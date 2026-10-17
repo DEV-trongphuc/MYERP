@@ -10,10 +10,11 @@ import { ManualAddModal, EditDocModal } from '../components/ai/modals/TrainingMo
 import { useNavigation } from '../contexts/NavigationContext';
 import Modal from '../components/common/Modal';
 import TipsModal from '../components/common/TipsModal';
-import { Lightbulb, Target, Sparkles, Zap, ShieldCheck, Brain, MessageSquare, UserCheck, Search, ListCheck, Users, Shield, Activity } from 'lucide-react';
+import { Lightbulb, Target, Sparkles, Zap, ShieldCheck, Brain, MessageSquare, UserCheck, Search, ListCheck, Users, Shield, Activity, Bot, Copy, ExternalLink } from 'lucide-react';
 import { useChatPage } from '../contexts/ChatPageContext';
 import OrgUserManager from '../components/ai/org/OrgUserManager';
 import FeedbackAdminPanel from '../components/ai/training/FeedbackAdminPanel';
+import UnifiedChat from '../components/ai/UnifiedChat';
 import { API_BASE_URL } from '../utils/config';
 import { useAuthStore } from '../../../store/authStore';
 import { AppIcon } from '../../common/AppIcons';
@@ -301,15 +302,49 @@ const AITraining: React.FC = () => {
 
     const [isAITrainingDarkTheme, setIsAITrainingDarkTheme] = useState(false);
     const [isOrgManagerOpen, setIsOrgManagerOpen] = useState(false);
+    const [aiSpaceModal, setAiSpaceModal] = useState<{
+        isOpen: boolean;
+        categoryId: string | null;
+        activeBotId: string | null;
+    }>({ isOpen: false, categoryId: null, activeBotId: null });
 
     useEffect(() => {
         // AI Training in AutoFlow follows its own local theme and should not affect global AutoFlow shell
     }, [isAITrainingDarkTheme]);
 
-    // Deep Linking Logic
+    // Deep Linking Logic (supports query params + /ai-space/:categoryId and /chat/:botId routes)
     useEffect(() => {
-        const handleHashChange = () => {
+        const handleRouteOrHashChange = () => {
             const hash = window.location.hash;
+            const pathname = window.location.pathname;
+            const combinedPath = `${pathname} ${hash}`;
+
+            const aiSpaceMatch = combinedPath.match(/\/ai-space\/([^/?#\s]+)/);
+            if (aiSpaceMatch && aiSpaceMatch[1]) {
+                const targetCat = decodeURIComponent(aiSpaceMatch[1]);
+                setMainTab('chat');
+                setSelectedCategoryId(targetCat);
+                setViewModeChat('chatbots');
+                setAiSpaceModal(prev => ({
+                    isOpen: true,
+                    categoryId: targetCat,
+                    activeBotId: prev.categoryId === targetCat ? prev.activeBotId : null
+                }));
+                return;
+            }
+
+            const chatBotMatch = combinedPath.match(/\/chat\/([^/?#\s]+)/);
+            if (chatBotMatch && chatBotMatch[1]) {
+                const targetBot = decodeURIComponent(chatBotMatch[1]);
+                setMainTab('chat');
+                setAiSpaceModal(prev => ({
+                    isOpen: true,
+                    categoryId: prev.categoryId,
+                    activeBotId: targetBot
+                }));
+                return;
+            }
+
             if (hash.includes('?')) {
                 const query = hash.split('?')[1];
                 const params = new URLSearchParams(query);
@@ -338,13 +373,51 @@ const AITraining: React.FC = () => {
             }
         };
 
-        // Check on mount
-        handleHashChange();
+        handleRouteOrHashChange();
 
-        // Listen for changes
-        window.addEventListener('hashchange', handleHashChange);
-        return () => window.removeEventListener('hashchange', handleHashChange);
+        window.addEventListener('hashchange', handleRouteOrHashChange);
+        window.addEventListener('popstate', handleRouteOrHashChange);
+        return () => {
+            window.removeEventListener('hashchange', handleRouteOrHashChange);
+            window.removeEventListener('popstate', handleRouteOrHashChange);
+        };
     }, []);
+
+    // Resolve slug or missing activeBotId inside AI Space modal once categories & chatbots load
+    useEffect(() => {
+        if (!aiSpaceModal.isOpen) return;
+        let resolvedCatId = aiSpaceModal.categoryId;
+        if (resolvedCatId && categories.length > 0) {
+            const matchedCat = categories.find(
+                c => String(c.id) === String(resolvedCatId) || String(c.slug || '') === String(resolvedCatId)
+            );
+            if (matchedCat && String(matchedCat.id) !== String(resolvedCatId)) {
+                resolvedCatId = matchedCat.id;
+                setSelectedCategoryId(matchedCat.id);
+            }
+        }
+        if (!aiSpaceModal.activeBotId && chatbots.length > 0) {
+            const catBots = resolvedCatId
+                ? chatbots.filter(b => String(b.category_id) === String(resolvedCatId))
+                : chatbots;
+            const firstBot = catBots[0] || chatbots[0];
+            if (firstBot) {
+                setAiSpaceModal(prev => ({
+                    ...prev,
+                    categoryId: resolvedCatId || firstBot.category_id || prev.categoryId,
+                    activeBotId: firstBot.id
+                }));
+            }
+        } else if (aiSpaceModal.activeBotId && !aiSpaceModal.categoryId && chatbots.length > 0) {
+            const matchedBot = chatbots.find(b => String(b.id) === String(aiSpaceModal.activeBotId));
+            if (matchedBot?.category_id) {
+                setAiSpaceModal(prev => ({
+                    ...prev,
+                    categoryId: matchedBot.category_id || null
+                }));
+            }
+        }
+    }, [aiSpaceModal.isOpen, aiSpaceModal.categoryId, aiSpaceModal.activeBotId, categories, chatbots]);
 
     // Sync Tags for Info Modal
     useEffect(() => {
@@ -353,6 +426,17 @@ const AITraining: React.FC = () => {
 
     const handleTestAI = React.useCallback(() => {
         if (!selectedProperty) return;
+
+        // If this property is a group chatbot, open the interactive AI Space Chat directly
+        const groupBot = chatbots.find(b => String(b.id) === String(selectedProperty));
+        if (groupBot) {
+            setAiSpaceModal({
+                isOpen: true,
+                categoryId: groupBot.category_id || selectedCategoryId || null,
+                activeBotId: groupBot.id
+            });
+            return;
+        }
 
         // 1. Set global config
         (window as any)._mf_config = {
@@ -386,7 +470,7 @@ const AITraining: React.FC = () => {
         document.body.appendChild(script);
 
         toast.success('Khởi tạo Widget Test...', { icon: '🤖' });
-    }, [selectedProperty, settings]);
+    }, [selectedProperty, settings, chatbots, selectedCategoryId]);
 
     const handleSaveTags = async () => {
         if (!infoDoc) return;
@@ -586,11 +670,19 @@ const AITraining: React.FC = () => {
     const fetchChatbots = async (catId?: string) => {
         try {
             const url = catId
-                ? `ai_chatbots?action=list&category_id=${catId}`
-                : 'ai_chatbots?action=list'; // Fallback logic
+                ? `ai_chatbots?action=list&category_id=${encodeURIComponent(catId)}`
+                : 'ai_chatbots?action=list';
             const res = await api.get<any>(url);
             if (res.success) {
-                setChatbots(res.data || []);
+                const incoming: WebProperty[] = res.data || [];
+                if (catId) {
+                    setChatbots(prev => {
+                        const otherCats = prev.filter(b => String(b.category_id) !== String(catId));
+                        return [...otherCats, ...incoming];
+                    });
+                } else {
+                    setChatbots(incoming);
+                }
             }
         } catch (e) {
             toast.error('Không thể tải danh sách AI Chatbot');
@@ -758,13 +850,36 @@ const AITraining: React.FC = () => {
     };
 
     const handleShareBot = (botId: string) => {
-        const shareUrl = `${window.location.origin}/#/chat/${botId}`;
+        const shareUrl = `${window.location.origin}/chat/${botId}`;
         navigator.clipboard.writeText(shareUrl);
         toast.success('Đã copy link chia sẻ!', { icon: '🔗' });
     };
 
+    const handleOpenAISpace = React.useCallback((categoryId: string, preferredBotId?: string) => {
+        const catBots = chatbots.filter(b => String(b.category_id) === String(categoryId));
+        const initialBotId = preferredBotId || catBots[0]?.id || null;
+        setAiSpaceModal({
+            isOpen: true,
+            categoryId,
+            activeBotId: initialBotId
+        });
+        if (catBots.length === 0) {
+            fetchChatbots(categoryId);
+        }
+    }, [chatbots]);
+
+    const handleOpenBotChat = React.useCallback((botId: string, categoryId?: string) => {
+        const bot = chatbots.find(b => String(b.id) === String(botId));
+        const catId = categoryId || bot?.category_id || selectedCategoryId || null;
+        setAiSpaceModal({
+            isOpen: true,
+            categoryId: catId,
+            activeBotId: botId
+        });
+    }, [chatbots, selectedCategoryId]);
+
     const handleOpenChatPage = (botId: string) => {
-        window.open(`/#/chat/${botId}`, '_blank');
+        handleOpenBotChat(botId);
     };
 
     // Re-fetch chatbots when switching back to grid view to prevent empty list
@@ -1722,78 +1837,31 @@ Lịch sử hoạt động:
         p.domain.toLowerCase().includes(searchTerm.toLowerCase())
     ), [properties, searchTerm]);
 
-    const filteredChatbots = React.useMemo(() => chatbots.filter(c =>
-        c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (c.description && c.description.toLowerCase().includes(searchTerm.toLowerCase()))
-    ), [chatbots, searchTerm]);
+    const filteredChatbots = React.useMemo(() => chatbots.filter(c => {
+        const matchCategory = !selectedCategoryId || !c.category_id || String(c.category_id) === String(selectedCategoryId);
+        const matchSearch = !searchTerm ||
+            c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (c.description && c.description.toLowerCase().includes(searchTerm.toLowerCase()));
+        return matchCategory && matchSearch;
+    }), [chatbots, selectedCategoryId, searchTerm]);
+
+    const activeSpaceCategory = React.useMemo(() => {
+        if (!aiSpaceModal.categoryId) return null;
+        return categories.find(
+            c => String(c.id) === String(aiSpaceModal.categoryId) || String(c.slug || '') === String(aiSpaceModal.categoryId)
+        ) || null;
+    }, [categories, aiSpaceModal.categoryId]);
+
+    const spaceBots = React.useMemo(() => {
+        if (!aiSpaceModal.categoryId) return chatbots;
+        const resolvedId = activeSpaceCategory?.id || aiSpaceModal.categoryId;
+        const filtered = chatbots.filter(b => String(b.category_id) === String(resolvedId));
+        return filtered.length > 0 ? filtered : chatbots;
+    }, [chatbots, aiSpaceModal.categoryId, activeSpaceCategory]);
 
     return (
         <div className="animate-fade-in space-y-6 pb-20 w-full min-w-0">
-            {viewMode === 'grid' && (
-                <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[20px] p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3.5 min-w-0">
-                        <AppIcon name="ai_training" size={40} className="shrink-0" />
-                        <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                                <h2 className="text-base font-bold text-[var(--color-text)] truncate">Trung tâm Huấn luyện AI & Tri thức Đa kênh</h2>
-                                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-violet-500/10 text-violet-600 dark:text-violet-400">
-                                    RAG Vector Engine
-                                </span>
-                            </div>
-                            <p className="text-xs text-[var(--color-text-muted)] mt-0.5 truncate">
-                                Nạp tài liệu, kịch bản phản hồi và đồng bộ tri thức cho AI Livechat Website ({properties.length} miền) & Nội bộ ({chatbots.length} bot)
-                            </p>
-                        </div>
-                    </div>
-                    <div className="inline-flex items-center gap-1 p-1 rounded-[14px] bg-[var(--color-bg)] border border-[var(--color-border)] shrink-0">
-                        <button
-                            type="button"
-                            onClick={() => setMainTab('website')}
-                            className={`px-3.5 py-1.5 rounded-[10px] text-xs font-semibold transition-all inline-flex items-center gap-2 ${
-                                mainTab === 'website'
-                                    ? 'bg-[var(--color-surface)] text-[var(--color-text)] shadow-xs'
-                                    : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
-                            }`}
-                        >
-                            <AppIcon name="ai_training" size={16} />
-                            <span>AI Chatbot Website ({properties.length})</span>
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setMainTab('chat')}
-                            className={`px-3.5 py-1.5 rounded-[10px] text-xs font-semibold transition-all inline-flex items-center gap-2 ${
-                                mainTab === 'chat'
-                                    ? 'bg-[var(--color-surface)] text-[var(--color-text)] shadow-xs'
-                                    : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
-                            }`}
-                        >
-                            <Brain className="w-4 h-4 text-violet-500" />
-                            <span>Huấn luyện nhóm ({categories.length})</span>
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {viewMode === 'grid' && loading && properties.length === 0 && categories.length === 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {[1, 2, 3, 4, 5, 6].map((i) => (
-                        <div key={i} className="rounded-[20px] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 space-y-4">
-                            <div className="flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-11 h-11 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
-                                    <div className="space-y-2">
-                                        <div className="w-36 h-4 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[8px]" />
-                                        <div className="w-24 h-3 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[6px]" />
-                                    </div>
-                                </div>
-                                <div className="w-16 h-6 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-full" />
-                            </div>
-                            <div className="h-14 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
-                            <div className="h-10 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
-                        </div>
-                    ))}
-                </div>
-            ) : viewMode === 'grid' ? (
+            {viewMode === 'grid' ? (
                 <AITrainingGrid
                     mainTab={mainTab}
                     setMainTab={setMainTab}
@@ -1829,6 +1897,8 @@ Lịch sử hoạt động:
                     onOpenOrgManager={() => setIsOrgManagerOpen(true)}
                     selectedCategory={categories.find(c => String(c.id) === String(selectedCategoryId)) || null}
                     orgUserOverride={effectiveOrgUser}
+                    onOpenAISpace={handleOpenAISpace}
+                    onOpenBotChat={handleOpenBotChat}
                 />
             ) : (
                 <AITrainingDetail
@@ -1892,8 +1962,6 @@ Lịch sử hoạt động:
                     fetchDocs={fetchDocs}
                     orgUser={effectiveOrgUser}
                 />
-
-
             )}
 
             <AIModals
@@ -2057,6 +2125,158 @@ Lịch sử hoạt động:
                             isDarkTheme={isAITrainingDarkTheme}
                             categoryId={selectedCategoryId || undefined}
                         />
+                    </div>
+                </div>
+            </Modal>
+
+            {/* AI Space Interactive Workspace Modal */}
+            <Modal
+                isOpen={aiSpaceModal.isOpen}
+                onClose={() => setAiSpaceModal(prev => ({ ...prev, isOpen: false }))}
+                title={
+                    <div className="flex items-center gap-3">
+                        <AppIcon name="ai_training" size={32} className="rounded-[10px] shrink-0" />
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-bold text-slate-900 dark:text-white">
+                                    AI Space: {activeSpaceCategory?.name || 'Trợ lý AI Nội bộ'}
+                                </span>
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                    {spaceBots.length} AI Agents
+                                </span>
+                            </div>
+                            <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                                {activeSpaceCategory?.description || 'Không gian hỏi đáp tri thức nội bộ và kiểm thử kịch bản AI trực tiếp'}
+                            </p>
+                        </div>
+                    </div>
+                }
+                size="4xl"
+                isDarkTheme={isAITrainingDarkTheme}
+                noPadding
+            >
+                <div className={`flex flex-col h-[680px] max-h-[82vh] overflow-hidden ${isAITrainingDarkTheme ? 'bg-slate-900 text-slate-100' : 'bg-white text-slate-800'}`}>
+                    {/* Sub-toolbar: Category switcher + Quick actions */}
+                    <div className={`px-4 py-2.5 border-b flex flex-wrap items-center justify-between gap-2 shrink-0 ${isAITrainingDarkTheme ? 'bg-slate-900/90 border-slate-800' : 'bg-slate-50/80 border-slate-200'}`}>
+                        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
+                            {categories.map(cat => {
+                                const isCurrentCat = String(cat.id) === String(activeSpaceCategory?.id || aiSpaceModal.categoryId);
+                                return (
+                                    <button
+                                        key={cat.id}
+                                        type="button"
+                                        onClick={() => handleOpenAISpace(cat.id)}
+                                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors whitespace-nowrap border ${
+                                            isCurrentCat
+                                                ? 'bg-indigo-600 text-white border-indigo-600'
+                                                : (isAITrainingDarkTheme
+                                                    ? 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100')
+                                        }`}
+                                    >
+                                        {cat.name}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                            {aiSpaceModal.categoryId && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const url = `${window.location.origin}/ai-space/${activeSpaceCategory?.id || aiSpaceModal.categoryId}`;
+                                        navigator.clipboard.writeText(url);
+                                        toast.success('Đã sao chép đường dẫn AI Space!');
+                                    }}
+                                    className={`h-8 px-3 rounded-lg border text-[11px] font-semibold transition-colors flex items-center gap-1.5 ${
+                                        isAITrainingDarkTheme
+                                            ? 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                                    }`}
+                                >
+                                    <Copy className="w-3.5 h-3.5" />
+                                    <span>Copy Link Space</span>
+                                </button>
+                            )}
+                            {aiSpaceModal.activeBotId && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const botId = aiSpaceModal.activeBotId!;
+                                        setAiSpaceModal(prev => ({ ...prev, isOpen: false }));
+                                        setSelectedProperty(botId);
+                                        setViewMode('doc');
+                                    }}
+                                    className="h-8 px-3 rounded-lg bg-[var(--color-primary)] text-white text-[11px] font-bold transition-colors flex items-center gap-1.5 hover:brightness-95"
+                                >
+                                    <Bot className="w-3.5 h-3.5" />
+                                    <span>Huấn luyện Bot này</span>
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* 2-Column Workspace Body */}
+                    <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden">
+                        {/* Left Bot Selector Sidebar */}
+                        <div className={`w-full lg:w-64 border-b lg:border-b-0 lg:border-r p-3 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto shrink-0 ${
+                            isAITrainingDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50/50 border-slate-200'
+                        }`}>
+                            <div className="hidden lg:block text-[10px] font-black uppercase tracking-widest text-slate-400 px-1 mb-1">
+                                Chọn AI Agent ({spaceBots.length})
+                            </div>
+                            {spaceBots.map(bot => {
+                                const isSelected = String(bot.id) === String(aiSpaceModal.activeBotId);
+                                return (
+                                    <button
+                                        key={bot.id}
+                                        type="button"
+                                        onClick={() => setAiSpaceModal(prev => ({ ...prev, activeBotId: bot.id }))}
+                                        className={`p-3 rounded-[14px] border text-left transition-colors flex items-start gap-2.5 shrink-0 lg:w-full min-w-[200px] lg:min-w-0 ${
+                                            isSelected
+                                                ? (isAITrainingDarkTheme
+                                                    ? 'bg-indigo-500/15 border-indigo-500/40 text-white'
+                                                    : 'bg-indigo-50/80 border-indigo-300 text-slate-900')
+                                                : (isAITrainingDarkTheme
+                                                    ? 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
+                                                    : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300')
+                                        }`}
+                                    >
+                                        <AppIcon name="ai_training" size={32} className="rounded-[8px] shrink-0 mt-0.5" />
+                                        <div className="min-w-0 flex-1">
+                                            <div className="text-xs font-bold truncate">{bot.name}</div>
+                                            <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                                                {bot.description || 'Trợ lý AI nội bộ'}
+                                            </div>
+                                            <div className="flex items-center gap-2 mt-1.5 text-[10px] font-semibold text-slate-500">
+                                                <span>{(bot.stats?.docs_count || 0)} docs</span>
+                                                <span>•</span>
+                                                <span>{(bot.stats?.queries_count || 0)} convos</span>
+                                            </div>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {/* Right UnifiedChat Workspace */}
+                        <div className="flex-1 min-w-0 min-h-0 p-3 overflow-hidden flex flex-col">
+                            {aiSpaceModal.activeBotId ? (
+                                <UnifiedChat
+                                    key={aiSpaceModal.activeBotId}
+                                    propertyId={aiSpaceModal.activeBotId}
+                                    isGroup={true}
+                                    initialSource="org"
+                                    isDarkTheme={isAITrainingDarkTheme}
+                                />
+                            ) : (
+                                <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+                                    <Bot className="w-12 h-12 text-slate-300 mb-3" />
+                                    <h4 className="text-sm font-bold text-slate-600 dark:text-slate-300">Chưa có AI Agent trong nhóm này</h4>
+                                    <p className="text-xs text-slate-400 mt-1">Vui lòng chọn nhóm khác hoặc nhấn "Tạo AI Agent" để bắt đầu.</p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </Modal>

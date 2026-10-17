@@ -57,7 +57,7 @@ class LeadDistributionController {
         }
 
         // Validate consultant exists and is active
-        $stmtUser = $this->db->prepare("SELECT id, full_name, email, is_active FROM users WHERE id = ? AND tenant_id = ?");
+        $stmtUser = $this->db->prepare("SELECT id, full_name, email, is_active, team_id FROM users WHERE id = ? AND tenant_id = ?");
         $stmtUser->execute([$consultantId, $tid]);
         $consultant = $stmtUser->fetch();
         if (!$consultant) {
@@ -95,11 +95,11 @@ class LeadDistributionController {
             try {
                 $logDist = $this->db->prepare("
                     INSERT INTO distribution_logs (lead_id, assigned_to, round_id, status, message, received_at)
-                    VALUES (?, ?, 0, 'assigned', ?, NOW())
+                    VALUES (?, ?, ?, 'assigned', ?, NOW())
                 ");
                 $assignerName = $auth['name'] ?? $auth['full_name'] ?? 'Quản trị viên';
                 $msg = "Phân bổ thủ công cho {$consultant['full_name']} bởi {$assignerName}";
-                $logDist->execute([$contactId, $consultantId, $msg]);
+                $logDist->execute([$contactId, $consultantId, (int)($consultant['team_id'] ?? 0), $msg]);
             } catch (\Throwable $eDist) {
                 try {
                     $logDistFallback = $this->db->prepare("
@@ -124,6 +124,24 @@ class LeadDistributionController {
             }
             if (class_exists('DomationContactMatcher')) {
                 DomationContactMatcher::syncContactToSubscriber($this->db, (int)$contactId, (int)$tid);
+            }
+            require_once __DIR__ . '/../automation/trigger_helper.php';
+            $stmtSub = $this->db->prepare("SELECT id, workspace_id FROM subscribers WHERE contact_id = ? LIMIT 1");
+            $stmtSub->execute([(int)$contactId]);
+            $subRow = $stmtSub->fetch(PDO::FETCH_ASSOC);
+            if ($subRow && !empty($subRow['id'])) {
+                $subId = $subRow['id'];
+                $wsId = $subRow['workspace_id'] ?: 1;
+                $extraMeta = [
+                    'contact_id' => (int)$contactId,
+                    'owner_id' => (int)$consultantId,
+                    'team_id' => $consultant['team_id'] ?? null,
+                    'round_id' => $consultant['team_id'] ?? 0,
+                    'assignment_type' => 'manual',
+                    'distribution_status' => 'assigned'
+                ];
+                processSubscriberTrigger($this->db, $subId, 'round_distributed', null, $wsId, $extraMeta);
+                processSubscriberTrigger($this->db, $subId, 'lead_assigned', null, $wsId, $extraMeta);
             }
         } catch (\Throwable $eSyncSub) {
         }

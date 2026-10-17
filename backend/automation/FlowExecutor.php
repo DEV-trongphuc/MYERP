@@ -863,7 +863,7 @@ class FlowExecutor
 
                 case 'condition':
                     $condType = $step['config']['conditionType'] ?? 'opened';
-                    $waitDur = (int) ($step['config']['waitDuration'] ?? 1);
+                    $waitDur = (int) ($step['config']['waitDuration'] ?? 0);
                     $waitUnit = $step['config']['waitUnit'] ?? 'hours';
 
                     // [FIX] Khai báo target/campaign ID từ bước Trigger
@@ -876,24 +876,25 @@ class FlowExecutor
                         }
                     }
 
-                    // Timeout Calculation
-                    $startTime = !empty($lastStepAt) ? $lastStepAt : (!empty($itemUpdatedAt) ? $itemUpdatedAt : $queueCreatedAt);
-                    // [FIX] Guard against empty string or MySQL zero-date ("0000-00-00 00:00:00")
-                    // from DB. Passing either into new DateTime() throws an uncatchable Fatal Error:
-                    // "Failed to parse time string" — crashing the entire worker process.
-                    if (empty($startTime) || strpos($startTime, '0000-00-00') !== false || trim($startTime) === '') {
-                        $startTime = 'now';
+                    // Timeout Calculation (waitDur <= 0 means Instant Check -> immediately timed out if not matched)
+                    if ($waitDur <= 0) {
+                        $isTimedOut = true;
+                    } else {
+                        $startTime = !empty($lastStepAt) ? $lastStepAt : (!empty($itemUpdatedAt) ? $itemUpdatedAt : $queueCreatedAt);
+                        if (empty($startTime) || strpos($startTime, '0000-00-00') !== false || trim($startTime) === '') {
+                            $startTime = 'now';
+                        }
+                        try {
+                            $timeout = new DateTime($startTime);
+                        } catch (Exception $e) {
+                            $timeout = new DateTime('now');
+                        }
+                        $timeout->modify("+$waitDur $waitUnit");
+                        $isTimedOut = new DateTime('now') > $timeout;
                     }
-                    try {
-                        $timeout = new DateTime($startTime);
-                    } catch (Exception $e) {
-                        $timeout = new DateTime('now');
-                    }
-                    $timeout->modify("+$waitDur $waitUnit");
-                    $isTimedOut = new DateTime('now') > $timeout;
 
                     // Forced Fail on Email Error
-                    if (($hasEmailError && in_array($condType, ['opened', 'clicked'])) || (isset($hasZnsError) && $hasZnsError && strpos($condType, 'zns_') === 0)) {
+                    if (($hasEmailError && in_array($condType, ['opened', 'clicked', 'clicked_specific'])) || (isset($hasZnsError) && $hasZnsError && strpos($condType, 'zns_') === 0)) {
                         $logs[] = "  -> Condition forced NO due to email error.";
                         $nextStepId = $step['noStepId'] ?? null;
                         $isInstantStep = true;
@@ -904,6 +905,7 @@ class FlowExecutor
                     $isMatched = false;
                     // Resolve Reference (Campaign vs Step)
                     $targetStepId = $step['config']['targetStepId'] ?? null;
+                    $anyCampaign = !empty($step['config']['any_campaign']);
 
                     // Determine Types
                     $types = [];
@@ -922,10 +924,11 @@ class FlowExecutor
                             $sqlResp = "SELECT * FROM survey_responses WHERE workspace_id = ? AND subscriber_id = ?";
                             $paramsResp = [$subscriber['workspace_id'], $subscriberId];
                             
-                            // [FIX] Allow 1 hour grace period before queue creation to catch the survey response that triggered the flow
-                            $graceStartTime = !empty($queueCreatedAt) ? $queueCreatedAt : $startTime;
-                            $sqlResp .= " AND submitted_at >= ?";
-                            $paramsResp[] = (new DateTime($graceStartTime))->modify('-1 hour')->format('Y-m-d H:i:s');
+                            if (!$anyCampaign) {
+                                $graceStartTime = !empty($queueCreatedAt) ? $queueCreatedAt : ($lastStepAt ?: 'now');
+                                $sqlResp .= " AND submitted_at >= ?";
+                                $paramsResp[] = (new DateTime($graceStartTime))->modify('-1 hour')->format('Y-m-d H:i:s');
+                            }
 
                             if ($targetSurveyId) {
                                 $sqlResp .= " AND survey_id = ?";
@@ -936,13 +939,14 @@ class FlowExecutor
                             $stmtR->execute($paramsResp);
                             $latestResp = $stmtR->fetch(PDO::FETCH_ASSOC);
 
-                            // [MEMORY GUARD] [FIX AUDIT-07] Use centralized pruning
                             self::pruneCache(self::$profileCache['_survey_responses'], 200);
                             self::$profileCache['_survey_responses'][$cacheKey] = $latestResp;
                         }
 
                         if ($latestResp) {
-                            if ($condType === 'survey_score') {
+                            if ($condType === 'survey_completed') {
+                                $isMatched = true;
+                            } elseif ($condType === 'survey_score') {
                                 $targetVal = (float)($step['config']['scoreValue'] ?? 0);
                                 $actualVal = (float)($latestResp['total_score'] ?? 0);
                                 $op = $step['config']['scoreOperator'] ?? '>=';
@@ -970,7 +974,6 @@ class FlowExecutor
                                             }
                                         }
                                         $valStr = mb_strtolower($valStr, 'UTF-8');
-                                        // Precise or contains match
                                         if (mb_stripos($valStr, $ansMatch, 0, 'UTF-8') !== false || $valStr === $ansMatch) {
                                             $isMatched = true;
                                             break;
@@ -983,73 +986,119 @@ class FlowExecutor
                                 $isMatched = (($latestResp['end_screen_id'] ?? 'default') === $targetScreen);
                             }
                         }
-                    } elseif (in_array($condType, ['deposit_paid', 'has_deposit', 'has_deal', 'stage_matches', 'erp_is_student', 'erp_student_status', 'erp_tuition_status', 'erp_has_certificate', 'erp_ticket_status', 'erp_deal_status'], true)) {
+                    } elseif (in_array($condType, [
+                        'crm_sale_contacted', 'crm_assigned_to', 'crm_stage_is', 'crm_temperature_is', 'channel_reachability',
+                        'deposit_paid', 'has_deposit', 'has_deal', 'stage_matches',
+                        'erp_is_student', 'erp_student_status', 'erp_tuition_status', 'erp_has_certificate', 'erp_ticket_status', 'erp_deal_status'
+                    ], true)) {
                         $subProfile = getSubscriberProfileForFlow($this->pdo, $subscriberId);
-                        if ($condType === 'deposit_paid' || $condType === 'has_deposit') {
+                        if ($condType === 'crm_sale_contacted') {
+                            $isMatched = (strtolower((string) ($subProfile['crm_sale_contacted'] ?? 'false')) === 'true');
+                        } elseif ($condType === 'crm_assigned_to') {
+                            $actualOwnerId = trim((string) ($subProfile['crm_owner_id'] ?? ''));
+                            $actualTeamId = trim((string) ($subProfile['crm_team_id'] ?? ''));
+                            $targetOwnerId = trim((string) ($step['config']['targetOwnerId'] ?? $step['config']['owner_id'] ?? ''));
+                            $targetTeamId = trim((string) ($step['config']['targetTeamId'] ?? $step['config']['team_id'] ?? ''));
+                            $assignMode = $step['config']['assignMatchMode'] ?? 'any_assigned';
+
+                            if ($assignMode === 'specific' || $targetOwnerId !== '' || $targetTeamId !== '') {
+                                $ownerOk = ($targetOwnerId === '' || $targetOwnerId === 'all' || $actualOwnerId === $targetOwnerId);
+                                $teamOk = ($targetTeamId === '' || $targetTeamId === 'all' || $actualTeamId === $targetTeamId);
+                                $isMatched = ($actualOwnerId !== '' && $actualOwnerId !== '0' && $ownerOk && $teamOk);
+                            } else {
+                                $isMatched = ($actualOwnerId !== '' && $actualOwnerId !== '0');
+                            }
+                        } elseif ($condType === 'crm_stage_is' || $condType === 'stage_matches') {
+                            $targetStage = trim((string) ($step['config']['targetStageId'] ?? $step['config']['stageId'] ?? $step['config']['targetValue'] ?? ''));
+                            $actualStageId = (string) ($subProfile['crm_stage_id'] ?? $subProfile['stage_id'] ?? '');
+                            $actualStageName = (string) ($subProfile['crm_stage_name'] ?? '');
+                            $actualSlug = (string) ($subProfile['crm_pipeline_status'] ?? '');
+                            $isMatched = ($targetStage !== '' && (
+                                $actualStageId === $targetStage
+                                || mb_strtolower($actualStageName, 'UTF-8') === mb_strtolower($targetStage, 'UTF-8')
+                                || mb_strtolower($actualSlug, 'UTF-8') === mb_strtolower($targetStage, 'UTF-8')
+                            ));
+                        } elseif ($condType === 'crm_temperature_is') {
+                            $targetTemp = strtolower(trim((string) ($step['config']['targetTemperature'] ?? $step['config']['temperature'] ?? 'hot')));
+                            $actualTemp = strtolower(trim((string) ($subProfile['crm_temperature'] ?: ($subProfile['crm_lead_status'] ?? ''))));
+                            $isMatched = ($targetTemp !== '' && $actualTemp === $targetTemp);
+                        } elseif ($condType === 'channel_reachability') {
+                            $channelType = strtolower(trim((string) ($step['config']['channelType'] ?? 'has_zalo')));
+                            $availList = $subProfile['channel_available_list'] ?? [];
+                            if ($channelType === 'has_zalo' || $channelType === 'zalo_oa') {
+                                $isMatched = in_array('zalo_oa', $availList, true);
+                            } elseif ($channelType === 'has_email' || $channelType === 'email_valid') {
+                                $isMatched = in_array('email_valid', $availList, true);
+                            } elseif ($channelType === 'has_phone' || $channelType === 'phone_valid') {
+                                $isMatched = in_array('phone_valid', $availList, true);
+                            } else {
+                                $isMatched = !empty($availList);
+                            }
+                        } elseif ($condType === 'deposit_paid' || $condType === 'has_deposit') {
                             $depStatus = strtolower((string) ($subProfile['crm_deposit_status'] ?? 'none'));
                             $isMatched = in_array($depStatus, ['approved', 'paid', 'completed', 'confirmed'], true) || ((float) ($subProfile['crm_deposit_amount'] ?? 0) > 0 && $depStatus !== 'cancelled' && $depStatus !== 'rejected');
                         } elseif ($condType === 'has_deal') {
-                            $isMatched = ((float) ($subProfile['crm_expected_revenue'] ?? 0) > 0 || ($subProfile['erp_deal_status'] ?? 'none') !== 'none');
-                        } elseif ($condType === 'stage_matches') {
-                            $targetStage = trim((string) ($step['config']['stageId'] ?? $step['config']['targetValue'] ?? ''));
-                            $actualStageId = (string) ($subProfile['crm_stage_id'] ?? $subProfile['stage_id'] ?? '');
-                            $actualStageName = (string) ($subProfile['crm_stage_name'] ?? '');
-                            $isMatched = ($targetStage !== '' && ($actualStageId === $targetStage || mb_strtolower($actualStageName, 'UTF-8') === mb_strtolower($targetStage, 'UTF-8')));
+                            $isMatched = ((float) ($subProfile['crm_expected_revenue'] ?? 0) > 0 || ($subProfile['erp_deal_status'] ?? 'no_deal') !== 'no_deal');
                         } elseif ($condType === 'erp_is_student') {
-                            $isMatched = !empty($subProfile['erp_is_student']);
+                            $isMatched = in_array(strtolower((string) ($subProfile['erp_is_student'] ?? 'no')), ['yes', 'true', '1'], true);
                         } elseif ($condType === 'erp_student_status') {
                             $targetSt = strtolower(trim((string) ($step['config']['studentStatus'] ?? $step['config']['targetValue'] ?? 'studying')));
                             $isMatched = (strtolower((string) ($subProfile['erp_student_status'] ?? 'none')) === $targetSt);
                         } elseif ($condType === 'erp_tuition_status') {
-                            $targetTuit = strtolower(trim((string) ($step['config']['tuitionStatus'] ?? $step['config']['targetValue'] ?? 'paid_full')));
-                            $isMatched = (strtolower((string) ($subProfile['erp_tuition_status'] ?? 'none')) === $targetTuit);
+                            $targetTuit = strtolower(trim((string) ($step['config']['tuitionStatus'] ?? $step['config']['targetValue'] ?? 'paid')));
+                            $actualTuit = strtolower((string) ($subProfile['erp_tuition_status'] ?? 'unpaid'));
+                            $isMatched = ($actualTuit === $targetTuit || ($targetTuit === 'paid_full' && $actualTuit === 'paid'));
                         } elseif ($condType === 'erp_has_certificate') {
-                            $isMatched = !empty($subProfile['erp_has_certificate']);
+                            $isMatched = in_array(strtolower((string) ($subProfile['erp_has_certificate'] ?? 'no')), ['yes', 'true', '1'], true);
                         } elseif ($condType === 'erp_ticket_status') {
-                            $targetTk = strtolower(trim((string) ($step['config']['ticketStatus'] ?? $step['config']['targetValue'] ?? 'has_open')));
-                            $isMatched = (strtolower((string) ($subProfile['erp_ticket_status'] ?? 'none')) === $targetTk);
+                            $targetTk = strtolower(trim((string) ($step['config']['ticketStatus'] ?? $step['config']['targetValue'] ?? 'has_open_ticket')));
+                            $isMatched = (strtolower((string) ($subProfile['erp_ticket_status'] ?? 'no_ticket')) === $targetTk);
                         } elseif ($condType === 'erp_deal_status') {
                             $targetDealSt = strtolower(trim((string) ($step['config']['dealStatus'] ?? $step['config']['targetValue'] ?? 'won')));
-                            $isMatched = (strtolower((string) ($subProfile['erp_deal_status'] ?? 'none')) === $targetDealSt);
+                            $isMatched = (strtolower((string) ($subProfile['erp_deal_status'] ?? 'no_deal')) === $targetDealSt);
+                        }
+                    } elseif ($condType === 'voucher_claimed') {
+                        try {
+                            $stmtVc = $this->pdo->prepare("SELECT 1 FROM voucher_codes WHERE subscriber_id = ? AND sent_at IS NOT NULL LIMIT 1");
+                            $stmtVc->execute([$subscriberId]);
+                            if ($stmtVc->fetchColumn()) {
+                                $isMatched = true;
+                            }
+                        } catch (\Throwable $eVc) {}
+                        if (!$isMatched) {
+                            $types = ['voucher_redeem'];
                         }
                     } elseif ($condType === 'opened') {
                         $types = ['open_email', 'open_zns'];
-                    } elseif ($condType === 'clicked') {
+                    } elseif ($condType === 'clicked' || $condType === 'clicked_specific') {
                         $types = ['click_link', 'click_zns'];
+                    } elseif ($condType === 'replied') {
+                        $types = ['reply_email', 'staff_reply', 'zns_replied', 'user_send_text'];
+                    } elseif ($condType === 'zalo_interacted') {
+                        $types = ['click_zns', 'zns_clicked', 'zns_replied', 'staff_reply', 'user_send_text', 'user_reacted_message', 'follow'];
                     } elseif ($condType === 'unsubscribed') {
                         $types = ['unsubscribe'];
-                    }
-                    // [FIX] ZNS-specific condition types
-                    elseif ($condType === 'zns_delivered') {
+                    } elseif ($condType === 'zns_delivered') {
                         $types = ['zns_sent'];
                     } elseif ($condType === 'zns_clicked') {
                         $types = ['click_zns'];
                     } elseif ($condType === 'zns_replied') {
-                        // [VERIFIED 2026-04-23] DB audit: ZNS reply is logged as 'staff_reply'
-                        // by the CRM/support module. 'reply_zns' and 'zns_replied' do NOT exist
-                        // in subscriber_activity. 'zns_clicked' also absent — Zalo click/reply
-                        // webhooks are not configured on this installation.
                         $types = ['staff_reply'];
                     } elseif ($condType === 'zns_failed') {
                         $types = ['zns_failed'];
-                    }
-                    // [FIX] Email delivered = receive_email
-                    elseif ($condType === 'delivered') {
+                    } elseif ($condType === 'delivered') {
                         $types = ['receive_email'];
-                    }
-                    // [FIX] Reminder conditions — check subscriber_activity for reminder events
-                    elseif ($condType === 'received_reminder') {
-                        $types = ['receive_email']; // receive_email logged when reminder is sent
+                    } elseif ($condType === 'received_reminder') {
+                        $types = ['receive_email'];
                     } elseif ($condType === 'opened_reminder') {
-                        $types = ['open_email']; // open_email logged when reminder is opened
+                        $types = ['open_email'];
                     }
 
                     // reminderId from frontend config — if set, filter activities to this specific reminder campaign
                     $reminderId = $step['config']['reminderId'] ?? null;
 
-                    // [FIX] 'unsubscribe' is a global event — NOT scoped to flow_id.
-                    // Reminder conditions are also global but can be scoped by reminderId (campaign_id).
-                    $isGlobalEvent = in_array($condType, ['unsubscribed', 'received_reminder', 'opened_reminder']);
+                    // Global event check (including smart fallback when any_campaign = true or no targetStepId)
+                    $isGlobalEvent = $anyCampaign || in_array($condType, ['unsubscribed', 'received_reminder', 'opened_reminder', 'zalo_interacted', 'voucher_claimed']);
 
                     if (empty($types)) {
                         $activities = [];
@@ -1058,9 +1107,7 @@ class FlowExecutor
                         $activities = [];
                         foreach ($cachedActivities as $act) {
                             if (in_array($act['type'], $types)) {
-                                // [FIX] Global events (unsubscribe) have no flow_id — always include them
                                 if ($isGlobalEvent) {
-                                    // For reminder conditions: filter by reminderId (campaign_id) if provided
                                     if (($condType === 'received_reminder' || $condType === 'opened_reminder') && !empty($reminderId)) {
                                         if ((string) ($act['campaign_id'] ?? '') === (string) $reminderId) {
                                             $activities[] = $act;
@@ -1070,7 +1117,6 @@ class FlowExecutor
                                     }
                                     continue;
                                 }
-                                // Apply linkedCampaignId and targetStepId filtering to cached activities
                                 $isFromTarget = false;
                                 if ($linkedCampaignId && !empty($act['campaign_id']) && (string) $act['campaign_id'] === (string) $linkedCampaignId) {
                                     $isFromTarget = true;
@@ -1093,8 +1139,6 @@ class FlowExecutor
                         foreach ($types as $t)
                             $params[] = $t;
 
-                        // [FIX] 'unsubscribe' is global — do NOT filter by flow_id
-                        // For reminder conditions: optionally filter by reminderId (campaign_id)
                         if (!$isGlobalEvent) {
                             if ($linkedCampaignId) {
                                 $sqlCheck .= " AND (flow_id = ? OR campaign_id = ?) ";
@@ -1105,7 +1149,6 @@ class FlowExecutor
                                 $params[] = $flowId;
                             }
                         } elseif (($condType === 'received_reminder' || $condType === 'opened_reminder') && !empty($reminderId)) {
-                            // Scope reminder to specific campaign
                             $sqlCheck .= " AND campaign_id = ?";
                             $params[] = $reminderId;
                         }
@@ -1122,10 +1165,7 @@ class FlowExecutor
                             if (!in_array($act['type'], $types))
                                 continue;
 
-                            // [SMART MATCH] Phân loại đối soát: Trigger vs Step cụ thể
                             $isFromTarget = false;
-
-                            // 0. Kiểm tra xem bước đích có phải là Trigger không
                             $isTargetingTrigger = false;
                             if ($targetStepId) {
                                 foreach ($flowSteps as $fs) {
@@ -1136,27 +1176,25 @@ class FlowExecutor
                                 }
                             }
 
-                            // 1. Trường hợp chờ đợi kết quả từ Trigger Campaign (Trường hợp của anh hiện tại)
-                            if ($isTargetingTrigger && $linkedCampaignId && !empty($act['campaign_id']) && (string) $act['campaign_id'] === (string) $linkedCampaignId) {
+                            if ($isGlobalEvent) {
                                 $isFromTarget = true;
-                            }
-                            // 2. Trường hợp chờ đợi một bước Gửi Mail cụ thể TRONG Flow
-                            // (Ví dụ: Bước 2 Gửi Mail -> Bước 3 Kiểm tra Mail bước 2)
-                            elseif ($targetStepId && trim($act['reference_id'] ?? '') === trim($targetStepId)) {
+                            } elseif ($isTargetingTrigger && $linkedCampaignId && !empty($act['campaign_id']) && (string) $act['campaign_id'] === (string) $linkedCampaignId) {
                                 $isFromTarget = true;
-                            }
-                            // 3. Nếu không chỉ định đích đến, chấp nhận mọi hoạt động thuộc Flow này 
-                            elseif (!$targetStepId) {
+                            } elseif ($targetStepId && trim($act['reference_id'] ?? '') === trim($targetStepId)) {
+                                $isFromTarget = true;
+                            } elseif (!$targetStepId) {
                                 $isFromTarget = true;
                             }
 
                             if (!$isFromTarget)
                                 continue;
 
-                            if ($condType === 'clicked') {
+                            if ($condType === 'clicked' || $condType === 'clicked_specific') {
                                 $linkTargets = $step['config']['linkTargets'] ?? [];
                                 if (!is_array($linkTargets) && !empty($step['config']['linkTarget']))
                                     $linkTargets = [$step['config']['linkTarget']];
+                                if (empty($linkTargets) && !empty($step['config']['targetUrl']))
+                                    $linkTargets = [$step['config']['targetUrl']];
 
                                 if (empty($linkTargets)) {
                                     $isMatched = true;
@@ -1165,15 +1203,8 @@ class FlowExecutor
                                     $rawDetail = $act['details'] ?? '';
                                     $clickedUrl = extractClickedUrlFromDetails($rawDetail);
 
-                                    // [FIX #4] Old logic used strtok($u, '?') to strip ALL query strings,
-                                    // causing links like ?ref=email to NEVER match the configured target.
-                                    // New logic: normalize path only (strip protocol + trailing slash),
-                                    // then use stripos to allow partial/substring URL matching.
-                                    // This means: target 'example.com/page' matches 'example.com/page?utm_source=flow'
                                     $normalizeUrlBase = function ($u) {
-                                        // Remove protocol
                                         $u = preg_replace('/^https?:\/\//', '', trim($u));
-                                        // Remove trailing slash
                                         return rtrim($u, '/');
                                     };
 
@@ -1181,7 +1212,6 @@ class FlowExecutor
 
                                     foreach ($linkTargets as $target) {
                                         $normTarget = $normalizeUrlBase($target);
-                                        // Exact match OR clicked URL starts with/contains the target base
                                         if ($normTarget !== '' && mb_stripos($normClicked, $normTarget, 0, 'UTF-8') !== false) {
                                             $isMatched = true;
                                             break 2;
@@ -1202,25 +1232,23 @@ class FlowExecutor
                         $isInstantStep = true;
                     } elseif ($isTimedOut) {
                         $nextStepId = $step['noStepId'] ?? null;
-                        logActivity($this->pdo, $subscriberId, 'condition_false', $currentStepId, $flowName, "Timed Out: $condType", $flowId, null, [], $subscriber['workspace_id']);
-                        $logs[] = "  -> Condition Timed Out. Moving to ELSE.";
+                        logActivity($this->pdo, $subscriberId, 'condition_false', $currentStepId, $flowName, "Timed Out / Instant False: $condType", $flowId, null, [], $subscriber['workspace_id']);
+                        $logs[] = "  -> Condition False/Timed Out. Moving to ELSE.";
                         $isInstantStep = true;
                     } else {
                         // CHƯA KHỚP VÀ CHƯA HẾT GIỜ -> TIẾP TỤC ĐỢI
                         $logs[] = "  -> Condition not met yet. Still waiting...";
                         $status = 'waiting';
                         $shouldContinueChain = false;
-                        // [FIX] Tăng từ 5 phút lên 15 phút — giảm tải worker khi có nhiều subscriber chờ condition
                         $nextScheduledAt = date('Y-m-d H:i:s', strtotime('+15 minutes'));
                     }
                     break;
 
                 case 'advanced_condition':
                     require_once 'flow_helpers.php';
-                    // Ensure helper is available for evaluateAdvancedConditionGroup
 
-                    $branches = $step['config']['branches'] ?? [];
-                    $defaultStepId = $step['config']['defaultStepId'] ?? null;
+                    $branches = $step['config']['branches'] ?? ($step['branches'] ?? []);
+                    $defaultStepId = $step['defaultStepId'] ?? ($step['config']['defaultStepId'] ?? null);
                     $matchedStepId = null;
                     $matchLabel = "Fallback";
 
@@ -1229,20 +1257,16 @@ class FlowExecutor
                         $subProfile = self::$profileCache[$subscriberId];
                     } else {
                         $subProfile = getSubscriberProfileForFlow($this->pdo, $subscriberId);
-                        // [MEMORY GUARD] [FIX AUDIT-07] Use centralized pruning
                         self::pruneCache(self::$profileCache, 200);
                         self::$profileCache[$subscriberId] = $subProfile;
                     }
 
                     foreach ($branches as $branch) {
-                        $conditions = $branch['conditions'] ?? [];
-                        // [FIX] Empty conditions branch should NOT auto-match.
-                        // Previously: empty($conditions) would cause every branch without
-                        // conditions to match instantly, bypassing all other branches.
-                        // Now: only branches with at least 1 condition AND all conditions true will match.
-                        if (!empty($conditions) && evaluateAdvancedConditionGroup($this->pdo, $subscriberId, $subProfile, $conditions)) {
-                            $matchedStepId = $branch['stepId'];
-                            $matchLabel = $branch['label'];
+                        $condGroup = $branch['conditionGroup'] ?? ($branch['conditions'] ?? ($branch['rules'] ?? []));
+                        $hasRules = isset($condGroup['conditions']) ? !empty($condGroup['conditions']) : !empty($condGroup);
+                        if ($hasRules && evaluateAdvancedConditionGroup($this->pdo, $subscriberId, $subProfile, $condGroup)) {
+                            $matchedStepId = $branch['nextStepId'] ?? ($branch['stepId'] ?? null);
+                            $matchLabel = $branch['label'] ?? ($branch['name'] ?? 'Branch');
                             break;
                         }
                     }
@@ -1585,6 +1609,151 @@ class FlowExecutor
                         } else {
                             $logs[] = "  -> CRM Assign Owner skipped: No ownerId configured.";
                         }
+                    } elseif (in_array($crmActionType, ['assign_round_robin', 'reassign_if_uncontacted', 'crm_assign_round_robin', 'crm_reassign_if_uncontacted'], true)) {
+                        $isReassignSla = (strpos($crmActionType, 'reassign') !== false);
+                        $rawRoundId = trim((string) ($crmConfig['roundId'] ?? $crmConfig['team_id'] ?? $crmConfig['round_id'] ?? ''));
+                        $targetTeamId = ($rawRoundId !== '' && $rawRoundId !== 'all' && is_numeric($rawRoundId)) ? (int) $rawRoundId : 0;
+                        $respectShifts = ($crmConfig['respectShifts'] ?? true) !== false;
+                        $onlyIfUnassigned = !$isReassignSla && !empty($crmConfig['onlyIfUnassigned']);
+                        $notifyNewSale = ($crmConfig['notifyNewSale'] ?? true) !== false;
+
+                        // Check current owner of the contact
+                        $currOwnerId = 0;
+                        $currContactName = trim(($subscriber['first_name'] ?? '') . ' ' . ($subscriber['last_name'] ?? '')) ?: 'Khách hàng';
+                        if ($crmContactId > 0) {
+                            $stmtCurrC = $this->pdo->prepare("SELECT owner_id, full_name FROM contacts WHERE id = ? AND deleted_at IS NULL LIMIT 1");
+                            $stmtCurrC->execute([$crmContactId]);
+                            $currCRow = $stmtCurrC->fetch(PDO::FETCH_ASSOC);
+                            if ($currCRow) {
+                                $currOwnerId = (int) ($currCRow['owner_id'] ?? 0);
+                                if (!empty($currCRow['full_name'])) {
+                                    $currContactName = $currCRow['full_name'];
+                                }
+                            }
+                        }
+
+                        if ($onlyIfUnassigned && $currOwnerId > 0) {
+                            $logs[] = "  -> CRM Round-Robin skipped: Contact {$crmContactId} already has owner #{$currOwnerId}.";
+                        } else {
+                            // Find candidate active Sales in users (not on vacation)
+                            $sqlUsers = "SELECT u.id, u.full_name, u.team_id,
+                                                (SELECT MAX(dl.received_at) FROM distribution_logs dl WHERE dl.assigned_to = u.id) AS last_received_at
+                                         FROM users u
+                                         WHERE u.is_active = 1 AND COALESCE(u.vacation_mode, 0) = 0";
+                            $uParams = [];
+                            if ($targetTeamId > 0) {
+                                $sqlUsers .= " AND u.team_id = ?";
+                                $uParams[] = $targetTeamId;
+                            } else {
+                                $sqlUsers .= " AND LOWER(COALESCE(u.role, '')) IN ('sale', 'sales', 'consultant', 'telesale', 'manager', 'sale_admin')";
+                            }
+                            $stmtU = $this->pdo->prepare($sqlUsers);
+                            $stmtU->execute($uParams);
+                            $candidates = $stmtU->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                            // Filter by today's scheduled shifts if respectShifts is enabled and shift rows exist
+                            if ($respectShifts && !empty($candidates)) {
+                                try {
+                                    $stmtShifts = $this->pdo->query("SELECT DISTINCT user_id FROM consultant_shifts WHERE shift_date = CURDATE() AND status = 'scheduled' AND user_id IS NOT NULL");
+                                    $scheduledUserIds = $stmtShifts ? array_map('intval', $stmtShifts->fetchAll(PDO::FETCH_COLUMN)) : [];
+                                    if (!empty($scheduledUserIds)) {
+                                        $shiftedCandidates = array_values(array_filter($candidates, function ($c) use ($scheduledUserIds) {
+                                            return in_array((int) $c['id'], $scheduledUserIds, true);
+                                        }));
+                                        if (!empty($shiftedCandidates)) {
+                                            $candidates = $shiftedCandidates;
+                                        }
+                                    }
+                                } catch (\Throwable $eShift) {}
+                            }
+
+                            // When reassigning due to SLA breach, exclude the current owner if another Sale is available
+                            if ($isReassignSla && $currOwnerId > 0 && count($candidates) > 1) {
+                                $otherCandidates = array_values(array_filter($candidates, function ($c) use ($currOwnerId) {
+                                    return (int) $c['id'] !== $currOwnerId;
+                                }));
+                                if (!empty($otherCandidates)) {
+                                    $candidates = $otherCandidates;
+                                }
+                            }
+
+                            // Sort by oldest last_received_at (NULL first -> least recently assigned)
+                            if (!empty($candidates)) {
+                                usort($candidates, function ($a, $b) {
+                                    $ta = !empty($a['last_received_at']) ? strtotime($a['last_received_at']) : 0;
+                                    $tb = !empty($b['last_received_at']) ? strtotime($b['last_received_at']) : 0;
+                                    if ($ta === $tb) {
+                                        return ((int) $a['id']) <=> ((int) $b['id']);
+                                    }
+                                    return $ta <=> $tb;
+                                });
+
+                                $chosenSale = $candidates[0];
+                                $chosenSaleId = (int) $chosenSale['id'];
+                                $chosenSaleName = $chosenSale['full_name'] ?: "Sale #{$chosenSaleId}";
+                                $chosenRoundId = $targetTeamId > 0 ? $targetTeamId : (int) ($chosenSale['team_id'] ?? 0);
+
+                                if ($crmContactId > 0) {
+                                    $this->pdo->prepare("UPDATE contacts SET owner_id = ?, pipeline_status = COALESCE(NULLIF(pipeline_status, 'held'), 'assigned'), assigned_at = NOW(), updated_at = NOW() WHERE id = ? AND deleted_at IS NULL")
+                                        ->execute([$chosenSaleId, $crmContactId]);
+
+                                    try {
+                                        $distMsg = $isReassignSla
+                                            ? "Thu hồi SLA & chia lại tự động từ Flow '{$flowName}' sang {$chosenSaleName}"
+                                            : "Chia tự động Round-Robin từ Flow '{$flowName}' cho {$chosenSaleName}";
+                                        $this->pdo->prepare("
+                                            INSERT INTO distribution_logs (lead_id, assigned_to, round_id, status, message, received_at)
+                                            VALUES (?, ?, ?, 'assigned', ?, NOW())
+                                        ")->execute([$crmContactId, $chosenSaleId, $chosenRoundId, $distMsg]);
+                                    } catch (\Throwable $eDl) {}
+                                }
+
+                                $this->pdo->prepare("UPDATE subscribers SET owner_id = ?, salesperson = ? WHERE id = ?")
+                                    ->execute([$chosenSaleId, $chosenSaleName, $subscriberId]);
+
+                                if ($notifyNewSale) {
+                                    try {
+                                        $notifTitle = $isReassignSla
+                                            ? "🔄 Bàn giao Lead quá hạn SLA: {$currContactName}"
+                                            : "🎯 Lead mới từ Vòng chia tự động: {$currContactName}";
+                                        $notifBody = $isReassignSla
+                                            ? "Khách hàng {$currContactName} vừa được hệ thống tự động thu hồi SLA và chuyển cho bạn chăm sóc từ kịch bản '{$flowName}'."
+                                            : "Khách hàng {$currContactName} vừa được phân bổ cho bạn từ kịch bản '{$flowName}'. Vui lòng liên hệ ngay!";
+                                        $linkUrl = $crmContactId > 0 ? "/contacts?open_contact_id={$crmContactId}" : "/contacts";
+                                        $this->pdo->prepare("
+                                            INSERT INTO notifications (tenant_id, user_id, type, title, body, link, is_read, created_at)
+                                            VALUES (1, ?, 'lead_assigned', ?, ?, ?, 0, NOW())
+                                        ")->execute([$chosenSaleId, $notifTitle, $notifBody, $linkUrl]);
+                                    } catch (\Throwable $eNotif) {}
+                                }
+
+                                unset(self::$profileCache[$subscriberId]);
+                                $actLogType = $isReassignSla ? 'crm_reassign_sla' : 'crm_assign_round_robin';
+                                logActivity($this->pdo, $subscriberId, $actLogType, $currentStepId, $flowName, "Assigned to {$chosenSaleName} (#{$chosenSaleId})", $flowId, null, [], $subscriber['workspace_id']);
+                                $logs[] = "  -> CRM Round-Robin assigned to {$chosenSaleName} (#{$chosenSaleId}).";
+                            } else {
+                                $logs[] = "  -> CRM Round-Robin skipped: No active Sales found for team #{$targetTeamId}.";
+                            }
+                        }
+                    } elseif ($crmActionType === 'update_temperature' || $crmActionType === 'crm_update_temperature') {
+                        $newTemp = strtolower(trim((string) ($crmConfig['temperature'] ?? 'hot')));
+                        if (!in_array($newTemp, ['hot', 'warm', 'cold', 'nurture', 'lost'], true)) {
+                            $newTemp = 'hot';
+                        }
+                        if ($crmContactId > 0) {
+                            $this->pdo->prepare("UPDATE contacts SET temperature = ?, lead_status = ?, updated_at = NOW() WHERE id = ? AND deleted_at IS NULL")
+                                ->execute([$newTemp, $newTemp, $crmContactId]);
+                        }
+                        try {
+                            $this->pdo->prepare("UPDATE subscribers SET lead_status = ?, temperature = ? WHERE id = ?")
+                                ->execute([$newTemp, $newTemp, $subscriberId]);
+                        } catch (\Throwable $eSubTemp) {
+                            $this->pdo->prepare("UPDATE subscribers SET lead_status = ? WHERE id = ?")
+                                ->execute([$newTemp, $subscriberId]);
+                        }
+                        unset(self::$profileCache[$subscriberId]);
+                        logActivity($this->pdo, $subscriberId, 'crm_update_temperature', $currentStepId, $flowName, "Updated Lead Temperature: " . strtoupper($newTemp), $flowId, null, [], $subscriber['workspace_id']);
+                        $logs[] = "  -> CRM Lead Temperature updated to {$newTemp} for contact {$crmContactId}.";
                     } elseif ($crmActionType === 'notify_owner' || $crmActionType === 'crm_notify_owner') {
                         $rawNotifyUser = $crmConfig['user_id'] ?? $crmConfig['userId'] ?? $crmConfig['owner_id'] ?? $crmConfig['ownerId'] ?? null;
                         $notifyUserId = !empty($rawNotifyUser) ? (int) $rawNotifyUser : null;

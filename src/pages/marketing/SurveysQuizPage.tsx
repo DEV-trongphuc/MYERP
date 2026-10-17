@@ -5,7 +5,7 @@ import {
     Plus, BarChart2, Globe, Trash2, FileText,
     LayoutGrid, Ticket, PenSquare, PenLine,
     Link2, Copy, Check, ExternalLink, QrCode, Lightbulb,
-    Users, Star, List, PauseCircle, ClipboardList, Clock, HelpCircle
+    Users, Star, List, PauseCircle
 } from 'lucide-react';
 import Modal from '../../components/marketing/components/common/Modal';
 import ConfirmModal from '../../components/marketing/components/common/ConfirmModal';
@@ -20,10 +20,11 @@ import SearchBox from '../../components/marketing/components/common/SearchBox';
 import { api } from '../../components/marketing/services/storageAdapter';
 import { toast } from 'react-hot-toast';
 import { useTheme } from '../../components/marketing/contexts/ThemeContext';
+import { AppIcon } from '../../components/common/AppIcons';
+import SurveyEditor from '../../components/marketing/components/surveys/SurveyEditor';
+import SurveyReportModal from '../../components/marketing/components/surveys/SurveyReportModal';
+import { DEFAULT_THEME, DEFAULT_SETTINGS, DEFAULT_THANK_YOU, createPresetBlocks } from '../../components/marketing/components/surveys/constants/questionTypes';
 
-// Lazy-load heavy editor & report drawer (Contract §2)
-const SurveyEditor = React.lazy(() => import('../../components/marketing/components/surveys/SurveyEditor'));
-const SurveyReportModal = React.lazy(() => import('../../components/marketing/components/surveys/SurveyReportModal'));
 const SurveyGuideModal = React.lazy(() => import('../../components/marketing/components/surveys/SurveyGuideModal'));
 
 // ─── Status config ───────────────────────────────────────────────────────────
@@ -94,9 +95,7 @@ const SurveyPreviewModal: React.FC<{
             size="md"
             title={
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-[var(--radius-md)] bg-[var(--color-primary-light)] flex items-center justify-center flex-shrink-0">
-                        <FileText className="w-5 h-5 text-[var(--color-primary)]" />
-                    </div>
+                    <AppIcon name="surveys_quiz" size={38} className="rounded-[12px] shrink-0" />
                     <div>
                         <p className="text-[var(--color-text-muted)] text-[10px] font-bold uppercase tracking-wider">Khảo sát</p>
                         <h3 className="text-[var(--color-text)] font-bold text-base leading-tight line-clamp-1">{survey.name}</h3>
@@ -208,7 +207,7 @@ const SurveyPreviewModal: React.FC<{
 const CreateSurveyModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
-    onCreate: (name: string) => Promise<void>;
+    onCreate: (name: string) => void | Promise<void>;
     isDark?: boolean;
 }> = ({ isOpen, onClose, onCreate, isDark }) => {
     const [name, setName] = useState('Khảo sát mới');
@@ -217,9 +216,12 @@ const CreateSurveyModal: React.FC<{
     const handleSubmit = async () => {
         if (!name.trim() || isLoading) return;
         setIsLoading(true);
-        await onCreate(name.trim());
-        setIsLoading(false);
-        setName('Khảo sát mới');
+        try {
+            await onCreate(name.trim());
+        } finally {
+            setIsLoading(false);
+            setName('Khảo sát mới');
+        }
     };
 
     return (
@@ -257,9 +259,9 @@ const CreateSurveyModal: React.FC<{
                                     key={t.label}
                                     type="button"
                                     onClick={() => setName(t.label)}
-                                    className={`flex items-start gap-2.5 p-3 rounded-[var(--radius-md)] border text-left transition-all ${
+                                    className={`flex items-start gap-2.5 p-3 rounded-[var(--radius-md)] border text-left transition-colors ${
                                         isActive
-                                            ? 'border-[var(--color-primary)] bg-[var(--color-primary-light)] shadow-xs'
+                                            ? 'border-[var(--color-primary)] bg-[var(--color-primary-light)]'
                                             : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-bg)]'
                                     }`}
                                 >
@@ -301,7 +303,7 @@ const CreateSurveyModal: React.FC<{
     );
 };
 
-// ─── Survey Card (Grid card & Table row, NO .card class — Contract §1) ───────
+// ─── Survey Card (Grid card & Table row, Zero-Shadow High-Contrast — Contract §1) ───────
 const SurveyCard: React.FC<{
     survey: Survey;
     viewMode?: 'grid' | 'list';
@@ -310,7 +312,7 @@ const SurveyCard: React.FC<{
     onDelete: () => void;
     onTogglePause: () => void;
     onSlugClick: () => void;
-}> = React.memo(({ survey, viewMode = 'grid', onEdit, onAnalytics, onDelete, onTogglePause, onSlugClick }) => {
+}> = React.memo(({ survey, viewMode = 'grid', onEdit, onAnalytics, onDelete, onTogglePause }) => {
     const responses = survey.response_count ?? 0;
     const nps = survey.avg_nps;
     const statusCfg = STATUS[survey.status as keyof typeof STATUS] ?? STATUS.draft;
@@ -324,9 +326,7 @@ const SurveyCard: React.FC<{
             >
                 <td className="px-4 py-3">
                     <div className="flex items-center gap-3 min-w-0">
-                        <div className={`w-9 h-9 rounded-[12px] flex items-center justify-center flex-shrink-0 ${statusCfg.iconBg}`}>
-                            <ClipboardList className="w-4 h-4" />
-                        </div>
+                        <AppIcon name="surveys_quiz" size={34} className="rounded-[10px] shrink-0" />
                         <div className="min-w-0">
                             <p className="text-[13px] font-semibold text-[var(--color-text)] group-hover:text-[var(--color-primary)] transition-colors truncate max-w-[320px]">
                                 {survey.name}
@@ -406,7 +406,7 @@ const SurveyCard: React.FC<{
                         <button
                             type="button"
                             onClick={onAnalytics}
-                            className="h-8 px-2.5 inline-flex items-center gap-1 rounded-[12px] bg-[var(--color-primary)] text-white text-xs font-semibold hover:bg-[var(--color-primary-hover)] transition-colors shadow-xs"
+                            className="h-8 px-2.5 inline-flex items-center gap-1 rounded-[12px] bg-[var(--color-primary)] text-white text-xs font-semibold hover:bg-[var(--color-primary-hover)] transition-colors"
                             title="Xem báo cáo"
                         >
                             <BarChart2 className="w-3.5 h-3.5" />
@@ -427,14 +427,12 @@ const SurveyCard: React.FC<{
     }
 
     return (
-        <div className="hover-lift bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[18px] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all duration-300 hover:border-[var(--color-primary-light)] flex flex-col justify-between group h-full">
+        <div className="bg-white dark:bg-[#111827] border border-slate-200/90 dark:border-white/[0.08] rounded-[18px] p-5 transition-colors duration-200 hover:border-slate-300 dark:hover:border-white/20 flex flex-col justify-between group h-full">
             <div>
-                {/* Top row: Status icon + Status badge + Toggle + Delete */}
+                {/* Top row: Unified AppIcon + Status badge + Toggle + Delete */}
                 <div className="flex items-center justify-between gap-2 mb-3">
                     <div className="flex items-center gap-2.5 min-w-0">
-                        <div className={`w-10 h-10 rounded-[14px] flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:scale-105 ${statusCfg.iconBg}`}>
-                            <ClipboardList className="w-5 h-5" />
-                        </div>
+                        <AppIcon name="surveys_quiz" size={38} className="rounded-[12px] shrink-0" />
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${statusCfg.badgeClass}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.dotClass}`} />
                             {statusCfg.label}
@@ -468,7 +466,7 @@ const SurveyCard: React.FC<{
                 {/* Title */}
                 <h3
                     onClick={onAnalytics}
-                    className="text-sm font-bold text-[var(--color-text)] group-hover:text-[var(--color-primary)] transition-colors line-clamp-2 mt-2 mb-2 cursor-pointer leading-snug"
+                    className="text-sm font-bold text-slate-900 dark:text-slate-100 group-hover:text-[var(--color-primary)] transition-colors line-clamp-2 mt-2 mb-2 cursor-pointer leading-snug"
                     title={survey.name}
                 >
                     {survey.name}
@@ -478,7 +476,7 @@ const SurveyCard: React.FC<{
                 <div className="mb-2">
                     {survey.slug ? (
                         <div
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[10px] bg-[var(--color-bg)] border border-[var(--color-border)] text-xs text-[var(--color-text-muted)] font-mono hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer group/chip max-w-full"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[10px] bg-slate-50 dark:bg-white/[0.04] border border-slate-200/80 dark:border-white/[0.08] text-xs text-slate-600 dark:text-slate-400 font-mono hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer group/chip max-w-full"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 if (publicUrl) {
@@ -488,12 +486,12 @@ const SurveyCard: React.FC<{
                             }}
                             title="Nhấn để sao chép liên kết"
                         >
-                            <Link2 className="w-3.5 h-3.5 shrink-0 text-[var(--color-text-muted)] group-hover/chip:text-[var(--color-primary)] transition-colors" />
+                            <Link2 className="w-3.5 h-3.5 shrink-0 text-slate-500 dark:text-slate-400 group-hover/chip:text-[var(--color-primary)] transition-colors" />
                             <span className="truncate max-w-[200px]">/s/{survey.slug}</span>
                             <Copy className="w-3 h-3 ml-auto opacity-60 group-hover/chip:opacity-100 shrink-0" />
                         </div>
                     ) : (
-                        <span className="inline-block text-xs text-[var(--color-text-muted)] italic py-1">
+                        <span className="inline-block text-xs text-slate-500 dark:text-slate-400 italic py-1">
                             Chưa xuất bản
                         </span>
                     )}
@@ -501,26 +499,26 @@ const SurveyCard: React.FC<{
             </div>
 
             <div>
-                {/* Metrics row: 2-column stats with subtle icons */}
-                <div className="grid grid-cols-2 gap-2 p-2.5 bg-[var(--color-bg)] rounded-[14px] border border-[var(--color-border-light)] my-3">
+                {/* Metrics row: flat 2-column stats box */}
+                <div className="grid grid-cols-2 gap-2 p-2.5 bg-slate-50/80 dark:bg-white/[0.03] rounded-[14px] border border-slate-200/70 dark:border-white/[0.06] my-3">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-[10px] bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                        <div className="w-8 h-8 rounded-[10px] bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/40 flex items-center justify-center shrink-0">
                             <Users className="w-4 h-4" />
                         </div>
                         <div className="min-w-0">
-                            <span className="block text-[10px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider truncate">Lượt trả lời</span>
-                            <span className="text-xs font-bold text-[var(--color-text)] tabular-nums">
+                            <span className="block text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate">Lượt trả lời</span>
+                            <span className="text-xs font-bold text-slate-900 dark:text-slate-100 tabular-nums">
                                 {responses.toLocaleString('vi-VN')}
                             </span>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 border-l border-[var(--color-border-light)] pl-2">
-                        <div className="w-8 h-8 rounded-[10px] bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                    <div className="flex items-center gap-2 border-l border-slate-200/70 dark:border-white/[0.06] pl-2">
+                        <div className="w-8 h-8 rounded-[10px] bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/40 flex items-center justify-center shrink-0">
                             <Star className="w-4 h-4" />
                         </div>
                         <div className="min-w-0">
-                            <span className="block text-[10px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider truncate">Điểm NPS</span>
-                            <span className={`text-xs font-bold tabular-nums ${nps !== undefined && nps !== null ? (nps >= 0 ? 'text-emerald-600' : 'text-rose-600') : 'text-[var(--color-text-muted)]'}`}>
+                            <span className="block text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate">Điểm NPS</span>
+                            <span className={`text-xs font-bold tabular-nums ${nps !== undefined && nps !== null ? (nps >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400') : 'text-slate-500 dark:text-slate-400'}`}>
                                 {nps !== undefined && nps !== null ? (nps > 0 ? `+${nps}` : nps) : '—'}
                             </span>
                         </div>
@@ -532,7 +530,7 @@ const SurveyCard: React.FC<{
                     <button
                         type="button"
                         onClick={onEdit}
-                        className="border border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-bg-subtle)] rounded-[12px] h-9 px-3.5 font-semibold text-xs flex-1 inline-flex items-center justify-center gap-1.5 transition-colors"
+                        className="border border-slate-200 dark:border-white/15 bg-white dark:bg-white/[0.03] text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/[0.07] rounded-[12px] h-9 px-3.5 font-semibold text-xs flex-1 inline-flex items-center justify-center gap-1.5 transition-colors"
                     >
                         <PenLine className="w-3.5 h-3.5" />
                         Thiết kế
@@ -540,7 +538,7 @@ const SurveyCard: React.FC<{
                     <button
                         type="button"
                         onClick={onAnalytics}
-                        className="bg-[var(--color-primary)] text-white hover:brightness-95 rounded-[12px] h-9 px-3.5 font-semibold text-xs shadow-xs flex-[1.4] inline-flex items-center justify-center gap-1.5 transition-colors"
+                        className="bg-[var(--color-primary)] text-white hover:brightness-95 rounded-[12px] h-9 px-3.5 font-semibold text-xs flex-[1.4] inline-flex items-center justify-center gap-1.5 transition-colors"
                     >
                         <BarChart2 className="w-3.5 h-3.5" />
                         Xem báo cáo
@@ -557,6 +555,7 @@ const Surveys: React.FC = () => {
     const navigate = useNavigate();
     const routeParams = useParams<{ id: string }>();
     const [editingSurveyId, setEditingSurveyId] = useState<string | null>(routeParams.id || null);
+    const [editingSurvey, setEditingSurvey] = useState<Survey | null>(null);
     const { isDark } = useTheme();
     const [surveys, setSurveys] = useState<Survey[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -607,15 +606,64 @@ const Surveys: React.FC = () => {
         };
     }, [fetchSurveys]);
 
-    const handleCreate = async (name: string) => {
-        const res = await api.post<{ id: string; slug: string }>('surveys?action=create', { name });
-        if (res.success) {
-            setShowCreate(false);
-            setEditingSurveyId((res.data as any).id);
-        } else {
+    const handleOpenEdit = useCallback((survey: Survey) => {
+        setEditingSurvey(survey);
+        setEditingSurveyId(survey.id);
+    }, []);
+
+    const handleCreate = useCallback(async (name: string) => {
+        const tempId = crypto.randomUUID();
+        const presetBlocks = createPresetBlocks(name);
+        const nowIso = new Date().toISOString();
+        const optimisticSurvey: Survey = {
+            id: tempId,
+            workspace_id: 1,
+            name,
+            slug: `khao-sat-${tempId.slice(0, 6)}`,
+            status: 'draft',
+            blocks: presetBlocks,
+            theme: { ...DEFAULT_THEME, cardShadow: 'none' },
+            settings: { ...DEFAULT_SETTINGS },
+            thankYouPage: { ...DEFAULT_THANK_YOU },
+            response_count: 0,
+            require_login: false,
+            allow_anonymous: true,
+            one_per_email: false,
+            created_at: nowIso,
+            updated_at: nowIso,
+        };
+
+        // 0ms instant modal close + instant editor open
+        setShowCreate(false);
+        setSurveys(prev => [optimisticSurvey, ...prev]);
+        setEditingSurvey(optimisticSurvey);
+        setEditingSurveyId(tempId);
+
+        try {
+            const res = await api.post<any>('surveys?action=create', {
+                id: tempId,
+                name,
+                blocks_json: presetBlocks,
+            });
+            if (res.success && res.data) {
+                const created = res.data as Survey;
+                const merged: Survey = {
+                    ...optimisticSurvey,
+                    ...created,
+                    blocks: Array.isArray(created.blocks) && created.blocks.length > 0 ? created.blocks : presetBlocks,
+                };
+                setSurveys(prev => prev.map(s => s.id === tempId ? merged : s));
+                setEditingSurvey(prev => prev && prev.id === tempId ? merged : prev);
+                if (created.id && created.id !== tempId) {
+                    setEditingSurveyId(created.id);
+                }
+            } else {
+                toast.error('Tạo khảo sát thất bại');
+            }
+        } catch {
             toast.error('Tạo khảo sát thất bại');
         }
-    };
+    }, []);
 
     const handleDeleteConfirm = async () => {
         if (!deleteTarget) return;
@@ -685,62 +733,20 @@ const Surveys: React.FC = () => {
     const isFiltering = Boolean(debouncedSearch.trim()) || activeTab !== 'all';
 
     if (editingSurveyId) {
+        const initialSurveyData = editingSurvey?.id === editingSurveyId
+            ? editingSurvey
+            : (surveys.find(s => s.id === editingSurveyId) || null);
         return (
-            <React.Suspense
-                fallback={
-                    <div className="w-full h-[80vh] flex flex-col bg-slate-100 dark:bg-[#0B0F19] rounded-[20px] border border-[var(--color-border)] overflow-hidden">
-                        {/* Top Bar Skeleton */}
-                        <div className="h-14 shrink-0 bg-white dark:bg-[#111827] border-b border-slate-200 dark:border-white/[0.07] px-5 flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
-                                <div className="w-48 h-5 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[10px]" />
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="w-28 h-8 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
-                                <div className="w-28 h-8 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
-                            </div>
-                            <div className="flex items-center gap-2.5">
-                                <div className="w-24 h-9 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
-                                <div className="w-28 h-9 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
-                            </div>
-                        </div>
-                        {/* 3-Column Editor Workspace Skeleton: 320px Left Toolbox + Center Canvas + 380px Right Properties */}
-                        <div className="flex-1 flex overflow-hidden">
-                            <div className="w-[320px] shrink-0 bg-white dark:bg-[#111827] border-r border-slate-200 dark:border-white/[0.07] p-4 space-y-3">
-                                <div className="w-36 h-4 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[8px]" />
-                                <div className="grid grid-cols-2 gap-2.5 pt-1">
-                                    {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
-                                        <div key={n} className="h-16 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
-                                    ))}
-                                </div>
-                            </div>
-                            <div className="flex-1 p-8 overflow-y-auto flex justify-center">
-                                <div className="w-full max-w-2xl space-y-4">
-                                    <div className="h-44 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
-                                    <div className="h-32 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
-                                    <div className="h-32 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
-                                </div>
-                            </div>
-                            <div className="w-[380px] shrink-0 bg-white dark:bg-[#111827] border-l border-slate-200 dark:border-white/[0.07] p-5 space-y-4">
-                                <div className="w-40 h-5 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[10px]" />
-                                <div className="h-10 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
-                                <div className="h-24 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
-                                <div className="h-10 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
-                                <div className="h-32 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
-                            </div>
-                        </div>
-                    </div>
-                }
-            >
-                <SurveyEditor
-                    surveyIdProp={editingSurveyId}
-                    onBack={() => {
-                        setEditingSurveyId(null);
-                        if (routeParams.id) navigate('/marketing/surveys');
-                        fetchSurveys();
-                    }}
-                />
-            </React.Suspense>
+            <SurveyEditor
+                surveyIdProp={editingSurveyId}
+                initialSurvey={initialSurveyData}
+                onBack={() => {
+                    setEditingSurveyId(null);
+                    setEditingSurvey(null);
+                    if (routeParams.id) navigate('/marketing/surveys');
+                    fetchSurveys();
+                }}
+            />
         );
     }
 
@@ -840,7 +846,7 @@ const Surveys: React.FC = () => {
                                     <button
                                         type="button"
                                         onClick={() => setViewMode('grid')}
-                                        className={`h-full px-2 rounded-[var(--radius-sm)] transition-colors ${viewMode === 'grid' ? 'bg-[var(--color-surface)] shadow-sm text-[var(--color-primary)]' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'}`}
+                                        className={`h-full px-2 rounded-[var(--radius-sm)] transition-colors ${viewMode === 'grid' ? 'bg-[var(--color-surface)] text-[var(--color-primary)] border border-[var(--color-border-light)]' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'}`}
                                         title="Chế độ lưới"
                                         aria-pressed={viewMode === 'grid'}
                                     >
@@ -849,7 +855,7 @@ const Surveys: React.FC = () => {
                                     <button
                                         type="button"
                                         onClick={() => setViewMode('list')}
-                                        className={`h-full px-2 rounded-[var(--radius-sm)] transition-colors ${viewMode === 'list' ? 'bg-[var(--color-surface)] shadow-sm text-[var(--color-primary)]' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'}`}
+                                        className={`h-full px-2 rounded-[var(--radius-sm)] transition-colors ${viewMode === 'list' ? 'bg-[var(--color-surface)] text-[var(--color-primary)] border border-[var(--color-border-light)]' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'}`}
                                         title="Chế độ danh sách"
                                         aria-pressed={viewMode === 'list'}
                                     >
@@ -878,10 +884,10 @@ const Surveys: React.FC = () => {
                     {!hasLoaded ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-4">
                             {[...Array(6)].map((_, i) => (
-                                <div key={i} className="rounded-[20px] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 flex flex-col gap-4">
+                                <div key={i} className="rounded-[18px] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 flex flex-col gap-4">
                                     <div className="flex justify-between items-start">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-11 h-11 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                            <div className="w-10 h-10 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
                                             <div className="space-y-2">
                                                 <div className="w-40 h-4 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[8px]" />
                                                 <div className="w-24 h-3 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[6px]" />
@@ -889,8 +895,7 @@ const Surveys: React.FC = () => {
                                         </div>
                                         <div className="w-16 h-6 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-full" />
                                     </div>
-                                    <div className="grid grid-cols-3 gap-2.5 pt-1">
-                                        <div className="h-14 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                    <div className="grid grid-cols-2 gap-2.5 pt-1">
                                         <div className="h-14 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
                                         <div className="h-14 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
                                     </div>
@@ -938,7 +943,7 @@ const Surveys: React.FC = () => {
                                     key={survey.id}
                                     survey={survey}
                                     viewMode="grid"
-                                    onEdit={() => setEditingSurveyId(survey.id)}
+                                    onEdit={() => handleOpenEdit(survey)}
                                     onAnalytics={() => setReportSurvey(survey)}
                                     onDelete={() => setDeleteTarget(survey)}
                                     onTogglePause={() => handleTogglePause(survey)}
@@ -965,7 +970,7 @@ const Surveys: React.FC = () => {
                                             key={survey.id}
                                             survey={survey}
                                             viewMode="list"
-                                            onEdit={() => setEditingSurveyId(survey.id)}
+                                            onEdit={() => handleOpenEdit(survey)}
                                             onAnalytics={() => setReportSurvey(survey)}
                                             onDelete={() => setDeleteTarget(survey)}
                                             onTogglePause={() => handleTogglePause(survey)}
@@ -979,43 +984,42 @@ const Surveys: React.FC = () => {
                 </div>
             </Panel>
 
-            {/* Modals gated so lazy chunks only load when opened */}
+            {showCreate && (
+                <CreateSurveyModal
+                    isOpen={showCreate}
+                    onClose={() => setShowCreate(false)}
+                    onCreate={handleCreate}
+                    isDark={isDark}
+                />
+            )}
+
+            {reportSurvey && (
+                <SurveyReportModal
+                    survey={reportSurvey}
+                    isOpen={!!reportSurvey}
+                    onClose={() => setReportSurvey(null)}
+                />
+            )}
+
+            {deleteTarget && (
+                <ConfirmDeleteModal
+                    survey={deleteTarget}
+                    onConfirm={handleDeleteConfirm}
+                    onCancel={() => setDeleteTarget(null)}
+                    isDark={isDark}
+                />
+            )}
+
+            {previewSurvey && (
+                <SurveyPreviewModal
+                    survey={previewSurvey}
+                    onClose={() => setPreviewSurvey(null)}
+                    onEdit={() => { handleOpenEdit(previewSurvey); setPreviewSurvey(null); }}
+                    isDark={isDark}
+                />
+            )}
+
             <React.Suspense fallback={null}>
-                {showCreate && (
-                    <CreateSurveyModal
-                        isOpen={showCreate}
-                        onClose={() => setShowCreate(false)}
-                        onCreate={handleCreate}
-                        isDark={isDark}
-                    />
-                )}
-
-                {reportSurvey && (
-                    <SurveyReportModal
-                        survey={reportSurvey}
-                        isOpen={!!reportSurvey}
-                        onClose={() => setReportSurvey(null)}
-                    />
-                )}
-
-                {deleteTarget && (
-                    <ConfirmDeleteModal
-                        survey={deleteTarget}
-                        onConfirm={handleDeleteConfirm}
-                        onCancel={() => setDeleteTarget(null)}
-                        isDark={isDark}
-                    />
-                )}
-
-                {previewSurvey && (
-                    <SurveyPreviewModal
-                        survey={previewSurvey}
-                        onClose={() => setPreviewSurvey(null)}
-                        onEdit={() => { setEditingSurveyId(previewSurvey.id); setPreviewSurvey(null); }}
-                        isDark={isDark}
-                    />
-                )}
-
                 {isGuideOpen && (
                     <SurveyGuideModal isOpen={isGuideOpen} onClose={() => setIsGuideOpen(false)} />
                 )}

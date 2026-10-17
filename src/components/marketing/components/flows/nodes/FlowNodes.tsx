@@ -120,6 +120,8 @@ export const TriggerNode: React.FC<NodeProps> = memo(
         const getTriggerStyle = () => {
             if (isFormDeleted) return { icon: AlertOctagon, color: 'from-rose-500 to-red-700', label: 'LỖI LIÊN KẾT' };
             switch (triggerType) {
+                case 'erp_event':
+                    return { icon: Briefcase, color: 'from-indigo-600 to-blue-700', label: 'MYERP Event' };
                 case 'segment':
                     return step.config.targetSubtype === 'list' || step.config.targetSubtype === 'sync'
                         ? { icon: ListPlus, color: 'from-emerald-500 to-teal-600', label: 'List Entry' }
@@ -140,6 +142,38 @@ export const TriggerNode: React.FC<NodeProps> = memo(
         };
 
         const { icon: Icon, color, label } = getTriggerStyle();
+        const erpFilters = step.config?.erpFilters || {};
+        const filterBadges: string[] = [];
+        if (triggerType === 'erp_event' && erpFilters && typeof erpFilters === 'object') {
+            if (erpFilters.round_id && erpFilters.round_id !== 'all') {
+                filterBadges.push(`Vòng chia #${erpFilters.round_id}`);
+            }
+            if (erpFilters.team_id && erpFilters.team_id !== 'all') {
+                filterBadges.push(`Team #${erpFilters.team_id}`);
+            }
+            if (Array.isArray(erpFilters.owner_ids) && erpFilters.owner_ids.length > 0) {
+                filterBadges.push(`${erpFilters.owner_ids.length} Sale`);
+            } else if (erpFilters.owner_id && erpFilters.owner_id !== 'all') {
+                filterBadges.push(`Sale #${erpFilters.owner_id}`);
+            }
+            if (erpFilters.to_stage_id && erpFilters.to_stage_id !== 'all') {
+                filterBadges.push(`Tới Stage #${erpFilters.to_stage_id}`);
+            } else if (erpFilters.stage_id && erpFilters.stage_id !== 'all') {
+                filterBadges.push(`Stage #${erpFilters.stage_id}`);
+            }
+            if (erpFilters.sla_hours) {
+                filterBadges.push(`SLA > ${erpFilters.sla_hours}h`);
+            }
+            if (erpFilters.temperature && erpFilters.temperature !== 'all') {
+                filterBadges.push(`Độ nóng: ${String(erpFilters.temperature).toUpperCase()}`);
+            }
+            if (erpFilters.branch_id && erpFilters.branch_id !== 'all') {
+                filterBadges.push(`Chi nhánh #${erpFilters.branch_id}`);
+            }
+            if (erpFilters.program && erpFilters.program !== 'all') {
+                filterBadges.push(String(erpFilters.program));
+            }
+        }
 
         return (
             <div
@@ -157,12 +191,29 @@ export const TriggerNode: React.FC<NodeProps> = memo(
                     <div className="w-11 h-11 rounded-[14px] bg-white/20 flex items-center justify-center shrink-0">
                         <Icon className="w-5 h-5" />
                     </div>
-                    <div>
+                    <div className="max-w-[230px]">
                         <p className="text-[9px] font-bold uppercase tracking-widest opacity-80 leading-none mb-1">
                             {label}
                         </p>
                         <p className="text-sm font-black leading-tight">{step.label}</p>
                         {isFormDeleted && <p className="text-[9px] opacity-90 font-bold mt-0.5">Form đã bị xóa</p>}
+                        {filterBadges.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                                {filterBadges.slice(0, 3).map((bText, idx) => (
+                                    <span
+                                        key={idx}
+                                        className="text-[9px] font-bold bg-white/20 px-1.5 py-0.5 rounded-md backdrop-blur-sm"
+                                    >
+                                        {bText}
+                                    </span>
+                                ))}
+                                {filterBadges.length > 3 && (
+                                    <span className="text-[9px] font-bold bg-white/20 px-1.5 py-0.5 rounded-md">
+                                        +{filterBadges.length - 3}
+                                    </span>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
                 {!isViewMode && <QuickEdit onClick={onClick || (() => {})} />}
@@ -373,19 +424,43 @@ export const ConditionNode: React.FC<NodeProps> = memo(
         const unitMap: any = { minutes: 'phút', hours: 'giờ', days: 'ngày', weeks: 'tuần' };
         const getActionInfo = () => {
             switch (step.config.conditionType) {
+                case 'crm_sale_contacted':
+                    return { label: 'Sale đã liên hệ?', icon: PhoneCall };
+                case 'crm_assigned_to':
+                    return { label: 'Phân bổ Sale?', icon: UserCheck };
+                case 'crm_stage_is':
+                case 'stage_matches':
+                    return { label: 'Giai đoạn Pipeline?', icon: Briefcase };
+                case 'crm_temperature_is':
+                    return { label: 'Độ nóng Lead?', icon: Zap };
+                case 'deposit_paid':
+                case 'has_deposit':
+                    return { label: 'Đã đặt cọc?', icon: ShoppingCart };
+                case 'erp_is_student':
+                    return { label: 'Đã nhập học?', icon: UserCheck };
+                case 'channel_reachability':
+                    return { label: 'Kênh khả dụng?', icon: MessageSquare };
                 case 'opened':
                     return { label: 'Đã mở Email?', icon: MailOpen };
                 case 'clicked':
+                case 'clicked_specific':
                     return { label: 'Đã click Link?', icon: MousePointer2 };
                 case 'replied':
                     return { label: 'Đã phản hồi?', icon: MessageSquare };
+                case 'zalo_interacted':
+                    return { label: 'Tương tác Zalo?', icon: MessageSquare };
+                case 'survey_completed':
+                    return { label: 'Hoàn thành Survey?', icon: FileInput };
+                case 'voucher_claimed':
+                    return { label: 'Nhận Voucher?', icon: Tag };
                 case 'unsubscribed':
                     return { label: 'Hủy đăng ký', icon: UserMinus };
                 default:
                     return { label: 'Đang theo dõi...', icon: Hourglass };
             }
         };
-        const { icon: Icon } = getActionInfo();
+        const { icon: Icon, label: actionLabel } = getActionInfo();
+        const isInstantCheck = Number(step.config.waitDuration) === 0;
 
         return (
             <div
@@ -413,9 +488,11 @@ export const ConditionNode: React.FC<NodeProps> = memo(
                     <p className="text-sm font-bold text-slate-800 leading-tight mb-3">{step.label}</p>
                     {!incomplete ? (
                         <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 bg-slate-50 px-3 py-2 rounded-[10px] border border-slate-100">
-                            <Icon className="w-3.5 h-3.5 text-[var(--color-primary)]" />
-                            <span>
-                                Wait: {step.config.waitDuration} {unitMap[step.config.waitUnit] || 'giờ'}
+                            <Icon className="w-3.5 h-3.5 text-[var(--color-primary)] shrink-0" />
+                            <span className="truncate">
+                                {isInstantCheck
+                                    ? `Kiểm tra tức thì: ${actionLabel}`
+                                    : `Wait: ${step.config.waitDuration} ${unitMap[step.config.waitUnit] || 'giờ'}`}
                             </span>
                         </div>
                     ) : (
@@ -669,7 +746,7 @@ export const CrmActionNode: React.FC<NodeProps> = memo(
         isReportMode,
         reportStats
     }) => {
-        const actionType = step.config?.actionType || 'update_stage';
+        const actionType = step.config?.actionType || step.config?.crmActionType || 'update_stage';
 
         const getActionSummary = () => {
             switch (actionType) {
@@ -689,22 +766,54 @@ export const CrmActionNode: React.FC<NodeProps> = memo(
                     const isCall = (step.config?.task_type || 'call') === 'call';
                     return {
                         badge: isCall ? 'Lịch gọi Sale' : 'Task CRM',
-                        detail: step.config?.subject || 'Tạo công việc cho Sale',
+                        detail: step.config?.subject || step.config?.taskSubject || 'Tạo công việc cho Sale',
                         icon: PhoneCall
                     };
                 }
                 case 'assign_owner': {
                     return {
                         badge: 'Phân bổ Sale',
-                        detail: step.config?.owner_name || (step.config?.owner_id ? `Sale: ${step.config.owner_id}` : 'Chưa chọn Sale'),
+                        detail: step.config?.owner_name || (step.config?.owner_id || step.config?.ownerId ? `Sale: #${step.config.owner_id || step.config.ownerId}` : 'Chưa chọn Sale'),
                         icon: UserCheck
+                    };
+                }
+                case 'assign_round_robin': {
+                    const roundInfo = step.config?.roundId ? `Vòng chia #${step.config.roundId}` : 'Tất cả Sale đang trực';
+                    const shiftInfo = step.config?.respectShifts !== false ? ' • Theo ca trực' : '';
+                    return {
+                        badge: 'Chia Round-Robin',
+                        detail: `${roundInfo}${shiftInfo}`,
+                        icon: UserCheck
+                    };
+                }
+                case 'reassign_if_uncontacted': {
+                    const roundInfo = step.config?.roundId ? `Vòng chia #${step.config.roundId}` : 'Sale khác trong ca';
+                    return {
+                        badge: 'Thu hồi & Chia lại SLA',
+                        detail: `Chuyển sang: ${roundInfo}`,
+                        icon: UserCheck
+                    };
+                }
+                case 'update_temperature': {
+                    const tempVal = String(step.config?.temperature || 'hot').toUpperCase();
+                    return {
+                        badge: 'Cập nhật Độ nóng',
+                        detail: `Độ nóng: ${tempVal}`,
+                        icon: Zap
                     };
                 }
                 case 'notify_owner': {
                     return {
                         badge: 'Thông báo Sale',
-                        detail: step.config?.message || step.config?.body || 'Thông báo nội bộ MYERP',
+                        detail: step.config?.notifyTitle || step.config?.message || step.config?.body || 'Thông báo nội bộ MYERP',
                         icon: BellRing
+                    };
+                }
+                case 'create_support_ticket': {
+                    return {
+                        badge: 'Phiếu Hỗ trợ / Học vụ',
+                        detail: step.config?.ticket_subject || step.config?.subject || 'Tạo Ticket hỗ trợ MYERP',
+                        icon: Briefcase
                     };
                 }
                 default:
@@ -762,7 +871,7 @@ export const CrmActionNode: React.FC<NodeProps> = memo(
 
 export const AdvancedConditionNode: React.FC<NodeProps> = memo(
     ({ step, onClick, isViewMode, hasWarning, isReportMode, reportStats }) => {
-        const branches = step.config.branches || [];
+        const branches = step.config?.branches || (step as any).branches || [];
         return (
             <div
                 onClick={e => {
@@ -780,12 +889,12 @@ export const AdvancedConditionNode: React.FC<NodeProps> = memo(
                 >
                     <GitMerge className="w-8 h-8 rotate-90" />
                 </div>
-                <div className="absolute top-0 left-16 ml-3 w-44 opacity-0 group-hover:opacity-100 transition-all pointer-events-none z-50">
+                <div className="absolute top-0 left-16 ml-3 w-48 opacity-0 group-hover:opacity-100 transition-all pointer-events-none z-50">
                     <div className="bg-slate-800 text-white text-[10px] p-2.5 rounded-[14px] font-bold shadow-xl">
                         <p className="uppercase tracking-widest text-slate-400 mb-1">Advanced Split</p>
                         {branches.map((b: any, i: number) => (
-                            <div key={i} className="flex justify-between text-slate-300">
-                                <span className="truncate">{b.label}</span>
+                            <div key={i} className="flex justify-between text-slate-300 gap-2">
+                                <span className="truncate">{b.label || b.name || `Nhánh ${i + 1}`}</span>
                                 <span>→</span>
                             </div>
                         ))}

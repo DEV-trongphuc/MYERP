@@ -17,37 +17,120 @@ import { getMktPortalRoot } from '../../utils/portalRoot';
 
 export interface SurveyEditorProps {
     surveyIdProp?: string;
+    initialSurvey?: Survey | null;
     onBack?: () => void;
 }
 
-const SurveyEditor: React.FC<SurveyEditorProps> = ({ surveyIdProp, onBack }) => {
+function normalizeClientBlocks(rawBlocks: any[]): SurveyBlock[] {
+    if (!Array.isArray(rawBlocks)) return [];
+    return rawBlocks.map((b: any, idx: number) => {
+        if (!b || typeof b !== 'object') return createDefaultBlock('short_text');
+        const label = b.label || b.title || b.question || b.content || `Câu hỏi ${idx + 1}`;
+        let type = b.type || 'short_text';
+        let extra: Partial<SurveyBlock> = {};
+
+        if (type === 'rating') {
+            const style = b.options?.style || b.style?.style || '';
+            const scale = Number(b.options?.scale || b.scale || 5);
+            if (style === 'nps' || scale === 10) {
+                type = 'nps';
+                extra = {
+                    minValue: b.minValue ?? 0,
+                    maxValue: b.maxValue ?? 10,
+                    minLabel: b.minLabel ?? 'Rất không hài lòng',
+                    maxLabel: b.maxLabel ?? 'Rất hài lòng',
+                };
+            } else {
+                type = 'star_rating';
+                extra = {
+                    minValue: b.minValue ?? 1,
+                    maxValue: b.maxValue ?? (scale > 0 ? scale : 5),
+                    ratingIcon: b.ratingIcon ?? 'star',
+                };
+            }
+        } else if (type === 'multiple_choice') {
+            type = 'single_choice';
+        }
+
+        let normalizedOptions = b.options;
+        if (b.options && typeof b.options === 'object') {
+            const rawOpts = Array.isArray(b.options.choices)
+                ? b.options.choices
+                : (Array.isArray(b.options) ? b.options : null);
+            if (rawOpts) {
+                normalizedOptions = rawOpts.map((opt: any, optIdx: number) => {
+                    if (opt && typeof opt === 'object') {
+                        const optLabel = String(opt.label ?? opt.value ?? `Lựa chọn ${optIdx + 1}`);
+                        return {
+                            id: opt.id ? String(opt.id) : `opt-${idx + 1}-${optIdx + 1}`,
+                            label: optLabel,
+                            value: String(opt.value ?? optLabel),
+                        };
+                    }
+                    const str = String(opt);
+                    return {
+                        id: `opt-${idx + 1}-${optIdx + 1}`,
+                        label: str,
+                        value: str,
+                    };
+                });
+            } else if (type === 'nps' || type === 'star_rating') {
+                normalizedOptions = undefined;
+            }
+        }
+
+        return {
+            ...b,
+            ...extra,
+            id: b.id || crypto.randomUUID(),
+            type,
+            label,
+            options: normalizedOptions,
+        } as SurveyBlock;
+    });
+}
+
+function hydrateSurveyData(d: any): Survey {
+    const rawBlocks = Array.isArray(d.blocks) && d.blocks.length > 0
+        ? d.blocks
+        : (Array.isArray(d.blocks_json) ? d.blocks_json : []);
+    const cover = (d.cover_style && typeof d.cover_style === 'object')
+        ? d.cover_style
+        : (d.theme && typeof d.theme === 'object' ? d.theme : {});
+    const settings = (d.settings_json && typeof d.settings_json === 'object')
+        ? d.settings_json
+        : (d.settings && typeof d.settings === 'object' ? d.settings : {});
+    const thankYou = (d.thank_you_page && typeof d.thank_you_page === 'object')
+        ? d.thank_you_page
+        : (d.thankYouPage && typeof d.thankYouPage === 'object' ? d.thankYouPage : {});
+
+    return {
+        ...d,
+        blocks: normalizeClientBlocks(rawBlocks),
+        theme: { ...DEFAULT_THEME, ...cover, cardShadow: 'none' },
+        settings: { ...DEFAULT_SETTINGS, ...settings },
+        thankYouPage: { ...DEFAULT_THANK_YOU, ...thankYou },
+        thankYouPages: thankYou?.extraScreens || d.thankYouPages || [],
+    };
+}
+
+const SurveyEditor: React.FC<SurveyEditorProps> = ({ surveyIdProp, initialSurvey, onBack }) => {
     const params = useParams<{ id: string }>();
     const id = surveyIdProp || params.id;
     const navigate = useNavigate();
     const isNew = id === 'new';
 
-    const [survey, setSurvey] = useState<Survey | null>(null);
-    const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
-    const [isDirty, setIsDirty] = useState(false);
-    const [isSaving, setIsSaving] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
-    const [viewMode, setViewMode] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
-    const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-    const [previewDevice, setPreviewDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
-    const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-    // ─── Load survey ─────────────────────────────────────────────────────────
-    useEffect(() => {
+    const [survey, setSurvey] = useState<Survey | null>(() => {
+        if (initialSurvey) return hydrateSurveyData(initialSurvey);
         if (isNew) {
-            // Create blank survey
-            const blank: Survey = {
+            return {
                 id: '',
                 workspace_id: 1,
                 name: 'Khảo sát mới',
                 slug: '',
                 status: 'draft',
                 blocks: [],
-                theme: { ...DEFAULT_THEME },
+                theme: { ...DEFAULT_THEME, cardShadow: 'none' },
                 settings: { ...DEFAULT_SETTINGS },
                 thankYouPage: { ...DEFAULT_THANK_YOU },
                 require_login: false,
@@ -56,25 +139,50 @@ const SurveyEditor: React.FC<SurveyEditorProps> = ({ surveyIdProp, onBack }) => 
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
             };
-            setSurvey(blank);
+        }
+        return null;
+    });
+    const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+    const [isDirty, setIsDirty] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isLoading, setIsLoading] = useState<boolean>(() => !initialSurvey && !isNew);
+    const [viewMode, setViewMode] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
+    const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+    const [previewDevice, setPreviewDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
+    const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // ─── Load survey ─────────────────────────────────────────────────────────
+    useEffect(() => {
+        if (isNew) {
             setIsLoading(false);
             return;
         }
+        if (initialSurvey && initialSurvey.id === id) {
+            setSurvey(prev => prev && prev.id === id ? prev : hydrateSurveyData(initialSurvey));
+            setIsLoading(false);
+        }
+        let cancelled = false;
         api.get<any>(`surveys/${id}?action=get`)
             .then(res => {
-                if (res.success) {
-                    const d = (res as any).data;
-                    setSurvey({
-                        ...d,
-                        blocks: d.blocks_json || [],
-                        theme: d.cover_style || DEFAULT_THEME,
-                        settings: d.settings_json || DEFAULT_SETTINGS,
-                        thankYouPage: d.thank_you_page || DEFAULT_THANK_YOU,
-                        thankYouPages: d.thank_you_page?.extraScreens || [],
+                if (cancelled) return;
+                if (res.success && (res as any).data) {
+                    const hydrated = hydrateSurveyData((res as any).data);
+                    setSurvey(prev => {
+                        // Preserve optimistic blocks if user already started editing or if server row was still initializing
+                        if (prev && prev.id === id && prev.blocks.length > 0 && hydrated.blocks.length === 0) {
+                            return { ...hydrated, blocks: prev.blocks };
+                        }
+                        return hydrated;
                     });
                 }
             })
-            .finally(() => setIsLoading(false));
+            .catch(() => {
+                // Keep optimistic survey if background fetch fails or is still creating
+            })
+            .finally(() => {
+                if (!cancelled) setIsLoading(false);
+            });
+        return () => { cancelled = true; };
     }, [id, isNew]);
 
     // Scroll selected/added block into view smoothly
@@ -297,7 +405,7 @@ const SurveyEditor: React.FC<SurveyEditorProps> = ({ surveyIdProp, onBack }) => 
 
     return createPortal(
         <DndProvider backend={HTML5Backend}>
-            <div className="fixed inset-0 z-[2147483630] w-screen h-screen flex flex-col bg-slate-100 overflow-hidden font-sans shadow-2xl" style={{ zIndex: 2147483630 }}>
+            <div className="fixed inset-0 z-[2147483630] w-screen h-screen flex flex-col bg-slate-100 dark:bg-[#0B0F19] overflow-hidden font-sans" style={{ zIndex: 2147483630 }}>
                 {/* Top Bar */}
                 <SurveyTopBar
                     survey={survey}
@@ -382,7 +490,7 @@ const SurveyEditor: React.FC<SurveyEditorProps> = ({ surveyIdProp, onBack }) => 
                     {/* iframe viewport */}
                     <div className="flex-1 flex items-start justify-center overflow-y-auto py-6 w-full">
                         <div
-                            className="bg-white rounded-2xl overflow-hidden shadow-2xl transition-all duration-300"
+                            className="bg-white rounded-2xl overflow-hidden border border-slate-700 transition-all duration-300"
                             style={{
                                 width: previewDevice === 'mobile' ? '390px' : previewDevice === 'tablet' ? '768px' : '100%',
                                 maxWidth: previewDevice === 'desktop' ? '960px' : undefined,

@@ -23,11 +23,16 @@ import { createBlock, insertDeep, deleteBlockDeep, duplicateBlockDeep, ensureUni
 import { API_BASE_URL } from '../../../utils/config';
 import { api } from '../../../services/storageAdapter';
 import { getMktPortalRoot } from '../../../utils/portalRoot';
+import {
+    type TemplateAccessConfig,
+    type TemplateVisibilityMode,
+    normalizeTemplateAccessConfig
+} from '../TemplateAccessModal';
 
 interface EmailEditorProps {
     template?: Template;
     groups: TemplateGroup[];
-    onSave: (data: Partial<Template> & { visibility?: 'shared' | 'personal' }) => void;
+    onSave: (data: Partial<Template> & { visibility?: TemplateVisibilityMode; accessConfig?: TemplateAccessConfig }) => void;
     onCancel: () => void;
     customMergeTags?: { label: string; key: string }[];
     canSetShared?: boolean;
@@ -338,20 +343,22 @@ const applyCtaTracking = (currentUrl: string, index: number): string => {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onCancel, customMergeTags = [], canSetShared = true }) => {
+    const hasInitialBlockObjects = Boolean(
+        template?.blocks && template.blocks.length > 0 && typeof template.blocks[0] === 'object'
+    );
     const [editorMode, setEditorMode] = useState<'visual' | 'code'>(
         (template?.htmlContent && (!template.blocks || template.blocks.length === 0)) ? 'code' : 'visual'
     );
     const [blocks, setBlocks] = useState<EmailBlock[]>(
-        (template?.blocks && template.blocks.length > 0) ? ensureUniqueIds(template.blocks) : DEFAULT_BLOCKS
+        hasInitialBlockObjects ? ensureUniqueIds(template!.blocks) : DEFAULT_BLOCKS
     );
     const [bodyStyle, setBodyStyle] = useState<EmailBodyStyle>(template?.bodyStyle || DEFAULT_BODY_STYLE);
     const [name, setName] = useState(template?.name || 'Thiết kế mới');
     const [groupId, setGroupId] = useState(template?.groupId || '');
-    const [visibility, setVisibility] = useState<'shared' | 'personal'>(() => {
-        const v = (template as any)?.visibility || (template?.bodyStyle as any)?.visibility;
-        if (v === 'personal' || v === 'shared') return v;
-        return canSetShared ? 'shared' : 'personal';
-    });
+    const [accessConfig, setAccessConfig] = useState<TemplateAccessConfig>(() =>
+        normalizeTemplateAccessConfig(template, canSetShared ? 'shared' : 'personal')
+    );
+    const [visibility, setVisibility] = useState<TemplateVisibilityMode>(() => accessConfig.visibility);
 
     const [customHtml, setCustomHtml] = useState(template?.htmlContent || '');
     const handleSetEditorMode = useCallback((newMode: 'visual' | 'code') => {
@@ -362,7 +369,9 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
     }, [editorMode, blocks, bodyStyle, name]);
     const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop');
-    const [history, setHistory] = useState<EmailBlock[][]>([template?.blocks || DEFAULT_BLOCKS]);
+    const [history, setHistory] = useState<EmailBlock[][]>([
+        hasInitialBlockObjects ? ensureUniqueIds(template!.blocks) : DEFAULT_BLOCKS
+    ]);
     const [historyIndex, setHistoryIndex] = useState(0);
     // [UX] Track which history index was last saved to compute isDirty
     const [savedHistoryIndex, setSavedHistoryIndex] = useState(0);
@@ -370,6 +379,24 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
     const historyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [isTestModalOpen, setIsTestModalOpen] = useState(false);
     const isDirty = historyIndex !== savedHistoryIndex || hasUncommittedChanges;
+
+    // Sync real blocks if template opened instantaneously with placeholder [true] and full blocks arrive in background
+    const syncedRealBlocksRef = useRef<boolean>(hasInitialBlockObjects);
+    useEffect(() => {
+        const nowHasRealBlocks = Boolean(
+            template?.blocks && template.blocks.length > 0 && typeof template.blocks[0] === 'object'
+        );
+        if (nowHasRealBlocks && !syncedRealBlocksRef.current && historyIndex === 0 && !hasUncommittedChanges) {
+            const unique = ensureUniqueIds(template!.blocks);
+            syncedRealBlocksRef.current = true;
+            setBlocks(unique);
+            setHistory([unique]);
+            setHistoryIndex(0);
+            setSavedHistoryIndex(0);
+            if (template?.bodyStyle) setBodyStyle(template.bodyStyle);
+            if (template?.htmlContent) setCustomHtml(template.htmlContent);
+        }
+    }, [template, historyIndex, hasUncommittedChanges]);
 
     const [savedSections, setSavedSections] = useState<{ id: string, name: string, data: EmailBlock }[]>([]);
     const [saveSectionModal, setSaveSectionModal] = useState<{ isOpen: boolean, block: EmailBlock | null, name: string }>({ isOpen: false, block: null, name: '' });
@@ -568,13 +595,22 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
 
     const handleSaveData = useCallback(() => {
         const finalHtml = editorMode === 'code' ? customHtml : compileHTML(blocks, bodyStyle, name);
-        const effectiveVisibility: 'shared' | 'personal' = canSetShared ? visibility : 'personal';
+        const effectiveVisibility: TemplateVisibilityMode = (!canSetShared && visibility === 'shared') ? 'personal' : visibility;
+        const finalAccessConfig: TemplateAccessConfig = {
+            ...accessConfig,
+            visibility: effectiveVisibility,
+        };
         onSave({
             name,
             groupId,
             visibility: effectiveVisibility,
+            accessConfig: finalAccessConfig,
             blocks: (blocks && blocks.length > 0) ? blocks : [],
-            bodyStyle: { ...(bodyStyle || DEFAULT_BODY_STYLE), visibility: effectiveVisibility } as any,
+            bodyStyle: {
+                ...(bodyStyle || DEFAULT_BODY_STYLE),
+                visibility: effectiveVisibility,
+                accessConfig: finalAccessConfig,
+            } as any,
             htmlContent: finalHtml,
             thumbnail: ''
         });
@@ -585,7 +621,7 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
         setHasUncommittedChanges(false);
         setSavedHistoryIndex(historyIndex);
         setTimeout(() => silentScan(), 0);
-    }, [editorMode, customHtml, blocks, bodyStyle, name, groupId, visibility, canSetShared, historyIndex, onSave, silentScan]);
+    }, [editorMode, customHtml, blocks, bodyStyle, name, groupId, visibility, accessConfig, canSetShared, historyIndex, onSave, silentScan]);
 
     // Keyboard Shortcuts: Ctrl+Z (Undo), Ctrl+Y/Ctrl+Shift+Z (Redo), Ctrl+S (Save)
     useEffect(() => {
@@ -733,6 +769,8 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
                 isDirty={isDirty}
                 visibility={visibility}
                 setVisibility={setVisibility}
+                accessConfig={accessConfig}
+                setAccessConfig={setAccessConfig}
                 canSetShared={canSetShared}
             />
             <div className="flex-1 flex overflow-hidden">

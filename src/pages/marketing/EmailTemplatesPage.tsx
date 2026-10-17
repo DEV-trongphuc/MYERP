@@ -6,7 +6,7 @@ import { logAction } from '../../components/marketing/services/historyService';
 import {
     Edit3, Copy, Trash2, Plus, Layout, Eye, Sparkles, FolderOpen, Globe,
     FolderPlus, Check, X, AlertCircle, Image as ImageIcon, SearchX, User,
-    Folder, ChevronDown, Search, Users
+    Folder, ChevronDown, Search, Users, Lock, ShieldCheck
 } from 'lucide-react';
 import PageHero from '../../components/marketing/components/common/PageHero';
 import Button from '../../components/marketing/components/common/Button';
@@ -27,9 +27,19 @@ import { useIsAdmin } from '../../components/marketing/hooks/useAuthUser';
 import { usePermissionGuard } from '../../components/marketing/components/common/PermissionGuard';
 import { Avatar } from '../../components/ui/Avatar';
 import { useAuth } from '../../contexts/AuthContext';
+import EmailEditor from '../../components/marketing/components/templates/EmailEditor/index';
+import TemplateAccessModal, {
+    type TemplateAccessConfig,
+    type TemplateVisibilityMode,
+    normalizeTemplateAccessConfig,
+    canUserViewTemplate,
+    canUserEditTemplate,
+    isTemplateOwner,
+    countAccessTargets,
+    preloadAccessDirectory
+} from '../../components/marketing/components/templates/TemplateAccessModal';
 
-// [PERF] Lazy-load heavy editors and modals only when opened
-const EmailEditor = lazy(() => import('../../components/marketing/components/templates/EmailEditor/index'));
+// [PERF] Lazy-load secondary modals & drawers
 const AIEmailModal = lazy(() => import('../../components/marketing/components/templates/EmailEditor/AIEmailGeneratorModal'));
 const ImageLibraryModal = lazy(() => import('../../components/marketing/components/templates/EmailEditor/components/Properties/ImageLibraryModal'));
 const EmailPreviewDrawer = lazy(() => import('../../components/marketing/components/flows/config/EmailPreviewDrawer'));
@@ -44,7 +54,13 @@ const SORT_OPTIONS = [
     { value: 'name_desc', label: 'Tên Z → A' },
 ];
 
-const isAbort = (e: any) => e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED';
+// ─── Module-level In-Memory Caches for 0ms Instant Page & Editor Load ────────
+let cachedUserTemplates: Template[] | null = null;
+let cachedTemplateGroups: TemplateGroup[] | null = null;
+let cachedMergeTags: { label: string; key: string }[] | null = null;
+const fullTemplateBlocksCache = new Map<string, Template>();
+const prefetchingTemplateIds = new Set<string>();
+const compiledPreviewHtmlCache = new Map<string, string>();
 
 const fmtTemplateDate = (tpl: Template) => {
     if (tpl.id.startsWith('sys_')) return 'Mẫu hệ thống';
@@ -58,43 +74,69 @@ const fmtTemplateDate = (tpl: Template) => {
     return `${day}/${month}/${year}`;
 };
 
-const getTemplateVisibility = (tpl: Template): 'personal' | 'shared' | 'system' => {
+const getTemplateVisibility = (tpl: Template): TemplateVisibilityMode => {
     if (tpl.id.startsWith('sys_')) return 'system';
-    const rawVis = (tpl as any).visibility || (tpl.bodyStyle as any)?.visibility;
-    return rawVis === 'personal' ? 'personal' : 'shared';
+    const rawVis = tpl.visibility || tpl.accessConfig?.visibility || (tpl.bodyStyle as any)?.visibility;
+    if (rawVis === 'personal' || rawVis === 'custom' || rawVis === 'shared' || rawVis === 'system') {
+        return rawVis;
+    }
+    return 'shared';
 };
 
-const isOwnTemplate = (tpl: Template, currentUserId?: number, currentUserEmail?: string): boolean => {
-    if (tpl.id.startsWith('sys_')) return false;
-    const createdBy = Number((tpl as any).created_by || (tpl.bodyStyle as any)?.creator?.id || (tpl as any).creator?.id || 0);
-    if (currentUserId && currentUserId > 0 && createdBy > 0 && createdBy === Number(currentUserId)) {
-        return true;
-    }
-    const creatorEmail = String((tpl as any).creator?.email || (tpl.bodyStyle as any)?.creator?.email || '').trim().toLowerCase();
-    if (currentUserEmail && creatorEmail && creatorEmail === currentUserEmail.trim().toLowerCase()) {
-        return true;
-    }
-    return false;
+const buildFastPreviewDoc = (rawHtml: string): string => {
+    if (!rawHtml) return '';
+    // Strip scripts inside preview iframe so browser never spins up JS VMs for card thumbnails
+    const clean = rawHtml.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;overflow:hidden;background:#ffffff;pointer-events:none;user-select:none;}::-webkit-scrollbar{display:none;}img{max-width:100%;content-visibility:auto;}</style></head><body>${clean}</body></html>`;
 };
 
-const VisualTemplate: React.FC<{ template: Template }> = memo(({ template }) => {
+const VisualTemplate: React.FC<{ template: Template; index?: number }> = memo(({ template, index = 0 }) => {
     const containerRef = React.useRef<HTMLDivElement>(null);
-    const [scale, setScale] = useState(0.4);
-    const [isVisible, setIsVisible] = useState(false);
+    const [scale, setScale] = useState(0.42);
+    const [readyToMountIframe, setReadyToMountIframe] = useState(index < 4);
 
-    // [PERF] Use precompiled htmlContent directly whenever available, avoiding heavy synchronous AST compilation
-    const html = useMemo(() => {
+    // [PERF] Memoize + module-cache compiled HTML document so it is computed at most once per template
+    const srcDoc = useMemo(() => {
         if (!template) return '';
-        if (template.htmlContent) return template.htmlContent;
-        if (template.blocks && template.blocks.length > 0 && typeof template.blocks[0] === 'object') {
-            return compileHTML(template.blocks, template.bodyStyle, template.name);
-        }
-        return '';
-    }, [template.htmlContent, template.blocks, template.bodyStyle, template.name]);
+        const cacheKey = `${template.id}::${template.lastModified || ''}::${(template.htmlContent || '').length}`;
+        const hit = compiledPreviewHtmlCache.get(cacheKey);
+        if (hit !== undefined) return hit;
 
-    // [PERF] ResizeObserver instead of adding window resize listener for every single card
+        let raw = template.htmlContent || '';
+        if (!raw && template.blocks && template.blocks.length > 0 && typeof template.blocks[0] === 'object') {
+            raw = compileHTML(template.blocks, template.bodyStyle, template.name);
+        }
+        const doc = raw ? buildFastPreviewDoc(raw) : '';
+        if (doc) {
+            if (compiledPreviewHtmlCache.size > 250) {
+                const firstKey = compiledPreviewHtmlCache.keys().next().value;
+                if (firstKey) compiledPreviewHtmlCache.delete(firstKey);
+            }
+            compiledPreviewHtmlCache.set(cacheKey, doc);
+        }
+        return doc;
+    }, [template]);
+
+    // [PERF] Stagger iframe mounting across animation frames so all 12 cards paint at 60fps with 0ms freeze
     useEffect(() => {
-        if (!containerRef.current) return;
+        if (readyToMountIframe) return;
+        let rafId: number;
+        const timer = setTimeout(() => {
+            rafId = requestAnimationFrame(() => setReadyToMountIframe(true));
+        }, Math.min(index * 18, 140));
+        return () => {
+            clearTimeout(timer);
+            if (rafId) cancelAnimationFrame(rafId);
+        };
+    }, [index, readyToMountIframe]);
+
+    // [PERF] Measure width once on mount + lightweight ResizeObserver
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        const w = el.clientWidth;
+        if (w > 0) setScale(w / 600);
+
         const observer = new ResizeObserver((entries) => {
             for (const entry of entries) {
                 if (entry.contentRect.width > 0) {
@@ -102,37 +144,29 @@ const VisualTemplate: React.FC<{ template: Template }> = memo(({ template }) => 
                 }
             }
         });
-        observer.observe(containerRef.current);
-        return () => observer.disconnect();
-    }, []);
-
-    // [PERF] IntersectionObserver: Only mount heavy <iframe> when card enters/nears viewport
-    useEffect(() => {
-        if (!containerRef.current) return;
-        const observer = new IntersectionObserver(([entry]) => {
-            if (entry.isIntersecting) {
-                setIsVisible(true);
-                observer.disconnect();
-            }
-        }, { rootMargin: '300px' });
-        observer.observe(containerRef.current);
+        observer.observe(el);
         return () => observer.disconnect();
     }, []);
 
     return (
-        <div ref={containerRef} className="email-canvas-scope w-full h-full bg-white dark:bg-slate-900 relative overflow-hidden flex items-start justify-center">
-            {isVisible && html ? (
+        <div
+            ref={containerRef}
+            className="email-canvas-scope w-full h-full bg-white dark:bg-slate-900 relative overflow-hidden flex items-start justify-center"
+        >
+            {readyToMountIframe && srcDoc ? (
                 <div
                     className="absolute top-0 left-0 origin-top-left"
                     style={{
                         width: '600px',
                         height: '1000px',
                         transform: `scale(${scale})`,
-                        pointerEvents: 'none'
+                        pointerEvents: 'none',
+                        willChange: 'transform'
                     }}
                 >
                     <iframe
-                        srcDoc={`<html><head><style>body{margin:0;padding:0;overflow:hidden;background:white;}::-webkit-scrollbar{display:none;}</style></head><body>${html}</body></html>`}
+                        srcDoc={srcDoc}
+                        sandbox=""
                         className="w-full h-full border-none"
                         title={template.name || 'preview'}
                         loading="lazy"
@@ -152,36 +186,49 @@ VisualTemplate.displayName = 'VisualTemplate';
 
 interface TemplateCardProps {
     template: Template;
+    index: number;
     isSelected: boolean;
     canModify: boolean;
+    isOwn: boolean;
     groupName: string;
     onToggleSelect: (id: string) => void;
     onPreview: (template: Template) => void;
     onEdit: (template: Template) => void;
     onDuplicate: (template: Template) => void;
     onDelete: (id: string) => void;
+    onOpenAccessModal: (template: Template) => void;
+    onPrefetch: (template: Template) => void;
 }
 
 const TemplateCard: React.FC<TemplateCardProps> = memo(({
     template,
+    index,
     isSelected,
     canModify,
+    isOwn,
     groupName,
     onToggleSelect,
     onPreview,
     onEdit,
     onDuplicate,
-    onDelete
+    onDelete,
+    onOpenAccessModal,
+    onPrefetch
 }) => {
     const isSystem = template.id.startsWith('sys_');
     const visibility = getTemplateVisibility(template);
     const creatorObj = (template as any).creator || (template.bodyStyle as any)?.creator;
     const creatorName = isSystem ? 'Hệ thống' : (creatorObj?.name || creatorObj?.full_name || 'Hệ thống');
     const creatorPic = creatorObj?.avatar_url || creatorObj?.picture || creatorObj?.avatar;
-    const isEditorBlock = Boolean(template.blocks && template.blocks.length > 0);
+    const isEditorBlock = Boolean(
+        (template as any).hasBlocks ||
+        (template.blocks && template.blocks.length > 0)
+    );
+    const customTargetCount = countAccessTargets(template.accessConfig || (template.bodyStyle as any)?.accessConfig);
 
     return (
         <div
+            onMouseEnter={() => onPrefetch(template)}
             className={`bg-[var(--color-surface)] rounded-[18px] border overflow-hidden group transition-all duration-200 flex flex-col h-[340px] relative shadow-[var(--shadow-xs)] hover:shadow-md ${
                 isSelected
                     ? 'border-[var(--color-primary)] ring-2 ring-[var(--color-primary-light)]'
@@ -193,7 +240,7 @@ const TemplateCard: React.FC<TemplateCardProps> = memo(({
                 <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); onToggleSelect(template.id); }}
-                    className={`absolute top-3 left-3 z-20 w-7 h-7 rounded-[var(--radius-md)] border flex items-center justify-center transition-all ${
+                    className={`absolute top-3 left-3 z-20 w-7 h-7 rounded-[var(--radius-md)] border flex items-center justify-center transition-all outline-none focus:outline-none cursor-pointer ${
                         isSelected
                             ? 'bg-[var(--color-primary)] border-[var(--color-primary)] text-white shadow-sm'
                             : 'bg-[var(--color-surface)]/95 border-[var(--color-border)] text-[var(--color-text-muted)] opacity-0 group-hover:opacity-100 hover:border-[var(--color-primary)]'
@@ -213,7 +260,7 @@ const TemplateCard: React.FC<TemplateCardProps> = memo(({
                     {template.thumbnail && !template.thumbnail.includes('placehold.co') ? (
                         <img src={template.thumbnail} alt={template.name} className="w-full h-full object-cover object-top" loading="lazy" />
                     ) : (
-                        <VisualTemplate template={template} />
+                        <VisualTemplate template={template} index={index} />
                     )}
                 </div>
 
@@ -222,7 +269,7 @@ const TemplateCard: React.FC<TemplateCardProps> = memo(({
                     <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); onPreview(template); }}
-                        className="h-8 px-3.5 bg-white text-slate-900 rounded-[var(--radius-md)] font-semibold text-xs hover:bg-[var(--color-primary)] hover:text-white transition-colors shadow-sm inline-flex items-center gap-1.5"
+                        className="h-8 px-3.5 bg-white text-slate-900 rounded-[var(--radius-md)] font-semibold text-xs hover:bg-[var(--color-primary)] hover:text-white transition-colors shadow-sm inline-flex items-center gap-1.5 outline-none focus:outline-none cursor-pointer"
                     >
                         <Eye className="w-3.5 h-3.5" /> Xem chi tiết
                     </button>
@@ -231,7 +278,7 @@ const TemplateCard: React.FC<TemplateCardProps> = memo(({
                         <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); onDuplicate(template); }}
-                            className="h-8 px-3.5 bg-[var(--color-primary)] text-white rounded-[var(--radius-md)] font-semibold text-xs hover:opacity-90 transition-opacity shadow-sm inline-flex items-center gap-1.5"
+                            className="h-8 px-3.5 bg-[var(--color-primary)] text-white rounded-[var(--radius-md)] font-semibold text-xs hover:opacity-90 transition-opacity shadow-sm inline-flex items-center gap-1.5 outline-none focus:outline-none cursor-pointer"
                         >
                             <Copy className="w-3.5 h-3.5" /> {isSystem ? 'Sử dụng mẫu' : 'Nhân bản về Của tôi'}
                         </button>
@@ -240,15 +287,24 @@ const TemplateCard: React.FC<TemplateCardProps> = memo(({
                             <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); onEdit(template); }}
-                                className="w-8 h-8 bg-white text-[var(--color-text)] rounded-[var(--radius-md)] hover:bg-[var(--color-primary)] hover:text-white shadow-sm flex items-center justify-center transition-colors"
+                                className="w-8 h-8 bg-white text-[var(--color-text)] rounded-[var(--radius-md)] hover:bg-[var(--color-primary)] hover:text-white shadow-sm flex items-center justify-center transition-colors outline-none focus:outline-none cursor-pointer"
                                 title="Chỉnh sửa"
                             >
                                 <Edit3 className="w-3.5 h-3.5" />
                             </button>
                             <button
                                 type="button"
+                                onMouseEnter={() => preloadAccessDirectory()}
+                                onClick={(e) => { e.stopPropagation(); onOpenAccessModal(template); }}
+                                className="w-8 h-8 bg-white text-[var(--color-text)] rounded-[var(--radius-md)] hover:bg-[var(--color-primary)] hover:text-white shadow-sm flex items-center justify-center transition-colors outline-none focus:outline-none cursor-pointer"
+                                title="Phân quyền & Chia sẻ"
+                            >
+                                <ShieldCheck className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                                type="button"
                                 onClick={(e) => { e.stopPropagation(); onDuplicate(template); }}
-                                className="w-8 h-8 bg-white text-[var(--color-text)] rounded-[var(--radius-md)] hover:bg-[var(--color-primary)] hover:text-white shadow-sm flex items-center justify-center transition-colors"
+                                className="w-8 h-8 bg-white text-[var(--color-text)] rounded-[var(--radius-md)] hover:bg-[var(--color-primary)] hover:text-white shadow-sm flex items-center justify-center transition-colors outline-none focus:outline-none cursor-pointer"
                                 title="Nhân bản"
                             >
                                 <Copy className="w-3.5 h-3.5" />
@@ -256,7 +312,7 @@ const TemplateCard: React.FC<TemplateCardProps> = memo(({
                             <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); onDelete(template.id); }}
-                                className="w-8 h-8 bg-white text-rose-600 rounded-[var(--radius-md)] hover:bg-rose-600 hover:text-white shadow-sm flex items-center justify-center transition-colors"
+                                className="w-8 h-8 bg-white text-rose-600 rounded-[var(--radius-md)] hover:bg-rose-600 hover:text-white shadow-sm flex items-center justify-center transition-colors outline-none focus:outline-none cursor-pointer"
                                 title="Xóa"
                             >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -265,19 +321,44 @@ const TemplateCard: React.FC<TemplateCardProps> = memo(({
                     )}
                 </div>
 
-                {/* Top-Right Format & Visibility Badge */}
-                <div className="absolute top-3 right-3 flex items-center gap-1.5 pointer-events-none">
+                {/* Top-Right Format & Clickable Visibility Badge */}
+                <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10 pointer-events-none">
                     {isSystem ? (
                         <span className="bg-[var(--color-primary)] text-white px-2 py-0.5 rounded-[var(--radius-sm)] text-[10px] font-semibold shadow-xs">
                             Mẫu chuẩn
                         </span>
-                    ) : visibility === 'personal' ? (
+                    ) : (
+                        <button
+                            type="button"
+                            disabled={!canModify}
+                            onMouseEnter={() => { if (canModify) preloadAccessDirectory(); }}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (canModify) onOpenAccessModal(template);
+                            }}
+                            title={canModify ? 'Bấm để thay đổi phân quyền & chia sẻ' : undefined}
+                            className={`px-2 py-0.5 rounded-[var(--radius-sm)] text-[10px] font-semibold shadow-xs inline-flex items-center gap-1 outline-none focus:outline-none transition-transform ${
+                                canModify ? 'pointer-events-auto cursor-pointer hover:scale-105' : ''
+                            } ${
+                                visibility === 'personal'
+                                    ? 'bg-amber-500/95 text-white'
+                                    : visibility === 'custom'
+                                        ? 'bg-[var(--color-primary)]/95 text-white'
+                                        : 'bg-emerald-600/95 text-white'
+                            }`}
+                        >
+                            {visibility === 'personal' ? (
+                                <><Lock className="w-2.5 h-2.5" /> Riêng tư</>
+                            ) : visibility === 'custom' ? (
+                                <><Users className="w-2.5 h-2.5" /> Giới hạn ({customTargetCount})</>
+                            ) : (
+                                <><Globe className="w-2.5 h-2.5" /> Dùng chung</>
+                            )}
+                        </button>
+                    )}
+                    {isOwn && !isSystem && visibility !== 'personal' && (
                         <span className="bg-amber-500/95 text-white px-2 py-0.5 rounded-[var(--radius-sm)] text-[10px] font-semibold shadow-xs inline-flex items-center gap-1">
                             <User className="w-2.5 h-2.5" /> Của tôi
-                        </span>
-                    ) : (
-                        <span className="bg-emerald-600/95 text-white px-2 py-0.5 rounded-[var(--radius-sm)] text-[10px] font-semibold shadow-xs inline-flex items-center gap-1">
-                            <Users className="w-2.5 h-2.5" /> Dùng chung
                         </span>
                     )}
                     <span className="bg-[var(--color-surface)]/95 backdrop-blur px-2 py-0.5 rounded-[var(--radius-sm)] text-[10px] font-semibold text-[var(--color-text-secondary)] shadow-xs inline-flex items-center gap-1 border border-[var(--color-border)]">
@@ -341,6 +422,7 @@ const Templates: React.FC = () => {
 
     const currentUserId = useMemo(() => Number(erpUser?.id || 0), [erpUser?.id]);
     const currentUserEmail = useMemo(() => String(erpUser?.email || ''), [erpUser?.email]);
+    const currentUserName = useMemo(() => String(erpUser?.full_name || erpUser?.name || ''), [erpUser?.full_name, erpUser?.name]);
 
     const getCurrentCreatorInfo = useCallback(() => {
         if (erpUser) {
@@ -372,16 +454,32 @@ const Templates: React.FC = () => {
     const canModifyTemplate = useCallback((tpl?: Template | null) => {
         if (!tpl) return true;
         if (tpl.id.startsWith('sys_')) return false;
-        if (effectiveIsAdmin) return true;
-        if (isOwnTemplate(tpl, currentUserId, currentUserEmail)) return true;
-        if (getTemplateVisibility(tpl) === 'personal') return true;
-        return false;
-    }, [effectiveIsAdmin, currentUserId, currentUserEmail]);
+        return canUserEditTemplate(tpl, erpUser, effectiveIsAdmin);
+    }, [erpUser, effectiveIsAdmin]);
 
-    const [userTemplates, setUserTemplates] = useState<Template[]>([]);
-    const [groups, setGroups] = useState<TemplateGroup[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [customMergeTags, setCustomMergeTags] = useState<{ label: string; key: string }[]>([]);
+    // [PERF] Initialize directly from memory cache or domationApi peek cache so re-mounts are 0ms with no skeleton
+    const [userTemplates, setUserTemplates] = useState<Template[]>(() => {
+        if (cachedUserTemplates) return cachedUserTemplates;
+        const peeked = api.peek<Template[]>('templates');
+        if (peeked?.value?.success && Array.isArray(peeked.value.data)) {
+            cachedUserTemplates = peeked.value.data;
+            return peeked.value.data;
+        }
+        return [];
+    });
+
+    const [groups, setGroups] = useState<TemplateGroup[]>(() => {
+        if (cachedTemplateGroups) return cachedTemplateGroups;
+        const peeked = api.peek<TemplateGroup[]>('template_groups');
+        if (peeked?.value?.success && Array.isArray(peeked.value.data)) {
+            cachedTemplateGroups = peeked.value.data;
+            return peeked.value.data;
+        }
+        return [];
+    });
+
+    const [loading, setLoading] = useState<boolean>(() => cachedUserTemplates === null);
+    const [customMergeTags, setCustomMergeTags] = useState<{ label: string; key: string }[]>(() => cachedMergeTags || []);
     const [isImageLibraryOpen, setIsImageLibraryOpen] = useState(false);
 
     // Editor & AI Modal State
@@ -389,6 +487,9 @@ const Templates: React.FC = () => {
     const [editingTemplate, setEditingTemplate] = useState<Template | undefined>(undefined);
     const [isAIModalOpen, setIsAIModalOpen] = useState(false);
     const [aiModalMounted, setAiModalMounted] = useState(false);
+
+    // Granular Access Modal State (opened from Card Grid)
+    const [accessModalTarget, setAccessModalTarget] = useState<Template | null>(null);
 
     // Group State
     const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
@@ -445,6 +546,7 @@ const Templates: React.FC = () => {
     const savingTemplateRef = useRef(false);
     const duplicatingRef = useRef(false);
     const deletingRef = useRef(false);
+    const isMountedRef = useRef(true);
 
     const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
         if (type === 'success') toast.success(message);
@@ -452,42 +554,59 @@ const Templates: React.FC = () => {
         else toast(message);
     }, []);
 
-    const fetchGroups = useCallback(async (signal?: AbortSignal) => {
+    const syncUserTemplates = useCallback((updater: Template[] | ((prev: Template[]) => Template[])) => {
+        setUserTemplates(prev => {
+            const next = typeof updater === 'function' ? updater(prev) : updater;
+            cachedUserTemplates = next;
+            return next;
+        });
+    }, []);
+
+    const fetchGroups = useCallback(async () => {
         try {
-            const res = await api.get<TemplateGroup[]>('template_groups', {}, signal ? { signal } : undefined);
-            if (res.success && Array.isArray(res.data)) setGroups(res.data);
+            const res = await api.get<TemplateGroup[]>('template_groups');
+            if (res.success && Array.isArray(res.data)) {
+                cachedTemplateGroups = res.data;
+                if (isMountedRef.current) setGroups(res.data);
+            }
         } catch (error) {
-            if (isAbort(error)) return;
             console.error('Fetch groups error:', error);
         }
     }, []);
 
-    const fetchUserTemplates = useCallback(async (signal?: AbortSignal) => {
-        setLoading(true);
+    const fetchUserTemplates = useCallback(async (forceSpinner = false) => {
+        if (forceSpinner || cachedUserTemplates === null) {
+            setLoading(true);
+        }
         try {
-            const res = await api.get<Template[]>('templates', {}, signal ? { signal } : undefined);
-            if (signal?.aborted) return;
-            if (res.success) setUserTemplates(Array.isArray(res.data) ? res.data : []);
-            else showToast(res.message || 'Lỗi khi tải danh sách mẫu', 'error');
+            const res = await api.get<Template[]>('templates');
+            if (res.success) {
+                const list = Array.isArray(res.data) ? res.data : [];
+                cachedUserTemplates = list;
+                if (isMountedRef.current) setUserTemplates(list);
+            } else if (isMountedRef.current && cachedUserTemplates === null) {
+                showToast(res.message || 'Lỗi khi tải danh sách mẫu', 'error');
+            }
         } catch (error) {
-            if (isAbort(error)) return;
             console.error('Fetch templates error:', error);
-            showToast('Không thể kết nối với máy chủ', 'error');
+            if (isMountedRef.current && cachedUserTemplates === null) {
+                showToast('Không thể kết nối với máy chủ', 'error');
+            }
         } finally {
-            if (!signal?.aborted) setLoading(false);
+            if (isMountedRef.current) setLoading(false);
         }
     }, [showToast]);
 
-    // [PERF] Parallel initial fetch (<= 3 requests) with AbortController cleanup
+    // [PERF] Fast deduplicated initial fetch without AbortSignal cancellation in StrictMode
     useEffect(() => {
-        const controller = new AbortController();
-        const { signal } = controller;
+        isMountedRef.current = true;
+        fetchUserTemplates(false);
+        fetchGroups();
 
-        Promise.all([
-            fetchUserTemplates(signal),
-            fetchGroups(signal),
-            api.get<any[]>('forms', {}, { signal }).then(res => {
-                if (signal.aborted) return;
+        // Defer secondary forms merge-tags fetch so it never competes with template list rendering
+        const timer = setTimeout(() => {
+            if (cachedMergeTags !== null) return;
+            api.get<any[]>('forms').then(res => {
                 if (res.success && Array.isArray(res.data)) {
                     const keyMap = new Map<string, string>();
                     res.data.forEach((form: any) => {
@@ -497,17 +616,44 @@ const Templates: React.FC = () => {
                             }
                         });
                     });
-                    setCustomMergeTags(Array.from(keyMap.entries()).map(([key, label]) => ({ key, label })));
+                    const tags = Array.from(keyMap.entries()).map(([key, label]) => ({ key, label }));
+                    cachedMergeTags = tags;
+                    if (isMountedRef.current) setCustomMergeTags(tags);
                 }
-            }).catch(err => {
-                if (!isAbort(err)) console.error('Fetch forms merge tags error:', err);
-            })
-        ]);
+            }).catch(() => {});
+        }, 200);
 
-        return () => controller.abort();
+        return () => {
+            isMountedRef.current = false;
+            clearTimeout(timer);
+        };
     }, [fetchUserTemplates, fetchGroups]);
 
-    const handleSaveTemplate = async (data: Partial<Template>, shouldExit: boolean = false) => {
+    // [PERF] Hover Prefetch: load full blocks into RAM when user hovers over a card so clicking Edit is 0ms
+    const handlePrefetchTemplate = useCallback((tpl: Template) => {
+        if (!tpl || !tpl.id || tpl.id.startsWith('sys_')) return;
+        if (fullTemplateBlocksCache.has(tpl.id) || prefetchingTemplateIds.has(tpl.id)) return;
+        if (tpl.blocks && tpl.blocks.length > 0 && typeof tpl.blocks[0] === 'object') {
+            fullTemplateBlocksCache.set(tpl.id, tpl);
+            return;
+        }
+        prefetchingTemplateIds.add(tpl.id);
+        api.get<Template>(`templates/${tpl.id}`)
+            .then(res => {
+                if (res.success && res.data) {
+                    fullTemplateBlocksCache.set(tpl.id, res.data);
+                }
+            })
+            .catch(() => {})
+            .finally(() => {
+                prefetchingTemplateIds.delete(tpl.id);
+            });
+    }, []);
+
+    const handleSaveTemplate = async (
+        data: Partial<Template> & { visibility?: TemplateVisibilityMode; accessConfig?: TemplateAccessConfig },
+        shouldExit: boolean = false
+    ) => {
         if (savingTemplateRef.current) return;
         const isExisting = Boolean(editingTemplate && editingTemplate.id && !editingTemplate.id.startsWith('sys_'));
         if (isExisting && !canModifyTemplate(editingTemplate)) {
@@ -518,21 +664,26 @@ const Templates: React.FC = () => {
         try {
             let res;
             const creatorInfo = getCurrentCreatorInfo();
-            const resolvedVisibility: 'personal' | 'shared' = effectiveIsAdmin
-                ? (((data as any).visibility || (data.bodyStyle as any)?.visibility || (editingTemplate as any)?.visibility || (editingTemplate?.bodyStyle as any)?.visibility || 'shared') === 'personal' ? 'personal' : 'shared')
-                : 'personal';
+            const rawVis = data.visibility || data.accessConfig?.visibility || (editingTemplate as any)?.visibility || (effectiveIsAdmin ? 'shared' : 'personal');
+            const resolvedVisibility: TemplateVisibilityMode = (!effectiveIsAdmin && rawVis === 'shared') ? 'personal' : rawVis;
+            const resolvedAccessConfig: TemplateAccessConfig = {
+                ...(data.accessConfig || normalizeTemplateAccessConfig(editingTemplate, resolvedVisibility)),
+                visibility: resolvedVisibility,
+            };
 
             if (isExisting && editingTemplate) {
                 const existingCreator = (editingTemplate as any).creator || (editingTemplate.bodyStyle as any)?.creator || creatorInfo;
                 const updatedBodyStyle = {
                     ...data.bodyStyle,
                     visibility: resolvedVisibility,
+                    accessConfig: resolvedAccessConfig,
                     creator: existingCreator
                 };
                 res = await api.put(`templates/${editingTemplate.id}`, {
                     ...editingTemplate,
                     ...data,
                     visibility: resolvedVisibility,
+                    accessConfig: resolvedAccessConfig,
                     creator: existingCreator,
                     bodyStyle: updatedBodyStyle,
                     lastModified: new Date().toISOString()
@@ -540,24 +691,29 @@ const Templates: React.FC = () => {
                 if (res.success) {
                     showToast('Đã cập nhật mẫu email');
                     logAction('Cập nhật mẫu email', `Mẫu: ${data.name || editingTemplate.name}`);
-                    setUserTemplates(prev => prev.map(t => t.id === editingTemplate.id ? {
-                        ...t,
+                    const updatedTpl = {
+                        ...editingTemplate,
                         ...res.data,
                         visibility: resolvedVisibility,
+                        accessConfig: resolvedAccessConfig,
                         creator: existingCreator,
                         bodyStyle: updatedBodyStyle,
-                        created_at: t.created_at || (t as any).createdAt || new Date().toISOString()
-                    } as Template : t));
+                        created_at: editingTemplate.created_at || (editingTemplate as any).createdAt || new Date().toISOString()
+                    } as Template;
+                    fullTemplateBlocksCache.set(editingTemplate.id, updatedTpl);
+                    syncUserTemplates(prev => prev.map(t => t.id === editingTemplate.id ? updatedTpl : t));
                 }
             } else {
                 const updatedBodyStyle = {
                     ...data.bodyStyle,
                     visibility: resolvedVisibility,
+                    accessConfig: resolvedAccessConfig,
                     creator: creatorInfo
                 };
                 res = await api.post('templates', {
                     ...data,
                     visibility: resolvedVisibility,
+                    accessConfig: resolvedAccessConfig,
                     created_by: creatorInfo.id,
                     creator: creatorInfo,
                     bodyStyle: updatedBodyStyle,
@@ -566,19 +722,23 @@ const Templates: React.FC = () => {
                     lastModified: new Date().toISOString()
                 } as any);
                 if (res.success) {
-                    showToast(resolvedVisibility === 'personal' ? 'Đã tạo mẫu email cá nhân mới' : 'Đã tạo mẫu email dùng chung mới');
+                    showToast(resolvedVisibility === 'personal' ? 'Đã tạo mẫu email cá nhân mới' : 'Đã tạo mẫu email mới');
                     logAction('Tạo mẫu email mới', `Mẫu: ${data.name}`);
                     const newTemplateWithDate = {
                         ...res.data,
                         visibility: resolvedVisibility,
+                        accessConfig: resolvedAccessConfig,
                         created_by: creatorInfo.id,
                         creator: creatorInfo,
                         bodyStyle: updatedBodyStyle,
                         created_at: new Date().toISOString(),
                         createdAt: new Date().toISOString()
                     } as Template;
+                    if (newTemplateWithDate.id) {
+                        fullTemplateBlocksCache.set(newTemplateWithDate.id, newTemplateWithDate);
+                    }
                     setEditingTemplate(newTemplateWithDate);
-                    setUserTemplates(prev => [newTemplateWithDate, ...prev]);
+                    syncUserTemplates(prev => [newTemplateWithDate, ...prev]);
                 }
             }
 
@@ -598,6 +758,43 @@ const Templates: React.FC = () => {
             savingTemplateRef.current = false;
         }
     };
+
+    const handleQuickUpdateAccess = useCallback(async (nextConfig: TemplateAccessConfig) => {
+        if (!accessModalTarget) return;
+        const tplId = accessModalTarget.id;
+        try {
+            const res = await api.put(`templates/${tplId}`, {
+                action: 'update_access',
+                visibility: nextConfig.visibility,
+                accessConfig: nextConfig,
+            });
+            if (res.success) {
+                syncUserTemplates(prev => prev.map(t => {
+                    if (t.id !== tplId) return t;
+                    const updated = {
+                        ...t,
+                        visibility: nextConfig.visibility,
+                        accessConfig: nextConfig,
+                        bodyStyle: {
+                            ...(t.bodyStyle || DEFAULT_BODY_STYLE),
+                            visibility: nextConfig.visibility,
+                            accessConfig: nextConfig,
+                        } as any
+                    };
+                    if (fullTemplateBlocksCache.has(tplId)) {
+                        const cached = fullTemplateBlocksCache.get(tplId)!;
+                        fullTemplateBlocksCache.set(tplId, { ...cached, ...updated });
+                    }
+                    return updated;
+                }));
+                showToast('Đã cập nhật phân quyền & chia sẻ mẫu thiết kế');
+            } else {
+                showToast(res.message || 'Không thể cập nhật phân quyền', 'error');
+            }
+        } catch {
+            showToast('Lỗi kết nối khi cập nhật phân quyền', 'error');
+        }
+    }, [accessModalTarget, syncUserTemplates, showToast]);
 
     const handleDelete = async (ids: string[], type: 'template' | 'group' = 'template') => {
         if (type === 'group') {
@@ -622,10 +819,14 @@ const Templates: React.FC = () => {
                 if (res.success) {
                     const groupName = groups.find(g => g.id === ids[0])?.name || ids[0];
                     logAction('Xóa nhóm mẫu', `Đã xóa nhóm: ${groupName}`);
-                    setGroups(prev => prev.filter(g => g.id !== ids[0]));
+                    setGroups(prev => {
+                        const next = prev.filter(g => g.id !== ids[0]);
+                        cachedTemplateGroups = next;
+                        return next;
+                    });
                     if (filterGroupId === ids[0]) setFilterGroupId('all');
                     showToast('Đã xóa nhóm', 'info');
-                    fetchUserTemplates();
+                    fetchUserTemplates(false);
                 } else {
                     showToast(res.message || 'Lỗi khi xóa nhóm', 'error');
                 }
@@ -634,7 +835,8 @@ const Templates: React.FC = () => {
                 if (res.success) {
                     const deletedNames = userTemplates.filter(t => ids.includes(t.id)).map(t => t.name).join(', ');
                     logAction('Xóa mẫu email', `Đã xóa: ${deletedNames || ids.join(', ')}`);
-                    setUserTemplates(prev => prev.filter(t => !ids.includes(t.id)));
+                    ids.forEach(id => fullTemplateBlocksCache.delete(id));
+                    syncUserTemplates(prev => prev.filter(t => !ids.includes(t.id)));
                     setSelectedIds(prev => prev.filter(id => !ids.includes(id)));
                     showToast(res.message || 'Đã xóa mẫu email', 'info');
                 } else {
@@ -672,7 +874,7 @@ const Templates: React.FC = () => {
             if (res.success) {
                 showToast(res.message || 'Đã cập nhật nhóm cho các mẫu đã chọn');
                 const newGroupId = toGroupId === 'null' ? undefined : toGroupId;
-                setUserTemplates(prev => prev.map(t => selectedIds.includes(t.id) ? { ...t, groupId: newGroupId } : t));
+                syncUserTemplates(prev => prev.map(t => selectedIds.includes(t.id) ? { ...t, groupId: newGroupId } : t));
                 setSelectedIds([]);
             } else {
                 showToast(res.message || 'Lỗi khi di chuyển mẫu', 'error');
@@ -724,47 +926,46 @@ const Templates: React.FC = () => {
         }
     }, 'tạo nhóm');
 
+    // [PERF] Instant 0ms Editor Open — never block on loading toast!
     const handleStartEdit = useCallback(async (template: Template) => {
         if (!template.id.startsWith('sys_') && !canModifyTemplate(template)) {
             adminGuard(() => {})();
             return;
         }
+        const cachedFull = fullTemplateBlocksCache.get(template.id) || template;
+        setEditingTemplate(cachedFull);
+        setIsEditorOpen(true);
+
         if (template.id.startsWith('sys_')) {
-            setEditingTemplate(template);
-            setIsEditorOpen(true);
+            return;
+        }
+        if (cachedFull.blocks && cachedFull.blocks.length > 0 && typeof cachedFull.blocks[0] === 'object') {
             return;
         }
 
-        if (template.blocks && template.blocks.length > 0 && typeof template.blocks[0] === 'object') {
-            setEditingTemplate(template);
-            setIsEditorOpen(true);
-            return;
-        }
-
-        const loadToast = toast.loading('Đang mở trình thiết kế...');
+        // Fetch full blocks in background while editor is already mounted
         try {
             const res = await api.get<Template>(`templates/${template.id}`);
-            toast.dismiss(loadToast);
             if (res.success && res.data) {
+                fullTemplateBlocksCache.set(template.id, res.data);
                 setEditingTemplate(res.data);
-                setIsEditorOpen(true);
-            } else {
-                showToast('Không thể tải chi tiết mẫu', 'error');
             }
         } catch {
-            toast.dismiss(loadToast);
-            showToast('Lỗi kết nối khi tải mẫu', 'error');
+            // Editor already mounted with template HTML / fallback blocks
         }
-    }, [showToast, canModifyTemplate, adminGuard]);
+    }, [canModifyTemplate, adminGuard]);
 
     const handleDuplicate = async (tpl: Template) => {
         if (duplicatingRef.current) return;
         duplicatingRef.current = true;
         try {
-            let fullTpl = tpl;
-            if (!tpl.id.startsWith('sys_') && (!tpl.blocks || tpl.blocks.length === 0 || typeof tpl.blocks[0] !== 'object')) {
+            let fullTpl = fullTemplateBlocksCache.get(tpl.id) || tpl;
+            if (!tpl.id.startsWith('sys_') && (!fullTpl.blocks || fullTpl.blocks.length === 0 || typeof fullTpl.blocks[0] !== 'object')) {
                 const res = await api.get<Template>(`templates/${tpl.id}`);
-                if (res.success && res.data) fullTpl = res.data;
+                if (res.success && res.data) {
+                    fullTpl = res.data;
+                    fullTemplateBlocksCache.set(tpl.id, res.data);
+                }
             }
 
             const baseName = fullTpl.name.replace(' (Copy)', '');
@@ -776,11 +977,19 @@ const Templates: React.FC = () => {
             }
 
             const creatorInfo = getCurrentCreatorInfo();
-            const targetVisibility: 'personal' | 'shared' = effectiveIsAdmin ? 'shared' : 'personal';
+            const targetVisibility: TemplateVisibilityMode = effectiveIsAdmin ? 'shared' : 'personal';
+            const targetAccessConfig: TemplateAccessConfig = {
+                visibility: targetVisibility,
+                allowed_user_ids: [],
+                allowed_team_ids: [],
+                allowed_departments: [],
+                permission: 'use',
+            };
 
             const updatedBodyStyle = {
                 ...fullTpl.bodyStyle,
                 visibility: targetVisibility,
+                accessConfig: targetAccessConfig,
                 creator: creatorInfo
             };
 
@@ -790,6 +999,7 @@ const Templates: React.FC = () => {
                 thumbnail: fullTpl.thumbnail,
                 blocks: fullTpl.blocks,
                 visibility: targetVisibility,
+                accessConfig: targetAccessConfig,
                 created_by: creatorInfo.id,
                 creator: creatorInfo,
                 bodyStyle: updatedBodyStyle,
@@ -801,13 +1011,17 @@ const Templates: React.FC = () => {
                 const duplicatedWithDate = {
                     ...(res.data as any),
                     visibility: targetVisibility,
+                    accessConfig: targetAccessConfig,
                     created_by: creatorInfo.id,
                     creator: creatorInfo,
                     bodyStyle: updatedBodyStyle,
                     created_at: new Date().toISOString(),
                     createdAt: new Date().toISOString()
                 } as Template;
-                setUserTemplates(prev => [duplicatedWithDate, ...prev]);
+                if (duplicatedWithDate.id) {
+                    fullTemplateBlocksCache.set(duplicatedWithDate.id, duplicatedWithDate);
+                }
+                syncUserTemplates(prev => [duplicatedWithDate, ...prev]);
                 setCurrentPage(1);
                 showToast('Đã nhân bản mẫu thành công', 'success');
                 logAction('Nhân bản mẫu email', `Nhân bản mẫu "${tpl.name}" thành "${newName}"`);
@@ -840,15 +1054,29 @@ const Templates: React.FC = () => {
     }, []);
 
     // ── Filtering & Sorting Logic ────────────────────────────────────────────
-    const allMergedTemplates = useMemo(() => [...userTemplates, ...SYSTEM_TEMPLATES], [userTemplates]);
+    const visibleUserTemplates = useMemo(() => {
+        return userTemplates.filter(t => canUserViewTemplate(t, erpUser, effectiveIsAdmin));
+    }, [userTemplates, erpUser, effectiveIsAdmin]);
+
+    const allMergedTemplates = useMemo(
+        () => [...visibleUserTemplates, ...SYSTEM_TEMPLATES],
+        [visibleUserTemplates]
+    );
+
+    const isMyOwnTemplate = useCallback((tpl: Template) => {
+        if (tpl.id.startsWith('sys_')) return false;
+        if (isTemplateOwner(tpl, currentUserId, currentUserEmail, currentUserName)) return true;
+        if (getTemplateVisibility(tpl) === 'personal' && canModifyTemplate(tpl) && !effectiveIsAdmin) return true;
+        return false;
+    }, [currentUserId, currentUserEmail, currentUserName, canModifyTemplate, effectiveIsAdmin]);
 
     const personalTemplatesCount = useMemo(() => {
-        return userTemplates.filter(t => isOwnTemplate(t, currentUserId, currentUserEmail) || getTemplateVisibility(t) === 'personal').length;
-    }, [userTemplates, currentUserId, currentUserEmail]);
+        return visibleUserTemplates.filter(t => isMyOwnTemplate(t) || getTemplateVisibility(t) === 'personal').length;
+    }, [visibleUserTemplates, isMyOwnTemplate]);
 
     const sharedTemplatesCount = useMemo(() => {
-        return userTemplates.filter(t => !t.id.startsWith('sys_') && getTemplateVisibility(t) !== 'personal').length;
-    }, [userTemplates]);
+        return visibleUserTemplates.filter(t => !t.id.startsWith('sys_') && getTemplateVisibility(t) !== 'personal').length;
+    }, [visibleUserTemplates]);
 
     const filteredTemplates = useMemo(() => {
         const q = debouncedSearch.trim().toLowerCase();
@@ -857,7 +1085,7 @@ const Templates: React.FC = () => {
             const vis = getTemplateVisibility(t);
             const matchesGroup =
                 filterGroupId === 'all' ? true :
-                filterGroupId === 'personal' ? (!isSys && (isOwnTemplate(t, currentUserId, currentUserEmail) || vis === 'personal')) :
+                filterGroupId === 'personal' ? (!isSys && (isMyOwnTemplate(t) || vis === 'personal')) :
                 filterGroupId === 'shared' ? (!isSys && vis !== 'personal') :
                 filterGroupId === 'system' ? isSys :
                 t.groupId === filterGroupId;
@@ -872,7 +1100,7 @@ const Templates: React.FC = () => {
             return [...list].sort((a, b) => (b.name || '').localeCompare(a.name || '', 'vi'));
         }
         return list;
-    }, [allMergedTemplates, filterGroupId, debouncedSearch, sortBy, currentUserId, currentUserEmail]);
+    }, [allMergedTemplates, filterGroupId, debouncedSearch, sortBy, isMyOwnTemplate]);
 
     const totalPages = Math.max(1, Math.ceil(filteredTemplates.length / PAGE_SIZE));
     const paginatedTemplates = useMemo(() => {
@@ -911,38 +1139,10 @@ const Templates: React.FC = () => {
         return '';
     }, [previewTemplate]);
 
-    // Top 3 most recently used/interacted groups + active group if not in top 3
-    const topGroups = useMemo(() => {
-        const scored = groups.map(g => {
-            const templates = allMergedTemplates.filter(t => t.groupId === g.id);
-            const count = templates.length;
-            let latestTime = 0;
-            templates.forEach(t => {
-                const raw = t.lastModified || t.created_at || (t as any).createdAt;
-                if (raw) {
-                    const ts = new Date(raw).getTime();
-                    if (!isNaN(ts) && ts > latestTime) latestTime = ts;
-                }
-            });
-            return { group: g, count, latestTime };
-        });
-
-        scored.sort((a, b) => {
-            if (b.latestTime !== a.latestTime) return b.latestTime - a.latestTime;
-            if (b.count !== a.count) return b.count - a.count;
-            return a.group.name.localeCompare(b.group.name, 'vi');
-        });
-
-        const top3 = scored.slice(0, 3).map(s => s.group);
-        const isCustomActive = filterGroupId !== 'all' && filterGroupId !== 'personal' && filterGroupId !== 'shared' && filterGroupId !== 'system';
-        if (isCustomActive && !top3.some(g => g.id === filterGroupId)) {
-            const activeGroup = groups.find(g => g.id === filterGroupId);
-            if (activeGroup) {
-                return [...top3, activeGroup];
-            }
-        }
-        return top3;
-    }, [groups, allMergedTemplates, filterGroupId]);
+    const activeCustomFolder = useMemo(() => {
+        if (['all', 'personal', 'shared', 'system'].includes(filterGroupId)) return null;
+        return groups.find(g => g.id === filterGroupId) || null;
+    }, [filterGroupId, groups]);
 
     const filteredGroups = useMemo(() => {
         if (!folderSearchTerm.trim()) return groups;
@@ -972,7 +1172,7 @@ const Templates: React.FC = () => {
     }, [filterGroupId, allMergedTemplates, personalTemplatesCount, sharedTemplatesCount, groups]);
 
     const pillClass = (active: boolean) =>
-        `h-9 px-3 rounded-[var(--radius-md)] text-[13px] font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-colors border ${
+        `h-9 px-3 rounded-[var(--radius-md)] text-[13px] font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-colors border outline-none focus:outline-none cursor-pointer ${
             active
                 ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)] shadow-[var(--shadow-xs)]'
                 : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:bg-[var(--color-bg)] hover:text-[var(--color-text)]'
@@ -981,16 +1181,14 @@ const Templates: React.FC = () => {
     return (
         <div className="w-full flex flex-col gap-5">
             {isEditorOpen ? (
-                <Suspense fallback={<div className="py-20 text-center text-sm text-[var(--color-text-muted)]">Đang mở trình thiết kế...</div>}>
-                    <EmailEditor
-                        template={editingTemplate}
-                        groups={groups}
-                        onSave={(data) => handleSaveTemplate(data, false)}
-                        onCancel={() => { setIsEditorOpen(false); setEditingTemplate(undefined); }}
-                        customMergeTags={customMergeTags}
-                        canSetShared={effectiveIsAdmin}
-                    />
-                </Suspense>
+                <EmailEditor
+                    template={editingTemplate}
+                    groups={groups}
+                    onSave={(data) => handleSaveTemplate(data, false)}
+                    onCancel={() => { setIsEditorOpen(false); setEditingTemplate(undefined); }}
+                    customMergeTags={customMergeTags}
+                    canSetShared={effectiveIsAdmin}
+                />
             ) : (
                 <>
                     <PageHero
@@ -1020,8 +1218,8 @@ const Templates: React.FC = () => {
 
                     {/* Main panel */}
                     <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[18px] shadow-[var(--shadow-xs)] relative">
-                        {/* Single-row Toolbar: category pills left, filter + sort + SearchBox right */}
-                        <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-[var(--color-border)]">
+                        {/* Single-row Toolbar: Core scope pills on left, Folder Modal + Sort + SearchBox on right */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-[var(--color-border)]">
                             <div className="flex items-center gap-1.5 max-w-full overflow-x-auto no-scrollbar">
                                 <button
                                     type="button"
@@ -1071,70 +1269,38 @@ const Templates: React.FC = () => {
                                     </span>
                                 </button>
 
-                                {topGroups.map(group => {
-                                    const active = filterGroupId === group.id;
-                                    const count = allMergedTemplates.filter(t => t.groupId === group.id).length;
-                                    return (
-                                        <div key={group.id} className="group/grp inline-flex items-center shrink-0">
-                                            <button
-                                                type="button"
-                                                onClick={() => handleFilterGroupChange(group.id)}
-                                                className={pillClass(active)}
-                                            >
-                                                <FolderOpen className="w-3.5 h-3.5 shrink-0" />
-                                                <span className="truncate max-w-[120px]">{group.name}</span>
-                                                <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${active ? 'bg-white/20 text-white' : 'bg-[var(--color-bg)] text-[var(--color-text-muted)]'}`}>
-                                                    {count}
-                                                </span>
-                                            </button>
-                                            {active && effectiveIsAdmin && (
-                                                <div className="inline-flex items-center ml-1 gap-0.5">
-                                                    <button
-                                                        type="button"
-                                                        onClick={(e) => { e.stopPropagation(); setEditingGroup(group); setNewGroupName(group.name); setIsGroupModalOpen(true); }}
-                                                        className="w-7 h-7 rounded-[var(--radius-sm)] inline-flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-primary)] hover:bg-[var(--color-bg)] transition-colors"
-                                                        title="Đổi tên nhóm"
-                                                    >
-                                                        <Edit3 className="w-3.5 h-3.5" />
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ isOpen: true, ids: [group.id], type: 'group' }); }}
-                                                        className="w-7 h-7 rounded-[var(--radius-sm)] inline-flex items-center justify-center text-[var(--color-text-muted)] hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                                                        title="Xóa nhóm"
-                                                    >
-                                                        <Trash2 className="w-3.5 h-3.5" />
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-
-                                {effectiveIsAdmin && (
-                                    <button
-                                        type="button"
-                                        onClick={() => { setEditingGroup(null); setNewGroupName(''); setIsGroupModalOpen(true); }}
-                                        className="h-9 px-2.5 rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] text-xs font-semibold text-[var(--color-text-secondary)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] inline-flex items-center gap-1 shrink-0 transition-colors"
-                                        title="Tạo nhóm mẫu mới"
-                                    >
-                                        <FolderPlus className="w-3.5 h-3.5" />
-                                        <span>Nhóm mới</span>
-                                    </button>
+                                {/* Show active folder chip only when a folder was selected from the Folder Modal */}
+                                {activeCustomFolder && (
+                                    <div className="inline-flex items-center gap-1 h-9 pl-3 pr-2 rounded-[var(--radius-md)] bg-[var(--color-primary)]/10 border border-[var(--color-primary)] text-[var(--color-primary)] text-[13px] font-semibold">
+                                        <FolderOpen className="w-3.5 h-3.5 shrink-0" />
+                                        <span className="truncate max-w-[140px]">{activeCustomFolder.name}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleFilterGroupChange('all')}
+                                            className="ml-0.5 p-0.5 rounded hover:bg-[var(--color-primary)]/15 outline-none focus:outline-none cursor-pointer"
+                                            title="Bỏ lọc thư mục"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
                                 )}
                             </div>
 
                             <div className="ml-auto flex flex-wrap items-center gap-2">
-                                {/* Custom wide dropdown popover for folder filtering */}
+                                {/* Folder Modal / Popover containing ALL folders & group management */}
                                 <div ref={folderPopoverRef} className="relative">
                                     <button
                                         type="button"
                                         onClick={() => setIsFolderPopoverOpen(prev => !prev)}
-                                        className="h-9 px-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-semibold inline-flex items-center justify-between gap-2 min-w-[160px] max-w-[220px] text-[var(--color-text)] hover:border-[var(--color-primary)] transition-colors cursor-pointer"
+                                        className={`h-9 px-3 rounded-[var(--radius-md)] border text-xs font-semibold inline-flex items-center justify-between gap-2 min-w-[165px] max-w-[230px] transition-colors outline-none focus:outline-none cursor-pointer ${
+                                            activeCustomFolder
+                                                ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5 text-[var(--color-primary)]'
+                                                : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] hover:border-[var(--color-primary)]'
+                                        }`}
                                         title={currentFolderDisplay.name}
                                     >
                                         <div className="flex items-center gap-1.5 truncate">
-                                            <Folder className="w-3.5 h-3.5 shrink-0 text-[var(--color-text-muted)]" />
+                                            <Folder className={`w-3.5 h-3.5 shrink-0 ${activeCustomFolder ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-muted)]'}`} />
                                             <span className="truncate">{currentFolderDisplay.name}</span>
                                             <span className="text-[11px] text-[var(--color-text-muted)] font-normal shrink-0">
                                                 ({currentFolderDisplay.count})
@@ -1144,38 +1310,55 @@ const Templates: React.FC = () => {
                                     </button>
 
                                     {isFolderPopoverOpen && (
-                                        <div className="absolute top-full mt-1.5 left-0 sm:left-auto sm:right-0 w-[540px] sm:w-[620px] max-w-[calc(100vw-2rem)] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[18px] shadow-2xl z-50 p-3 flex flex-col gap-2.5">
-                                            {/* Top: Search box */}
-                                            <div className="relative">
-                                                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
-                                                <input
-                                                    type="text"
-                                                    value={folderSearchTerm}
-                                                    onChange={(e) => setFolderSearchTerm(e.target.value)}
-                                                    placeholder="Tìm kiếm thư mục / nhóm mẫu..."
-                                                    className="w-full h-8.5 pl-8.5 pr-8 text-xs rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-                                                    autoFocus
-                                                />
-                                                {folderSearchTerm && (
+                                        <div className="absolute top-full mt-1.5 left-0 sm:left-auto sm:right-0 w-[560px] sm:w-[640px] max-w-[calc(100vw-2rem)] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[18px] shadow-2xl z-50 p-3.5 flex flex-col gap-3">
+                                            {/* Header & Search */}
+                                            <div className="flex items-center justify-between gap-2">
+                                                <div className="relative flex-1">
+                                                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
+                                                    <input
+                                                        type="text"
+                                                        value={folderSearchTerm}
+                                                        onChange={(e) => setFolderSearchTerm(e.target.value)}
+                                                        placeholder="Tìm kiếm thư mục / nhóm mẫu..."
+                                                        className="w-full h-9 pl-8.5 pr-8 text-xs rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
+                                                        autoFocus
+                                                    />
+                                                    {folderSearchTerm && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setFolderSearchTerm('')}
+                                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-[var(--color-text)] p-0.5 outline-none focus:outline-none"
+                                                        >
+                                                            <X className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                {effectiveIsAdmin && (
                                                     <button
                                                         type="button"
-                                                        onClick={() => setFolderSearchTerm('')}
-                                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-[var(--color-text)] p-0.5"
+                                                        onClick={() => {
+                                                            setIsFolderPopoverOpen(false);
+                                                            setEditingGroup(null);
+                                                            setNewGroupName('');
+                                                            setIsGroupModalOpen(true);
+                                                        }}
+                                                        className="h-9 px-3 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white text-xs font-semibold inline-flex items-center gap-1.5 hover:opacity-90 transition-opacity shrink-0 outline-none focus:outline-none cursor-pointer"
                                                     >
-                                                        <X className="w-3.5 h-3.5" />
+                                                        <FolderPlus className="w-3.5 h-3.5" />
+                                                        <span>+ Tạo thư mục</span>
                                                     </button>
                                                 )}
                                             </div>
 
                                             {/* Quick options row */}
-                                            <div className="flex flex-wrap items-center gap-1.5 pb-2 border-b border-[var(--color-border)]">
+                                            <div className="flex flex-wrap items-center gap-1.5 pb-2.5 border-b border-[var(--color-border)]">
                                                 <button
                                                     type="button"
                                                     onClick={() => {
                                                         handleFilterGroupChange('all');
                                                         setIsFolderPopoverOpen(false);
                                                     }}
-                                                    className={`px-2.5 py-1.5 rounded-[var(--radius-md)] text-xs font-semibold inline-flex items-center gap-1.5 transition-colors border cursor-pointer ${
+                                                    className={`px-2.5 py-1.5 rounded-[var(--radius-md)] text-xs font-semibold inline-flex items-center gap-1.5 transition-colors border outline-none focus:outline-none cursor-pointer ${
                                                         filterGroupId === 'all'
                                                             ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]'
                                                             : 'bg-[var(--color-bg)] text-[var(--color-text-secondary)] border-transparent hover:border-[var(--color-border)] hover:text-[var(--color-text)]'
@@ -1194,7 +1377,7 @@ const Templates: React.FC = () => {
                                                         handleFilterGroupChange('personal');
                                                         setIsFolderPopoverOpen(false);
                                                     }}
-                                                    className={`px-2.5 py-1.5 rounded-[var(--radius-md)] text-xs font-semibold inline-flex items-center gap-1.5 transition-colors border cursor-pointer ${
+                                                    className={`px-2.5 py-1.5 rounded-[var(--radius-md)] text-xs font-semibold inline-flex items-center gap-1.5 transition-colors border outline-none focus:outline-none cursor-pointer ${
                                                         filterGroupId === 'personal'
                                                             ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]'
                                                             : 'bg-[var(--color-bg)] text-[var(--color-text-secondary)] border-transparent hover:border-[var(--color-border)] hover:text-[var(--color-text)]'
@@ -1213,7 +1396,7 @@ const Templates: React.FC = () => {
                                                         handleFilterGroupChange('shared');
                                                         setIsFolderPopoverOpen(false);
                                                     }}
-                                                    className={`px-2.5 py-1.5 rounded-[var(--radius-md)] text-xs font-semibold inline-flex items-center gap-1.5 transition-colors border cursor-pointer ${
+                                                    className={`px-2.5 py-1.5 rounded-[var(--radius-md)] text-xs font-semibold inline-flex items-center gap-1.5 transition-colors border outline-none focus:outline-none cursor-pointer ${
                                                         filterGroupId === 'shared'
                                                             ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]'
                                                             : 'bg-[var(--color-bg)] text-[var(--color-text-secondary)] border-transparent hover:border-[var(--color-border)] hover:text-[var(--color-text)]'
@@ -1232,7 +1415,7 @@ const Templates: React.FC = () => {
                                                         handleFilterGroupChange('system');
                                                         setIsFolderPopoverOpen(false);
                                                     }}
-                                                    className={`px-2.5 py-1.5 rounded-[var(--radius-md)] text-xs font-semibold inline-flex items-center gap-1.5 transition-colors border cursor-pointer ${
+                                                    className={`px-2.5 py-1.5 rounded-[var(--radius-md)] text-xs font-semibold inline-flex items-center gap-1.5 transition-colors border outline-none focus:outline-none cursor-pointer ${
                                                         filterGroupId === 'system'
                                                             ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]'
                                                             : 'bg-[var(--color-bg)] text-[var(--color-text-secondary)] border-transparent hover:border-[var(--color-border)] hover:text-[var(--color-text)]'
@@ -1246,43 +1429,74 @@ const Templates: React.FC = () => {
                                                 </button>
                                             </div>
 
-                                            {/* Main body: 3-column grid */}
-                                            <div className="grid grid-cols-3 gap-2 max-h-[300px] overflow-y-auto p-1 custom-scrollbar">
+                                            {/* Main body: 3-column folder grid with inline Edit/Delete actions */}
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 max-h-[300px] overflow-y-auto p-0.5 custom-scrollbar">
                                                 {filteredGroups.length === 0 ? (
                                                     <div className="col-span-3 py-6 text-center text-xs text-[var(--color-text-muted)]">
-                                                        {folderSearchTerm ? 'Không tìm thấy nhóm thư mục phù hợp' : 'Chưa có nhóm thư mục nào'}
+                                                        {folderSearchTerm ? 'Không tìm thấy thư mục phù hợp' : 'Chưa có thư mục nào'}
                                                     </div>
                                                 ) : (
                                                     filteredGroups.map(group => {
                                                         const count = allMergedTemplates.filter(t => t.groupId === group.id).length;
                                                         const isSelected = filterGroupId === group.id;
                                                         return (
-                                                            <button
+                                                            <div
                                                                 key={group.id}
-                                                                type="button"
                                                                 onClick={() => {
                                                                     handleFilterGroupChange(group.id);
                                                                     setIsFolderPopoverOpen(false);
                                                                 }}
-                                                                className={`h-11 px-2.5 rounded-[var(--radius-md)] border text-left text-xs font-medium flex items-center justify-between gap-1.5 transition-all cursor-pointer ${
+                                                                className={`group/fld h-11 px-2.5 rounded-[var(--radius-md)] border text-left text-xs font-medium flex items-center justify-between gap-1.5 transition-all cursor-pointer ${
                                                                     isSelected
                                                                         ? 'bg-[var(--color-primary)]/10 border-[var(--color-primary)] text-[var(--color-primary)] font-semibold shadow-xs'
                                                                         : 'bg-[var(--color-bg)] border-[var(--color-border)] text-[var(--color-text)] hover:border-[var(--color-primary)]/50 hover:bg-[var(--color-surface)]'
                                                                 }`}
                                                                 title={group.name}
                                                             >
-                                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                                <div className="flex items-center gap-1.5 min-w-0 flex-1">
                                                                     <Folder className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-muted)]'}`} />
                                                                     <span className="truncate">{group.name}</span>
                                                                 </div>
-                                                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full shrink-0 font-normal ${
-                                                                    isSelected
-                                                                        ? 'bg-[var(--color-primary)] text-white'
-                                                                        : 'bg-[var(--color-surface)] text-[var(--color-text-muted)] border border-[var(--color-border)]'
-                                                                }`}>
-                                                                    {count}
-                                                                </span>
-                                                            </button>
+                                                                <div className="flex items-center gap-1 shrink-0">
+                                                                    {effectiveIsAdmin && (
+                                                                        <div className="hidden group-hover/fld:inline-flex items-center gap-0.5">
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setIsFolderPopoverOpen(false);
+                                                                                    setEditingGroup(group);
+                                                                                    setNewGroupName(group.name);
+                                                                                    setIsGroupModalOpen(true);
+                                                                                }}
+                                                                                className="w-6 h-6 rounded inline-flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-primary)] hover:bg-white transition-colors outline-none focus:outline-none"
+                                                                                title="Đổi tên thư mục"
+                                                                            >
+                                                                                <Edit3 className="w-3 h-3" />
+                                                                            </button>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setIsFolderPopoverOpen(false);
+                                                                                    setDeleteConfirm({ isOpen: true, ids: [group.id], type: 'group' });
+                                                                                }}
+                                                                                className="w-6 h-6 rounded inline-flex items-center justify-center text-[var(--color-text-muted)] hover:text-rose-600 hover:bg-rose-50 transition-colors outline-none focus:outline-none"
+                                                                                title="Xóa thư mục"
+                                                                            >
+                                                                                <Trash2 className="w-3 h-3" />
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
+                                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-normal ${
+                                                                        isSelected
+                                                                            ? 'bg-[var(--color-primary)] text-white'
+                                                                            : 'bg-[var(--color-surface)] text-[var(--color-text-muted)] border border-[var(--color-border)]'
+                                                                    }`}>
+                                                                        {count}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
                                                         );
                                                     })
                                                 )}
@@ -1291,27 +1505,25 @@ const Templates: React.FC = () => {
                                             {/* Footer */}
                                             <div className="pt-2 border-t border-[var(--color-border)] flex items-center justify-between text-xs">
                                                 <span className="text-[11px] text-[var(--color-text-muted)]">
-                                                    {groups.length} nhóm thư mục
+                                                    Tổng cộng {groups.length} thư mục phân nhóm
                                                 </span>
-                                                {effectiveIsAdmin && (
+                                                {filterGroupId !== 'all' && (
                                                     <button
                                                         type="button"
                                                         onClick={() => {
+                                                            handleFilterGroupChange('all');
                                                             setIsFolderPopoverOpen(false);
-                                                            setEditingGroup(null);
-                                                            setNewGroupName('');
-                                                            setIsGroupModalOpen(true);
                                                         }}
-                                                        className="inline-flex items-center gap-1 font-semibold text-[var(--color-primary)] hover:underline cursor-pointer"
+                                                        className="text-[11px] font-semibold text-[var(--color-primary)] hover:underline outline-none focus:outline-none cursor-pointer"
                                                     >
-                                                        <FolderPlus className="w-3.5 h-3.5" />
-                                                        <span>+ Tạo nhóm mới</span>
+                                                        Đặt lại: Tất cả thư mục
                                                     </button>
                                                 )}
                                             </div>
                                         </div>
                                     )}
                                 </div>
+
                                 <div className="w-[145px]">
                                     <Select
                                         size="sm"
@@ -1324,9 +1536,9 @@ const Templates: React.FC = () => {
                                     value={searchTerm}
                                     onChange={setSearchTerm}
                                     onDebouncedChange={handleDebouncedSearch}
-                                    debounceMs={300}
+                                    debounceMs={250}
                                     placeholder="Tìm theo tên mẫu..."
-                                    className="w-full sm:w-64"
+                                    className="w-full sm:w-60"
                                 />
                             </div>
                         </div>
@@ -1355,7 +1567,7 @@ const Templates: React.FC = () => {
                                     <button
                                         type="button"
                                         onClick={clearFilters}
-                                        className="mt-2 h-9 px-4 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white text-[13px] font-semibold hover:opacity-90 transition-opacity"
+                                        className="mt-2 h-9 px-4 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white text-[13px] font-semibold hover:opacity-90 transition-opacity outline-none focus:outline-none cursor-pointer"
                                     >
                                         Xóa bộ lọc
                                     </button>
@@ -1363,7 +1575,7 @@ const Templates: React.FC = () => {
                                     <button
                                         type="button"
                                         onClick={() => { setEditingTemplate(undefined); setIsEditorOpen(true); }}
-                                        className="mt-2 h-9 px-4 inline-flex items-center gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white text-[13px] font-semibold hover:opacity-90 transition-opacity"
+                                        className="mt-2 h-9 px-4 inline-flex items-center gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white text-[13px] font-semibold hover:opacity-90 transition-opacity outline-none focus:outline-none cursor-pointer"
                                     >
                                         <Plus className="w-4 h-4" /> Thiết kế mới
                                     </button>
@@ -1371,18 +1583,22 @@ const Templates: React.FC = () => {
                             </div>
                         ) : (
                             <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                {paginatedTemplates.map((template) => (
+                                {paginatedTemplates.map((template, idx) => (
                                     <TemplateCard
                                         key={template.id}
                                         template={template}
+                                        index={idx}
                                         isSelected={selectedIds.includes(template.id)}
                                         canModify={canModifyTemplate(template)}
+                                        isOwn={isMyOwnTemplate(template)}
                                         groupName={getGroupName(template.groupId)}
                                         onToggleSelect={toggleSelect}
                                         onPreview={setPreviewTemplate}
                                         onEdit={handleStartEdit}
                                         onDuplicate={handleDuplicate}
                                         onDelete={(id) => setDeleteConfirm({ isOpen: true, ids: [id], type: 'template' })}
+                                        onOpenAccessModal={setAccessModalTarget}
+                                        onPrefetch={handlePrefetchTemplate}
                                     />
                                 ))}
                             </div>
@@ -1409,7 +1625,7 @@ const Templates: React.FC = () => {
                                     <button
                                         type="button"
                                         onClick={() => setSelectedIds([])}
-                                        className="text-rose-400 text-xs font-semibold hover:text-rose-300 ml-1"
+                                        className="text-rose-400 text-xs font-semibold hover:text-rose-300 ml-1 outline-none focus:outline-none cursor-pointer"
                                     >
                                         Bỏ chọn
                                     </button>
@@ -1436,7 +1652,7 @@ const Templates: React.FC = () => {
                                     <button
                                         type="button"
                                         onClick={() => setDeleteConfirm({ isOpen: true, ids: selectedIds, type: 'template' })}
-                                        className="h-9 px-3 bg-rose-500/15 hover:bg-rose-600 text-rose-400 hover:text-white rounded-[var(--radius-md)] text-xs font-semibold inline-flex items-center gap-1.5 transition-colors border border-rose-500/30 whitespace-nowrap"
+                                        className="h-9 px-3 bg-rose-500/15 hover:bg-rose-600 text-rose-400 hover:text-white rounded-[var(--radius-md)] text-xs font-semibold inline-flex items-center gap-1.5 transition-colors border border-rose-500/30 whitespace-nowrap outline-none focus:outline-none cursor-pointer"
                                     >
                                         <Trash2 className="w-3.5 h-3.5" /> Xóa đã chọn
                                     </button>
@@ -1445,7 +1661,7 @@ const Templates: React.FC = () => {
                                 <button
                                     type="button"
                                     onClick={() => handleSelectAll(filteredTemplates)}
-                                    className="inline-flex items-center gap-1.5 ml-auto text-white/70 hover:text-white text-xs font-semibold transition-colors"
+                                    className="inline-flex items-center gap-1.5 ml-auto text-white/70 hover:text-white text-xs font-semibold transition-colors outline-none focus:outline-none cursor-pointer"
                                 >
                                     <Check className="w-3.5 h-3.5" /> Chọn tất cả
                                 </button>
@@ -1454,6 +1670,16 @@ const Templates: React.FC = () => {
                     )}
                 </>
             )}
+
+            {/* Granular Access / Sharing Modal opened from TemplateCard */}
+            <TemplateAccessModal
+                isOpen={Boolean(accessModalTarget)}
+                onClose={() => setAccessModalTarget(null)}
+                templateName={accessModalTarget?.name}
+                value={normalizeTemplateAccessConfig(accessModalTarget, effectiveIsAdmin ? 'shared' : 'personal')}
+                canSetShared={effectiveIsAdmin}
+                onSave={handleQuickUpdateAccess}
+            />
 
             {/* Lazy-loaded Modals & Drawers */}
             <Suspense fallback={null}>
@@ -1511,21 +1737,21 @@ const Templates: React.FC = () => {
             <Modal
                 isOpen={isGroupModalOpen}
                 onClose={() => { setIsGroupModalOpen(false); setEditingGroup(null); setNewGroupName(''); }}
-                title={editingGroup ? 'Chỉnh sửa nhóm' : 'Tạo nhóm mới'}
+                title={editingGroup ? 'Chỉnh sửa thư mục' : 'Tạo thư mục mới'}
                 size="sm"
                 footer={
                     <div className="flex justify-between w-full">
                         <Button variant="ghost" onClick={() => { setIsGroupModalOpen(false); setEditingGroup(null); setNewGroupName(''); }}>Hủy</Button>
                         <Button onClick={handleSaveGroup} isLoading={isSavingGroup} disabled={!newGroupName.trim()}>
-                            {editingGroup ? 'Cập nhật' : 'Tạo nhóm'}
+                            {editingGroup ? 'Cập nhật' : 'Tạo thư mục'}
                         </Button>
                     </div>
                 }
             >
                 <div className="space-y-4">
                     <Input
-                        label="Tên nhóm"
-                        placeholder="VD: Chào mừng, Khuyến mãi..."
+                        label="Tên thư mục / nhóm mẫu"
+                        placeholder="VD: Chào mừng, Khuyến mãi, ISTEC..."
                         value={newGroupName}
                         onChange={(e) => setNewGroupName(e.target.value)}
                         autoFocus

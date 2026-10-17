@@ -347,6 +347,25 @@ export interface Template {
   blocks: EmailBlock[];
   bodyStyle: EmailBodyStyle;
   htmlContent?: string;
+  visibility?: 'shared' | 'personal' | 'custom' | 'system';
+  accessConfig?: {
+    visibility: 'shared' | 'personal' | 'custom' | 'system';
+    allowed_user_ids: number[];
+    allowed_team_ids: number[];
+    allowed_departments: string[];
+    permission: 'use' | 'edit';
+  };
+  created_by?: number | null;
+  updated_by?: number | null;
+  creator?: {
+    id?: number;
+    name?: string;
+    full_name?: string;
+    email?: string;
+    avatar_url?: string | null;
+    picture?: string | null;
+    role?: string | null;
+  } | null;
 }
 
 export interface ApiResponse<T> {

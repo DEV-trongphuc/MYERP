@@ -302,6 +302,8 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
         STANDARD_PIPELINE_STAGES
     );
     const [crmUsers, setCrmUsers] = useState<Array<{ value: string; label: string }>>([]);
+    const [crmTeams, setCrmTeams] = useState<Array<{ value: string; label: string }>>([]);
+    const [crmBranches, setCrmBranches] = useState<Array<{ value: string; label: string }>>([]);
     const [erpClasses, setErpClasses] = useState<Array<{ value: string; label: string }>>([]);
 
     const displayTags = propTags && propTags.length > 0 ? propTags : internalTags;
@@ -373,10 +375,44 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                         setCrmUsers(mappedUsers);
                     }
                 }
-            } catch (err: any) {
-                if (err?.name !== 'AbortError' && err?.name !== 'CanceledError') {
-                    // Keep empty array, user can still type salesperson name or ID
+            } catch {
+                // Keep empty array, user can still type salesperson name or ID
+            }
+
+            try {
+                const teamRes = await erpApi.get('/teams', { signal: controller.signal });
+                const rawTeams = teamRes?.data?.data || teamRes?.data || [];
+                if (Array.isArray(rawTeams) && rawTeams.length > 0) {
+                    const mappedTeams = rawTeams
+                        .filter((t: any) => t && (t.id || t.name || t.team_name))
+                        .map((t: any) => ({
+                            value: String(t.id ?? t.name),
+                            label: String(t.name ?? t.team_name ?? `Vòng chia #${t.id}`)
+                        }));
+                    if (mappedTeams.length > 0) {
+                        setCrmTeams(mappedTeams);
+                    }
                 }
+            } catch {
+                // Silent fallback
+            }
+
+            try {
+                const branchRes = await erpApi.get('/branches', { signal: controller.signal });
+                const rawBranches = branchRes?.data?.data || branchRes?.data || [];
+                if (Array.isArray(rawBranches) && rawBranches.length > 0) {
+                    const mappedBranches = rawBranches
+                        .filter((b: any) => b && (b.id || b.name || b.branch_name))
+                        .map((b: any) => ({
+                            value: String(b.id ?? b.name),
+                            label: String(b.name ?? b.branch_name ?? `Chi nhánh #${b.id}`)
+                        }));
+                    if (mappedBranches.length > 0) {
+                        setCrmBranches(mappedBranches);
+                    }
+                }
+            } catch {
+                // Silent fallback
             }
 
             try {
@@ -414,6 +450,7 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                 {
                     id: `br-${Date.now()}-1`,
                     label: 'Nhánh 1',
+                    name: 'Nhánh 1',
                     conditionGroup: {
                         logic: 'AND',
                         conditions: [{ field: 'crm_stage_id', operator: 'equals', value: '1' }]
@@ -428,11 +465,104 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
         onChange({ ...config, branches: newBranches });
     };
 
+    const applySmartPreset = (presetId: 'temperature' | 'team' | 'channel' | 'deposit') => {
+        const now = Date.now();
+        let nextBranches: AdvancedConditionBranch[] = [];
+
+        if (presetId === 'temperature') {
+            nextBranches = [
+                {
+                    id: `br-${now}-1`,
+                    label: 'Nhánh 1: Lead Nóng (Hot)',
+                    name: 'Nhánh 1: Lead Nóng (Hot)',
+                    conditionGroup: {
+                        logic: 'AND',
+                        conditions: [{ field: 'crm_temperature', operator: 'equals', value: 'hot' }]
+                    }
+                },
+                {
+                    id: `br-${now}-2`,
+                    label: 'Nhánh 2: Lead Ấm (Warm)',
+                    name: 'Nhánh 2: Lead Ấm (Warm)',
+                    conditionGroup: {
+                        logic: 'AND',
+                        conditions: [{ field: 'crm_temperature', operator: 'equals', value: 'warm' }]
+                    }
+                }
+            ];
+        } else if (presetId === 'team') {
+            const topTeams = crmTeams.length > 0
+                ? crmTeams.slice(0, 3)
+                : [
+                    { value: '1', label: 'Vòng chia Team Sale 1' },
+                    { value: '2', label: 'Vòng chia Team Sale 2' }
+                ];
+            nextBranches = topTeams.map((tm, idx) => ({
+                id: `br-${now}-${idx + 1}`,
+                label: `Vòng chia: ${tm.label}`,
+                name: `Vòng chia: ${tm.label}`,
+                conditionGroup: {
+                    logic: 'AND',
+                    conditions: [{ field: 'crm_team_id', operator: 'equals', value: tm.value }]
+                }
+            }));
+        } else if (presetId === 'channel') {
+            nextBranches = [
+                {
+                    id: `br-${now}-1`,
+                    label: 'Có Zalo / SĐT',
+                    name: 'Có Zalo / SĐT',
+                    conditionGroup: {
+                        logic: 'AND',
+                        conditions: [{ field: 'channel_available', operator: 'equals', value: 'zalo_oa' }]
+                    }
+                },
+                {
+                    id: `br-${now}-2`,
+                    label: 'Chỉ có Email',
+                    name: 'Chỉ có Email',
+                    conditionGroup: {
+                        logic: 'AND',
+                        conditions: [{ field: 'channel_available', operator: 'equals', value: 'email_valid' }]
+                    }
+                }
+            ];
+        } else if (presetId === 'deposit') {
+            nextBranches = [
+                {
+                    id: `br-${now}-1`,
+                    label: 'Đã đặt cọc (Approved)',
+                    name: 'Đã đặt cọc (Approved)',
+                    conditionGroup: {
+                        logic: 'AND',
+                        conditions: [{ field: 'crm_deposit_status', operator: 'equals', value: 'approved' }]
+                    }
+                },
+                {
+                    id: `br-${now}-2`,
+                    label: 'Đang chờ duyệt cọc (Pending)',
+                    name: 'Đang chờ duyệt cọc (Pending)',
+                    conditionGroup: {
+                        logic: 'AND',
+                        conditions: [{ field: 'crm_deposit_status', operator: 'equals', value: 'pending' }]
+                    }
+                }
+            ];
+        }
+
+        if (nextBranches.length > 0) {
+            updateBranches(nextBranches);
+            setActiveBranchIdx(0);
+        }
+    };
+
     const addBranch = () => {
         if (branches.length >= 8) return;
+        const label = `Nhánh ${branches.length + 1}`;
         const newBranch: AdvancedConditionBranch = {
             id: `br-${Date.now()}`,
-            label: `Nhánh ${branches.length + 1}`,
+            label,
+            name: label,
             conditionGroup: {
                 logic: 'AND',
                 conditions: [{ field: 'crm_lead_status', operator: 'equals', value: 'active' }]
@@ -457,6 +587,9 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
 
     const updateActiveBranch = (updates: Partial<AdvancedConditionBranch>) => {
         if (!activeBranch) return;
+        if (updates.label !== undefined && updates.name === undefined) {
+            updates.name = updates.label;
+        }
         const updated = branches.map((b, i) => (i === activeBranchIdx ? { ...b, ...updates } : b));
         updateBranches(updated);
     };
@@ -514,6 +647,52 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
             const noValueOperators = ['is_empty', 'is_not_empty', 'is_true', 'is_false', 'is_today', 'is_this_month'];
             if (noValueOperators.includes(rule.operator)) {
                 return null;
+            }
+
+            if (fieldDef.value === 'crm_team_id') {
+                return (
+                    <div className="mt-2 space-y-1.5 animate-in fade-in duration-200">
+                        {crmTeams.length > 0 && (
+                            <CustomSelect
+                                value={rule.value}
+                                onChange={val => updateItem(idx, { ...rule, value: val })}
+                                options={crmTeams}
+                                placeholder="-- Chọn Vòng chia / Team Sale --"
+                                icon={Briefcase}
+                            />
+                        )}
+                        <input
+                            type="text"
+                            value={rule.value || ''}
+                            onChange={e => updateItem(idx, { ...rule, value: e.target.value })}
+                            placeholder="Hoặc nhập ID / Tên Vòng chia (Team Sale)..."
+                            className="w-full bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] px-3 py-1.5 text-[11px] font-bold text-slate-700 outline-none focus:bg-white focus:border-[var(--color-primary)] transition-all"
+                        />
+                    </div>
+                );
+            }
+
+            if (fieldDef.value === 'crm_branch_id') {
+                return (
+                    <div className="mt-2 space-y-1.5 animate-in fade-in duration-200">
+                        {crmBranches.length > 0 && (
+                            <CustomSelect
+                                value={rule.value}
+                                onChange={val => updateItem(idx, { ...rule, value: val })}
+                                options={crmBranches}
+                                placeholder="-- Chọn Chi nhánh / Cơ sở MYERP --"
+                                icon={Briefcase}
+                            />
+                        )}
+                        <input
+                            type="text"
+                            value={rule.value || ''}
+                            onChange={e => updateItem(idx, { ...rule, value: e.target.value })}
+                            placeholder="Hoặc nhập ID / Tên Chi nhánh..."
+                            className="w-full bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] px-3 py-1.5 text-[11px] font-bold text-slate-700 outline-none focus:bg-white focus:border-[var(--color-primary)] transition-all"
+                        />
+                    </div>
+                );
             }
 
             if (fieldDef.value === 'erp_class_id') {
@@ -825,8 +1004,47 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                         Phân nhánh Đa điều kiện (MYERP Pipeline & Đa kênh)
                     </h4>
                     <p className="text-[11px] text-slate-600 leading-relaxed font-medium">
-                        Hệ thống kiểm tra lần lượt từ <b>Nhánh 1</b> sang phải (Hồ sơ, Giai đoạn Pipeline CRM, Đặt cọc, Điểm tương tác, Zalo/Email). Khách hàng khớp nhánh nào đầu tiên sẽ đi theo nhánh đó; nếu không khớp sẽ vào nhánh <b>Mặc định (Else)</b>.
+                        Hệ thống kiểm tra lần lượt từ <b>Nhánh 1</b> sang phải (Hồ sơ, Vòng chia, Giai đoạn Pipeline CRM, Đặt cọc, Điểm tương tác, Zalo/Email). Khách hàng khớp nhánh nào đầu tiên sẽ đi theo nhánh đó; nếu không khớp sẽ vào nhánh <b>Mặc định (Else)</b>.
                     </p>
+                </div>
+            </div>
+
+            {/* Smart Branch Presets (Chèn nhanh Bộ nhánh thông minh) */}
+            <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-[14px] space-y-2.5">
+                <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                        ⚡ Chèn nhanh Bộ nhánh thông minh (Smart Branch Presets)
+                    </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                        type="button"
+                        onClick={() => applySmartPreset('temperature')}
+                        className="p-2.5 bg-white hover:bg-amber-50/60 border border-slate-200 hover:border-amber-300 rounded-xl text-left text-[11px] font-bold text-slate-700 hover:text-amber-800 transition-all shadow-sm cursor-pointer"
+                    >
+                        🔥 Rẽ nhánh theo Nhiệt độ (Hot / Warm / Cold)
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => applySmartPreset('team')}
+                        className="p-2.5 bg-white hover:bg-indigo-50/60 border border-slate-200 hover:border-indigo-300 rounded-xl text-left text-[11px] font-bold text-slate-700 hover:text-indigo-800 transition-all shadow-sm cursor-pointer"
+                    >
+                        👥 Rẽ nhánh theo Vòng chia (Team Sale)
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => applySmartPreset('channel')}
+                        className="p-2.5 bg-white hover:bg-cyan-50/60 border border-slate-200 hover:border-cyan-300 rounded-xl text-left text-[11px] font-bold text-slate-700 hover:text-cyan-800 transition-all shadow-sm cursor-pointer"
+                    >
+                        📱 Rẽ nhánh Kênh tối ưu (Zalo OA ➔ Email ➔ Gọi SĐT)
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => applySmartPreset('deposit')}
+                        className="p-2.5 bg-white hover:bg-emerald-50/60 border border-slate-200 hover:border-emerald-300 rounded-xl text-left text-[11px] font-bold text-slate-700 hover:text-emerald-800 transition-all shadow-sm cursor-pointer"
+                    >
+                        🎓 Rẽ nhánh theo Trạng thái Cọc & Nhập học
+                    </button>
                 </div>
             </div>
 
@@ -849,6 +1067,7 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                 <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
                     {branches.map((b, idx) => {
                         const isActive = idx === activeBranchIdx;
+                        const branchTitle = b.label || b.name || `Nhánh ${idx + 1}`;
                         return (
                             <div
                                 key={b.id}
@@ -859,7 +1078,7 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                                         : 'bg-white text-slate-600 border-slate-200 hover:border-red-200 hover:bg-red-50/30'
                                 }`}
                             >
-                                <span>{b.label}</span>
+                                <span>{branchTitle}</span>
                                 {branches.length > 1 && (
                                     <button
                                         type="button"
@@ -888,15 +1107,15 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
 
             {/* Active Branch Editor */}
             {activeBranch && (
-                <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-5 animate-in fade-in slide-in-from-right-4 duration-200 key={activeBranch.id}">
+                <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-5 animate-in fade-in slide-in-from-right-4 duration-200" key={activeBranch.id}>
                     <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
                             Tên hiển thị trên sơ đồ
                         </label>
                         <input
                             type="text"
-                            value={activeBranch.label}
-                            onChange={e => updateActiveBranch({ label: e.target.value })}
+                            value={activeBranch.label || activeBranch.name || ''}
+                            onChange={e => updateActiveBranch({ label: e.target.value, name: e.target.value })}
                             placeholder="VD: Lead Nóng - Đã Đặt Cọc..."
                             className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-sm font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-all"
                         />
@@ -904,9 +1123,15 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
 
                     <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                            Cấu hình Logic cho "{activeBranch.label}"
+                            Cấu hình Logic cho "{activeBranch.label || activeBranch.name || 'Nhánh'}"
                         </label>
-                        {renderConditionGroup(activeBranch.conditionGroup, updateGroup)}
+                        {renderConditionGroup(
+                            activeBranch.conditionGroup || {
+                                logic: activeBranch.logic || 'AND',
+                                conditions: activeBranch.rules || [{ field: 'crm_stage_id', operator: 'equals', value: '1' }]
+                            },
+                            updateGroup
+                        )}
                     </div>
                 </div>
             )}
@@ -923,7 +1148,7 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                                     : 'bg-white border border-slate-200'
                             }`}
                         >
-                            {i + 1}. {b.label}
+                            {i + 1}. {b.label || b.name || `Nhánh ${i + 1}`}
                         </span>
                         <ChevronRight className="w-3 h-3 text-slate-400 shrink-0" />
                     </React.Fragment>

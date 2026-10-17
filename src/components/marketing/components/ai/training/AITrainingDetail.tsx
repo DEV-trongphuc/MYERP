@@ -19,6 +19,7 @@ import { MessageSquare } from 'lucide-react';
 import InputModal from '../../common/InputModal';
 import { api } from '../../../services/storageAdapter';
 import { API_BASE_URL, EXTERNAL_API_BASE } from '../../../utils/config';
+import { AppIcon } from '../../../../common/AppIcons';
 
 interface AITrainingDetailProps {
     selectedProperty: string;
@@ -468,7 +469,7 @@ const AITrainingDetail: React.FC<AITrainingDetailProps> = (props) => {
                                 />
                             ) : (
                                 <div className={`w-full h-full flex items-center justify-center transition-all duration-500 ${categoryId ? 'bg-[var(--color-primary)]' : 'bg-gradient-to-br from-[#BD1D2D] to-[#9A1523]'}`}>
-                                    <Bot className="w-6 h-6 text-white" />
+                                    <AppIcon name="ai_training" size={42} className="rounded-[12px] shrink-0" />
                                 </div>
                             )}
                         </div>
@@ -523,7 +524,7 @@ const AITrainingDetail: React.FC<AITrainingDetailProps> = (props) => {
                 ]}
             />
 
-            <div className={`rounded-[14px] border shadow-sm p-4 lg:p-6 min-h-[600px] transition-colors duration-500 animate-in fade-in slide-in-from-bottom-5 delay-200 ${isDarkTheme ? 'bg-[rgba(13,17,23,0.6)] backdrop-blur-md border-slate-800 shadow-none' : 'bg-white border-slate-200 shadow-sm'}`}>
+            <div className={`rounded-[14px] border shadow-none p-4 lg:p-6 min-h-[600px] transition-colors duration-300 ${isDarkTheme ? 'bg-[rgba(13,17,23,0.6)] backdrop-blur-md border-slate-800' : 'bg-white border-slate-200'}`}>
 
 
             {/* Tabs */}
@@ -678,7 +679,7 @@ const AITrainingDetail: React.FC<AITrainingDetailProps> = (props) => {
                                         Học Đồng Nghĩa
                                     </button>
                                     <div className={`hidden lg:block h-8 w-px mx-1 ${isDarkTheme ? 'bg-slate-700' : 'bg-slate-200'}`}></div>
-                                    {mainTab !== 'chat' && (
+                                    {(true || mainTab !== 'chat') && (
                                         <button
                                             onClick={handleTestAI}
                                             className={`h-9 lg:h-11 px-3 lg:px-5 rounded-lg lg:rounded-xl border font-bold text-[10px] lg:text-[11px] transition-all flex items-center gap-2 group active:scale-95 shadow-sm whitespace-nowrap ${isDarkTheme ? 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600 hover:text-slate-100' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900'}`}

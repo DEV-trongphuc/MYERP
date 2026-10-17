@@ -44,21 +44,26 @@ const Pagination: React.FC<PaginationProps> = ({
         stripLegacyClasses(className),
       )}
     >
-      <div className="text-xs font-medium text-[var(--color-text-muted)]">
+      <div className="text-xs font-medium text-[var(--color-text-muted)] whitespace-nowrap flex items-center gap-1 shrink-0">
         {hasRange ? (
           <>
-            Hiển thị <strong className="font-semibold text-[var(--color-text)]">{from.toLocaleString()}</strong> &ndash;{' '}
-            <strong className="font-semibold text-[var(--color-text)]">{to.toLocaleString()}</strong> trên{' '}
+            <span>Hiển thị</span>
+            <strong className="font-semibold text-[var(--color-text)]">{from.toLocaleString()}</strong>
+            <span>&ndash;</span>
+            <strong className="font-semibold text-[var(--color-text)]">{to.toLocaleString()}</strong>
+            <span>trên</span>
             <strong className="font-semibold text-[var(--color-text)]">{totalCount.toLocaleString()}</strong>
           </>
         ) : (
           <>
-            Tổng: <strong className="font-semibold text-[var(--color-text)]">{totalCount.toLocaleString()}</strong> kết quả (Trang {currentPage}/{totalPages})
+            <span>Tổng:</span>
+            <strong className="font-semibold text-[var(--color-text)]">{totalCount.toLocaleString()}</strong>
+            <span>kết quả (Trang {currentPage}/{totalPages})</span>
           </>
         )}
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 shrink-0">
         <button
           type="button"
           onClick={() => onPageChange(Math.max(1, currentPage - 1))}

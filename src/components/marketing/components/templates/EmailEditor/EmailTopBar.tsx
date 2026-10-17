@@ -1,9 +1,18 @@
 import * as React from 'react';
 import { useState } from 'react';
-import { ChevronLeft, Undo2, Redo2, Layout, Code, Monitor, Smartphone, Eye, Save, Loader2, Send, FolderOpen, ShieldCheck, Pencil, Users, Lock } from 'lucide-react';
+import {
+  ChevronLeft, Undo2, Redo2, Layout, Code, Monitor, Smartphone, Eye, Save,
+  Loader2, Send, FolderOpen, ShieldCheck, Pencil, Users, Lock, Globe, ChevronDown
+} from 'lucide-react';
 import Button from '../../common/Button';
 import Select from '../../common/Select';
 import { TemplateGroup } from '../../../types';
+import TemplateAccessModal, {
+  type TemplateAccessConfig,
+  type TemplateVisibilityMode,
+  countAccessTargets,
+  preloadAccessDirectory
+} from '../TemplateAccessModal';
 
 interface EmailTopBarProps {
   name: string;
@@ -29,8 +38,10 @@ interface EmailTopBarProps {
   showValidation?: boolean;
   /** True when there are unsaved changes (historyIndex !== savedHistoryIndex) */
   isDirty?: boolean;
-  visibility?: 'shared' | 'personal';
-  setVisibility?: (v: 'shared' | 'personal') => void;
+  visibility?: TemplateVisibilityMode;
+  setVisibility?: (v: TemplateVisibilityMode) => void;
+  accessConfig?: TemplateAccessConfig;
+  setAccessConfig?: (cfg: TemplateAccessConfig) => void;
   canSetShared?: boolean;
 }
 
@@ -38,12 +49,13 @@ const EmailTopBar: React.FC<EmailTopBarProps> = ({
   name, setName, groupId, setGroupId, groups, editorMode, setEditorMode, viewMode, setViewMode,
   canUndo, canRedo, onUndo, onRedo, onSave, onCancel, onPreview, onSendTest, onOpenTestModal,
   onValidate, validationIssueCount, showValidation, isDirty = false,
-  visibility = 'shared', setVisibility, canSetShared = true
+  visibility = 'shared', setVisibility, accessConfig, setAccessConfig, canSetShared = true
 }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [isSendingTest, setIsSendingTest] = useState(false);
   const [showTestInput, setShowTestInput] = useState(false);
   const [testEmail, setTestEmail] = useState('');
+  const [isAccessModalOpen, setIsAccessModalOpen] = useState(false);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -64,11 +76,26 @@ const EmailTopBar: React.FC<EmailTopBarProps> = ({
     setShowTestInput(false);
   };
 
+  const effectiveAccessConfig: TemplateAccessConfig = accessConfig || {
+    visibility: visibility === 'system' ? 'shared' : visibility,
+    allowed_user_ids: [],
+    allowed_team_ids: [],
+    allowed_departments: [],
+    permission: 'use',
+  };
+
+  const currentMode: TemplateVisibilityMode = effectiveAccessConfig.visibility || visibility || 'shared';
+  const totalSelectedTargets = countAccessTargets(effectiveAccessConfig);
+
   return (
     <div className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05)] z-50 relative">
-      {/* LEFT: Back + Name + Group + Visibility */}
-      <div className="flex items-center gap-3.5">
-        <button onClick={onCancel} className="h-9 w-9 rounded-[12px] flex items-center justify-center hover:bg-slate-100 text-slate-500 transition-colors">
+      {/* LEFT: Back + Name + Group + Access Trigger */}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="h-9 w-9 rounded-[12px] flex items-center justify-center hover:bg-slate-100 text-slate-500 transition-colors outline-none focus:outline-none cursor-pointer"
+        >
           <ChevronLeft className="w-5 h-5" />
         </button>
         <div className="flex flex-col">
@@ -88,7 +115,7 @@ const EmailTopBar: React.FC<EmailTopBarProps> = ({
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="h-9 text-sm font-semibold text-slate-800 outline-none bg-transparent hover:bg-slate-50 focus:bg-slate-100 px-2.5 rounded-[12px] transition-all border border-transparent hover:border-slate-200 focus:border-[var(--color-primary)] truncate max-w-[150px] sm:max-w-[220px] flex items-center"
+              className="h-9 text-sm font-semibold text-slate-800 outline-none focus:outline-none bg-transparent hover:bg-slate-50 focus:bg-slate-100 px-2.5 rounded-[12px] transition-all border border-transparent hover:border-slate-200 focus:border-[var(--color-primary)] truncate max-w-[150px] sm:max-w-[220px] flex items-center"
             />
             <Pencil className="w-3 h-3 text-slate-300 opacity-0 group-hover/name:opacity-100 transition-opacity duration-200 pointer-events-none shrink-0" />
           </div>
@@ -99,7 +126,7 @@ const EmailTopBar: React.FC<EmailTopBarProps> = ({
 
         <div className="h-8 w-px bg-slate-200/60 mx-0.5 hidden sm:block" />
 
-        <div className="w-48 hidden sm:flex items-center">
+        <div className="w-44 hidden sm:flex items-center">
           <Select
             options={[
               { value: '', label: 'Chưa phân loại' },
@@ -115,68 +142,87 @@ const EmailTopBar: React.FC<EmailTopBarProps> = ({
           />
         </div>
 
-        {/* Visibility Selector (Shared vs Personal) */}
-        {setVisibility && (
+        {/* Sleek Access / Sharing Trigger Button */}
+        {(setVisibility || setAccessConfig) && (
           <div className="hidden lg:flex items-center">
-            {canSetShared ? (
-              <div className="flex items-center h-9 p-0.5 rounded-[12px] bg-slate-100 border border-slate-200/60">
-                <button
-                  type="button"
-                  onClick={() => setVisibility('shared')}
-                  title="Dùng chung cho toàn công ty & đội ngũ Sale"
-                  className={`h-8 px-2.5 rounded-[10px] text-[11px] font-bold flex items-center gap-1.5 transition-all ${
-                    visibility === 'shared'
-                      ? 'bg-white shadow-xs text-[var(--color-primary)]'
-                      : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  <Users className="w-3.5 h-3.5" />
-                  <span>Dùng chung</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setVisibility('personal')}
-                  title="Mẫu cá nhân (Chỉ mình tôi chỉnh sửa)"
-                  className={`h-8 px-2.5 rounded-[10px] text-[11px] font-bold flex items-center gap-1.5 transition-all ${
-                    visibility === 'personal'
-                      ? 'bg-white shadow-xs text-[var(--color-primary)]'
-                      : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  <Lock className="w-3.5 h-3.5" />
-                  <span>Chỉ mình tôi</span>
-                </button>
-              </div>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] bg-rose-50 text-[var(--color-primary)] border border-rose-200/60 text-[11px] font-bold">
-                <Lock className="w-3.5 h-3.5" />
-                Mẫu cá nhân
-              </span>
-            )}
+            <button
+              type="button"
+              onMouseEnter={() => preloadAccessDirectory()}
+              onClick={() => setIsAccessModalOpen(true)}
+              title="Phân quyền & Chia sẻ mẫu thiết kế"
+              className={`h-9 px-3 rounded-[12px] border text-xs font-semibold inline-flex items-center gap-1.5 transition-all shadow-2xs outline-none focus:outline-none cursor-pointer ${
+                currentMode === 'personal'
+                  ? 'bg-amber-50/70 border-amber-200 text-amber-800 hover:bg-amber-100/70'
+                  : currentMode === 'custom'
+                    ? 'bg-rose-50/70 border-rose-200 text-[#BD1D2D] hover:bg-rose-100/70'
+                    : 'bg-emerald-50/70 border-emerald-200 text-emerald-800 hover:bg-emerald-100/70'
+              }`}
+            >
+              {currentMode === 'personal' ? (
+                <>
+                  <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>Riêng tư</span>
+                </>
+              ) : currentMode === 'custom' ? (
+                <>
+                  <Users className="w-3.5 h-3.5 text-[var(--color-primary)] shrink-0" />
+                  <span>Giới hạn ({totalSelectedTargets})</span>
+                </>
+              ) : (
+                <>
+                  <Globe className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>Công khai</span>
+                </>
+              )}
+              <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
+            </button>
           </div>
         )}
       </div>
 
-      <div className="flex items-center gap-4">
+      {/* CENTER: Undo/Redo + Visual/Code + Desktop/Mobile */}
+      <div className="flex items-center gap-3">
         {editorMode === 'visual' && (
           <div className="flex items-center h-9 p-0.5 rounded-[12px] bg-slate-100 border border-slate-200/60 shadow-xs">
-            <button onClick={onUndo} disabled={!canUndo} className="h-8 w-8 rounded-[10px] hover:bg-white text-slate-500 hover:text-[var(--color-primary)] hover:shadow-xs disabled:opacity-30 disabled:hover:bg-transparent transition-all flex items-center justify-center" title="Undo (Ctrl+Z)"><Undo2 className="w-4 h-4" /></button>
+            <button
+              type="button"
+              onClick={onUndo}
+              disabled={!canUndo}
+              className="h-8 w-8 rounded-[10px] hover:bg-white text-slate-500 hover:text-[var(--color-primary)] hover:shadow-xs disabled:opacity-30 disabled:hover:bg-transparent transition-all flex items-center justify-center outline-none focus:outline-none cursor-pointer"
+              title="Undo (Ctrl+Z)"
+            >
+              <Undo2 className="w-4 h-4" />
+            </button>
             <div className="w-px h-4 bg-slate-200 mx-0.5"></div>
-            <button onClick={onRedo} disabled={!canRedo} className="h-8 w-8 rounded-[10px] hover:bg-white text-slate-500 hover:text-[var(--color-primary)] hover:shadow-xs disabled:opacity-30 disabled:hover:bg-transparent transition-all flex items-center justify-center" title="Redo (Ctrl+Y)"><Redo2 className="w-4 h-4" /></button>
+            <button
+              type="button"
+              onClick={onRedo}
+              disabled={!canRedo}
+              className="h-8 w-8 rounded-[10px] hover:bg-white text-slate-500 hover:text-[var(--color-primary)] hover:shadow-xs disabled:opacity-30 disabled:hover:bg-transparent transition-all flex items-center justify-center outline-none focus:outline-none cursor-pointer"
+              title="Redo (Ctrl+Y)"
+            >
+              <Redo2 className="w-4 h-4" />
+            </button>
           </div>
         )}
 
         <div className="hidden md:flex h-9 p-0.5 rounded-[12px] bg-slate-100 border border-slate-200/60 items-center">
-          <button 
-            onClick={() => setEditorMode('visual')} 
-            className={`h-8 px-3 rounded-[10px] text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${editorMode === 'visual' ? 'bg-white shadow-xs text-[var(--color-primary)] font-bold' : 'text-slate-500 hover:text-slate-700'}`}
+          <button
+            type="button"
+            onClick={() => setEditorMode('visual')}
+            className={`h-8 px-3 rounded-[10px] text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all outline-none focus:outline-none cursor-pointer ${
+              editorMode === 'visual' ? 'bg-white shadow-xs text-[var(--color-primary)] font-bold' : 'text-slate-500 hover:text-slate-700'
+            }`}
           >
             <Layout className="w-3.5 h-3.5" />
             <span className="leading-none">Visual</span>
           </button>
-          <button 
-            onClick={() => setEditorMode('code')} 
-            className={`h-8 px-3 rounded-[10px] text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${editorMode === 'code' ? 'bg-white shadow-xs text-[var(--color-primary)] font-bold' : 'text-slate-500 hover:text-slate-700'}`}
+          <button
+            type="button"
+            onClick={() => setEditorMode('code')}
+            className={`h-8 px-3 rounded-[10px] text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all outline-none focus:outline-none cursor-pointer ${
+              editorMode === 'code' ? 'bg-white shadow-xs text-[var(--color-primary)] font-bold' : 'text-slate-500 hover:text-slate-700'
+            }`}
           >
             <Code className="w-3.5 h-3.5" />
             <span className="leading-none">Code</span>
@@ -184,22 +230,42 @@ const EmailTopBar: React.FC<EmailTopBarProps> = ({
         </div>
 
         <div className="hidden md:flex h-9 p-0.5 rounded-[12px] bg-slate-100 border border-slate-200/60 items-center gap-0.5">
-          <button onClick={() => setViewMode('desktop')} className={`h-8 w-8 rounded-[10px] transition-all flex items-center justify-center ${viewMode === 'desktop' ? 'bg-white shadow-xs text-[var(--color-primary)]' : 'text-slate-500 hover:text-slate-700'}`} title="Desktop View"><Monitor className="w-4 h-4" /></button>
-          <button onClick={() => setViewMode('mobile')} className={`h-8 w-8 rounded-[10px] transition-all flex items-center justify-center ${viewMode === 'mobile' ? 'bg-white shadow-xs text-[var(--color-primary)]' : 'text-slate-500 hover:text-slate-700'}`} title="Mobile View"><Smartphone className="w-4 h-4" /></button>
+          <button
+            type="button"
+            onClick={() => setViewMode('desktop')}
+            className={`h-8 w-8 rounded-[10px] transition-all flex items-center justify-center outline-none focus:outline-none cursor-pointer ${
+              viewMode === 'desktop' ? 'bg-white shadow-xs text-[var(--color-primary)]' : 'text-slate-500 hover:text-slate-700'
+            }`}
+            title="Desktop View"
+          >
+            <Monitor className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('mobile')}
+            className={`h-8 w-8 rounded-[10px] transition-all flex items-center justify-center outline-none focus:outline-none cursor-pointer ${
+              viewMode === 'mobile' ? 'bg-white shadow-xs text-[var(--color-primary)]' : 'text-slate-500 hover:text-slate-700'
+            }`}
+            title="Mobile View"
+          >
+            <Smartphone className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        {/* Validate button */}
+      {/* RIGHT: Validate + Test + Preview + Save */}
+      <div className="flex items-center gap-2.5">
         {editorMode === 'visual' && (
           <div className="relative">
             <button
+              type="button"
               onClick={onValidate}
               title="Kiểm duyệt email"
-              className={`relative flex items-center gap-2 h-9 px-3.5 rounded-[12px] border text-xs font-semibold transition-all ${showValidation
-                ? 'bg-slate-100 border-slate-300 text-slate-800 shadow-inner'
-                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900 shadow-xs'
-                }`}
+              className={`relative flex items-center gap-2 h-9 px-3.5 rounded-[12px] border text-xs font-semibold transition-all outline-none focus:outline-none cursor-pointer ${
+                showValidation
+                  ? 'bg-slate-100 border-slate-300 text-slate-800 shadow-inner'
+                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900 shadow-xs'
+              }`}
             >
               <ShieldCheck className="w-4 h-4" />
               <span className="hidden sm:inline">Kiểm duyệt</span>
@@ -210,7 +276,9 @@ const EmailTopBar: React.FC<EmailTopBarProps> = ({
               )}
               {validationIssueCount === 0 && (
                 <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-sm">
-                  <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                  <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
                 </span>
               )}
             </button>
@@ -228,7 +296,7 @@ const EmailTopBar: React.FC<EmailTopBarProps> = ({
               }
             }}
             icon={Send}
-            className="hidden sm:flex h-9 px-3.5 !rounded-[12px] text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 shadow-xs"
+            className="hidden sm:flex h-9 px-3.5 !rounded-[12px] text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 shadow-xs outline-none focus:outline-none"
           >
             Test
           </Button>
@@ -246,9 +314,10 @@ const EmailTopBar: React.FC<EmailTopBarProps> = ({
                   autoFocus
                 />
                 <button
+                  type="button"
                   onClick={handleSendTest}
                   disabled={isSendingTest || !testEmail}
-                  className="bg-[var(--color-primary)] text-white rounded-lg p-2 hover:brightness-95 transition-colors disabled:opacity-50"
+                  className="bg-[var(--color-primary)] text-white rounded-lg p-2 hover:brightness-95 transition-colors disabled:opacity-50 outline-none focus:outline-none"
                 >
                   {isSendingTest ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 </button>
@@ -258,10 +327,10 @@ const EmailTopBar: React.FC<EmailTopBarProps> = ({
           {showTestInput && <div className="fixed inset-0 z-40 bg-transparent" onClick={() => setShowTestInput(false)} />}
         </div>
 
-        <Button 
-          variant="secondary" 
-          onClick={onPreview} 
-          className="hidden sm:flex h-9 px-3.5 !rounded-[12px] text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-xs items-center justify-center gap-1.5" 
+        <Button
+          variant="secondary"
+          onClick={onPreview}
+          className="hidden sm:flex h-9 px-3.5 !rounded-[12px] text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-xs items-center justify-center gap-1.5 outline-none focus:outline-none"
           title="Xem trước"
         >
           <Eye className="w-4 h-4 text-[var(--color-primary)]" strokeWidth={2.2} />
@@ -273,11 +342,24 @@ const EmailTopBar: React.FC<EmailTopBarProps> = ({
           isLoading={isSaving}
           disabled={isSaving}
           title="Lưu mẫu (Ctrl+S)"
-          className="h-9 px-3.5 !rounded-[12px] text-xs font-semibold transition-all duration-300 shadow-xs !border-transparent bg-[var(--color-primary)] text-white hover:brightness-95 flex items-center gap-1.5"
+          className="h-9 px-3.5 !rounded-[12px] text-xs font-semibold transition-all duration-300 shadow-xs !border-transparent bg-[var(--color-primary)] text-white hover:brightness-95 flex items-center gap-1.5 outline-none focus:outline-none"
         >
           Lưu mẫu
         </Button>
       </div>
+
+      {/* Granular Access / Sharing Modal */}
+      <TemplateAccessModal
+        isOpen={isAccessModalOpen}
+        onClose={() => setIsAccessModalOpen(false)}
+        templateName={name}
+        value={effectiveAccessConfig}
+        canSetShared={canSetShared}
+        onSave={(nextCfg) => {
+          if (setVisibility) setVisibility(nextCfg.visibility);
+          if (setAccessConfig) setAccessConfig(nextCfg);
+        }}
+      />
     </div>
   );
 };

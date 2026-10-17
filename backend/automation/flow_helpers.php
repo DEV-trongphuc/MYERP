@@ -186,7 +186,11 @@ if (!function_exists('logActivity')) {
             'crm_update_stage',
             'crm_create_task',
             'crm_assign_owner',
-            'crm_notify_owner'
+            'crm_assign_round_robin',
+            'crm_reassign_sla',
+            'crm_update_temperature',
+            'crm_notify_owner',
+            'crm_create_ticket'
         ];
 
         // If it's a system progress event (wait, enter, exit, tag update, etc.), skip logging to keep Flow history clean
@@ -1763,7 +1767,10 @@ function getSubscriberProfileForFlow($pdo, $subscriberId)
         $sub['crm_temperature'] = '';
         $sub['crm_program'] = $sub['program'] ?? '';
         $sub['crm_owner_id'] = !empty($sub['owner_id']) ? (string)$sub['owner_id'] : '';
+        $sub['crm_team_id'] = '';
         $sub['crm_branch_id'] = '';
+        $sub['crm_sale_contacted'] = 'false';
+        $sub['crm_hours_uncontacted'] = 0;
         $sub['crm_deposit_status'] = 'none';
         $sub['crm_deposit_amount'] = 0;
         $sub['crm_expected_revenue'] = 0;
@@ -1779,6 +1786,25 @@ function getSubscriberProfileForFlow($pdo, $subscriberId)
         $sub['erp_sla_uncontacted_hours'] = 0;
         $sub['erp_ticket_status'] = 'no_ticket';
         $sub['erp_has_certificate'] = 'no';
+
+        // Channel reachability array & primary channel
+        $channelsList = [];
+        $rawPhone = trim((string)($sub['phone_number'] ?? ''));
+        $rawEmail = trim((string)($sub['email'] ?? ''));
+        $hasValidPhone = ($rawPhone !== '' && strlen(preg_replace('/\D+/', '', $rawPhone)) >= 8);
+        $hasValidEmail = ($rawEmail !== '' && !isVirtualEmail($rawEmail) && strpos($rawEmail, '@myerp.local') === false);
+        $hasZalo = (!empty($sub['zalo_user_id']) || !empty($sub['is_zalo_follower']) || $hasValidPhone);
+        if ($hasZalo) {
+            $channelsList[] = 'zalo_oa';
+        }
+        if ($hasValidPhone) {
+            $channelsList[] = 'phone_valid';
+        }
+        if ($hasValidEmail) {
+            $channelsList[] = 'email_valid';
+        }
+        $sub['channel_available_list'] = $channelsList;
+        $sub['channel_available'] = $channelsList[0] ?? 'none';
 
         // 3. Enrich from MYERP CRM contacts, pipeline_stages, deposits, deals, tickets, and certificates
         try {
@@ -1800,11 +1826,13 @@ function getSubscriberProfileForFlow($pdo, $subscriberId)
                 $stmtCrm = $pdo->prepare("
                     SELECT c.stage_id, c.pipeline_status, c.lead_status, c.status AS contact_status,
                            c.temperature, c.program, c.project_id, c.student_id, c.study_status,
-                           c.owner_id, c.expected_revenue, c.total_spent, c.last_contact, c.created_at,
+                           c.owner_id, c.company_id, c.expected_revenue, c.total_spent, c.last_contact, c.assigned_at, c.created_at,
                            c.tags, c.district, c.ward, c.city,
-                           ps.name AS stage_name, ps.system_slug AS stage_slug, ps.is_won AS stage_is_won,
+                           u.team_id AS owner_team_id,
+                           ps.name AS stage_name, ps.system_slug AS stage_slug, ps.is_won AS stage_is_won, ps.order_index AS stage_order,
                            pr.name AS project_name, pr.code AS project_code
                     FROM contacts c
+                    LEFT JOIN users u ON u.id = c.owner_id
                     LEFT JOIN pipeline_stages ps ON ps.id = c.stage_id
                     LEFT JOIN projects pr ON pr.id = c.project_id
                     WHERE c.id = ? AND c.deleted_at IS NULL
@@ -1818,13 +1846,30 @@ function getSubscriberProfileForFlow($pdo, $subscriberId)
                     $sub['crm_stage_name'] = $crmRow['stage_name'] ?? '';
                     $sub['crm_pipeline_status'] = !empty($crmRow['stage_slug']) ? $crmRow['stage_slug'] : (!empty($crmRow['pipeline_status']) ? $crmRow['pipeline_status'] : $sub['crm_pipeline_status']);
                     $sub['crm_lead_status'] = !empty($crmRow['lead_status']) ? $crmRow['lead_status'] : $sub['crm_lead_status'];
-                    $sub['crm_temperature'] = $crmRow['temperature'] ?? '';
+                    $sub['crm_temperature'] = !empty($crmRow['temperature']) ? $crmRow['temperature'] : $sub['crm_lead_status'];
                     $sub['crm_program'] = !empty($crmRow['program']) ? $crmRow['program'] : (!empty($crmRow['project_name']) ? $crmRow['project_name'] : $sub['crm_program']);
                     $sub['crm_owner_id'] = !empty($crmRow['owner_id']) ? (string)$crmRow['owner_id'] : $sub['crm_owner_id'];
-                    $sub['crm_branch_id'] = '';
+                    $sub['crm_team_id'] = !empty($crmRow['owner_team_id']) ? (string)$crmRow['owner_team_id'] : '';
+                    $sub['crm_branch_id'] = !empty($crmRow['company_id']) ? (string)$crmRow['company_id'] : '';
                     $sub['crm_expected_revenue'] = isset($crmRow['expected_revenue']) ? (float)$crmRow['expected_revenue'] : 0;
                     $sub['erp_class_id'] = !empty($crmRow['project_id']) ? (string)$crmRow['project_id'] : $sub['crm_program'];
                     $sub['erp_class_name'] = !empty($crmRow['project_name']) ? $crmRow['project_name'] : $sub['crm_program'];
+
+                    // Check latest distribution_logs for round_id and received_at
+                    $distReceivedAt = null;
+                    try {
+                        $stmtDl = $pdo->prepare("SELECT round_id, received_at FROM distribution_logs WHERE lead_id = ? ORDER BY id DESC LIMIT 1");
+                        $stmtDl->execute([$contactId]);
+                        $dlRow = $stmtDl->fetch(PDO::FETCH_ASSOC);
+                        if ($dlRow) {
+                            if (empty($sub['crm_team_id']) && !empty($dlRow['round_id'])) {
+                                $sub['crm_team_id'] = (string)$dlRow['round_id'];
+                            }
+                            if (!empty($dlRow['received_at'])) {
+                                $distReceivedAt = $dlRow['received_at'];
+                            }
+                        }
+                    } catch (Throwable $eDl) {}
 
                     // Determine erp_is_student & erp_student_status
                     $studyStLower = mb_strtolower(trim((string)($crmRow['study_status'] ?? '')), 'UTF-8');
@@ -1851,13 +1896,37 @@ function getSubscriberProfileForFlow($pdo, $subscriberId)
                         $sub['erp_student_status'] = 'studying';
                     }
 
+                    // Check if Sale has contacted the lead (call, note, meeting, zalo, or moved past stage 1)
+                    $hasSaleActivity = false;
+                    $stageOrder = (int)($crmRow['stage_order'] ?? 0);
+                    $stageIdInt = (int)($crmRow['stage_id'] ?? 0);
+                    if (($stageOrder > 1) || ($stageIdInt > 1 && !in_array($pipeLower, ['new_lead', 'assigned'], true))) {
+                        $hasSaleActivity = true;
+                    }
+                    if (!$hasSaleActivity) {
+                        try {
+                            $stmtActCheck = $pdo->prepare("
+                                SELECT 1 FROM activities
+                                WHERE (contact_id = ? OR (related_type IN ('contact', 'lead') AND related_id = ?))
+                                  AND type IN ('call', 'meeting', 'note', 'email', 'zalo', 'task')
+                                  AND status != 'cancelled'
+                                  AND deleted_at IS NULL
+                                LIMIT 1
+                            ");
+                            $stmtActCheck->execute([$contactId, $contactId]);
+                            if ($stmtActCheck->fetchColumn()) {
+                                $hasSaleActivity = true;
+                            }
+                        } catch (Throwable $eAct) {}
+                    }
+                    $sub['crm_sale_contacted'] = $hasSaleActivity ? 'true' : 'false';
+
                     // SLA uncontacted hours
-                    if (empty($crmRow['last_contact']) && !empty($crmRow['created_at'])) {
-                        $stmtActCheck = $pdo->prepare("SELECT 1 FROM activities WHERE (contact_id = ? OR (related_type IN ('contact', 'lead') AND related_id = ?)) AND deleted_at IS NULL LIMIT 1");
-                        $stmtActCheck->execute([$contactId, $contactId]);
-                        if (!$stmtActCheck->fetchColumn()) {
-                            $sub['erp_sla_uncontacted_hours'] = max(0, (int)floor((time() - strtotime($crmRow['created_at'])) / 3600));
-                        }
+                    $slaRefTime = $distReceivedAt ?: (!empty($crmRow['assigned_at']) ? $crmRow['assigned_at'] : ($crmRow['created_at'] ?? null));
+                    if (!$hasSaleActivity && !empty($slaRefTime)) {
+                        $hoursUncontacted = max(0, (int)floor((time() - strtotime($slaRefTime)) / 3600));
+                        $sub['erp_sla_uncontacted_hours'] = $hoursUncontacted;
+                        $sub['crm_hours_uncontacted'] = $hoursUncontacted;
                     }
 
                     if (empty($sub['district']) && !empty($crmRow['district'])) {
@@ -1885,9 +1954,9 @@ function getSubscriberProfileForFlow($pdo, $subscriberId)
                 // Query deposit & tuition milestone summary for contact
                 $stmtDep = $pdo->prepare("
                     SELECT
-                        MAX(CASE WHEN status IN ('approved', 'completed') THEN 1 ELSE 0 END) AS has_approved,
+                        MAX(CASE WHEN status IN ('approved', 'completed', 'paid') THEN 1 ELSE 0 END) AS has_approved,
                         MAX(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS has_pending,
-                        COALESCE(SUM(CASE WHEN status IN ('approved', 'completed') THEN price ELSE 0 END), 0) AS approved_amount
+                        COALESCE(SUM(CASE WHEN status IN ('approved', 'completed', 'paid') THEN price ELSE 0 END), 0) AS approved_amount
                     FROM deposits
                     WHERE contact_id = ?
                 ");
@@ -2007,19 +2076,43 @@ function getSubscriberProfileForFlow($pdo, $subscriberId)
 }
 
 /**
- * Centrally evaluate a group of advanced conditions (AND logic within a group)
+ * Centrally evaluate a group of advanced conditions (supports recursive AND / OR groups & MYERP fields)
  * Shared between worker_flow.php and worker_priority.php
  */
-function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $conditions)
+function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $conditions, $groupLogic = 'AND')
 {
     if (empty($conditions)) {
         return false;
     }
 
+    // Support passing a conditionGroup object directly: ['logic' => 'AND'|'OR', 'conditions' => [...]]
+    if (isset($conditions['conditions']) && is_array($conditions['conditions'])) {
+        $groupLogic = strtoupper($conditions['logic'] ?? $groupLogic);
+        $conditions = $conditions['conditions'];
+        if (empty($conditions)) {
+            return false;
+        }
+    }
+
+    $isOrGroup = (strtoupper((string)$groupLogic) === 'OR');
+    $anyMatched = false;
+
     foreach ($conditions as $cond) {
+        // Recursive nested condition group support
+        if (isset($cond['conditions']) && is_array($cond['conditions'])) {
+            $subLogic = strtoupper($cond['logic'] ?? 'AND');
+            $subMatch = evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $cond['conditions'], $subLogic);
+            if ($isOrGroup) {
+                if ($subMatch) return true;
+            } else {
+                if (!$subMatch) return false;
+            }
+            continue;
+        }
+
         $field = $cond['field'] ?? '';
         $op = $cond['operator'] ?? 'equals';
-        $val = trim($cond['value'] ?? '');
+        $val = trim((string)($cond['value'] ?? ''));
 
         // -----------------------------------------------------------------
         // 1. Map Fields to Actual Subscriber Data
@@ -2075,8 +2168,12 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
             'crm_program' => 'crm_program',
             'owner_id' => 'crm_owner_id',
             'crm_owner_id' => 'crm_owner_id',
+            'team_id' => 'crm_team_id',
+            'crm_team_id' => 'crm_team_id',
             'branch_id' => 'crm_branch_id',
             'crm_branch_id' => 'crm_branch_id',
+            'crm_sale_contacted' => 'crm_sale_contacted',
+            'crm_hours_uncontacted' => 'crm_hours_uncontacted',
             'stage_id' => 'crm_stage_id',
             'crm_stage' => 'crm_stage_id',
             'crm_stage_id' => 'crm_stage_id',
@@ -2117,6 +2214,37 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
                 $actualVal = $stmtT->fetchAll(PDO::FETCH_COLUMN);
             }
             $isArrayField = true;
+
+        } elseif ($field === 'channel_available') {
+            $actualVal = $subProfile['channel_available_list'] ?? [$subProfile['channel_available'] ?? 'none'];
+            $isArrayField = true;
+
+        } elseif ($field === 'crm_owner_id' || $field === 'owner_id') {
+            $rawOwnerVal = trim((string)($subProfile['crm_owner_id'] ?? ($subProfile['owner_id'] ?? '')));
+            if ($val === 'unassigned') {
+                $actualVal = ($rawOwnerVal === '' || $rawOwnerVal === '0') ? 'unassigned' : $rawOwnerVal;
+            } else {
+                $actualVal = $rawOwnerVal;
+            }
+
+        } elseif ($field === 'crm_deposit_status' || $field === 'deposit_status') {
+            $rawDepSt = strtolower(trim((string)($subProfile['crm_deposit_status'] ?? 'none')));
+            if (in_array(strtolower($val), ['paid', 'approved', 'completed'], true) && in_array($rawDepSt, ['paid', 'approved', 'completed'], true)) {
+                $actualVal = strtolower($val);
+            } else {
+                $actualVal = $rawDepSt;
+            }
+
+        } elseif ($field === 'crm_sale_contacted') {
+            $rawContacted = strtolower(trim((string)($subProfile['crm_sale_contacted'] ?? 'false')));
+            $isContactedBool = in_array($rawContacted, ['true', 'yes', '1'], true);
+            if (in_array(strtolower($val), ['true', 'yes', '1'], true)) {
+                $actualVal = $isContactedBool ? strtolower($val) : 'false';
+            } elseif (in_array(strtolower($val), ['false', 'no', '0'], true)) {
+                $actualVal = !$isContactedBool ? strtolower($val) : 'true';
+            } else {
+                $actualVal = $isContactedBool ? 'true' : 'false';
+            }
 
         } elseif ($field === 'erp_class_id' || $field === 'erp_class_name') {
             $classIdVal = (string)($subProfile['erp_class_id'] ?? '');
@@ -2285,8 +2413,11 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
 
         // Skip scalar evaluation if special field already set $condMatch
         if ($isSpecialField) {
-            if (!$condMatch)
-                return false;
+            if ($isOrGroup) {
+                if ($condMatch) return true;
+            } else {
+                if (!$condMatch) return false;
+            }
             continue;
         }
 
@@ -2294,14 +2425,14 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
         // 2. Evaluate Condition
         // -----------------------------------------------------------------
 
-        // --- A. ARRAY LOGIC (tags) ---
+        // --- A. ARRAY LOGIC (tags, channel_available) ---
         if ($isArrayField && is_array($actualVal)) {
             switch ($op) {
                 case 'contains':
                 case 'equals':
                 case 'is':
                     foreach ($actualVal as $item) {
-                        if (mb_stripos($item, $val) !== false) {
+                        if (mb_stripos((string)$item, $val) !== false) {
                             $condMatch = true;
                             break;
                         }
@@ -2311,7 +2442,7 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
                 case 'is_not':
                     $condMatch = true;
                     foreach ($actualVal as $item) {
-                        if (mb_stripos($item, $val) !== false) {
+                        if (mb_stripos((string)$item, $val) !== false) {
                             $condMatch = false;
                             break;
                         }
@@ -2449,10 +2580,17 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
             }
         }
 
-        if (!$condMatch) {
-            return false;
+        if ($isOrGroup) {
+            if ($condMatch) {
+                return true;
+            }
+        } else {
+            if (!$condMatch) {
+                return false;
+            }
+            $anyMatched = true;
         }
     }
 
-    return true;
+    return $isOrGroup ? $anyMatched : true;
 }

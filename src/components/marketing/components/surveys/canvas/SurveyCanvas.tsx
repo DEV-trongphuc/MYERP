@@ -61,7 +61,7 @@ const InserterSlot: React.FC<{
                     </div>
                 ) : canDrop ? (
                     /* Dragging but not over this slot: glowing thin line */
-                    <div className="w-full h-1 bg-[var(--color-primary)]/40 rounded-full shadow-sm animate-pulse" />
+                    <div className="w-full h-1 bg-[var(--color-primary)]/40 rounded-full animate-pulse" />
                 ) : (
                     /* Default: invisible fine line (hit target) */
                     <div className="w-full h-px bg-transparent" />
@@ -120,7 +120,7 @@ const SurveyCover: React.FC<{
             )}
             <div className="relative px-8 py-8 flex flex-col justify-end h-full" style={{ minHeight: heightMap[coverHeight] }}>
                 {theme.coverCountdown && theme.coverCountdownPos === 'top_right' && (
-                    <div className="absolute top-4 right-4 bg-black/40 backdrop-blur-md rounded-xl p-2 border border-white/20 flex items-center gap-2.5 z-20 shadow-xl">
+                    <div className="absolute top-4 right-4 bg-black/40 backdrop-blur-md rounded-xl p-2 border border-white/20 flex items-center gap-2.5 z-20">
                         <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-primary)] animate-pulse ring-2 ring-[var(--color-primary)]/50" />
                         <div className="flex gap-1.5">
                             {['03', '12', '45'].map((v, i) => (
@@ -135,21 +135,21 @@ const SurveyCover: React.FC<{
                 
                 <div className="w-full relative z-10">
                     {theme.coverBadge && (
-                        <span className="inline-block px-3 py-1 mb-4 rounded-full text-[10px] font-black tracking-widest text-white shadow-none uppercase border border-white/20 relative" style={{ background: 'linear-gradient(90deg, #BD1D2D, #ea580c)' }}>
+                        <span className="inline-block px-3 py-1 mb-4 rounded-full text-[10px] font-black tracking-widest text-white uppercase border border-white/20 relative" style={{ background: 'linear-gradient(90deg, #BD1D2D, #ea580c)' }}>
                             {theme.coverBadge}
                         </span>
                     )}
 
                     {theme.logoUrl && (
-                        <img src={theme.logoUrl} alt="logo" className="h-10 mb-5 object-contain drop-shadow-md" />
+                        <img src={theme.logoUrl} alt="logo" className="h-10 mb-5 object-contain" />
                     )}
 
-                    <h1 className="text-2xl md:text-3xl font-black leading-tight drop-shadow-md" style={{ color: textColor, fontFamily: theme.fontFamily }}>
+                    <h1 className="text-2xl md:text-3xl font-black leading-tight" style={{ color: textColor, fontFamily: theme.fontFamily }}>
                         {survey.name}
                     </h1>
 
                     {theme.coverDescription && (
-                        <p className="mt-3 text-sm md:text-base leading-relaxed drop-shadow-sm whitespace-pre-wrap" style={{ color: textColor, opacity: 0.9 }}>
+                        <p className="mt-3 text-sm md:text-base leading-relaxed whitespace-pre-wrap" style={{ color: textColor, opacity: 0.9 }}>
                             {theme.coverDescription}
                         </p>
                     )}
@@ -160,14 +160,14 @@ const SurveyCover: React.FC<{
                                 theme.coverFeaturesStyle === 'dot' ? (
                                     <div key={i} className="flex items-start gap-2.5 max-w-2xl">
                                         <div className="w-1.5 h-1.5 rounded-full mt-2 shrink-0 bg-white/70" />
-                                        <span className="text-sm font-medium drop-shadow-md leading-snug" style={{ color: textColor }}>{feat}</span>
+                                        <span className="text-sm font-medium leading-snug" style={{ color: textColor }}>{feat}</span>
                                     </div>
                                 ) : (
                                     <div key={i} className="flex items-center gap-3 bg-white/5 w-fit pr-4 py-1.5 rounded-full border border-white/10 backdrop-blur-sm">
                                         <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shrink-0 ml-1">
                                             <Check className="w-3.5 h-3.5 text-white stroke-[3]" />
                                         </div>
-                                        <span className="text-sm font-semibold drop-shadow-md" style={{ color: textColor }}>{feat}</span>
+                                        <span className="text-sm font-semibold" style={{ color: textColor }}>{feat}</span>
                                     </div>
                                 )
                             ))}
@@ -183,7 +183,7 @@ const SurveyCover: React.FC<{
                             <div className="flex gap-2">
                                 {/* Dummy layout cho Preview Editor */}
                                 {['03', '12', '45', '59'].map((v, i) => (
-                                    <div key={i} className="bg-white/10 border border-white/20 rounded-xl w-12 h-12 flex flex-col items-center justify-center shadow-inner relative overflow-hidden">
+                                    <div key={i} className="bg-white/10 border border-white/20 rounded-xl w-12 h-12 flex flex-col items-center justify-center relative overflow-hidden">
                                         <div className="absolute inset-x-0 top-1/2 h-px bg-black/10" />
                                         <span className="text-lg font-black text-white z-10">{v}</span>
                                         <span className="text-[7px] uppercase font-bold text-white/70 mt-0.5 z-10">{['Ng', 'Giờ', 'Ph', 'Gi'][i]}</span>
@@ -246,12 +246,12 @@ const SurveyCanvas: React.FC<Props> = ({
                     <div
                         ref={dropEmpty as any}
                         className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed py-16 transition-all mt-1
-                            ${isOverEmpty ? 'border-[var(--color-primary)] bg-[var(--color-primary-light)]/20' : 'border-slate-200 bg-white'}`}
+                            ${isOverEmpty ? 'border-[var(--color-primary)] bg-[var(--color-primary-light)]/20' : 'border-slate-300 bg-white'}`}
                     >
                         <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-3 ${isOverEmpty ? 'bg-[var(--color-primary-light)]' : 'bg-slate-100'}`}>
-                            <Plus className={`w-6 h-6 ${isOverEmpty ? 'text-[var(--color-primary)]' : 'text-slate-400'}`} />
+                            <Plus className={`w-6 h-6 ${isOverEmpty ? 'text-[var(--color-primary)]' : 'text-slate-600'}`} />
                         </div>
-                        <p className={`font-semibold text-sm ${isOverEmpty ? 'text-[var(--color-primary)]' : 'text-slate-400'}`}>
+                        <p className={`font-bold text-sm ${isOverEmpty ? 'text-[var(--color-primary)]' : 'text-slate-600'}`}>
                             {isOverEmpty ? 'Thả vào đây!' : 'Kéo câu hỏi từ bên trái vào đây'}
                         </p>
                     </div>
@@ -284,7 +284,7 @@ const SurveyCanvas: React.FC<Props> = ({
                         {/* Add block button at bottom */}
                         <button
                             onClick={() => onAddBlock('short_text')}
-                            className="flex items-center justify-center gap-2 w-full py-3 rounded-xl border-2 border-dashed border-slate-200 text-slate-400 hover:border-[var(--color-primary)]/40 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-light)]/20 transition-all text-sm font-medium mt-1"
+                            className="flex items-center justify-center gap-2 w-full py-3 rounded-xl border-2 border-dashed border-slate-300 text-slate-700 hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-light)]/20 transition-all text-sm font-bold mt-1 bg-white/70"
                         >
                             <Plus className="w-4 h-4" />
                             Thêm câu hỏi
@@ -297,19 +297,19 @@ const SurveyCanvas: React.FC<Props> = ({
             {survey.blocks.length > 0 && (
                 <div
                     id="block-__thankyou__"
-                    className={`w-full mt-3 rounded-2xl p-6 text-center bg-white shadow-sm border-2 transition-all cursor-pointer ${selectedBlockId === '__thankyou__' ? 'border-[var(--color-primary)] shadow-sm' : 'border-transparent hover:border-slate-200'}`}
+                    className={`w-full mt-3 rounded-2xl p-6 text-center bg-white transition-all cursor-pointer ${selectedBlockId === '__thankyou__' ? 'border-2 border-[var(--color-primary)] ring-2 ring-[var(--color-primary)]/15' : 'border border-slate-200 hover:border-slate-300'}`}
                     style={{ maxWidth: canvasWidth }}
                     onClick={(e) => { e.stopPropagation(); onSelectBlock('__thankyou__'); }}
                 >
                     <div className="text-3xl mb-2">{ty.emoji ?? '🎉'}</div>
-                    <h3 className="font-bold text-slate-700">{ty.title}</h3>
-                    <p className="text-sm text-slate-500 mt-1">{ty.message}</p>
+                    <h3 className="font-bold text-slate-900">{ty.title}</h3>
+                    <p className="text-sm text-slate-600 mt-1">{ty.message}</p>
                     {ty.ctaText && (
                         <div className="mt-4 inline-block px-6 py-2 rounded-xl text-sm font-bold text-white" style={{ background: (ty as any)?.ctaColor || (survey as any).thank_you?.ctaColor || theme.primaryColor || '#BD1D2D' }}>
                             {ty.ctaText}
                         </div>
                     )}
-                    <p className="text-[10px] text-slate-400 mt-3 uppercase tracking-widest">Trang cảm ơn · Click để chỉnh</p>
+                    <p className="text-[10px] font-semibold text-slate-500 mt-3 uppercase tracking-widest">Trang cảm ơn · Click để chỉnh</p>
                 </div>
             )}
 
@@ -321,19 +321,19 @@ const SurveyCanvas: React.FC<Props> = ({
                     <div
                         key={page.id ?? i}
                         id={`block-${blockId}`}
-                        className={`w-full mt-3 rounded-2xl p-6 text-center bg-white shadow-sm border-2 transition-all cursor-pointer ${isSelected ? 'border-[var(--color-primary)] shadow-sm' : 'border-transparent hover:border-slate-200'}`}
+                        className={`w-full mt-3 rounded-2xl p-6 text-center bg-white transition-all cursor-pointer ${isSelected ? 'border-2 border-[var(--color-primary)] ring-2 ring-[var(--color-primary)]/15' : 'border border-slate-200 hover:border-slate-300'}`}
                         style={{ maxWidth: canvasWidth }}
                         onClick={(e) => { e.stopPropagation(); onSelectBlock(blockId); }}
                     >
                         <div className="text-3xl mb-2">{page.emoji ?? '🎉'}</div>
-                        <h3 className="font-bold text-slate-700">{page.title || `Trang cảm ơn phụ ${i+1}`}</h3>
-                        <p className="text-sm text-slate-500 mt-1">{page.message}</p>
+                        <h3 className="font-bold text-slate-900">{page.title || `Trang cảm ơn phụ ${i+1}`}</h3>
+                        <p className="text-sm text-slate-600 mt-1">{page.message}</p>
                         {page.ctaText && (
                             <div className="mt-4 inline-block px-6 py-2 rounded-xl text-sm font-bold text-white" style={{ background: (page as any)?.ctaColor || theme.primaryColor || '#BD1D2D' }}>
                                 {page.ctaText}
                             </div>
                         )}
-                        <p className="text-[10px] text-slate-400 mt-3 uppercase tracking-widest">Trang cảm ơn phụ · Click để chỉnh</p>
+                        <p className="text-[10px] font-semibold text-slate-500 mt-3 uppercase tracking-widest">Trang cảm ơn phụ · Click để chỉnh</p>
                     </div>
                 );
             })}

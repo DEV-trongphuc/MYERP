@@ -114,8 +114,9 @@ const EmailToolbox: React.FC<EmailToolboxProps> = ({ blocks, onDragStart, onSele
         return (
             <div key={block.id} className="space-y-1 select-none">
                 <button
+                    type="button"
                     onClick={() => onSelectBlock(block.id)}
-                    className={`w-full flex items-center gap-2 py-1.5 px-2 rounded-lg transition-all text-left group/item border ${isSelected ? 'bg-slate-100 border-slate-300 text-slate-800' : 'border-transparent hover:bg-slate-50 text-slate-600'}`}
+                    className={`w-full flex items-center gap-2 py-1.5 px-2 rounded-lg transition-all text-left group/item border outline-none focus:outline-none cursor-pointer ${isSelected ? 'bg-slate-100 border-slate-300 text-slate-800' : 'border-transparent hover:bg-slate-50 text-slate-600'}`}
                     style={{ paddingLeft: `${depth * 10 + 8}px` }}
                 >
                     {hasChildren ? (
@@ -139,19 +140,19 @@ const EmailToolbox: React.FC<EmailToolboxProps> = ({ blocks, onDragStart, onSele
         <div className="w-[320px] shrink-0 bg-white border-r border-slate-200 flex flex-col z-40 h-full shadow-xl">
             <div className="p-3 border-b border-slate-100 bg-slate-50/50">
                 <div className="flex gap-1 bg-slate-200/50 p-1 rounded-xl mb-3">
-                    <button onClick={() => setActiveTab('blocks')} className={`flex-1 py-2 px-1 rounded-lg flex items-center justify-center gap-1 transition-all ${activeTab === 'blocks' ? 'bg-white shadow-sm text-[var(--color-primary)]' : 'text-slate-400 hover:text-slate-600'}`}>
+                    <button type="button" onClick={() => setActiveTab('blocks')} className={`flex-1 py-2 px-1 rounded-lg flex items-center justify-center gap-1 transition-all outline-none focus:outline-none cursor-pointer ${activeTab === 'blocks' ? 'bg-white shadow-sm text-[var(--color-primary)]' : 'text-slate-400 hover:text-slate-600'}`}>
                         <LucideIcons.Blocks className="w-3.5 h-3.5 shrink-0" />
                         <span className="text-[9px] font-bold uppercase tracking-wider truncate">Blocks</span>
                     </button>
-                    <button onClick={() => setActiveTab('templates')} className={`flex-1 py-2 px-1 rounded-lg flex items-center justify-center gap-1 transition-all ${activeTab === 'templates' ? 'bg-white shadow-sm text-[var(--color-primary)]' : 'text-slate-400 hover:text-slate-600'}`}>
+                    <button type="button" onClick={() => setActiveTab('templates')} className={`flex-1 py-2 px-1 rounded-lg flex items-center justify-center gap-1 transition-all outline-none focus:outline-none cursor-pointer ${activeTab === 'templates' ? 'bg-white shadow-sm text-[var(--color-primary)]' : 'text-slate-400 hover:text-slate-600'}`}>
                         <LucideIcons.Sparkles className="w-3.5 h-3.5 shrink-0" />
                         <span className="text-[9px] font-bold uppercase tracking-wider truncate">Mẫu</span>
                     </button>
-                    <button onClick={() => setActiveTab('saved')} className={`flex-1 py-2 px-1 rounded-lg flex items-center justify-center gap-1 transition-all ${activeTab === 'saved' ? 'bg-white shadow-sm text-[var(--color-primary)]' : 'text-slate-400 hover:text-slate-600'}`}>
+                    <button type="button" onClick={() => setActiveTab('saved')} className={`flex-1 py-2 px-1 rounded-lg flex items-center justify-center gap-1 transition-all outline-none focus:outline-none cursor-pointer ${activeTab === 'saved' ? 'bg-white shadow-sm text-[var(--color-primary)]' : 'text-slate-400 hover:text-slate-600'}`}>
                         <LucideIcons.Bookmark className="w-3.5 h-3.5 shrink-0" />
                         <span className="text-[9px] font-bold uppercase tracking-wider truncate">SAVE</span>
                     </button>
-                    <button onClick={() => setActiveTab('layers')} title="Cấu trúc" className={`w-10 shrink-0 py-2 px-0 rounded-lg flex items-center justify-center transition-all ${activeTab === 'layers' ? 'bg-white shadow-sm text-[var(--color-primary)]' : 'text-slate-400 hover:text-slate-600'}`}>
+                    <button type="button" onClick={() => setActiveTab('layers')} title="Cấu trúc" className={`w-10 shrink-0 py-2 px-0 rounded-lg flex items-center justify-center transition-all outline-none focus:outline-none cursor-pointer ${activeTab === 'layers' ? 'bg-white shadow-sm text-[var(--color-primary)]' : 'text-slate-400 hover:text-slate-600'}`}>
                         <LucideIcons.Layers className="w-4 h-4" />
                     </button>
                 </div>

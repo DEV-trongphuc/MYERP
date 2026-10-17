@@ -299,75 +299,45 @@ const CampaignDeliveryDetailsTab: React.FC<Props> = ({ campaign, allLists, allTa
             {/* ... stats ... */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 {/* Card 1: Tổng gửi */}
-                <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-[18px] border border-slate-100/70 dark:border-slate-800/80 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex items-center justify-between group hover:shadow-[0_12px_36px_rgba(0,0,0,0.035)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden min-h-[100px]">
-                    <div className="decor-svg" style={{ color: '#3b82f6' }}>
-                        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                            <path d="M10 50 Q 50 10 90 50 T 90 90" stroke="currentColor" strokeWidth="2" stroke-dasharray="3 3" />
-                            <circle cx="10" cy="50" r="6" fill="currentColor" />
-                            <circle cx="50" cy="10" r="6" fill="currentColor" />
-                            <circle cx="90" cy="50" r="6" fill="currentColor" />
-                            <path d="M50 10 L 90 50" stroke="currentColor" strokeWidth="1.5" />
-                        </svg>
-                    </div>
+                <div className="border border-slate-200 dark:border-slate-800 rounded-[16px] p-4 bg-white dark:bg-slate-900 shadow-none flex items-center justify-between group hover:border-slate-300 dark:hover:border-slate-700 transition-colors relative overflow-hidden min-h-[92px]">
                     <div className="relative z-10">
                         <p className="text-[10px] uppercase font-black text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 leading-none">Tổng gửi</p>
                         <h4 className="text-xl md:text-2xl font-black text-slate-850 dark:text-slate-100 tracking-tight leading-none">{stats.total.toLocaleString()}</h4>
                     </div>
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 relative z-10" style={{ backgroundColor: '#3b82f615', color: '#3b82f6' }}>
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 relative z-10" style={{ backgroundColor: '#3b82f615', color: '#3b82f6' }}>
                         {isZns ? <Smartphone className="w-4 h-4" /> : <Mail className="w-4 h-4" />}
                     </div>
                 </div>
 
                 {/* Card 2: Thành công */}
-                <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-[18px] border border-slate-100/70 dark:border-slate-800/80 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex items-center justify-between group hover:shadow-[0_12px_36px_rgba(0,0,0,0.035)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden min-h-[100px]">
-                    <div className="decor-svg" style={{ color: '#10b981' }}>
-                        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                            <rect x="20" y="20" width="60" height="15" rx="7.5" fill="currentColor" fillOpacity="0.6" />
-                            <rect x="20" y="42" width="60" height="15" rx="7.5" fill="currentColor" fillOpacity="0.4" />
-                            <rect x="20" y="64" width="60" height="15" rx="7.5" fill="currentColor" fillOpacity="0.2" />
-                        </svg>
-                    </div>
+                <div className="border border-slate-200 dark:border-slate-800 rounded-[16px] p-4 bg-white dark:bg-slate-900 shadow-none flex items-center justify-between group hover:border-slate-300 dark:hover:border-slate-700 transition-colors relative overflow-hidden min-h-[92px]">
                     <div className="relative z-10">
                         <p className="text-[10px] uppercase font-black text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 leading-none">Thành công</p>
                         <h4 className="text-xl md:text-2xl font-black text-emerald-600 dark:text-emerald-500 tracking-tight leading-none">{stats.sent.toLocaleString()}</h4>
                     </div>
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 relative z-10" style={{ backgroundColor: '#10b98115', color: '#10b981' }}>
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 relative z-10" style={{ backgroundColor: '#10b98115', color: '#10b981' }}>
                         <CheckCircle2 className="w-4 h-4" />
                     </div>
                 </div>
 
                 {/* Card 3: Lượt mở */}
-                <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-[18px] border border-slate-100/70 dark:border-slate-800/80 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex items-center justify-between group hover:shadow-[0_12px_36px_rgba(0,0,0,0.035)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden min-h-[100px]">
-                    <div className="decor-svg" style={{ color: '#8b5cf6' }}>
-                        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                            <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="2" stroke-dasharray="4 4" />
-                            <circle cx="35" cy="45" r="15" fill="currentColor" fillOpacity="0.2" />
-                            <circle cx="65" cy="45" r="15" fill="currentColor" fillOpacity="0.4" />
-                            <circle cx="50" cy="70" r="18" fill="currentColor" fillOpacity="0.6" />
-                        </svg>
-                    </div>
+                <div className="border border-slate-200 dark:border-slate-800 rounded-[16px] p-4 bg-white dark:bg-slate-900 shadow-none flex items-center justify-between group hover:border-slate-300 dark:hover:border-slate-700 transition-colors relative overflow-hidden min-h-[92px]">
                     <div className="relative z-10">
                         <p className="text-[10px] uppercase font-black text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 leading-none">{isZns ? 'Người xem' : 'Lượt mở'}</p>
                         <h4 className="text-xl md:text-2xl font-black text-purple-600 dark:text-purple-550 tracking-tight leading-none">{stats.opened.toLocaleString()}</h4>
                     </div>
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 relative z-10" style={{ backgroundColor: '#8b5cf615', color: '#8b5cf6' }}>
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 relative z-10" style={{ backgroundColor: '#8b5cf615', color: '#8b5cf6' }}>
                         {isZns ? <BadgeCheck className="w-4 h-4" /> : <MailOpen className="w-4 h-4" />}
                     </div>
                 </div>
 
                 {/* Card 4: Thất bại */}
-                <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-[18px] border border-slate-100/70 dark:border-slate-800/80 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex items-center justify-between group hover:shadow-[0_12px_36px_rgba(0,0,0,0.035)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden min-h-[100px]">
-                    <div className="decor-svg" style={{ color: '#ec4899' }}>
-                        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                            <circle cx="50" cy="50" r="30" stroke="currentColor" strokeWidth="2" />
-                            <path d="M50 35 V 65 M35 50 H 65" stroke="currentColor" strokeWidth="3" stroke-linecap="round" />
-                        </svg>
-                    </div>
+                <div className="border border-slate-200 dark:border-slate-800 rounded-[16px] p-4 bg-white dark:bg-slate-900 shadow-none flex items-center justify-between group hover:border-slate-300 dark:hover:border-slate-700 transition-colors relative overflow-hidden min-h-[92px]">
                     <div className="relative z-10">
                         <p className="text-[10px] uppercase font-black text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 leading-none">Thất bại</p>
                         <h4 className="text-xl md:text-2xl font-black text-rose-600 dark:text-rose-500 tracking-tight leading-none">{stats.failed.toLocaleString()}</h4>
                     </div>
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 relative z-10" style={{ backgroundColor: '#ec489915', color: '#ec4899' }}>
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 relative z-10" style={{ backgroundColor: '#ec489915', color: '#ec4899' }}>
                         <XCircle className="w-4 h-4" />
                     </div>
                 </div>
@@ -553,7 +523,34 @@ const CampaignDeliveryDetailsTab: React.FC<Props> = ({ campaign, allLists, allTa
                         </thead>
                         <tbody className="divide-y divide-[var(--color-border)] bg-[var(--color-surface)]">
                             {loading ? (
-                                <tr><td colSpan={6} className="py-20 text-center text-slate-400 text-xs font-medium italic">Đang tải danh sách...</td></tr>
+                                Array.from({ length: 6 }).map((_, idx) => (
+                                    <tr key={`skeleton-recipient-${idx}`}>
+                                        <td className="px-6 py-3.5">
+                                            <div className="w-4 h-4 animate-pulse bg-slate-200/70 rounded-md" />
+                                        </td>
+                                        <td className="px-6 py-3.5">
+                                            <div className="h-5 w-14 animate-pulse bg-slate-200/70 rounded-md" />
+                                        </td>
+                                        <td className="px-6 py-3.5">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 animate-pulse bg-slate-200/70 rounded-md shrink-0" />
+                                                <div className="space-y-1.5">
+                                                    <div className="h-3.5 w-28 animate-pulse bg-slate-200/70 rounded-md" />
+                                                    <div className="h-2.5 w-36 animate-pulse bg-slate-200/70 rounded-md" />
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-3.5">
+                                            <div className="h-5 w-16 animate-pulse bg-slate-200/70 rounded-md" />
+                                        </td>
+                                        <td className="px-6 py-3.5">
+                                            <div className="h-5 w-20 animate-pulse bg-slate-200/70 rounded-md" />
+                                        </td>
+                                        <td className="px-6 py-3.5">
+                                            <div className="h-3.5 w-28 animate-pulse bg-slate-200/70 rounded-md" />
+                                        </td>
+                                    </tr>
+                                ))
                             ) : recipients.length === 0 ? (
                                 <tr><td colSpan={6} className="py-20 text-center text-slate-400 text-xs font-medium italic">Không tìm thấy người nhận nào khớp với bộ lọc.</td></tr>
                             ) : (
@@ -584,12 +581,25 @@ const CampaignDeliveryDetailsTab: React.FC<Props> = ({ campaign, allLists, allTa
                                                     {r.type === 'Main Campaign' ? 'Main' : (r.type || 'Main')}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-3 max-w-[240px]">
+                                            <td className="px-6 py-3 max-w-[260px]">
                                                  <div className="flex items-center gap-3">
                                                      <Avatar name={displayName || r.email} size={32} />
                                                      <div className="min-w-0">
-                                                         <div className="text-xs font-bold text-[var(--color-text)] group-hover/row:text-[var(--color-primary)] transition-colors truncate" title={displayName || r.email}>
-                                                             {displayName || r.email}
+                                                         <div className="flex items-center gap-1.5">
+                                                             <div className="text-xs font-bold text-[var(--color-text)] group-hover/row:text-[var(--color-primary)] transition-colors truncate" title={displayName || r.email}>
+                                                                 {displayName || r.email}
+                                                             </div>
+                                                             {r.contact_id && (
+                                                                 <span
+                                                                     onClick={(e) => {
+                                                                         e.stopPropagation();
+                                                                         window.dispatchEvent(new CustomEvent('open-customer-drawer', { detail: { id: Number(r.contact_id), initialTab: 'journey360' } }));
+                                                                     }}
+                                                                     className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200 text-[9px] font-bold shrink-0 hover:bg-blue-100 transition-colors"
+                                                                 >
+                                                                     CRM #{r.contact_id}
+                                                                 </span>
+                                                             )}
                                                          </div>
                                                          {displayName && r.email && (
                                                              <div className="text-[10px] text-[var(--color-text-muted)] truncate" title={r.email}>{r.email}</div>
@@ -629,7 +639,7 @@ const CampaignDeliveryDetailsTab: React.FC<Props> = ({ campaign, allLists, allTa
 
                 {/* Result Count and Pagination Footer */}
                 <div className="flex flex-col sm:flex-row justify-between items-center gap-4 px-6 py-4 border-t border-slate-100 bg-slate-50/50">
-                    <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                    <div className="whitespace-nowrap flex items-center gap-2 shrink-0 text-xs font-semibold text-slate-500">
                         <span>Hiển thị</span>
                         <select
                             value={limit}
@@ -711,13 +721,20 @@ const CampaignDeliveryDetailsTab: React.FC<Props> = ({ campaign, allLists, allTa
                 <div className="space-y-4">
                     <div className="p-4 bg-slate-50 border border-slate-100 rounded-[14px]">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Tiêu đề (Personalized Subject)</p>
-                        <p className="text-sm font-bold text-slate-700">{previewModal.loading ? '...' : previewModal.subject}</p>
+                        {previewModal.loading ? (
+                            <div className="h-4 w-48 animate-pulse bg-slate-200/70 rounded-md" />
+                        ) : (
+                            <p className="text-sm font-bold text-slate-700">{previewModal.subject}</p>
+                        )}
                     </div>
                     <div className="border border-slate-200 rounded-[14px] overflow-hidden bg-white shadow-inner h-[500px]">
                         {previewModal.loading ? (
-                            <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-3 animate-pulse">
-                                <RefreshCw className="w-8 h-8 animate-spin" />
-                                <p className="text-xs font-bold uppercase tracking-widest">Đang tạo nội dung preview...</p>
+                            <div className="p-6 space-y-4 h-full">
+                                <div className="h-24 w-full animate-pulse bg-slate-200/70 rounded-md" />
+                                <div className="h-4 w-3/4 animate-pulse bg-slate-200/70 rounded-md" />
+                                <div className="h-4 w-full animate-pulse bg-slate-200/70 rounded-md" />
+                                <div className="h-4 w-5/6 animate-pulse bg-slate-200/70 rounded-md" />
+                                <div className="h-40 w-full animate-pulse bg-slate-200/70 rounded-md" />
                             </div>
                         ) : (
                             <iframe

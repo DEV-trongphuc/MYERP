@@ -237,14 +237,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
             }
 
             setIsVisible(true);
-            let raf2 = 0;
-            const raf1 = requestAnimationFrame(() => {
-                raf2 = requestAnimationFrame(() => setAnimateIn(true));
-            });
-            return () => {
-                cancelAnimationFrame(raf1);
-                cancelAnimationFrame(raf2);
-            };
+            setAnimateIn(true);
         } else if (!isOpen) {
             setAnimateIn(false);
             const timer = setTimeout(() => {
@@ -523,58 +516,14 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
             return '#8b5cf6';
         })();
 
-        const decorSvg = (() => {
-            if (accentColor === '#10b981') {
-                return (
-                    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                        <rect x="20" y="20" width="60" height="15" rx="7.5" fill="currentColor" fillOpacity="0.6" />
-                        <rect x="20" y="42" width="60" height="15" rx="7.5" fill="currentColor" fillOpacity="0.4" />
-                        <rect x="20" y="64" width="60" height="15" rx="7.5" fill="currentColor" fillOpacity="0.2" />
-                    </svg>
-                );
-            }
-            if (accentColor === '#ec4899') {
-                return (
-                    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                        <circle cx="50" cy="50" r="30" stroke="currentColor" strokeWidth="2" />
-                        <path d="M50 35 V 65 M35 50 H 65" stroke="currentColor" strokeWidth="3" stroke-linecap="round" />
-                    </svg>
-                );
-            }
-            if (accentColor === '#3b82f6') {
-                return (
-                    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                        <path d="M10 50 Q 50 10 90 50 T 90 90" stroke="currentColor" strokeWidth="2" stroke-dasharray="3 3" />
-                        <circle cx="10" cy="50" r="6" fill="currentColor" />
-                        <circle cx="50" cy="10" r="6" fill="currentColor" />
-                        <circle cx="90" cy="50" r="6" fill="currentColor" />
-                        <path d="M50 10 L 90 50" stroke="currentColor" strokeWidth="1.5" />
-                    </svg>
-                );
-            }
-            return (
-                <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                    <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="2" stroke-dasharray="4 4" />
-                    <circle cx="35" cy="45" r="15" fill="currentColor" fillOpacity="0.2" />
-                    <circle cx="65" cy="45" r="15" fill="currentColor" fillOpacity="0.4" />
-                    <circle cx="50" cy="70" r="18" fill="currentColor" fillOpacity="0.6" />
-                </svg>
-            );
-        })();
-
         return (
-            <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-[14px] md:rounded-[18px] border border-slate-100/70 dark:border-slate-800/80 shadow-[0_2px_8px_rgba(0,0,0,0.02)] hover:shadow-[0_12px_36px_rgba(0,0,0,0.035)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden flex items-center justify-between group cursor-pointer">
-                {decorSvg && (
-                    <div className="decor-svg" style={{ color: accentColor }}>
-                        {decorSvg}
-                    </div>
-                )}
+            <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-[14px] md:rounded-[18px] border border-slate-200 dark:border-slate-800 shadow-none hover:border-slate-300 dark:hover:border-slate-700 transition-colors relative overflow-hidden flex items-center justify-between group cursor-pointer">
                 <div className="min-w-0 relative z-10">
                     <p className="text-[10px] md:text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 leading-none">{label}</p>
                     <h4 className="text-xl md:text-2xl font-black text-slate-850 dark:text-slate-100 tracking-tight leading-none">{value}</h4>
                     {subValue && <p className="text-[9px] md:text-[10px] font-bold text-slate-400 dark:text-slate-500 mt-1 md:mt-2 uppercase tracking-tight truncate max-w-[150px] md:max-w-none">{subValue}</p>}
                 </div>
-                <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 relative z-10 ml-4" style={{ backgroundColor: `${accentColor}15`, color: accentColor }}>
+                <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 relative z-10 ml-4" style={{ backgroundColor: `${accentColor}15`, color: accentColor }}>
                     <Icon className="w-4 h-4" />
                 </div>
             </div>
@@ -1213,9 +1162,16 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                         </div>
                                         <div className="h-[900px] bg-[#fcfcfc] rounded-[14px] border border-slate-50 shadow-inner overflow-hidden relative flex justify-center items-start">
                                             {previewContent.loading ? (
-                                                <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 gap-3">
-                                                    <RefreshCw className="w-8 h-8 animate-spin" />
-                                                    <p className="text-[10px] font-bold uppercase tracking-widest">Đang tải preview...</p>
+                                                <div className="w-full h-full p-8 space-y-6 bg-white">
+                                                    <div className="h-32 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                                    <div className="space-y-3">
+                                                        <div className="h-6 w-2/3 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                                        <div className="h-4 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                                        <div className="h-4 w-5/6 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                                        <div className="h-4 w-4/5 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                                    </div>
+                                                    <div className="h-48 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                                    <div className="h-12 w-40 mx-auto animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
                                                 </div>
                                             ) : (
                                                 <div className={`h-full transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${previewMode === 'mobile' ? 'w-[400px] py-8' : 'w-full py-0'}`}>
@@ -1419,10 +1375,20 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                             <p className="text-xs text-amber-700/70 font-medium tracking-tight">Đối tượng mà bạn chọn đã thay đổi kể từ lần gửi cuối cùng của chiến dịch này.</p>
                                         </div>
                                         {statsLoading ? (
-                                            <div className="flex-1 flex justify-center items-center py-2">
-                                                <div className="flex items-center gap-3 text-amber-600/50">
-                                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                                    <span className="text-[10px] font-bold uppercase tracking-widest">Đang phân tích dữ liệu...</span>
+                                            <div className="flex items-center gap-10">
+                                                <div className="text-center space-y-1.5">
+                                                    <div className="h-3 w-12 mx-auto animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                                    <div className="h-7 w-16 mx-auto animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                                </div>
+                                                <div className="w-px h-10 bg-amber-100" />
+                                                <div className="text-center space-y-1.5">
+                                                    <div className="h-3 w-12 mx-auto animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                                    <div className="h-7 w-16 mx-auto animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                                </div>
+                                                <div className="w-px h-10 bg-amber-100" />
+                                                <div className="text-center space-y-1.5">
+                                                    <div className="h-3 w-14 mx-auto animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                                    <div className="h-7 w-16 mx-auto animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
                                                 </div>
                                             </div>
                                         ) : (
@@ -1590,7 +1556,28 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                         </thead>
                                         <tbody className="divide-y divide-[var(--color-border)]">
                                             {loadingLogs ? (
-                                                <tr><td colSpan={4} className="py-20 text-center text-slate-400 text-xs font-medium italic">Đang tải dữ liệu...</td></tr>
+                                                Array.from({ length: 5 }).map((_, idx) => (
+                                                    <tr key={`skeleton-log-${idx}`}>
+                                                        <td className="px-6 py-3.5">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="w-8 h-8 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px] shrink-0" />
+                                                                <div className="space-y-1.5">
+                                                                    <div className="h-3.5 w-28 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                                                    <div className="h-2.5 w-36 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-3.5">
+                                                            <div className="h-6 w-20 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                                        </td>
+                                                        <td className="px-6 py-3.5">
+                                                            <div className="h-3.5 w-40 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                                        </td>
+                                                        <td className="px-6 py-3.5 text-right">
+                                                            <div className="h-3.5 w-28 ml-auto animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                                        </td>
+                                                    </tr>
+                                                ))
                                             ) : activityLogs.length === 0 ? (
                                                 <tr>
                                                     <td colSpan={4} className="py-20 text-center">
@@ -1615,7 +1602,14 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                                             <div className="flex items-center gap-3">
                                                                 <Avatar name={displayName || log.email} size={32} />
                                                                 <div className="flex flex-col">
-                                                                    <span className="text-xs font-bold text-[var(--color-text)]">{displayName || log.email}</span>
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <span className="text-xs font-bold text-[var(--color-text)]">{displayName || log.email}</span>
+                                                                        {log.contact_id && (
+                                                                            <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200 text-[9px] font-bold">
+                                                                                CRM #{log.contact_id}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
                                                                     <span className="text-[10px] text-[var(--color-text-muted)]">{log.email}</span>
                                                                 </div>
                                                             </div>
@@ -1723,8 +1717,13 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                             <p className="text-slate-600">Bạn sắp xóa <span className="font-bold text-rose-600">{deleteModal.total || audienceStats?.count_unsubscribed || 0} người liên hệ</span> đã Hủy đăng ký từ chiến dịch này.</p>
 
                             {deleteModal.fetchingList ? (
-                                <div className="flex justify-center p-4">
-                                    <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
+                                <div className="space-y-2 p-3 border border-slate-200 rounded-lg bg-white">
+                                    {Array.from({ length: 3 }).map((_, i) => (
+                                        <div key={i} className="flex items-center justify-between gap-4">
+                                            <div className="h-3.5 w-36 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                            <div className="h-3.5 w-24 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                        </div>
+                                    ))}
                                 </div>
                             ) : deleteModal.list.length > 0 ? (
                                 <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">

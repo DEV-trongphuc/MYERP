@@ -35,10 +35,24 @@ try {
             $stmt->execute([$workspace_id, $workspace_id]);
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
             foreach ($rows as &$row) {
-                $row['settings_json'] = json_decode($row['settings_json'] ?? '{}', true);
-                $row['creator'] = domationFormatCreator($row);
+                $decodedBlocks = json_decode($row['blocks_json'] ?? '[]', true);
+                $normBlocks = normalizeSurveyBlocks(is_array($decodedBlocks) ? $decodedBlocks : []);
+                $row['blocks_json']    = $normBlocks;
+                $row['blocks']         = $normBlocks;
+                $row['settings_json']  = json_decode($row['settings_json'] ?? '{}', true) ?: new stdClass();
+                $row['settings']       = $row['settings_json'];
+                $row['thank_you_page'] = json_decode($row['thank_you_page'] ?? '{}', true) ?: new stdClass();
+                $row['thankYouPage']   = $row['thank_you_page'];
+                $coverStyle = json_decode($row['cover_style'] ?? '{}', true) ?: [];
+                if (empty($coverStyle['cardShadow'])) {
+                    $coverStyle['cardShadow'] = 'none';
+                }
+                $row['cover_style']    = $coverStyle;
+                $row['theme']          = $coverStyle;
+                $row['creator']        = domationFormatCreator($row);
             }
-            echo json_encode(['success' => true, 'data' => $rows]);
+            unset($row);
+            echo json_encode(['success' => true, 'data' => $rows], JSON_UNESCAPED_UNICODE);
             break;
         }
 
@@ -57,12 +71,22 @@ try {
             $stmt->execute([$id, $workspace_id, $workspace_id]);
             $survey = $stmt->fetch(PDO::FETCH_ASSOC);
             if (!$survey) { http_response_code(404); echo json_encode(['success' => false, 'error' => 'Not found']); exit; }
-            $survey['blocks_json']   = json_decode($survey['blocks_json'] ?? '[]');
-            $survey['settings_json'] = json_decode($survey['settings_json'] ?? '{}');
-            $survey['thank_you_page']= json_decode($survey['thank_you_page'] ?? '{}');
-            $survey['cover_style']   = json_decode($survey['cover_style'] ?? '{}');
+            $decodedBlocks = json_decode($survey['blocks_json'] ?? '[]', true);
+            $normBlocks = normalizeSurveyBlocks(is_array($decodedBlocks) ? $decodedBlocks : []);
+            $survey['blocks_json']   = $normBlocks;
+            $survey['blocks']        = $normBlocks;
+            $survey['settings_json'] = json_decode($survey['settings_json'] ?? '{}', true) ?: new stdClass();
+            $survey['settings']      = $survey['settings_json'];
+            $survey['thank_you_page']= json_decode($survey['thank_you_page'] ?? '{}', true) ?: new stdClass();
+            $survey['thankYouPage']  = $survey['thank_you_page'];
+            $coverStyle = json_decode($survey['cover_style'] ?? '{}', true) ?: [];
+            if (empty($coverStyle['cardShadow'])) {
+                $coverStyle['cardShadow'] = 'none';
+            }
+            $survey['cover_style']   = $coverStyle;
+            $survey['theme']         = $coverStyle;
             $survey['creator']       = domationFormatCreator($survey);
-            echo json_encode(['success' => true, 'data' => $survey]);
+            echo json_encode(['success' => true, 'data' => $survey], JSON_UNESCAPED_UNICODE);
             break;
         }
 
@@ -92,53 +116,225 @@ try {
 
         // ─── CREATE ──────────────────────────────────────────────────────────
         case 'create': {
-            $newId   = generateUUID();
+            $requestedId = isset($input['id']) && is_string($input['id']) && preg_match('/^[0-9a-fA-F\-]{36}$/', $input['id']) ? $input['id'] : null;
+            $newId   = $requestedId ?: generateUUID();
             $name    = trim($input['name'] ?? 'Khảo sát mới');
             $baseSlug= clean_slug($name);
             $slug    = $baseSlug . '-' . substr($newId, 0, 6);
 
-            $blocks_json = '[]';
-            if ($name === 'Khảo sát NPS') {
-                $blocks_json = json_encode([
-                    ['id' => uniqid(), 'type' => 'rating', 'question' => 'Bạn sẵn sàng giới thiệu sản phẩm của chúng tôi cho bạn bè/đồng nghiệp ở mức nào? (Từ 0-10)', 'required' => true, 'options' => ['scale' => 10, 'style' => 'nps']],
-                    ['id' => uniqid(), 'type' => 'short_text', 'question' => 'Lý do chính cho điểm số của bạn là gì? (Tùy chọn)', 'required' => false]
-                ], JSON_UNESCAPED_UNICODE);
+            $presetBlocks = [];
+            if (!empty($input['blocks_json']) && is_array($input['blocks_json'])) {
+                $presetBlocks = normalizeSurveyBlocks($input['blocks_json']);
+            } elseif ($name === 'Khảo sát NPS') {
+                $presetBlocks = [
+                    [
+                        'id' => generateUUID(),
+                        'type' => 'nps',
+                        'label' => 'Bạn sẵn sàng giới thiệu sản phẩm của chúng tôi cho bạn bè/đồng nghiệp ở mức nào? (Từ 0-10)',
+                        'title' => 'Bạn sẵn sàng giới thiệu sản phẩm của chúng tôi cho bạn bè/đồng nghiệp ở mức nào? (Từ 0-10)',
+                        'required' => true,
+                        'scale' => 10,
+                        'minValue' => 0,
+                        'maxValue' => 10,
+                        'minLabel' => 'Rất không hài lòng',
+                        'maxLabel' => 'Rất hài lòng',
+                    ],
+                    [
+                        'id' => generateUUID(),
+                        'type' => 'short_text',
+                        'label' => 'Lý do chính cho điểm số của bạn là gì? (Tùy chọn)',
+                        'title' => 'Lý do chính cho điểm số của bạn là gì? (Tùy chọn)',
+                        'required' => false,
+                        'placeholder' => 'Nhập chia sẻ của bạn...',
+                    ],
+                ];
             } elseif ($name === 'Phản hồi sản phẩm') {
-                $blocks_json = json_encode([
-                    ['id' => uniqid(), 'type' => 'multiple_choice', 'question' => 'Bạn đánh giá chất lượng sản phẩm như thế nào?', 'required' => true, 'options' => ['choices' => ['Rất tốt', 'Tốt', 'Bình thường', 'Kém']]],
-                    ['id' => uniqid(), 'type' => 'long_text', 'question' => 'Bạn muốn chúng tôi cải thiện điều gì?', 'required' => false]
-                ], JSON_UNESCAPED_UNICODE);
+                $presetBlocks = [
+                    [
+                        'id' => generateUUID(),
+                        'type' => 'single_choice',
+                        'label' => 'Bạn đánh giá chất lượng sản phẩm như thế nào?',
+                        'title' => 'Bạn đánh giá chất lượng sản phẩm như thế nào?',
+                        'required' => true,
+                        'options' => [
+                            ['id' => generateUUID(), 'label' => 'Rất tốt', 'value' => 'Rất tốt'],
+                            ['id' => generateUUID(), 'label' => 'Tốt', 'value' => 'Tốt'],
+                            ['id' => generateUUID(), 'label' => 'Bình thường', 'value' => 'Bình thường'],
+                            ['id' => generateUUID(), 'label' => 'Kém', 'value' => 'Kém'],
+                        ],
+                    ],
+                    [
+                        'id' => generateUUID(),
+                        'type' => 'long_text',
+                        'label' => 'Bạn muốn chúng tôi cải thiện điều gì?',
+                        'title' => 'Bạn muốn chúng tôi cải thiện điều gì?',
+                        'required' => false,
+                        'placeholder' => 'Nhập góp ý của bạn...',
+                    ],
+                ];
             } elseif ($name === 'Đánh giá dịch vụ') {
-                $blocks_json = json_encode([
-                    ['id' => uniqid(), 'type' => 'rating', 'question' => 'Vui lòng đánh giá chất lượng phục vụ của nhân viên:', 'required' => true, 'options' => ['scale' => 5, 'style' => 'star']],
-                    ['id' => uniqid(), 'type' => 'short_text', 'question' => 'Góp ý thêm (Tùy chọn)', 'required' => false]
-                ], JSON_UNESCAPED_UNICODE);
+                $presetBlocks = [
+                    [
+                        'id' => generateUUID(),
+                        'type' => 'star_rating',
+                        'label' => 'Vui lòng đánh giá chất lượng phục vụ của nhân viên:',
+                        'title' => 'Vui lòng đánh giá chất lượng phục vụ của nhân viên:',
+                        'required' => true,
+                        'maxStars' => 5,
+                        'minValue' => 1,
+                        'maxValue' => 5,
+                        'ratingIcon' => 'star',
+                    ],
+                    [
+                        'id' => generateUUID(),
+                        'type' => 'short_text',
+                        'label' => 'Góp ý thêm (Tùy chọn)',
+                        'title' => 'Góp ý thêm (Tùy chọn)',
+                        'required' => false,
+                        'placeholder' => 'Nhập góp ý thêm...',
+                    ],
+                ];
             } elseif ($name === 'Khảo sát thị trường') {
-                $blocks_json = json_encode([
-                    ['id' => uniqid(), 'type' => 'multiple_choice', 'question' => 'Sản phẩm nào bạn quan tâm nhất?', 'required' => true, 'options' => ['choices' => ['Phần mềm tự động hóa', 'Truyền thông Email', 'Tạo Khảo sát', 'Khác']]]
-                ], JSON_UNESCAPED_UNICODE);
+                $presetBlocks = [
+                    [
+                        'id' => generateUUID(),
+                        'type' => 'single_choice',
+                        'label' => 'Sản phẩm nào bạn quan tâm nhất?',
+                        'title' => 'Sản phẩm nào bạn quan tâm nhất?',
+                        'required' => true,
+                        'options' => [
+                            ['id' => generateUUID(), 'label' => 'Phần mềm tự động hóa', 'value' => 'Phần mềm tự động hóa'],
+                            ['id' => generateUUID(), 'label' => 'Truyền thông Email', 'value' => 'Truyền thông Email'],
+                            ['id' => generateUUID(), 'label' => 'Tạo Khảo sát', 'value' => 'Tạo Khảo sát'],
+                            ['id' => generateUUID(), 'label' => 'Khác', 'value' => 'Khác'],
+                        ],
+                    ],
+                ];
             } elseif ($name === 'Mẫu Quiz (Trắc nghiệm)') {
-                $blocks_json = json_encode([
-                    ['id' => uniqid(), 'type' => 'multiple_choice', 'question' => 'Câu 1: Câu hỏi trắc nghiệm của bạn là gì?', 'required' => true, 'options' => ['choices' => ['Đáp án A', 'Đáp án B', 'Đáp án C']]],
-                    ['id' => uniqid(), 'type' => 'multiple_choice', 'question' => 'Câu 2: Chọn đáp án đúng', 'required' => true, 'options' => ['choices' => ['Sự thật', 'Giả định']]]
-                ], JSON_UNESCAPED_UNICODE);
+                $presetBlocks = [
+                    [
+                        'id' => generateUUID(),
+                        'type' => 'single_choice',
+                        'label' => 'Câu 1: Câu hỏi trắc nghiệm của bạn là gì?',
+                        'title' => 'Câu 1: Câu hỏi trắc nghiệm của bạn là gì?',
+                        'required' => true,
+                        'options' => [
+                            ['id' => generateUUID(), 'label' => 'Đáp án A', 'value' => 'Đáp án A'],
+                            ['id' => generateUUID(), 'label' => 'Đáp án B', 'value' => 'Đáp án B'],
+                            ['id' => generateUUID(), 'label' => 'Đáp án C', 'value' => 'Đáp án C'],
+                        ],
+                    ],
+                    [
+                        'id' => generateUUID(),
+                        'type' => 'single_choice',
+                        'label' => 'Câu 2: Chọn đáp án đúng',
+                        'title' => 'Câu 2: Chọn đáp án đúng',
+                        'required' => true,
+                        'options' => [
+                            ['id' => generateUUID(), 'label' => 'Sự thật', 'value' => 'Sự thật'],
+                            ['id' => generateUUID(), 'label' => 'Giả định', 'value' => 'Giả định'],
+                        ],
+                    ],
+                ];
             } elseif ($name === 'Mẫu Check-in Event') {
-                 $blocks_json = json_encode([
-                    ['id' => uniqid(), 'type' => 'short_text', 'question' => 'Họ và Tên', 'required' => true],
-                    ['id' => uniqid(), 'type' => 'short_text', 'question' => 'Số điện thoại', 'required' => true],
-                    ['id' => uniqid(), 'type' => 'multiple_choice', 'question' => 'Bạn đã nhận quà sự kiện chưa?', 'required' => true, 'options' => ['choices' => ['Đã nhận', 'Chưa nhận']]]
-                ], JSON_UNESCAPED_UNICODE);
+                $presetBlocks = [
+                    [
+                        'id' => generateUUID(),
+                        'type' => 'short_text',
+                        'label' => 'Họ và Tên',
+                        'title' => 'Họ và Tên',
+                        'required' => true,
+                        'placeholder' => 'Nhập họ và tên của bạn...',
+                    ],
+                    [
+                        'id' => generateUUID(),
+                        'type' => 'phone',
+                        'label' => 'Số điện thoại',
+                        'title' => 'Số điện thoại',
+                        'required' => true,
+                        'placeholder' => '0912 345 678',
+                    ],
+                    [
+                        'id' => generateUUID(),
+                        'type' => 'single_choice',
+                        'label' => 'Bạn đã nhận quà sự kiện chưa?',
+                        'title' => 'Bạn đã nhận quà sự kiện chưa?',
+                        'required' => true,
+                        'options' => [
+                            ['id' => generateUUID(), 'label' => 'Đã nhận', 'value' => 'Đã nhận'],
+                            ['id' => generateUUID(), 'label' => 'Chưa nhận', 'value' => 'Chưa nhận'],
+                        ],
+                    ],
+                ];
             }
+
+            $blocks_json = json_encode($presetBlocks, JSON_UNESCAPED_UNICODE);
+            $defaultSettingsArr = ['showProgressBar'=>true,'progressBarStyle'=>'bar','allowPartialSubmit'=>false,'trackIp'=>true,'trackLocation'=>false];
+            $defaultThankYouArr = ['title'=>'Cảm ơn bạn! 🎉','message'=>'Phản hồi của bạn đã được ghi nhận.','showSocialShare'=>false];
+            $defaultCoverArr    = [
+                'primaryColor' => '#BD1D2D',
+                'backgroundColor' => '#f8fafc',
+                'cardBackground' => '#ffffff',
+                'textColor' => '#1e293b',
+                'borderRadius' => '12px',
+                'cardShadow' => 'none',
+                'coverStyle' => 'minimal',
+                'coverHeight' => 'md'
+            ];
+
+            $defaultSettings  = json_encode($defaultSettingsArr, JSON_UNESCAPED_UNICODE);
+            $defaultThankYou  = json_encode($defaultThankYouArr, JSON_UNESCAPED_UNICODE);
+            $defaultCover     = json_encode($defaultCoverArr, JSON_UNESCAPED_UNICODE);
 
             $currentUserId = get_current_user_id();
             $stmt = $pdo->prepare("
                 INSERT INTO surveys (id, workspace_id, name, slug, status, blocks_json, settings_json, thank_you_page, cover_style, created_by, updated_by)
-                VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, '{}', ?, ?)
+                VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?)
             ");
-            $defaultSettings  = json_encode(['showProgressBar'=>true,'progressBarStyle'=>'bar','allowPartialSubmit'=>false,'trackIp'=>true,'trackLocation'=>false]);
-            $defaultThankYou  = json_encode(['title'=>'Cảm ơn bạn! 🎉','message'=>'Phản hồi của bạn đã được ghi nhận.','showSocialShare'=>false]);
-            $stmt->execute([$newId, $workspace_id, $name, $slug, $blocks_json, $defaultSettings, $defaultThankYou, $currentUserId, $currentUserId]);
-            echo json_encode(['success' => true, 'data' => ['id' => $newId, 'slug' => $slug, 'created_by' => $currentUserId, 'creator' => get_current_user_info()]]);
+            $stmt->execute([$newId, $workspace_id, $name, $slug, $blocks_json, $defaultSettings, $defaultThankYou, $defaultCover, $currentUserId, $currentUserId]);
+
+            // Auto-sync survey_questions on create
+            if (!empty($presetBlocks)) {
+                $qStmt = $pdo->prepare("INSERT INTO survey_questions (id, survey_id, block_id, type, label, options_json, required, order_index, target_attribute) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $order = 0;
+                foreach ($presetBlocks as $b) {
+                    $isLayout = in_array($b['type'] ?? '', ['section_header', 'image_block', 'divider', 'page_break', 'button_block', 'link_block', 'banner_block']);
+                    if (!$isLayout) {
+                        $opts = isset($b['options']) ? json_encode($b['options'], JSON_UNESCAPED_UNICODE) : null;
+                        $req = !empty($b['required']) ? 1 : 0;
+                        $label = $b['label'] ?? ($b['title'] ?? 'Câu hỏi ' . ($order + 1));
+                        $blockId = $b['id'] ?? generateUUID();
+                        $targetAttr = $b['targetAttribute'] ?? ($b['target_attribute'] ?? null);
+                        $qStmt->execute([generateUUID(), $newId, $blockId, $b['type'] ?? 'short_text', $label, $opts, $req, $order, $targetAttr]);
+                        $order++;
+                    }
+                }
+            }
+
+            $nowIso = date('Y-m-d H:i:s');
+            echo json_encode([
+                'success' => true,
+                'data' => [
+                    'id' => $newId,
+                    'workspace_id' => $workspace_id,
+                    'name' => $name,
+                    'slug' => $slug,
+                    'status' => 'draft',
+                    'blocks' => $presetBlocks,
+                    'blocks_json' => $presetBlocks,
+                    'settings' => $defaultSettingsArr,
+                    'settings_json' => $defaultSettingsArr,
+                    'thankYouPage' => $defaultThankYouArr,
+                    'thank_you_page' => $defaultThankYouArr,
+                    'theme' => $defaultCoverArr,
+                    'cover_style' => $defaultCoverArr,
+                    'response_count' => 0,
+                    'created_by' => $currentUserId,
+                    'creator' => get_current_user_info(),
+                    'created_at' => $nowIso,
+                    'updated_at' => $nowIso,
+                ]
+            ], JSON_UNESCAPED_UNICODE);
             break;
         }
 
@@ -290,11 +486,13 @@ try {
 
             $stmt = $pdo->prepare("
                 SELECT r.*,
-                    s.email AS subscriber_email,
-                    COALESCE(NULLIF(TRIM(CONCAT(COALESCE(s.first_name, ''), ' ', COALESCE(s.last_name, ''))), ''), s.first_name, 'Ẩn danh') AS subscriber_name,
-                    s.phone_number AS subscriber_phone
+                    COALESCE(r.contact_id, s.contact_id, ct.id) AS contact_id,
+                    COALESCE(s.email, ct.email) AS subscriber_email,
+                    COALESCE(NULLIF(TRIM(CONCAT(COALESCE(s.first_name, ''), ' ', COALESCE(s.last_name, ''))), ''), s.first_name, ct.name, 'Ẩn danh') AS subscriber_name,
+                    COALESCE(s.phone_number, ct.phone) AS subscriber_phone
                 FROM survey_responses r
                 LEFT JOIN subscribers s ON s.id = r.subscriber_id
+                LEFT JOIN contacts ct ON ct.id = COALESCE(r.contact_id, s.contact_id) AND ct.deleted_at IS NULL
                 WHERE r.survey_id = ?
                 ORDER BY r.submitted_at DESC
             ");
@@ -304,7 +502,8 @@ try {
             // Fetch block definitions to format answers
             $surveyStmt = $pdo->prepare("SELECT blocks_json FROM surveys WHERE id = ?");
             $surveyStmt->execute([$id]);
-            $blocks = json_decode($surveyStmt->fetchColumn() ?: '[]', true) ?: [];
+            $rawBlocks = json_decode($surveyStmt->fetchColumn() ?: '[]', true) ?: [];
+            $blocks = normalizeSurveyBlocks(is_array($rawBlocks) ? $rawBlocks : []);
             $blocksMap = [];
             foreach ($blocks as $b) {
                 if (!empty($b['id'])) $blocksMap[$b['id']] = $b;
@@ -317,7 +516,7 @@ try {
                     $bId = $ans['block_id'] ?? ($ans['question_id'] ?? '');
                     $block = $blocksMap[$bId] ?? null;
                     $qType = $ans['type'] ?? ($block['type'] ?? 'short_text');
-                    $qLabel = !empty($ans['label']) ? $ans['label'] : (!empty($block['label']) ? $block['label'] : 'Câu hỏi');
+                    $qLabel = !empty($ans['label']) ? $ans['label'] : (!empty($block['label']) ? $block['label'] : (!empty($block['question']) ? $block['question'] : 'Câu hỏi'));
                     
                     $val = '';
                     if (isset($ans['answer_text'])) {
@@ -355,6 +554,22 @@ try {
                         $row['subscriber_phone'] = $ans['answer_text'];
                     }
                 }
+
+                if (empty($row['contact_id']) && class_exists('DomationContactMatcher')) {
+                    try {
+                        $matchedCid = DomationContactMatcher::findExistingContactId(
+                            $pdo,
+                            !empty($row['subscriber_email']) ? (string)$row['subscriber_email'] : null,
+                            !empty($row['subscriber_phone']) ? (string)$row['subscriber_phone'] : null
+                        );
+                        if ($matchedCid) {
+                            $row['contact_id'] = $matchedCid;
+                        }
+                    } catch (Throwable $e) {
+                        // non-blocking
+                    }
+                }
+
                 $row['answers'] = $formattedAnswers;
                 unset($row['answers_json']);
             }
@@ -384,7 +599,8 @@ try {
             // Load survey blocks map for question titles & choice resolution
             $surveyStmt = $pdo->prepare("SELECT blocks_json FROM surveys WHERE id = ?");
             $surveyStmt->execute([$id]);
-            $blocks = json_decode($surveyStmt->fetchColumn() ?: '[]', true) ?: [];
+            $rawBlocks = json_decode($surveyStmt->fetchColumn() ?: '[]', true) ?: [];
+            $blocks = normalizeSurveyBlocks(is_array($rawBlocks) ? $rawBlocks : []);
             $blocksMap = [];
             foreach ($blocks as $b) {
                 if (!empty($b['id'])) $blocksMap[$b['id']] = $b;
@@ -392,11 +608,13 @@ try {
 
             $stmt = $pdo->prepare("
                 SELECT r.*,
-                    s.email AS subscriber_email,
+                    COALESCE(r.contact_id, s.contact_id, ct.id) AS contact_id,
+                    COALESCE(s.email, ct.email) AS subscriber_email,
                     TRIM(CONCAT(COALESCE(s.first_name, ''), ' ', COALESCE(s.last_name, ''))) AS subscriber_name,
-                    s.phone_number AS subscriber_phone
+                    COALESCE(s.phone_number, ct.phone) AS subscriber_phone
                 FROM survey_responses r
                 LEFT JOIN subscribers s ON s.id = r.subscriber_id
+                LEFT JOIN contacts ct ON ct.id = COALESCE(r.contact_id, s.contact_id) AND ct.deleted_at IS NULL
                 WHERE r.survey_id = ?
                 ORDER BY r.submitted_at DESC
                 LIMIT " . (int)$limit . " OFFSET " . (int)$offset . "
@@ -416,7 +634,7 @@ try {
                     $b = $blocksMap[$bId] ?? null;
                     $qTitle = (!empty($b['label']) && $b['label'] !== 'Untitled Question') 
                         ? $b['label'] 
-                        : ($b['content'] ?? ($b['title'] ?? ''));
+                        : ($b['content'] ?? ($b['title'] ?? ($b['question'] ?? '')));
 
                     $rawVal = $ans['answer_text'] ?? ($ans['answer_num'] ?? (is_array($ans['answer_json'] ?? null) ? implode(', ', $ans['answer_json']) : ''));
                     $resolvedAnswers[] = [
@@ -515,7 +733,8 @@ try {
             // Load original blocks from surveys table for self-healing & label resolution
             $surveyStmt = $pdo->prepare("SELECT blocks_json FROM surveys WHERE id = ?");
             $surveyStmt->execute([$surveyId]);
-            $blocks = json_decode($surveyStmt->fetchColumn() ?: '[]', true) ?: [];
+            $rawBlocks = json_decode($surveyStmt->fetchColumn() ?: '[]', true) ?: [];
+            $blocks = normalizeSurveyBlocks(is_array($rawBlocks) ? $rawBlocks : []);
             $blocksMap = [];
             foreach ($blocks as $b) {
                 if (!empty($b['id'])) $blocksMap[$b['id']] = $b;
@@ -710,7 +929,8 @@ try {
             // 1. Fetch survey questions & block options for human-friendly labels
             $surveyStmt = $pdo->prepare("SELECT blocks_json FROM surveys WHERE id = ?");
             $surveyStmt->execute([$id]);
-            $blocks = json_decode($surveyStmt->fetchColumn() ?: '[]', true) ?: [];
+            $rawBlocks = json_decode($surveyStmt->fetchColumn() ?: '[]', true) ?: [];
+            $blocks = normalizeSurveyBlocks(is_array($rawBlocks) ? $rawBlocks : []);
             $blocksMap = [];
             foreach ($blocks as $b) {
                 if (!empty($b['id'])) $blocksMap[$b['id']] = $b;
@@ -795,6 +1015,78 @@ try {
     error_log('Survey API Error: ' . $e->getMessage());
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'Server error', 'message' => 'Lỗi hệ thống, vui lòng thử lại.']);
+}
+
+function normalizeSurveyBlocks(array $blocks): array {
+    $normalized = [];
+    foreach ($blocks as $idx => $b) {
+        if (!is_array($b)) continue;
+        if (empty($b['id'])) {
+            $b['id'] = generateUUID();
+        }
+        // Normalize label from title / question / content
+        $label = $b['label'] ?? ($b['title'] ?? ($b['question'] ?? ($b['content'] ?? '')));
+        if ($label === '' || $label === 'Untitled Question') {
+            $label = !empty($b['question']) ? $b['question'] : (!empty($b['title']) ? $b['title'] : 'Câu hỏi ' . ($idx + 1));
+        }
+        $b['label'] = $label;
+        if (empty($b['title'])) {
+            $b['title'] = $label;
+        }
+
+        // Normalize legacy preset types ('rating', 'multiple_choice')
+        $type = $b['type'] ?? 'short_text';
+        if ($type === 'rating') {
+            $style = $b['options']['style'] ?? ($b['style']['style'] ?? '');
+            $scale = (int)($b['options']['scale'] ?? ($b['scale'] ?? 5));
+            if ($style === 'nps' || $scale === 10) {
+                $type = 'nps';
+                $b['minValue'] = $b['minValue'] ?? 0;
+                $b['maxValue'] = $b['maxValue'] ?? 10;
+                $b['minLabel'] = $b['minLabel'] ?? 'Rất không hài lòng';
+                $b['maxLabel'] = $b['maxLabel'] ?? 'Rất hài lòng';
+            } else {
+                $type = 'star_rating';
+                $b['minValue'] = $b['minValue'] ?? 1;
+                $b['maxValue'] = $b['maxValue'] ?? ($scale > 0 ? $scale : 5);
+                $b['ratingIcon'] = $b['ratingIcon'] ?? 'star';
+            }
+            unset($b['options']);
+        } elseif ($type === 'multiple_choice') {
+            $type = 'single_choice';
+        }
+        $b['type'] = $type;
+
+        // Normalize options if stored as ['choices' => [...]] or array of strings
+        if (isset($b['options']) && is_array($b['options'])) {
+            $rawOpts = isset($b['options']['choices']) && is_array($b['options']['choices'])
+                ? $b['options']['choices']
+                : $b['options'];
+            $cleanOpts = [];
+            foreach ($rawOpts as $optIdx => $opt) {
+                if (is_array($opt)) {
+                    $optLabel = (string)($opt['label'] ?? ($opt['value'] ?? ('Lựa chọn ' . ($optIdx + 1))));
+                    $optValue = (string)($opt['value'] ?? $optLabel);
+                    $cleanOpts[] = [
+                        'id'    => !empty($opt['id']) ? (string)$opt['id'] : ('opt-' . ($idx + 1) . '-' . ($optIdx + 1)),
+                        'label' => $optLabel,
+                        'value' => $optValue,
+                    ];
+                } elseif (is_scalar($opt)) {
+                    $strVal = (string)$opt;
+                    $cleanOpts[] = [
+                        'id'    => 'opt-' . ($idx + 1) . '-' . ($optIdx + 1),
+                        'label' => $strVal,
+                        'value' => $strVal,
+                    ];
+                }
+            }
+            $b['options'] = $cleanOpts;
+        }
+
+        $normalized[] = $b;
+    }
+    return $normalized;
 }
 
 function resolveChoiceLabel(?string $rawValue, ?array $block, string $type = ''): string {

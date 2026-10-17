@@ -316,15 +316,15 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                 <div className="flex items-center gap-2"><span className="text-[10px] font-bold text-slate-700 uppercase tracking-widest bg-white px-2 py-1 rounded border shadow-sm">{selectedBlock.type}</span></div>
                 <div className="flex gap-1">
-                    <button onClick={() => onDuplicateBlock(selectedBlock)} className="p-1.5 hover:bg-white hover:text-[#BD1D2D] rounded text-slate-400 transition-all"><LucideIcons.Copy className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => onDeleteBlock(selectedBlock.id)} className="p-1.5 hover:bg-white hover:text-rose-600 rounded text-slate-400 transition-all"><LucideIcons.Trash2 className="w-3.5 h-3.5" /></button>
-                    <button onClick={onDeselect} className="p-1.5 hover:bg-slate-200 rounded text-slate-400"><LucideIcons.X className="w-3.5 h-3.5" /></button>
+                    <button type="button" onClick={() => onDuplicateBlock(selectedBlock)} className="p-1.5 hover:bg-white hover:text-[#BD1D2D] rounded text-slate-400 transition-all outline-none focus:outline-none cursor-pointer"><LucideIcons.Copy className="w-3.5 h-3.5" /></button>
+                    <button type="button" onClick={() => onDeleteBlock(selectedBlock.id)} className="p-1.5 hover:bg-white hover:text-rose-600 rounded text-slate-400 transition-all outline-none focus:outline-none cursor-pointer"><LucideIcons.Trash2 className="w-3.5 h-3.5" /></button>
+                    <button type="button" onClick={onDeselect} className="p-1.5 hover:bg-slate-200 rounded text-slate-400 outline-none focus:outline-none cursor-pointer"><LucideIcons.X className="w-3.5 h-3.5" /></button>
                 </div>
             </div>
 
             <div className="flex p-2 gap-1 border-b border-slate-100">
-                <button onClick={() => setActiveTab('content')} className={`flex-1 py-2 text-[10px] font-bold uppercase rounded-xl transition-all ${activeTab === 'content' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>Content</button>
-                <button onClick={() => setActiveTab('style')} className={`flex-1 py-2 text-[10px] font-bold uppercase rounded-xl transition-all ${activeTab === 'style' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>Design</button>
+                <button type="button" onClick={() => setActiveTab('content')} className={`flex-1 py-2 text-[10px] font-bold uppercase rounded-xl transition-all outline-none focus:outline-none cursor-pointer ${activeTab === 'content' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>Content</button>
+                <button type="button" onClick={() => setActiveTab('style')} className={`flex-1 py-2 text-[10px] font-bold uppercase rounded-xl transition-all outline-none focus:outline-none cursor-pointer ${activeTab === 'style' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>Design</button>
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">

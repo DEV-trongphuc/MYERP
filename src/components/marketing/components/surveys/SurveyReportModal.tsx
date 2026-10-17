@@ -221,24 +221,24 @@ const QuestionCard: React.FC<{ q: QuestionAnalytics; idx: number; survey?: Surve
     const block = survey?.blocks?.find(b => b.id === q.question_id || (b as any).id === (q as any).id);
     const resolvedTitle = (q.label && q.label !== 'Untitled Question' && q.label.trim() !== '')
         ? q.label
-        : (block?.label || (block as any)?.content || (block as any)?.title || `Câu hỏi #${idx + 1}`);
+        : (block?.label || (block as any)?.content || (block as any)?.title || (block as any)?.question || `Câu hỏi #${idx + 1}`);
 
     const displayTitle = formatChoiceLabel(resolvedTitle);
     const skipPct = Math.round((q.skip_rate ?? 0) * 100);
 
     return (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
             {/* Header */}
-            <div className="px-5 py-4 border-b border-slate-50 flex items-start gap-3">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-start gap-3">
                 <div className="w-7 h-7 rounded-xl bg-[var(--color-primary-light)] flex items-center justify-center flex-shrink-0 mt-0.5">
                     <span className="text-[10px] font-black text-[var(--color-primary)]">#{idx + 1}</span>
                 </div>
                 <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-slate-800 leading-snug">{displayTitle}</p>
+                    <p className="text-sm font-bold text-slate-900 leading-snug">{displayTitle}</p>
                     <div className="flex items-center gap-2 mt-1">
-                        {typeIcons[q.type] ?? <div className="text-[9px] text-slate-400">{q.type}</div>}
-                        <span className="text-[10px] text-slate-400">{q.total_answered} phản hồi</span>
-                        {skipPct > 0 && <span className="text-[10px] text-red-400">{skipPct}% bỏ qua</span>}
+                        {typeIcons[q.type] ?? <div className="text-[9px] text-slate-500">{q.type}</div>}
+                        <span className="text-[10px] font-medium text-slate-600">{q.total_answered} phản hồi</span>
+                        {skipPct > 0 && <span className="text-[10px] font-medium text-red-500">{skipPct}% bỏ qua</span>}
                     </div>
                 </div>
             </div>
@@ -262,11 +262,11 @@ const QuestionCard: React.FC<{ q: QuestionAnalytics; idx: number; survey?: Surve
                 {q.text_responses && q.text_responses.length > 0 && (
                     <div className="space-y-2">
                         {q.text_responses.slice(0, 5).map((t, i) => (
-                            <div key={i} className="flex gap-2.5 p-2.5 bg-slate-50 rounded-xl">
+                            <div key={i} className="flex gap-2.5 p-2.5 bg-slate-50 rounded-xl border border-slate-100">
                                 <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
-                                    <User className="w-3 h-3 text-slate-400" />
+                                    <User className="w-3 h-3 text-slate-600" />
                                 </div>
-                                <p className="text-xs text-slate-600 italic leading-snug">
+                                <p className="text-xs text-slate-700 italic leading-snug">
                                     {(() => {
                                         if ((q.type === 'matrix_single' || q.type === 'matrix_multi') && q.content) {
                                             try {
@@ -303,16 +303,16 @@ const QuestionCard: React.FC<{ q: QuestionAnalytics; idx: number; survey?: Surve
                             </div>
                         ))}
                         {q.text_responses.length > 5 && (
-                            <p className="text-xs text-slate-400 text-center py-1">+{q.text_responses.length - 5} phản hồi khác</p>
+                            <p className="text-xs text-slate-500 text-center py-1">+{q.text_responses.length - 5} phản hồi khác</p>
                         )}
                     </div>
                 )}
                 {/* Skip rate micro bar */}
                 {skipPct > 0 && (
-                    <div className="mt-3 pt-3 border-t border-slate-50">
+                    <div className="mt-3 pt-3 border-t border-slate-100">
                         <div className="flex justify-between text-[10px] mb-1">
-                            <span className="text-slate-400">Tỷ lệ trả lời</span>
-                            <span className="font-bold text-slate-600">{100 - skipPct}%</span>
+                            <span className="text-slate-500">Tỷ lệ trả lời</span>
+                            <span className="font-bold text-slate-700">{100 - skipPct}%</span>
                         </div>
                         <Bar value={100 - skipPct} color="var(--color-primary)" />
                     </div>
@@ -368,11 +368,11 @@ const RespondentsList: React.FC<{ surveyId: string; survey?: Survey | null }> = 
     return (
         <div className="space-y-4">
             <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
                 <input
                     value={search} onChange={e => setSearch(e.target.value)}
                     placeholder="Tìm theo họ tên, email hoặc số điện thoại..."
-                    className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary-light)]"
+                    className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 placeholder:text-slate-500 focus:outline-none focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary-light)]"
                 />
             </div>
 
@@ -381,8 +381,8 @@ const RespondentsList: React.FC<{ surveyId: string; survey?: Survey | null }> = 
                     {[1, 2, 3].map(i => <div key={i} className="h-14 bg-slate-100 rounded-2xl animate-pulse" />)}
                 </div>
             ) : filtered.length === 0 ? (
-                <div className="text-center py-12 text-slate-400 text-sm bg-white rounded-2xl border border-slate-100">
-                    <Users className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                <div className="text-center py-12 text-slate-600 text-sm bg-white rounded-2xl border border-slate-200">
+                    <Users className="w-8 h-8 mx-auto mb-2 text-slate-400" />
                     {search ? 'Không tìm thấy người tham gia phù hợp' : 'Chưa có phản hồi nào'}
                 </div>
             ) : (
@@ -398,7 +398,7 @@ const RespondentsList: React.FC<{ surveyId: string; survey?: Survey | null }> = 
                         return (
                             <div 
                                 key={r.id ?? i} 
-                                className={`bg-white rounded-2xl border transition-all ${isExpanded ? 'border-[var(--color-primary)] shadow-md ring-1 ring-[var(--color-primary-light)]' : 'border-slate-100 hover:border-slate-200 shadow-sm'}`}
+                                className={`bg-white rounded-2xl border transition-all ${isExpanded ? 'border-[var(--color-primary)] ring-1 ring-[var(--color-primary-light)]' : 'border-slate-200 hover:border-slate-300'}`}
                             >
                                 <div className="p-4 flex items-center gap-3.5">
                                     {/* Shared Avatar component (Contract §1) */}
@@ -411,15 +411,15 @@ const RespondentsList: React.FC<{ surveyId: string; survey?: Survey | null }> = 
                                                 <button
                                                     type="button"
                                                     onClick={() => openCustomerDrawer(r.contact_id)}
-                                                    className="text-sm font-bold text-slate-800 hover:text-[var(--color-primary)] transition-colors truncate inline-flex items-center gap-1"
-                                                    title="Mở hồ sơ khách hàng 360°"
+                                                    className="text-sm font-bold text-slate-900 hover:text-[var(--color-primary)] transition-colors truncate inline-flex items-center gap-1"
+                                                    title="Mở hồ sơ CRM 360°"
                                                 >
                                                     <span className="truncate">{r.subscriber_name || r.subscriber_email || 'Khách hàng'}</span>
                                                     <ExternalLink className="w-3 h-3 text-[var(--color-primary)] shrink-0" />
                                                 </button>
                                             ) : (
-                                                <p className="text-sm font-bold text-slate-800 truncate">
-                                                    {r.subscriber_name || <span className="text-slate-400 font-normal italic">Khách chưa lưu tên</span>}
+                                                <p className="text-sm font-bold text-slate-900 truncate">
+                                                    {r.subscriber_name || <span className="text-slate-500 font-normal italic">Khách chưa lưu tên</span>}
                                                 </p>
                                             )}
 
@@ -443,17 +443,17 @@ const RespondentsList: React.FC<{ surveyId: string; survey?: Survey | null }> = 
                                             )}
 
                                             {r.device_type && (
-                                                <span className="text-[10px] text-slate-400 font-medium px-1.5 py-0.5 bg-slate-50 rounded border border-slate-100">
+                                                <span className="text-[10px] text-slate-600 font-medium px-1.5 py-0.5 bg-slate-50 rounded border border-slate-200">
                                                     {r.device_type}
                                                 </span>
                                             )}
                                         </div>
 
                                         {/* Contact row */}
-                                        <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500 flex-wrap">
+                                        <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-600 flex-wrap">
                                             {r.subscriber_email && (
-                                                <span className="flex items-center gap-1 font-medium text-slate-600">
-                                                    <Mail className="w-3 h-3 text-slate-400" /> {r.subscriber_email}
+                                                <span className="flex items-center gap-1 font-medium text-slate-700">
+                                                    <Mail className="w-3 h-3 text-slate-500" /> {r.subscriber_email}
                                                 </span>
                                             )}
                                             {r.subscriber_phone && (
@@ -462,8 +462,8 @@ const RespondentsList: React.FC<{ surveyId: string; survey?: Survey | null }> = 
                                                 </span>
                                             )}
                                             {r.submitted_at && (
-                                                <span className="flex items-center gap-1 text-slate-400">
-                                                    <Clock className="w-3 h-3 text-slate-300" /> {new Date(r.submitted_at).toLocaleString('vi-VN')}
+                                                <span className="flex items-center gap-1 text-slate-500">
+                                                    <Clock className="w-3 h-3 text-slate-400" /> {new Date(r.submitted_at).toLocaleString('vi-VN')}
                                                 </span>
                                             )}
                                         </div>
@@ -472,31 +472,34 @@ const RespondentsList: React.FC<{ surveyId: string; survey?: Survey | null }> = 
                                     {/* Right actions */}
                                     <div className="flex items-center gap-2 shrink-0">
                                         <div className="text-right hidden sm:block">
-                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${r.completion_rate >= 80 ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
+                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${r.completion_rate >= 80 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-700 border border-slate-200'}`}>
                                                 {Math.round(r.completion_rate ?? 0)}% xong
                                             </span>
                                             {r.time_spent_sec ? (
-                                                <p className="text-[10px] text-slate-400 mt-0.5">{formatTime(r.time_spent_sec)}</p>
+                                                <p className="text-[10px] text-slate-500 mt-0.5">{formatTime(r.time_spent_sec)}</p>
                                             ) : null}
                                         </div>
 
                                         {hasContactId && (
-                                            <button
-                                                type="button"
-                                                onClick={() => openCustomerDrawer(r.contact_id)}
-                                                className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-[var(--color-primary)] text-xs font-bold flex items-center gap-1 transition-all"
-                                                title="Xem hồ sơ 360°"
+                                            <a
+                                                href={`/crm/contacts?id=${r.contact_id}`}
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    openCustomerDrawer(r.contact_id);
+                                                }}
+                                                className="px-2.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-[var(--color-primary)] text-xs font-bold flex items-center gap-1 transition-all"
+                                                title="Mở hồ sơ CRM 360°"
                                             >
                                                 <User className="w-3.5 h-3.5" />
-                                                <span className="hidden md:inline">Hồ sơ 360°</span>
-                                            </button>
+                                                <span className="hidden md:inline">Mở hồ sơ CRM 360°</span>
+                                            </a>
                                         )}
 
                                         {/* Expand answers button */}
                                         <button
                                             type="button"
                                             onClick={() => setExpandedId(isExpanded ? null : (r.id || String(i)))}
-                                            className={`p-2 rounded-xl text-xs font-bold flex items-center gap-1 transition-all ${isExpanded ? 'bg-[var(--color-primary-light)] text-[var(--color-primary)]' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}
+                                            className={`p-2 rounded-xl text-xs font-bold flex items-center gap-1 transition-all ${isExpanded ? 'bg-[var(--color-primary-light)] text-[var(--color-primary)]' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
                                             title="Xem chi tiết các câu trả lời"
                                         >
                                             <span className="hidden sm:inline">{isExpanded ? 'Thu gọn' : 'Xem trả lời'}</span>
@@ -507,10 +510,10 @@ const RespondentsList: React.FC<{ surveyId: string; survey?: Survey | null }> = 
                                             <button
                                                 type="button"
                                                 onClick={() => copyLink(r.subscriber_email)}
-                                                className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 transition-all"
+                                                className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition-all"
                                                 title="Sao chép link khảo sát cho người này"
                                             >
-                                                {copiedId === r.subscriber_email ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                                                {copiedId === r.subscriber_email ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                                             </button>
                                         )}
                                     </div>
@@ -518,33 +521,33 @@ const RespondentsList: React.FC<{ surveyId: string; survey?: Survey | null }> = 
 
                                 {/* Expanded Answers View */}
                                 {isExpanded && (
-                                    <div className="px-4 pb-4 pt-1 border-t border-slate-100 bg-slate-50/50 rounded-b-2xl space-y-2">
-                                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mt-2 mb-2">Câu trả lời đã gửi:</p>
+                                    <div className="px-4 pb-4 pt-1 border-t border-slate-200 bg-slate-50/50 rounded-b-2xl space-y-2">
+                                        <p className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mt-2 mb-2">Câu trả lời đã gửi:</p>
                                         {Array.isArray(r.answers) && r.answers.length > 0 ? (
                                             r.answers.map((ans: any, aIdx: number) => {
                                                 const block = survey?.blocks?.find(b => b.id === ans.block_id || b.id === ans.question_id);
-                                                const qTitle = ans.question_title || block?.label || (block as any)?.content || (block as any)?.title || `Câu hỏi #${aIdx + 1}`;
+                                                const qTitle = ans.question_title || block?.label || (block as any)?.content || (block as any)?.title || (block as any)?.question || `Câu hỏi #${aIdx + 1}`;
                                                 const rawAnswer = ans.answer_text || (Array.isArray(ans.answer_json) ? ans.answer_json.join(', ') : (ans.answer_num != null ? String(ans.answer_num) : ''));
                                                 const answerText = formatChoiceLabel(rawAnswer, block?.options);
 
                                                 return (
-                                                    <div key={aIdx} className="bg-white p-3 rounded-xl border border-slate-200/70 shadow-2xs">
-                                                        <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 mb-1">
+                                                    <div key={aIdx} className="bg-white p-3 rounded-xl border border-slate-200">
+                                                        <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800 mb-1">
                                                             <span className="w-4 h-4 rounded bg-[var(--color-primary-light)] text-[var(--color-primary)] text-[10px] font-black flex items-center justify-center">{aIdx + 1}</span>
                                                             <span>{formatChoiceLabel(qTitle)}</span>
                                                         </div>
-                                                        <div className="text-xs text-slate-800 font-medium pl-5">
+                                                        <div className="text-xs text-slate-900 font-medium pl-5">
                                                             {answerText ? (
                                                                 <span className="bg-slate-50 px-2 py-0.5 rounded border border-slate-200 inline-block">{answerText}</span>
                                                             ) : (
-                                                                <span className="text-slate-400 italic">Không có phản hồi</span>
+                                                                <span className="text-slate-500 italic">Không có phản hồi</span>
                                                             )}
                                                         </div>
                                                     </div>
                                                 );
                                             })
                                         ) : (
-                                            <p className="text-xs text-slate-400 italic py-2">Không có chi tiết câu trả lời được lưu trong phiên này.</p>
+                                            <p className="text-xs text-slate-500 italic py-2">Không có chi tiết câu trả lời được lưu trong phiên này.</p>
                                         )}
                                     </div>
                                 )}
@@ -670,7 +673,7 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
 
             {/* Panel — full height, flush to top */}
             <div
-                className="drawer-panel fixed top-0 right-0 bottom-0 z-[2147483625] w-full lg:w-[calc(100vw-var(--sidebar-width,220px))] max-w-none bg-white flex flex-col shadow-2xl shadow-slate-900/30"
+                className="drawer-panel fixed top-0 right-0 bottom-0 z-[2147483625] w-full lg:w-[calc(100vw-var(--sidebar-width,220px))] max-w-none bg-white flex flex-col border-l border-slate-200"
                 style={{
                     zIndex: 2147483625,
                     opacity: animateIn ? 1 : 0,
@@ -686,22 +689,22 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-2 flex-wrap text-[11px] font-bold">
                                 {survey.status === 'active' ? (
-                                    <span className="px-2 py-0.5 rounded text-emerald-600 bg-emerald-50 border border-emerald-100 uppercase tracking-widest flex items-center gap-1">
+                                    <span className="px-2 py-0.5 rounded text-emerald-700 bg-emerald-50 border border-emerald-200 uppercase tracking-widest flex items-center gap-1">
                                         <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> ĐANG CHẠY
                                     </span>
                                 ) : survey.status === 'paused' ? (
-                                    <span className="px-2 py-0.5 rounded text-amber-600 bg-amber-50 border border-amber-100 uppercase tracking-widest flex items-center gap-1">
+                                    <span className="px-2 py-0.5 rounded text-amber-700 bg-amber-50 border border-amber-200 uppercase tracking-widest flex items-center gap-1">
                                         <div className="w-1.5 h-1.5 rounded-full bg-amber-500" /> TẠM DỪNG
                                     </span>
                                 ) : (
-                                    <span className="px-2 py-0.5 rounded text-slate-500 bg-slate-100 border border-slate-200 uppercase tracking-widest">BẢN NHÁP</span>
+                                    <span className="px-2 py-0.5 rounded text-slate-600 bg-slate-100 border border-slate-200 uppercase tracking-widest">BẢN NHÁP</span>
                                 )}
-                                {ov && <span className="text-slate-400 font-medium flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-slate-300" /> Tạo lúc: {new Date(survey.created_at || '').toLocaleDateString('vi-VN')}</span>}
-                                <span className="text-slate-400 font-medium flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-50 border border-slate-100">
-                                    ID: <span className="font-mono text-slate-600">{survey.id.split('-')[0]}</span>
+                                {ov && <span className="text-slate-600 font-medium flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-slate-400" /> Tạo lúc: {new Date(survey.created_at || '').toLocaleDateString('vi-VN')}</span>}
+                                <span className="text-slate-600 font-medium flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-50 border border-slate-200">
+                                    ID: <span className="font-mono text-slate-800">{survey.id.split('-')[0]}</span>
                                 </span>
                             </div>
-                            <h2 className="text-slate-800 font-black text-2xl leading-tight truncate mt-1">{survey.name}</h2>
+                            <h2 className="text-slate-900 font-black text-2xl leading-tight truncate mt-1">{survey.name}</h2>
                         </div>
 
                         <div className="flex items-center gap-2 flex-shrink-0">
@@ -713,26 +716,26 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                                         .then(r => { if (r.success) setAnalytics(r.data); })
                                         .finally(() => setLoading(false));
                                 }}
-                                className="px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-bold flex items-center gap-1.5 transition-all"
+                                className="px-3 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold flex items-center gap-1.5 transition-all"
                             >
                                 <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Làm mới
                             </button>
-                            <button type="button" onClick={onClose} className="w-9 h-9 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 transition-all">
+                            <button type="button" onClick={onClose} className="w-9 h-9 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-600 transition-all">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
                     </div>
 
                     {/* ── TABS ─────────────────────────────────────────────────── */}
-                    <div className="flex border-b border-slate-100 mt-5 pt-1">
+                    <div className="flex border-b border-slate-200 mt-5 pt-1">
                         <button type="button" onClick={() => setTab('overview')}
-                            className={`flex items-center gap-2 py-3 px-4 text-xs font-bold border-b-2 transition-all -mb-px ${tab === 'overview' ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                            className={`flex items-center gap-2 py-3 px-4 text-xs font-bold border-b-2 transition-all -mb-px ${tab === 'overview' ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-slate-600 hover:text-slate-900'}`}
                         ><BarChart2 className="w-4 h-4" /> Báo cáo</button>
                         <button type="button" onClick={() => setTab('questions')}
-                            className={`flex items-center gap-1.5 py-3 px-4 text-xs font-bold border-b-2 transition-all -mb-px ${tab === 'questions' ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-                        ><BarChart2 className="w-4 h-4" /> Nội dung <span className="ml-0.5 bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md text-[9px]">{questions.length}</span></button>
+                            className={`flex items-center gap-1.5 py-3 px-4 text-xs font-bold border-b-2 transition-all -mb-px ${tab === 'questions' ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-slate-600 hover:text-slate-900'}`}
+                        ><BarChart2 className="w-4 h-4" /> Nội dung <span className="ml-0.5 bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded-md text-[9px]">{questions.length}</span></button>
                         <button type="button" onClick={() => setTab('respondents')}
-                            className={`flex items-center gap-1.5 py-3 px-4 text-xs font-bold border-b-2 transition-all -mb-px ${tab === 'respondents' ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                            className={`flex items-center gap-1.5 py-3 px-4 text-xs font-bold border-b-2 transition-all -mb-px ${tab === 'respondents' ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-slate-600 hover:text-slate-900'}`}
                         ><Users className="w-4 h-4" /> Đối tượng</button>
                     </div>
                 </div>
@@ -741,11 +744,11 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                 <div className="flex-1 overflow-y-auto bg-slate-50">
                     {loading ? (
                         <div className="p-6 grid grid-cols-2 gap-4">
-                            {[1, 2, 3, 4, 5, 6].map(i => <div key={i} className="h-32 bg-white rounded-2xl animate-pulse border border-slate-100" />)}
+                            {[1, 2, 3, 4, 5, 6].map(i => <div key={i} className="h-32 bg-white rounded-2xl animate-pulse border border-slate-200" />)}
                         </div>
                     ) : !ov && tab === 'overview' ? (
-                        <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3 py-20">
-                            <BarChart2 className="w-12 h-12 text-slate-200" />
+                        <div className="flex flex-col items-center justify-center h-full text-slate-600 gap-3 py-20">
+                            <BarChart2 className="w-12 h-12 text-slate-300" />
                             <p className="text-sm font-semibold">Chưa có dữ liệu phân tích</p>
                             <p className="text-xs">Khảo sát cần có ít nhất một phản hồi</p>
                         </div>
@@ -759,13 +762,13 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                                     { label: 'THỜI GIAN TB', desc: 'TRUNG BÌNH', value: formatTime(+ov.avg_time_spent_sec), icon: <Clock className="w-5 h-5 text-white" />, iconBg: 'bg-blue-500' },
                                     { label: 'TỶ LỆ DI ĐỘNG', desc: 'THIẾT BỊ DI ĐỘNG', value: (ov.mobile_count && ov.total_responses) ? `${pct(+ov.mobile_count, +ov.total_responses)}%` : '0%', icon: <Smartphone className="w-5 h-5 text-white" />, iconBg: 'bg-[var(--color-primary)]' },
                                 ].map((s, idx) => (
-                                    <div key={idx} className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-start justify-between">
+                                    <div key={idx} className="bg-white rounded-2xl p-4 border border-slate-200 flex items-start justify-between">
                                         <div>
-                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{s.label}</p>
-                                            <p className="text-3xl font-black text-slate-800 mt-1 leading-none">{s.value}</p>
-                                            <p className="text-[9px] text-slate-400 mt-2 uppercase">{s.desc}</p>
+                                            <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">{s.label}</p>
+                                            <p className="text-3xl font-black text-slate-900 mt-1 leading-none">{s.value}</p>
+                                            <p className="text-[9px] font-semibold text-slate-500 mt-2 uppercase">{s.desc}</p>
                                         </div>
-                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${s.iconBg} shadow-sm`}>
+                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${s.iconBg}`}>
                                             {s.icon}
                                         </div>
                                     </div>
@@ -774,15 +777,15 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
 
                             {/* Trend chart (Trả lời theo ngày) */}
                             {byDate.length > 0 && (
-                                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-5">Lượt trả lời theo ngày</h4>
+                                <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                                    <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest mb-5">Lượt trả lời theo ngày</h4>
                                     <div className="w-full -ml-4" style={{ height: 260 }}>
                                         <ResponsiveContainer width="100%" height={260}>
                                             <LineChart data={byDate}>
                                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                                <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={v => String(v).slice(5)} />
-                                                <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                                                <RechartsTooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                                <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} tickFormatter={v => String(v).slice(5)} />
+                                                <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                                                <RechartsTooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: 'none' }} />
                                                 <Line type="monotone" dataKey="count" name="Phản hồi" stroke={primaryColor} strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 6 }} />
                                             </LineChart>
                                         </ResponsiveContainer>
@@ -793,8 +796,8 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                             {/* Channel + Device */}
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                                 {/* Channel */}
-                                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Nguồn kênh</h4>
+                                <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                                    <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest mb-4">Nguồn kênh</h4>
                                     <div className="space-y-3">
                                         {Object.entries(CHANNEL_META).map(([k, ch]) => {
                                             const cnt = Number(ov[ch.key] ?? 0);
@@ -802,11 +805,11 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                                             return (
                                                 <div key={k}>
                                                     <div className="flex items-center justify-between text-xs mb-1.5">
-                                                        <span className="flex items-center gap-1.5 font-medium text-slate-600" style={{ color: p > 0 ? ch.color : undefined }}>
+                                                        <span className="flex items-center gap-1.5 font-medium text-slate-700" style={{ color: p > 0 ? ch.color : undefined }}>
                                                             <span style={{ color: ch.color }}>{ch.icon}</span>
                                                             {ch.label}
                                                         </span>
-                                                        <span className="font-black text-slate-700">{cnt} <span className="font-normal text-slate-400">({p}%)</span></span>
+                                                        <span className="font-black text-slate-800">{cnt} <span className="font-normal text-slate-500">({p}%)</span></span>
                                                     </div>
                                                     <Bar value={p} color={ch.color} />
                                                 </div>
@@ -816,8 +819,8 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                                 </div>
 
                                 {/* Device Donut Chart */}
-                                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Thiết bị</h4>
+                                <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                                    <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest mb-2">Thiết bị</h4>
                                     <div className="w-full flex items-center justify-center" style={{ height: 260 }}>
                                         {(() => {
                                             const DEVICE_COLORS: Record<string, string> = { 'Desktop': '#3b82f6', 'Mobile': '#BD1D2D', 'Tablet': '#8b5cf6' };
@@ -827,7 +830,7 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                                                 { name: 'Tablet', value: Number(ov.tablet_count ?? 0) }
                                             ].filter(x => x.value > 0);
                                             
-                                            if (deviceData.length === 0) return <span className="text-xs text-slate-400">Không có dữ liệu</span>;
+                                            if (deviceData.length === 0) return <span className="text-xs text-slate-500">Không có dữ liệu</span>;
 
                                             return (
                                                 <ResponsiveContainer width="100%" height={260}>
@@ -841,7 +844,7 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                                                         >
                                                             {deviceData.map(e => <Cell key={e.name} fill={DEVICE_COLORS[e.name]} />)}
                                                         </Pie>
-                                                        <RechartsTooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                                        <RechartsTooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: 'none' }} />
                                                         <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
                                                     </PieChart>
                                                 </ResponsiveContainer>
@@ -853,17 +856,17 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                             
                             {/* Country Bar Chart */}
                             {ov.countries && ov.countries.length > 0 && (
-                                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-5 flex items-center gap-1">
+                                <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                                    <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest mb-5 flex items-center gap-1">
                                         <MapPin className="w-3.5 h-3.5" /> Vị trí (Quốc gia)
                                     </h4>
                                     <div className="w-full -ml-4" style={{ height: 260 }}>
                                         <ResponsiveContainer width="100%" height={260}>
                                             <BarChart data={ov.countries}>
                                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                                <XAxis dataKey="country" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                                                <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                                                <RechartsTooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                                <XAxis dataKey="country" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                                                <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                                                <RechartsTooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: 'none' }} />
                                                 <RechartsBar dataKey="count" name="Lượt phản hồi" fill="#14b8a6" radius={[4, 4, 0, 0]} />
                                             </BarChart>
                                         </ResponsiveContainer>
@@ -873,8 +876,8 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
 
                             {/* NPS global if applicable */}
                             {ov.nps_score !== undefined && (
-                                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">NPS tổng thể</h4>
+                                <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                                    <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest mb-4">NPS tổng thể</h4>
                                     <NpsGauge
                                         score={ov.nps_score}
                                         promoters={ov.promoters ?? 0}
@@ -886,9 +889,9 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
 
                             {/* Quick question summary (first 2 questions) */}
                             {questions.length > 0 && (
-                                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                                <div className="bg-white rounded-2xl border border-slate-200 p-5">
                                     <div className="flex items-center justify-between mb-4">
-                                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Nổi bật từng câu</h4>
+                                        <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest">Nổi bật từng câu</h4>
                                         <button type="button" onClick={() => setTab('questions')} className="text-xs font-bold text-[var(--color-primary)] hover:opacity-80 flex items-center gap-1">
                                             Xem tất cả <ChevronRight className="w-3 h-3" />
                                         </button>

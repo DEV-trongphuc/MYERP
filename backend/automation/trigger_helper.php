@@ -22,15 +22,260 @@ function triggerFlows($pdo, $subscriberId, $triggerType, $targetValue, $workspac
     return 1;
 }
 
+if (!function_exists('getErpEventEquivalentCodes')) {
+    function getErpEventEquivalentCodes(?string $code): array
+    {
+        $c = trim((string) $code);
+        if ($c === '') {
+            return [];
+        }
+        $aliases = [
+            'deposit_paid' => ['deposit_paid', 'erp_deposit_approved'],
+            'erp_deposit_approved' => ['deposit_paid', 'erp_deposit_approved'],
+            'student_enrolled' => ['student_enrolled', 'erp_student_enrolled'],
+            'erp_student_enrolled' => ['student_enrolled', 'erp_student_enrolled'],
+            'certificate_issued' => ['certificate_issued', 'erp_certificate_issued'],
+            'erp_certificate_issued' => ['certificate_issued', 'erp_certificate_issued'],
+            'support_ticket_resolved' => ['support_ticket_resolved', 'erp_ticket_resolved'],
+            'erp_ticket_resolved' => ['support_ticket_resolved', 'erp_ticket_resolved'],
+            'lead_created' => ['lead_created', 'erp_lead_created'],
+            'erp_lead_created' => ['lead_created', 'erp_lead_created'],
+            'stage_changed' => ['stage_changed', 'erp_stage_changed'],
+            'erp_stage_changed' => ['stage_changed', 'erp_stage_changed'],
+        ];
+        return $aliases[$c] ?? [$c];
+    }
+}
+
+if (!function_exists('doesSubscriberMatchErpFilters')) {
+    function doesSubscriberMatchErpFilters($pdo, string $subscriberId, array $erpFilters, array $extraData = []): bool
+    {
+        if (empty($erpFilters)) {
+            return true;
+        }
+
+        // Check if any filter is actually active (non-empty and !== 'all')
+        $hasActiveFilter = false;
+        foreach ($erpFilters as $k => $v) {
+            if (is_array($v)) {
+                if (!empty($v)) {
+                    $hasActiveFilter = true;
+                    break;
+                }
+            } elseif ($v !== null && trim((string) $v) !== '' && trim((string) $v) !== 'all') {
+                $hasActiveFilter = true;
+                break;
+            }
+        }
+        if (!$hasActiveFilter) {
+            return true;
+        }
+
+        // Fetch subscriber + CRM contact context
+        $contactData = [];
+        try {
+            $stmtSub = $pdo->prepare("SELECT contact_id, email, phone_number, owner_id, stage_id, lead_status, program FROM subscribers WHERE id = ? LIMIT 1");
+            $stmtSub->execute([$subscriberId]);
+            $subRow = $stmtSub->fetch(PDO::FETCH_ASSOC) ?: [];
+            $contactId = (int) ($extraData['contact_id'] ?? $subRow['contact_id'] ?? 0);
+
+            if ($contactId > 0) {
+                $stmtC = $pdo->prepare("
+                    SELECT c.id, c.owner_id, c.stage_id, c.pipeline_status, c.lead_status, c.temperature,
+                           c.program, c.source, c.company_id, c.created_at, c.last_contact,
+                           u.team_id AS user_team_id
+                    FROM contacts c
+                    LEFT JOIN users u ON u.id = c.owner_id
+                    WHERE c.id = ? AND c.deleted_at IS NULL
+                    LIMIT 1
+                ");
+                $stmtC->execute([$contactId]);
+                $contactData = $stmtC->fetch(PDO::FETCH_ASSOC) ?: [];
+
+                // Latest distribution log for round_id / status
+                try {
+                    $stmtDl = $pdo->prepare("SELECT round_id, status, assigned_to FROM distribution_logs WHERE lead_id = ? ORDER BY id DESC LIMIT 1");
+                    $stmtDl->execute([$contactId]);
+                    $dlRow = $stmtDl->fetch(PDO::FETCH_ASSOC);
+                    if ($dlRow) {
+                        $contactData['dist_round_id'] = $dlRow['round_id'] ?? null;
+                        $contactData['dist_status'] = $dlRow['status'] ?? null;
+                    }
+                } catch (\Throwable $eDl) {}
+            } else {
+                $contactData = [
+                    'owner_id' => $subRow['owner_id'] ?? null,
+                    'stage_id' => $subRow['stage_id'] ?? null,
+                    'lead_status' => $subRow['lead_status'] ?? null,
+                    'program' => $subRow['program'] ?? null,
+                ];
+            }
+        } catch (\Throwable $e) {
+            error_log('[doesSubscriberMatchErpFilters] Context lookup warning: ' . $e->getMessage());
+        }
+
+        $actualOwnerId = (string) ($extraData['owner_id'] ?? $contactData['owner_id'] ?? '');
+        $actualTeamId = (string) ($extraData['team_id'] ?? $extraData['round_id'] ?? $contactData['user_team_id'] ?? $contactData['dist_round_id'] ?? '');
+        $actualRoundId = (string) ($extraData['round_id'] ?? $extraData['team_id'] ?? $contactData['dist_round_id'] ?? $contactData['user_team_id'] ?? '');
+        $actualStageId = (string) ($extraData['to_stage_id'] ?? $extraData['stage_id'] ?? $contactData['stage_id'] ?? '');
+        $actualFromStageId = (string) ($extraData['from_stage_id'] ?? '');
+        $actualTemp = strtolower(trim((string) ($extraData['temperature'] ?? $contactData['temperature'] ?? $contactData['lead_status'] ?? '')));
+        $actualProgram = trim((string) ($extraData['program'] ?? $contactData['program'] ?? ''));
+        $actualBranchId = (string) ($extraData['branch_id'] ?? $contactData['company_id'] ?? '');
+        $actualSource = trim((string) ($extraData['source'] ?? $contactData['source'] ?? ''));
+        $actualDistStatus = strtolower(trim((string) ($extraData['distribution_status'] ?? $contactData['dist_status'] ?? '')));
+        $actualAssignType = strtolower(trim((string) ($extraData['assignment_type'] ?? '')));
+
+        // 1. round_id filter
+        if (!empty($erpFilters['round_id']) && $erpFilters['round_id'] !== 'all') {
+            $targetRound = (string) $erpFilters['round_id'];
+            if ($actualRoundId !== $targetRound && $actualTeamId !== $targetRound) {
+                return false;
+            }
+        }
+
+        // 2. team_id filter
+        if (!empty($erpFilters['team_id']) && $erpFilters['team_id'] !== 'all') {
+            $targetTeam = (string) $erpFilters['team_id'];
+            if ($actualTeamId !== $targetTeam && $actualRoundId !== $targetTeam) {
+                return false;
+            }
+        }
+
+        // 3. owner_ids (multi) or owner_id (single)
+        if (!empty($erpFilters['owner_ids']) && is_array($erpFilters['owner_ids'])) {
+            $allowedOwners = array_map('strval', array_filter($erpFilters['owner_ids'], fn($v) => $v !== '' && $v !== 'all'));
+            if (!empty($allowedOwners) && !in_array($actualOwnerId, $allowedOwners, true)) {
+                return false;
+            }
+        } elseif (!empty($erpFilters['owner_id']) && $erpFilters['owner_id'] !== 'all') {
+            if ($actualOwnerId !== (string) $erpFilters['owner_id']) {
+                return false;
+            }
+        }
+
+        // 4. stage_id / to_stage_id / from_stage_id
+        if (!empty($erpFilters['stage_id']) && $erpFilters['stage_id'] !== 'all') {
+            if ($actualStageId !== (string) $erpFilters['stage_id']) {
+                return false;
+            }
+        }
+        if (!empty($erpFilters['to_stage_id']) && $erpFilters['to_stage_id'] !== 'all') {
+            if ($actualStageId !== (string) $erpFilters['to_stage_id']) {
+                return false;
+            }
+        }
+        if (!empty($erpFilters['from_stage_id']) && $erpFilters['from_stage_id'] !== 'all' && $actualFromStageId !== '') {
+            if ($actualFromStageId !== (string) $erpFilters['from_stage_id']) {
+                return false;
+            }
+        }
+
+        // 5. temperature
+        if (!empty($erpFilters['temperature']) && $erpFilters['temperature'] !== 'all') {
+            if ($actualTemp !== strtolower(trim((string) $erpFilters['temperature']))) {
+                return false;
+            }
+        }
+
+        // 6. program
+        if (!empty($erpFilters['program']) && $erpFilters['program'] !== 'all') {
+            $targetProg = mb_strtolower(trim((string) $erpFilters['program']), 'UTF-8');
+            $actProgLower = mb_strtolower($actualProgram, 'UTF-8');
+            if ($actProgLower === '' || ($actProgLower !== $targetProg && mb_stripos($actProgLower, $targetProg, 0, 'UTF-8') === false)) {
+                return false;
+            }
+        }
+
+        // 7. branch_id
+        if (!empty($erpFilters['branch_id']) && $erpFilters['branch_id'] !== 'all') {
+            if ($actualBranchId !== '' && $actualBranchId !== (string) $erpFilters['branch_id']) {
+                return false;
+            }
+        }
+
+        // 8. source
+        if (!empty($erpFilters['source']) && $erpFilters['source'] !== 'all') {
+            $targetSrc = mb_strtolower(trim((string) $erpFilters['source']), 'UTF-8');
+            $actSrcLower = mb_strtolower($actualSource, 'UTF-8');
+            if ($actSrcLower === '' || ($actSrcLower !== $targetSrc && mb_stripos($actSrcLower, $targetSrc, 0, 'UTF-8') === false)) {
+                return false;
+            }
+        }
+
+        // 9. distribution_status
+        if (!empty($erpFilters['distribution_status']) && $erpFilters['distribution_status'] !== 'all') {
+            $targetDistSt = strtolower(trim((string) $erpFilters['distribution_status']));
+            if ($actualDistStatus !== '' && $actualDistStatus !== $targetDistSt) {
+                return false;
+            }
+        }
+
+        // 10. assignment_type
+        if (!empty($erpFilters['assignment_type']) && $erpFilters['assignment_type'] !== 'all') {
+            $targetAssType = strtolower(trim((string) $erpFilters['assignment_type']));
+            if ($actualAssignType !== '' && $actualAssignType !== $targetAssType) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}
+
+if (!function_exists('processSubscriberTrigger')) {
+    function processSubscriberTrigger($pdo, $subscriberId, $triggerType, $targetValue = null, $workspaceId = null, array $extraData = [])
+    {
+        if (empty($subscriberId)) {
+            return 0;
+        }
+
+        $myerpEvents = [
+            'round_distributed', 'lead_assigned', 'lead_held_queue', 'lead_created',
+            'stage_changed', 'temperature_changed', 'sla_uncontacted',
+            'deposit_created', 'deposit_paid', 'tuition_paid',
+            'student_enrolled', 'student_attendance_warning', 'certificate_issued',
+            'support_ticket_resolved', 'lead_stale_14d',
+            'erp_deposit_approved', 'erp_student_enrolled', 'erp_certificate_issued',
+            'erp_ticket_resolved', 'erp_lead_created', 'erp_stage_changed'
+        ];
+
+        $effectiveTriggerType = $triggerType;
+        $effectiveTarget = $targetValue;
+        if (in_array($triggerType, $myerpEvents, true) && ($targetValue === null || $targetValue === '')) {
+            $effectiveTriggerType = 'erp_event';
+            $effectiveTarget = $triggerType;
+        }
+
+        $enrolled = enrollSubscribersBulk($pdo, [$subscriberId], $effectiveTriggerType, $effectiveTarget, $workspaceId, null, $extraData);
+        wakeupWaitingSubscribers($pdo, $subscriberId, $workspaceId);
+        return $enrolled;
+    }
+}
+
 /**
  * HIGH PERFORMANCE BULK ENROLLMENT
  * Replaces individual CURL triggers with set-based SQL and single worker trigger.
  * [SECURITY FIX] Added optional $workspaceId to ensure flows are scoped to the correct tenant.
  */
-function enrollSubscribersBulk($pdo, array $subscriberIds, $triggerType, $targetValue = null, $workspaceId = null, $specificFlowId = null)
+function enrollSubscribersBulk($pdo, array $subscriberIds, $triggerType, $targetValue = null, $workspaceId = null, $specificFlowId = null, array $extraData = [])
 {
     if (empty($subscriberIds))
         return 0;
+
+    $myerpEvents = [
+        'round_distributed', 'lead_assigned', 'lead_held_queue', 'lead_created',
+        'stage_changed', 'temperature_changed', 'sla_uncontacted',
+        'deposit_created', 'deposit_paid', 'tuition_paid',
+        'student_enrolled', 'student_attendance_warning', 'certificate_issued',
+        'support_ticket_resolved', 'lead_stale_14d',
+        'erp_deposit_approved', 'erp_student_enrolled', 'erp_certificate_issued',
+        'erp_ticket_resolved', 'erp_lead_created', 'erp_stage_changed'
+    ];
+    if (in_array($triggerType, $myerpEvents, true) && ($targetValue === null || $targetValue === '')) {
+        $targetValue = $triggerType;
+        $triggerType = 'erp_event';
+    }
 
     // [AUTO-DETECT WORKSPACE] If not provided, fetch from the first subscriber
     if ($workspaceId === null) {
@@ -45,8 +290,8 @@ function enrollSubscribersBulk($pdo, array $subscriberIds, $triggerType, $target
 
     // 1. Find matching flows using the optimized trigger_type column
     // [FIX] Added workspace_id scoping + optional specificFlowId to prevent cross-enrolling into unrelated date/segment flows
-    $sqlFlows = "SELECT id, workspace_id, name, steps, config FROM flows WHERE workspace_id = ? AND status = 'active' AND (trigger_type = ? OR trigger_type = 'erp_event' OR trigger_type = 'custom_event' OR trigger_type = 'segment' OR trigger_type = 'list' OR trigger_type IS NULL)";
-    $flowParams = [$workspaceId, $triggerType];
+    $sqlFlows = "SELECT id, workspace_id, name, steps, config FROM flows WHERE workspace_id = ? AND status = 'active' AND (trigger_type = ? OR trigger_type = ? OR trigger_type = 'erp_event' OR trigger_type = 'custom_event' OR trigger_type = 'segment' OR trigger_type = 'list' OR trigger_type IS NULL)";
+    $flowParams = [$workspaceId, $triggerType, (string) $targetValue];
     if ($specificFlowId !== null && $specificFlowId !== '') {
         $sqlFlows .= " AND id = ?";
         $flowParams[] = $specificFlowId;
@@ -76,20 +321,29 @@ function enrollSubscribersBulk($pdo, array $subscriberIds, $triggerType, $target
         $tConfig = $trigger['config'] ?? [];
         $flowTriggerType = $tConfig['type'] ?? 'segment';
         $flowTargetSubtype = $tConfig['targetSubtype'] ?? ''; 
-        $flowTargetId = $tConfig['targetId'] ?? '';
+        $flowTargetId = $tConfig['targetId'] ?? ($tConfig['event_name'] ?? '');
 
         // Match "list" or "added_to_list" trigger against flows that are "list" or "segment" with list/sync subtype
         $isMatch = false;
         if ($flowTriggerType === $triggerType) {
             $isMatch = true;
-        } elseif (in_array($triggerType, ['erp_event', 'custom_event'], true) && in_array($flowTriggerType, ['erp_event', 'custom_event'], true)) {
+        } elseif (in_array($triggerType, ['erp_event', 'custom_event'], true) && (in_array($flowTriggerType, ['erp_event', 'custom_event'], true) || in_array($flowTriggerType, $myerpEvents, true))) {
             $isMatch = true;
+            if ($flowTargetId === '' && in_array($flowTriggerType, $myerpEvents, true)) {
+                $flowTargetId = $flowTriggerType;
+            }
         } elseif (($triggerType === 'list' || $triggerType === 'added_to_list') && ($flowTriggerType === 'list' || ($flowTriggerType === 'segment' && in_array($flowTargetSubtype, ['list', 'sync'], true)))) {
             $isMatch = true;
         }
 
-        // Target Matching Logic
-        $targetMatched = ($flowTargetId == $targetValue || empty($flowTargetId) || $flowTargetId === 'all');
+        // Target Matching Logic (with MYERP event alias equivalence)
+        $equivTargets = getErpEventEquivalentCodes((string) $targetValue);
+        $targetMatched = (
+            $flowTargetId == $targetValue
+            || in_array((string) $flowTargetId, $equivTargets, true)
+            || empty($flowTargetId)
+            || $flowTargetId === 'all'
+        );
 
         // SPECIAL CASE: Inbound Message Keyword Logic
         if ($isMatch && $triggerType === 'inbound_message' && !empty($flowTargetId) && $flowTargetId !== 'all') {
@@ -106,6 +360,17 @@ function enrollSubscribersBulk($pdo, array $subscriberIds, $triggerType, $target
         }
 
         if ($isMatch && $targetMatched) {
+            // Evaluate MYERP Sub-Filters (erpFilters) if configured on the trigger step
+            $erpFilters = isset($tConfig['erpFilters']) && is_array($tConfig['erpFilters']) ? $tConfig['erpFilters'] : [];
+            $filteredSubscriberIds = $subscriberIds;
+            if (!empty($erpFilters)) {
+                $filteredSubscriberIds = array_values(array_filter($subscriberIds, function ($sid) use ($pdo, $erpFilters, $extraData) {
+                    return doesSubscriberMatchErpFilters($pdo, (string) $sid, $erpFilters, $extraData);
+                }));
+                if (empty($filteredSubscriberIds)) {
+                    continue;
+                }
+            }
             // [P2 FIX] Block triggers if the target tag is inactive
             if (($triggerType === 'tag' || $flowTriggerType === 'tag') && !empty($flowTargetId) && $flowTargetId !== 'all') {
                 // [PERF] Local cache for tag status to avoid N+1 in high-volume triggers
@@ -215,7 +480,7 @@ function enrollSubscribersBulk($pdo, array $subscriberIds, $triggerType, $target
                 }
             }
 
-            $enrollLockKey = count($subscriberIds) === 1 ? 'enroll_' . $flow['id'] . '_' . md5($subscriberIds[0]) : 'enroll_flow_' . $flow['id'];
+            $enrollLockKey = count($filteredSubscriberIds) === 1 ? 'enroll_' . $flow['id'] . '_' . md5($filteredSubscriberIds[0]) : 'enroll_flow_' . $flow['id'];
             $lockAcquired = false;
             try {
                 $stmtLock = $pdo->prepare('SELECT GET_LOCK(?, 3)');
@@ -230,7 +495,7 @@ function enrollSubscribersBulk($pdo, array $subscriberIds, $triggerType, $target
             }
 
             $ENROLL_CHUNK = 500;
-            foreach (array_chunk($subscriberIds, $ENROLL_CHUNK) as $chunk) {
+            foreach (array_chunk($filteredSubscriberIds, $ENROLL_CHUNK) as $chunk) {
                 $placeholders = implode(',', array_fill(0, count($chunk), '?'));
 
                 $sqlIns = "INSERT INTO subscriber_flow_states (workspace_id, subscriber_id, contact_id, flow_id, step_id, step_type, scheduled_at, status, created_at, updated_at, last_step_at)
@@ -650,7 +915,8 @@ if (!class_exists('DomationEventDispatcher')) {
                     return;
                 }
 
-                enrollSubscribersBulk($pdo, [$subscriberId], 'erp_event', $eventCode, $workspaceId);
+                $extraMeta = array_merge(['contact_id' => $contactId], $meta);
+                enrollSubscribersBulk($pdo, [$subscriberId], 'erp_event', $eventCode, $workspaceId, null, $extraMeta);
                 wakeupWaitingSubscribers($pdo, $subscriberId, $workspaceId);
                 checkDynamicTriggers($pdo, $subscriberId);
             } catch (\Throwable $e) {

@@ -293,6 +293,9 @@ const AppTabs = () => {
         if (path.startsWith('/marketing/surveys/') && path.endsWith('/edit')) {
           return <div className="mkt-scope" key={path}><SurveysQuizPage /></div>;
         }
+        if (path.startsWith('/ai-space/') || path.startsWith('/chat/') || path.startsWith('/marketing/ai-space/')) {
+          return <div className="mkt-scope" key={path}><AITrainingMarketingPage /></div>;
+        }
         return <SalePortal embedMode={true} activeTabProp="workspace" key="workspace" />;
     }
   };

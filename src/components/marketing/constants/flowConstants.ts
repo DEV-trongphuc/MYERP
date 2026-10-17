@@ -208,8 +208,35 @@ export const ADVANCED_CONDITION_FIELD_GROUPS: ConditionFieldGroup[] = [
     },
     {
         id: 'crm_pipeline',
-        label: 'Pipeline & Nghiệp vụ MYERP CRM',
+        label: 'Pipeline, Vòng chia & Nghiệp vụ MYERP CRM',
         fields: [
+            {
+                value: 'crm_team_id',
+                label: 'Vòng chia / Nhóm Sale (Team)',
+                type: 'select',
+                group: 'crm_pipeline',
+                placeholder: 'Chọn Vòng chia / Team Sale...'
+            },
+            {
+                value: 'crm_owner_id',
+                label: 'Tư vấn viên phụ trách (Sale Owner)',
+                type: 'owner',
+                group: 'crm_pipeline',
+                placeholder: 'Chọn hoặc nhập ID / Tên Sale...'
+            },
+            {
+                value: 'crm_sale_contacted',
+                label: 'Sale đã liên hệ (Gọi / Ghi chú / CSKH)',
+                type: 'boolean',
+                group: 'crm_pipeline'
+            },
+            {
+                value: 'crm_hours_uncontacted',
+                label: 'Số giờ chưa được Sale liên hệ',
+                type: 'number',
+                group: 'crm_pipeline',
+                placeholder: 'VD: 2 (giờ)'
+            },
             {
                 value: 'crm_stage_id',
                 label: 'Giai đoạn Pipeline CRM',
@@ -219,7 +246,7 @@ export const ADVANCED_CONDITION_FIELD_GROUPS: ConditionFieldGroup[] = [
             },
             {
                 value: 'crm_lead_status',
-                label: 'Trạng thái Lead (CRM)',
+                label: 'Trạng thái Lead (Active / Nurture / Lost)',
                 type: 'select',
                 group: 'crm_pipeline',
                 options: [
@@ -230,7 +257,7 @@ export const ADVANCED_CONDITION_FIELD_GROUPS: ConditionFieldGroup[] = [
             },
             {
                 value: 'crm_temperature',
-                label: 'Độ nóng Lead (Temperature)',
+                label: 'Nhiệt độ Lead (Hot / Warm / Cold)',
                 type: 'select',
                 group: 'crm_pipeline',
                 options: [
@@ -247,15 +274,15 @@ export const ADVANCED_CONDITION_FIELD_GROUPS: ConditionFieldGroup[] = [
                 placeholder: 'VD: Du học Úc, IELTS, Định cư...'
             },
             {
-                value: 'crm_owner_id',
-                label: 'Tư vấn viên phụ trách (Sale Owner)',
-                type: 'owner',
+                value: 'crm_branch_id',
+                label: 'Chi nhánh / Cơ sở (Branch)',
+                type: 'select',
                 group: 'crm_pipeline',
-                placeholder: 'Chọn hoặc nhập ID / Tên Sale...'
+                placeholder: 'Chọn Chi nhánh...'
             },
             {
                 value: 'crm_deposit_status',
-                label: 'Trạng thái Đặt cọc',
+                label: 'Trạng thái Đặt cọc (Approved / Pending / None)',
                 type: 'select',
                 group: 'crm_pipeline',
                 options: [
@@ -266,7 +293,7 @@ export const ADVANCED_CONDITION_FIELD_GROUPS: ConditionFieldGroup[] = [
             },
             {
                 value: 'crm_deposit_amount',
-                label: 'Tổng tiền đặt cọc (VNĐ)',
+                label: 'Số tiền Đặt cọc (VNĐ)',
                 type: 'number',
                 group: 'crm_pipeline',
                 placeholder: 'VD: 10000000'
@@ -393,11 +420,15 @@ export const ADVANCED_CONDITION_FIELD_GROUPS: ConditionFieldGroup[] = [
         label: 'Hành vi & Tương tác Đa kênh',
         fields: [
             {
-                value: 'lastActivityDays',
-                label: 'Số ngày không tương tác (Ngủ đông)',
-                type: 'number',
+                value: 'channel_available',
+                label: 'Kênh liên lạc khả dụng',
+                type: 'select',
                 group: 'behavior',
-                placeholder: 'VD: 30 (ngày)'
+                options: [
+                    { value: 'zalo_oa', label: 'Có Zalo OA / SĐT dùng Zalo' },
+                    { value: 'email_valid', label: 'Có Email hợp lệ' },
+                    { value: 'phone_valid', label: 'Có Số điện thoại hợp lệ' }
+                ]
             },
             {
                 value: 'lead_score',
@@ -405,6 +436,13 @@ export const ADVANCED_CONDITION_FIELD_GROUPS: ConditionFieldGroup[] = [
                 type: 'number',
                 group: 'behavior',
                 placeholder: 'VD: 50'
+            },
+            {
+                value: 'lastActivityDays',
+                label: 'Số ngày không tương tác (Ngủ đông)',
+                type: 'number',
+                group: 'behavior',
+                placeholder: 'VD: 30 (ngày)'
             },
             {
                 value: 'activity_history',
@@ -512,6 +550,21 @@ export const OPERATORS_BY_TYPE: Record<string, Array<{ value: string; label: str
 
 export const CRM_ACTION_TYPES = [
     {
+        id: 'assign_round_robin',
+        label: 'Chia Lead theo Vòng chia (Round-Robin / Ca trực)',
+        desc: 'Tự động phân bổ hồ sơ khách hàng theo vòng chia ca trực tư vấn viên.'
+    },
+    {
+        id: 'reassign_if_uncontacted',
+        label: 'Điều phối lại sang Sale khác nếu chưa liên hệ (SLA)',
+        desc: 'Tự động thu hồi từ Sale cũ chưa CSKH và chuyển sang Sale khác trong vòng chia.'
+    },
+    {
+        id: 'update_temperature',
+        label: 'Cập nhật Nhiệt độ & Trạng thái Chăm sóc (Hot / Warm / Cold)',
+        desc: 'Đổi nhanh độ nóng Lead (Hot/Warm/Cold) và trạng thái chăm sóc (Active/Nurture/Lost).'
+    },
+    {
         id: 'update_stage',
         label: 'Chuyển giai đoạn Pipeline & Cập nhật Lead',
         desc: 'Tự động đổi Stage, trạng thái chăm sóc hoặc độ nóng (Hot/Warm/Cold) của hồ sơ CRM.'
@@ -536,6 +589,14 @@ export const CRM_ACTION_TYPES = [
         label: 'Tạo Ticket Hỗ trợ / CSKH Học vụ (MYERP Ticket)',
         desc: 'Khởi tạo tự động phiếu hỗ trợ / khiếu nại trên MYERP gắn với hồ sơ khách hàng & phân công xử lý.'
     }
+] as const;
+
+export const FLOW_TEMPLATE_CATEGORIES = [
+    { id: 'all', label: 'Tất cả kịch bản' },
+    { id: 'myerp_sale', label: '🎯 Chia Lead & Vòng chia Sale' },
+    { id: 'pipeline_sla', label: '🔥 Chăm sóc Pipeline & SLA' },
+    { id: 'academic_finance', label: '🎓 Đặt cọc, Học phí & Học vụ' },
+    { id: 'omnichannel', label: '📧 Marketing Đa kênh (Email/Zalo)' }
 ] as const;
 
 export const getStepDefinition = (type: string) => {

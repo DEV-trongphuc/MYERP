@@ -48,27 +48,27 @@ const FlowTriggerSelector: React.FC<{
             <button
                 type="button"
                 onClick={() => setOpen(o => !o)}
-                className="w-full flex items-center justify-between gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-left hover:border-amber-300 transition-all"
+                className="w-full flex items-center justify-between gap-2 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-left hover:border-amber-400 transition-all"
             >
                 <span className="flex items-center gap-2 flex-1 min-w-0">
-                    <GitMerge className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
-                    <span className="truncate font-medium text-slate-700">
+                    <GitMerge className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                    <span className="truncate font-semibold text-slate-800">
                         {loading ? 'Đang tải...' : selected ? selected.name : 'Chưa chọn flow'}
                     </span>
                 </span>
-                <ChevronDown className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                <ChevronDown className="w-3 h-3 text-slate-600 flex-shrink-0" />
             </button>
             {open && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl z-50 overflow-hidden">
                     <div className="max-h-48 overflow-y-auto">
                         <button
                             onClick={() => { onChange(null); setOpen(false); }}
-                            className="w-full px-3 py-2 text-left text-xs text-slate-400 hover:bg-slate-50 transition-all"
+                            className="w-full px-3 py-2 text-left text-xs text-slate-600 hover:bg-slate-50 transition-all"
                         >
                             Không kích hoạt flow
                         </button>
                         {flows.length === 0 && !loading && (
-                            <div className="px-3 py-3 text-xs text-slate-400 text-center">
+                            <div className="px-3 py-3 text-xs text-slate-600 text-center">
                                 Chưa có flow nào có trigger “Survey Submit”
                             </div>
                         )}
@@ -77,13 +77,13 @@ const FlowTriggerSelector: React.FC<{
                                 key={f.id}
                                 onClick={() => { onChange(f.id); setOpen(false); }}
                                 className={`w-full px-3 py-2.5 text-left flex items-center gap-2 text-xs transition-all ${
-                                    f.id === value ? 'bg-amber-50 text-amber-700 font-bold' : 'text-slate-700 hover:bg-slate-50'
+                                    f.id === value ? 'bg-amber-50 text-amber-800 font-bold' : 'text-slate-800 hover:bg-slate-50'
                                 }`}
                             >
                                 <GitMerge className="w-3 h-3 flex-shrink-0" />
                                 <span className="flex-1 truncate">{f.name}</span>
                                 <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
-                                    f.status === 'active' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'
+                                    f.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
                                 }`}>{f.status}</span>
                             </button>
                         ))}
@@ -97,7 +97,7 @@ const FlowTriggerSelector: React.FC<{
 // ─── Shared micro-components ─────────────────────────────────────────────────
 
 const Label: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.12em] mb-1.5">{children}</label>
+    <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-[0.12em] mb-1.5">{children}</label>
 );
 
 const FieldInput: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = (props) => {
@@ -139,7 +139,7 @@ const FieldInput: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = (props
                 }
                 if (props.onBlur) props.onBlur(e);
             }}
-            className={`w-full px-3 py-2 text-xs bg-white border border-slate-200 hover:border-slate-300 rounded-xl focus:outline-none focus:border-[var(--color-primary)] focus:ring-[3px] focus:ring-[var(--color-primary)]/20 transition-all shadow-sm ${props.className ?? ''}`} 
+            className={`w-full px-3 py-2 text-xs text-slate-900 bg-white border border-slate-300 hover:border-slate-400 rounded-xl focus:outline-none focus:border-[var(--color-primary)] focus:ring-[3px] focus:ring-[var(--color-primary)]/15 transition-all placeholder:text-slate-500 ${props.className ?? ''}`} 
         />
     );
 };
@@ -182,7 +182,7 @@ const FieldTextarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement>>
                 }
                 if (props.onBlur) props.onBlur(e);
             }}
-            className={`w-full px-3 py-2.5 text-xs bg-white border border-slate-200 hover:border-slate-300 rounded-xl focus:outline-none focus:border-[var(--color-primary)] focus:ring-[3px] focus:ring-[var(--color-primary)]/20 transition-all shadow-sm resize-none ${props.className ?? ''}`} 
+            className={`w-full px-3 py-2.5 text-xs text-slate-900 bg-white border border-slate-300 hover:border-slate-400 rounded-xl focus:outline-none focus:border-[var(--color-primary)] focus:ring-[3px] focus:ring-[var(--color-primary)]/15 transition-all resize-none placeholder:text-slate-500 ${props.className ?? ''}`} 
         />
     );
 };
@@ -210,9 +210,9 @@ const FieldSelect: React.FC<React.SelectHTMLAttributes<HTMLSelectElement>> = (pr
 
 const Toggle: React.FC<{ value: boolean; onChange: () => void; label: string }> = ({ value, onChange, label }) => (
     <div className="flex items-center justify-between py-0.5">
-        <span className="text-xs font-medium text-slate-600">{label}</span>
-        <button onClick={onChange} className={`relative w-9 h-5 rounded-full transition-colors ${value ? 'bg-[var(--color-primary)]' : 'bg-slate-200'}`}>
-            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${value ? 'left-4' : 'left-0.5'}`} />
+        <span className="text-xs font-semibold text-slate-700">{label}</span>
+        <button onClick={onChange} className={`relative w-9 h-5 rounded-full transition-colors ${value ? 'bg-[var(--color-primary)]' : 'bg-slate-300'}`}>
+            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${value ? 'left-4' : 'left-0.5'}`} />
         </button>
     </div>
 );
@@ -223,7 +223,7 @@ const AlignButtons: React.FC<{ value?: string; onChange: (v: 'left' | 'center' |
             const Icon = a === 'left' ? AlignLeft : a === 'center' ? AlignCenter : AlignRight;
             return (
                 <button key={a} onClick={() => onChange(a)}
-                    className={`flex-1 py-1.5 rounded-lg flex items-center justify-center transition-all ${value === a ? 'bg-[var(--color-primary)] text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                    className={`flex-1 py-1.5 rounded-lg flex items-center justify-center transition-all ${value === a ? 'bg-[var(--color-primary)] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                 >
                     <Icon className="w-3.5 h-3.5" />
                 </button>
@@ -240,7 +240,7 @@ const ColorRow: React.FC<{ label: string; value: string; onChange: (v: string) =
             <div className="flex items-center gap-2">
                 <label className="relative flex-shrink-0 cursor-pointer">
                     <div
-                        className="w-8 h-8 rounded-full border-2 border-white shadow-md ring-1 ring-slate-200 transition-transform hover:scale-110"
+                        className="w-8 h-8 rounded-full border-2 border-white ring-1 ring-slate-300 transition-transform hover:scale-110"
                         style={{ background: value }}
                     />
                     <input type="color" value={isHex ? value : '#ffffff'} onChange={e => onChange(e.target.value)}
@@ -268,11 +268,11 @@ const ShadowRow: React.FC<{ label: string; value: string; onChange: (v: string) 
                 <Select 
                     size="sm"
                     variant="outline"
-                    value={presets.find(p => p.value === value) ? value : 'custom'} 
+                    value={presets.find(p => p.value === (value || 'none')) ? (value || 'none') : 'custom'} 
                     onChange={v => { if (v !== 'custom') onChange(v); }}
                     options={[
                         ...presets,
-                        ...(!presets.find(p => p.value === value) && value ? [{ value: 'custom', label: 'Tùy chỉnh CSS...' }] : [])
+                        ...(!presets.find(p => p.value === (value || 'none')) && value ? [{ value: 'custom', label: 'Tùy chỉnh CSS...' }] : [])
                     ]}
                     className="!bg-white"
                 />
@@ -284,9 +284,9 @@ const ShadowRow: React.FC<{ label: string; value: string; onChange: (v: string) 
 
 const SectionDivider: React.FC<{ label: string }> = ({ label }) => (
     <div className="flex items-center gap-2 pt-1">
-        <div className="flex-1 h-px bg-slate-100" />
-        <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">{label}</span>
-        <div className="flex-1 h-px bg-slate-100" />
+        <div className="flex-1 h-px bg-slate-200" />
+        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{label}</span>
+        <div className="flex-1 h-px bg-slate-200" />
     </div>
 );
 
@@ -337,7 +337,7 @@ const ImageUploader: React.FC<{
                     <button key={t.key}
                         onClick={() => setTab(t.key)}
                         className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all ${
-                            tab === t.key ? 'bg-[var(--color-primary)] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                            tab === t.key ? 'bg-[var(--color-primary)] text-white' : 'text-slate-600 hover:text-slate-900'
                         }`}
                     >{t.label}</button>
                 ))}
@@ -497,12 +497,12 @@ const ThankYouDesigner: React.FC<{
     return (
         <div className="space-y-3 relative">
             {deletingIndex !== null && (
-                <div className="absolute top-0 inset-x-0 z-50 bg-white/95 backdrop-blur-sm border border-slate-200 p-4 rounded-xl shadow-lg border-l-4 border-l-red-500 animate-in fade-in zoom-in-95">
-                    <h3 className="font-bold text-slate-800 text-sm mb-1">Xoá trang kết thúc này?</h3>
-                    <p className="text-[10px] text-slate-500 mb-3 leading-relaxed">Người xem đang nhảy đến trang này sẽ bị trả về màn hình cảm ơn mặc định.</p>
+                <div className="absolute top-0 inset-x-0 z-50 bg-white/95 backdrop-blur-sm border border-slate-200 p-4 rounded-xl border-l-4 border-l-red-500 animate-in fade-in zoom-in-95">
+                    <h3 className="font-bold text-slate-900 text-sm mb-1">Xoá trang kết thúc này?</h3>
+                    <p className="text-[10px] text-slate-600 mb-3 leading-relaxed">Người xem đang nhảy đến trang này sẽ bị trả về màn hình cảm ơn mặc định.</p>
                     <div className="flex gap-2">
-                        <button onClick={() => setDeletingIndex(null)} className="flex-1 py-1.5 bg-slate-100 font-semibold text-slate-600 rounded-lg text-xs hover:bg-slate-200">Huỷ bỏ</button>
-                        <button onClick={() => { deleteExtraPage(deletingIndex); setDeletingIndex(null); }} className="flex-1 py-1.5 bg-red-500 font-semibold text-white rounded-lg text-xs hover:bg-red-600 shadow-sm">Xác nhận xoá</button>
+                        <button onClick={() => setDeletingIndex(null)} className="flex-1 py-1.5 bg-slate-100 font-semibold text-slate-700 rounded-lg text-xs hover:bg-slate-200">Huỷ bỏ</button>
+                        <button onClick={() => { deleteExtraPage(deletingIndex); setDeletingIndex(null); }} className="flex-1 py-1.5 bg-red-600 font-semibold text-white rounded-lg text-xs hover:bg-red-700">Xác nhận xoá</button>
                     </div>
                 </div>
             )}
@@ -511,12 +511,12 @@ const ThankYouDesigner: React.FC<{
                 <button
                     onClick={() => setActiveIndex(-1)}
                     className={`px-3 py-1.5 text-[10px] font-bold rounded-lg transition-all ${
-                        activeIndex === -1 ? 'bg-[var(--color-primary)] text-white shadow-sm' : 'text-slate-500 hover:bg-slate-200'
+                        activeIndex === -1 ? 'bg-[var(--color-primary)] text-white' : 'text-slate-600 hover:bg-slate-200'
                     }`}
                 >Mặc định</button>
                 {extraPages.map((p, i) => (
                     <div key={p.id ?? i} className={`flex items-center rounded-lg transition-all ${
-                        activeIndex === i ? 'bg-[var(--color-primary)] text-white shadow-sm' : 'bg-transparent text-slate-500 hover:bg-slate-200'
+                        activeIndex === i ? 'bg-[var(--color-primary)] text-white' : 'bg-transparent text-slate-600 hover:bg-slate-200'
                     }`}>
                         <button
                             onClick={() => setActiveIndex(i)}
@@ -532,7 +532,7 @@ const ThankYouDesigner: React.FC<{
                         )}
                     </div>
                 ))}
-                <button onClick={addExtraPage} className="px-2 py-1.5 text-amber-600 hover:bg-amber-100 rounded-lg">
+                <button onClick={addExtraPage} className="px-2 py-1.5 text-amber-700 hover:bg-amber-100 rounded-lg">
                     <Plus className="w-3 h-3" />
                 </button>
             </div>
@@ -602,21 +602,21 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
     // Survey-level settings (nothing selected OR special blocks)
     if (!selectedBlock) {
         return (
-            <div className="w-[380px] shrink-0 bg-white border-l border-slate-100 flex flex-col overflow-hidden">
+            <div className="w-[380px] shrink-0 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
                 {/* Header */}
-                <div className="px-4 py-3 border-b border-slate-100">
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.12em] flex items-center gap-2">
-                        <Settings className="w-3.5 h-3.5" /> Cài đặt khảo sát
+                <div className="px-4 py-3 border-b border-slate-200">
+                    <h3 className="text-[11px] font-black text-slate-700 uppercase tracking-[0.12em] flex items-center gap-2">
+                        <Settings className="w-3.5 h-3.5 text-slate-600" /> Cài đặt khảo sát
                     </h3>
                 </div>
                 {/* Icon tabs */}
-                <div className="flex border-b border-slate-100">
+                <div className="flex border-b border-slate-200">
                     {TABS.map(({ key, label, icon: Icon }) => (
                         <button key={key} onClick={() => setSettingsTab(key)}
-                            className={`flex-1 py-2.5 flex flex-col items-center gap-0.5 text-[9px] font-bold transition-all ${
+                            className={`flex-1 py-2.5 flex flex-col items-center gap-0.5 text-[10px] font-bold transition-all ${
                                 settingsTab === key
-                                    ? 'text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]'
-                                    : 'text-slate-400 hover:text-slate-600'
+                                    ? 'text-[var(--color-primary)] border-b-2 border-[var(--color-primary)] bg-slate-50/60'
+                                    : 'text-slate-600 hover:text-slate-900'
                             }`}
                         >
                             <Icon className="w-3.5 h-3.5" />
@@ -632,7 +632,7 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
                             <ColorRow label="Màu nền trang" value={survey.theme?.backgroundColor || '#f8fafc'} onChange={v => onUpdateSurvey({ theme: { ...survey.theme, backgroundColor: v } })} />
                             <ColorRow label="Màu card" value={survey.theme?.cardBackground || '#ffffff'} onChange={v => onUpdateSurvey({ theme: { ...survey.theme, cardBackground: v } })} />
                             <ShadowRow label="Đổ bóng Card" value={survey.theme?.cardShadow || 'none'} onChange={v => onUpdateSurvey({ theme: { ...survey.theme, cardShadow: v } as any })} />
-                            <ColorRow label="Màu chữ" value={survey.theme?.textColor || '#1e293b'} onChange={v => onUpdateSurvey({ theme: { ...survey.theme, textColor: v } })} />
+                            <ColorRow label="Màu chữ" value={survey.theme?.textColor || '#0f172a'} onChange={v => onUpdateSurvey({ theme: { ...survey.theme, textColor: v } })} />
                             <SectionDivider label="Header / Cover" />
 
                             {/* Cover style toggle */}
@@ -644,7 +644,7 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
                                             className={`py-1.5 text-[10px] font-bold rounded-lg capitalize transition-all ${
                                                 (survey.theme?.coverStyle ?? 'minimal') === s
                                                     ? 'bg-[var(--color-primary)] text-white'
-                                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                             }`}
                                         >{lbl}</button>
                                     ))}
@@ -677,7 +677,7 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
                                             className={`py-1.5 text-[10px] font-bold rounded-lg uppercase transition-all ${
                                                 (survey.theme?.coverHeight ?? 'md') === h
                                                     ? 'bg-[var(--color-primary)] text-white'
-                                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                             }`}
                                         >{h}</button>
                                     ))}
@@ -759,7 +759,7 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
                                     onChange={() => onUpdateSurvey({ settings: { ...survey.settings, quiz: { ...survey.settings?.quiz, enabled: !survey.settings?.quiz?.enabled, scoringType: survey.settings?.quiz?.scoringType || 'immediate', allowRetry: !!survey.settings?.quiz?.allowRetry } } })}
                                     label="Bật chế độ Trắc nghiệm"
                                 />
-                                <p className="text-[9px] text-slate-400 mt-0.5 leading-relaxed pl-9">
+                                <p className="text-[10px] text-slate-600 mt-0.5 leading-relaxed pl-9">
                                     Tính điểm cho từng câu hỏi và hiển thị kết quả đúng/sai.
                                 </p>
                             </div>
@@ -776,7 +776,7 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
                                             <option value="backend">Ghi nhận (Ẩn điểm số)</option>
                                         </FieldSelect>
                                         {survey.settings?.quiz?.scoringType === 'backend' && (
-                                            <p className="text-[9px] text-slate-400 mt-1">Sử dụng trong Automation để rẽ nhánh điểm số ngầm.</p>
+                                            <p className="text-[10px] text-slate-600 mt-1">Sử dụng trong Automation để rẽ nhánh điểm số ngầm.</p>
                                         )}
                                     </div>
                                     
@@ -805,7 +805,7 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
                                     onChange={() => onUpdateSurvey({ settings: { ...survey.settings, allow_anonymous: !(survey.settings as any)?.allow_anonymous } } as any)}
                                     label="Cho phép ẩn danh"
                                 />
-                                <p className="text-[9px] text-slate-400 mt-0.5 leading-relaxed pl-9">
+                                <p className="text-[10px] text-slate-600 mt-0.5 leading-relaxed pl-9">
                                     Không yêu cầu email — phản hồi không liên kết với người dùng nào.
                                 </p>
                             </div>
@@ -815,31 +815,31 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
                                     onChange={() => onUpdateSurvey({ settings: { ...survey.settings, email_tracking: !(survey.settings as any)?.email_tracking } } as any)}
                                     label="Email tracking"
                                 />
-                                <p className="text-[9px] text-slate-400 mt-0.5 leading-relaxed pl-9">
-                                    Tự nhận diện người dùng qua <code className="bg-slate-100 px-1 rounded text-[9px]">?uid={'{{email}}'}</code> trong link public.
+                                <p className="text-[10px] text-slate-600 mt-0.5 leading-relaxed pl-9">
+                                    Tự nhận diện người dùng qua <code className="bg-slate-100 px-1 rounded text-[9px] text-slate-800">?uid={'{{email}}'}</code> trong link public.
                                 </p>
                             </div>
                             <SectionDivider label="Automation Flow" />
-                            <div className="bg-gradient-to-br from-amber-50 to-orange-50/30 border border-amber-200/60 rounded-2xl p-4 shadow-sm relative">
+                            <div className="bg-gradient-to-br from-amber-50 to-orange-50/30 border border-amber-200/80 rounded-2xl p-4 relative">
                                 <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
                                     <div className="absolute top-0 right-0 w-24 h-24 bg-amber-400/10 rounded-full blur-xl transform translate-x-1/2 -translate-y-1/2" />
                                 </div>
                                 <div className="flex items-center gap-2 mb-3 relative z-10">
-                                    <div className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center text-amber-500">
+                                    <div className="w-8 h-8 rounded-lg bg-white border border-amber-200/60 flex items-center justify-center text-amber-600">
                                         <Zap className="w-4 h-4" />
                                     </div>
                                     <div className="flex-1">
                                         <h4 className="text-[11px] font-black text-amber-900 tracking-tight leading-none uppercase">Kịch bản sau khảo sát</h4>
-                                        <p className="text-[9px] text-amber-700/80 mt-0.5 leading-tight">Chăm sóc khách tự động</p>
+                                        <p className="text-[9px] text-amber-800 mt-0.5 leading-tight">Chăm sóc khách tự động</p>
                                     </div>
                                     {/* Toggle */}
                                     <button
                                         onClick={() => onUpdateSurvey({ flow_trigger_id: (survey as any).flow_trigger_id ? null : 'enable_intent' } as any)}
-                                        className={`relative w-10 h-5 rounded-full transition-colors shadow-inner ${
+                                        className={`relative w-10 h-5 rounded-full transition-colors ${
                                             (survey as any).flow_trigger_id ? 'bg-[var(--color-primary)]' : 'bg-slate-300'
                                         }`}
                                     >
-                                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${
+                                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${
                                             (survey as any).flow_trigger_id ? 'left-5.5 left-[22px]' : 'left-[2px]'
                                         }`} />
                                     </button>
@@ -852,7 +852,7 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
                                             value={(survey as any).flow_trigger_id === 'enable_intent' ? null : (survey as any).flow_trigger_id}
                                             onChange={v => onUpdateSurvey({ flow_trigger_id: v } as any)}
                                         />
-                                        <p className="text-[9px] text-amber-800/70 mt-1.5 leading-relaxed font-medium">
+                                        <p className="text-[10px] text-amber-900/80 mt-1.5 leading-relaxed font-medium">
                                             Chọn kịch bản "Phản hồi Khảo sát" để gửi Email cảm ơn hoặc gắn Tag ngay khi khách nộp đơn.
                                         </p>
                                     </div>
@@ -941,10 +941,10 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
     };
 
     return (
-        <div className="w-[380px] shrink-0 bg-white border-l border-slate-100 flex flex-col overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-100">
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.12em] flex items-center gap-2">
-                    <Settings className="w-3.5 h-3.5" /> Cấu hình câu hỏi
+        <div className="w-[380px] shrink-0 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-200">
+                <h3 className="text-[11px] font-black text-slate-700 uppercase tracking-[0.12em] flex items-center gap-2">
+                    <Settings className="w-3.5 h-3.5 text-slate-600" /> Cấu hình câu hỏi
                 </h3>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -1005,7 +1005,7 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
                 {!['divider', 'page_break', 'button_block', 'link_block'].includes(block.type) && (
                     <div>
                         <Label>Câu hỏi / Tiêu đề</Label>
-                        <FieldTextarea value={block.label} onChange={e => update({ label: e.target.value })} rows={2} />
+                        <FieldTextarea value={block.label || (block as any).title || (block as any).question || ''} onChange={e => update({ label: e.target.value })} rows={2} />
                     </div>
                 )}
 

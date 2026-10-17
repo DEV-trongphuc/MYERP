@@ -122,6 +122,13 @@ try {
             ];
         }
 
+        $rawBlocks = json_decode($survey['blocks_json'] ?? '[]', true);
+        $normBlocks = normalizePublicSurveyBlocks(is_array($rawBlocks) ? $rawBlocks : []);
+        $coverStyle = json_decode($survey['cover_style'] ?? '{}', true) ?: [];
+        if (empty($coverStyle['cardShadow'])) {
+            $coverStyle['cardShadow'] = 'none';
+        }
+
         echo json_encode([
             'success' => true,
             'data' => [
@@ -129,10 +136,10 @@ try {
                 'name'         => $survey['name'],
                 'slug'         => $survey['slug'],
                 'status'       => $survey['status'],
-                'blocks'       => json_decode($survey['blocks_json'] ?? '[]'),
+                'blocks'       => $normBlocks,
                 'settings'     => json_decode($survey['settings_json'] ?? '{}'),
                 'thank_you_page' => json_decode($survey['thank_you_page'] ?? '{}'),
-                'cover_style'  => json_decode($survey['cover_style'] ?? '{}'),
+                'cover_style'  => $coverStyle,
                 'allow_anonymous' => (bool)$survey['allow_anonymous'],
                 'require_login'   => (bool)$survey['require_login'],
                 'prefill'      => $prefill,
@@ -183,7 +190,7 @@ try {
             exit;
         }
 
-        // Rate limiting by IP hash (Support Cloudflare/Proxy and prevent spoofing)
+        // High-concurrency Rate limiting by IP hash (1000/hr per IP to support 100s of concurrent respondents at events/shared Wi-Fi)
         $clientIp = '0.0.0.0';
         if (!empty($_SERVER['HTTP_CF_CONNECTING_IP'])) {
             $clientIp = $_SERVER['HTTP_CF_CONNECTING_IP'];
@@ -202,7 +209,7 @@ try {
             WHERE survey_id = ? AND ip_hash = ? AND submitted_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)
         ");
         $rateLimitStmt->execute([$survey['id'], $ipHash]);
-        if ((int)$rateLimitStmt->fetchColumn() >= 10) {
+        if ((int)$rateLimitStmt->fetchColumn() >= 1000) {
             http_response_code(429);
             echo json_encode(['success' => false, 'error' => 'RATE_LIMIT_EXCEEDED']);
             exit;
@@ -233,7 +240,6 @@ try {
             }
             if (is_scalar($data)) {
                 $str = (string)$data;
-                // Strip tags for safety while preserving characters like &, quotes, and Vietnamese diacritics
                 $str = strip_tags($str);
                 return trim($str);
             }
@@ -242,10 +248,18 @@ try {
 
         $answers = $sanitizePayload($input['answers'] ?? []);
         $submittedEmail = null;
+        $rawRespondentEmail = trim((string)($input['respondent_email'] ?? ($input['email'] ?? ($input['uid'] ?? ($_GET['email'] ?? ($_GET['uid'] ?? ''))))));
+        if ($rawRespondentEmail !== '' && strpos($rawRespondentEmail, '*') === false && filter_var($rawRespondentEmail, FILTER_VALIDATE_EMAIL)) {
+            $submittedEmail = strtolower($rawRespondentEmail);
+        }
+
         if ($survey['one_per_email']) {
             foreach ($answers as $ans) {
-                if (($ans['type'] ?? '') === 'email' && !empty($ans['answer_text'])) {
-                    $submittedEmail = strtolower(trim($ans['answer_text']));
+                if (($ans['type'] ?? '') === 'email' && !empty($ans['answer_text']) && strpos((string)$ans['answer_text'], '*') === false) {
+                    $candidateEmail = strtolower(trim((string)$ans['answer_text']));
+                    if (filter_var($candidateEmail, FILTER_VALIDATE_EMAIL)) {
+                        $submittedEmail = $candidateEmail;
+                    }
                 }
             }
             if ($submittedEmail) {
@@ -283,6 +297,7 @@ try {
             $utmMed === 'email' || 
             $utmSrc === 'mailflow' || 
             !empty($input['email']) || 
+            !empty($input['respondent_email']) ||
             !empty($_GET['email']) || 
             !empty($input['sid']) || 
             !empty($_GET['sid'])
@@ -299,23 +314,44 @@ try {
         $geoCity = $_SERVER['HTTP_CF_IPCITY'] ?? null;
 
         $subscriberId = null;
-        $submittedName = trim((string)($input['name'] ?? ($_GET['name'] ?? '')));
-        $submittedPhone = trim((string)($input['phone'] ?? ($_GET['phone'] ?? '')));
+        $submittedName = trim((string)($input['respondent_name'] ?? ($input['name'] ?? ($_GET['name'] ?? ''))));
+        $submittedPhone = trim((string)($input['respondent_phone'] ?? ($input['phone'] ?? ($_GET['phone'] ?? ''))));
+        if (strpos($submittedPhone, '*') !== false) {
+            $submittedPhone = '';
+        }
         $submittedCompany = trim((string)($input['company'] ?? ($_GET['company'] ?? '')));
+        $npsValue = null;
+
+        // Load blocks map so we can also inspect block labels/types when extracting respondent identity
+        $rawBlocks = json_decode($survey['blocks_json'] ?? '[]', true);
+        $blocks = normalizePublicSurveyBlocks(is_array($rawBlocks) ? $rawBlocks : []);
+        $blocksById = [];
+        foreach ($blocks as $blk) {
+            if (!empty($blk['id'])) {
+                $blocksById[$blk['id']] = $blk;
+            }
+        }
         
         foreach ($answers as $ans) {
-            $ansType = $ans['type'] ?? '';
+            $bId = $ans['block_id'] ?? ($ans['question_id'] ?? '');
+            $blk = $blocksById[$bId] ?? null;
+            $ansType = $ans['type'] ?? ($blk['type'] ?? '');
             $ansText = trim((string)($ans['answer_text'] ?? ''));
-            $ansLabel = mb_strtolower(trim((string)($ans['label'] ?? '')));
+            $ansLabel = mb_strtolower(trim((string)($ans['label'] ?? ($blk['label'] ?? ($blk['question'] ?? '')))));
             
-            if ($ansType === 'email' && !empty($ansText) && strpos($ansText, '*') === false) {
+            if ($ansType === 'nps' && isset($ans['answer_num']) && is_numeric($ans['answer_num'])) {
+                $npsValue = (int)$ans['answer_num'];
+            }
+            if ($ansType === 'email' && !empty($ansText) && strpos($ansText, '*') === false && filter_var($ansText, FILTER_VALIDATE_EMAIL)) {
                 $submittedEmail = strtolower($ansText);
             }
             if (($ansType === 'phone' || $ansType === 'phone_number') && !empty($ansText) && strpos($ansText, '*') === false) {
                 $submittedPhone = $ansText;
             }
             if ($ansType === 'short_text' && !empty($ansText)) {
-                if (strpos($ansLabel, 'tên') !== false || strpos($ansLabel, 'name') !== false || strpos($ansLabel, 'họ') !== false) {
+                if (empty($submittedEmail) && strpos($ansText, '*') === false && filter_var($ansText, FILTER_VALIDATE_EMAIL)) {
+                    $submittedEmail = strtolower($ansText);
+                } elseif (strpos($ansLabel, 'tên') !== false || strpos($ansLabel, 'name') !== false || strpos($ansLabel, 'họ') !== false) {
                     $submittedName = $ansText;
                 } elseif ((strpos($ansLabel, 'điện thoại') !== false || strpos($ansLabel, 'sđt') !== false || strpos($ansLabel, 'phone') !== false) && strpos($ansText, '*') === false) {
                     $submittedPhone = $ansText;
@@ -327,7 +363,7 @@ try {
 
         // Check UID or email or SID passed from query/input
         $passedSid = trim((string)($input['sid'] ?? ($input['subscriber_id'] ?? ($_GET['sid'] ?? ''))));
-        $passedUid = filter_var(trim((string)($input['uid'] ?? ($input['email'] ?? ($_GET['uid'] ?? ($_GET['email'] ?? ''))))), FILTER_VALIDATE_EMAIL);
+        $passedUid = filter_var(trim((string)($input['respondent_email'] ?? ($input['uid'] ?? ($input['email'] ?? ($_GET['uid'] ?? ($_GET['email'] ?? '')))))), FILTER_VALIDATE_EMAIL);
         if (empty($submittedEmail) && $passedUid) {
             $submittedEmail = strtolower($passedUid);
         }
@@ -371,8 +407,11 @@ try {
 
         if ($existSub) {
             $subscriberId = $existSub['id'];
-            if (empty($submittedEmail)) {
+            if (empty($submittedEmail) && !empty($existSub['email']) && strpos((string)$existSub['email'], '@no-email.domation') === false) {
                 $submittedEmail = $existSub['email'];
+            }
+            if (empty($submittedPhone) && !empty($existSub['phone_number'])) {
+                $submittedPhone = $existSub['phone_number'];
             }
             $updateFields = [];
             $updateParams = [];
@@ -382,8 +421,13 @@ try {
                 $updateFields[] = "phone_number = ?";
                 $updateParams[] = $submittedPhone;
             }
+            // Update real email if previously placeholder
+            if (!empty($submittedEmail) && (empty($existSub['email']) || strpos((string)$existSub['email'], '@no-email.domation') !== false)) {
+                $updateFields[] = "email = ?";
+                $updateParams[] = $submittedEmail;
+            }
             // Update missing name
-            if (!empty($submittedName) && (empty($existSub['first_name']) || $existSub['first_name'] === 'Guest')) {
+            if (!empty($submittedName) && (empty($existSub['first_name']) || $existSub['first_name'] === 'Guest' || $existSub['first_name'] === 'Khách khảo sát')) {
                 $updateFields[] = "first_name = ?";
                 $updateParams[] = $submittedName;
             }
@@ -395,8 +439,10 @@ try {
             
             if (!empty($updateFields)) {
                 $updateParams[] = $subscriberId;
-                $pdo->prepare("UPDATE subscribers SET " . implode(', ', $updateFields) . " WHERE id = ?")
-                    ->execute($updateParams);
+                try {
+                    $pdo->prepare("UPDATE subscribers SET " . implode(', ', $updateFields) . " WHERE id = ?")
+                        ->execute($updateParams);
+                } catch (Exception $e) {}
             }
         } elseif (!empty($submittedEmail) || !empty($submittedPhone)) {
             // [BUG-FSV-03] Support creating subscriber even when email is empty (using phone@no-email.domation)
@@ -416,14 +462,14 @@ try {
         }
 
         // [MATCH-ONLY ("3 KHÔNG")] Match subscriber with existing MYERP.contacts without creating any new contact or notification
-        if ($subscriberId && function_exists('domationSyncSubscriberMatchOnly')) {
-            domationSyncSubscriberMatchOnly($pdo, $subscriberId);
+        $contactId = null;
+        if ($subscriberId && class_exists('DomationContactMatcher')) {
+            $contactId = DomationContactMatcher::syncSubscriberMatchOnly($pdo, (string)$subscriberId);
+        } elseif ($subscriberId && function_exists('domationSyncSubscriberMatchOnly')) {
+            $contactId = domationSyncSubscriberMatchOnly($pdo, (string)$subscriberId);
         }
 
         if ($subscriberId) {
-            // Tag subscriber
-            $tagName = 'survey_responded_' . $survey['id'];
-            
             // Add to Target List if configured (explicitly set workspace_id for isolation)
             if (!empty($survey['target_list_id'])) {
                 $stmtListIns = $pdo->prepare("INSERT IGNORE INTO subscriber_lists (subscriber_id, list_id, workspace_id) VALUES (?, ?, ?)");
@@ -435,8 +481,6 @@ try {
             }
         }
 
-        // Schema migration moved to formal migration script 003_survey_hardening.sql
-
         // INSERT response
         $responseId = generateUUID();
         
@@ -446,7 +490,6 @@ try {
         // --- QUIZ ANTI-CHEAT SERVER-SIDE VALIDATION ---
         $totalScore = null;
         $maxScore = null;
-        $blocks = json_decode($survey['blocks_json'] ?? '[]', true);
         if (!empty($settingsObj['quiz']['enabled'])) {
             $totalScore = 0;
             $maxScore = 0;
@@ -513,8 +556,21 @@ try {
             $survey['workspace_id']
         ]);
 
-        if ($subscriberId && function_exists('domationSyncSubscriberMatchOnly')) {
-            domationSyncSubscriberMatchOnly($pdo, $subscriberId);
+        // Re-sync after inserting survey_responses so contact_id is propagated onto survey_responses & survey_completed_count is refreshed
+        if ($subscriberId && class_exists('DomationContactMatcher')) {
+            $syncedCid = DomationContactMatcher::syncSubscriberMatchOnly($pdo, (string)$subscriberId);
+            if ($syncedCid) {
+                $contactId = $syncedCid;
+            }
+        }
+        if (!$contactId && class_exists('DomationContactMatcher') && (!empty($submittedEmail) || !empty($submittedPhone))) {
+            $contactId = DomationContactMatcher::findExistingContactId($pdo, $submittedEmail, $submittedPhone);
+            if ($contactId) {
+                try {
+                    $pdo->prepare("UPDATE survey_responses SET contact_id = ? WHERE id = ? AND contact_id IS NULL")
+                        ->execute([$contactId, $responseId]);
+                } catch (Throwable $e) {}
+            }
         }
 
         // INSERT answer details
@@ -523,13 +579,14 @@ try {
             VALUES (?, ?, ?, ?, ?, ?, ?)
         ");
         foreach ($answers as $ans) {
-            if (empty($ans['question_id'])) continue;
+            $qId = $ans['question_id'] ?? ($ans['block_id'] ?? '');
+            if (empty($qId)) continue;
             $answerNum  = null;
             $answerJson = null;
             $answerText = $ans['answer_text'] ?? null;
-            if (isset($ans['answer_num'])) $answerNum = (float)$ans['answer_num'];
+            if (isset($ans['answer_num']) && is_numeric($ans['answer_num'])) $answerNum = (float)$ans['answer_num'];
             if (isset($ans['answer_json'])) $answerJson = json_encode($ans['answer_json'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-            $detailStmt->execute([generateUUID(), $responseId, $survey['id'], $ans['question_id'], $answerText, $answerNum, $answerJson]);
+            $detailStmt->execute([generateUUID(), $responseId, $survey['id'], $qId, $answerText, $answerNum, $answerJson]);
         }
 
         // [NEW] CUSTOM ATTRIBUTE MAPPING
@@ -544,7 +601,6 @@ try {
                     $bId = $ans['question_id'] ?? ($ans['block_id'] ?? '');
                     if (isset($mappings[$bId])) {
                         $attrName = $mappings[$bId];
-                        // Get the most appropriate value for the attribute
                         $val = $ans['answer_text'] ?? ($ans['answer_num'] ?? ($ans['answer_json'] ?? null));
                         if ($val !== null) {
                             $mappedAttrs[$attrName] = $val;
@@ -553,7 +609,6 @@ try {
                 }
 
                 if (!empty($mappedAttrs)) {
-                    // Safe JSON merge using COALESCE(NULLIF()) pattern to support empty string attributes in MariaDB
                     $pdo->prepare("UPDATE subscribers SET custom_attributes = JSON_MERGE_PATCH(COALESCE(NULLIF(custom_attributes, ''), '{}'), ?) WHERE id = ? AND workspace_id = ?")
                         ->execute([json_encode($mappedAttrs, JSON_UNESCAPED_UNICODE), $subscriberId, $survey['workspace_id']]);
                 }
@@ -566,7 +621,6 @@ try {
             $vConfig = $settingsObj['voucher_config'];
             $targetRewardItemId = $vConfig['fallback_reward_item_id'] ?? null;
             
-            // Evaluate logic conditions if provided
             if (!empty($vConfig['logic_mappings']) && is_array($vConfig['logic_mappings'])) {
                 foreach ($vConfig['logic_mappings'] as $mapping) {
                     $cond = $mapping['condition'] ?? null;
@@ -576,7 +630,6 @@ try {
                     $op = $cond['operator'] ?? 'equals';
                     $val = $cond['value'] ?? '';
                     
-                    // Find answer for this question
                     $ansMatched = null;
                     foreach ($answers as $a) {
                         $bId = $a['question_id'] ?? ($a['block_id'] ?? '');
@@ -591,13 +644,12 @@ try {
                             $targetRewardItemId = $mapping['reward_item_id'] ?? $targetRewardItemId;
                             break;
                         }
-                        continue; // No answer provided
+                        continue;
                     }
                     
                     $isMatched = false;
                     $actualValue = $ansMatched['answer_text'] ?? $ansMatched['answer_num'] ?? '';
                     
-                    // Support multi_choice (array in answer_json)
                     if (isset($ansMatched['answer_json']) && is_array($ansMatched['answer_json'])) {
                         $actualValue = implode(', ', $ansMatched['answer_json']);
                     }
@@ -610,7 +662,6 @@ try {
                     } else if ($op === 'is_empty') {
                         $isMatched = empty($actualText);
                     } else if ($op === 'equals') {
-                        // For multi_choice, check if the expected value is among the selected values
                         if (isset($ansMatched['answer_json']) && is_array($ansMatched['answer_json'])) {
                             foreach($ansMatched['answer_json'] as $item) {
                                 if (strtolower(trim((string)$item)) === $expectedText) { $isMatched = true; break; }
@@ -630,7 +681,7 @@ try {
                     
                     if ($isMatched) {
                         $targetRewardItemId = $mapping['reward_item_id'] ?? $targetRewardItemId;
-                        break; // Stop at first match
+                        break;
                     }
                 }
             }
@@ -640,21 +691,103 @@ try {
                 $claimRes = claimVoucherAtomic($pdo, $vConfig['campaign_id'], $subscriberId, $targetRewardItemId, 'survey', $survey['id'], 'survey_voucher_claimed');
                 if ($claimRes['success'] && !empty($claimRes['code'])) {
                     $claimedVoucherCode = $claimRes['code'];
-                    // Update survey response with claimed code
                     $pdo->prepare("UPDATE survey_responses SET claimed_voucher_code = ? WHERE id = ?")
                         ->execute([$claimedVoucherCode, $responseId]);
                 }
             }
         }
 
-        // Flow trigger — priority worker (same as forms.php pattern)
-        // LOG ACTIVITY
+        // LOG ACTIVITY INTO subscriber_activity & CRM 360 TIMELINE
+        $npsScoreText = $npsValue !== null ? " (NPS: {$npsValue})" : '';
+        $activityDetails = "Hoàn thành khảo sát: {$survey['name']}{$npsScoreText}";
         if ($subscriberId) {
-            logActivity($pdo, $subscriberId, 'survey_submit', $survey['id'], $survey['name'], "Submitted Survey: {$survey['name']}", null, null, [
+            $activityExtra = [
                 'source' => $sourceChannel,
                 'device' => $device,
-                'score' => $totalScore
-            ], $survey['workspace_id']);
+                'score' => $totalScore,
+                'nps_score' => $npsValue,
+                'response_id' => $responseId,
+            ];
+            logActivity($pdo, $subscriberId, 'survey_submit', $survey['id'], $survey['name'], $activityDetails, null, null, $activityExtra, $survey['workspace_id']);
+
+            // Also record 'complete_survey' with contact_id for Customer 360 Journey parity
+            try {
+                $pdo->prepare("
+                    INSERT INTO subscriber_activity
+                      (subscriber_id, contact_id, action_type, target_id, target_name, details, ip_address, user_agent, extra_data, workspace_id, created_at)
+                    VALUES (?, ?, 'complete_survey', ?, ?, ?, ?, ?, ?, ?, NOW())
+                ")->execute([
+                    $subscriberId,
+                    $contactId ?: null,
+                    (string)$survey['id'],
+                    (string)$survey['name'],
+                    $activityDetails,
+                    $clientIp,
+                    substr($ua, 0, 512),
+                    json_encode($activityExtra, JSON_UNESCAPED_UNICODE),
+                    $survey['workspace_id']
+                ]);
+            } catch (Throwable $e) {
+                try {
+                    $pdo->prepare("
+                        INSERT INTO subscriber_activity
+                          (subscriber_id, action_type, target_id, target_name, details, ip_address, user_agent, extra_data, workspace_id, created_at)
+                        VALUES (?, 'complete_survey', ?, ?, ?, ?, ?, ?, ?, NOW())
+                    ")->execute([
+                        $subscriberId,
+                        (string)$survey['id'],
+                        (string)$survey['name'],
+                        $activityDetails,
+                        $clientIp,
+                        substr($ua, 0, 512),
+                        json_encode($activityExtra, JSON_UNESCAPED_UNICODE),
+                        $survey['workspace_id']
+                    ]);
+                } catch (Throwable $e2) {}
+            }
+        }
+
+        // Log completed note into CRM activities timeline when matched with an existing CRM contact ("3 KHÔNG" compliant)
+        if ($contactId && (int)$contactId > 0) {
+            try {
+                $stmtCt = $pdo->prepare("SELECT tenant_id, owner_id FROM contacts WHERE id = ? AND deleted_at IS NULL LIMIT 1");
+                $stmtCt->execute([(int)$contactId]);
+                $ctRow = $stmtCt->fetch(PDO::FETCH_ASSOC);
+                if ($ctRow) {
+                    $summaryLines = [];
+                    foreach ($answers as $ansItem) {
+                        $bId = $ansItem['block_id'] ?? ($ansItem['question_id'] ?? '');
+                        $blk = $blocksById[$bId] ?? null;
+                        $qLbl = trim((string)($ansItem['label'] ?? ($blk['label'] ?? ($blk['question'] ?? ''))));
+                        $aVal = $ansItem['answer_text'] ?? ($ansItem['answer_num'] ?? (isset($ansItem['answer_json']) ? (is_array($ansItem['answer_json']) ? implode(', ', $ansItem['answer_json']) : (string)$ansItem['answer_json']) : ''));
+                        if ($qLbl !== '' && (string)$aVal !== '') {
+                            $summaryLines[] = "• {$qLbl}: {$aVal}";
+                        }
+                        if (count($summaryLines) >= 6) break;
+                    }
+                    $noteSubject = "Hoàn thành khảo sát: " . ($survey['name'] ?? 'Khảo sát');
+                    $noteBody = "Khách hàng đã gửi phản hồi khảo sát \"{$survey['name']}\"" . ($npsValue !== null ? " (NPS: {$npsValue}/10)" : "") . "."
+                        . (!empty($summaryLines) ? "\n" . implode("\n", $summaryLines) : "");
+                    $ctTenantId = (int)($ctRow['tenant_id'] ?? 1) ?: 1;
+                    $ctOwnerId  = !empty($ctRow['owner_id']) ? (int)$ctRow['owner_id'] : null;
+
+                    $pdo->prepare("
+                        INSERT INTO activities
+                          (tenant_id, user_id, created_by, type, subject, body, status, done_at, related_type, related_id, contact_id, progress, created_at)
+                        VALUES (?, ?, ?, 'note', ?, ?, 'done', NOW(), 'contact', ?, ?, 100, NOW())
+                    ")->execute([
+                        $ctTenantId,
+                        $ctOwnerId,
+                        $ctOwnerId,
+                        $noteSubject,
+                        $noteBody,
+                        (int)$contactId,
+                        (int)$contactId
+                    ]);
+                }
+            } catch (Throwable $e) {
+                error_log('[survey_public.php] CRM activity note non-blocking error: ' . $e->getMessage());
+            }
         }
 
         // Flow trigger — priority worker (using centralized WorkerTriggerService)
@@ -706,6 +839,7 @@ try {
         echo json_encode([
             'success'      => true,
             'response_id'  => $responseId,
+            'contact_id'   => $contactId,
             'thank_you'    => $thankYou,
             'voucher_code' => $claimedVoucherCode,
             'redirect_url' => $thankYou['redirectUrl'] ?? null,
@@ -720,6 +854,75 @@ try {
     error_log('Survey Public API Error: ' . $e->getMessage());
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'Server error']);
+}
+
+function normalizePublicSurveyBlocks(array $blocks): array {
+    $normalized = [];
+    foreach ($blocks as $idx => $b) {
+        if (!is_array($b)) continue;
+        if (empty($b['id'])) {
+            $b['id'] = generateUUID();
+        }
+        $label = $b['label'] ?? ($b['title'] ?? ($b['question'] ?? ($b['content'] ?? '')));
+        if ($label === '' || $label === 'Untitled Question') {
+            $label = !empty($b['question']) ? $b['question'] : (!empty($b['title']) ? $b['title'] : 'Câu hỏi ' . ($idx + 1));
+        }
+        $b['label'] = $label;
+        if (empty($b['title'])) {
+            $b['title'] = $label;
+        }
+
+        $type = $b['type'] ?? 'short_text';
+        if ($type === 'rating') {
+            $style = $b['options']['style'] ?? ($b['style']['style'] ?? '');
+            $scale = (int)($b['options']['scale'] ?? ($b['scale'] ?? 5));
+            if ($style === 'nps' || $scale === 10) {
+                $type = 'nps';
+                $b['minValue'] = $b['minValue'] ?? 0;
+                $b['maxValue'] = $b['maxValue'] ?? 10;
+                $b['minLabel'] = $b['minLabel'] ?? 'Rất không hài lòng';
+                $b['maxLabel'] = $b['maxLabel'] ?? 'Rất hài lòng';
+            } else {
+                $type = 'star_rating';
+                $b['minValue'] = $b['minValue'] ?? 1;
+                $b['maxValue'] = $b['maxValue'] ?? ($scale > 0 ? $scale : 5);
+                $b['ratingIcon'] = $b['ratingIcon'] ?? 'star';
+            }
+            unset($b['options']);
+        } elseif ($type === 'multiple_choice') {
+            $type = 'single_choice';
+        }
+        $b['type'] = $type;
+
+        if (isset($b['options']) && is_array($b['options'])) {
+            $rawOpts = isset($b['options']['choices']) && is_array($b['options']['choices'])
+                ? $b['options']['choices']
+                : $b['options'];
+            $cleanOpts = [];
+            foreach ($rawOpts as $optIdx => $opt) {
+                if (is_array($opt)) {
+                    $optLabel = (string)($opt['label'] ?? ($opt['value'] ?? ('Lựa chọn ' . ($optIdx + 1))));
+                    $optValue = (string)($opt['value'] ?? $optLabel);
+                    $cleanOpts[] = [
+                        'id'    => !empty($opt['id']) ? (string)$opt['id'] : ('opt-' . ($idx + 1) . '-' . ($optIdx + 1)),
+                        'label' => $optLabel,
+                        'value' => $optValue,
+                    ];
+                } elseif (is_scalar($opt)) {
+                    $strVal = (string)$opt;
+                    $cleanOpts[] = [
+                        'id'    => 'opt-' . ($idx + 1) . '-' . ($optIdx + 1),
+                        'label' => $strVal,
+                        'value' => $strVal,
+                    ];
+                }
+            }
+            $b['options'] = $cleanOpts;
+        }
+
+        $normalized[] = $b;
+    }
+    return $normalized;
 }
 
 function generateUUID(): string {

@@ -395,6 +395,35 @@ const PublicSurvey: React.FC = () => {
                 ? 'email_embed' 
                 : (['qr_code', 'widget', 'api'].includes(srcParam) ? srcParam : 'direct_link');
 
+            // Extract respondent identity from answers if not in URL params
+            let answeredEmail = '';
+            let answeredPhone = '';
+            let answeredName = '';
+            Object.values(answers).forEach((ans: any) => {
+                const b = survey.blocks.find(blk => blk.id === ans.block_id || blk.id === ans.question_id);
+                const bType = b?.type || ans.type || '';
+                const bLabel = (b?.label || (b as any)?.title || (b as any)?.question || ans.label || '').toLowerCase();
+                const txt = (ans.answer_text || '').trim();
+                if (!txt) return;
+                if (bType === 'email' && !answeredEmail) {
+                    answeredEmail = txt;
+                } else if (bType === 'phone' && !answeredPhone) {
+                    answeredPhone = txt;
+                } else if (bType === 'short_text') {
+                    if (!answeredEmail && txt.includes('@') && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(txt)) {
+                        answeredEmail = txt;
+                    } else if (!answeredPhone && (bLabel.includes('điện thoại') || bLabel.includes('sđt') || bLabel.includes('phone'))) {
+                        answeredPhone = txt;
+                    } else if (!answeredName && (bLabel.includes('tên') || bLabel.includes('name') || bLabel.includes('họ'))) {
+                        answeredName = txt;
+                    }
+                }
+            });
+
+            const finalEmail = emailParam || (survey as any)?.prefill?.email || answeredEmail || undefined;
+            const finalPhone = phoneParam || (survey as any)?.prefill?.phone || (survey as any)?.prefill?.phone_number || answeredPhone || undefined;
+            const finalName = nameParam || (survey as any)?.prefill?.name || (survey as any)?.prefill?.full_name || answeredName || undefined;
+
             const res = await fetch(`${PUBLIC_API}?slug=${slug}&action=submit`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-Session-Token': sessionToken.current, 'X-Survey-Source': effectiveChannel },
@@ -402,10 +431,13 @@ const PublicSurvey: React.FC = () => {
                     session_token: sessionToken.current,
                     answers: Object.values(answers),
                     sid: sid || (survey as any)?.prefill?.subscriber_id,
-                    uid: uid || emailParam || (survey as any)?.prefill?.email,
-                    email: emailParam || (survey as any)?.prefill?.email,
-                    name: nameParam || (survey as any)?.prefill?.name || (survey as any)?.prefill?.full_name,
-                    phone: phoneParam || (survey as any)?.prefill?.phone || (survey as any)?.prefill?.phone_number,
+                    uid: uid || finalEmail,
+                    email: finalEmail,
+                    name: finalName,
+                    phone: finalPhone,
+                    respondent_email: finalEmail,
+                    respondent_name: finalName,
+                    respondent_phone: finalPhone,
                     completion_rate: 100,
                     time_spent_sec: Math.round((Date.now() - startTime.current) / 1000),
                     source_channel: effectiveChannel,
@@ -455,7 +487,7 @@ const PublicSurvey: React.FC = () => {
     // ─── Loading ────────────────────────────────────────────────────────────
     if (isLoading) return (
         <div className="min-h-screen py-10 px-4 relative overflow-hidden" style={{ background: pageBgColor, fontFamily: theme.fontFamily }}>
-            <div className="relative z-10 max-w-2xl mx-auto bg-white dark:bg-[#111827] rounded-[20px] shadow-2xl overflow-hidden">
+            <div className="relative z-10 max-w-2xl mx-auto bg-white dark:bg-[#111827] rounded-[20px] border border-slate-200 overflow-hidden">
                 <div className="h-32 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06]" />
                 <div className="p-6 sm:p-8 space-y-5">
                     <div className="space-y-2">
@@ -463,7 +495,7 @@ const PublicSurvey: React.FC = () => {
                         <div className="h-4 w-1/2 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[10px]" />
                     </div>
                     {[1, 2, 3].map(i => (
-                        <div key={i} className="p-5 rounded-[16px] border border-slate-100 dark:border-white/[0.06] space-y-3">
+                        <div key={i} className="p-5 rounded-[16px] border border-slate-200 dark:border-white/[0.06] space-y-3">
                             <div className="h-4 w-48 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[8px]" />
                             <div className="h-10 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
                         </div>
@@ -486,12 +518,10 @@ const PublicSurvey: React.FC = () => {
         const m = msgs[error] ?? { icon: '❌', title: 'Có lỗi xảy ra', desc: error };
         return (
             <div className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden" style={{ background: pageBgColor, fontFamily: theme.fontFamily }}>
-                <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-rose-600/10 blur-[120px] rounded-full -mr-64 -mt-64 pointer-events-none" />
-                <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-rose-800/8 blur-[100px] rounded-full -ml-48 -mb-48 pointer-events-none" />
-                <div className="relative z-10 text-center max-w-sm bg-white/5 backdrop-blur-xl border border-white/10 rounded-[18px] p-10 shadow-2xl">
+                <div className="relative z-10 text-center max-w-sm bg-white border border-slate-200 rounded-[18px] p-10">
                     <div className="text-5xl mb-4">{m.icon}</div>
-                    <h1 className="text-xl font-bold text-white mb-2">{m.title}</h1>
-                    <p className="text-sm text-slate-400">{m.desc}</p>
+                    <h1 className="text-xl font-bold text-slate-900 mb-2">{m.title}</h1>
+                    <p className="text-sm text-slate-600">{m.desc}</p>
                 </div>
             </div>
         );
@@ -502,15 +532,13 @@ const PublicSurvey: React.FC = () => {
         const ty = thankYouData ?? survey?.thankYouPage;
         return (
             <div className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden" style={{ background: pageBgColor, fontFamily: theme.fontFamily }}>
-                <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-rose-600/10 blur-[120px] rounded-full -mr-64 -mt-64 pointer-events-none" />
-                <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-rose-800/8 blur-[100px] rounded-full -ml-48 -mb-48 pointer-events-none" />
                 <CanvasConfetti particleCount={150} />
                 
                 <motion.div 
                     initial={{ opacity: 0, scale: 0.9, y: 20 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     transition={{ duration: 0.5, type: 'spring', bounce: 0.4 }}
-                    className="relative z-10 text-center max-w-md bg-white rounded-[18px] shadow-2xl p-10"
+                    className="relative z-10 text-center max-w-md bg-white border border-slate-200 rounded-[18px] p-10"
                 >
                     {ty?.imageUrl && (
                         <motion.img 
@@ -525,23 +553,23 @@ const PublicSurvey: React.FC = () => {
                         {ty?.emoji ?? '🎉'}
                     </motion.div>
                     <h1 className="text-2xl font-black mb-3" style={{ color: theme.textColor }}>{ty?.title ?? 'Cảm ơn!'}</h1>
-                    <p className="text-base text-slate-500 leading-relaxed">{ty?.message ?? 'Phản hồi của bạn đã được ghi nhận.'}</p>
+                    <p className="text-base text-slate-600 leading-relaxed">{ty?.message ?? 'Phản hồi của bạn đã được ghi nhận.'}</p>
 
                     {quizResult && (
                         <motion.div 
                             initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }}
                             className="mt-6 mb-2 bg-slate-50 border border-slate-200 rounded-[14px] p-6 relative overflow-hidden"
                         >
-                            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-2">Điểm của bạn</h3>
-                            <div className="flex items-end justify-center gap-1.5 text-slate-800 relative z-10">
+                            <h3 className="text-sm font-bold text-slate-600 uppercase tracking-widest mb-2">Điểm của bạn</h3>
+                            <div className="flex items-end justify-center gap-1.5 text-slate-900 relative z-10">
                                 <motion.span 
                                     initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.6, type: 'spring', bounce: 0.6 }}
-                                    className="text-6xl font-black leading-none drop-shadow-sm" 
+                                    className="text-6xl font-black leading-none" 
                                     style={{ color: theme.primaryColor }}
                                 >
                                     {quizResult.score}
                                 </motion.span>
-                                <span className="text-2xl font-bold opacity-30 mb-2">/ {quizResult.maxScore}</span>
+                                <span className="text-2xl font-bold opacity-40 mb-2">/ {quizResult.maxScore}</span>
                             </div>
                         </motion.div>
                     )}
@@ -551,20 +579,19 @@ const PublicSurvey: React.FC = () => {
                             initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}
                             className="mt-6 mb-2 bg-gradient-to-tr from-rose-50 to-white border border-rose-200 rounded-[14px] p-6 relative overflow-hidden"
                         >
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-rose-400/20 blur-3xl rounded-full" />
                             <h3 className="text-[11px] font-black text-[var(--color-primary)] uppercase tracking-widest mb-3 flex items-center justify-center gap-1.5 relative z-10">
                                 <span className="w-2 h-2 rounded-full bg-[var(--color-primary)] animate-pulse" />
                                 Phần quà của bạn
                             </h3>
                             <div 
-                                className="bg-white border-2 border-dashed border-rose-300 rounded-[var(--radius-md)] py-3 px-4 shadow-sm relative group cursor-pointer overflow-hidden transition-all hover:shadow-md" 
+                                className="bg-white border-2 border-dashed border-rose-300 rounded-[var(--radius-md)] py-3 px-4 relative group cursor-pointer overflow-hidden transition-all" 
                                 onClick={() => { navigator.clipboard.writeText(voucherCode); toast.success('Đã sao chép mã!'); }}
                             >
                                 <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-rose-100/50 to-transparent group-hover:animate-shimmer" />
-                                <p className="text-2xl font-mono font-black text-[var(--color-primary)] tracking-wider break-all drop-shadow-sm relative z-10">{voucherCode}</p>
+                                <p className="text-2xl font-mono font-black text-[var(--color-primary)] tracking-wider break-all relative z-10">{voucherCode}</p>
                                 <div className="absolute inset-0 bg-[var(--color-primary)] text-white font-bold text-xs flex items-center justify-center rounded-[var(--radius-md)] opacity-0 group-hover:opacity-100 transition-all duration-300 z-20">Bấm để sao chép</div>
                             </div>
-                            <p className="text-[10px] text-rose-700/60 mt-2 font-medium relative z-10">Chụp màn hình hoặc lưu mã này lại để sử dụng nhé!</p>
+                            <p className="text-[10px] text-rose-800/80 mt-2 font-medium relative z-10">Chụp màn hình hoặc lưu mã này lại để sử dụng nhé!</p>
                         </motion.div>
                     )}
 
@@ -573,7 +600,7 @@ const PublicSurvey: React.FC = () => {
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
                             href={nextUrl || ty?.ctaUrl} target={nextUrl ? '_self' : '_blank'} rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 mt-6 px-6 py-3 rounded-[14px] font-bold text-white shadow-lg transition-all"
+                            className="inline-flex items-center gap-2 mt-6 px-6 py-3 rounded-[14px] font-bold text-white transition-all"
                             style={{ background: (ty as any)?.ctaColor || (survey as any)?.thank_you?.ctaColor || (survey as any)?.thankYouPage?.ctaColor || theme.primaryColor }}
                         >
                             {nextUrl ? 'Bấm để Tiếp tục' : ty?.ctaText} <ExternalLink className="w-4 h-4" />
@@ -585,14 +612,13 @@ const PublicSurvey: React.FC = () => {
                         className="mt-8 flex items-center justify-center gap-3"
                     >
                         <div className="relative w-8 h-8 shrink-0">
-                            <div className="absolute inset-0 bg-rose-500 blur-lg opacity-20 rounded-full"></div>
-                            <div className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-full border border-white/80 shadow-md">
+                            <div className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-full border border-slate-200">
                                 <img src="/imgs/ICON.png" className="w-full h-full object-contain" alt="Logo" />
                             </div>
                         </div>
                         <div className="flex flex-col">
-                            <span className="text-[13px] font-black text-slate-700 tracking-tighter leading-none">DOMATION</span>
-                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em]">Digital AI Vision</span>
+                            <span className="text-[13px] font-black text-slate-800 tracking-tighter leading-none">DOMATION</span>
+                            <span className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em]">Digital AI Vision</span>
                         </div>
                     </motion.div>
                 </motion.div>
@@ -606,20 +632,15 @@ const PublicSurvey: React.FC = () => {
 
     return (
         <div className="min-h-screen py-10 px-4 relative overflow-hidden" style={{ background: pageBgColor, fontFamily: theme.fontFamily }}>
-            {/* Ambient glow orbs */}
-            <div className="fixed top-0 right-0 w-[600px] h-[600px] bg-rose-600/8 blur-[140px] rounded-full -mr-72 -mt-72 pointer-events-none" />
-            <div className="fixed bottom-0 left-0 w-[500px] h-[500px] bg-rose-900/10 blur-[120px] rounded-full -ml-56 -mb-56 pointer-events-none" />
-            <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(189,29,45,0.12),transparent_70%)] pointer-events-none" />
-
-            {/* Progress bar — floats ABOVE the white card on dark bg */}
+            {/* Progress bar — floats ABOVE the white card */}
             {survey.settings?.showProgressBar !== false && totalPages > 1 && (
                 <div className="relative z-10 max-w-2xl mx-auto mb-4">
-                    <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+                    <div className="flex items-center justify-between text-xs text-slate-600 mb-2">
                         <span className="font-semibold tracking-wide">Trang {currentPage + 1} / {totalPages}</span>
                         <span className="font-bold" style={{ color: theme.primaryColor ?? '#BD1D2D' }}>{Math.round(progress)}%</span>
                     </div>
-                    <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(189,29,45,0.6)]" style={{ width: `${progress}%`, background: theme.primaryColor ?? '#BD1D2D' }} />
+                    <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress}%`, background: theme.primaryColor ?? '#BD1D2D' }} />
                     </div>
                 </div>
             )}
@@ -627,15 +648,15 @@ const PublicSurvey: React.FC = () => {
             {/* Quiz Timer */}
             {timeLeft !== null && (
                 <div className="relative z-20 max-w-2xl mx-auto mb-4 flex justify-end">
-                    <div className="bg-white/10 backdrop-blur border border-white/20 rounded-[var(--radius-md)] px-4 py-2 flex items-center gap-2 text-white shadow-lg">
-                        <div className={`w-2.5 h-2.5 rounded-full ${timeLeft < 60 ? 'bg-red-500 animate-pulse border border-red-300' : 'bg-green-400'}`}></div>
+                    <div className="bg-white border border-slate-200 rounded-[var(--radius-md)] px-4 py-2 flex items-center gap-2 text-slate-900">
+                        <div className={`w-2.5 h-2.5 rounded-full ${timeLeft < 60 ? 'bg-red-500 animate-pulse border border-red-300' : 'bg-green-500'}`}></div>
                         <span className="text-sm font-black tracking-widest font-mono">{formatTime(timeLeft)}</span>
                     </div>
                 </div>
             )}
 
             {/* White content card */}
-            <div className="relative z-10 max-w-2xl mx-auto bg-white rounded-[18px] shadow-[0_32px_80px_rgba(0,0,0,0.45)] overflow-hidden">
+            <div className="relative z-10 max-w-2xl mx-auto bg-white rounded-[18px] border border-slate-200 overflow-hidden">
 
                 {/* Survey header */}
                 {currentPage === 0 && (
@@ -663,7 +684,7 @@ const PublicSurvey: React.FC = () => {
                     {currentPage < totalPages - 1 ? (
                         <button
                             onClick={handleNext}
-                            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-[14px] font-bold text-white transition-all shadow-lg text-base hover:brightness-105 active:scale-[0.98]"
+                            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-[14px] font-bold text-white transition-all text-base hover:brightness-105 active:scale-[0.98]"
                             style={{ background: theme.primaryColor }}
                         >
                             Tiếp theo <ChevronRight className="w-4 h-4" />
@@ -672,7 +693,7 @@ const PublicSurvey: React.FC = () => {
                         <button
                             onClick={() => handleSubmit(undefined)}
                             disabled={isSubmitting}
-                            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-[14px] font-bold text-white transition-all shadow-lg text-base hover:brightness-105 active:scale-[0.98] disabled:opacity-70"
+                            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-[14px] font-bold text-white transition-all text-base hover:brightness-105 active:scale-[0.98] disabled:opacity-70"
                             style={{ background: theme.primaryColor }}
                         >
                             <Send className="w-4 h-4" />
@@ -683,7 +704,7 @@ const PublicSurvey: React.FC = () => {
                     {pageHistory.length > 0 && (
                         <button
                             onClick={handleBack}
-                            className="w-full flex items-center justify-center gap-2 px-5 py-2.5 rounded-[14px] border-2 border-slate-200 text-slate-500 font-semibold hover:border-slate-300 hover:bg-slate-50 transition-all text-sm"
+                            className="w-full flex items-center justify-center gap-2 px-5 py-2.5 rounded-[14px] border-2 border-slate-200 text-slate-700 font-semibold hover:border-slate-300 hover:bg-slate-50 transition-all text-sm"
                         >
                             <ChevronLeft className="w-4 h-4" /> Trang trước
                         </button>
@@ -693,14 +714,13 @@ const PublicSurvey: React.FC = () => {
                 {/* Footer */}
                 <div className="flex items-center justify-center gap-3 mt-8 pb-8">
                     <div className="relative w-7 h-7 shrink-0">
-                        <div className="absolute inset-0 bg-rose-500 blur-lg opacity-20 rounded-full"></div>
-                        <div className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-full border border-white/80 shadow-md">
+                        <div className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-full border border-slate-200">
                             <img src="/imgs/ICON.png" className="w-full h-full object-contain" alt="Logo" />
                         </div>
                     </div>
                     <div className="flex flex-col">
-                        <span className="text-[12px] font-black text-slate-600 tracking-tighter leading-none">DOMATION</span>
-                        <span className="text-[7px] font-black text-slate-400 uppercase tracking-[0.2em]">Digital AI Vision</span>
+                        <span className="text-[12px] font-black text-slate-800 tracking-tighter leading-none">DOMATION</span>
+                        <span className="text-[7px] font-black text-slate-500 uppercase tracking-[0.2em]">Digital AI Vision</span>
                     </div>
                 </div>
             </div>
@@ -775,7 +795,7 @@ const SurveyCoverPublic: React.FC<{ survey: Survey }> = ({ survey }) => {
             )}
             <div className="relative px-8 py-8 flex flex-col justify-end h-full" style={{ minHeight: heightMap[coverHeight] }}>
                 {timeLeft && theme.coverCountdownPos === 'top_right' && (
-                    <div className="absolute top-4 right-4 bg-black/40 backdrop-blur-md rounded-[var(--radius-md)] p-2 border border-white/20 flex items-center gap-2.5 z-20 shadow-xl">
+                    <div className="absolute top-4 right-4 bg-black/40 backdrop-blur-md rounded-[var(--radius-md)] p-2 border border-white/20 flex items-center gap-2.5 z-20">
                         <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse ring-2 ring-rose-400/50" />
                         <div className="flex gap-1.5">
                             {[timeLeft.h, timeLeft.m, timeLeft.s].map((v, i) => (
@@ -790,21 +810,21 @@ const SurveyCoverPublic: React.FC<{ survey: Survey }> = ({ survey }) => {
 
                 <div className="w-full relative z-10">
                     {theme.coverBadge && (
-                        <span className="inline-block px-3 py-1 mb-4 rounded-full text-[10px] font-black tracking-widest text-white shadow-none uppercase border border-white/20 relative" style={{ background: 'var(--color-primary)' }}>
+                        <span className="inline-block px-3 py-1 mb-4 rounded-full text-[10px] font-black tracking-widest text-white uppercase border border-white/20 relative" style={{ background: 'var(--color-primary)' }}>
                             {theme.coverBadge}
                         </span>
                     )}
 
                     {theme.logoUrl && (
-                        <img src={theme.logoUrl} alt="logo" className="h-10 mb-5 object-contain drop-shadow-md" />
+                        <img src={theme.logoUrl} alt="logo" className="h-10 mb-5 object-contain" />
                     )}
 
-                    <h1 className="text-2xl md:text-3xl font-black leading-tight drop-shadow-md" style={{ color: textColor, fontFamily: theme.fontFamily }}>
+                    <h1 className="text-2xl md:text-3xl font-black leading-tight" style={{ color: textColor, fontFamily: theme.fontFamily }}>
                         {survey.name}
                     </h1>
 
                     {theme.coverDescription && (
-                        <p className="mt-3 text-base leading-relaxed drop-shadow-sm whitespace-pre-wrap" style={{ color: textColor, opacity: 0.9 }}>
+                        <p className="mt-3 text-base leading-relaxed whitespace-pre-wrap" style={{ color: textColor, opacity: 0.9 }}>
                             {theme.coverDescription}
                         </p>
                     )}
@@ -815,14 +835,14 @@ const SurveyCoverPublic: React.FC<{ survey: Survey }> = ({ survey }) => {
                                 theme.coverFeaturesStyle === 'dot' ? (
                                     <div key={i} className="flex items-start gap-2.5 max-w-2xl">
                                         <div className="w-1.5 h-1.5 rounded-full mt-2 shrink-0 bg-white/70" />
-                                        <span className="text-sm font-medium drop-shadow-md leading-snug" style={{ color: textColor }}>{feat}</span>
+                                        <span className="text-sm font-medium leading-snug" style={{ color: textColor }}>{feat}</span>
                                     </div>
                                 ) : (
                                     <div key={i} className="flex items-center gap-3 bg-white/5 w-fit pr-4 py-1.5 rounded-full border border-white/10 backdrop-blur-sm">
                                         <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shrink-0 ml-1">
                                             <Check className="w-3.5 h-3.5 text-white stroke-[3]" />
                                         </div>
-                                        <span className="text-sm font-semibold drop-shadow-md" style={{ color: textColor }}>{feat}</span>
+                                        <span className="text-sm font-semibold" style={{ color: textColor }}>{feat}</span>
                                     </div>
                                 )
                             ))}
@@ -837,7 +857,7 @@ const SurveyCoverPublic: React.FC<{ survey: Survey }> = ({ survey }) => {
                             </p>
                             <div className="flex gap-2">
                                 {[timeLeft.d, timeLeft.h, timeLeft.m, timeLeft.s].map((v, i) => (
-                                    <div key={i} className="bg-white/10 border border-white/20 rounded-[var(--radius-md)] w-12 h-12 flex flex-col items-center justify-center shadow-inner relative overflow-hidden">
+                                    <div key={i} className="bg-white/10 border border-white/20 rounded-[var(--radius-md)] w-12 h-12 flex flex-col items-center justify-center relative overflow-hidden">
                                         <div className="absolute inset-x-0 top-1/2 h-px bg-black/10" />
                                         <span className="text-lg font-black text-white z-10">{v}</span>
                                         <span className="text-[7px] uppercase font-bold text-white/70 mt-0.5 z-10">{['Ng', 'Giờ', 'Ph', 'Gi'][i]}</span>
@@ -870,13 +890,19 @@ const BlockRenderer: React.FC<{
     const textAlign = block.style?.textAlign ?? 'left';
     const boxShadow = block.style?.boxShadow && block.style.boxShadow !== 'none'
         ? block.style.boxShadow
-        : (theme.cardShadow && theme.cardShadow !== 'none' ? theme.cardShadow : undefined);
+        : (theme.cardShadow && theme.cardShadow !== 'none' ? theme.cardShadow : 'none');
+    const resolvedLabel = block.label || (block as any).title || (block as any).question || '';
+    const rawOptions: Array<{ id: string; label: string; value: string }> = Array.isArray(block.options)
+        ? block.options
+        : Array.isArray((block as any).options?.choices)
+        ? (block as any).options.choices.map((c: string, i: number) => ({ id: `opt_${i}`, label: c, value: c }))
+        : [];
 
     const cardStyle: React.CSSProperties = {
         background: hasError ? 'rgba(239, 68, 68, 0.05)' : bgColor,
         borderRadius: theme.borderRadius,
         textAlign,
-        boxShadow: hasError ? '0 0 8px rgba(239, 68, 68, 0.2)' : boxShadow,
+        boxShadow,
         borderColor: hasError ? '#ef4444' : undefined,
     };
 
@@ -884,8 +910,8 @@ const BlockRenderer: React.FC<{
     if (block.type === 'section_header') {
         return (
             <div className="pt-2" style={{ textAlign }}>
-                <h2 className="text-lg font-bold" style={{ color: textColor }}>{block.label}</h2>
-                {block.description && <p className="text-sm text-slate-500 mt-1">{block.description}</p>}
+                <h2 className="text-lg font-bold" style={{ color: textColor }}>{resolvedLabel}</h2>
+                {block.description && <p className="text-sm text-slate-600 mt-1">{block.description}</p>}
             </div>
         );
     }
@@ -932,7 +958,7 @@ const BlockRenderer: React.FC<{
             >
                 <div className="absolute inset-0" style={{ background: block.bannerOverlay ?? 'rgba(0,0,0,0.35)' }} />
                 <div className="relative px-6 pb-6">
-                    <p className="font-bold text-lg" style={{ color: block.bannerTextColor ?? '#fff' }}>{block.label}</p>
+                    <p className="font-bold text-lg" style={{ color: block.bannerTextColor ?? '#fff' }}>{resolvedLabel}</p>
                     {block.description && <p className="text-sm mt-1" style={{ color: (block.bannerTextColor ?? '#fff') + 'bb' }}>{block.description}</p>}
                 </div>
             </div>
@@ -945,14 +971,14 @@ const BlockRenderer: React.FC<{
     return (
         <div 
             id={`block-${block.id}`}
-            className={`p-5 shadow-sm border transition-all ${hasError ? 'border-red-500' : 'border-slate-100'}`}
+            className={`p-5 border transition-all ${hasError ? 'border-red-500' : 'border-slate-200'}`}
             style={cardStyle}
         >
-            <label className="block font-semibold mb-3 text-sm" style={{ color: textColor, textAlign }}>
-                {block.label}
+            <label className="block font-bold mb-3 text-sm text-slate-900" style={{ color: textColor, textAlign }}>
+                {resolvedLabel}
                 {block.required && <span style={{ color: accent }} className="ml-1">*</span>}
             </label>
-            {block.description && <p className="text-xs text-slate-400 mb-3" style={{ textAlign }}>{block.description}</p>}
+            {block.description && <p className="text-xs text-slate-600 mb-3" style={{ textAlign }}>{block.description}</p>}
 
             {/* Short/Email/Phone/Number */}
             {(block.type === 'short_text' || block.type === 'email' || block.type === 'phone' || block.type === 'number') && (
@@ -961,7 +987,7 @@ const BlockRenderer: React.FC<{
                     value={answer?.answer_text ?? ''}
                     onChange={e => onAnswer({ answer_text: e.target.value })}
                     placeholder={block.placeholder || 'Nhập câu trả lời...'}
-                    className="w-full px-4 py-2.5 rounded-xl border-2 border-slate-200 focus:outline-none transition-colors text-sm"
+                    className="w-full px-4 py-2.5 rounded-xl border-2 border-slate-300 text-slate-900 placeholder:text-slate-500 focus:outline-none transition-colors text-sm"
                     style={{ borderColor: answer?.answer_text ? accent : undefined } as any}
                 />
             )}
@@ -973,7 +999,7 @@ const BlockRenderer: React.FC<{
                     onChange={e => onAnswer({ answer_text: e.target.value })}
                     placeholder={block.placeholder || 'Nhập câu trả lời...'}
                     rows={4}
-                    className="w-full px-4 py-2.5 rounded-xl border-2 border-slate-200 focus:outline-none resize-none transition-colors text-sm"
+                    className="w-full px-4 py-2.5 rounded-xl border-2 border-slate-300 text-slate-900 placeholder:text-slate-500 focus:outline-none resize-none transition-colors text-sm"
                 />
             )}
 
@@ -983,15 +1009,15 @@ const BlockRenderer: React.FC<{
                     type={(block as any).dateMode === 'datetime' ? 'datetime-local' : 'date'}
                     value={answer?.answer_text ?? ''}
                     onChange={e => onAnswer({ answer_text: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-xl border-2 border-slate-200 focus:outline-none text-sm"
+                    className="w-full px-4 py-2.5 rounded-xl border-2 border-slate-300 text-slate-900 focus:outline-none text-sm"
                 />
             )}
 
             {/* Yes / No */}
             {block.type === 'yes_no' && (
                 <div className="flex gap-3">
-                    {(block.options && block.options.length > 0
-                        ? block.options
+                    {(rawOptions.length > 0
+                        ? rawOptions
                         : [{ id: 'yes', label: 'Có', value: 'yes' }, { id: 'no', label: 'Không', value: 'no' }]
                     ).map((opt, i) => {
                         const optVal = opt.value || opt.label;
@@ -1003,7 +1029,7 @@ const BlockRenderer: React.FC<{
                                 onClick={() => onAnswer({ answer_text: optVal })}
                                 className="flex-1 py-2.5 px-4 rounded-xl border-2 text-center text-sm font-semibold transition-all"
                                 style={{
-                                    borderColor: isSelected ? accent : '#e2e8f0',
+                                    borderColor: isSelected ? accent : '#cbd5e1',
                                     background: isSelected ? accent + '12' : '#f8fafc',
                                     color: isSelected ? accent : textColor,
                                 }}
@@ -1018,15 +1044,15 @@ const BlockRenderer: React.FC<{
             {/* Single choice */}
             {block.type === 'single_choice' && (
                 <div className="flex flex-col gap-2">
-                    {(block.options ?? []).map(opt => {
+                    {rawOptions.map(opt => {
                         const isSelected = answer?.answer_text === opt.value;
                         return (
                             <button key={opt.id} onClick={() => { onAnswer({ answer_text: opt.value }); setOtherSelected(false); }}
                                 className="flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all text-left text-sm font-medium"
-                                style={{ borderColor: isSelected ? accent : '#e2e8f0', background: isSelected ? accent + '12' : undefined, color: isSelected ? accent : textColor }}
+                                style={{ borderColor: isSelected ? accent : '#cbd5e1', background: isSelected ? accent + '12' : undefined, color: isSelected ? accent : textColor }}
                             >
                                 <div className="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all"
-                                    style={{ borderColor: isSelected ? accent : '#cbd5e1', background: isSelected ? accent : undefined }}>
+                                    style={{ borderColor: isSelected ? accent : '#94a3b8', background: isSelected ? accent : undefined }}>
                                     {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
                                 </div>
                                 {opt.label}
@@ -1037,10 +1063,10 @@ const BlockRenderer: React.FC<{
                         <div>
                             <button onClick={() => { setOtherSelected(true); onAnswer({ answer_text: `__other__:${otherText}` }); }}
                                 className="flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all text-left text-sm font-medium w-full"
-                                style={{ borderColor: otherSelected ? accent : '#e2e8f0', background: otherSelected ? accent + '12' : undefined, color: otherSelected ? accent : '#94a3b8' }}
+                                style={{ borderColor: otherSelected ? accent : '#cbd5e1', background: otherSelected ? accent + '12' : undefined, color: otherSelected ? accent : '#475569' }}
                             >
                                 <div className="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0"
-                                    style={{ borderColor: otherSelected ? accent : '#cbd5e1', background: otherSelected ? accent : undefined }}>
+                                    style={{ borderColor: otherSelected ? accent : '#94a3b8', background: otherSelected ? accent : undefined }}>
                                     {otherSelected && <div className="w-2 h-2 rounded-full bg-white" />}
                                 </div>
                                 Khác...
@@ -1063,17 +1089,17 @@ const BlockRenderer: React.FC<{
             {/* Multi choice */}
             {block.type === 'multi_choice' && (
                 <div className="flex flex-col gap-2">
-                    {(block.options ?? []).map(opt => {
+                    {rawOptions.map(opt => {
                         const selected: string[] = (answer?.answer_json as string[]) ?? [];
                         const isSelected = selected.includes(opt.value);
                         const toggle = () => onAnswer({ answer_json: isSelected ? selected.filter(v => v !== opt.value) : [...selected, opt.value] });
                         return (
                             <button key={opt.id} onClick={toggle}
                                 className="flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all text-left text-sm font-medium"
-                                style={{ borderColor: isSelected ? accent : '#e2e8f0', background: isSelected ? accent + '12' : undefined, color: isSelected ? accent : textColor }}
+                                style={{ borderColor: isSelected ? accent : '#cbd5e1', background: isSelected ? accent + '12' : undefined, color: isSelected ? accent : textColor }}
                             >
                                 <div className="w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0"
-                                    style={{ borderColor: isSelected ? accent : '#cbd5e1', background: isSelected ? accent : undefined }}>
+                                    style={{ borderColor: isSelected ? accent : '#94a3b8', background: isSelected ? accent : undefined }}>
                                     {isSelected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                                 </div>
                                 {opt.label}
@@ -1089,10 +1115,10 @@ const BlockRenderer: React.FC<{
                                 else { setOtherSelected(true); onAnswer({ answer_json: [...selected, `__other__:${otherText}`] }); }
                             }}
                                 className="flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all text-left text-sm font-medium w-full"
-                                style={{ borderColor: otherSelected ? accent : '#e2e8f0', background: otherSelected ? accent + '12' : undefined, color: otherSelected ? accent : '#94a3b8' }}
+                                style={{ borderColor: otherSelected ? accent : '#cbd5e1', background: otherSelected ? accent + '12' : undefined, color: otherSelected ? accent : '#475569' }}
                             >
                                 <div className="w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0"
-                                    style={{ borderColor: otherSelected ? accent : '#cbd5e1', background: otherSelected ? accent : undefined }}>
+                                    style={{ borderColor: otherSelected ? accent : '#94a3b8', background: otherSelected ? accent : undefined }}>
                                     {otherSelected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                                 </div>
                                 Khác...
@@ -1122,7 +1148,7 @@ const BlockRenderer: React.FC<{
                         onChange={val => onAnswer({ answer_text: val })}
                         options={[
                             { value: '', label: '— Chọn một đáp án —' },
-                            ...(block.options ?? []).map(opt => ({ value: opt.value, label: opt.label }))
+                            ...rawOptions.map(opt => ({ value: opt.value, label: opt.label }))
                         ]}
                         placeholder="— Chọn một đáp án —"
                         className="w-full"
@@ -1138,7 +1164,7 @@ const BlockRenderer: React.FC<{
                         const filled = (answer?.answer_num ?? 0) >= val;
                         return (
                             <button key={i} onClick={() => onAnswer({ answer_num: val })} className="transition-transform hover:scale-110">
-                                <Star className="w-8 h-8" fill={filled ? accent : 'none'} stroke={filled ? accent : '#cbd5e1'} />
+                                <Star className="w-8 h-8" fill={filled ? accent : 'none'} stroke={filled ? accent : '#94a3b8'} />
                             </button>
                         );
                     })}
@@ -1155,15 +1181,15 @@ const BlockRenderer: React.FC<{
                                 <button key={i} onClick={() => onAnswer({ answer_num: i })}
                                     className="w-9 h-9 rounded-xl font-bold text-sm transition-all border-2"
                                     style={{
-                                        borderColor: isSelected ? accent : '#e2e8f0',
+                                        borderColor: isSelected ? accent : '#cbd5e1',
                                         background: isSelected ? accent : '#ffffff',
-                                        color: isSelected ? '#ffffff' : '#64748b',
+                                        color: isSelected ? '#ffffff' : '#334155',
                                     }}
                                 >{i}</button>
                             );
                         })}
                     </div>
-                    <div className="flex justify-between text-xs text-slate-400 px-1">
+                    <div className="flex justify-between text-xs text-slate-600 font-medium px-1">
                         <span>{block.minLabel ?? 'Hoàn toàn không'}</span>
                         <span>{block.maxLabel ?? 'Chắc chắn có'}</span>
                     </div>
@@ -1190,13 +1216,12 @@ const BlockRenderer: React.FC<{
                                 <button key={i} type="button" onClick={() => onAnswer({ answer_num: pt.value })}
                                     className="flex flex-col items-center gap-1 flex-1 min-w-[50px] py-2 px-1 rounded-xl border-2 transition-all"
                                     style={{
-                                        borderColor: isSelected ? accent : '#e2e8f0',
+                                        borderColor: isSelected ? accent : '#cbd5e1',
                                         background: isSelected ? accent + '15' : undefined,
-                                        filter: isSelected ? 'none' : 'grayscale(30%)',
                                     }}
                                 >
-                                    <span className="text-base font-black" style={{ color: isSelected ? accent : '#64748b' }}>{pt.value}</span>
-                                    <span className="text-[9px] text-slate-400 text-center leading-tight">{pt.label}</span>
+                                    <span className="text-base font-black" style={{ color: isSelected ? accent : '#334155' }}>{pt.value}</span>
+                                    <span className="text-[9px] text-slate-600 font-medium text-center leading-tight">{pt.label}</span>
                                 </button>
                             );
                         })}
@@ -1215,7 +1240,7 @@ const BlockRenderer: React.FC<{
                                 style={{ filter: isSelected ? 'none' : 'grayscale(50%) opacity(0.7)' }}
                             >
                                 <span className="text-3xl">{emoji}</span>
-                                <div className="w-6 h-1.5 rounded-full transition-all" style={{ background: isSelected ? accent : '#e2e8f0' }} />
+                                <div className="w-6 h-1.5 rounded-full transition-all" style={{ background: isSelected ? accent : '#cbd5e1' }} />
                             </button>
                         );
                     })}
@@ -1232,7 +1257,7 @@ const BlockRenderer: React.FC<{
                         className="w-full"
                         style={{ accentColor: accent }}
                     />
-                    <div className="flex justify-between text-xs text-slate-400">
+                    <div className="flex justify-between text-xs text-slate-600 font-medium">
                         <span>{block.minLabel ?? block.minValue ?? 0}</span>
                         <span className="font-bold" style={{ color: accent }}>{answer?.answer_num ?? '—'}</span>
                         <span>{block.maxLabel ?? block.maxValue ?? 100}</span>
@@ -1248,14 +1273,14 @@ const BlockRenderer: React.FC<{
                             <tr>
                                 <th className="p-2 border-b border-slate-200"></th>
                                 {(block.matrixCols ?? []).map(col => (
-                                    <th key={col.id} className="p-2 border-b border-slate-200 text-center font-semibold text-slate-600 leading-tight">{col.label}</th>
+                                    <th key={col.id} className="p-2 border-b border-slate-200 text-center font-semibold text-slate-700 leading-tight">{col.label}</th>
                                 ))}
                             </tr>
                         </thead>
                         <tbody>
                             {(block.matrixRows ?? []).map((row, rIdx) => (
                                 <tr key={row.id} className={rIdx % 2 === 0 ? 'bg-slate-50/50' : 'bg-white'}>
-                                    <td className="p-2.5 font-medium text-slate-700 min-w-[120px]">{row.label}</td>
+                                    <td className="p-2.5 font-medium text-slate-800 min-w-[120px]">{row.label}</td>
                                     {(block.matrixCols ?? []).map(col => {
                                         const ansObj = (answer?.answer_json as Record<string, string[]>) ?? {};
                                         const isSelected = (ansObj[row.id] ?? []).includes(col.id);
@@ -1269,7 +1294,7 @@ const BlockRenderer: React.FC<{
                                         return (
                                             <td key={col.id} className="p-2.5 text-center" onClick={toggle}>
                                                 <div className={`mx-auto w-5 h-5 flex items-center justify-center cursor-pointer transition-all ${block.type === 'matrix_single' ? 'rounded-full' : 'rounded-md'} border-2`}
-                                                    style={{ borderColor: isSelected ? accent : '#cbd5e1', background: isSelected ? accent : 'white' }}
+                                                    style={{ borderColor: isSelected ? accent : '#94a3b8', background: isSelected ? accent : 'white' }}
                                                 >
                                                     {isSelected && (block.type === 'matrix_single' ? <div className="w-2 h-2 bg-white rounded-full" /> : <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>)}
                                                 </div>
@@ -1287,31 +1312,31 @@ const BlockRenderer: React.FC<{
             {block.type === 'ranking' && (
                 <div className="flex flex-col gap-2">
                     {(() => {
-                        const allStrs = block.options?.map(o => o.value) ?? [];
+                        const allStrs = rawOptions.map(o => o.value);
                         const currentRank: string[] = Array.isArray(answer?.answer_json) && (answer?.answer_json as string[]).length === allStrs.length
                             ? (answer?.answer_json as string[])
                             : allStrs;
                         return currentRank.map((val, idx) => {
-                            const opt = block.options?.find(o => o.value === val);
+                            const opt = rawOptions.find(o => o.value === val);
                             return (
-                                <div key={val} className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-white shadow-sm">
-                                    <div className="w-7 h-7 rounded bg-slate-100 flex items-center justify-center font-black text-slate-500 text-xs shrink-0">
+                                <div key={val} className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-white">
+                                    <div className="w-7 h-7 rounded bg-slate-100 flex items-center justify-center font-black text-slate-700 text-xs shrink-0">
                                         #{idx + 1}
                                     </div>
-                                    <div className="flex-1 text-sm font-medium text-slate-700">{opt?.label ?? val}</div>
+                                    <div className="flex-1 text-sm font-medium text-slate-800">{opt?.label ?? val}</div>
                                     <div className="flex flex-col gap-0.5 shrink-0">
                                         <button disabled={idx === 0} onClick={() => {
                                             const copy = [...currentRank];
                                             [copy[idx - 1], copy[idx]] = [copy[idx], copy[idx - 1]];
                                             onAnswer({ answer_json: copy });
-                                        }} className={`p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors ${idx === 0 ? 'opacity-30 cursor-not-allowed' : ''}`}>
+                                        }} className={`p-1 rounded hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors ${idx === 0 ? 'opacity-30 cursor-not-allowed' : ''}`}>
                                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 15l7-7 7 7" /></svg>
                                         </button>
                                         <button disabled={idx === currentRank.length - 1} onClick={() => {
                                             const copy = [...currentRank];
                                             [copy[idx + 1], copy[idx]] = [copy[idx], copy[idx + 1]];
                                             onAnswer({ answer_json: copy });
-                                        }} className={`p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors ${idx === currentRank.length - 1 ? 'opacity-30 cursor-not-allowed' : ''}`}>
+                                        }} className={`p-1 rounded hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors ${idx === currentRank.length - 1 ? 'opacity-30 cursor-not-allowed' : ''}`}>
                                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
                                         </button>
                                     </div>
@@ -1362,12 +1387,12 @@ const BlockRenderer: React.FC<{
                             e.stopPropagation();
                             handleFileSelect(e.dataTransfer.files?.[0]);
                         }}
-                        className="border-2 border-dashed border-slate-200 rounded-xl p-6 flex flex-col items-center justify-center text-center bg-slate-50 transition-colors hover:bg-slate-100"
+                        className="border-2 border-dashed border-slate-300 rounded-xl p-6 flex flex-col items-center justify-center text-center bg-slate-50 transition-colors hover:bg-slate-100"
                         style={{ borderColor: selectedFileName ? accent : undefined }}
                     >
-                        <svg className="w-8 h-8 text-slate-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                        <p className="text-sm font-semibold text-slate-600 mb-1">Click tải lên hoặc kéo thả tệp vào đây</p>
-                        <p className="text-xs text-slate-400 mb-4">Các định dạng hỗ trợ: {(block.acceptedTypes ?? []).join(', ') || 'Tất cả'}. Tối đa {maxMB}MB</p>
+                        <svg className="w-8 h-8 text-slate-600 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                        <p className="text-sm font-semibold text-slate-800 mb-1">Click tải lên hoặc kéo thả tệp vào đây</p>
+                        <p className="text-xs text-slate-600 mb-4">Các định dạng hỗ trợ: {(block.acceptedTypes ?? []).join(', ') || 'Tất cả'}. Tối đa {maxMB}MB</p>
                         <input
                             type="file"
                             className="hidden"
@@ -1376,7 +1401,7 @@ const BlockRenderer: React.FC<{
                             onChange={e => handleFileSelect(e.target.files?.[0])}
                         />
                         <div className="flex items-center gap-2">
-                            <label htmlFor={`file_${block.id}`} className="px-5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm font-bold hover:bg-slate-50 cursor-pointer transition-colors shadow-sm text-slate-700">
+                            <label htmlFor={`file_${block.id}`} className="px-5 py-2.5 bg-white border border-slate-300 rounded-lg text-sm font-bold hover:bg-slate-50 cursor-pointer transition-colors text-slate-800">
                                 {selectedFileName ? 'Đổi tệp khác' : 'Chọn tệp'}
                             </label>
                             {selectedFileName && (
@@ -1390,7 +1415,7 @@ const BlockRenderer: React.FC<{
                             )}
                         </div>
                         {selectedFileName && (
-                            <p className="mt-3 text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
+                            <p className="mt-3 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
                                 Đã chọn: {selectedFileName}
                             </p>
                         )}
@@ -1398,7 +1423,7 @@ const BlockRenderer: React.FC<{
                 );
             })()}
             {hasError && (
-                <p className="text-xs text-red-500 mt-2 font-medium">{errorMsg}</p>
+                <p className="text-xs text-red-600 mt-2 font-medium">{errorMsg}</p>
             )}
         </div>
     );

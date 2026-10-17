@@ -1024,62 +1024,18 @@ const FlowAnalyticsTab: React.FC<{
             return '#64748b';
         })();
 
-        const decorSvg = (() => {
-            if (hexColor === '#3b82f6') {
-                return (
-                    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                        <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="2" stroke-dasharray="4 4" />
-                        <circle cx="35" cy="45" r="15" fill="currentColor" fillOpacity="0.2" />
-                        <circle cx="65" cy="45" r="15" fill="currentColor" fillOpacity="0.4" />
-                        <circle cx="50" cy="70" r="18" fill="currentColor" fillOpacity="0.6" />
-                    </svg>
-                );
-            }
-            if (hexColor === '#8b5cf6') {
-                return (
-                    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                        <path d="M10 50 Q 50 10 90 50 T 90 90" stroke="currentColor" strokeWidth="2" stroke-dasharray="3 3" />
-                        <circle cx="10" cy="50" r="6" fill="currentColor" />
-                        <circle cx="50" cy="10" r="6" fill="currentColor" />
-                        <circle cx="90" cy="50" r="6" fill="currentColor" />
-                        <path d="M50 10 L 90 50" stroke="currentColor" strokeWidth="1.5" />
-                    </svg>
-                );
-            }
-            if (hexColor === '#f59e0b') {
-                return (
-                    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                        <rect x="20" y="20" width="60" height="15" rx="7.5" fill="currentColor" fillOpacity="0.6" />
-                        <rect x="20" y="42" width="60" height="15" rx="7.5" fill="currentColor" fillOpacity="0.4" />
-                        <rect x="20" y="64" width="60" height="15" rx="7.5" fill="currentColor" fillOpacity="0.2" />
-                    </svg>
-                );
-            }
-            return (
-                <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                    <circle cx="50" cy="50" r="30" stroke="currentColor" strokeWidth="2" />
-                    <path d="M50 35 V 65 M35 50 H 65" stroke="currentColor" strokeWidth="3" stroke-linecap="round" />
-                </svg>
-            );
-        })();
-
         const isTrendSuccess = trendType === 'success';
 
         return (
             <div
                 onClick={onClick}
-                className={`hover-lift bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-5 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex flex-col justify-between hover:border-[var(--color-primary-light)] transition-all duration-300 relative overflow-hidden min-h-[145px] group ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
+                className={`bg-[var(--color-surface)] border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-none flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-colors relative overflow-hidden min-h-[145px] group ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
             >
-                {decorSvg && (
-                    <div className="decor-svg" style={{ color: hexColor }}>
-                        {decorSvg}
-                    </div>
-                )}
                 <div className="relative z-10 flex flex-col justify-between h-full w-full">
                     <div>
                         <div className="flex items-center justify-between gap-2">
                             <p className="text-[10px] md:text-xs text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest leading-none">{label}</p>
-                            <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform group-hover:scale-110" style={{ backgroundColor: `${hexColor}15`, color: hexColor }}>
+                            <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform group-hover:scale-105" style={{ backgroundColor: `${hexColor}15`, color: hexColor }}>
                                 <Icon className="w-4 h-4" />
                             </div>
                         </div>
@@ -1114,7 +1070,7 @@ const FlowAnalyticsTab: React.FC<{
     const BottleneckBadge = ({ type, value, tooltip }: { type: 'time' | 'drop', value: string, tooltip?: string }) => (
         <div
             title={tooltip}
-            className={`absolute -top-3 -right-3 z-50 px-3 py-1.5 rounded-full shadow-lg border flex items-center gap-2 animate-pulse cursor-help ${type === 'time' ? 'bg-amber-600 border-amber-400 text-white' : 'bg-orange-500 border-orange-400 text-white'
+            className={`absolute -top-3 -right-3 z-50 px-3 py-1.5 rounded-full shadow-none border flex items-center gap-2 animate-pulse cursor-help ${type === 'time' ? 'bg-amber-600 border-amber-400 text-white' : 'bg-orange-500 border-orange-400 text-white'
                 }`}
         >
             <AlertOctagon className="w-4 h-4" />
@@ -1126,7 +1082,7 @@ const FlowAnalyticsTab: React.FC<{
         <div ref={containerRef} className="p-3 md:p-6 lg:px-8 lg:pb-8 lg:pt-4 space-y-4 md:space-y-8 max-w-[1400px] mx-auto animate-in fade-in duration-500 relative pb-20">
 
             {/* Clean SaaS ERP Performance Header Banner */}
-            <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-5 md:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all">
+            <div className="bg-[var(--color-surface)] border border-slate-200 dark:border-slate-800 rounded-xl p-5 md:p-6 shadow-none transition-all">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
                     {/* Left: Main Performance */}
                     <div className="lg:col-span-5 lg:border-r border-[var(--color-border-light)] lg:pr-6">
@@ -1329,8 +1285,8 @@ const FlowAnalyticsTab: React.FC<{
                 <div className="lg:col-span-2 space-y-8">
 
                     {/* JOURNEY VISUALIZATION */}
-                    <Card className="rounded-2xl border border-slate-100 dark:border-slate-800/60 shadow-md shadow-slate-100/40 dark:shadow-none overflow-hidden bg-white dark:bg-slate-900" noPadding>
-                        <div className="px-5 md:px-8 py-4 md:py-5 border-b border-slate-100 dark:border-slate-800/60 flex flex-col md:flex-row md:justify-between md:items-center bg-slate-50/50 dark:bg-slate-950/20 gap-3">
+                    <Card className="rounded-2xl border border-slate-200 dark:border-slate-800 shadow-none overflow-hidden bg-white dark:bg-slate-900" noPadding>
+                        <div className="px-5 md:px-8 py-4 md:py-5 border-b border-slate-200 dark:border-slate-800 flex flex-col md:flex-row md:justify-between md:items-center bg-slate-50/50 dark:bg-slate-950/20 gap-3">
                             <div>
                                 <h3 className="text-xs md:text-sm font-bold text-slate-800 dark:text-slate-200">Hành trình Khách hàng</h3>
                                 <p className="text-[9px] md:text-[10px] text-slate-400 mt-0.5 uppercase tracking-widest font-bold">Cumulative Flow Analytics</p>
@@ -1346,7 +1302,7 @@ const FlowAnalyticsTab: React.FC<{
 
                         <div className="p-4 md:p-8">
                             {funnelData.length > 0 ? (
-                                <div className="relative pl-6 md:pl-8 border-l border-slate-100 dark:border-slate-800/80 space-y-8">
+                                <div className="relative pl-6 md:pl-8 border-l border-slate-200 dark:border-slate-800 space-y-8">
                                     {funnelData.map((item, idx) => {
                                         const Icon = item.style.icon;
                                         const dotColorClass = (() => {
@@ -1370,7 +1326,7 @@ const FlowAnalyticsTab: React.FC<{
                                             <div key={idx} className="relative group">
                                                 {/* Timeline Connector Dot (Top Aligned to step icon) */}
                                                  <div 
-                                                     className={`absolute -left-[21px] md:-left-[33px] top-[26px] md:top-[30px] w-3 h-3 md:w-4 md:h-4 rounded-full border-2 border-white dark:border-slate-950 shadow-sm z-10 flex items-center justify-center ${item.type === 'wait' && item.users > 0 ? '' : dotColorClass}`}
+                                                     className={`absolute -left-[21px] md:-left-[33px] top-[26px] md:top-[30px] w-3 h-3 md:w-4 md:h-4 rounded-full border-2 border-white dark:border-slate-950 shadow-none z-10 flex items-center justify-center ${item.type === 'wait' && item.users > 0 ? '' : dotColorClass}`}
                                                      style={item.type === 'wait' && item.users > 0 ? { background: '#f59e0b' } : undefined}
                                                  >
                                                      <div className="w-1 md:w-1.5 h-1 md:h-1.5 bg-white dark:bg-slate-950 rounded-full"></div>
@@ -1379,17 +1335,17 @@ const FlowAnalyticsTab: React.FC<{
                                                 {/* Step Card */}
                                                 <div
                                                     onClick={() => item.type !== 'wait' && handleStepClick(item.id, item.type)}
-                                                    className={`flex flex-col border rounded-xl transition-all duration-300 group 
+                                                    className={`flex flex-col border rounded-xl transition-colors duration-200 group shadow-none 
                                                         ${item.type === 'wait' ? 'p-2 md:p-3 border-dashed bg-slate-100/50 dark:bg-slate-800/20 opacity-90 cursor-default' : 'bg-white dark:bg-slate-900 p-3 md:p-4 cursor-pointer'} 
                                                         ${(selectedStepId === item.id || (selectedStatus === 'completed' && item.type === 'completed'))
-                                                            ? 'border-amber-500 dark:border-amber-400 shadow-md ring-4 ring-amber-500/10 dark:ring-amber-400/5'
-                                                            : (item.type === 'wait' ? 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20' : 'border-slate-100 dark:border-slate-800/50 hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700/60')
+                                                            ? 'border-amber-500 dark:border-amber-400 ring-2 ring-amber-500/10 dark:ring-amber-400/5'
+                                                            : (item.type === 'wait' ? 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20' : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700')
                                                         }`}
                                                 >
                                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between w-full gap-4">
 
                                                         <div className="flex items-center flex-1 min-w-0 gap-3 md:gap-4">
-                                                            <div className={`${item.type === 'wait' ? 'w-8 h-8' : 'w-10 h-10'} rounded-lg flex items-center justify-center shadow-sm bg-gradient-to-br ${item.style.gradient} text-white shrink-0`} style={item.style.inlineGradient ? { background: item.style.inlineGradient } : undefined}>
+                                                            <div className={`${item.type === 'wait' ? 'w-8 h-8' : 'w-10 h-10'} rounded-lg flex items-center justify-center shadow-none bg-gradient-to-br ${item.style.gradient} text-white shrink-0`} style={item.style.inlineGradient ? { background: item.style.inlineGradient } : undefined}>
                                                                 <Icon className={`${item.type === 'wait' ? 'w-4 h-4' : 'w-5 h-5'}`} />
                                                             </div>
                                                             <div className="min-w-0 flex-1">
@@ -1550,7 +1506,7 @@ const FlowAnalyticsTab: React.FC<{
 
                                                 {/* Branch Switching UI */}
                                                 {item.hasBranches && (
-                                                    <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex bg-white dark:bg-slate-950 rounded-lg shadow-md border border-slate-100 dark:border-slate-800/80 p-0.5 transition-all z-20">
+                                                    <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex bg-white dark:bg-slate-950 rounded-lg shadow-none border border-slate-200 dark:border-slate-800 p-0.5 transition-all z-20">
                                                         {item.type === 'advanced_condition' ? (
                                                             <div className="flex items-center gap-1 px-2">
                                                                 {(item.config.branches || []).map((b: any, i: number) => (
@@ -1606,8 +1562,8 @@ const FlowAnalyticsTab: React.FC<{
 
                 <div className="lg:col-span-1">
                     <div className="sticky top-4 flex flex-col" style={{ maxHeight: 'calc(100vh - 80px)' }}>
-                        <Card className="rounded-2xl border border-slate-100 dark:border-slate-800/60 shadow-md shadow-slate-200/10 dark:shadow-none bg-white dark:bg-slate-900 overflow-hidden flex-1 min-h-0 flex flex-col" title="Live Events" noPadding>
-                            <div className="px-4 py-3.5 border-b border-slate-100 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-950/20 sticky top-0 z-10">
+                        <Card className="rounded-2xl border border-slate-200 dark:border-slate-800 shadow-none bg-white dark:bg-slate-900 overflow-hidden flex-1 min-h-0 flex flex-col" title="Live Events" noPadding>
+                            <div className="px-4 py-3.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20 sticky top-0 z-10">
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-2">
                                         <div className="p-1 bg-indigo-50 text-indigo-600 rounded-lg">
@@ -1623,7 +1579,7 @@ const FlowAnalyticsTab: React.FC<{
                                                 className={`
                                                     flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-all duration-300
                                                     ${isLogFilterOpen 
-                                                        ? 'bg-white dark:bg-slate-800 border-indigo-400 shadow-lg shadow-indigo-500/10' 
+                                                        ? 'bg-white dark:bg-slate-800 border-indigo-400 shadow-none' 
                                                         : 'bg-white/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700/60 hover:border-slate-300'}
                                                 `}
                                             >
@@ -1640,7 +1596,7 @@ const FlowAnalyticsTab: React.FC<{
                                                         initial={{ opacity: 0, y: 10, scale: 0.95 }}
                                                         animate={{ opacity: 1, y: 0, scale: 1 }}
                                                         exit={{ opacity: 0, y: 5, scale: 0.95 }}
-                                                        className="absolute right-0 mt-2 w-40 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-2xl p-1 z-[100] overflow-hidden"
+                                                        className="absolute right-0 mt-2 w-40 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl p-1 z-[100] overflow-hidden"
                                                     >
                                                         <div className="max-h-60 overflow-y-auto custom-scrollbar">
                                                             {logTypeOptions.map((opt) => (
@@ -1687,7 +1643,7 @@ const FlowAnalyticsTab: React.FC<{
                                             <FileDown className="w-3 h-3" />
                                         </button>
                                         <button onClick={handleRefreshLogs} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg border border-transparent hover:border-indigo-100 transition-all">
-                                            <RefreshCcw className={`w-3 h-3 ${loadingLogs ? 'animate-spin' : ''}`} />
+                                            <RefreshCcw className="w-3 h-3" />
                                         </button>
                                     </div>
                                 </div>
@@ -1695,15 +1651,15 @@ const FlowAnalyticsTab: React.FC<{
                             <div className="flex-1 overflow-y-auto p-0 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
                                 {loadingLogs ? (
                                     <div className="space-y-3 p-4">
-                                        {[...Array(5)].map((_, i) => (
+                                        {Array.from({ length: 5 }).map((_, i) => (
                                             <div key={i} className="flex items-start gap-3">
-                                                <Skeleton variant="rounded" width={24} height={24} className="shrink-0" />
+                                                <div className="w-7 h-7 animate-pulse bg-slate-200/70 rounded-[12px] shrink-0" />
                                                 <div className="flex-1 space-y-2">
-                                                    <div className="flex justify-between">
-                                                        <Skeleton variant="text" width="40%" height={10} />
-                                                        <Skeleton variant="text" width="20%" height={10} />
+                                                    <div className="flex justify-between gap-2">
+                                                        <div className="h-3 w-2/5 animate-pulse bg-slate-200/70 rounded-[12px]" />
+                                                        <div className="h-3 w-1/5 animate-pulse bg-slate-200/70 rounded-[12px]" />
                                                     </div>
-                                                    <Skeleton variant="text" width="90%" height={14} />
+                                                    <div className="h-3.5 w-11/12 animate-pulse bg-slate-200/70 rounded-[12px]" />
                                                 </div>
                                             </div>
                                         ))}

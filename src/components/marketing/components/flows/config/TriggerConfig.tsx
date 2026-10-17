@@ -8,6 +8,8 @@ import {
     UserPlus, UserMinus, AlertCircle, Ticket, PartyPopper, Bot, ClipboardList
 } from 'lucide-react';
 import { api } from '../../../services/storageAdapter';
+import erpApi from '../../../../../api/axios';
+import { STANDARD_PIPELINE_STAGES } from '../../../constants/flowConstants';
 import { Campaign, Flow, Segment, FormDefinition, PurchaseEvent, CustomEvent, VoucherCampaign } from '../../../types';
 import { Survey } from '../../../types/survey';
 import IntegrationGuideModal from '../modals/IntegrationGuideModal';
@@ -23,6 +25,15 @@ interface TriggerConfigProps {
     allFlows?: Flow[];
     currentFlowId?: string;
 }
+
+interface ErpMetaCache {
+    teams: Array<{ id: string; name: string }>;
+    users: Array<{ id: string; name: string; role?: string; team_id?: string }>;
+    stages: Array<{ id: string; name: string }>;
+    branches: Array<{ id: string; name: string }>;
+}
+
+let cachedErpMeta: ErpMetaCache | null = null;
 
 const GoogleSheetsIcon = ({ className }: { className?: string }) => (
     <div className={className} style={{ width: className?.includes('w-3') ? '12px' : '18px', height: className?.includes('h-3') ? '12px' : '18px' }}>
@@ -57,6 +68,12 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
     const [voucherCampaigns, setVoucherCampaigns] = useState<VoucherCampaign[]>([]);
     const [surveys, setSurveys] = useState<Survey[]>([]);
     const [chatbots, setChatbots] = useState<any[]>([]);
+    const [erpMeta, setErpMeta] = useState<ErpMetaCache>(() => cachedErpMeta || {
+        teams: [],
+        users: [],
+        stages: STANDARD_PIPELINE_STAGES.map(s => ({ id: s.value, name: s.label })),
+        branches: []
+    });
     const [loading, setLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [showGuide, setShowGuide] = useState(false);
@@ -100,6 +117,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
     }, [config.targetLists, config.targetListIds, config.targetSegmentIds]);
 
     useEffect(() => {
+        const controller = new AbortController();
         const loadInitialData = async () => {
             setLoading(true);
             const [listRes, segRes, campRes, tagRes, formRes, purchRes, customRes, surveyRes, chatbotsRes] = await Promise.all([
@@ -134,24 +152,102 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                 }
             } catch (e) { /* ignore */ }
 
+            if (!cachedErpMeta) {
+                try {
+                    const [teamsRes, usersRes, stagesRes, branchesRes] = await Promise.allSettled([
+                        erpApi.get('/teams', { signal: controller.signal }),
+                        erpApi.get('/users', { signal: controller.signal }),
+                        erpApi.get('/pipeline-stages', { signal: controller.signal }),
+                        erpApi.get('/branches', { signal: controller.signal })
+                    ]);
+
+                    const nextMeta: ErpMetaCache = {
+                        teams: [],
+                        users: [],
+                        stages: STANDARD_PIPELINE_STAGES.map(s => ({ id: s.value, name: s.label })),
+                        branches: []
+                    };
+
+                    if (teamsRes.status === 'fulfilled') {
+                        const raw = teamsRes.value?.data?.data || teamsRes.value?.data || [];
+                        if (Array.isArray(raw)) {
+                            nextMeta.teams = raw
+                                .map((t: any) => ({ id: String(t.id ?? ''), name: String(t.name ?? t.team_name ?? `Vòng chia #${t.id}`) }))
+                                .filter(t => t.id && t.name);
+                        }
+                    }
+                    if (usersRes.status === 'fulfilled') {
+                        const raw = usersRes.value?.data?.data || usersRes.value?.data || [];
+                        if (Array.isArray(raw)) {
+                            nextMeta.users = raw
+                                .filter((u: any) => u && (u.id || u.full_name || u.name || u.username))
+                                .map((u: any) => ({
+                                    id: String(u.id ?? ''),
+                                    name: String(u.full_name || u.name || u.username || `Sale #${u.id}`),
+                                    role: u.role ? String(u.role) : undefined,
+                                    team_id: u.team_id ? String(u.team_id) : undefined
+                                }))
+                                .filter(u => u.id);
+                        }
+                    }
+                    if (stagesRes.status === 'fulfilled') {
+                        const raw = stagesRes.value?.data?.data || stagesRes.value?.data || [];
+                        if (Array.isArray(raw) && raw.length > 0) {
+                            const mapped = raw
+                                .map((st: any) => ({ id: String(st.id ?? st.stage_id ?? ''), name: String(st.name ?? st.stage_name ?? st.title ?? '') }))
+                                .filter(s => s.id && s.name);
+                            if (mapped.length > 0) nextMeta.stages = mapped;
+                        }
+                    }
+                    if (branchesRes.status === 'fulfilled') {
+                        const raw = branchesRes.value?.data?.data || branchesRes.value?.data || [];
+                        if (Array.isArray(raw)) {
+                            nextMeta.branches = raw
+                                .map((b: any) => ({ id: String(b.id ?? ''), name: String(b.name ?? b.branch_name ?? `Chi nhánh #${b.id}`) }))
+                                .filter(b => b.id && b.name);
+                        }
+                    }
+                    cachedErpMeta = nextMeta;
+                    setErpMeta(nextMeta);
+                } catch {
+                    // Fallback silently
+                }
+            }
+
             setLoading(false);
         };
         loadInitialData();
+        return () => controller.abort();
     }, []);
 
     const erpEventPresets = [
-        { id: 'erp_deposit_approved', label: 'Duyệt Đặt cọc / Đóng Học phí', desc: 'Khi Kế toán duyệt phiếu thu / đợt thanh toán' },
-        { id: 'erp_deal_won', label: 'Chốt thành công Cơ hội (Deal Won)', desc: 'Khi Sale chuyển Deal sang giai đoạn Won' },
-        { id: 'erp_student_enrolled', label: 'Ghi danh Học viên vào Lớp học', desc: 'Khi Học viên được xếp lớp đào tạo MYERP' },
-        { id: 'erp_tuition_overdue', label: 'Quá hạn đóng Học phí đợt tiếp', desc: 'Khi Học viên có đợt đóng học phí quá hạn' },
-        { id: 'erp_certificate_issued', label: 'Cấp Chứng chỉ Tốt nghiệp', desc: 'Khi Học viên hoàn thành khóa & nhận chứng chỉ' },
-        { id: 'erp_ticket_created', label: 'Khách tạo Ticket Hỗ trợ / Khiếu nại', desc: 'Khi phát sinh Ticket CSKH trên MYERP' },
-        { id: 'erp_ticket_resolved', label: 'Hoàn tất xử lý Ticket (Resolved)', desc: 'Khi Ticket hỗ trợ được đóng / giải quyết xong' }
+        // Nhóm 1: Phân bổ Lead & Vòng chia (Lead Distribution & Sale)
+        { id: 'round_distributed', group: 'Phân bổ Lead & Vòng chia Sale', label: 'Lead vừa được Vòng chia phân bổ', desc: 'Khi hệ thống tự động chia Lead vào Vòng chia / Ca trực' },
+        { id: 'lead_assigned', group: 'Phân bổ Lead & Vòng chia Sale', label: 'Lead được giao cho Sale (Thủ công / Tự động)', desc: 'Khi hồ sơ khách hàng được gán người phụ trách mới' },
+        { id: 'lead_held_queue', group: 'Phân bổ Lead & Vòng chia Sale', label: 'Lead bị giữ trong hàng đợi (Chưa có ca trực)', desc: 'Khi Lead đổ về ngoài giờ hoặc không có Sale trực ca' },
+        { id: 'lead_created', group: 'Phân bổ Lead & Vòng chia Sale', label: 'Lead mới tạo trong CRM', desc: 'Khi phát sinh hồ sơ khách hàng mới trên MYERP' },
+
+        // Nhóm 2: Chuyển đổi Pipeline & Chăm sóc (CRM Pipeline & SLA)
+        { id: 'stage_changed', group: 'Chuyển đổi Pipeline & SLA', label: 'Chuyển giai đoạn Pipeline (Stage Changed)', desc: 'Khi Sale kéo Lead sang giai đoạn chăm sóc mới' },
+        { id: 'temperature_changed', group: 'Chuyển đổi Pipeline & SLA', label: 'Thay đổi độ nóng Lead (Hot / Warm / Cold)', desc: 'Khi mức độ quan tâm của khách hàng thay đổi' },
+        { id: 'sla_uncontacted', group: 'Chuyển đổi Pipeline & SLA', label: 'Vi phạm SLA: Chưa liên hệ Lead mới', desc: 'Khi Lead đã giao cho Sale nhưng quá thời gian quy định chưa gọi/chăm sóc' },
+        { id: 'lead_stale_14d', group: 'Chuyển đổi Pipeline & SLA', label: 'Lead ngủ đông / Quá hạn chăm sóc', desc: 'Khi hồ sơ không có lịch sử gọi/ghi chú mới trong X ngày' },
+
+        // Nhóm 3: Tài chính - Đặt cọc - Học phí (Accounting & Tuition)
+        { id: 'deposit_created', group: 'Tài chính - Đặt cọc - Học phí', label: 'Tạo phiếu Đặt cọc mới (Pending)', desc: 'Khi Sale vừa lên phiếu đặt cọc chờ Kế toán duyệt' },
+        { id: 'deposit_paid', group: 'Tài chính - Đặt cọc - Học phí', label: 'Đặt cọc thành công (Approved)', desc: 'Khi Kế toán xác nhận đã nhận tiền cọc' },
+        { id: 'tuition_paid', group: 'Tài chính - Đặt cọc - Học phí', label: 'Hoàn tất đóng Học phí', desc: 'Khi Học viên thanh toán xong học phí khóa học' },
+
+        // Nhóm 4: Đào tạo & Học vụ (Academic & Support)
+        { id: 'student_enrolled', group: 'Đào tạo & Học vụ', label: 'Chính thức Nhập học / Xếp lớp', desc: 'Khi khách hàng chuyển thành Học viên chính thức trong lớp' },
+        { id: 'student_attendance_warning', group: 'Đào tạo & Học vụ', label: 'Cảnh báo Chuyên cần / Vắng học', desc: 'Khi Học viên nghỉ học quá số buổi quy định' },
+        { id: 'certificate_issued', group: 'Đào tạo & Học vụ', label: 'Cấp Chứng chỉ / Tốt nghiệp', desc: 'Khi Học viên hoàn thành khóa học và được cấp chứng chỉ' },
+        { id: 'support_ticket_resolved', group: 'Đào tạo & Học vụ', label: 'Hoàn tất xử lý Ticket Hỗ trợ', desc: 'Khi yêu cầu hỗ trợ của Học viên được giải quyết' }
     ];
 
     const triggerOptions = [
         { id: 'segment', label: 'Danh sách & Phân khúc', icon: Layers, color: 'orange', desc: 'Bộ lọc thông minh' },
-        { id: 'erp_event', label: 'Sự kiện MYERP & Học vụ', icon: CheckCircle2, color: 'indigo', desc: 'Đặt cọc, Lớp học, SLA' },
+        { id: 'erp_event', label: 'Sự kiện MYERP & Học vụ', icon: CheckCircle2, color: 'indigo', desc: 'Vòng chia, Sale, Đặt cọc, SLA' },
         { id: 'form', label: 'Gửi Biểu mẫu', icon: FileInput, color: 'yellow', desc: 'Từ Landing Page' },
         { id: 'survey', label: 'Làm Khảo sát', icon: ClipboardList, color: 'emerald', desc: 'Hoàn thành Survey' },
         { id: 'purchase', label: 'Khách hàng Mua', icon: ShoppingCart, color: 'pink', desc: 'Sự kiện API' },
@@ -167,7 +263,39 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
         { id: 'unsubscribe', label: 'Hủy đăng ký', icon: UserMinus, color: 'red', desc: 'Khi khách nhấn Unsub' },
     ];
 
-    const getLabelForType = (type: string, targetId: string, subtype?: string, dateField?: string) => {
+    const buildErpLabel = (targetId: string, erpFilters?: Record<string, any>) => {
+        const erpPreset = erpEventPresets.find(e => e.id === targetId);
+        const base = erpPreset ? `MYERP: ${erpPreset.label}` : 'Khi có sự kiện MYERP';
+        if (!erpFilters) return base;
+        const parts: string[] = [];
+        const roundOrTeamId = erpFilters.round_id || erpFilters.team_id;
+        if (roundOrTeamId) {
+            const t = erpMeta.teams.find(tm => tm.id === String(roundOrTeamId));
+            parts.push(`Vòng chia: ${t ? t.name : `#${roundOrTeamId}`}`);
+        }
+        if (erpFilters.owner_id) {
+            const u = erpMeta.users.find(us => us.id === String(erpFilters.owner_id));
+            parts.push(`Sale: ${u ? u.name : `#${erpFilters.owner_id}`}`);
+        } else if (Array.isArray(erpFilters.owner_ids) && erpFilters.owner_ids.length > 0) {
+            parts.push(`${erpFilters.owner_ids.length} Sale`);
+        }
+        if (erpFilters.to_stage_id) {
+            const st = erpMeta.stages.find(s => s.id === String(erpFilters.to_stage_id));
+            parts.push(`-> ${st ? st.name : `Stage #${erpFilters.to_stage_id}`}`);
+        }
+        if (erpFilters.temperature && erpFilters.temperature !== 'all') {
+            parts.push(`Độ nóng: ${String(erpFilters.temperature).toUpperCase()}`);
+        }
+        if (erpFilters.sla_hours) {
+            parts.push(`SLA > ${erpFilters.sla_hours}h`);
+        }
+        if (erpFilters.stale_days) {
+            parts.push(`Quá hạn > ${erpFilters.stale_days}d`);
+        }
+        return parts.length > 0 ? `${base} (${parts.join(' • ')})` : base;
+    };
+
+    const getLabelForType = (type: string, targetId: string, subtype?: string, dateField?: string, customFilters?: Record<string, any>) => {
         switch (type) {
             case 'segment':
                 if (subtype === 'segment') {
@@ -190,8 +318,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                 const purch = purchases.find(p => p.id === targetId);
                 return purch ? `Mua hàng: ${purch.name}` : 'Khi khách Mua hàng';
             case 'erp_event':
-                const erpPreset = erpEventPresets.find(e => e.id === targetId);
-                return erpPreset ? `MYERP: ${erpPreset.label}` : 'Khi có sự kiện MYERP';
+                return buildErpLabel(targetId, customFilters ?? config.erpFilters);
             case 'custom_event':
                 const ce = customEvents.find(c => c.id === targetId);
                 return ce ? `Sự kiện: ${ce.name}` : 'Khi có sự kiện tùy chọn';
@@ -242,8 +369,10 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
         if (disabled || locked) return;
         setTriggerType(type as any);
         setSearchTerm('');
-        const newLabel = getLabelForType(type, '', type === 'segment' ? 'list' : undefined);
-        onChange({ ...config, type, targetId: '', targetSubtype: type === 'segment' ? 'list' : undefined }, newLabel);
+        const defaultTarget = type === 'erp_event' ? 'round_distributed' : '';
+        const defaultErpFilters = type === 'erp_event' ? (config.erpFilters || {}) : undefined;
+        const newLabel = getLabelForType(type, defaultTarget, type === 'segment' ? 'list' : undefined, undefined, defaultErpFilters);
+        onChange({ ...config, type, targetId: defaultTarget, targetSubtype: type === 'segment' ? 'list' : undefined, ...(type === 'erp_event' ? { erpFilters: defaultErpFilters } : {}) }, newLabel);
     };
 
     useEffect(() => {
@@ -255,8 +384,15 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
     const handleTargetChange = (id: string, subtype?: string) => {
         if (disabled) return;
         const finalSubtype = subtype || targetSubtype;
-        const newLabel = getLabelForType(triggerType, id, finalSubtype, config.dateField);
+        const newLabel = getLabelForType(triggerType, id, finalSubtype, config.dateField, config.erpFilters);
         onChange({ ...config, targetId: id, targetSubtype: finalSubtype }, newLabel);
+    };
+
+    const handleErpFilterChange = (patch: Record<string, any>) => {
+        if (disabled) return;
+        const nextFilters = { ...(config.erpFilters || {}), ...patch };
+        const newLabel = getLabelForType('erp_event', config.targetId, undefined, undefined, nextFilters);
+        onChange({ ...config, erpFilters: nextFilters }, newLabel);
     };
 
     const getOptionClasses = (color: string, isSelected: boolean) => {
@@ -419,7 +555,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                             </div>
                         )}
 
-                        <div className={`space-y-2 pr-1 custom-scrollbar p-0.5 ${triggerType === 'date' ? '' : 'max-h-72 overflow-y-auto'}`}>
+                        <div className={`space-y-2 pr-1 custom-scrollbar p-0.5 ${triggerType === 'date' || triggerType === 'erp_event' ? '' : 'max-h-72 overflow-y-auto'}`}>
                             {/* CASE: SEGMENT / LIST / SYNC */}
                             {triggerType === 'segment' && targetSubtype === 'list' && lists
                                 .filter(i => isManualList(i) && i.name.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -555,19 +691,336 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                             }
 
                             {/* CASE: ERP EVENT (MYERP CRM / ACADEMIC / TUITION / TICKET) */}
-                            {triggerType === 'erp_event' && erpEventPresets
-                                .filter(ev => ev.label.toLowerCase().includes(searchTerm.toLowerCase()) || ev.desc.toLowerCase().includes(searchTerm.toLowerCase()))
-                                .map(ev => (
-                                    <ConfigItem
-                                        key={ev.id}
-                                        label={ev.label}
-                                        desc={ev.desc}
-                                        icon={CheckCircle2}
-                                        isSelected={config.targetId === ev.id}
-                                        onClick={() => handleTargetChange(ev.id)}
-                                    />
-                                ))
-                            }
+                            {triggerType === 'erp_event' && (
+                                <div className="space-y-4">
+                                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
+                                        {erpEventPresets
+                                            .filter(ev => ev.label.toLowerCase().includes(searchTerm.toLowerCase()) || ev.desc.toLowerCase().includes(searchTerm.toLowerCase()) || (ev.group && ev.group.toLowerCase().includes(searchTerm.toLowerCase())))
+                                            .map(ev => (
+                                                <ConfigItem
+                                                    key={ev.id}
+                                                    label={ev.label}
+                                                    desc={`${ev.group ? `[${ev.group}] ` : ''}${ev.desc}`}
+                                                    icon={CheckCircle2}
+                                                    isSelected={config.targetId === ev.id}
+                                                    onClick={() => handleTargetChange(ev.id)}
+                                                />
+                                            ))
+                                        }
+                                    </div>
+
+                                    {config.targetId && (
+                                        <div className="p-5 bg-white border border-indigo-200/80 rounded-[16px] space-y-4 shadow-sm animate-in slide-in-from-bottom-2">
+                                            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                                                <div className="flex items-center gap-2.5">
+                                                    <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600">
+                                                        <Filter className="w-4 h-4" />
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight">Bộ lọc Điều kiện Sự kiện MYERP</h4>
+                                                        <p className="text-[10px] text-slate-500 font-medium">Chỉ kích hoạt Flow khi hồ sơ thỏa mãn các tiêu chí chuyên sâu dưới đây</p>
+                                                    </div>
+                                                </div>
+                                                {config.erpFilters && Object.keys(config.erpFilters).some(k => {
+                                                    const v = config.erpFilters[k];
+                                                    return Array.isArray(v) ? v.length > 0 : (v && v !== 'all');
+                                                }) && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const newLabel = getLabelForType('erp_event', config.targetId, undefined, undefined, {});
+                                                            onChange({ ...config, erpFilters: {} }, newLabel);
+                                                        }}
+                                                        className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer"
+                                                    >
+                                                        Xóa lọc
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            {/* 1. Vòng chia / Hàng đợi (round_distributed | lead_held_queue) */}
+                                            {(config.targetId === 'round_distributed' || config.targetId === 'lead_held_queue') && (
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-indigo-50/40 p-3.5 rounded-xl border border-indigo-100">
+                                                    <div className="space-y-1.5">
+                                                        <label className="text-[10px] font-black text-indigo-900 uppercase tracking-wider block">
+                                                            Vòng chia / Team Sale
+                                                        </label>
+                                                        <select
+                                                            value={config.erpFilters?.round_id || config.erpFilters?.team_id || ''}
+                                                            onChange={(e) => handleErpFilterChange({ round_id: e.target.value, team_id: e.target.value })}
+                                                            disabled={disabled}
+                                                            className="w-full h-10 px-3 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                                                        >
+                                                            <option value="">Tất cả Vòng chia (Mọi Team)</option>
+                                                            {erpMeta.teams.map(t => (
+                                                                <option key={t.id} value={t.id}>{t.name}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <label className="text-[10px] font-black text-indigo-900 uppercase tracking-wider block">
+                                                            Trạng thái phân bổ
+                                                        </label>
+                                                        <select
+                                                            value={config.erpFilters?.distribution_status || 'all'}
+                                                            onChange={(e) => handleErpFilterChange({ distribution_status: e.target.value })}
+                                                            disabled={disabled}
+                                                            className="w-full h-10 px-3 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                                                        >
+                                                            <option value="all">Tất cả trạng thái</option>
+                                                            <option value="success">Đã giao Sale thành công</option>
+                                                            <option value="held">Đang chờ ca trực (Held)</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* 2. Phân công Sale (lead_assigned | round_distributed | lead_created) */}
+                                            {(config.targetId === 'lead_assigned' || config.targetId === 'round_distributed' || config.targetId === 'lead_created') && (
+                                                <div className="space-y-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                        <div className="space-y-1.5">
+                                                            <label className="text-[10px] font-black text-slate-700 uppercase tracking-wider block">
+                                                                Tư vấn viên nhận Lead (Sale)
+                                                            </label>
+                                                            <select
+                                                                value={config.erpFilters?.owner_id || ''}
+                                                                onChange={(e) => handleErpFilterChange({ owner_id: e.target.value })}
+                                                                disabled={disabled}
+                                                                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                                                            >
+                                                                <option value="">Bất kỳ Tư vấn viên nào</option>
+                                                                {erpMeta.users.map(u => (
+                                                                    <option key={u.id} value={u.id}>
+                                                                        {u.name}{u.role ? ` (${u.role})` : ''}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+
+                                                        {config.targetId !== 'round_distributed' && (
+                                                            <div className="space-y-1.5">
+                                                                <label className="text-[10px] font-black text-slate-700 uppercase tracking-wider block">
+                                                                    Thuộc Vòng chia / Team Sale
+                                                                </label>
+                                                                <select
+                                                                    value={config.erpFilters?.team_id || ''}
+                                                                    onChange={(e) => handleErpFilterChange({ team_id: e.target.value })}
+                                                                    disabled={disabled}
+                                                                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                                                                >
+                                                                    <option value="">Tất cả Team Sale</option>
+                                                                    {erpMeta.teams.map(t => (
+                                                                        <option key={t.id} value={t.id}>{t.name}</option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+                                                        )}
+
+                                                        {config.targetId === 'lead_assigned' && (
+                                                            <div className="space-y-1.5 sm:col-span-2">
+                                                                <label className="text-[10px] font-black text-slate-700 uppercase tracking-wider block">
+                                                                    Loại phân công
+                                                                </label>
+                                                                <select
+                                                                    value={config.erpFilters?.assignment_type || 'all'}
+                                                                    onChange={(e) => handleErpFilterChange({ assignment_type: e.target.value })}
+                                                                    disabled={disabled}
+                                                                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                                                                >
+                                                                    <option value="all">Tất cả (Giao mới & Chuyển giao)</option>
+                                                                    <option value="initial">Giao lần đầu (New Lead)</option>
+                                                                    <option value="reassigned">Chuyển giao / Điều phối lại (Reassigned)</option>
+                                                                </select>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Multi-select Sale chips (optional when no single owner_id selected) */}
+                                                    {!config.erpFilters?.owner_id && erpMeta.users.length > 0 && (
+                                                        <div className="space-y-1.5 pt-1">
+                                                            <label className="text-[10px] font-bold text-slate-500 block">
+                                                                Hoặc chọn nhóm nhiều Sale cụ thể ({Array.isArray(config.erpFilters?.owner_ids) ? config.erpFilters.owner_ids.length : 0} đã chọn):
+                                                            </label>
+                                                            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1">
+                                                                {erpMeta.users.slice(0, 20).map(u => {
+                                                                    const selectedIds: string[] = Array.isArray(config.erpFilters?.owner_ids) ? config.erpFilters.owner_ids.map(String) : [];
+                                                                    const isChecked = selectedIds.includes(String(u.id));
+                                                                    return (
+                                                                        <button
+                                                                            key={u.id}
+                                                                            type="button"
+                                                                            disabled={disabled}
+                                                                            onClick={() => {
+                                                                                const next = isChecked
+                                                                                    ? selectedIds.filter(id => id !== String(u.id))
+                                                                                    : [...selectedIds, String(u.id)];
+                                                                                handleErpFilterChange({ owner_ids: next });
+                                                                            }}
+                                                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
+                                                                                isChecked
+                                                                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                                                                    : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                                                                            }`}
+                                                                        >
+                                                                            {u.name}
+                                                                        </button>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* 3. Chuyển giai đoạn Pipeline (stage_changed) */}
+                                            {config.targetId === 'stage_changed' && (
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-purple-50/40 p-3.5 rounded-xl border border-purple-100">
+                                                    <div className="space-y-1.5">
+                                                        <label className="text-[10px] font-black text-purple-900 uppercase tracking-wider block">
+                                                            Từ giai đoạn (From Stage)
+                                                        </label>
+                                                        <select
+                                                            value={config.erpFilters?.from_stage_id || ''}
+                                                            onChange={(e) => handleErpFilterChange({ from_stage_id: e.target.value })}
+                                                            disabled={disabled}
+                                                            className="w-full h-10 px-3 bg-white border border-purple-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-purple-500"
+                                                        >
+                                                            <option value="">Bất kỳ giai đoạn nào</option>
+                                                            {erpMeta.stages.map(st => (
+                                                                <option key={st.id} value={st.id}>{st.name}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <label className="text-[10px] font-black text-purple-900 uppercase tracking-wider block">
+                                                            Sang giai đoạn (To Stage)
+                                                        </label>
+                                                        <select
+                                                            value={config.erpFilters?.to_stage_id || ''}
+                                                            onChange={(e) => handleErpFilterChange({ to_stage_id: e.target.value })}
+                                                            disabled={disabled}
+                                                            className="w-full h-10 px-3 bg-white border border-purple-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-purple-500"
+                                                        >
+                                                            <option value="">Bất kỳ giai đoạn nào</option>
+                                                            {erpMeta.stages.map(st => (
+                                                                <option key={st.id} value={st.id}>{st.name}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* 4. Thay đổi độ nóng Lead (temperature_changed) */}
+                                            {config.targetId === 'temperature_changed' && (
+                                                <div className="space-y-1.5 bg-amber-50/40 p-3.5 rounded-xl border border-amber-100">
+                                                    <label className="text-[10px] font-black text-amber-900 uppercase tracking-wider block">
+                                                        Mức nhiệt độ mới
+                                                    </label>
+                                                    <select
+                                                        value={config.erpFilters?.temperature || 'all'}
+                                                        onChange={(e) => handleErpFilterChange({ temperature: e.target.value })}
+                                                        disabled={disabled}
+                                                        className="w-full h-10 px-3 bg-white border border-amber-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-amber-500"
+                                                    >
+                                                        <option value="all">Tất cả mức nhiệt độ</option>
+                                                        <option value="hot">🔥 Nóng (Hot)</option>
+                                                        <option value="warm">🌤️ Ấm (Warm)</option>
+                                                        <option value="cold">❄️ Lạnh (Cold)</option>
+                                                    </select>
+                                                </div>
+                                            )}
+
+                                            {/* 5. Vi phạm SLA / Lead ngủ đông (sla_uncontacted | lead_stale_14d) */}
+                                            {(config.targetId === 'sla_uncontacted' || config.targetId === 'lead_stale_14d') && (
+                                                <div className="space-y-1.5 bg-rose-50/40 p-3.5 rounded-xl border border-rose-100">
+                                                    <label className="text-[10px] font-black text-rose-900 uppercase tracking-wider block">
+                                                        {config.targetId === 'sla_uncontacted'
+                                                            ? 'Thời gian quá hạn chưa liên hệ (Số giờ SLA)'
+                                                            : 'Số ngày không có lịch sử chăm sóc mới'}
+                                                    </label>
+                                                    <div className="flex items-center gap-3">
+                                                        <input
+                                                            type="number"
+                                                            min={1}
+                                                            value={
+                                                                config.targetId === 'sla_uncontacted'
+                                                                    ? (config.erpFilters?.sla_hours ?? 2)
+                                                                    : (config.erpFilters?.stale_days ?? 14)
+                                                            }
+                                                            onChange={(e) => {
+                                                                const val = Math.max(1, parseInt(e.target.value) || 1);
+                                                                if (config.targetId === 'sla_uncontacted') {
+                                                                    handleErpFilterChange({ sla_hours: val });
+                                                                } else {
+                                                                    handleErpFilterChange({ stale_days: val });
+                                                                }
+                                                            }}
+                                                            disabled={disabled}
+                                                            className="w-28 h-10 px-3 bg-white border border-rose-200 rounded-xl text-xs font-black text-slate-800 outline-none focus:border-rose-500"
+                                                        />
+                                                        <span className="text-xs font-bold text-rose-700">
+                                                            {config.targetId === 'sla_uncontacted' ? 'Giờ (Hours)' : 'Ngày (Days)'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* 6. Bộ lọc điều kiện bổ sung chung cho MỌI sự kiện MYERP */}
+                                            <div className="pt-2 border-t border-slate-100 space-y-3">
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                                    Bộ lọc điều kiện bổ sung (Tùy chọn)
+                                                </p>
+                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-bold text-slate-600 block">Chương trình quan tâm</label>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Tất cả (VD: IELTS, Du học...)"
+                                                            value={config.erpFilters?.program || ''}
+                                                            onChange={(e) => handleErpFilterChange({ program: e.target.value })}
+                                                            disabled={disabled}
+                                                            className="w-full h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-indigo-400"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-bold text-slate-600 block">Chi nhánh MYERP</label>
+                                                        <select
+                                                            value={config.erpFilters?.branch_id || ''}
+                                                            onChange={(e) => handleErpFilterChange({ branch_id: e.target.value })}
+                                                            disabled={disabled}
+                                                            className="w-full h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-indigo-400"
+                                                        >
+                                                            <option value="">Tất cả chi nhánh</option>
+                                                            {erpMeta.branches.map(b => (
+                                                                <option key={b.id} value={b.id}>{b.name}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-bold text-slate-600 block">Nguồn Lead (Source)</label>
+                                                        <select
+                                                            value={config.erpFilters?.source || ''}
+                                                            onChange={(e) => handleErpFilterChange({ source: e.target.value })}
+                                                            disabled={disabled}
+                                                            className="w-full h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-indigo-400"
+                                                        >
+                                                            <option value="">Tất cả nguồn</option>
+                                                            <option value="Facebook">Facebook</option>
+                                                            <option value="Zalo">Zalo</option>
+                                                            <option value="Tiktok">Tiktok</option>
+                                                            <option value="Website">Website</option>
+                                                            <option value="Landing Page">Landing Page</option>
+                                                            <option value="Hotline">Hotline</option>
+                                                            <option value="Referral">Giới thiệu (Referral)</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {/* CASE: CUSTOM EVENT */}
                             {triggerType === 'custom_event' && customEvents

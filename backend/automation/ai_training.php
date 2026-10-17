@@ -32,7 +32,7 @@ if (!$isPublicAction) {
     $userRole = $currentOrgUser['role'] ?? '';
 
     $isSuperAdmin = is_super_admin();
-    $hasAdminRole = in_array($userRole, ['admin', 'assistant', 'super_admin']);
+    $hasAdminRole = in_array($userRole, ['admin', 'assistant', 'super_admin', 'manager']);
 
     if (!$isSuperAdmin && !$hasAdminRole) {
         http_response_code(403);
@@ -410,7 +410,7 @@ try {
         // training data of Bot B by supplying a different property_id.
         // Skip for: public read-only actions that bypass auth above (get_settings, list_all_chatbots)
         // and for the super-admin (admin-001) who has global access.
-        if ($currentOrgUser && ($currentOrgUser['id'] ?? '') !== 'admin-001') {
+        if ($currentOrgUser && ($currentOrgUser['id'] ?? '') !== 'admin-001' && !in_array($currentOrgUser['role'] ?? '', ['admin', 'super_admin', 'manager', 'assistant'])) {
             requireCategoryAccess($propertyId, $currentOrgUser);
         }
     }
@@ -436,7 +436,9 @@ try {
             $params = [];
             if (!empty($groupId)) {
                 // [SECURITY FIX] Verify access to the requested group
-                requireCategoryAccess(resolvePropertyId($pdo, $groupId), $currentOrgUser);
+                if ($currentOrgUser && ($currentOrgUser['id'] ?? '') !== 'admin-001' && !in_array($currentOrgUser['role'] ?? '', ['admin', 'super_admin', 'manager', 'assistant'])) {
+                    requireCategoryAccess(resolvePropertyId($pdo, $groupId), $currentOrgUser);
+                }
 
                 $sql .= " AND d.property_id IN (SELECT b2.id FROM ai_chatbots b2 WHERE b2.category_id = ?)";
                 $params[] = $groupId;
@@ -507,7 +509,7 @@ try {
                 $settings['has_cat_api_key'] = !empty($settings['cat_gemini_api_key']);
 
                 // SECURITY: Only admin/assistant can see sensitive fields
-                $isAdmin = ($currentOrgUser && in_array($currentOrgUser['role'], ['admin', 'assistant']));
+                $isAdmin = ($currentOrgUser && in_array($currentOrgUser['role'], ['admin', 'assistant', 'super_admin', 'manager']));
 
                 if (!$isAdmin) {
                     // Remove ALL sensitive fields for non-admin users

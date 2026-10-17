@@ -29,12 +29,21 @@ $writeActions = [
 ];
 
 if (in_array($action, $writeActions)) {
-    // Only Admin and Assistant can modify data
-    if ($currentUserRole !== 'admin' && $currentUserRole !== 'assistant') {
+    // Only Admin, Super Admin, Manager and Assistant can modify data
+    if (!in_array($currentUserRole, ['admin', 'super_admin', 'manager', 'assistant'], true)) {
         http_response_code(403);
         echo json_encode(['success' => false, 'message' => 'Unauthorized: Only Admins or Assistants can perform this action.']);
         exit;
     }
+}
+
+function isWorkspaceAdmin($currentOrgUser, $currentUserRole)
+{
+    return in_array($currentUserRole, ['admin', 'super_admin', 'manager', 'assistant'], true)
+        || (function_exists('is_super_admin') && is_super_admin())
+        || in_array('*', is_array($currentOrgUser['permissions'] ?? []) ? ($currentOrgUser['permissions'] ?? []) : [])
+        || in_array('*', is_array($currentOrgUser['allowed_categories'] ?? []) ? ($currentOrgUser['allowed_categories'] ?? []) : [])
+        || in_array('*', is_array($currentOrgUser['allowed_chatbots'] ?? []) ? ($currentOrgUser['allowed_chatbots'] ?? []) : []);
 }
 
 // Resolve IDs if provided as slugs
@@ -55,9 +64,6 @@ if (isset($data['id'])) {
 if (!empty($_POST)) {
     $data = array_merge($data, $_POST);
 }
-
-// Logic moved to setup_ai_db.php and check_ai_schema.php for better performance.
-// Only keep if strictly necessary for zero-downtime, but here it's redundant.
 
 try {
     switch ($action) {
@@ -109,7 +115,7 @@ try {
 } catch (Exception $e) {
     http_response_code(500); // Internal Error
     error_log('[EXCEPTION] ' . $e->getMessage() . ' in ' . __FILE__ . ':' . __LINE__);
-    echo json_encode(['success' => false, 'message' => 'Lỗi hệ thống, vui lòng thử lại.']);
+    echo json_encode(['success' => false, 'message' => $e->getMessage() ?: 'Lỗi hệ thống, vui lòng thử lại.']);
 }
 
 // --- Helper Functions ---
@@ -137,31 +143,25 @@ function listCategories($pdo)
     $where = "";
     $params = [];
 
-    // ── Scope logic ──────────────────────────────────────────────────────────
-    // Admin role (including admin-001 / super-admin) ➜ sees ALL categories.
-    // Non-admin (assistant, user, staff) ➜ only sees categories that belong
-    // to their organisation's top admin (admin_id).
-    $isAdmin = ($currentUserRole === 'admin') ||
-               is_super_admin() ||
-               in_array('*', is_array($currentOrgUser['permissions'] ?? []) ? ($currentOrgUser['permissions'] ?? []) : []);
+    $isAdmin = isWorkspaceAdmin($currentOrgUser, $currentUserRole);
 
     if (!$isAdmin) {
-        // Staff/user: restrict to their org scope
         $orgScopeAdminId = $currentOrgUser['admin_id'] ?? $currentAdminId;
         if (!empty($orgScopeAdminId) && $orgScopeAdminId !== 'admin-001') {
-            $where = " WHERE ac.admin_id = ? OR ac.admin_id IS NULL";
+            $where = " WHERE ac.admin_id = ? OR ac.admin_id = 'admin-001' OR ac.admin_id IS NULL";
             $params[] = $orgScopeAdminId;
         }
     }
-    // Admin → no WHERE filter → returns everything
 
     $sql = "SELECT
 ac.id, ac.name, ac.slug, ac.description, ac.admin_id, ac.created_at, ac.updated_at,
 ads.brand_color, ads.gemini_api_key, ads.bot_avatar,
-COUNT(acb.id) as chatbot_count
+COUNT(DISTINCT acb.id) as chatbot_count,
+COUNT(DISTINCT atd.id) as docs_count
 FROM ai_chatbot_categories ac
 LEFT JOIN ai_chatbot_settings ads ON ads.property_id = ac.id
 LEFT JOIN ai_chatbots acb ON acb.category_id = ac.id
+LEFT JOIN domation_ai_training_docs atd ON atd.property_id = acb.id AND atd.source_type != 'folder'
 $where
 GROUP BY ac.id
 ORDER BY ac.created_at DESC";
@@ -215,6 +215,7 @@ bot_avatar) VALUES (?, ?, ?, ?, ?)");
 
 function updateCategory($pdo, $data)
 {
+    global $currentOrgUser, $currentAdminId, $currentUserRole;
     $id = $data['id'] ?? '';
     $name = $data['name'] ?? '';
     $description = $data['description'] ?? '';
@@ -227,9 +228,14 @@ function updateCategory($pdo, $data)
         throw new Exception('ID không hợp lệ');
     }
 
-    // [FIX] Verify ownership
-    $stmtCheckOwn = $pdo->prepare("SELECT id FROM ai_chatbot_categories WHERE id = ? AND admin_id = ?");
-    $stmtCheckOwn->execute([$id, $orgScopeAdminId]);
+    $isAdmin = isWorkspaceAdmin($currentOrgUser, $currentUserRole);
+    if ($isAdmin) {
+        $stmtCheckOwn = $pdo->prepare("SELECT id FROM ai_chatbot_categories WHERE id = ?");
+        $stmtCheckOwn->execute([$id]);
+    } else {
+        $stmtCheckOwn = $pdo->prepare("SELECT id FROM ai_chatbot_categories WHERE id = ? AND (admin_id = ? OR admin_id = 'admin-001' OR admin_id IS NULL)");
+        $stmtCheckOwn->execute([$id, $orgScopeAdminId]);
+    }
     if (!$stmtCheckOwn->fetch()) {
         throw new Exception('Bạn không có quyền cập nhật category này');
     }
@@ -246,7 +252,6 @@ function updateCategory($pdo, $data)
     $sqlCat = "UPDATE ai_chatbot_categories SET name = ?, description = ?, slug = ?";
     $paramsCat = [$name, $description, $slug];
 
-    // Check if updated_at exists to avoid error if migration hasn't run
     $stmtCheck = $pdo->query("SHOW COLUMNS FROM ai_chatbot_categories LIKE 'updated_at'");
     if ($stmtCheck->fetch()) {
         $sqlCat .= ", updated_at = NOW()";
@@ -269,7 +274,6 @@ gemini_api_key = VALUES(gemini_api_key),
 bot_avatar = VALUES(bot_avatar)");
     $stmtSettings->execute([$id, $name, $brand_color, $gemini_api_key, $bot_avatar]);
 
-    global $currentAdminId;
     if ($currentAdminId)
         logAdminAction($pdo, $currentAdminId, 'update_category', 'category', $id, ['name' => $name]);
 
@@ -280,12 +284,18 @@ bot_avatar = VALUES(bot_avatar)");
 
 function deleteCategory($pdo, $id, $adminId)
 {
+    global $currentOrgUser, $currentAdminId, $currentUserRole;
     if (empty($id))
         throw new Exception('ID không hợp lệ');
 
-    // [FIX] Verify ownership
-    $stmtCheckOwn = $pdo->prepare("SELECT id FROM ai_chatbot_categories WHERE id = ? AND admin_id = ?");
-    $stmtCheckOwn->execute([$id, $adminId]);
+    $isAdmin = isWorkspaceAdmin($currentOrgUser, $currentUserRole);
+    if ($isAdmin) {
+        $stmtCheckOwn = $pdo->prepare("SELECT id FROM ai_chatbot_categories WHERE id = ?");
+        $stmtCheckOwn->execute([$id]);
+    } else {
+        $stmtCheckOwn = $pdo->prepare("SELECT id FROM ai_chatbot_categories WHERE id = ? AND (admin_id = ? OR admin_id = 'admin-001' OR admin_id IS NULL)");
+        $stmtCheckOwn->execute([$id, $adminId]);
+    }
     if (!$stmtCheckOwn->fetch()) {
         throw new Exception('Bạn không có quyền xóa category này');
     }
@@ -302,7 +312,6 @@ function deleteCategory($pdo, $id, $adminId)
     $stmt = $pdo->prepare("DELETE FROM ai_chatbot_categories WHERE id = ?");
     if ($stmt->execute([$id])) {
         clearBotCache($pdo, $id, true);
-        global $currentAdminId;
         if ($currentAdminId)
             logAdminAction($pdo, $currentAdminId, 'delete_category', 'category', $id);
         echo json_encode(['success' => true]);
@@ -315,7 +324,8 @@ function deleteCategory($pdo, $id, $adminId)
 
 function listChatbots($pdo, $categoryId = null)
 {
-    // Base SQL
+    global $currentOrgUser, $currentAdminId, $currentUserRole;
+
     $sql = "SELECT
 ac.id, ac.name, ac.description, ac.category_id, ac.created_at, ac.updated_at,
 acc.name as category_name,
@@ -323,27 +333,25 @@ COALESCE(ads.is_enabled, ac.is_enabled) as ai_enabled,
 COUNT(DISTINCT atd.id) as docs_count,
 COUNT(DISTINCT aoc.id) as queries_count
 FROM ai_chatbots ac
-INNER JOIN ai_chatbot_categories acc ON ac.category_id = acc.id
+LEFT JOIN ai_chatbot_categories acc ON ac.category_id = acc.id
 LEFT JOIN ai_chatbot_settings ads ON ads.property_id = ac.id
 LEFT JOIN domation_ai_training_docs atd ON atd.property_id = ac.id AND atd.source_type != 'folder'
 LEFT JOIN ai_org_conversations aoc ON aoc.property_id = ac.id AND aoc.status != 'deleted'
 WHERE 1=1";
 
     $params = [];
-    
-    // [FIX] Multi-tenant isolation for chatbots
-    global $currentOrgUser, $currentAdminId, $currentUserRole;
-    $isAdmin = ($currentUserRole === 'admin') || is_super_admin();
-    
+    $isAdmin = isWorkspaceAdmin($currentOrgUser, $currentUserRole);
+
     if (!$isAdmin) {
         $orgScopeAdminId = $currentOrgUser['admin_id'] ?? $currentAdminId;
         if (!empty($orgScopeAdminId) && $orgScopeAdminId !== 'admin-001') {
-            $sql .= " AND acc.admin_id = ?";
+            $sql .= " AND (acc.admin_id = ? OR acc.admin_id = 'admin-001' OR acc.admin_id IS NULL)";
             $params[] = $orgScopeAdminId;
         }
     }
     if ($categoryId) {
-        $sql .= " AND ac.category_id = ?";
+        $sql .= " AND (ac.category_id = ? OR acc.slug = ?)";
+        $params[] = $categoryId;
         $params[] = $categoryId;
     }
 
@@ -375,9 +383,11 @@ WHERE 1=1";
 
 function createChatbot($pdo, $data)
 {
+    global $currentOrgUser, $currentAdminId, $currentUserRole;
     $name = $data['name'] ?? '';
     $description = $data['description'] ?? '';
     $categoryId = $data['category_id'] ?? null;
+    $slug = $data['slug'] ?? null;
 
     if (empty($name)) {
         throw new Exception('Tên AI Chatbot không được để trống');
@@ -386,13 +396,17 @@ function createChatbot($pdo, $data)
     // Generate unique ID
     $id = 'chatbot_' . uniqid();
 
-    // [FIX] Verify Category ownership
-    global $currentOrgUser, $currentAdminId;
     $orgScopeAdminId = $currentOrgUser['admin_id'] ?? $currentAdminId;
-    
+    $isAdmin = isWorkspaceAdmin($currentOrgUser, $currentUserRole);
+
     if ($categoryId) {
-        $stmtCat = $pdo->prepare("SELECT id FROM ai_chatbot_categories WHERE id = ? AND admin_id = ?");
-        $stmtCat->execute([$categoryId, $orgScopeAdminId]);
+        if ($isAdmin) {
+            $stmtCat = $pdo->prepare("SELECT id FROM ai_chatbot_categories WHERE id = ?");
+            $stmtCat->execute([$categoryId]);
+        } else {
+            $stmtCat = $pdo->prepare("SELECT id FROM ai_chatbot_categories WHERE id = ? AND (admin_id = ? OR admin_id = 'admin-001' OR admin_id IS NULL)");
+            $stmtCat->execute([$categoryId, $orgScopeAdminId]);
+        }
         if (!$stmtCat->fetch()) {
             throw new Exception('Category không hợp lệ hoặc không thuộc quyền sở hữu của bạn');
         }
@@ -400,31 +414,29 @@ function createChatbot($pdo, $data)
         throw new Exception('Chatbot mới phải thuộc về một Category');
     }
 
-    if (!$stmt->execute([$id, $name, $description, $categoryId])) {
+    $stmt = $pdo->prepare("INSERT INTO ai_chatbots (id, name, slug, description, category_id) VALUES (?, ?, ?, ?, ?)");
+    if (!$stmt->execute([$id, $name, $slug, $description, $categoryId])) {
         throw new Exception('Lỗi tạo AI Chatbot');
     }
 
     // Create default AI settings (REDUCED Defaults for Standalone)
-// Identity info will be fetched from Category
     $defaultSettings = [
         'property_id' => $id,
         'is_enabled' => 0,
-        'bot_name' => $name, // Keep bot name as fallback or specific override
+        'bot_name' => $name,
         'company_name' => '',
-        'brand_color' => '', // Leave empty to use Category's color
-        'bot_avatar' => '', // Leave empty to use Category's avatar
+        'brand_color' => '',
+        'bot_avatar' => '',
         'welcome_msg' => 'Chào bạn! Mình có thể giúp gì cho bạn?',
         'persona_prompt' => '',
-        'gemini_api_key' => '', // Leave empty to use Category's key
+        'gemini_api_key' => '',
         'quick_actions' => json_encode([]),
-        'system_instruction' => "Bạn là tư vấn viên chuyên nghiệp.\n#TONE: Chuyên nghiệp, tư vấn đầy đủ nhưng đúng trọng tâm,
-KHÔNG emoji, KHÔNG nói kiểu (\"theo dữ liệu...\").\nXưng \"em\", gọi khách \"anh/chị\".",
+        'system_instruction' => "Bạn là tư vấn viên chuyên nghiệp.\n#TONE: Chuyên nghiệp, tư vấn đầy đủ nhưng đúng trọng tâm, KHÔNG emoji, KHÔNG nói kiểu (\"theo dữ liệu...\").\nXưng \"em\", gọi khách \"anh/chị\".",
         'fast_replies' => json_encode([
             ['pattern' => 'chào, hi, hello, xin chào', 'reply' => 'Chào bạn! Mình có thể giúp gì cho bạn hôm nay ạ?'],
             [
                 'pattern' => 'tạm biệt, bye, cám ơn, cảm ơn',
-                'reply' => 'Dạ, cảm ơn Anh Chị đã quan tâm! Chúc bạn một ngày tốt lành
-ạ.'
+                'reply' => 'Dạ, cảm ơn Anh Chị đã quan tâm! Chúc bạn một ngày tốt lành ạ.'
             ]
         ]),
         'similarity_threshold' => 0.55,
@@ -459,7 +471,6 @@ similarity_threshold, top_k, history_limit, chunk_size, chunk_overlap) VALUES (?
         $defaultSettings['chunk_overlap']
     ]);
 
-    global $currentAdminId;
     if ($currentAdminId)
         logAdminAction($pdo, $currentAdminId, 'create_chatbot', 'bot', $id, ['name' => $name]);
 
@@ -468,22 +479,24 @@ similarity_threshold, top_k, history_limit, chunk_size, chunk_overlap) VALUES (?
 
 function getChatbot($pdo, $id, $adminId)
 {
+    global $currentOrgUser, $currentUserRole;
     if (empty($id)) {
         throw new Exception('ID không hợp lệ');
     }
 
     $sql = "SELECT ac.*, acc.name as category_name 
             FROM ai_chatbots ac 
-            JOIN ai_chatbot_categories acc ON ac.category_id = acc.id 
+            LEFT JOIN ai_chatbot_categories acc ON ac.category_id = acc.id 
             WHERE ac.id = ?";
-    
+
     $params = [$id];
-    
-    if ($adminId && $adminId !== 'admin-001') {
-        $sql .= " AND acc.admin_id = ?";
+    $isAdmin = isWorkspaceAdmin($currentOrgUser, $currentUserRole);
+
+    if (!$isAdmin && $adminId && $adminId !== 'admin-001') {
+        $sql .= " AND (acc.admin_id = ? OR acc.admin_id = 'admin-001' OR acc.admin_id IS NULL)";
         $params[] = $adminId;
     }
-    
+
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
 
@@ -496,6 +509,7 @@ function getChatbot($pdo, $id, $adminId)
 
 function updateChatbot($pdo, $data)
 {
+    global $currentOrgUser, $currentAdminId, $currentUserRole;
     $id = $data['id'] ?? '';
     $name = $data['name'] ?? '';
     $description = $data['description'] ?? '';
@@ -505,11 +519,15 @@ function updateChatbot($pdo, $data)
         throw new Exception('ID không hợp lệ');
     }
 
-    // [FIX] Verify ownership
-    global $currentOrgUser, $currentAdminId;
     $orgScopeAdminId = $currentOrgUser['admin_id'] ?? $currentAdminId;
-    $stmtCheck = $pdo->prepare("SELECT ac.id FROM ai_chatbots ac JOIN ai_chatbot_categories acc ON ac.category_id = acc.id WHERE ac.id = ? AND acc.admin_id = ?");
-    $stmtCheck->execute([$id, $orgScopeAdminId]);
+    $isAdmin = isWorkspaceAdmin($currentOrgUser, $currentUserRole);
+    if ($isAdmin) {
+        $stmtCheck = $pdo->prepare("SELECT ac.id FROM ai_chatbots ac WHERE ac.id = ?");
+        $stmtCheck->execute([$id]);
+    } else {
+        $stmtCheck = $pdo->prepare("SELECT ac.id FROM ai_chatbots ac LEFT JOIN ai_chatbot_categories acc ON ac.category_id = acc.id WHERE ac.id = ? AND (acc.admin_id = ? OR acc.admin_id = 'admin-001' OR acc.admin_id IS NULL)");
+        $stmtCheck->execute([$id, $orgScopeAdminId]);
+    }
     if (!$stmtCheck->fetch()) {
         throw new Exception('Bạn không có quyền cập nhật chatbot này');
     }
@@ -542,12 +560,11 @@ function updateChatbot($pdo, $data)
 ?")->execute($settingsParams);
     }
 
-    global $currentAdminId;
     if ($currentAdminId)
         logAdminAction($pdo, $currentAdminId, 'update_chatbot', 'bot', $id, $data);
 
     clearBotCache($pdo, $id, false);
-    
+
     // ALSO CLEAR RAG CACHE for this property
     $pdo->prepare("DELETE FROM ai_rag_search_cache WHERE property_id = ?")->execute([$id]);
 
@@ -556,13 +573,19 @@ function updateChatbot($pdo, $data)
 
 function deleteChatbot($pdo, $id, $adminId)
 {
+    global $currentOrgUser, $currentAdminId, $currentUserRole;
     if (empty($id)) {
         throw new Exception('ID không hợp lệ');
     }
 
-    // [FIX] Verify ownership
-    $stmtCheck = $pdo->prepare("SELECT ac.id FROM ai_chatbots ac JOIN ai_chatbot_categories acc ON ac.category_id = acc.id WHERE ac.id = ? AND acc.admin_id = ?");
-    $stmtCheck->execute([$id, $adminId]);
+    $isAdmin = isWorkspaceAdmin($currentOrgUser, $currentUserRole);
+    if ($isAdmin) {
+        $stmtCheck = $pdo->prepare("SELECT ac.id FROM ai_chatbots ac WHERE ac.id = ?");
+        $stmtCheck->execute([$id]);
+    } else {
+        $stmtCheck = $pdo->prepare("SELECT ac.id FROM ai_chatbots ac LEFT JOIN ai_chatbot_categories acc ON ac.category_id = acc.id WHERE ac.id = ? AND (acc.admin_id = ? OR acc.admin_id = 'admin-001' OR acc.admin_id IS NULL)");
+        $stmtCheck->execute([$id, $adminId]);
+    }
     if (!$stmtCheck->fetch()) {
         throw new Exception('Bạn không có quyền xóa chatbot này');
     }
@@ -579,7 +602,6 @@ function deleteChatbot($pdo, $id, $adminId)
     // Delete RAG cache
     $pdo->prepare("DELETE FROM ai_rag_search_cache WHERE property_id = ?")->execute([$id]);
 
-    global $currentAdminId;
     if ($currentAdminId)
         logAdminAction($pdo, $currentAdminId, 'delete_chatbot', 'bot', $id);
 

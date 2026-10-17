@@ -71,11 +71,12 @@ const SurveyCanvasBlock: React.FC<Props> = ({
 
     const accentColor = block.style?.accentColor || theme.primaryColor || '#BD1D2D';
     const bgColor = block.style?.backgroundColor || theme.cardBackground || '#ffffff';
-    const textColor = block.style?.textColor || theme.textColor || '#1e293b';
+    const textColor = block.style?.textColor || theme.textColor || '#0f172a';
     const textAlign = block.style?.textAlign || 'left';
     const boxShadow = block.style?.boxShadow && block.style.boxShadow !== 'none' 
         ? block.style.boxShadow 
-        : (theme.cardShadow && theme.cardShadow !== 'none' ? theme.cardShadow : undefined);
+        : (theme.cardShadow && theme.cardShadow !== 'none' ? theme.cardShadow : 'none');
+    const resolvedLabel = block.label || (block as any).title || (block as any).question || '';
 
     const NON_QUESTION_TYPES = ['section_header', 'image_block', 'divider', 'page_break', 'button_block', 'link_block', 'banner_block', 'video', 'text_block'];
     const isLayout = NON_QUESTION_TYPES.includes(block.type);
@@ -90,24 +91,24 @@ const SurveyCanvasBlock: React.FC<Props> = ({
             id={`block-${block.id}`}
             data-handler-id={handlerId}
             onClick={(e) => { e.stopPropagation(); onSelect(); }}
-            className={`group relative rounded-2xl border-2 transition-all duration-150 cursor-pointer
+            className={`group relative rounded-2xl transition-all duration-150 cursor-pointer
                 ${isDragging 
-                    ? 'opacity-40 border-dashed border-[var(--color-primary)] bg-[var(--color-primary-light)]/20 scale-[0.98]' 
+                    ? 'opacity-40 border-2 border-dashed border-[var(--color-primary)] bg-[var(--color-primary-light)]/20 scale-[0.98]' 
                     : isSelected
-                        ? 'border-[var(--color-primary)] ring-4 ring-[var(--color-primary)]/20 shadow-sm'
-                        : 'border-transparent hover:border-slate-200'
+                        ? 'border-2 border-[var(--color-primary)] ring-2 ring-[var(--color-primary)]/15'
+                        : 'border border-slate-200/90 hover:border-slate-300'
                 }`}
             style={{ background: block.type === 'page_break' ? 'transparent' : bgColor, boxShadow: block.type === 'page_break' ? 'none' : boxShadow }}
         >
             {/* ── Hover/selected action toolbar (top-right) ─────────────────── */}
-            <div className={`absolute -top-3.5 right-3 flex items-center gap-0.5 bg-white border border-slate-200 rounded-xl shadow-md px-1 py-0.5 z-20 transition-all
+            <div className={`absolute -top-3.5 right-3 flex items-center gap-0.5 bg-white border border-slate-200 rounded-xl px-1 py-0.5 z-20 transition-all
                 ${isSelected || isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
 
                 {/* Move up */}
                 {index > 0 && (
                     <button
                         onClick={e => { e.stopPropagation(); onMove(index, index - 1); }}
-                        className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors"
+                        className="p-1 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
                         title="Di chuyển lên"
                     >
                         <ArrowUp className="w-3.5 h-3.5" />
@@ -117,19 +118,19 @@ const SurveyCanvasBlock: React.FC<Props> = ({
                 {index < totalBlocks - 1 && (
                     <button
                         onClick={e => { e.stopPropagation(); onMove(index, index + 1); }}
-                        className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors"
+                        className="p-1 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
                         title="Di chuyển xuống"
                     >
                         <ArrowDown className="w-3.5 h-3.5" />
                     </button>
                 )}
 
-                {(index > 0 || index < totalBlocks - 1) && <div className="w-px h-3.5 bg-slate-100 mx-0.5" />}
+                {(index > 0 || index < totalBlocks - 1) && <div className="w-px h-3.5 bg-slate-200 mx-0.5" />}
 
                 {/* Drag handle */}
                 <div
                     ref={drag as any}
-                    className="p-1 cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-colors select-none"
+                    className="p-1 cursor-grab active:cursor-grabbing text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors select-none"
                     title="Kéo để di chuyển"
                     onMouseDown={e => e.stopPropagation()}
                     onClick={e => e.stopPropagation()}
@@ -137,12 +138,12 @@ const SurveyCanvasBlock: React.FC<Props> = ({
                     <GripVertical className="w-3.5 h-3.5" />
                 </div>
 
-                <div className="w-px h-3.5 bg-slate-100 mx-0.5" />
+                <div className="w-px h-3.5 bg-slate-200 mx-0.5" />
 
                 {/* Duplicate */}
                 <button
                     onClick={e => { e.stopPropagation(); onDuplicate(); }}
-                    className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors"
+                    className="p-1 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
                     title="Nhân đôi"
                 >
                     <Copy className="w-3.5 h-3.5" />
@@ -151,7 +152,7 @@ const SurveyCanvasBlock: React.FC<Props> = ({
                 {/* Delete */}
                 <button
                     onClick={e => { e.stopPropagation(); onDelete(); }}
-                    className="p-1 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                    className="p-1 rounded-lg text-slate-600 hover:text-red-600 hover:bg-red-50 transition-colors"
                     title="Xoá"
                 >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -160,7 +161,7 @@ const SurveyCanvasBlock: React.FC<Props> = ({
 
             {/* ── Logic Indicator (when not selected but has config) ── */}
             {(!isSelected && (block.logic ?? []).length > 0) && (
-                <div className="absolute top-3 right-3 flex items-center gap-1 bg-amber-50 text-amber-500 border border-amber-200/50 shadow-sm px-1.5 py-1 rounded-lg z-10 transition-opacity group-hover:opacity-0 pointer-events-none" title="Câu hỏi này có logic rẽ nhánh">
+                <div className="absolute top-3 right-3 flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-1 rounded-lg z-10 transition-opacity group-hover:opacity-0 pointer-events-none" title="Câu hỏi này có logic rẽ nhánh">
                     <LucideIcons.GitMerge className="w-3.5 h-3.5" />
                 </div>
             )}
@@ -169,15 +170,15 @@ const SurveyCanvasBlock: React.FC<Props> = ({
                 {/* Question number */}
                 {isQuestion && questionNumber !== null && (
                     <div className="flex items-center gap-2 mb-2">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">Câu {questionNumber}</span>
-                        {block.required && <span className="text-[9px] font-bold bg-red-50 text-red-400 px-1.5 py-0.5 rounded-full uppercase">Bắt buộc</span>}
-                        {block.allowOther && <span className="text-[9px] font-bold bg-blue-50 text-blue-400 px-1.5 py-0.5 rounded-full">Khác</span>}
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">Câu {questionNumber}</span>
+                        {block.required && <span className="text-[9px] font-bold bg-red-50 text-red-600 border border-red-200 px-1.5 py-0.5 rounded-full uppercase">Bắt buộc</span>}
+                        {block.allowOther && <span className="text-[9px] font-bold bg-blue-50 text-blue-600 border border-blue-200 px-1.5 py-0.5 rounded-full">Khác</span>}
                     </div>
                 )}
 
                 {/* ── Block type renderers ─────────────────────────────────────── */}
                 {block.type === 'section_header' ? (
-                    <div className="font-bold text-lg leading-snug" style={{ color: textColor }}>{block.label}</div>
+                    <div className="font-bold text-lg leading-snug text-slate-900" style={{ color: textColor }}>{resolvedLabel}</div>
 
                 ) : block.type === 'divider' ? (
                     <hr className="border-slate-200" />
@@ -185,7 +186,7 @@ const SurveyCanvasBlock: React.FC<Props> = ({
                 ) : block.type === 'page_break' ? (
                     <div className="flex items-center gap-3 py-1">
                         <div className="flex-1 h-px bg-amber-200" />
-                        <span className="text-xs font-semibold text-amber-500 px-3 py-1 bg-amber-50 rounded-full border border-amber-200">Chuyển trang</span>
+                        <span className="text-xs font-semibold text-amber-700 px-3 py-1 bg-amber-50 rounded-full border border-amber-200">Chuyển trang</span>
                         <div className="flex-1 h-px bg-amber-200" />
                     </div>
 
@@ -194,9 +195,9 @@ const SurveyCanvasBlock: React.FC<Props> = ({
                         {block.imageUrl ? (
                             <img src={block.imageUrl} alt={block.imageAlt} style={{ width: block.imageWidth ?? '100%' }} className="rounded-xl object-cover max-h-48" />
                         ) : (
-                            <div className="w-full h-32 bg-slate-100 rounded-xl flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-200">
-                                <LucideIcons.Image className="w-8 h-8 text-slate-300" />
-                                <span className="text-xs text-slate-400">Chưa có ảnh</span>
+                            <div className="w-full h-32 bg-slate-100 rounded-xl flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-300">
+                                <LucideIcons.Image className="w-8 h-8 text-slate-500" />
+                                <span className="text-xs font-medium text-slate-600">Chưa có ảnh</span>
                             </div>
                         )}
                     </div>
@@ -219,23 +220,23 @@ const SurveyCanvasBlock: React.FC<Props> = ({
 
                 ) : (
                     <>
-                        <p className="font-semibold text-sm mb-2.5" style={{ color: textColor }}>
-                            {block.label}
+                        <p className="font-bold text-sm mb-2.5 text-slate-900" style={{ color: textColor }}>
+                            {resolvedLabel}
                             {block.required && <span style={{ color: accentColor }} className="ml-1">*</span>}
                         </p>
-                        {block.description && <p className="text-xs text-slate-400 mb-3">{block.description}</p>}
+                        {block.description && <p className="text-xs text-slate-600 mb-3">{block.description}</p>}
                         <BlockInputPreview block={block} theme={theme} accentColor={accentColor} />
                     </>
                 )}
 
                 {/* ── Logic Branching config inline ──────────────────────────── */}
                 {isSelected && !isLayout && (
-                    <div className="mt-8 pt-4 border-t border-slate-100 animate-in fade-in slide-in-from-top-2 duration-300" onClick={e => e.stopPropagation()}>
+                    <div className="mt-8 pt-4 border-t border-slate-200 animate-in fade-in slide-in-from-top-2 duration-300" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-between mb-3">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Logic rẽ nhánh (Điều kiện & Hành động)</span>
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-600">Logic rẽ nhánh (Điều kiện & Hành động)</span>
                             <button
                                 onClick={() => onUpdate({ logic: [...(block.logic ?? []), { condition: { question_id: block.id, operator: 'equals', value: '' }, action: 'skip_to', target: '' }] })}
-                                className="flex items-center gap-1 text-[10px] text-amber-600 hover:bg-amber-50 px-2 py-1 rounded-lg transition-colors font-bold"
+                                className="flex items-center gap-1 text-[10px] text-amber-700 hover:bg-amber-50 px-2 py-1 rounded-lg transition-colors font-bold"
                             >
                                 <Plus className="w-3 h-3" /> Thêm luật logic
                             </button>
@@ -243,18 +244,18 @@ const SurveyCanvasBlock: React.FC<Props> = ({
                         
                         <div className="space-y-2">
                             {(block.logic ?? []).map((rule, idx) => (
-                                <div key={idx} className="bg-white border border-amber-200/60 shadow-sm p-3 rounded-xl flex flex-wrap gap-2 items-center relative group">
+                                <div key={idx} className="bg-white border border-amber-200 p-3 rounded-xl flex flex-wrap gap-2 items-center relative group">
                                     <button
                                         onClick={() => onUpdate({ logic: block.logic?.filter((_, i) => i !== idx) })}
-                                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-100 text-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-100 text-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity border border-red-200"
                                     >
                                         <Trash2 className="w-3 h-3" />
                                     </button>
                                     
-                                    <span className="text-[10px] font-bold text-slate-400">NẾU</span>
+                                    <span className="text-[10px] font-bold text-slate-600">NẾU</span>
                                     
                                     <select
-                                        className="text-[11px] font-medium bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 outline-none focus:border-[var(--color-primary)]"
+                                        className="text-[11px] font-medium bg-slate-50 border border-slate-300 text-slate-800 rounded-lg px-2 py-1 outline-none focus:border-[var(--color-primary)]"
                                         value={rule.condition.operator}
                                         onChange={e => {
                                             const newLogic = [...(block.logic ?? [])];
@@ -298,7 +299,7 @@ const SurveyCanvasBlock: React.FC<Props> = ({
                                     {!['is_answered', 'is_empty'].includes(rule.condition.operator) && (
                                         ['single_choice', 'dropdown', 'multi_choice', 'yes_no'].includes(block.type) && block.options && block.options.length > 0 ? (
                                             <select
-                                                className="text-[11px] font-medium bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 outline-none focus:border-[var(--color-primary)] min-w-[100px]"
+                                                className="text-[11px] font-medium bg-slate-50 border border-slate-300 text-slate-800 rounded-lg px-2 py-1 outline-none focus:border-[var(--color-primary)] min-w-[100px]"
                                                 value={rule.condition.value as string ?? ''}
                                                 onChange={e => {
                                                     const newLogic = [...(block.logic ?? [])];
@@ -313,7 +314,7 @@ const SurveyCanvasBlock: React.FC<Props> = ({
                                             </select>
                                         ) : (
                                             <input 
-                                                className="text-[11px] bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 outline-none focus:border-[var(--color-primary)] w-24"
+                                                className="text-[11px] bg-slate-50 border border-slate-300 text-slate-800 rounded-lg px-2 py-1 outline-none focus:border-[var(--color-primary)] w-24"
                                                 placeholder="Giá trị..."
                                                 value={rule.condition.value as string ?? ''}
                                                 onChange={e => {
@@ -325,10 +326,10 @@ const SurveyCanvasBlock: React.FC<Props> = ({
                                         )
                                     )}
                                     
-                                    <span className="text-[10px] font-bold text-amber-600 ml-2">THÌ</span>
+                                    <span className="text-[10px] font-bold text-amber-700 ml-2">THÌ</span>
                                     
                                     <select
-                                        className="text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 outline-none focus:ring-1 focus:ring-amber-300"
+                                        className="text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 outline-none focus:ring-1 focus:ring-amber-300"
                                         value={rule.action}
                                         onChange={e => {
                                             const newLogic = [...(block.logic ?? [])];
@@ -343,7 +344,7 @@ const SurveyCanvasBlock: React.FC<Props> = ({
                                     
                                     {rule.action === 'skip_to' && (
                                         <select
-                                            className="text-[11px] font-medium bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none focus:border-[var(--color-primary)] flex-1 min-w-[150px]"
+                                            className="text-[11px] font-medium bg-white border border-slate-300 text-slate-800 rounded-lg px-2 py-1 outline-none focus:border-[var(--color-primary)] flex-1 min-w-[150px]"
                                             value={rule.target ?? ''}
                                             onChange={e => {
                                                 const newLogic = [...(block.logic ?? [])];
@@ -352,15 +353,18 @@ const SurveyCanvasBlock: React.FC<Props> = ({
                                             }}
                                         >
                                             <option value="">-- Chọn khối đích đến --</option>
-                                            {survey.blocks.map((b, i) => (
-                                                <option key={b.id} value={b.id}>{b.label ? `${i+1}. ${b.label.substring(0,25)}${b.label.length>25?'...':''}` : `Khối ${b.type}`}</option>
-                                            ))}
+                                            {survey.blocks.map((b, i) => {
+                                                const lbl = b.label || (b as any).title || (b as any).question || '';
+                                                return (
+                                                    <option key={b.id} value={b.id}>{lbl ? `${i+1}. ${lbl.substring(0,25)}${lbl.length>25?'...':''}` : `Khối ${b.type}`}</option>
+                                                );
+                                            })}
                                         </select>
                                     )}
                                     
                                     {rule.action === 'end_survey_screen' && (
                                         <select
-                                            className="text-[11px] font-medium bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none focus:border-[var(--color-primary)] flex-1 min-w-[150px]"
+                                            className="text-[11px] font-medium bg-white border border-slate-300 text-slate-800 rounded-lg px-2 py-1 outline-none focus:border-[var(--color-primary)] flex-1 min-w-[150px]"
                                             value={rule.target ?? ''}
                                             onChange={e => {
                                                 const newLogic = [...(block.logic ?? [])];
@@ -409,6 +413,7 @@ const ButtonPreview: React.FC<{ block: SurveyBlock; accentColor: string }> = ({ 
 // ─── Banner Preview ───────────────────────────────────────────────────────────
 const BannerPreview: React.FC<{ block: SurveyBlock }> = ({ block }) => {
     const height = block.bannerHeight ?? 160;
+    const resolvedLabel = block.label || (block as any).title || (block as any).question || '';
     return (
         <div
             className="w-full rounded-xl overflow-hidden relative flex items-end"
@@ -422,7 +427,7 @@ const BannerPreview: React.FC<{ block: SurveyBlock }> = ({ block }) => {
         >
             <div className="absolute inset-0" style={{ background: block.bannerOverlay ?? 'rgba(0,0,0,0.35)' }} />
             <div className="relative px-5 pb-5">
-                <p className="font-bold text-base leading-snug" style={{ color: block.bannerTextColor ?? '#ffffff' }}>{block.label}</p>
+                <p className="font-bold text-base leading-snug" style={{ color: block.bannerTextColor ?? '#ffffff' }}>{resolvedLabel}</p>
                 {block.description && <p className="text-xs mt-1" style={{ color: (block.bannerTextColor ?? '#ffffff') + 'bb' }}>{block.description}</p>}
             </div>
         </div>
@@ -431,50 +436,59 @@ const BannerPreview: React.FC<{ block: SurveyBlock }> = ({ block }) => {
 
 // ─── Input Preview by type ────────────────────────────────────────────────────
 const BlockInputPreview: React.FC<{ block: SurveyBlock; theme: SurveyTheme; accentColor: string }> = ({ block, theme, accentColor }) => {
+    const rawOptions = Array.isArray(block.options)
+        ? block.options
+        : Array.isArray((block as any).options?.choices)
+        ? (block as any).options.choices.map((c: string, i: number) => ({ id: `opt_${i}`, label: c, value: c }))
+        : [];
+
     switch (block.type) {
         case 'short_text': case 'email': case 'phone': case 'number':
-            return <div className="w-full h-9 rounded-xl bg-slate-50 border border-slate-200 px-3 flex items-center">
-                <span className="text-xs text-slate-300">{block.placeholder || 'Nhập câu trả lời...'}</span>
+            return <div className="w-full h-9 rounded-xl bg-slate-50 border border-slate-300 px-3 flex items-center">
+                <span className="text-xs text-slate-600">{block.placeholder || 'Nhập câu trả lời...'}</span>
             </div>;
 
         case 'long_text':
-            return <div className="w-full h-20 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">
-                <span className="text-xs text-slate-300">{block.placeholder || 'Nhập câu trả lời dài...'}</span>
+            return <div className="w-full h-20 rounded-xl bg-slate-50 border border-slate-300 px-3 py-2">
+                <span className="text-xs text-slate-600">{block.placeholder || 'Nhập câu trả lời dài...'}</span>
             </div>;
 
         case 'date':
             const isDatetime = (block as any).dateMode === 'datetime';
-            return <div className="w-full h-9 rounded-xl bg-slate-50 border border-slate-200 px-3 flex items-center justify-between">
-                <span className="text-xs text-slate-300">{isDatetime ? 'DD/MM/YYYY HH:mm' : 'DD/MM/YYYY'}</span>
-                {isDatetime ? <LucideIcons.Clock className="w-3.5 h-3.5 text-slate-300" /> : <LucideIcons.Calendar className="w-3.5 h-3.5 text-slate-300" />}
+            return <div className="w-full h-9 rounded-xl bg-slate-50 border border-slate-300 px-3 flex items-center justify-between">
+                <span className="text-xs text-slate-600">{isDatetime ? 'DD/MM/YYYY HH:mm' : 'DD/MM/YYYY'}</span>
+                {isDatetime ? <LucideIcons.Clock className="w-3.5 h-3.5 text-slate-500" /> : <LucideIcons.Calendar className="w-3.5 h-3.5 text-slate-500" />}
             </div>;
 
         case 'single_choice': case 'multi_choice':
             return <div className="flex flex-col gap-1.5">
-                {(block.options ?? []).map(opt => (
-                    <div key={opt.id} className="flex items-center gap-2.5 px-3 py-2 rounded-xl border border-slate-100 bg-slate-50">
-                        <div className={`w-4 h-4 flex-shrink-0 border-2 border-slate-300 ${block.type === 'single_choice' ? 'rounded-full' : 'rounded-md'}`} />
-                        <span className="text-sm text-slate-600">{opt.label}</span>
-                    </div>
-                ))}
+                {rawOptions.map((opt: any, i: number) => {
+                    const optLabel = typeof opt === 'string' ? opt : (opt.label || opt.text || opt.value || '');
+                    return (
+                        <div key={opt.id || i} className="flex items-center gap-2.5 px-3 py-2 rounded-xl border border-slate-200 bg-slate-50">
+                            <div className={`w-4 h-4 flex-shrink-0 border-2 border-slate-400 ${block.type === 'single_choice' ? 'rounded-full' : 'rounded-md'}`} />
+                            <span className="text-sm text-slate-800 font-medium">{optLabel}</span>
+                        </div>
+                    );
+                })}
                 {block.allowOther && (
-                    <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl border border-dashed border-slate-200">
-                        <div className={`w-4 h-4 flex-shrink-0 border-2 border-slate-200 ${block.type === 'single_choice' ? 'rounded-full' : 'rounded-md'}`} />
-                        <span className="text-xs text-slate-400 italic">Khác... (ô nhập tự do)</span>
+                    <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl border border-dashed border-slate-300">
+                        <div className={`w-4 h-4 flex-shrink-0 border-2 border-slate-300 ${block.type === 'single_choice' ? 'rounded-full' : 'rounded-md'}`} />
+                        <span className="text-xs text-slate-600 italic">Khác... (ô nhập tự do)</span>
                     </div>
                 )}
             </div>;
 
         case 'dropdown':
-            return <div className="w-full h-9 rounded-xl bg-slate-50 border border-slate-200 px-3 flex items-center justify-between">
-                <span className="text-xs text-slate-400">{block.options?.[0]?.label ?? 'Chọn một...'}</span>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            return <div className="w-full h-9 rounded-xl bg-slate-50 border border-slate-300 px-3 flex items-center justify-between">
+                <span className="text-xs text-slate-700 font-medium">{rawOptions[0]?.label ?? 'Chọn một...'}</span>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-600" />
             </div>;
 
         case 'yes_no':
             return <div className="flex gap-3">
-                {(block.options ?? [{ label: 'Có' }, { label: 'Không' }]).map((opt, i) => (
-                    <div key={i} className="flex-1 py-2.5 px-4 rounded-xl border-2 border-slate-200 text-center text-sm font-semibold text-slate-500 bg-slate-50">{opt.label}</div>
+                {(rawOptions.length > 0 ? rawOptions : [{ label: 'Có' }, { label: 'Không' }]).map((opt: any, i: number) => (
+                    <div key={i} className="flex-1 py-2.5 px-4 rounded-xl border-2 border-slate-200 text-center text-sm font-semibold text-slate-700 bg-slate-50">{opt.label || String(opt)}</div>
                 ))}
             </div>;
 
@@ -482,7 +496,7 @@ const BlockInputPreview: React.FC<{ block: SurveyBlock; theme: SurveyTheme; acce
             const max = block.maxValue ?? 5;
             return <div className="flex gap-1.5">
                 {Array.from({ length: max }).map((_, i) => (
-                    <Star key={i} className="w-6 h-6" fill={i < 3 ? accentColor : 'none'} stroke={i < 3 ? accentColor : '#cbd5e1'} />
+                    <Star key={i} className="w-6 h-6" fill={i < 3 ? accentColor : 'none'} stroke={i < 3 ? accentColor : '#94a3b8'} />
                 ))}
             </div>;
         }
@@ -491,11 +505,12 @@ const BlockInputPreview: React.FC<{ block: SurveyBlock; theme: SurveyTheme; acce
             return <div className="space-y-2">
                 <div className="flex gap-1 flex-wrap">
                     {Array.from({ length: 11 }).map((_, i) => {
-                        const bg = i <= 6 ? '#fecaca' : i <= 8 ? '#fde68a' : '#bbf7d0';
-                        return <div key={i} className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-semibold grayscale" style={{ background: bg, color: '#475569' }}>{i}</div>;
+                        const bg = i <= 6 ? '#fee2e2' : i <= 8 ? '#fef3c7' : '#dcfce7';
+                        const border = i <= 6 ? '#fca5a5' : i <= 8 ? '#fcd34d' : '#86efac';
+                        return <div key={i} className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold border" style={{ background: bg, borderColor: border, color: '#0f172a' }}>{i}</div>;
                     })}
                 </div>
-                <div className="flex justify-between text-xs text-slate-400 px-1">
+                <div className="flex justify-between text-xs text-slate-600 font-medium px-1">
                     <span>{block.minLabel ?? 'Hoàn toàn không'}</span>
                     <span>{block.maxLabel ?? 'Chắc chắn có'}</span>
                 </div>
@@ -515,8 +530,8 @@ const BlockInputPreview: React.FC<{ block: SurveyBlock; theme: SurveyTheme; acce
             return <div className="flex gap-2 flex-wrap">
                 {likertItems.map((pt, i) => (
                     <div key={i} className="flex-1 min-w-[50px] flex flex-col items-center gap-1">
-                        <div className="w-8 h-8 rounded-full border-2 border-slate-200 flex items-center justify-center text-xs font-semibold text-slate-400">{pt.value}</div>
-                        <span className="text-[9px] text-slate-400 text-center leading-tight" style={{ maxWidth: '64px' }}>{pt.label}</span>
+                        <div className="w-8 h-8 rounded-full border-2 border-slate-300 flex items-center justify-center text-xs font-bold text-slate-700">{pt.value}</div>
+                        <span className="text-[9px] text-slate-600 font-medium text-center leading-tight" style={{ maxWidth: '64px' }}>{pt.label}</span>
                     </div>
                 ))}
             </div>;
@@ -527,7 +542,7 @@ const BlockInputPreview: React.FC<{ block: SurveyBlock; theme: SurveyTheme; acce
                 {(block.emojis ?? ['😠', '😕', '😐', '🙂', '😁']).map((e, i) => (
                     <div key={i} className="flex flex-col items-center gap-1">
                         <span className="text-2xl">{e}</span>
-                        <div className="w-6 h-1.5 rounded-full bg-slate-100" />
+                        <div className="w-6 h-1.5 rounded-full bg-slate-200" />
                     </div>
                 ))}
             </div>;
@@ -535,7 +550,7 @@ const BlockInputPreview: React.FC<{ block: SurveyBlock; theme: SurveyTheme; acce
         case 'slider':
             return <div className="w-full">
                 <input type="range" className="w-full" readOnly defaultValue={50} min={block.minValue ?? 0} max={block.maxValue ?? 100} style={{ accentColor }} />
-                <div className="flex justify-between text-xs text-slate-400">
+                <div className="flex justify-between text-xs text-slate-600 font-medium">
                     <span>{block.minLabel ?? block.minValue ?? 0}</span>
                     <span>{block.maxLabel ?? block.maxValue ?? 100}</span>
                 </div>
@@ -543,11 +558,11 @@ const BlockInputPreview: React.FC<{ block: SurveyBlock; theme: SurveyTheme; acce
 
         case 'ranking':
             return <div className="flex flex-col gap-2">
-                {(block.options ?? []).map((opt, i) => (
-                    <div key={opt.id} className="flex items-center gap-2.5 bg-slate-50 rounded-xl px-3 py-2 border border-slate-100">
-                        <GripVertical className="w-4 h-4 text-slate-300" />
+                {rawOptions.map((opt: any, i: number) => (
+                    <div key={opt.id || i} className="flex items-center gap-2.5 bg-slate-50 rounded-xl px-3 py-2 border border-slate-200">
+                        <GripVertical className="w-4 h-4 text-slate-500" />
                         <span className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold" style={{ background: accentColor + '20', color: accentColor }}>{i + 1}</span>
-                        <span className="text-sm text-slate-600">{opt.label}</span>
+                        <span className="text-sm text-slate-800 font-medium">{opt.label || String(opt)}</span>
                     </div>
                 ))}
             </div>;
@@ -557,16 +572,16 @@ const BlockInputPreview: React.FC<{ block: SurveyBlock; theme: SurveyTheme; acce
                 <div className="overflow-x-auto">
                     <table className="text-xs w-full border-collapse">
                         <thead><tr>
-                            <th className="text-left py-1 pr-3 text-slate-400 font-medium" />
-                            {(block.matrixCols ?? []).map(col => <th key={col.id} className="py-1 px-2 text-slate-500 font-semibold text-center">{col.label}</th>)}
+                            <th className="text-left py-1 pr-3 text-slate-600 font-medium" />
+                            {(block.matrixCols ?? []).map(col => <th key={col.id} className="py-1 px-2 text-slate-700 font-bold text-center">{col.label}</th>)}
                         </tr></thead>
                         <tbody>
                             {(block.matrixRows ?? []).map(row => (
                                 <tr key={row.id}>
-                                    <td className="py-1.5 pr-3 text-slate-600">{row.label}</td>
+                                    <td className="py-1.5 pr-3 text-slate-800 font-medium">{row.label}</td>
                                     {(block.matrixCols ?? []).map(col => (
                                         <td key={col.id} className="py-1.5 px-2 text-center">
-                                            <div className={`w-4 h-4 border-2 border-slate-300 inline-block ${block.type === 'matrix_single' ? 'rounded-full' : 'rounded'}`} />
+                                            <div className={`w-4 h-4 border-2 border-slate-400 inline-block ${block.type === 'matrix_single' ? 'rounded-full' : 'rounded'}`} />
                                         </td>
                                     ))}
                                 </tr>
@@ -577,9 +592,9 @@ const BlockInputPreview: React.FC<{ block: SurveyBlock; theme: SurveyTheme; acce
             );
 
         case 'file_upload':
-            return <div className="w-full h-20 rounded-xl bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-1">
-                <LucideIcons.Upload className="w-5 h-5 text-slate-400" />
-                <span className="text-xs text-slate-400">Kéo thả tệp hoặc click để chọn</span>
+            return <div className="w-full h-20 rounded-xl bg-slate-50 border-2 border-dashed border-slate-300 flex flex-col items-center justify-center gap-1">
+                <LucideIcons.Upload className="w-5 h-5 text-slate-600" />
+                <span className="text-xs text-slate-600 font-medium">Kéo thả tệp hoặc click để chọn</span>
             </div>;
 
         default: return null;

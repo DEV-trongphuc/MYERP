@@ -1280,6 +1280,27 @@ class ContactController {
             if (class_exists('DomationContactMatcher')) {
                 DomationContactMatcher::syncContactToSubscriber($this->db, (int)$id, (int)($auth['tenant_id'] ?? 1));
             }
+            require_once __DIR__ . '/../automation/trigger_helper.php';
+            $stmtSub = $this->db->prepare("SELECT id, workspace_id FROM subscribers WHERE contact_id = ? LIMIT 1");
+            $stmtSub->execute([(int)$id]);
+            $subRow = $stmtSub->fetch(PDO::FETCH_ASSOC);
+            if ($subRow && !empty($subRow['id'])) {
+                $subId = $subRow['id'];
+                $wsId = $subRow['workspace_id'] ?: 1;
+                $extraMeta = [
+                    'contact_id' => (int)$id,
+                    'owner_id' => !empty($b['owner_id']) ? (int)$b['owner_id'] : null,
+                    'stage_id' => !empty($b['stage_id']) ? (int)$b['stage_id'] : null,
+                    'temperature' => $b['temperature'] ?? ($b['lead_status'] ?? null),
+                    'program' => $b['program'] ?? null,
+                    'source' => $b['source'] ?? null,
+                    'branch_id' => $b['company_id'] ?? null
+                ];
+                processSubscriberTrigger($this->db, $subId, 'lead_created', null, $wsId, $extraMeta);
+                if (!empty($b['owner_id']) && (int)$b['owner_id'] > 0) {
+                    processSubscriberTrigger($this->db, $subId, 'lead_assigned', null, $wsId, $extraMeta);
+                }
+            }
         } catch (\Throwable $eSyncSub) {
         }
         $this->show($auth, $id);
@@ -1971,7 +1992,46 @@ class ContactController {
                 require_once __DIR__ . '/../utils/DomationContactMatcher.php';
             }
             if (class_exists('DomationContactMatcher')) {
-                DomationContactMatcher::syncContactToSubscriber($this->db, (int)$id, (int)($auth['tenant_id'] ?? 1));
+                $tIdTrigger = (int)($auth['tenant_id'] ?? 1);
+                $subIdTrigger = DomationContactMatcher::syncContactToSubscriber($this->db, (int)$id, $tIdTrigger);
+                if ($subIdTrigger && $subIdTrigger > 0) {
+                    if (!function_exists('processSubscriberTrigger') && file_exists(__DIR__ . '/../automation/trigger_helper.php')) {
+                        require_once __DIR__ . '/../automation/trigger_helper.php';
+                    }
+                    if (function_exists('processSubscriberTrigger')) {
+                        $prevOwnerId = !empty($currentContact['owner_id']) ? (int)$currentContact['owner_id'] : 0;
+                        $nextOwnerId = array_key_exists('owner_id', $b) && !empty($b['owner_id']) ? (int)$b['owner_id'] : $prevOwnerId;
+                        if (array_key_exists('owner_id', $b) && $nextOwnerId > 0 && $nextOwnerId !== $prevOwnerId) {
+                            processSubscriberTrigger($this->db, $tIdTrigger, (int)$subIdTrigger, 'erp_event', [
+                                'event' => 'lead_assigned',
+                                'contact_id' => (int)$id,
+                                'assigned_to' => $nextOwnerId
+                            ]);
+                        }
+
+                        $prevStageId = (int)($currentContact['stage_id'] ?? 0);
+                        $nextStageId = isset($b['stage_id']) && (int)$b['stage_id'] > 0 ? (int)$b['stage_id'] : $prevStageId;
+                        if ((!empty($newStatus) && $newStatus !== $currStatus) || ($nextStageId > 0 && $nextStageId !== $prevStageId)) {
+                            processSubscriberTrigger($this->db, $tIdTrigger, (int)$subIdTrigger, 'erp_event', [
+                                'event' => 'stage_changed',
+                                'contact_id' => (int)$id,
+                                'from_stage_id' => $prevStageId,
+                                'to_stage_id' => $nextStageId,
+                                'stage_id' => $nextStageId
+                            ]);
+                        }
+
+                        $prevTemp = (string)($currentContact['lead_temperature'] ?? $currentContact['temperature'] ?? $currentContact['lead_status'] ?? '');
+                        $nextTemp = (string)($b['lead_temperature'] ?? $b['temperature'] ?? $b['lead_status'] ?? $prevTemp);
+                        if ($nextTemp !== '' && $nextTemp !== $prevTemp) {
+                            processSubscriberTrigger($this->db, $tIdTrigger, (int)$subIdTrigger, 'erp_event', [
+                                'event' => 'temperature_changed',
+                                'contact_id' => (int)$id,
+                                'temperature' => $nextTemp
+                            ]);
+                        }
+                    }
+                }
             }
         } catch (\Throwable $eSyncSub) {
         }
@@ -2346,7 +2406,32 @@ class ContactController {
                 require_once __DIR__ . '/../utils/DomationContactMatcher.php';
             }
             if (class_exists('DomationContactMatcher')) {
-                DomationContactMatcher::syncContactToSubscriber($this->db, (int)$id, (int)($auth['tenant_id'] ?? 1));
+                $tIdTrigger = (int)($auth['tenant_id'] ?? 1);
+                $subIdTrigger = DomationContactMatcher::syncContactToSubscriber($this->db, (int)$id, $tIdTrigger);
+                if ($subIdTrigger && $subIdTrigger > 0) {
+                    if (!function_exists('processSubscriberTrigger') && file_exists(__DIR__ . '/../automation/trigger_helper.php')) {
+                        require_once __DIR__ . '/../automation/trigger_helper.php';
+                    }
+                    if (function_exists('processSubscriberTrigger')) {
+                        processSubscriberTrigger($this->db, $tIdTrigger, (int)$subIdTrigger, 'erp_event', [
+                            'event' => 'stage_changed',
+                            'contact_id' => (int)$id,
+                            'from_stage_id' => (int)$currStageId,
+                            'to_stage_id' => (int)$stageId,
+                            'stage_id' => (int)$stageId
+                        ]);
+
+                        $prevTemp = (string)($currentContact['lead_temperature'] ?? $currentContact['temperature'] ?? $currentContact['lead_status'] ?? '');
+                        $nextTemp = (string)($leadTemp ?: $targetLeadStatus ?: $prevTemp);
+                        if ($nextTemp !== '' && $nextTemp !== $prevTemp) {
+                            processSubscriberTrigger($this->db, $tIdTrigger, (int)$subIdTrigger, 'erp_event', [
+                                'event' => 'temperature_changed',
+                                'contact_id' => (int)$id,
+                                'temperature' => $nextTemp
+                            ]);
+                        }
+                    }
+                }
             }
         } catch (\Throwable $eSyncSub) {
         }

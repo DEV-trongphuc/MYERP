@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
     Briefcase, PhoneCall, CheckSquare, UserCheck, BellRing, Flame, Thermometer,
-    Snowflake, Clock, Sparkles, Check, Layers, AlertCircle
+    Snowflake, Clock, Sparkles, Check, Layers, AlertCircle, RefreshCw, Users
 } from 'lucide-react';
 import erpApi from '../../../../../api/axios';
 import { STANDARD_PIPELINE_STAGES, CRM_ACTION_TYPES } from '../../../constants/flowConstants';
@@ -13,13 +13,21 @@ interface CrmActionConfigProps {
 }
 
 export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChange }) => {
-    const actionType: 'update_stage' | 'create_task' | 'assign_owner' | 'notify_owner' | 'create_support_ticket' =
-        config.actionType || 'update_stage';
+    const actionType:
+        | 'assign_round_robin'
+        | 'reassign_if_uncontacted'
+        | 'update_temperature'
+        | 'update_stage'
+        | 'create_task'
+        | 'assign_owner'
+        | 'notify_owner'
+        | 'create_support_ticket' = config.actionType || 'update_stage';
 
     const [pipelineStages, setPipelineStages] = useState<Array<{ value: string; label: string }>>(
         STANDARD_PIPELINE_STAGES
     );
     const [crmUsers, setCrmUsers] = useState<Array<{ value: string; label: string }>>([]);
+    const [crmTeams, setCrmTeams] = useState<Array<{ value: string; label: string }>>([]);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -64,6 +72,25 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
             } catch {
                 // Keep manual fallback
             }
+
+            try {
+                const teamRes = await erpApi.get('/teams', { signal: controller.signal });
+                const rawTeams = teamRes?.data?.data || teamRes?.data || [];
+                if (Array.isArray(rawTeams) && rawTeams.length > 0) {
+                    const mappedTeams = rawTeams
+                        .filter((t: any) => t && (t.id || t.name || t.team_name))
+                        .map((t: any) => ({
+                            value: String(t.id ?? ''),
+                            label: String(t.name ?? t.team_name ?? `Vòng chia #${t.id}`)
+                        }))
+                        .filter(t => t.value && t.label);
+                    if (mappedTeams.length > 0) {
+                        setCrmTeams(mappedTeams);
+                    }
+                }
+            } catch {
+                // Keep manual fallback
+            }
         };
 
         fetchCrmOptions();
@@ -84,7 +111,19 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
 
     const handleSelectActionType = (newType: string) => {
         const next: Record<string, any> = { ...config, actionType: newType };
-        if (newType === 'update_stage') {
+        if (newType === 'assign_round_robin') {
+            if (next.respectShifts === undefined) next.respectShifts = true;
+            if (next.onlyIfUnassigned === undefined) next.onlyIfUnassigned = false;
+        } else if (newType === 'reassign_if_uncontacted') {
+            if (!next.note) next.note = 'Quá hạn SLA chưa liên hệ - Tự động điều phối sang Sale khác';
+            if (next.respectShifts === undefined) next.respectShifts = true;
+        } else if (newType === 'update_temperature') {
+            if (!next.temperature) next.temperature = 'hot';
+            if (!next.leadStatus && !next.lead_status) {
+                next.leadStatus = 'active';
+                next.lead_status = 'active';
+            }
+        } else if (newType === 'update_stage') {
             if (!next.stage_id) next.stage_id = pipelineStages[0]?.value || '1';
             if (!next.lead_status) next.lead_status = 'active';
             if (!next.temperature) next.temperature = 'warm';
@@ -139,7 +178,13 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                     {CRM_ACTION_TYPES.map(item => {
                         const isSelected = actionType === item.id;
                         const IconComp =
-                            item.id === 'update_stage'
+                            item.id === 'assign_round_robin'
+                                ? Users
+                                : item.id === 'reassign_if_uncontacted'
+                                ? RefreshCw
+                                : item.id === 'update_temperature'
+                                ? Flame
+                                : item.id === 'update_stage'
                                 ? Layers
                                 : item.id === 'create_task'
                                 ? PhoneCall
@@ -193,6 +238,195 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                     })}
                 </div>
             </div>
+
+            {/* 0A. ASSIGN ROUND-ROBIN CONFIG */}
+            {actionType === 'assign_round_robin' && (
+                <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4 shadow-sm animate-in fade-in duration-200">
+                    <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                            Chọn Vòng chia / Team Sale đích
+                        </label>
+                        <select
+                            value={config.roundId || config.team_id || ''}
+                            onChange={e => {
+                                const selectedTeam = crmTeams.find(t => t.value === e.target.value);
+                                onChange({
+                                    ...config,
+                                    roundId: e.target.value,
+                                    team_id: e.target.value,
+                                    roundName: selectedTeam?.label || ''
+                                });
+                            }}
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-all"
+                        >
+                            <option value="">-- Tự động chọn Vòng chia phù hợp --</option>
+                            {crmTeams.map(t => (
+                                <option key={t.value} value={t.value}>
+                                    {t.label}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <label className="flex items-start gap-3 p-3.5 rounded-[14px] bg-indigo-50/50 border border-indigo-200 cursor-pointer hover:bg-indigo-50 transition-colors">
+                        <input
+                            type="checkbox"
+                            checked={config.respectShifts !== false}
+                            onChange={e => onChange({ ...config, respectShifts: e.target.checked })}
+                            className="mt-0.5 w-4 h-4 accent-[#BD1D2D] rounded cursor-pointer"
+                        />
+                        <div>
+                            <div className="text-xs font-black text-slate-800">
+                                Chỉ chia cho Tư vấn viên đang trong Ca trực & không nghỉ phép (Vacation Mode)
+                            </div>
+                            <div className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                Hệ thống kiểm tra lịch trực hôm nay (`consultant_shifts`) và ưu tiên Sale nhận Lead lâu nhất (Round-Robin).
+                            </div>
+                        </div>
+                    </label>
+
+                    <label className="flex items-start gap-3 p-3.5 rounded-[14px] bg-slate-50 border border-slate-200 cursor-pointer hover:bg-slate-100/70 transition-colors">
+                        <input
+                            type="checkbox"
+                            checked={Boolean(config.onlyIfUnassigned ?? config.only_if_unassigned)}
+                            onChange={e =>
+                                onChange({
+                                    ...config,
+                                    onlyIfUnassigned: e.target.checked,
+                                    only_if_unassigned: e.target.checked
+                                })
+                            }
+                            className="mt-0.5 w-4 h-4 accent-[#BD1D2D] rounded cursor-pointer"
+                        />
+                        <div>
+                            <div className="text-xs font-black text-slate-800">
+                                Chỉ chia nếu Lead chưa có người phụ trách
+                            </div>
+                            <div className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                Bỏ qua nếu hồ sơ đã được gán cho một Tư vấn viên trước đó.
+                            </div>
+                        </div>
+                    </label>
+                </div>
+            )}
+
+            {/* 0B. REASSIGN IF UNCONTACTED (SLA) CONFIG */}
+            {actionType === 'reassign_if_uncontacted' && (
+                <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4 shadow-sm animate-in fade-in duration-200">
+                    <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                            Vòng chia / Team Sale điều phối lại
+                        </label>
+                        <select
+                            value={config.roundId || config.team_id || ''}
+                            onChange={e => {
+                                const selectedTeam = crmTeams.find(t => t.value === e.target.value);
+                                onChange({
+                                    ...config,
+                                    roundId: e.target.value,
+                                    team_id: e.target.value,
+                                    roundName: selectedTeam?.label || ''
+                                });
+                            }}
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-all"
+                        >
+                            <option value="">-- Giữ nguyên Vòng chia của Sale hiện tại --</option>
+                            {crmTeams.map(t => (
+                                <option key={t.value} value={t.value}>
+                                    {t.label}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                            Lý do điều phối lại (Ghi nhận vào Log & Thông báo)
+                        </label>
+                        <input
+                            type="text"
+                            value={config.note || ''}
+                            onChange={e => onChange({ ...config, note: e.target.value })}
+                            placeholder="VD: Quá 2h chưa liên hệ - Tự động điều phối sang Sale khác"
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-all"
+                        />
+                    </div>
+
+                    <div className="p-3.5 bg-rose-50/70 border border-rose-200 rounded-[14px] flex items-start gap-2.5 text-[11px] font-medium text-rose-800">
+                        <RefreshCw className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                        <span>
+                            Hệ thống sẽ tự động loại trừ Tư vấn viên cũ (chưa liên hệ đúng SLA), chọn Tư vấn viên kế tiếp trong ca trực theo chuẩn Round-Robin và gửi thông báo khẩn cho Sale mới.
+                        </span>
+                    </div>
+                </div>
+            )}
+
+            {/* 0C. UPDATE TEMPERATURE & STATUS CONFIG */}
+            {actionType === 'update_temperature' && (
+                <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-5 shadow-sm animate-in fade-in duration-200">
+                    <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                            Độ nóng của Lead (Temperature)
+                        </label>
+                        <div className="grid grid-cols-3 gap-2">
+                            {[
+                                { id: 'hot', label: '🔥 Nóng (Hot)', icon: Flame, activeClass: 'bg-rose-50 border-rose-500 text-rose-700' },
+                                { id: 'warm', label: '🌤️ Ấm (Warm)', icon: Thermometer, activeClass: 'bg-amber-50 border-amber-500 text-amber-700' },
+                                { id: 'cold', label: '❄️ Lạnh (Cold)', icon: Snowflake, activeClass: 'bg-sky-50 border-sky-500 text-sky-700' }
+                            ].map(temp => {
+                                const Icon = temp.icon;
+                                const active = (config.temperature || 'hot') === temp.id;
+                                return (
+                                    <button
+                                        key={temp.id}
+                                        type="button"
+                                        onClick={() => onChange({ ...config, temperature: temp.id })}
+                                        className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-[var(--radius-md)] border text-xs font-black transition-all cursor-pointer ${
+                                            active
+                                                ? `${temp.activeClass} shadow-sm`
+                                                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-white'
+                                        }`}
+                                    >
+                                        <Icon className="w-3.5 h-3.5" />
+                                        <span>{temp.label}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                            Trạng thái chăm sóc Lead (Tùy chọn)
+                        </label>
+                        <div className="grid grid-cols-3 gap-2">
+                            {[
+                                { id: 'active', label: 'Đang chăm sóc', sub: 'Active' },
+                                { id: 'nurture', label: 'Nuôi dưỡng', sub: 'Nurture' },
+                                { id: 'lost', label: 'Thất bại', sub: 'Lost' }
+                            ].map(st => {
+                                const currentSt = config.leadStatus || config.lead_status || 'active';
+                                const active = currentSt === st.id;
+                                return (
+                                    <button
+                                        key={st.id}
+                                        type="button"
+                                        onClick={() => onChange({ ...config, leadStatus: st.id, lead_status: st.id })}
+                                        className={`p-2.5 rounded-[var(--radius-md)] border text-center transition-all cursor-pointer ${
+                                            active
+                                                ? 'bg-red-50 border-[var(--color-primary)] text-[var(--color-primary)] shadow-sm'
+                                                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-white'
+                                        }`}
+                                    >
+                                        <div className="text-xs font-black">{st.label}</div>
+                                        <div className="text-[10px] opacity-75 font-bold">{st.sub}</div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* 1. UPDATE STAGE CONFIG */}
             {actionType === 'update_stage' && (

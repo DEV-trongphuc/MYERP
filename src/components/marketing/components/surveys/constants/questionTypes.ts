@@ -48,6 +48,7 @@ export const DEFAULT_THEME = {
   textColor: '#1e293b',
   fontFamily: "'Inter', 'Roboto', sans-serif",
   borderRadius: '12px',
+  cardShadow: 'none' as const,
   coverStyle: 'minimal' as const,
   coverHeight: 'md' as const,
 };
@@ -66,6 +67,144 @@ export const DEFAULT_THANK_YOU: import('../../../types/survey').ThankYouPage = {
   emoji: '🎉',
   showSocialShare: false,
 };
+
+export function createPresetBlocks(name: string): import('../../../types/survey').SurveyBlock[] {
+  const trimmed = name.trim();
+  if (trimmed === 'Khảo sát NPS') {
+    return [
+      {
+        id: crypto.randomUUID(),
+        type: 'nps',
+        label: 'Bạn sẵn sàng giới thiệu sản phẩm của chúng tôi cho bạn bè/đồng nghiệp ở mức nào? (Từ 0-10)',
+        required: true,
+        minValue: 0,
+        maxValue: 10,
+        minLabel: 'Rất không hài lòng',
+        maxLabel: 'Rất hài lòng',
+      },
+      {
+        id: crypto.randomUUID(),
+        type: 'short_text',
+        label: 'Lý do chính cho điểm số của bạn là gì? (Tùy chọn)',
+        required: false,
+        placeholder: 'Nhập chia sẻ của bạn...',
+      },
+    ];
+  }
+  if (trimmed === 'Phản hồi sản phẩm') {
+    return [
+      {
+        id: crypto.randomUUID(),
+        type: 'single_choice',
+        label: 'Bạn đánh giá chất lượng sản phẩm như thế nào?',
+        required: true,
+        options: [
+          { id: crypto.randomUUID(), label: 'Rất tốt', value: 'Rất tốt' },
+          { id: crypto.randomUUID(), label: 'Tốt', value: 'Tốt' },
+          { id: crypto.randomUUID(), label: 'Bình thường', value: 'Bình thường' },
+          { id: crypto.randomUUID(), label: 'Kém', value: 'Kém' },
+        ],
+      },
+      {
+        id: crypto.randomUUID(),
+        type: 'long_text',
+        label: 'Bạn muốn chúng tôi cải thiện điều gì?',
+        required: false,
+        placeholder: 'Nhập góp ý của bạn...',
+      },
+    ];
+  }
+  if (trimmed === 'Đánh giá dịch vụ') {
+    return [
+      {
+        id: crypto.randomUUID(),
+        type: 'star_rating',
+        label: 'Vui lòng đánh giá chất lượng phục vụ của nhân viên:',
+        required: true,
+        minValue: 1,
+        maxValue: 5,
+        ratingIcon: 'star',
+      },
+      {
+        id: crypto.randomUUID(),
+        type: 'short_text',
+        label: 'Góp ý thêm (Tùy chọn)',
+        required: false,
+        placeholder: 'Nhập góp ý thêm...',
+      },
+    ];
+  }
+  if (trimmed === 'Khảo sát thị trường') {
+    return [
+      {
+        id: crypto.randomUUID(),
+        type: 'single_choice',
+        label: 'Sản phẩm nào bạn quan tâm nhất?',
+        required: true,
+        options: [
+          { id: crypto.randomUUID(), label: 'Phần mềm tự động hóa', value: 'Phần mềm tự động hóa' },
+          { id: crypto.randomUUID(), label: 'Truyền thông Email', value: 'Truyền thông Email' },
+          { id: crypto.randomUUID(), label: 'Tạo Khảo sát', value: 'Tạo Khảo sát' },
+          { id: crypto.randomUUID(), label: 'Khác', value: 'Khác' },
+        ],
+      },
+    ];
+  }
+  if (trimmed === 'Mẫu Quiz (Trắc nghiệm)') {
+    return [
+      {
+        id: crypto.randomUUID(),
+        type: 'single_choice',
+        label: 'Câu 1: Câu hỏi trắc nghiệm của bạn là gì?',
+        required: true,
+        options: [
+          { id: crypto.randomUUID(), label: 'Đáp án A', value: 'Đáp án A' },
+          { id: crypto.randomUUID(), label: 'Đáp án B', value: 'Đáp án B' },
+          { id: crypto.randomUUID(), label: 'Đáp án C', value: 'Đáp án C' },
+        ],
+      },
+      {
+        id: crypto.randomUUID(),
+        type: 'single_choice',
+        label: 'Câu 2: Chọn đáp án đúng',
+        required: true,
+        options: [
+          { id: crypto.randomUUID(), label: 'Sự thật', value: 'Sự thật' },
+          { id: crypto.randomUUID(), label: 'Giả định', value: 'Giả định' },
+        ],
+      },
+    ];
+  }
+  if (trimmed === 'Mẫu Check-in Event') {
+    return [
+      {
+        id: crypto.randomUUID(),
+        type: 'short_text',
+        label: 'Họ và Tên',
+        required: true,
+        placeholder: 'Nhập họ và tên của bạn...',
+      },
+      {
+        id: crypto.randomUUID(),
+        type: 'phone',
+        label: 'Số điện thoại',
+        required: true,
+        placeholder: '0912 345 678',
+      },
+      {
+        id: crypto.randomUUID(),
+        type: 'single_choice',
+        label: 'Bạn đã nhận quà sự kiện chưa?',
+        required: true,
+        options: [
+          { id: crypto.randomUUID(), label: 'Đã nhận', value: 'Đã nhận' },
+          { id: crypto.randomUUID(), label: 'Chưa nhận', value: 'Chưa nhận' },
+        ],
+      },
+    ];
+  }
+  return [];
+}
 
 export function createDefaultBlock(type: import('../../../types/survey').QuestionType): import('../../../types/survey').SurveyBlock {
   const base = {

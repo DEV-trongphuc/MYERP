@@ -27,22 +27,7 @@ const AddStepModal: React.FC<AddStepModalProps> = ({
             return 'Không hỗ trợ chèn vào giữa.';
         }
 
-        if (typeId === 'condition') {
-            const isCampaignTrigger =
-                parentStep?.type === 'trigger' && parentStep.config?.type === 'campaign';
-            const isSurveyTrigger =
-                parentStep?.type === 'trigger' && parentStep.config?.type === 'survey';
-            if (
-                !parentStep ||
-                (parentStep.type !== 'action' &&
-                    parentStep.type !== 'zalo_zns' &&
-                    parentStep.type !== 'condition' &&
-                    !isCampaignTrigger &&
-                    !isSurveyTrigger)
-            ) {
-                return 'Cần bước Email, ZNS, Khảo sát hoặc Rẽ nhánh trước đó.';
-            }
-        }
+        // Cho phép bước Phân nhánh (If/Else) được thêm sau bất kỳ bước nào (Trigger, Wait, CRM Action, Email, Zalo ZNS, Condition...)
 
         if (typeId === 'remove_action') {
             if (!parentStep || (parentStep.type !== 'condition' && parentStep.type !== 'advanced_condition')) {
