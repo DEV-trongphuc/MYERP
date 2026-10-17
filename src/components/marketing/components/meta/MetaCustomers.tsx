@@ -3,14 +3,14 @@ import { useEffect, useState, useMemo } from 'react';
 import { api } from '../../services/storageAdapter';
 import {
     Users, ArrowLeft, RefreshCw, Filter, Check, Minus,
-    BadgeCheck, Star, Globe as Facebook, Zap, MoreHorizontal, Clock
+    BadgeCheck, Star, Globe as Facebook, Clock, MessageCircle, ExternalLink, Phone, Mail, UserCheck
 } from 'lucide-react';
 import Button from '../common/Button';
 import StatCard from '../common/StatCard';
 import Pagination from '../common/Pagination';
 import Skeleton from '../common/Skeleton';
-import { MetaCustomerProfileModal } from './MetaCustomerProfileModal';
 import { Avatar } from '../../../ui/Avatar';
+import { MetaCustomerProfileModal } from './MetaCustomerProfileModal';
 import {
     AudienceEmptyState,
     Panel,
@@ -21,6 +21,15 @@ import {
     THEAD_CLASS,
     Toolbar
 } from '../audience/AudienceUi';
+
+const openCrmContact360 = (arg1: any, arg2?: any) => {
+    if (arg1 && typeof arg1.stopPropagation === 'function') arg1.stopPropagation();
+    if (arg2 && typeof arg2.stopPropagation === 'function') arg2.stopPropagation();
+    const rawId = (arg1 && typeof arg1.stopPropagation === 'function') ? arg2 : arg1;
+    const id = Number(rawId);
+    if (!id || Number.isNaN(id)) return;
+    window.dispatchEvent(new CustomEvent('open-customer-drawer', { detail: { id, initialTab: 'journey360' } }));
+};
 
 interface PaginationState {
     page: number;
@@ -42,6 +51,20 @@ const formatTimeAgoShort = (date: string) => {
     return then.toLocaleDateString('vi-VN');
 };
 
+const parseTags = (rawTags: any): string[] => {
+    if (!rawTags) return [];
+    if (Array.isArray(rawTags)) return rawTags.map(String).filter(Boolean);
+    if (typeof rawTags === 'string') {
+        try {
+            const parsed = JSON.parse(rawTags);
+            if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+        } catch {
+            return rawTags.split(',').map(s => s.trim()).filter(Boolean);
+        }
+    }
+    return [];
+};
+
 const MetaCustomers: React.FC = () => {
     const [pages, setPages] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
@@ -61,9 +84,9 @@ const MetaCustomers: React.FC = () => {
     // Stats State
     const [stats, setStats] = useState<any>(null);
 
-    // Selection State
+    // Selection & Profile Modal State
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
-    const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+    const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const filterRef = React.useRef<HTMLDivElement>(null);
 
@@ -162,6 +185,7 @@ const MetaCustomers: React.FC = () => {
         setSearchQuery('');
         setPagination({ page: 1, limit: 20, total: 0, totalPages: 1 });
         setSelectedIds([]);
+        setSelectedUserId(null);
     };
 
     const filteredSubscribers = useMemo(() => {
@@ -211,7 +235,7 @@ const MetaCustomers: React.FC = () => {
                         <button
                             type="button"
                             onClick={handleBack}
-                            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[13px] font-medium text-[var(--color-text)] hover:bg-[var(--color-bg)] transition-colors"
+                            className="h-[38px] inline-flex items-center gap-1.5 px-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-semibold text-[var(--color-text)] hover:bg-[var(--color-bg)] transition-colors"
                         >
                             <ArrowLeft className="w-4 h-4" />
                             <span>{activePage.page_name || activePage.name || 'Fanpage'}</span>
@@ -228,7 +252,7 @@ const MetaCustomers: React.FC = () => {
                             <button
                                 type="button"
                                 onClick={() => setIsFilterOpen(!isFilterOpen)}
-                                className={`h-9 inline-flex items-center gap-2 px-3 rounded-[var(--radius-md)] border text-[13px] font-medium transition-colors ${isFilterOpen || activeFilterCount > 0
+                                className={`h-[38px] inline-flex items-center gap-2 px-3 rounded-[var(--radius-md)] border text-xs font-semibold transition-colors ${isFilterOpen || activeFilterCount > 0
                                     ? 'border-[var(--color-primary)] text-[var(--color-primary)] bg-[var(--color-primary-light)]'
                                     : 'border-[var(--color-border)] text-[var(--color-text)] bg-[var(--color-surface)] hover:bg-[var(--color-bg)]'
                                     }`}
@@ -306,13 +330,13 @@ const MetaCustomers: React.FC = () => {
                         </div>
 
                         <div className="ml-auto flex items-center gap-2">
-                            <span className="h-9 inline-flex items-center px-3 rounded-[var(--radius-md)] bg-[var(--color-bg)] border border-[var(--color-border)] text-xs font-medium text-[var(--color-text-light)] whitespace-nowrap">
+                            <span className="h-[38px] inline-flex items-center px-3 rounded-[var(--radius-md)] bg-[var(--color-bg)] border border-[var(--color-border)] text-xs font-medium text-[var(--color-text-light)] whitespace-nowrap">
                                 Tổng cộng: <b className="ml-1 font-bold text-[var(--color-text)] tabular-nums">{(pagination.total || 0).toLocaleString('vi-VN')}</b>
                             </span>
                         </div>
                     </Toolbar>
 
-                    <div className={`overflow-x-auto transition-opacity ${loadingSubs && !isFirstLoad ? 'opacity-60' : ''}`}>
+                    <div className="overflow-x-auto transition-opacity">
                         <table className="w-full text-sm border-collapse">
                             <thead className={THEAD_CLASS}>
                                 <tr className="border-b border-[var(--color-border)]">
@@ -327,16 +351,16 @@ const MetaCustomers: React.FC = () => {
                                         </button>
                                     </th>
                                     <th className={TH_CLASS}>Khách hàng</th>
+                                    <th className={TH_CLASS}>Liên hệ / Sale phụ trách</th>
                                     <th className={TH_CLASS}>Trạng thái</th>
                                     <th className={TH_CLASS}>Hoạt động gần nhất</th>
                                     <th className={`${TH_CLASS} text-right`}>Điểm Lead</th>
-                                    <th className={TH_CLASS}>Nguồn</th>
                                     <th className={TH_CLASS}>Ngày tham gia</th>
-                                    <th className="px-4 py-3 w-12" />
+                                    <th className={`${TH_CLASS} text-right`}>Thao tác</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {isFirstLoad && Array.from({ length: 6 }).map((_, i) => (
+                                {loadingSubs && Array.from({ length: 6 }).map((_, i) => (
                                     <tr key={i} className="border-b border-[var(--color-border-light)]">
                                         <td className="pl-4 pr-2 py-3"><Skeleton variant="rounded" width={16} height={16} /></td>
                                         <td className={TD_CLASS}>
@@ -345,23 +369,28 @@ const MetaCustomers: React.FC = () => {
                                                 <Skeleton variant="text" width={120} height={14} />
                                             </div>
                                         </td>
+                                        <td className={TD_CLASS}><Skeleton variant="text" width={110} height={14} /></td>
                                         <td className={TD_CLASS}><Skeleton variant="rounded" width={64} height={20} /></td>
                                         <td className={TD_CLASS}><Skeleton variant="text" width={90} height={12} /></td>
                                         <td className={`${TD_CLASS} text-right`}><Skeleton variant="text" width={32} height={14} className="ml-auto" /></td>
-                                        <td className={TD_CLASS}><Skeleton variant="text" width={50} height={12} /></td>
                                         <td className={TD_CLASS}><Skeleton variant="text" width={70} height={12} /></td>
                                         <td className="px-4 py-3" />
                                     </tr>
                                 ))}
 
-                                {!isFirstLoad && filteredSubscribers.map(sub => {
+                                {!loadingSubs && filteredSubscribers.map(sub => {
                                     const isSelected = selectedIds.includes(sub.id);
                                     const displayName = sub.name || sub.display_name || 'Facebook User';
+                                    const contactId = sub.contact_id || sub.myerp_contact_id;
+                                    const phoneVal = sub.phone_number || sub.phone || '';
+                                    const emailVal = sub.manual_email || sub.email || '';
+                                    const tagsList = parseTags(sub.tags);
+
                                     return (
                                         <tr
                                             key={sub.id}
                                             className={`${ROW_CLASS} cursor-pointer ${isSelected ? 'bg-[var(--color-primary-light)]' : ''}`}
-                                            onClick={() => setSelectedProfileId(sub.id)}
+                                            onClick={() => setSelectedUserId(String(sub.id))}
                                         >
                                             <td className="pl-4 pr-2 py-3 w-10" onClick={e => { e.stopPropagation(); toggleSelect(sub.id); }}>
                                                 <span
@@ -383,10 +412,63 @@ const MetaCustomers: React.FC = () => {
                                                     <div className="min-w-0">
                                                         <div className="text-[13px] font-semibold text-[var(--color-text)] flex items-center gap-1 truncate">
                                                             {displayName}
-                                                            {(sub.manual_email || sub.phone_number || sub.email || sub.phone) && <BadgeCheck className="w-3.5 h-3.5 text-sky-500 shrink-0" />}
+                                                            {(emailVal || phoneVal) && <BadgeCheck className="w-3.5 h-3.5 text-sky-500 shrink-0" />}
                                                         </div>
-                                                        <div className="text-xs text-[var(--color-text-muted)] truncate max-w-[180px]">PSID: {String(sub.psid || '').substring(0, 10)}</div>
+                                                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                                            {contactId && (
+                                                                <span
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        openCrmContact360(contactId);
+                                                                    }}
+                                                                    className="text-[11px] font-mono text-[var(--color-text-muted)] bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded px-1.5 py-0.5 cursor-pointer transition-colors"
+                                                                    title="Mở Hồ sơ CRM 360"
+                                                                >
+                                                                    CRM #{contactId}
+                                                                </span>
+                                                            )}
+                                                            <span className="text-[11px] font-mono text-[var(--color-text-muted)] bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 truncate max-w-[160px]">
+                                                                PSID: {String(sub.psid || '')}
+                                                            </span>
+                                                        </div>
                                                     </div>
+                                                </div>
+                                            </td>
+                                            <td className={TD_CLASS}>
+                                                <div className="flex flex-col gap-1 min-w-[140px]">
+                                                    {(phoneVal || emailVal) ? (
+                                                        <div className="flex flex-col gap-0.5 text-xs text-[var(--color-text)]">
+                                                            {phoneVal && (
+                                                                <span className="inline-flex items-center gap-1 font-medium">
+                                                                    <Phone className="w-3 h-3 text-[var(--color-text-muted)]" />
+                                                                    {phoneVal}
+                                                                </span>
+                                                            )}
+                                                            {emailVal && (
+                                                                <span className="inline-flex items-center gap-1 text-[var(--color-text-muted)] truncate max-w-[180px]">
+                                                                    <Mail className="w-3 h-3 shrink-0" />
+                                                                    {emailVal}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-xs text-[var(--color-text-muted)]">Chưa có SĐT/Email</span>
+                                                    )}
+                                                    {sub.salesperson && (
+                                                        <span className="inline-flex items-center gap-1 text-[11px] text-slate-600 font-medium">
+                                                            <UserCheck className="w-3 h-3 text-emerald-600 shrink-0" />
+                                                            Sale: <strong className="text-slate-800">{sub.salesperson}</strong>
+                                                        </span>
+                                                    )}
+                                                    {tagsList.length > 0 && (
+                                                        <div className="flex flex-wrap gap-1 mt-0.5">
+                                                            {tagsList.slice(0, 3).map((t, idx) => (
+                                                                <span key={idx} className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-semibold">
+                                                                    {t}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </td>
                                             <td className={TD_CLASS}>
@@ -406,17 +488,39 @@ const MetaCustomers: React.FC = () => {
                                                 </span>
                                             </td>
                                             <td className={TD_CLASS}>
-                                                <span className="text-[13px] text-[var(--color-text-light)]">Meta Messenger</span>
-                                            </td>
-                                            <td className={TD_CLASS}>
                                                 <span className="text-xs text-[var(--color-text-muted)] tabular-nums">
                                                     {(sub.created_at || sub.joined_at) ? new Date(sub.created_at || sub.joined_at).toLocaleDateString('vi-VN') : '—'}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-3 text-right">
-                                                <button type="button" className="text-[var(--color-text-muted)] hover:text-[var(--color-primary)] p-1.5 hover:bg-[var(--color-bg)] rounded-[var(--radius-sm)] transition-colors">
-                                                    <MoreHorizontal className="w-4 h-4" />
-                                                </button>
+                                                <div className="inline-flex items-center justify-end gap-1.5">
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setSelectedUserId(String(sub.id));
+                                                        }}
+                                                        className="px-2.5 py-1 rounded-md border border-[var(--color-border)] bg-white hover:bg-slate-50 text-xs font-semibold text-[var(--color-text)] inline-flex items-center gap-1 transition-colors cursor-pointer"
+                                                        title="Xem Hồ sơ & Lịch sử Chat"
+                                                    >
+                                                        <MessageCircle className="w-3.5 h-3.5 text-[var(--color-primary)]" />
+                                                        <span>Hồ sơ & Chat</span>
+                                                    </button>
+                                                    {contactId && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                openCrmContact360(contactId);
+                                                            }}
+                                                            className="px-2.5 py-1 rounded-md border border-slate-200 bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 inline-flex items-center gap-1 transition-colors cursor-pointer"
+                                                            title="Hồ sơ CRM 360"
+                                                        >
+                                                            <ExternalLink className="w-3 h-3" />
+                                                            <span>CRM 360</span>
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     );
@@ -448,11 +552,14 @@ const MetaCustomers: React.FC = () => {
                     </div>
                 </Panel>
 
-                {selectedProfileId && (
+                {selectedUserId && (
                     <MetaCustomerProfileModal
-                        subscriberId={selectedProfileId}
-                        onClose={() => setSelectedProfileId(null)}
+                        subscriberId={selectedUserId}
+                        userId={selectedUserId}
+                        isOpen={!!selectedUserId}
+                        onClose={() => setSelectedUserId(null)}
                         onUpdate={() => fetchSubscribers(activePage.page_id, pagination.page)}
+                        onUserUpdated={() => fetchSubscribers(activePage.page_id, pagination.page)}
                     />
                 )}
             </div>
@@ -545,4 +652,3 @@ const MetaCustomers: React.FC = () => {
 };
 
 export default MetaCustomers;
-

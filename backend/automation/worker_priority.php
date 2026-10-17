@@ -166,12 +166,13 @@ try {
                     // Columns needed: all fields used by FlowExecutor + flow_helpers for merge tags,
                     // send logic, phone validation, custom_attributes merge tags.
                     $stmtSubDetails = $pdo->prepare(
-                        "SELECT id, email, status, first_name, last_name, phone_number,
-                                company_name, job_title, city, country, gender,
+                        "SELECT id, contact_id, email, status, first_name, last_name, phone_number,
+                                company_name, job_title, city, district, ward, country, address, gender,
                                 date_of_birth, anniversary_date, joined_at,
                                 last_os, last_device, last_browser, last_city,
                                 stats_opened, stats_clicked, last_open_at, last_click_at,
-                                timezone, is_zalo_follower, tags, custom_attributes, workspace_id
+                                timezone, is_zalo_follower, tags, custom_attributes, workspace_id,
+                                program, stage_id, owner_id, salesperson
                          FROM subscribers WHERE id = ? AND workspace_id = ?"
                     );
                     $stmtSubDetails->execute([$prioritySid, $priorityWorkspaceId]);
@@ -229,11 +230,11 @@ try {
                             }
                         }
 
-                        $stmtE = $pdo->prepare("INSERT INTO subscriber_flow_states (subscriber_id, flow_id, step_id, step_type, scheduled_at, status, created_at, updated_at, last_step_at) VALUES (?, ?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW())");
-                        $stmtE->execute([$prioritySid, $manualFlow['id'], $nextStepId, $nextStepType, $initialSchedule]);
+                        $stmtE = $pdo->prepare("INSERT INTO subscriber_flow_states (workspace_id, subscriber_id, contact_id, flow_id, step_id, step_type, scheduled_at, status, created_at, updated_at, last_step_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW())");
+                        $stmtE->execute([$priorityWorkspaceId, $prioritySid, $subDetails['contact_id'] ?? null, $manualFlow['id'], $nextStepId, $nextStepType, $initialSchedule]);
                         $newQueueId = $pdo->lastInsertId();
 
-                        logActivity($pdo, $prioritySid, 'enter_flow', $manualFlow['id'], $manualFlow['name'], "Manual Trigger by Admin", $manualFlow['id']);
+                        logActivity($pdo, $prioritySid, 'enter_flow', $manualFlow['id'], $manualFlow['name'], "Manual Trigger by Admin", $manualFlow['id'], null, [], $priorityWorkspaceId);
                         $pdo->prepare("UPDATE flows SET stat_enrolled = stat_enrolled + 1 WHERE id = ?")->execute([$manualFlow['id']]);
 
                         $item = array_merge($subDetails, [
@@ -260,7 +261,7 @@ try {
             traceLog("[Priority] Fetching active flows for trigger: $priorityTriggerType (WS: $priorityWorkspaceId)");
             // [10M UPGRADE] Query flows specifically by trigger_type for MASSIVE performance gain
             // [SECURITY FIX] Added workspace_id filter
-            $stmtFlows = $pdo->prepare("SELECT id, name, steps, config FROM flows WHERE workspace_id = ? AND status = 'active' AND (trigger_type = ? OR trigger_type = 'segment')");
+            $stmtFlows = $pdo->prepare("SELECT id, name, steps, config FROM flows WHERE workspace_id = ? AND status = 'active' AND (trigger_type = ? OR trigger_type = 'segment' OR trigger_type = 'list' OR trigger_type IS NULL)");
             $stmtFlows->execute([$priorityWorkspaceId, $priorityTriggerType]);
             $activeFlows = $stmtFlows->fetchAll();
             traceLog("[Priority] Found " . count($activeFlows) . " active flows");
@@ -282,11 +283,11 @@ try {
                 $flowTargetSubtype = $tConfig['targetSubtype'] ?? '';
                 $flowTargetId = $tConfig['targetId'] ?? '';
 
-                // Match "list" or "added_to_list" trigger against flows that are technically "segment" type but "list" subtype
+                // Match "list" or "added_to_list" trigger against flows that are "list" or "segment" with list/sync subtype
                 $isMatch = false;
                 if ($flowTriggerType === $priorityTriggerType) {
                     $isMatch = true;
-                } elseif (($priorityTriggerType === 'list' || $priorityTriggerType === 'added_to_list') && $flowTriggerType === 'segment' && $flowTargetSubtype === 'list') {
+                } elseif (($priorityTriggerType === 'list' || $priorityTriggerType === 'added_to_list') && ($flowTriggerType === 'list' || ($flowTriggerType === 'segment' && in_array($flowTargetSubtype, ['list', 'sync'], true)))) {
                     $isMatch = true;
                 }
 
@@ -334,7 +335,7 @@ try {
                             $stmtTotal->execute([$prioritySid, $flow['id']]);
                             $totalEnrollments = (int) $stmtTotal->fetchColumn();
                             if ($totalEnrollments >= $maxEnrollments) {
-                                $logs[] = "[Priority-Enroll] Sub $prioritySid reached max enrollments ($maxEnrollments) for Flow {$flow['id']}. Skipping.";
+                                $logs[] = "[Priority-Enroll] Sub $prioritySid reached max enrollments ($maxEnrollments) for Flow {$flow['id']}." . " Skipping.";
                                 continue;
                             }
                         }
@@ -364,12 +365,13 @@ try {
                     // Proceed with enrollment
                     // [OPT] Explicit column select — same column list as manual trigger above
                     $stmtSubDetails = $pdo->prepare(
-                        "SELECT id, email, status, first_name, last_name, phone_number,
-                                company_name, job_title, city, country, gender,
+                        "SELECT id, contact_id, email, status, first_name, last_name, phone_number,
+                                company_name, job_title, city, district, ward, country, address, gender,
                                 date_of_birth, anniversary_date, joined_at,
                                 last_os, last_device, last_browser, last_city,
                                 stats_opened, stats_clicked, last_open_at, last_click_at,
-                                timezone, is_zalo_follower, tags, custom_attributes, workspace_id
+                                timezone, is_zalo_follower, tags, custom_attributes, workspace_id,
+                                program, stage_id, owner_id, salesperson
                          FROM subscribers WHERE id = ? AND workspace_id = ?"
                     );
                     $stmtSubDetails->execute([$prioritySid, $priorityWorkspaceId]);
@@ -446,14 +448,9 @@ try {
 
                         // [FIX] Respect allowMultiple flag in SQL INSERT
                         if ($allowMultiple) {
-                            // allowMultiple = true: Allow enrollment, but add a short debounce window
-                            // to prevent double-enrollment when a form is submitted twice in < 3 seconds
-                            // (e.g. double-click, retry on slow network).
-                            // [FIX] Plain INSERT here caused duplicate emails when two requests arrived
-                            // within the same PHP-FPM request window for the same subscriber+flow.
                             traceLog("[Priority] allowMultiple=true, using debounce INSERT");
-                            $sqlIns = "INSERT INTO subscriber_flow_states (workspace_id, subscriber_id, flow_id, step_id, step_type, scheduled_at, status, created_at, updated_at, last_step_at)
-                                       SELECT ?, ?, ?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW()
+                            $sqlIns = "INSERT INTO subscriber_flow_states (workspace_id, subscriber_id, contact_id, flow_id, step_id, step_type, scheduled_at, status, created_at, updated_at, last_step_at)
+                                       SELECT ?, ?, ?, ?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW()
                                        FROM DUAL
                                        WHERE NOT EXISTS (
                                            SELECT 1 FROM subscriber_flow_states
@@ -461,21 +458,18 @@ try {
                                            AND created_at >= DATE_SUB(NOW(), INTERVAL 3 SECOND)
                                        )";
                             $stmtE = $pdo->prepare($sqlIns);
-                            $stmtE->execute([$priorityWorkspaceId, $prioritySid, $flow['id'], $nextStepId, $nextStepType, $initialSchedule, $prioritySid, $flow['id'], $priorityWorkspaceId]);
+                            $stmtE->execute([$priorityWorkspaceId, $prioritySid, $subDetails['contact_id'] ?? null, $flow['id'], $nextStepId, $nextStepType, $initialSchedule, $prioritySid, $flow['id'], $priorityWorkspaceId]);
                         } else {
                             // allowMultiple = false: Apply frequency and cooldown rules
                             if ($frequency === 'one-time') {
                                 $blockCondition = "1=1"; // Always block if any record exists
                             } else {
-                                // For recurring: Block if (in progress) OR (recently completed within cooldown)
-                            // [FIX] $cooldownHours is cast (int) on L285 — safe to use in INTERVAL.
-                            // PDO does not accept params inside INTERVAL expressions.
                             $safeChHours = (int)$cooldownHours;
                             $blockCondition = "status IN ('waiting', 'processing') OR updated_at > DATE_SUB(NOW(), INTERVAL $safeChHours HOUR)";
                             }
     
-                            $sqlIns = "INSERT INTO subscriber_flow_states (workspace_id, subscriber_id, flow_id, step_id, step_type, scheduled_at, status, created_at, updated_at, last_step_at)
-                                       SELECT ?, ?, ?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW()
+                            $sqlIns = "INSERT INTO subscriber_flow_states (workspace_id, subscriber_id, contact_id, flow_id, step_id, step_type, scheduled_at, status, created_at, updated_at, last_step_at)
+                                       SELECT ?, ?, ?, ?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW()
                                        FROM DUAL
                                        WHERE NOT EXISTS (
                                            SELECT 1 FROM subscriber_flow_states 
@@ -483,7 +477,7 @@ try {
                                            AND ($blockCondition)
                                        )";
                             $stmtE = $pdo->prepare($sqlIns);
-                            $stmtE->execute([$priorityWorkspaceId, $prioritySid, $flow['id'], $nextStepId, $nextStepType, $initialSchedule, $prioritySid, $flow['id'], $priorityWorkspaceId]);
+                            $stmtE->execute([$priorityWorkspaceId, $prioritySid, $subDetails['contact_id'] ?? null, $flow['id'], $nextStepId, $nextStepType, $initialSchedule, $prioritySid, $flow['id'], $priorityWorkspaceId]);
                         }
 
                     if ($stmtE->rowCount() === 0) {
@@ -548,11 +542,11 @@ try {
  
         $stmtItem = $pdo->prepare("SELECT q.id as queue_id, q.subscriber_id, q.flow_id, q.step_id, q.status, q.scheduled_at, q.updated_at, q.created_at as queue_created_at, q.last_step_at, 
                                  f.steps as flow_steps, f.config as flow_config, f.name as flow_name, 
-                                 s.email as sub_email, s.first_name, s.last_name, s.company_name, s.phone_number, s.job_title,
+                                 s.email as sub_email, s.contact_id, s.first_name, s.last_name, s.company_name, s.phone_number, s.job_title,
                                  s.status as sub_status, s.tags as sub_tags, s.id as sub_id, s.date_of_birth, s.anniversary_date, s.joined_at,
-                                 s.city, s.country, s.gender, s.last_os, s.last_device, s.last_browser, s.last_city,
+                                 s.city, s.district, s.ward, s.country, s.address, s.gender, s.last_os, s.last_device, s.last_browser, s.last_city,
                                  s.stats_opened, s.stats_clicked, s.last_open_at, s.last_click_at, s.timezone, s.is_zalo_follower,
-                                 s.custom_attributes, s.workspace_id
+                                 s.custom_attributes, s.workspace_id, s.program, s.stage_id, s.owner_id, s.salesperson
                                  FROM subscriber_flow_states q 
                                  JOIN flows f ON q.flow_id = f.id 
                                  JOIN subscribers s ON q.subscriber_id = s.id 

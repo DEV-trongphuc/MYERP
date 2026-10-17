@@ -1,10 +1,11 @@
-
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Trash2, Moon, AlertTriangle, Loader2 } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { Segment } from '../../types';
 import { API_BASE_URL } from '../../utils/config';
+import { getMktPortalRoot } from '../../utils/portalRoot';
 
 interface SegmentCleanupModalProps {
     segment: Segment;
@@ -43,15 +44,15 @@ const SegmentCleanupModal: React.FC<SegmentCleanupModalProps> = ({ segment, onCl
         }
     };
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    return createPortal(
+        <div className="fixed inset-0 z-[110000] flex items-center justify-center p-4">
             <div
                 className={`absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity duration-300 ease-out ${animateIn ? 'opacity-100' : 'opacity-0'}`}
                 onClick={onClose}
             />
             <div
                 style={{ transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }}
-                className={`bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden transform transition-all duration-500 ${animateIn ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-8'}`}
+                className={`bg-white rounded-[18px] shadow-xl w-full max-w-md overflow-hidden transform transition-all duration-500 ${animateIn ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-8'}`}
             >
                 <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                     <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -80,13 +81,13 @@ const SegmentCleanupModal: React.FC<SegmentCleanupModalProps> = ({ segment, onCl
                                 type="number"
                                 value={days}
                                 onChange={(e) => setDays(parseInt(e.target.value) || 0)}
-                                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all font-bold text-slate-800"
+                                className="w-full px-4 py-2.5 rounded-[var(--radius-md)] border border-slate-200 focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/15 outline-none transition-all font-bold text-slate-800"
                             />
                         </div>
 
                         <div className="flex items-center justify-between p-4 rounded-xl border border-indigo-100 bg-indigo-50/50">
                             <div className="flex gap-3">
-                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${moveToDormant ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-200' : 'bg-white text-slate-400 border border-slate-200'}`}>
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${moveToDormant ? 'bg-[var(--color-primary)] text-white shadow-sm' : 'bg-white text-slate-400 border border-slate-200'}`}>
                                     <Moon className="w-5 h-5" />
                                 </div>
                                 <div className="flex-1">
@@ -98,27 +99,28 @@ const SegmentCleanupModal: React.FC<SegmentCleanupModalProps> = ({ segment, onCl
                             </div>
                             <label className="relative inline-flex items-center cursor-pointer">
                                 <input type="checkbox" className="sr-only peer" checked={moveToDormant} onChange={(e) => setMoveToDormant(e.target.checked)} />
-                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--color-primary)]"></div>
                             </label>
                         </div>
                     </div>
                 </div>
 
                 <div className="p-6 pt-0 flex justify-between gap-3">
-                    <button onClick={onClose} className="px-5 py-2.5 rounded-xl text-slate-600 font-bold hover:bg-slate-100 transition-colors">
+                    <button onClick={onClose} className="px-5 py-2.5 rounded-[var(--radius-md)] text-slate-600 font-bold hover:bg-slate-100 transition-colors">
                         Hủy
                     </button>
                     <button
                         onClick={handleCleanup}
                         disabled={isLoading}
-                        className={`px-5 py-2.5 rounded-xl font-bold hover:shadow-lg transition-all flex items-center gap-2 text-white ${moveToDormant ? 'bg-indigo-600 hover:shadow-indigo-500/30' : 'bg-rose-500 hover:shadow-rose-500/30'}`}
+                        className={`px-5 py-2.5 rounded-[var(--radius-md)] font-bold hover:shadow-md transition-all flex items-center gap-2 text-white ${moveToDormant ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)]' : 'bg-rose-500 hover:bg-rose-600'}`}
                     >
                         {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : (moveToDormant ? <Moon className="w-4 h-4" /> : <Trash2 className="w-4 h-4" />)}
                         {moveToDormant ? 'Chuyển sang Ngủ đông' : 'Dọn dẹp & Lưu trữ'}
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        getMktPortalRoot()
     );
 };
 

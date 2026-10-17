@@ -41,7 +41,7 @@ export const createBlock = (type: string, layout?: string): EmailBlock => {
     if (type === 'text') { content = '<p style="margin: 0;">Nhập văn bản...</p>'; styleOverrides.textAlign = 'left'; }
     if (type === 'button') {
         content = 'Nút Bấm';
-        styleOverrides.contentBackgroundColor = '#d97706';
+        styleOverrides.contentBackgroundColor = '#BD1D2D';
         styleOverrides.color = '#ffffff';
         styleOverrides.display = 'inline-block';
         styleOverrides.paddingTop = '12px';
@@ -59,7 +59,7 @@ export const createBlock = (type: string, layout?: string): EmailBlock => {
         content = 'Đây là nội dung trích dẫn nổi bật của bạn.';
         styleOverrides = createStyle({
             paddingTop: '20px', paddingRight: '20px', paddingBottom: '20px', paddingLeft: '20px', textAlign: 'left',
-            backgroundColor: '#f8fafc', borderLeftWidth: '4px', borderStyle: 'solid', borderColor: '#d97706', fontStyle: 'italic', color: '#334155',
+            backgroundColor: '#f8fafc', borderLeftWidth: '4px', borderStyle: 'solid', borderColor: '#BD1D2D', fontStyle: 'italic', color: '#334155',
         });
     }
     if (type === 'timeline') {
@@ -68,7 +68,7 @@ export const createBlock = (type: string, layout?: string): EmailBlock => {
             { id: createUniqueId(), title: 'Sự kiện 2', date: '10:30', description: 'Mô tả bước tiếp theo' },
         ];
         styleOverrides.backgroundColor = 'transparent';
-        styleOverrides.timelineDotColor = '#d97706';
+        styleOverrides.timelineDotColor = '#BD1D2D';
         styleOverrides.timelineLineColor = '#e2e8f0';
         styleOverrides.timelineLineStyle = 'solid';
         styleOverrides.textAlign = 'left';
@@ -103,7 +103,7 @@ export const createBlock = (type: string, layout?: string): EmailBlock => {
         styleOverrides.paddingTop = '10px';
         styleOverrides.paddingBottom = '10px';
         styleOverrides.borderRadius = '12px';
-        styleOverrides.playButtonColor = '#d97706';
+        styleOverrides.playButtonColor = '#BD1D2D';
     }
     if (type === 'order_list') {
         styleOverrides.paddingTop = '20px';
@@ -137,7 +137,7 @@ export const createBlock = (type: string, layout?: string): EmailBlock => {
             { id: createUniqueId(), title: 'Tính năng 2', description: 'Mô tả ngắn gọn về tính năng hoặc lợi ích tuyệt vời của sản phẩm.' },
             { id: createUniqueId(), title: 'Tính năng 3', description: 'Mô tả ngắn gọn về tính năng hoặc lợi ích tuyệt vời của sản phẩm.' },
         ];
-        styleOverrides.checkIconColor = '#d97706';
+        styleOverrides.checkIconColor = '#BD1D2D';
         styleOverrides.checkIconSize = '20';
         styleOverrides.showCheckListTitle = true;
         styleOverrides.textAlign = 'left';
@@ -198,19 +198,19 @@ export const createBlock = (type: string, layout?: string): EmailBlock => {
         (styleOverrides as any).logoWidth = '120px';
         (styleOverrides as any).headerMenuType = 'link'; // 'link' or 'button'
         (styleOverrides as any).menuGap = '20px';
-        (styleOverrides as any).buttonBg = '#d97706';
+        (styleOverrides as any).buttonBg = '#BD1D2D';
         (styleOverrides as any).buttonColor = '#ffffff';
     }
 
     // NEW: Footer Block
     if (type === 'footer') {
         content = '<p style="margin: 0; font-size: 12px; color: #64748b; text-align: center;">' +
-            '© 2024 Your Company. All rights reserved.<br>' +
-            '<a href="#" style="text-decoration: underline; color: #64748b;">Terms of Service</a>' +
+            '© {{current_year}} Viện Quốc Tế IDEAS. Bảo lưu mọi quyền.<br>' +
+            '<a href="https://ideas.edu.vn" style="text-decoration: underline; color: #64748b;">Trang chủ</a>' +
             '&nbsp;&nbsp;|&nbsp;&nbsp;' +
-            '<a href="#" style="text-decoration: underline; color: #64748b;">Privacy Policy</a>' +
+            '<a href="https://ideas.edu.vn" style="text-decoration: underline; color: #64748b;">Chính sách bảo mật</a>' +
             '&nbsp;&nbsp;|&nbsp;&nbsp;' +
-            '<a href="{{unsubscribe_url}}" style="text-decoration: underline; color: #64748b;">Unsubscribe</a>' +
+            '<a href="{{unsubscribe_url}}" style="text-decoration: underline; color: #64748b;">Hủy đăng ký</a>' +
             '</p>';
         styleOverrides.backgroundColor = '#f8fafc';
         styleOverrides.paddingTop = '30px';
@@ -447,9 +447,9 @@ export const createBlock = (type: string, layout?: string): EmailBlock => {
                         id: createUniqueId(), type: 'column' as const, content: '',
                         style: createStyle({ width: '85%', verticalAlign: 'top' }),
                         children: [
-                            { id: createUniqueId(), type: 'text' as const, content: '<div style="font-size: 14px; font-weight: bold; color: #0f172a;">Sarah Johnston</div>', style: createStyle({ textAlign: 'left', marginBottom: '4px' }) },
+                            { id: createUniqueId(), type: 'text' as const, content: '<div style="font-size: 14px; font-weight: bold; color: #0f172a;">Nguyễn Minh Anh</div>', style: createStyle({ textAlign: 'left', marginBottom: '4px' }) },
                             { id: createUniqueId(), type: 'text' as const, content: '<div style="color: #fbbf24; font-size: 12px;">★★★★★</div>', style: createStyle({ textAlign: 'left', marginBottom: '8px' }) },
-                            { id: createUniqueId(), type: 'text' as const, content: '<div style="font-size: 14px; color: #475569; line-height: 1.5; font-style: italic;">"MailFlow đã giúp đội nhóm của tôi tiết kiệm 50% thời gian xử lý email mỗi ngày. Một công cụ tuyệt vời!"</div>', style: createStyle({ textAlign: 'left' }) }
+                            { id: createUniqueId(), type: 'text' as const, content: '<div style="font-size: 14px; color: #475569; line-height: 1.5; font-style: italic;">"Chương trình tại Viện Quốc Tế IDEAS đã giúp tôi nâng tầm tư duy quản trị chiến lược và kết nối với mạng lưới lãnh đạo tuyệt vời!"</div>', style: createStyle({ textAlign: 'left' }) }
                         ]
                     }
                 ]
@@ -574,10 +574,34 @@ export const createBlock = (type: string, layout?: string): EmailBlock => {
         styleOverrides.display = 'block';
     }
 
+    // NEW: Survey Quick Card Block
+    if (type === 'survey_card') {
+        content = 'Khảo sát mức độ hài lòng của bạn';
+        styleOverrides = {
+            ...styleOverrides,
+            paddingTop: '16px',
+            paddingBottom: '16px',
+            paddingLeft: '24px',
+            paddingRight: '24px',
+            surveyId: '',
+            surveySlug: '',
+            surveyTitle: 'Khảo sát mức độ hài lòng của bạn',
+            surveyDescription: 'Ý kiến của bạn giúp chúng tôi nâng cao chất lượng dịch vụ mỗi ngày. Chỉ mất 1 phút để hoàn thành!',
+            surveyBadgeText: 'KHẢO SÁT NHANH',
+            surveyButtonText: 'Tham gia khảo sát ngay →',
+            surveyAccentColor: '#2563EB',
+            surveyCardBgColor: '#F8FAFC',
+            surveyBorderColor: '#BFDBFE',
+            surveyButtonTextColor: '#FFFFFF',
+            borderRadius: '14px',
+            textAlign: 'center',
+        };
+    }
+
     return {
         id, type: (type === 'footer' ? 'text' : type) as EmailBlockType,
         content,
-        url: (type === 'button' || type === 'image') ? '#' : undefined,
+        url: (type === 'button' || type === 'image' || type === 'survey_card') ? '#' : undefined,
         socialLinks: type === 'social' ? [
             { id: createUniqueId(), network: 'facebook', url: '#' },
             { id: createUniqueId(), network: 'instagram', url: '#' },

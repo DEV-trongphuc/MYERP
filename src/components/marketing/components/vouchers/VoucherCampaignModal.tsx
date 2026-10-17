@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Gift, Plus, CalendarRange, Infinity as InfinityIcon, Tag, Hash, Box, CheckSquare, Square, Layout, Eye, X, AlertCircle } from 'lucide-react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
@@ -8,6 +9,7 @@ import Tabs from '../common/Tabs';
 import ImageUploader from '../templates/EmailEditor/components/Properties/ImageUploader';
 import { VoucherCampaign, Template } from '../../types';
 import { api } from '../../services/storageAdapter';
+import { getMktPortalRoot } from '../../utils/portalRoot';
 import TemplateSelector from '../flows/TemplateSelector';
 import EmailPreviewDrawer from '../flows/config/EmailPreviewDrawer';
 import toast from 'react-hot-toast';
@@ -133,13 +135,13 @@ const VoucherCampaignModal: React.FC<VoucherCampaignModalProps> = ({ isOpen, onC
                 {[1, 2].map((s) => (
                     <React.Fragment key={s}>
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
-                            s === step ? 'bg-amber-600 text-white shadow-md' :
-                            s < step ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-400'
+                            s === step ? 'bg-[var(--color-primary)] text-white shadow-sm' :
+                            s < step ? 'bg-[var(--color-primary-light)] text-[var(--color-primary)]' : 'bg-slate-100 text-slate-400'
                         }`}>
                             {s}
                         </div>
                         {s < 2 && (
-                            <div className={`flex-1 h-1 rounded-full ${s < step ? 'bg-amber-200' : 'bg-slate-100'}`} />
+                            <div className={`flex-1 h-1 rounded-full ${s < step ? 'bg-[var(--color-primary)]/40' : 'bg-slate-100'}`} />
                         )}
                     </React.Fragment>
                 ))}
@@ -177,7 +179,7 @@ const VoucherCampaignModal: React.FC<VoucherCampaignModalProps> = ({ isOpen, onC
                         </div>
                         
                         {(formData.rewards || []).map((reward, idx) => (
-                            <div key={reward.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl relative space-y-4">
+                            <div key={reward.id} className="p-4 bg-slate-50 border border-slate-200 rounded-[14px] relative space-y-4">
                                 <div className="absolute -top-3 -right-3">
                                     <button onClick={() => removeReward(idx)} className="w-6 h-6 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center hover:bg-rose-600 hover:text-white transition-colors">
                                         <Plus className="w-3 h-3 rotate-45" />
@@ -196,10 +198,10 @@ const VoucherCampaignModal: React.FC<VoucherCampaignModalProps> = ({ isOpen, onC
                                                 key={type.id}
                                                 onClick={() => updateReward(idx, 'discountType', type.id)}
                                                 className={`flex flex-col items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all ${
-                                                    isSelected ? 'border-amber-600 bg-amber-50 text-amber-700' : 'border-slate-100 hover:border-slate-300 bg-white text-slate-500'
+                                                    isSelected ? 'border-[var(--color-primary)] bg-[var(--color-primary-light)] text-[var(--color-primary)]' : 'border-slate-100 hover:border-slate-300 bg-white text-slate-500'
                                                 }`}
                                             >
-                                                <Icon className={`w-5 h-5 ${isSelected ? 'text-amber-600' : 'text-slate-400'}`} />
+                                                <Icon className={`w-5 h-5 ${isSelected ? 'text-[var(--color-primary)]' : 'text-slate-400'}`} />
                                                 <span className="text-[10px] font-bold text-center">{type.label}</span>
                                             </button>
                                         );
@@ -286,7 +288,7 @@ const VoucherCampaignModal: React.FC<VoucherCampaignModalProps> = ({ isOpen, onC
                     </div>
 
                     <div className="space-y-6 pb-6 animate-in slide-in-from-right-4 duration-300">
-                        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 mb-2 mt-4">
+                        <div className="bg-slate-50 border border-slate-200 rounded-[14px] p-5 mb-2 mt-4">
                             <div className="flex items-center gap-3 mb-2">
                                 <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
                                     <Gift className="w-4 h-4" />
@@ -302,7 +304,7 @@ const VoucherCampaignModal: React.FC<VoucherCampaignModalProps> = ({ isOpen, onC
 
                         <div className="grid grid-cols-1 gap-4">
                             {/* Option 1: Survey (Recommended) */}
-                            <div className={`p-4 border-2 transition-all rounded-2xl cursor-pointer relative overflow-hidden group flex flex-col ${uiMagnetMode === 'survey' ? 'border-purple-400 bg-purple-50/50 shadow-sm' : 'border-slate-200 bg-white hover:border-purple-200'}`}
+                            <div className={`p-4 border-2 transition-all rounded-[14px] cursor-pointer relative overflow-hidden group flex flex-col ${uiMagnetMode === 'survey' ? 'border-purple-400 bg-purple-50/50 shadow-sm' : 'border-slate-200 bg-white hover:border-purple-200'}`}
                                  onClick={() => handleToggleMagnet('survey')}>
                                 <div className="absolute top-0 right-0 bg-gradient-to-l from-purple-500 to-indigo-500 text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl z-10 shadow-sm">
                                     Khuyên Dùng
@@ -329,7 +331,7 @@ const VoucherCampaignModal: React.FC<VoucherCampaignModalProps> = ({ isOpen, onC
                                                     <span className="text-[10px] font-bold text-purple-600 uppercase tracking-widest block">Đang dùng trong {relatedSurveys.length} Khảo sát:</span>
                                                     <div className="flex flex-wrap gap-2">
                                                         {relatedSurveys.map(s => (
-                                                            <a key={s.id} href={`/#/surveys/${s.id}/edit`} target="_blank" rel="noreferrer" className="text-[10px] bg-white border border-purple-200 text-purple-700 px-2 py-1 rounded-md shadow-sm hover:border-purple-400 hover:bg-purple-50 transition-all flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                                            <a key={s.id} href={`/marketing/surveys?id=${s.id}`} target="_blank" rel="noreferrer" className="text-[10px] bg-white border border-purple-200 text-purple-700 px-2 py-1 rounded-md shadow-sm hover:border-purple-400 hover:bg-purple-50 transition-all flex items-center gap-1" onClick={e => e.stopPropagation()}>
                                                                 <CheckSquare className="w-3 h-3 text-emerald-500" /> {s.name}
                                                             </a>
                                                         ))}
@@ -340,7 +342,7 @@ const VoucherCampaignModal: React.FC<VoucherCampaignModalProps> = ({ isOpen, onC
                                                     <AlertCircle className="w-3 h-3" /> Chưa có khảo sát nào dùng mã này.
                                                 </div>
                                             )}
-                                            <a href="/#/surveys" className="text-[11px] font-bold text-white bg-purple-600 hover:bg-purple-700 shadow-sm px-4 py-2 rounded-xl inline-flex items-center justify-center transition-all w-full mt-2" onClick={e => e.stopPropagation()}>
+                                            <a href="/marketing/surveys" className="text-[11px] font-bold text-white bg-purple-600 hover:bg-purple-700 shadow-sm px-4 py-2 rounded-[var(--radius-md)] inline-flex items-center justify-center transition-all w-full mt-2" onClick={e => e.stopPropagation()}>
                                                 <Plus className="w-3.5 h-3.5 mr-1" /> Đi tới Khảo sát 
                                             </a>
                                         </div>
@@ -349,7 +351,7 @@ const VoucherCampaignModal: React.FC<VoucherCampaignModalProps> = ({ isOpen, onC
                             </div>
 
                             {/* Option 2: Basic Form */}
-                            <div className={`p-4 border-2 transition-all rounded-2xl cursor-pointer flex flex-col ${uiMagnetMode === 'form' ? 'border-emerald-400 bg-emerald-50/50 shadow-sm' : 'border-slate-200 bg-white hover:border-emerald-200'}`}
+                            <div className={`p-4 border-2 transition-all rounded-[14px] cursor-pointer flex flex-col ${uiMagnetMode === 'form' ? 'border-emerald-400 bg-emerald-50/50 shadow-sm' : 'border-slate-200 bg-white hover:border-emerald-200'}`}
                                  onClick={() => handleToggleMagnet('form')}>
                                 <div className="flex items-center justify-between mb-2">
                                     <h5 className={`font-bold flex items-center gap-2 ${uiMagnetMode === 'form' ? 'text-emerald-800' : 'text-slate-600'}`}>
@@ -401,7 +403,7 @@ const VoucherCampaignModal: React.FC<VoucherCampaignModalProps> = ({ isOpen, onC
                                             ) : (
                                                 <div className="bg-white border border-rose-200 rounded-xl p-3">
                                                     <p className="text-[11px] text-slate-600 mb-2">Bạn chưa có Biểu mẫu (Form) nào.</p>
-                                                    <a href="/#/forms" target="_blank" className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700">
+                                                    <a href="/marketing/forms" target="_blank" rel="noreferrer" className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700">
                                                         + Tạo Biểu mẫu ngay
                                                     </a>
                                                 </div>
@@ -464,7 +466,7 @@ const VoucherCampaignModal: React.FC<VoucherCampaignModalProps> = ({ isOpen, onC
                     </div>
 
                     {formData.codeType === 'static' ? (
-                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 animate-in fade-in">
+                        <div className="p-4 bg-slate-50 rounded-[14px] border border-slate-100 animate-in fade-in">
                             <Input 
                                 label="Mã Voucher chung"
                                 placeholder="VD: SUMMERROSE"
@@ -474,8 +476,8 @@ const VoucherCampaignModal: React.FC<VoucherCampaignModalProps> = ({ isOpen, onC
                             <p className="text-xs text-slate-500 mt-2">Ví dụ: Mọi người đều nhập SUMMERROSE để được giảm giá.</p>
                         </div>
                     ) : (
-                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex gap-4 animate-in fade-in items-start">
-                            <div className="p-2 bg-white rounded-xl shadow-sm text-amber-600 shrink-0">
+                        <div className="p-4 bg-slate-50 rounded-[14px] border border-slate-100 flex gap-4 animate-in fade-in items-start">
+                            <div className="p-2 bg-white rounded-xl shadow-sm text-[var(--color-primary)] shrink-0">
                                 <Hash className="w-5 h-5" />
                             </div>
                             <div>
@@ -485,11 +487,10 @@ const VoucherCampaignModal: React.FC<VoucherCampaignModalProps> = ({ isOpen, onC
                         </div>
                     )}
 
-                    {/* Số lượng phát hành giờ đây được chỉnh ở mỗi item, nên ta có thể bỏ phần Vô hạn ở step 2, hoặc giữ nguyên nhưng disable quantity field */}
                     <div className="space-y-4 pt-4 border-t border-slate-100">
                         <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Chế độ phân bổ</label>
                         <p className="text-xs text-slate-500">
-                            Trong gói đa quà tặng, với loại <strong className="text-amber-600">Dynamic</strong>, khi hệ thống sinh mã ngẫu nhiên sẽ phân phối ngẫu nhiên (hoặc theo tỷ lệ số lượng <strong className="text-slate-800">Của từng món quà</strong> bạn nhập ở bước 1).
+                            Trong gói đa quà tặng, với loại <strong className="text-[var(--color-primary)]">Dynamic</strong>, khi hệ thống sinh mã ngẫu nhiên sẽ phân phối ngẫu nhiên (hoặc theo tỷ lệ số lượng <strong className="text-slate-800">của từng món quà</strong> bạn nhập ở bước 1).
                         </p>
                         {formData.codeType === 'static' && formData.rewards && formData.rewards.length > 1 && (
                             <p className="text-xs text-rose-500 font-bold bg-rose-50 p-2 rounded">Cảnh báo: Dùng mã tĩnh (VD: SUMMER26) cho một gói có NHIỀU món quà sẽ khiến mọi người nhập cùng 1 mã nhưng nhận phần quà chung! Đa quà tặng thường chỉ hiệu quả với mã Dynamic (Random Code).</p>
@@ -542,7 +543,7 @@ const VoucherCampaignModal: React.FC<VoucherCampaignModalProps> = ({ isOpen, onC
                     <p>Bạn đang lưu những thay đổi vào Ưu đãi đã có sẵn. Bạn muốn cập nhật số lượng mã phân bổ như thế nào?</p>
                     
                     <div className="space-y-3 mt-4">
-                        <label className={`flex gap-3 p-4 border rounded-xl cursor-pointer transition-colors ${syncMode === 'preserve' ? 'border-amber-600 bg-amber-50' : 'border-slate-200 hover:border-amber-300'}`}>
+                        <label className={`flex gap-3 p-4 border rounded-xl cursor-pointer transition-colors ${syncMode === 'preserve' ? 'border-[var(--color-primary)] bg-[var(--color-primary-light)]' : 'border-slate-200 hover:border-slate-300'}`}>
                             <input 
                                 type="radio" 
                                 name="syncMode" 
@@ -557,7 +558,7 @@ const VoucherCampaignModal: React.FC<VoucherCampaignModalProps> = ({ isOpen, onC
                             </div>
                         </label>
                         
-                        <label className={`flex gap-3 p-4 border rounded-xl cursor-pointer transition-colors ${syncMode === 'reset_unused' ? 'border-amber-600 bg-amber-50' : 'border-slate-200 hover:border-amber-300'}`}>
+                        <label className={`flex gap-3 p-4 border rounded-xl cursor-pointer transition-colors ${syncMode === 'reset_unused' ? 'border-[var(--color-primary)] bg-[var(--color-primary-light)]' : 'border-slate-200 hover:border-slate-300'}`}>
                             <input 
                                 type="radio" 
                                 name="syncMode" 
@@ -575,24 +576,27 @@ const VoucherCampaignModal: React.FC<VoucherCampaignModalProps> = ({ isOpen, onC
                 </div>
             </Modal>
 
-            {showPicker && <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[90]" onClick={() => setShowPicker(false)}></div>}
-            {showPicker && (
-                <div className="bg-white rounded-[32px] border-2 border-slate-100 shadow-2xl animate-in fade-in zoom-in-95 duration-200 fixed inset-4 md:inset-12 lg:inset-20 z-[100] overflow-hidden flex flex-col max-w-6xl mx-auto my-auto max-h-[90vh]">
-                    <div className="p-5 border-b border-slate-100 flex justify-between items-center shrink-0">
-                        <h3 className="font-bold text-slate-800 text-lg">Chọn mẫu Email</h3>
-                        <button onClick={() => setShowPicker(false)} className="p-2 hover:bg-slate-100 text-slate-500 rounded-full transition-colors"><X className="w-5 h-5" /></button>
+            {showPicker && createPortal(
+                <>
+                    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[110000]" onClick={() => setShowPicker(false)}></div>
+                    <div className="bg-white rounded-[18px] border border-slate-200 shadow-2xl animate-in fade-in zoom-in-95 duration-200 fixed inset-4 md:inset-12 lg:inset-20 z-[110001] overflow-hidden flex flex-col max-w-6xl mx-auto my-auto max-h-[90vh]">
+                        <div className="p-5 border-b border-slate-100 flex justify-between items-center shrink-0">
+                            <h3 className="font-bold text-slate-800 text-lg">Chọn mẫu Email</h3>
+                            <button onClick={() => setShowPicker(false)} className="p-2 hover:bg-slate-100 text-slate-500 rounded-full transition-colors"><X className="w-5 h-5" /></button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-2 md:p-6 custom-scrollbar bg-slate-50/50">
+                            <TemplateSelector
+                                templates={templates}
+                                selectedId={formData.claimEmailTemplateId}
+                                onSelect={(t) => { 
+                                    setFormData(p => ({ ...p, claimEmailTemplateId: t.id })); 
+                                    setShowPicker(false); 
+                                }}
+                            />
+                        </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-2 md:p-6 custom-scrollbar bg-slate-50/50">
-                        <TemplateSelector
-                            templates={templates}
-                            selectedId={formData.claimEmailTemplateId}
-                            onSelect={(t) => { 
-                                setFormData(p => ({ ...p, claimEmailTemplateId: t.id })); 
-                                setShowPicker(false); 
-                            }}
-                        />
-                    </div>
-                </div>
+                </>,
+                getMktPortalRoot()
             )}
 
             <EmailPreviewDrawer

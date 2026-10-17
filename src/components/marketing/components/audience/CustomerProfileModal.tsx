@@ -109,8 +109,9 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
     const handleClose = () => {
         setAnimateIn(false);
         setTimeout(() => {
+            setIsVisible(false);
             onClose();
-        }, 350);
+        }, 220);
     };
 
     const isZalo = formData.email?.endsWith('@zalo-oa.vn');
@@ -178,13 +179,19 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
         if (subscriber) {
             setIsVisible(true);
             resetState(subscriber);
-            const timer = setTimeout(() => setAnimateIn(true), 20);
-            return () => clearTimeout(timer);
+            let raf2 = 0;
+            const raf1 = requestAnimationFrame(() => {
+                raf2 = requestAnimationFrame(() => setAnimateIn(true));
+            });
+            return () => {
+                cancelAnimationFrame(raf1);
+                cancelAnimationFrame(raf2);
+            };
         } else {
             setAnimateIn(false);
             const timer = setTimeout(() => {
                 setIsVisible(false);
-            }, 350);
+            }, 220);
             return () => clearTimeout(timer);
         }
     }, [subscriber]);
@@ -661,37 +668,37 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
     const drawerContent = (
         <>
             <div
-                style={{ zIndex: 2147483625 }}
-                className={`fixed inset-0 z-[2147483625] flex justify-end overflow-hidden ${isVisible ? 'pointer-events-auto' : 'pointer-events-none'}`}
+                style={{ zIndex: 2147483625, pointerEvents: animateIn ? 'auto' : 'none' }}
+                className={`fixed inset-0 z-[2147483625] flex justify-end overflow-hidden ${animateIn ? 'pointer-events-auto' : 'pointer-events-none'}`}
             >
                 {/* Backdrop Blur Overlay with Floating Circular Arrow Close Button */}
                 <div
-                    style={{ zIndex: 2147483625 }}
-                    className={`fixed inset-0 bg-black/80 backdrop-blur-[2px] transition-opacity duration-500 z-[2147483625] cursor-pointer ${animateIn ? 'opacity-100' : 'opacity-0'}`}
+                    className="drawer-backdrop"
                     onClick={handleClose}
+                    style={{
+                        opacity: animateIn ? 1 : 0,
+                        transition: 'opacity 0.22s cubic-bezier(0.25, 0.1, 0.25, 1)',
+                        pointerEvents: animateIn ? 'auto' : 'none',
+                        zIndex: 2147483620,
+                        '--drawer-backdrop-z': 2147483620
+                    } as React.CSSProperties}
                 />
-
-                {/* Floating Circular Arrow Button (Centered over sidebar on desktop) */}
-                <div 
-                    className={`customer-profile-modal-back-btn hidden lg:flex absolute top-1/2 -translate-y-1/2 z-[2147483626] transition-opacity duration-500 ${animateIn ? 'opacity-100' : 'opacity-0'}`}
-                    style={{ zIndex: 2147483626, pointerEvents: 'none' }}
-                >
-                    <button
-                        onClick={handleClose}
-                        className="w-12 h-12 rounded-full bg-slate-900/90 border border-slate-700/80 text-white flex items-center justify-center shadow-2xl transition-all duration-300 hover:scale-110 hover:bg-blue-600 hover:border-blue-500 cursor-pointer"
-                        style={{ pointerEvents: 'auto' }}
-                        title="Quay lại (Esc)"
-                    >
-                        <ArrowLeft className="w-6 h-6 stroke-[2.5]" />
-                    </button>
-                </div>
 
                 {/* Slide-over Right Drawer Panel - Anchored to sidebar */}
                 <div
-                    style={{ zIndex: 2147483627 }}
-                    className="customer-profile-modal-container fixed inset-y-0 right-0 z-[2147483627] max-w-full flex pl-0 pointer-events-none"
+                    style={{ zIndex: 2147483625 }}
+                    className="customer-profile-modal-container fixed inset-y-0 right-0 z-[2147483625] max-w-full flex pl-0 pointer-events-none"
                 >
-                    <div className={`customer-profile-modal-panel w-screen max-w-none bg-white dark:bg-slate-950 shadow-2xl flex flex-col transform transition-all duration-500 cubic-bezier(0.16, 1, 0.3, 1) overflow-hidden pointer-events-auto ${animateIn ? 'translate-x-0 opacity-100' : 'translate-x-full lg:translate-x-[100px] opacity-0'}`}>
+                    <div
+                        className="drawer-panel fixed top-0 right-0 bottom-0 z-[2147483625] customer-profile-modal-panel w-screen max-w-none bg-white dark:bg-slate-950 shadow-2xl flex flex-col overflow-hidden"
+                        style={{
+                            zIndex: 2147483625,
+                            opacity: animateIn ? 1 : 0,
+                            transform: animateIn ? 'translate3d(0, 0, 0)' : 'translate3d(48px, 0, 0)',
+                            transition: 'transform 0.22s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.20s cubic-bezier(0.25, 0.1, 0.25, 1)',
+                            pointerEvents: animateIn ? 'auto' : 'none'
+                        }}
+                    >
                         <style>{`
                           @media (min-width: 1024px) {
                             .customer-profile-modal-container {
@@ -699,10 +706,6 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                             }
                             .customer-profile-modal-panel {
                               width: calc(100vw - var(--sidebar-width, 220px)) !important;
-                            }
-                            .customer-profile-modal-back-btn {
-                              left: calc(var(--sidebar-width, 220px) / 2) !important;
-                              transform: translate(-50%, -50%) !important;
                             }
                           }
                         `}</style>
@@ -770,7 +773,7 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                                         onClick={() => {
                                             window.dispatchEvent(new CustomEvent('open-customer-drawer', { detail: { initialTab: 'journey360', id: Number(formData.contact_id || (subscriber as any)?.contact_id) } }));
                                         }}
-                                        className="btn primary sm inline-flex items-center gap-1.5"
+                                        className="px-3.5 py-2 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-xs font-bold transition-all shadow-sm inline-flex items-center gap-1.5"
                                         title="Mở Hồ Sơ CRM 360°"
                                     >
                                         <ExternalLink className="w-3.5 h-3.5" />
@@ -932,7 +935,7 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1 flex items-center gap-2">
                                         <div className="w-4 h-px bg-slate-200"></div> Thông tin định danh
                                     </h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 bg-white dark:bg-slate-900 p-4 md:p-6 rounded-2xl md:rounded-[28px] border border-slate-100 dark:border-slate-800/60 shadow-sm">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 bg-white dark:bg-slate-900 p-4 md:p-6 rounded-2xl md:rounded-[18px] border border-slate-100 dark:border-slate-800/60 shadow-sm">
                                         <div className="col-span-1 md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-5">
                                             {(isEditing || formData.lastName) && (
                                                 <div className="md:col-span-1">
@@ -1021,7 +1024,7 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1 flex items-center gap-2">
                                         <div className="w-4 h-px bg-slate-200"></div> Còng việc & Công ty
                                     </h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 bg-white dark:bg-slate-900 p-4 md:p-6 rounded-2xl md:rounded-[28px] border border-slate-100 dark:border-slate-800/60 shadow-sm">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 bg-white dark:bg-slate-900 p-4 md:p-6 rounded-2xl md:rounded-[18px] border border-slate-100 dark:border-slate-800/60 shadow-sm">
                                         <Input label="Chức danh" value={formData.jobTitle} onChange={(e) => setFormData({ ...formData, jobTitle: e.target.value })} disabled={!isEditing} icon={Briefcase} />
                                         <Input label="Tên Công ty" value={formData.companyName} onChange={(e) => setFormData({ ...formData, companyName: e.target.value })} disabled={!isEditing} icon={Building} />
                                     </div>
@@ -1032,7 +1035,7 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1 flex items-center gap-2">
                                         <div className="w-4 h-px bg-slate-200"></div> Thông tin Địa lý
                                     </h4>
-                                    <div className="bg-white dark:bg-slate-900 p-4 md:p-6 rounded-2xl md:rounded-[28px] border border-slate-100 dark:border-slate-800/60 shadow-sm">
+                                    <div className="bg-white dark:bg-slate-900 p-4 md:p-6 rounded-2xl md:rounded-[18px] border border-slate-100 dark:border-slate-800/60 shadow-sm">
                                         <Input label="Địa chỉ" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} disabled={!isEditing} icon={MapPin} />
                                     </div>
                                 </section>
@@ -1055,7 +1058,7 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
 
                                     <div className="space-y-3">
                                         {attrForm.isOpen && (
-                                            <div className="bg-blue-50/50 p-4 rounded-[24px] border border-blue-200 animate-in zoom-in-95 duration-200">
+                                            <div className="bg-blue-50/50 p-4 rounded-[18px] border border-blue-200 animate-in zoom-in-95 duration-200">
                                                 <div className="grid grid-cols-2 gap-3 mb-3">
                                                     <div className="space-y-1">
                                                         <label className="text-[9px] font-black text-blue-500 uppercase ml-1">Tên trường</label>
@@ -1096,7 +1099,7 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                                             </div>
                                         )}
 
-                                        <div className={`bg-white dark:bg-slate-900 p-6 rounded-[28px] border border-slate-100 dark:border-slate-800/60 shadow-sm grid grid-cols-1 sm:grid-cols-2 gap-4 ${!formData.customAttributes || Object.keys(formData.customAttributes).length === 0 ? 'hidden' : ''}`}>
+                                        <div className={`bg-white dark:bg-slate-900 p-6 rounded-[18px] border border-slate-100 dark:border-slate-800/60 shadow-sm grid grid-cols-1 sm:grid-cols-2 gap-4 ${!formData.customAttributes || Object.keys(formData.customAttributes).length === 0 ? 'hidden' : ''}`}>
                                             {Object.entries(formData.customAttributes || {}).map(([key, value]) => (
                                                 <div key={key} className="flex flex-col bg-slate-50 dark:bg-slate-950/50 p-3 px-4 rounded-xl border border-transparent hover:border-slate-200 dark:border-slate-700/60 hover:bg-white dark:bg-slate-900 group/attr relative transition-all">
                                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter mb-0.5">{key}</span>
@@ -1142,7 +1145,7 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                                         </div>
 
                                         {(!formData.customAttributes || Object.keys(formData.customAttributes).length === 0) && !isEditing && (
-                                            <div className="text-center py-10 bg-slate-50 dark:bg-slate-950/50 rounded-[28px] border border-slate-100 dark:border-slate-800/60 border-dashed">
+                                            <div className="text-center py-10 bg-slate-50 dark:bg-slate-950/50 rounded-[18px] border border-slate-100 dark:border-slate-800/60 border-dashed">
                                                 <div className="w-12 h-12 bg-white dark:bg-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-sm">
                                                     <Globe className="w-6 h-6 text-slate-200" />
                                                 </div>
@@ -1185,7 +1188,7 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                                         </div>
                                     </div>
 
-                                    <div className="bg-white dark:bg-slate-900 p-6 pt-12 rounded-[28px] border border-slate-100 dark:border-slate-800/60 shadow-sm overflow-visible">
+                                    <div className="bg-white dark:bg-slate-900 p-6 pt-12 rounded-[18px] border border-slate-100 dark:border-slate-800/60 shadow-sm overflow-visible">
                                         <div className="grid grid-rows-4 grid-flow-col gap-1.5">
                                             {heatmapData.map((day, idx) => (
                                                 <div
@@ -1218,7 +1221,7 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                                             { label: 'Đã mở', value: formData.stats?.emailsOpened || 0, color: 'orange', icon: MailOpen, rate: formData.stats?.emailsSent > 0 ? Math.round((formData.stats.emailsOpened / formData.stats.emailsSent) * 100) : 0 },
                                             { label: 'Đã bấm', value: formData.stats?.linksClicked || 0, color: 'emerald', icon: MousePointer2, rate: formData.stats?.emailsOpened > 0 ? Math.round((formData.stats.linksClicked / formData.stats.emailsOpened) * 100) : 0 },
                                         ].map((stat, idx) => (
-                                            <div key={idx} className="bg-white dark:bg-slate-900 p-5 rounded-[24px] border border-slate-100 dark:border-slate-800/60 shadow-sm flex flex-col items-center justify-center relative overflow-hidden group">
+                                            <div key={idx} className="bg-white dark:bg-slate-900 p-5 rounded-[18px] border border-slate-100 dark:border-slate-800/60 shadow-sm flex flex-col items-center justify-center relative overflow-hidden group">
                                                 <div className={`absolute top-0 right-0 w-16 h-16 -mr-4 -mt-4 rounded-full opacity-5 bg-${stat.color}-500 transform scale-150`}></div>
                                                 <stat.icon className={`w-5 h-5 text-${stat.color}-500 mb-2.5 opacity-40`} />
                                                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 z-10">{stat.label}</p>
@@ -1232,7 +1235,7 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                                         ))}
                                     </div>
 
-                                    <div className="bg-slate-50 dark:bg-slate-950/80 p-5 rounded-[24px] border border-slate-100 dark:border-slate-800/60 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+                                    <div className="bg-slate-50 dark:bg-slate-950/80 p-5 rounded-[18px] border border-slate-100 dark:border-slate-800/60 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
                                         {[
                                             { label: 'Hoạt động cuối', value: formData.lastActivityAt, color: 'blue', icon: Activity },
                                             { label: 'Mở thư cuối', value: formData.stats?.lastOpenAt, color: 'orange', icon: Eye },
@@ -1260,7 +1263,7 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1 flex items-center gap-2">
                                         <div className="w-4 h-px bg-slate-200"></div> Hệ điều hành & Vị trí (Auto)
                                     </h4>
-                                    <div className="bg-white dark:bg-slate-900 p-6 rounded-[28px] border border-slate-100 dark:border-slate-800/60 shadow-sm">
+                                    <div className="bg-white dark:bg-slate-900 p-6 rounded-[18px] border border-slate-100 dark:border-slate-800/60 shadow-sm">
                                         <div className="grid grid-cols-2 md:grid-cols-3 gap-y-8 gap-x-4">
                                             {[
                                                 { label: 'Thiết bị', value: formData.last_device, icon: Smartphone, color: 'indigo' },
@@ -1442,7 +1445,7 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                                             return (
                                                 <div
                                                     key={flow.id}
-                                                    className={`p-5 rounded-3xl flex items-center justify-between shadow-xl cursor-pointer transition-all group/flow ${isActive ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700/60 text-slate-500 dark:text-slate-400 hover:border-slate-300'}`}
+                                                    className={`p-5 rounded-[18px] flex items-center justify-between shadow-xl cursor-pointer transition-all group/flow ${isActive ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700/60 text-slate-500 dark:text-slate-400 hover:border-slate-300'}`}
                                                     onClick={() => {
                                                         navigate('/marketing/flows', { state: { openFlowId: flow.id, tab: 'analytics' } });
                                                         onClose();
@@ -1524,7 +1527,7 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                                             <div className={`absolute -left-12 w-10 h-10 rounded-full border-4 border-white shadow-md flex items-center justify-center z-10 ${act.color}`}>
                                                 <act.icon className="w-4 h-4" />
                                             </div>
-                                            <div className="bg-white dark:bg-slate-900 p-5 rounded-[28px] border border-slate-100 dark:border-slate-800/60 shadow-sm group hover:border-blue-200 transition-all">
+                                            <div className="bg-white dark:bg-slate-900 p-5 rounded-[18px] border border-slate-100 dark:border-slate-800/60 shadow-sm group hover:border-blue-200 transition-all">
                                                 <div className="flex items-center justify-between gap-4 mb-2">
                                                     <div className="flex-1 min-w-0">
                                                         {act.type.includes('click') && act.url && /^https?:\/\//i.test(act.url) ? (
@@ -1854,7 +1857,7 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                 onConfirm={triggerWarning.onConfirm}
                 variant="warning"
                 title="Xác nhận Kích hoạt Flow"
-                zIndex={40000}
+                zIndex={2147483630}
                 message={
                     <div className="text-left space-y-4">
                         <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
@@ -2210,7 +2213,7 @@ const SubscriberChatHistory = ({ subscriber }: { subscriber: any }) => {
                     <div className="grid grid-cols-1 gap-4">
                         {/* Facebook Card */}
                         {subscriber.meta_psid && (
-                            <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-5 rounded-[24px] shadow-lg shadow-blue-500/20 text-white relative overflow-hidden group">
+                            <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-5 rounded-[18px] shadow-lg shadow-blue-500/20 text-white relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:scale-110 transition-transform">
                                     <Facebook className="w-20 h-20" />
                                 </div>
@@ -2241,7 +2244,7 @@ const SubscriberChatHistory = ({ subscriber }: { subscriber: any }) => {
 
                         {/* Zalo Card */}
                         {subscriber.zalo_user_id && (
-                            <div className="bg-gradient-to-br from-blue-400 to-blue-600 p-5 rounded-[24px] shadow-lg shadow-blue-400/20 text-white relative overflow-hidden group">
+                            <div className="bg-gradient-to-br from-blue-400 to-blue-600 p-5 rounded-[18px] shadow-lg shadow-blue-400/20 text-white relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:scale-110 transition-transform">
                                     <MessageSquare className="w-20 h-20" />
                                 </div>
@@ -2268,7 +2271,7 @@ const SubscriberChatHistory = ({ subscriber }: { subscriber: any }) => {
 
                         {/* Web Chat Card */}
                         {hasWebChat && (
-                            <div className="bg-gradient-to-br from-slate-700 to-slate-900 p-5 rounded-[24px] shadow-lg shadow-slate-500/20 text-white relative overflow-hidden group">
+                            <div className="bg-gradient-to-br from-slate-700 to-slate-900 p-5 rounded-[18px] shadow-lg shadow-slate-500/20 text-white relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:scale-110 transition-transform">
                                     <Globe className="w-20 h-20" />
                                 </div>

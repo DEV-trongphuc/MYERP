@@ -30,6 +30,20 @@ $method = $_SERVER['REQUEST_METHOD'];
 $route = $_GET['route'] ?? '';
 
 try {
+    try {
+        $msCols = $pdo->query("SHOW COLUMNS FROM `meta_subscribers`")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('subscriber_id', $msCols, true)) {
+            $pdo->exec("ALTER TABLE `meta_subscribers` ADD COLUMN `subscriber_id` CHAR(36) NULL DEFAULT NULL");
+        }
+        if (!in_array('contact_id', $msCols, true)) {
+            $pdo->exec("ALTER TABLE `meta_subscribers` ADD COLUMN `contact_id` INT NULL DEFAULT NULL");
+        }
+        if (!in_array('workspace_id', $msCols, true)) {
+            $pdo->exec("ALTER TABLE `meta_subscribers` ADD COLUMN `workspace_id` INT NULL DEFAULT 1");
+        }
+    } catch (\Throwable $eCol) {
+    }
+
     if ($method === 'GET') {
         if ($route === 'lists') {
             $stmt = $pdo->prepare("
@@ -45,33 +59,32 @@ try {
             // -------------------------------------------------------------
             // GET SINGLE USER DETAILS
             // -------------------------------------------------------------
-            $id = $_GET['id'] ?? '';
+            $id = trim((string)($_GET['id'] ?? ''));
             if (!$id)
                 jsonResponse(false, null, 'ID required');
 
-            // Support multiple ID formats: numeric id, psid, or visitor_id (meta_xxxxx)
-            $whereClause = 's.id = ?';
-            $param = $id;
+            $cleanPsid = (strpos($id, 'meta_') === 0) ? substr($id, 5) : $id;
 
-            if (strpos($id, 'meta_') === 0) {
-                // visitor_id format: meta_12345 -> extract psid
-                $whereClause = 's.psid = ?';
-                $param = str_replace('meta_', '', $id);
-            } elseif (preg_match('/^[0-9]+$/', $id)) {
-                // Strictly numeric -> PSID
-                $whereClause = 's.psid = ?';
-                $param = $id;
-            } else {
-                // Has letters or hyphens -> Internal ID (MD5/UUID)
-                $whereClause = 's.id = ?';
-                $param = $id;
-            }
-
-            $stmt = $pdo->prepare("SELECT s.*, c.page_name, c.avatar_url as page_avatar 
-                                  FROM meta_subscribers s
-                                  LEFT JOIN meta_app_configs c ON s.page_id = c.page_id 
-                                  WHERE $whereClause AND c.workspace_id = ?");
-            $stmt->execute([$param, $workspace_id]);
+            $stmt = $pdo->prepare("
+                SELECT s.*,
+                       c.page_name,
+                       c.avatar_url AS page_avatar,
+                       COALESCE(s.subscriber_id, m.id) AS subscriber_id,
+                       COALESCE(s.contact_id, m.contact_id) AS contact_id,
+                       COALESCE(NULLIF(s.email, ''), CASE WHEN m.email LIKE '%@facebook.com' THEN NULL ELSE NULLIF(m.email, '') END, ct.email) AS email,
+                       COALESCE(NULLIF(s.phone, ''), NULLIF(m.phone_number, ''), NULLIF(m.phone, ''), ct.phone) AS phone,
+                       COALESCE(ct.owner_id, m.owner_id) AS owner_id,
+                       COALESCE(u.full_name, m.salesperson) AS salesperson
+                FROM meta_subscribers s
+                LEFT JOIN meta_app_configs c ON s.page_id = c.page_id
+                LEFT JOIN subscribers m ON (m.id = s.subscriber_id OR (s.psid IS NOT NULL AND s.psid != '' AND m.meta_psid = s.psid))
+                LEFT JOIN contacts ct ON ct.id = COALESCE(s.contact_id, m.contact_id) AND ct.deleted_at IS NULL
+                LEFT JOIN users u ON u.id = COALESCE(ct.owner_id, m.owner_id)
+                WHERE (s.id = ? OR s.psid = ? OR s.psid = ?)
+                  AND (c.workspace_id = ? OR s.workspace_id = ? OR c.workspace_id IS NULL)
+                LIMIT 1
+            ");
+            $stmt->execute([$id, $id, $cleanPsid, $workspace_id, $workspace_id]);
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$user)
@@ -87,9 +100,12 @@ try {
             $journey = $stmtJ->fetchAll(PDO::FETCH_ASSOC);
 
             // Fetch Linked Audience ID
-            $stmtA = $pdo->prepare("SELECT id FROM subscribers WHERE meta_psid = ? AND workspace_id = ? LIMIT 1");
-            $stmtA->execute([$user['psid'], $workspace_id]);
-            $audienceId = $stmtA->fetchColumn();
+            $audienceId = $user['subscriber_id'] ?? null;
+            if (!$audienceId) {
+                $stmtA = $pdo->prepare("SELECT id FROM subscribers WHERE meta_psid = ? AND workspace_id = ? LIMIT 1");
+                $stmtA->execute([$user['psid'], $workspace_id]);
+                $audienceId = $stmtA->fetchColumn();
+            }
 
             // Fetch Meta Messages (Standard Logs)
             $stmtM = $pdo->prepare("SELECT * FROM meta_message_logs WHERE psid = ? AND page_id = ? ORDER BY created_at DESC LIMIT 50");
@@ -112,8 +128,8 @@ try {
 
                 foreach ($aiRaw as $aiMsg) {
                     $aiMessages[] = [
-                        'id' => 'ai_' . $aiMsg['id'], // Unique ID prefix
-                        'direction' => 'outbound', // AI/Human replies are outbound relative to Page
+                        'id' => 'ai_' . $aiMsg['id'],
+                        'direction' => 'outbound',
                         'message_type' => 'text',
                         'content' => $aiMsg['message'],
                         'attachments' => '[]',
@@ -127,19 +143,13 @@ try {
                 // Ignore AI fetch errors
             }
 
-            // Merge and Deduplicate (simple timestamp sort)
-            // Note: Actual duplicates (same message logged in both) are unlikely unless we double-logged. 
-            // Since we reverted meta_sender logging, checking by content/time might be overkill, just merge.
             $allMessages = array_merge($messages, $aiMessages);
 
-            // Sort by created_at DESC
             usort($allMessages, function ($a, $b) {
                 return strtotime($b['created_at']) - strtotime($a['created_at']);
             });
 
-            // Slice to limit
             $allMessages = array_slice($allMessages, 0, 50);
-            // Reverse to show chronologically: Oldest at top, Newest at bottom
             $allMessages = array_reverse($allMessages);
 
             $user['journey'] = $journey;
@@ -152,10 +162,11 @@ try {
                 ];
             }, $allMessages);
             $user['audience_id'] = $audienceId ?: null;
+            $user['subscriber_id'] = $audienceId ?: null;
 
             jsonResponse(true, $user);
         } else {
-            // LIST SUBSCRIBERS
+            // LIST SUBSCRIBERS (default GET or route=subscribers)
             // -------------------------------------------------------------
             $pageId = $_GET['page_id'] ?? '';
             $limit = isset($_GET['limit']) ? (int) $_GET['limit'] : 20;
@@ -178,7 +189,8 @@ try {
                 $params[] = $pageId;
             } else {
                 // If no pageId, filter all by current workspace pages
-                $where .= " AND s.page_id IN (SELECT page_id FROM meta_app_configs WHERE workspace_id = ?)";
+                $where .= " AND (s.page_id IN (SELECT page_id FROM meta_app_configs WHERE workspace_id = ?) OR s.workspace_id = ?)";
+                $params[] = $workspace_id;
                 $params[] = $workspace_id;
             }
 
@@ -192,7 +204,6 @@ try {
                 $params[] = "%$search%";
                 $params[] = "%$search%";
 
-                // Robust Phone Number Search (ignores spaces, dots, dashes, and formats)
                 $isMaybePhone = preg_match('/^[0-9\+\-\.\s\(\)]+$/', $search) && preg_match('/[0-9]{3,}/', $search);
                 if ($isMaybePhone) {
                     $digits = preg_replace('/[^0-9]/', '', $search);
@@ -230,13 +241,26 @@ try {
                 $where .= " AND s.last_active_at IS NOT NULL";
             }
 
-            $sql = "SELECT s.*, c.page_name, c.avatar_url as page_avatar 
+            $sql = "SELECT s.*,
+                           c.page_name,
+                           c.avatar_url as page_avatar,
+                           COALESCE(s.subscriber_id, m.id) AS subscriber_id,
+                           COALESCE(s.contact_id, m.contact_id) AS contact_id,
+                           COALESCE(NULLIF(s.email, ''), CASE WHEN m.email LIKE '%@facebook.com' THEN NULL ELSE NULLIF(m.email, '') END, ct.email) AS email,
+                           COALESCE(NULLIF(s.phone, ''), NULLIF(m.phone_number, ''), NULLIF(m.phone, ''), ct.phone) AS phone,
+                           COALESCE(ct.owner_id, m.owner_id) AS owner_id,
+                           COALESCE(u.full_name, m.salesperson) AS salesperson,
+                           m.tags AS main_tags,
+                           ct.tags AS crm_tags
                     FROM meta_subscribers s
-                    LEFT JOIN meta_app_configs c ON s.page_id = c.page_id 
+                    LEFT JOIN meta_app_configs c ON s.page_id = c.page_id
+                    LEFT JOIN subscribers m ON (m.id = s.subscriber_id OR (s.psid IS NOT NULL AND s.psid != '' AND m.meta_psid = s.psid))
+                    LEFT JOIN contacts ct ON ct.id = COALESCE(s.contact_id, m.contact_id) AND ct.deleted_at IS NULL
+                    LEFT JOIN users u ON u.id = COALESCE(ct.owner_id, m.owner_id)
                     $where";
 
             // Count Total for current filter
-            $countSql = "SELECT COUNT(*) FROM meta_subscribers s $where";
+            $countSql = "SELECT COUNT(DISTINCT s.id) FROM meta_subscribers s $where";
             $stmtCount = $pdo->prepare($countSql);
             $stmtCount->execute($params);
             $total = $stmtCount->fetchColumn();
@@ -270,17 +294,35 @@ try {
             $counts = $stmtCounts->fetch(PDO::FETCH_ASSOC);
 
             // Get Data
-            $sql .= " ORDER BY last_active_at DESC LIMIT $limit OFFSET $offset";
+            $sql .= " GROUP BY s.id ORDER BY s.last_active_at DESC LIMIT $limit OFFSET $offset";
             $stmt = $pdo->prepare($sql);
             $stmt->execute($params);
             $customersRaw = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            // [NEW] Map Sync Status and Labels
+            // [NEW] Map Sync Status, Labels, and Merged Tags
             $customers = array_map(function ($c) {
                 $isSynced = (!empty($c['name']) && $c['name'] !== 'Facebook User');
                 $c['is_synced'] = $isSynced;
                 $c['data_type_label'] = $isSynced ? 'Đồng bộ (QUAN TÂM)' : 'Chưa đồng bộ (TƯƠNG TÁC)';
                 $c['data_type'] = $isSynced ? 'synced' : 'unsynced';
+
+                $mergedTags = [];
+                foreach (['tags', 'main_tags', 'crm_tags'] as $tk) {
+                    if (!empty($c[$tk])) {
+                        $decoded = is_array($c[$tk]) ? $c[$tk] : json_decode((string)$c[$tk], true);
+                        if (is_array($decoded)) {
+                            foreach ($decoded as $tg) {
+                                if (is_string($tg) && trim($tg) !== '') {
+                                    $mergedTags[] = trim($tg);
+                                }
+                            }
+                        }
+                    }
+                    if ($tk !== 'tags') {
+                        unset($c[$tk]);
+                    }
+                }
+                $c['tags'] = array_values(array_unique($mergedTags));
                 return $c;
             }, $customersRaw);
 
@@ -301,32 +343,41 @@ try {
     } elseif ($method === 'POST') {
         if ($route === 'update_user') {
             $input = json_decode(file_get_contents('php://input'), true);
-            $id = $input['id'] ?? '';
+            $id = trim((string)($input['id'] ?? ''));
             if (!$id)
                 jsonResponse(false, null, 'ID required');
 
-            $name = $input['display_name'] ?? '';
+            $cleanPsid = (strpos($id, 'meta_') === 0) ? substr($id, 5) : $id;
+
+            $name = $input['display_name'] ?? ($input['name'] ?? '');
             $gender = $input['gender'] ?? '';
-            $phone = $input['phone'] ?? '';
+            $phone = $input['phone'] ?? ($input['phone_number'] ?? '');
             $birthday = $input['birthday'] ?? '';
             $email = $input['email'] ?? '';
             $notes = $input['notes'] ?? '';
 
-            // [SECURITY] Validate Ownership via Page ID
+            // [SECURITY] Validate Ownership via Page ID or workspace_id
             $stmtOwn = $pdo->prepare("
                 SELECT s.id FROM meta_subscribers s
-                JOIN meta_app_configs c ON s.page_id = c.page_id
-                WHERE s.id = ? AND c.workspace_id = ?
+                LEFT JOIN meta_app_configs c ON s.page_id = c.page_id
+                WHERE (s.id = ? OR s.psid = ? OR s.psid = ?)
+                  AND (c.workspace_id = ? OR s.workspace_id = ? OR c.workspace_id IS NULL)
+                LIMIT 1
             ");
-            $stmtOwn->execute([$id, $workspace_id]);
-            if (!$stmtOwn->fetchColumn()) {
+            $stmtOwn->execute([$id, $id, $cleanPsid, $workspace_id, $workspace_id]);
+            $realId = $stmtOwn->fetchColumn();
+            if (!$realId) {
                 jsonResponse(false, null, 'User not found or unauthorized');
             }
 
             $stmt = $pdo->prepare("UPDATE meta_subscribers SET name = ?, gender = ?, phone = ?, email = ?, notes = ? WHERE id = ?");
-            $stmt->execute([$name, $gender, $phone, $email, $notes, $id]);
+            $stmt->execute([$name, $gender, $phone, $email, $notes, $realId]);
 
-            jsonResponse(true, null, 'Cập nhật thành công');
+            // Sync with Main Subscribers & MYERP Contact
+            require_once __DIR__ . '/meta_sync_helpers.php';
+            syncMetaToMain($pdo, $realId, $workspace_id);
+
+            jsonResponse(true, ['id' => $realId], 'Cập nhật thành công');
         } elseif ($route === 'update_notes') {
             $input = getJsonInput();
             $id = $input['id'] ?? '';

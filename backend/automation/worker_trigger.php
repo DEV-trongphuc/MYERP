@@ -68,16 +68,34 @@ try {
         $startTime = time();
         $BATCH_SIZE = 500;
 
-        // --- CASE A: DATE TRIGGER (Born Today / Anniversary Today) ---
+        // --- CASE A: DATE TRIGGER (Born Today / Anniversary Today / Joined At / Custom Date Field) ---
         if ($tType === 'date') {
             $field = $trigger['config']['dateField'] ?? 'dateOfBirth';
 
-            if ($field === 'dateOfBirth' || $field === 'anniversaryDate' || $field === 'joinedAt') {
+            // Honor configured triggerHour / triggerMinute (fire once current time >= configured HH:MM today)
+            if (isset($trigger['config']['triggerHour']) && $trigger['config']['triggerHour'] !== '') {
+                $tHour = (int) $trigger['config']['triggerHour'];
+                $tMin = (int) ($trigger['config']['triggerMinute'] ?? 0);
+                $nowTotalMin = (int) date('H') * 60 + (int) date('i');
+                if ($nowTotalMin < ($tHour * 60 + $tMin)) {
+                    continue;
+                }
+            }
+
+            if ($field === 'dateOfBirth' || $field === 'anniversaryDate' || $field === 'joinedAt' || $field === 'custom_field_date') {
                 $dbField = 'date_of_birth';
                 if ($field === 'anniversaryDate')
                     $dbField = 'anniversary_date';
                 if ($field === 'joinedAt')
                     $dbField = 'joined_at';
+
+                $customFieldKey = '';
+                if ($field === 'custom_field_date') {
+                    $customFieldKey = trim((string) ($trigger['config']['customFieldKey'] ?? $trigger['config']['field'] ?? ''));
+                    if ($customFieldKey === '') {
+                        continue;
+                    }
+                }
 
                 $allParams = [];
                 do {
@@ -94,7 +112,15 @@ try {
                     }
 
                     $wheres = [];
-                    $wheres[] = "DATE_FORMAT($dbField, '%m-%d') = DATE_FORMAT($targetDateExpr, '%m-%d')";
+                    $dateWheresParams = [];
+                    if ($field === 'custom_field_date') {
+                        $cleanKey = preg_replace('/^custom_/', '', $customFieldKey);
+                        $jsonPath = '$."' . str_replace('"', '\\"', $cleanKey) . '"';
+                        $wheres[] = "DATE_FORMAT(STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(s.custom_attributes, ?)), '%Y-%m-%d'), '%m-%d') = DATE_FORMAT($targetDateExpr, '%m-%d')";
+                        $dateWheresParams[] = $jsonPath;
+                    } else {
+                        $wheres[] = "DATE_FORMAT(s.$dbField, '%m-%d') = DATE_FORMAT($targetDateExpr, '%m-%d')";
+                    }
                     $wheres[] = "s.status IN ('active', 'lead', 'customer')";
                     // [SECURITY FIX] Filter by workspace_id
                     $wheres[] = "s.workspace_id = ?";
@@ -149,7 +175,7 @@ try {
                         }
                     }
 
-                    $idParams = array_merge([$wsId, $flow['id']], $cachedSourceParams);
+                    $idParams = array_merge($dateWheresParams, [$wsId, $flow['id']], $cachedSourceParams);
                     $whereSql = implode(" AND ", $wheres) . $cachedSourceSql;
                     $sql = "SELECT s.id FROM subscribers s WHERE $whereSql LIMIT $BATCH_SIZE";
 
@@ -159,7 +185,7 @@ try {
 
                     if (!empty($subs)) {
                         $logs[] = "[Date Trigger] Found " . count($subs) . " subs for flow '{$flow['name']}' ($field) in workspace $wsId.";
-                        enrollSubscribersBulk($pdo, $subs, 'date', $tTargetId, $wsId);
+                        enrollSubscribersBulk($pdo, $subs, 'date', $tTargetId, $wsId, $flow['id']);
                     } else {
                         break; // No more found
                     }
@@ -177,11 +203,21 @@ try {
                 if (empty($specificDate))
                     continue;
 
+                $offsetType = $trigger['config']['offsetType'] ?? 'on';
+                $offsetValue = (int) ($trigger['config']['offsetValue'] ?? 0);
+                if ($offsetType === 'before' && $offsetValue > 0) {
+                    $triggerOnDate = date('Y-m-d', strtotime($specificDate . " -{$offsetValue} days"));
+                } elseif ($offsetType === 'after' && $offsetValue > 0) {
+                    $triggerOnDate = date('Y-m-d', strtotime($specificDate . " +{$offsetValue} days"));
+                } else {
+                    $triggerOnDate = $specificDate;
+                }
+
                 do {
                     if (time() - $startGlobalTime > 250)
                         break;
 
-                    // Match the specific date (YYYY-MM-DD)
+                    // Match the calculated trigger date (YYYY-MM-DD)
                     $wheres = []; // Reset wheres for this specific case
                     $wheres[] = "DATE(NOW()) = ?";
                     $wheres[] = "s.status IN ('active', 'lead', 'customer')";
@@ -199,7 +235,7 @@ try {
                     $targetListIds = $trigger['config']['targetListIds'] ?? [];
                     $targetSegmentIds = $trigger['config']['targetSegmentIds'] ?? [];
 
-                    $idParams = [$specificDate, $wsId, $flow['id']];
+                    $idParams = [$triggerOnDate, $wsId, $flow['id']];
                     $sourceWheres = [];
                     if ($targetMode === 'specific' && (!empty($targetListIds) || !empty($targetSegmentIds))) {
                         $sourceConditions = [];
@@ -248,49 +284,53 @@ try {
                         $initialSchedule = $pastTime;
 
                         // [SMART SCHEDULE FIX] Calculate future wait date if first step is wait
+                        $nextStepType = 'unknown';
                         foreach ($steps as $fs) {
-                            if ($fs['id'] === $trigger['nextStepId'] && strtolower($fs['type'] ?? '') === 'wait') {
-                                $fsWaitConfig = $fs['config'] ?? [];
-                                $fsWaitMode = $fsWaitConfig['mode'] ?? 'duration';
-                                if ($fsWaitMode === 'duration') {
-                                    $dur = (int) ($fsWaitConfig['duration'] ?? 0);
-                                    $unit = $fsWaitConfig['unit'] ?? 'minutes';
-                                    $unitSeconds = match ($unit) {
-                                        'weeks' => 604800,
-                                        'days' => 86400,
-                                        'hours' => 3600,
-                                        default => 60,
-                                    };
-                                    $delay = $unitSeconds * $dur;
-                                    if ($delay > 0) {
-                                        $initialSchedule = date('Y-m-d H:i:s', time() + $delay);
-                                    }
-                                } elseif ($fsWaitMode === 'until_date') {
-                                    $specDate   = $fsWaitConfig['specificDate'] ?? '';
-                                    $targetTime = $fsWaitConfig['untilTime'] ?? '09:00';
-                                    if ($specDate) {
-                                        $targetTs = strtotime("$specDate $targetTime:00");
-                                        if ($targetTs > time()) {
-                                            $initialSchedule = date('Y-m-d H:i:s', $targetTs);
+                            if ($fs['id'] === $trigger['nextStepId']) {
+                                $nextStepType = $fs['type'] ?? 'unknown';
+                                if (strtolower($nextStepType) === 'wait') {
+                                    $fsWaitConfig = $fs['config'] ?? [];
+                                    $fsWaitMode = $fsWaitConfig['mode'] ?? 'duration';
+                                    if ($fsWaitMode === 'duration') {
+                                        $dur = (int) ($fsWaitConfig['duration'] ?? 0);
+                                        $unit = $fsWaitConfig['unit'] ?? 'minutes';
+                                        $unitSeconds = match ($unit) {
+                                            'weeks' => 604800,
+                                            'days' => 86400,
+                                            'hours' => 3600,
+                                            default => 60,
+                                        };
+                                        $delay = $unitSeconds * $dur;
+                                        if ($delay > 0) {
+                                            $initialSchedule = date('Y-m-d H:i:s', time() + $delay);
                                         }
+                                    } elseif ($fsWaitMode === 'until_date') {
+                                        $specDate   = $fsWaitConfig['specificDate'] ?? '';
+                                        $targetTime = $fsWaitConfig['untilTime'] ?? '09:00';
+                                        if ($specDate) {
+                                            $targetTs = strtotime("$specDate $targetTime:00");
+                                            if ($targetTs > time()) {
+                                                $initialSchedule = date('Y-m-d H:i:s', $targetTs);
+                                            }
+                                        }
+                                    } elseif ($fsWaitMode === 'until') {
+                                        $targetTime = $fsWaitConfig['untilTime'] ?? '09:00';
+                                        $dt = new DateTime();
+                                        $parts2 = explode(':', $targetTime);
+                                        $dt->setTime((int)$parts2[0], (int)($parts2[1] ?? 0), 0);
+                                        if ($dt->getTimestamp() <= time()) $dt->modify('+1 day');
+                                        $initialSchedule = $dt->format('Y-m-d H:i:s');
                                     }
-                                } elseif ($fsWaitMode === 'until') {
-                                    $targetTime = $fsWaitConfig['untilTime'] ?? '09:00';
-                                    $dt = new DateTime();
-                                    $parts2 = explode(':', $targetTime);
-                                    $dt->setTime((int)$parts2[0], (int)($parts2[1] ?? 0), 0);
-                                    if ($dt->getTimestamp() <= time()) $dt->modify('+1 day');
-                                    $initialSchedule = $dt->format('Y-m-d H:i:s');
                                 }
                                 break;
                             }
                         }
 
                         $subPlaceholders = implode(',', array_fill(0, count($subs), '?'));
-                        // [SECURITY FIX] Enforce workspace_id in direct INSERT
+                        // [SECURITY FIX] Enforce workspace_id and contact_id in direct INSERT
                         $sqlDirect = "INSERT INTO subscriber_flow_states
-                            (subscriber_id, flow_id, step_id, scheduled_at, status, created_at, updated_at, last_step_at)
-                            SELECT s.id, ?, ?, ?, 'waiting', NOW(), NOW(), NOW()
+                            (workspace_id, subscriber_id, contact_id, flow_id, step_id, step_type, scheduled_at, status, created_at, updated_at, last_step_at)
+                            SELECT s.workspace_id, s.id, s.contact_id, ?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW()
                             FROM subscribers s
                             WHERE s.id IN ($subPlaceholders)
                             AND s.workspace_id = ?
@@ -300,7 +340,7 @@ try {
                                 AND sfs.created_at > DATE_SUB(NOW(), INTERVAL $cooldownHours HOUR)
                             )";
                         $directParams = array_merge(
-                            [$flow['id'], $trigger['nextStepId'], $initialSchedule],
+                            [$flow['id'], $trigger['nextStepId'], $nextStepType, $initialSchedule],
                             $subs,
                             [$wsId, $flow['id']]
                         );
@@ -338,7 +378,7 @@ try {
 
                     $wheres = [];
                     $wheres[] = "s.id > ?";
-                    $wheres[] = "s.last_activity_at < ?";
+                    $wheres[] = "COALESCE(s.last_activity_at, s.joined_at, s.created_at) < ?";
                     $wheres[] = "s.status IN ('active', 'lead', 'customer')";
                     // [SECURITY FIX] Filter by workspace_id
                     $wheres[] = "s.workspace_id = ?";
@@ -398,7 +438,7 @@ try {
 
                     if (!empty($subs)) {
                         $logs[] = "[Dormant Trigger] Found " . count($subs) . " inactive subs for flow '{$flow['name']}' in workspace $wsId.";
-                        enrollSubscribersBulk($pdo, $subs, 'date', 'lastActivity', $wsId);
+                        enrollSubscribersBulk($pdo, $subs, 'date', 'lastActivity', $wsId, $flow['id']);
                         $lastId = end($subs);
                     } else {
                         break;
@@ -456,7 +496,7 @@ try {
 
                 if (!empty($subs)) {
                     $logs[] = "[Campaign Trigger] Found " . count($subs) . " subs for flow '{$flow['name']}' (Camp: $campaignId, Act: $actType) in workspace $wsId.";
-                    enrollSubscribersBulk($pdo, $subs, 'campaign', $campaignId, $wsId);
+                    enrollSubscribersBulk($pdo, $subs, 'campaign', $campaignId, $wsId, $flow['id']);
                     $lastActId = end($actRows)['id'];
                 } else {
                     break;

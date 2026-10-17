@@ -57,7 +57,7 @@ const AIChatReport: React.FC<AIReportProps> = ({ dateRange }) => {
     const stats = [
         { label: 'TỔNG HỘI THOẠI', value: summary?.total_conversations || 0, icon: MessageSquare, color: 'text-indigo-600', bg: 'bg-indigo-50' },
         { label: 'AI TRẢ LỜI', value: summary?.ai_replies || 0, icon: Bot, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-        { label: 'CHUYỂN HUMAN', value: summary?.human_handovers || 0, icon: User, color: 'text-amber-600', bg: 'bg-amber-50' },
+        { label: 'CHUYỂN HUMAN', value: summary?.human_handovers || 0, icon: User, color: 'text-[var(--color-primary)]', bg: 'bg-amber-50' },
         { label: 'TỰ ĐỘNG HÓA', value: summary ? ((summary.ai_replies / (summary.ai_replies + summary.human_handovers + 1)) * 100).toFixed(1) + '%' : '0%', icon: Zap, color: 'text-rose-600', bg: 'bg-rose-50' },
     ];
 
@@ -85,7 +85,7 @@ const AIChatReport: React.FC<AIReportProps> = ({ dateRange }) => {
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
             {/* Filters Row */}
-            <div className="bg-slate-50/50 p-6 rounded-[32px] border border-slate-100 flex flex-wrap items-center gap-6">
+            <div className="bg-slate-50/50 p-6 rounded-[18px] border border-slate-100 flex flex-wrap items-center gap-6">
                 <div className="shrink-0 min-w-[250px]">
                     <Select
                         value={propertyId}
@@ -110,7 +110,7 @@ const AIChatReport: React.FC<AIReportProps> = ({ dateRange }) => {
             {/* Stats Grid */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
                 {stats.map((stat, idx) => (
-                    <div key={idx} className="bg-white rounded-2xl lg:rounded-[32px] p-4 lg:p-6 border border-slate-100 shadow-sm flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 group hover:shadow-md transition-all">
+                    <div key={idx} className="bg-white rounded-[14px] lg:rounded-[18px] p-4 lg:p-6 border border-slate-100 shadow-sm flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 group hover:shadow-md transition-all">
                         <div className="space-y-1 w-full">
                             <h4 className="text-[9px] lg:text-[10px] font-black text-slate-400 uppercase tracking-widest">{stat.label}</h4>
                             {loading ? (
@@ -119,7 +119,7 @@ const AIChatReport: React.FC<AIReportProps> = ({ dateRange }) => {
                                 <div className="text-xl lg:text-3xl font-black text-slate-800 tracking-tight">{stat.value.toLocaleString()}</div>
                             )}
                         </div>
-                        <div className={`w-10 h-10 lg:w-14 lg:h-14 ${stat.bg} rounded-xl lg:rounded-2xl flex items-center justify-center shrink-0`}>
+                        <div className={`w-10 h-10 lg:w-14 lg:h-14 ${stat.bg} rounded-xl lg:rounded-[14px] flex items-center justify-center shrink-0`}>
                             <stat.icon className={`w-5 h-5 lg:w-6 lg:h-6 ${stat.color}`} />
                         </div>
                     </div>
@@ -127,7 +127,7 @@ const AIChatReport: React.FC<AIReportProps> = ({ dateRange }) => {
             </div>
 
             {/* Main Chart */}
-            <div className="bg-white p-5 lg:p-8 rounded-2xl lg:rounded-[40px] border border-slate-100 shadow-sm">
+            <div className="bg-white p-5 lg:p-8 rounded-[14px] lg:rounded-[18px] border border-slate-100 shadow-sm">
                 <div className="flex items-center justify-between mb-8">
                     <div>
                         <h3 className="text-sm lg:text-base font-black text-slate-800 uppercase tracking-tight">Xu hướng Chat AI</h3>

@@ -47,7 +47,102 @@ function getDaterange($period)
 
 if ($method === 'GET' && $action === 'visitor_journey' && !empty($_GET['visitor_id'])) {
     try {
-        $visitorId = $_GET['visitor_id'];
+        $visitorId = (string) $_GET['visitor_id'];
+
+        if (strpos($visitorId, 'zalo_') === 0) {
+            $zaloUid = substr($visitorId, 5);
+            $merged = [];
+            try {
+                $stmtAct = $pdo->prepare("
+                    SELECT zsa.activity_type, zsa.title, zsa.description, zsa.created_at
+                    FROM zalo_subscriber_activity zsa
+                    INNER JOIN zalo_subscribers zs ON zs.id = zsa.subscriber_id
+                    WHERE zs.zalo_user_id = ?
+                    ORDER BY zsa.created_at DESC LIMIT 50
+                ");
+                $stmtAct->execute([$zaloUid]);
+                foreach ($stmtAct->fetchAll(PDO::FETCH_ASSOC) as $act) {
+                    $merged[] = [
+                        'type' => $act['activity_type'] ?: 'event',
+                        'title' => $act['title'] ?: 'Hoạt động Zalo',
+                        'url' => '',
+                        'details' => $act['description'] ?? '',
+                        'time' => $act['created_at'],
+                    ];
+                }
+            } catch (Exception $e) {
+            }
+            try {
+                $stmtMsg = $pdo->prepare("
+                    SELECT sender_type, message_text, created_at
+                    FROM zalo_user_messages
+                    WHERE zalo_user_id = ?
+                    ORDER BY created_at DESC LIMIT 50
+                ");
+                $stmtMsg->execute([$zaloUid]);
+                foreach ($stmtMsg->fetchAll(PDO::FETCH_ASSOC) as $msg) {
+                    $merged[] = [
+                        'type' => 'chat',
+                        'title' => ($msg['sender_type'] === 'user' ? 'Khách nhắn Zalo' : 'OA phản hồi Zalo'),
+                        'url' => '',
+                        'details' => $msg['message_text'] ?? '',
+                        'time' => $msg['created_at'],
+                    ];
+                }
+            } catch (Exception $e) {
+            }
+            usort($merged, function ($a, $b) {
+                return strtotime($b['time'] ?? 'now') - strtotime($a['time'] ?? 'now');
+            });
+            sendResponse(true, array_slice($merged, 0, 50));
+        }
+
+        if (strpos($visitorId, 'meta_') === 0) {
+            $psid = substr($visitorId, 5);
+            $merged = [];
+            try {
+                $stmtAct = $pdo->prepare("
+                    SELECT event_type, event_name, event_data, created_at
+                    FROM meta_customer_journey
+                    WHERE psid = ?
+                    ORDER BY created_at DESC LIMIT 50
+                ");
+                $stmtAct->execute([$psid]);
+                foreach ($stmtAct->fetchAll(PDO::FETCH_ASSOC) as $act) {
+                    $merged[] = [
+                        'type' => $act['event_type'] ?: 'event',
+                        'title' => $act['event_name'] ?: 'Hoạt động Meta',
+                        'url' => '',
+                        'details' => $act['event_data'] ?? '',
+                        'time' => $act['created_at'],
+                    ];
+                }
+            } catch (Exception $e) {
+            }
+            try {
+                $stmtMsg = $pdo->prepare("
+                    SELECT direction, message_text, created_at
+                    FROM meta_message_logs
+                    WHERE psid = ?
+                    ORDER BY created_at DESC LIMIT 50
+                ");
+                $stmtMsg->execute([$psid]);
+                foreach ($stmtMsg->fetchAll(PDO::FETCH_ASSOC) as $msg) {
+                    $merged[] = [
+                        'type' => 'chat',
+                        'title' => (($msg['direction'] ?? '') === 'inbound' ? 'Khách nhắn Messenger' : 'Page phản hồi Messenger'),
+                        'url' => '',
+                        'details' => $msg['message_text'] ?? '',
+                        'time' => $msg['created_at'],
+                    ];
+                }
+            } catch (Exception $e) {
+            }
+            usort($merged, function ($a, $b) {
+                return strtotime($b['time'] ?? 'now') - strtotime($a['time'] ?? 'now');
+            });
+            sendResponse(true, array_slice($merged, 0, 50));
+        }
 
         // Fetch Page Views
         $stmtPage = $pdo->prepare("SELECT 'pageview' as type, title, url, loaded_at as time FROM web_page_views WHERE visitor_id = ? AND (workspace_id = ? OR (? = 1 AND workspace_id IS NULL)) ORDER BY loaded_at DESC LIMIT 50");
@@ -572,6 +667,12 @@ if ($method === 'GET' && $action === 'live_visitors') {
                 v.id, 
                 v.zalo_user_id,
                 v.subscriber_id,
+                COALESCE(v.contact_id, sub.contact_id) as contact_id,
+                sub.lead_score,
+                COALESCE(ct.owner_id, sub.owner_id) as owner_id,
+                COALESCE(u.full_name, sub.salesperson) as salesperson,
+                COALESCE(ct.stage_id, sub.stage_id) as stage_id,
+                sub.tags,
                 COALESCE(sub.email, v.email, zs.manual_email) as email, 
                 COALESCE(sub.first_name, zs.display_name, SUBSTRING_INDEX(v.email, '@', 1), 'Visitor') as first_name, 
                 COALESCE(sub.phone_number, zs.phone_number, v.phone) as phone,
@@ -586,6 +687,8 @@ if ($method === 'GET' && $action === 'live_visitors') {
                 v.last_visit_at
             FROM web_visitors v
             LEFT JOIN subscribers sub ON v.subscriber_id = sub.id
+            LEFT JOIN contacts ct ON ct.id = COALESCE(v.contact_id, sub.contact_id) AND ct.deleted_at IS NULL
+            LEFT JOIN users u ON u.id = COALESCE(ct.owner_id, sub.owner_id)
             LEFT JOIN zalo_subscribers zs ON v.zalo_user_id = zs.zalo_user_id
             JOIN (
                 SELECT visitor_id, id as session_id, device_type, os, browser, last_active_at
@@ -622,7 +725,130 @@ if ($method === 'GET' && $action === 'visitors') {
         $visitorId = $_GET['visitor_id'] ?? '';
 
         if ($visitorId) {
+            if (strpos((string)$visitorId, 'zalo_') === 0) {
+                $zaloUid = substr((string)$visitorId, 5);
+                $timeline = [];
+                try {
+                    $stmtAct = $pdo->prepare("
+                        SELECT zsa.id, zsa.activity_type, zsa.title, zsa.description, zsa.created_at
+                        FROM zalo_subscriber_activity zsa
+                        INNER JOIN zalo_subscribers zs ON zs.id = zsa.subscriber_id
+                        WHERE zs.zalo_user_id = ?
+                        ORDER BY zsa.created_at DESC LIMIT 100
+                    ");
+                    $stmtAct->execute([$zaloUid]);
+                    foreach ($stmtAct->fetchAll(PDO::FETCH_ASSOC) as $act) {
+                        $timeline[] = [
+                            'type' => $act['activity_type'] ?: 'event',
+                            'id' => $act['id'],
+                            'url_hash' => null,
+                            'url' => '',
+                            'target' => $act['title'] ?: 'Hoạt động Zalo',
+                            'page_title' => $act['description'] ?? '',
+                            'meta' => null,
+                            'time' => $act['created_at'],
+                        ];
+                    }
+                } catch (Exception $e) {
+                }
+                try {
+                    $stmtMsg = $pdo->prepare("
+                        SELECT id, sender_type, message_text, created_at
+                        FROM zalo_user_messages
+                        WHERE zalo_user_id = ?
+                        ORDER BY created_at DESC LIMIT 100
+                    ");
+                    $stmtMsg->execute([$zaloUid]);
+                    foreach ($stmtMsg->fetchAll(PDO::FETCH_ASSOC) as $msg) {
+                        $timeline[] = [
+                            'type' => 'chat',
+                            'id' => $msg['id'],
+                            'url_hash' => null,
+                            'url' => '',
+                            'target' => ($msg['sender_type'] === 'user' ? 'Khách nhắn Zalo' : 'OA phản hồi Zalo'),
+                            'page_title' => $msg['message_text'] ?? '',
+                            'meta' => null,
+                            'time' => $msg['created_at'],
+                        ];
+                    }
+                } catch (Exception $e) {
+                }
+                usort($timeline, function ($a, $b) {
+                    return strtotime($b['time'] ?? 'now') - strtotime($a['time'] ?? 'now');
+                });
+                sendResponse(true, [
+                    'timeline' => array_slice($timeline, 0, 100),
+                    'stats' => ['clicks' => 0, 'canvas_clicks' => 0, 'page_views' => count($timeline), 'total_time' => 0]
+                ]);
+            }
+
+            if (strpos((string)$visitorId, 'meta_') === 0) {
+                $psid = substr((string)$visitorId, 5);
+                $timeline = [];
+                try {
+                    $stmtAct = $pdo->prepare("
+                        SELECT id, event_type, event_name, event_data, created_at
+                        FROM meta_customer_journey
+                        WHERE psid = ?
+                        ORDER BY created_at DESC LIMIT 100
+                    ");
+                    $stmtAct->execute([$psid]);
+                    foreach ($stmtAct->fetchAll(PDO::FETCH_ASSOC) as $act) {
+                        $timeline[] = [
+                            'type' => $act['event_type'] ?: 'event',
+                            'id' => $act['id'],
+                            'url_hash' => null,
+                            'url' => '',
+                            'target' => $act['event_name'] ?: 'Hoạt động Meta',
+                            'page_title' => $act['event_data'] ?? '',
+                            'meta' => null,
+                            'time' => $act['created_at'],
+                        ];
+                    }
+                } catch (Exception $e) {
+                }
+                try {
+                    $stmtMsg = $pdo->prepare("
+                        SELECT id, direction, message_text, created_at
+                        FROM meta_message_logs
+                        WHERE psid = ?
+                        ORDER BY created_at DESC LIMIT 100
+                    ");
+                    $stmtMsg->execute([$psid]);
+                    foreach ($stmtMsg->fetchAll(PDO::FETCH_ASSOC) as $msg) {
+                        $timeline[] = [
+                            'type' => 'chat',
+                            'id' => $msg['id'],
+                            'url_hash' => null,
+                            'url' => '',
+                            'target' => (($msg['direction'] ?? '') === 'inbound' ? 'Khách nhắn Messenger' : 'Page phản hồi Messenger'),
+                            'page_title' => $msg['message_text'] ?? '',
+                            'meta' => null,
+                            'time' => $msg['created_at'],
+                        ];
+                    }
+                } catch (Exception $e) {
+                }
+                usort($timeline, function ($a, $b) {
+                    return strtotime($b['time'] ?? 'now') - strtotime($a['time'] ?? 'now');
+                });
+                sendResponse(true, [
+                    'timeline' => array_slice($timeline, 0, 100),
+                    'stats' => ['clicks' => 0, 'canvas_clicks' => 0, 'page_views' => count($timeline), 'total_time' => 0]
+                ]);
+            }
+
             // Detail Journey
+            try {
+                $stmtVisSync = $pdo->prepare("SELECT subscriber_id, contact_id FROM web_visitors WHERE id = ? LIMIT 1");
+                $stmtVisSync->execute([$visitorId]);
+                $visSyncRow = $stmtVisSync->fetch(PDO::FETCH_ASSOC);
+                if ($visSyncRow && !empty($visSyncRow['subscriber_id']) && empty($visSyncRow['contact_id']) && function_exists('domationSyncSubscriberMatchOnly')) {
+                    domationSyncSubscriberMatchOnly($pdo, $visSyncRow['subscriber_id']);
+                }
+            } catch (\Throwable $eVisSync) {
+            }
+
             // 0. Summary Stats
             $stmtStats = $pdo->prepare("
                 SELECT 
@@ -732,9 +958,9 @@ if ($method === 'GET' && $action === 'visitors') {
             $searchMatch = "";
             $searchParams = [];
             if ($search !== '') {
-                $searchMatch = " AND (s.first_name LIKE ? OR s.email LIKE ? OR v.ip_address LIKE ?)";
+                $searchMatch = " AND (s.first_name LIKE ? OR s.email LIKE ? OR s.phone_number LIKE ? OR v.email LIKE ? OR v.phone LIKE ? OR v.ip_address LIKE ?)";
                 $likeTerm = '%' . $search . '%';
-                $searchParams = [$likeTerm, $likeTerm, $likeTerm];
+                $searchParams = [$likeTerm, $likeTerm, $likeTerm, $likeTerm, $likeTerm, $likeTerm];
             }
 
             // [FIX P42-A3] Replace $pdo->quote($id) in $returningMatch subquery.
@@ -794,6 +1020,12 @@ if ($method === 'GET' && $action === 'visitors') {
                     v.id, 
                     v.zalo_user_id,
                     v.subscriber_id,
+                    COALESCE(v.contact_id, s.contact_id) as contact_id,
+                    s.lead_score,
+                    COALESCE(ct.owner_id, s.owner_id) as owner_id,
+                    COALESCE(u.full_name, s.salesperson) as salesperson,
+                    COALESCE(ct.stage_id, s.stage_id) as stage_id,
+                    s.tags,
                     v.first_visit_at, 
                     v.last_visit_at, 
                     v.visit_count,
@@ -812,6 +1044,8 @@ if ($method === 'GET' && $action === 'visitors') {
                     (SELECT id FROM domation_ai_conversations WHERE visitor_id = v.id AND property_id = ? ORDER BY created_at DESC LIMIT 1) as conversation_id
                 FROM web_visitors v
                 LEFT JOIN subscribers s ON v.subscriber_id = s.id
+                LEFT JOIN contacts ct ON ct.id = COALESCE(v.contact_id, s.contact_id) AND ct.deleted_at IS NULL
+                LEFT JOIN users u ON u.id = COALESCE(ct.owner_id, s.owner_id)
                 LEFT JOIN zalo_subscribers zs ON v.zalo_user_id = zs.zalo_user_id
                 LEFT JOIN web_blacklist wb ON v.ip_address = wb.ip_address
                 LEFT JOIN (

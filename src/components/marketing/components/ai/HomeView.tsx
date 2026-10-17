@@ -20,7 +20,7 @@ const ChatbotCard = React.memo(({
     return (
         <div
             onClick={onClick}
-            className={`group p-6 rounded-[32px] border transition-all duration-500 cursor-pointer relative overflow-hidden flex flex-col justify-between gap-6 ${isDarkTheme ? 'bg-[#0D1117] border-slate-800 hover:border-brand/30 hover:shadow-2xl hover:shadow-brand/5' : 'bg-white border-slate-100 shadow-sm hover:shadow-2xl hover:shadow-slate-200 hover:border-slate-300'}`}
+            className={`group p-6 rounded-[18px] border transition-all duration-500 cursor-pointer relative overflow-hidden flex flex-col justify-between gap-6 ${isDarkTheme ? 'bg-[#0D1117] border-slate-800 hover:border-[var(--color-primary)]/30 hover:shadow-2xl hover:shadow-[var(--color-primary)]/5' : 'bg-white border-slate-100 shadow-sm hover:shadow-2xl hover:shadow-slate-200 hover:border-slate-300'}`}
         >
             <div className="absolute top-0 right-0 p-8 opacity-[0.03] text-slate-400 group-hover:scale-125 transition-transform">
                 <Bot className="w-32 h-32" />
@@ -28,14 +28,14 @@ const ChatbotCard = React.memo(({
 
             <div className="flex justify-between items-start relative z-10">
                 <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-[22px] bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center text-white shadow-xl shadow-brand/20 group-hover:rotate-3 transition-transform shrink-0 overflow-hidden border border-slate-100/10">
+                    <div className="w-14 h-14 rounded-[14px] bg-gradient-to-br from-[var(--color-primary)] to-[#9A1523] flex items-center justify-center text-white shadow-xl shadow-[var(--color-primary)]/20 group-hover:rotate-3 transition-transform shrink-0 overflow-hidden border border-slate-100/10">
                         {bot.settings?.bot_avatar ? (
                             <img
                                 src={bot.settings.bot_avatar}
                                 className={`w-full h-full object-cover ${categoryId ? 'grayscale group-hover:grayscale-0 transition-all duration-500' : ''}`}
                             />
                         ) : (
-                            <div className={`w-full h-full flex items-center justify-center transition-all duration-500 ${categoryId ? 'bg-brand' : 'bg-gradient-to-br from-[#c2410c] to-[#9a3412]'}`}>
+                            <div className={`w-full h-full flex items-center justify-center transition-all duration-500 ${categoryId ? 'bg-[var(--color-primary)]' : 'bg-gradient-to-br from-[#c2410c] to-[#9a3412]'}`}>
                                 <Bot className="w-7 h-7" />
                             </div>
                         )}
@@ -54,7 +54,7 @@ const ChatbotCard = React.memo(({
             </div>
 
             <div className="space-y-4 relative z-10">
-                <div className={`flex items-center justify-between p-3 rounded-2xl border transition-colors ${isDarkTheme ? 'bg-[#0B0F17] border-slate-800 group-hover:bg-[#161B24]' : 'bg-slate-50 border-slate-100 group-hover:bg-slate-100 group-hover:border-slate-200'}`}>
+                <div className={`flex items-center justify-between p-3 rounded-[14px] border transition-colors ${isDarkTheme ? 'bg-[#0B0F17] border-slate-800 group-hover:bg-[#161B24]' : 'bg-slate-50 border-slate-100 group-hover:bg-slate-100 group-hover:border-slate-200'}`}>
                     <div className="flex flex-col">
                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Tài liệu</span>
 
@@ -107,14 +107,14 @@ const HomeView = React.memo(({
     isDarkTheme?: boolean
 }) => {
     return (
-        <div className={`flex-1 flex flex-col items-center justify-start px-4 md:px-6 lg:px-12 pt-10 md:pt-16 lg:pt-24 pb-12 relative z-10 overflow-y-auto custom-scrollbar transition-colors duration-500 ${isDarkTheme ? 'bg-[#05070A]' : 'bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-brand/10 via-white to-white'}`}>
+        <div className={`flex-1 flex flex-col items-center justify-start px-4 md:px-6 lg:px-12 pt-10 md:pt-16 lg:pt-24 pb-12 relative z-10 overflow-y-auto custom-scrollbar transition-colors duration-500 ${isDarkTheme ? 'bg-[#05070A]' : 'bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[var(--color-primary)]/10 via-white to-white'}`}>
             <div className="w-full max-w-[1600px] flex flex-col items-center animate-in fade-in duration-500">
 
                 {/* AI Training Style Header */}
                 <div className="w-full flex flex-col items-center text-center md:flex-row md:justify-between md:items-start md:text-left gap-6 md:gap-0 mb-6 md:mb-10 px-0 md:px-4 relative">
                     <div className="flex flex-col items-center md:items-start animate-in fade-in slide-in-from-left-5 duration-700">
                         <h1 className={`text-2xl md:text-[32px] font-black leading-tight flex items-center justify-center md:justify-start gap-2 ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
-                            AI Agents<span className="text-brand text-3xl md:text-4xl leading-none">.</span>
+                            AI Agents<span className="text-[var(--color-primary)] text-3xl md:text-4xl leading-none">.</span>
                         </h1>
                         <div className="flex items-center justify-center md:justify-start gap-3 mt-2 md:mt-3">
                             <div className="hidden md:block w-8 h-[2px] bg-slate-200"></div>
@@ -138,7 +138,7 @@ const HomeView = React.memo(({
                 </div>
 
                 {/* Main Content Container (White Card style) */}
-                <div className={`w-full rounded-[24px] md:rounded-[32px] border shadow-sm p-4 md:p-8 min-h-[600px] animate-in fade-in slide-in-from-bottom-5 duration-1000 delay-200 transition-colors ${isDarkTheme ? 'bg-[rgba(13,17,23,0.6)] backdrop-blur-md border-slate-800' : 'bg-white border-slate-200'}`}>
+                <div className={`w-full rounded-[18px] md:rounded-[18px] border shadow-sm p-4 md:p-8 min-h-[600px] animate-in fade-in slide-in-from-bottom-5 duration-1000 delay-200 transition-colors ${isDarkTheme ? 'bg-[rgba(13,17,23,0.6)] backdrop-blur-md border-slate-800' : 'bg-white border-slate-200'}`}>
                     {/* Search & Controls Row */}
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6 mb-6 md:mb-10">
                         <div className="flex items-center gap-4 md:gap-6 justify-between md:justify-start">
@@ -172,7 +172,7 @@ const HomeView = React.memo(({
                     {/* Grid of Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                         {loadingList ? [1, 2, 3].map(i => (
-                            <div key={i} className={`h-48 rounded-[32px] animate-pulse border ${isDarkTheme ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-100'}`} />
+                            <div key={i} className={`h-48 rounded-[18px] animate-pulse border ${isDarkTheme ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-100'}`} />
                         )) : filteredChatbots.map(bot => (
                             <ChatbotCard
                                 key={bot.id}

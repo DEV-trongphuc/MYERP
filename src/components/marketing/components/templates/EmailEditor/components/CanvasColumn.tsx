@@ -136,10 +136,16 @@ const CanvasColumn: React.FC<CanvasColumnProps> = (props) => {
             onDrop={(e) => onDrop(e, col.id)}
             onClick={(e) => { e.stopPropagation(); onSelectBlock(col.id); }}
         >
-            {dragOverId === col.id && dropPosition && dropPosition !== 'inside' && <CanvasDropIndicator dropPosition={dropPosition} />}
+            {dragOverId === col.id && dropPosition && (
+                dropPosition !== 'inside' ? (
+                    <CanvasDropIndicator dropPosition={dropPosition} />
+                ) : (col.children && col.children.length > 0 ? (
+                    <CanvasDropIndicator dropPosition="bottom" />
+                ) : null)
+            )}
             <CanvasHandleOverlay
                 block={col}
-                color="ring-amber-400"
+                color="ring-[#BD1D2D]"
                 isSelected={isSelected}
                 onDragStart={onDragStart}
                 onMoveOrder={onMoveOrder}
@@ -152,12 +158,12 @@ const CanvasColumn: React.FC<CanvasColumnProps> = (props) => {
 
             {(!col.children || col.children.length === 0) && (
                 <div
-                    className={`relative border-2 border-dashed rounded-2xl flex flex-col items-center justify-center transition-all duration-300 group/col
+                    className={`relative border-2 border-dashed rounded-[14px] flex flex-col items-center justify-center transition-all duration-300 group/col
                         ${(dragOverId === col.id)
-                            ? "border-blue-600 bg-blue-50/50 text-blue-600 scale-[0.98] ring-2 ring-blue-500/20"
+                            ? "border-[#BD1D2D] bg-[#BD1D2D]/10 text-[#BD1D2D] ring-2 ring-[#BD1D2D]/20"
                             : isDragging
-                                ? "border-blue-400/50 bg-blue-50/10 text-blue-500/60 animate-pulse"
-                                : "border-slate-100 text-slate-300 hover:border-blue-600/20 hover:bg-blue-600/5 hover:text-blue-600/40"
+                                ? "border-[#BD1D2D]/50 bg-[#BD1D2D]/5 text-[#BD1D2D]/60 animate-pulse"
+                                : "border-slate-100 text-slate-300 hover:border-[#BD1D2D]/20 hover:bg-[#BD1D2D]/5 hover:text-[#BD1D2D]/40"
                         }`}
                     style={{ minHeight: '80px', width: '100%' }}
                 >

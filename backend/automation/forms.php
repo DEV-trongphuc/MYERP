@@ -78,17 +78,23 @@ try {
             }
 
             $form_ws_id = $formData['workspace_id'] ?? 1;
+            $emailNorm = $hasValidEmail
+                ? (class_exists('DomationContactMatcher') ? DomationContactMatcher::normalizeEmail($email) : strtolower(trim($email)))
+                : null;
+            $phoneNorm9 = $hasValidPhone
+                ? (class_exists('DomationContactMatcher') ? DomationContactMatcher::normalizePhone9($rawPhone) : (strlen($digitsPhone) >= 9 ? substr($digitsPhone, -9) : null))
+                : null;
 
             $sub = false;
             if ($hasValidEmail) {
-                $stmtCheck = $pdo->prepare("SELECT id, status, first_name, last_name, phone_number, job_title, company_name, country, city, gender, date_of_birth, anniversary_date, tags, custom_attributes FROM subscribers WHERE email = ? AND workspace_id = ? LIMIT 1");
-                $stmtCheck->execute([$email, $form_ws_id]);
+                $stmtCheck = $pdo->prepare("SELECT id, status, first_name, last_name, phone_number, job_title, company_name, country, city, gender, date_of_birth, anniversary_date, tags, custom_attributes FROM subscribers WHERE (email = ? OR email_norm = ?) AND workspace_id = ? LIMIT 1");
+                $stmtCheck->execute([$email, $emailNorm ?? $email, $form_ws_id]);
                 $sub = $stmtCheck->fetch();
             }
             if (!$sub && $hasValidPhone) {
-                $phoneTail = strlen($digitsPhone) >= 9 ? substr($digitsPhone, -9) : $digitsPhone;
-                $stmtCheckPhone = $pdo->prepare("SELECT id, status, first_name, last_name, phone_number, job_title, company_name, country, city, gender, date_of_birth, anniversary_date, tags, custom_attributes FROM subscribers WHERE (email = ? OR RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(phone_number,''), ' ', ''), '-', ''), '.', ''), '+', ''), 9) = ?) AND workspace_id = ? LIMIT 1");
-                $stmtCheckPhone->execute([$email, $phoneTail, $form_ws_id]);
+                $phoneTail = $phoneNorm9 ?: (strlen($digitsPhone) >= 9 ? substr($digitsPhone, -9) : $digitsPhone);
+                $stmtCheckPhone = $pdo->prepare("SELECT id, status, first_name, last_name, phone_number, job_title, company_name, country, city, gender, date_of_birth, anniversary_date, tags, custom_attributes FROM subscribers WHERE (email = ? OR phone_norm9 = ? OR RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(phone_number,''), ' ', ''), '-', ''), '.', ''), '+', ''), 9) = ?) AND workspace_id = ? LIMIT 1");
+                $stmtCheckPhone->execute([$email, $phoneTail, $phoneTail, $form_ws_id]);
                 $sub = $stmtCheckPhone->fetch();
             }
 
@@ -172,6 +178,15 @@ try {
                 $updateSqlParts[] = "lead_score = lead_score + ?";
                 $updateValues[] = (int)$pForm;
 
+                if ($emailNorm) {
+                    $updateSqlParts[] = "email_norm = ?";
+                    $updateValues[] = $emailNorm;
+                }
+                if ($phoneNorm9) {
+                    $updateSqlParts[] = "phone_norm9 = ?";
+                    $updateValues[] = $phoneNorm9;
+                }
+
                 // [FIX P1] source update: parameterized (not interpolated)
                 $currentSource = $sub['source'] ?? '';
                 if (in_array($currentSource, ['website_tracking', '', null])) {
@@ -233,12 +248,13 @@ try {
                     $batchParams = [];
                     foreach ($submittedTags as $tagName) {
                         if (empty($tagName) || !isset($existingTagMap[$tagName])) continue;
-                        $batchPairs[] = "(?, ?)";
+                        $batchPairs[] = "(?, ?, ?)";
+                        $batchParams[] = $form_ws_id;
                         $batchParams[] = $sid;
                         $batchParams[] = $existingTagMap[$tagName];
                     }
                     if (!empty($batchPairs)) {
-                        $stmtBatch = $pdo->prepare("INSERT IGNORE INTO subscriber_tags (subscriber_id, tag_id) VALUES " . implode(',', $batchPairs));
+                        $stmtBatch = $pdo->prepare("INSERT IGNORE INTO subscriber_tags (workspace_id, subscriber_id, tag_id) VALUES " . implode(',', $batchPairs));
                         $stmtBatch->execute($batchParams);
                         if ($stmtBatch->rowCount() > 0) {
                             foreach ($submittedTags as $tagName) {
@@ -255,9 +271,11 @@ try {
                 // see $sub=false and both try INSERT → Duplicate entry crash.
                 // UPSERT handles both new and existing emails atomically in one SQL.
                 $sid = bin2hex(random_bytes(16));
-                $upsertFields = 'workspace_id, id, email, status, source, joined_at, lead_score';
-                $upsertValues = [$form_ws_id, $sid, $email, 'active', "Form: " . $formName, date('Y-m-d H:i:s'), $pForm];
+                $upsertFields = 'workspace_id, id, email, email_norm, phone_norm9, status, source, joined_at, lead_score';
+                $upsertValues = [$form_ws_id, $sid, $email, $emailNorm, $phoneNorm9, 'active', "Form: " . $formName, date('Y-m-d H:i:s'), $pForm];
                 $upsertSet = "lead_score = lead_score + VALUES(lead_score),
+                               email_norm = COALESCE(VALUES(email_norm), email_norm),
+                               phone_norm9 = COALESCE(VALUES(phone_norm9), phone_norm9),
                                source = IF(source IS NULL OR source = '' OR source = 'website_tracking', VALUES(source), source)";
 
                 $extraFields = [];
@@ -332,12 +350,13 @@ try {
                     $batchParams = [];
                     foreach ($submittedTags as $tagName) {
                         if (empty($tagName) || !isset($existingTagMap[$tagName])) continue;
-                        $batchPairs[] = "(?, ?)";
+                        $batchPairs[] = "(?, ?, ?)";
+                        $batchParams[] = $form_ws_id;
                         $batchParams[] = $sid;
                         $batchParams[] = $existingTagMap[$tagName];
                     }
                     if (!empty($batchPairs)) {
-                        $stmtBatch = $pdo->prepare("INSERT IGNORE INTO subscriber_tags (subscriber_id, tag_id) VALUES " . implode(',', $batchPairs));
+                        $stmtBatch = $pdo->prepare("INSERT IGNORE INTO subscriber_tags (workspace_id, subscriber_id, tag_id) VALUES " . implode(',', $batchPairs));
                         $stmtBatch->execute($batchParams);
                         if ($stmtBatch->rowCount() > 0) {
                             foreach ($submittedTags as $tagName) {
@@ -350,15 +369,12 @@ try {
                 }
             }
 
+            if (function_exists('domationSyncSubscriberMatchOnly')) {
+                domationSyncSubscriberMatchOnly($pdo, $sid);
+            }
+
             if ($targetListId) {
-                $pdo->prepare("INSERT IGNORE INTO subscriber_lists (subscriber_id, list_id) VALUES (?, ?)")->execute([$sid, $targetListId]);
-                // [FIX BACKEND-BUG-03] Removed manual subscriber_count UPDATE here.
-                // The subscriber_lists table has after_subscriber_list_insert/delete triggers
-                // that atomically maintain lists.subscriber_count. Running a manual
-                // UPDATE lists SET subscriber_count = (SELECT COUNT(*) ...) after the INSERT
-                // was causing a double-count race condition under concurrent form submissions
-                // (trigger fires first, then this SELECT COUNT re-reads the already-incremented value
-                // and writes it again → count is correct but wastes a query and is racy under high load).
+                $pdo->prepare("INSERT IGNORE INTO subscriber_lists (workspace_id, subscriber_id, list_id) VALUES (?, ?, ?)")->execute([$form_ws_id, $sid, $targetListId]);
             }
 
             // [FIX] IP detection: removed spoofable HTTP_CLIENT_IP and duplicate X_FORWARDED_FOR.
@@ -697,9 +713,19 @@ try {
                         jsonResponse(false, null, 'Không tìm thấy Form hoặc Form đã ngừng hoạt động');
                     }
                 } elseif ($path) {
-                    $stmt = $pdo->prepare("SELECT * FROM forms WHERE id = ? AND workspace_id = ?");
+                    $stmt = $pdo->prepare("
+                        SELECT f.*,
+                               u_creator.id AS creator_id,
+                               u_creator.full_name AS creator_name,
+                               u_creator.email AS creator_email,
+                               u_creator.avatar_url AS creator_avatar,
+                               u_creator.role AS creator_role
+                        FROM forms f
+                        LEFT JOIN users u_creator ON u_creator.id = f.created_by
+                        WHERE f.id = ? AND f.workspace_id = ?
+                    ");
                     $stmt->execute([$path, $admin_workspace_id]);
-                    $form = $stmt->fetch();
+                    $form = $stmt->fetch(PDO::FETCH_ASSOC);
                     if ($form) {
                         $form['fields'] = json_decode($form['fields_json'] ?? '[]');
                         $form['targetListId'] = $form['target_list_id'];
@@ -707,6 +733,7 @@ try {
                         $form['notificationEmails'] = $form['notification_emails'] ?? '';
                         $form['notificationCcEmails'] = $form['notification_cc_emails'] ?? '';
                         $form['notificationSubject'] = $form['notification_subject'] ?? '';
+                        $form['creator'] = function_exists('domationFormatCreator') ? domationFormatCreator($form) : null;
                         // Use specialized index for count
                         $stmtS = $pdo->prepare("SELECT COUNT(*) FROM subscriber_activity WHERE type='form_submit' AND reference_id = ? AND workspace_id = ?");
                         $stmtS->execute([$path, $admin_workspace_id]);
@@ -721,11 +748,14 @@ try {
                     $stmt->execute([$_GET['list_id'], $admin_workspace_id]);
                     jsonResponse(true, $stmt->fetchAll(PDO::FETCH_ASSOC));
                 } else {
-                    // [OPTIMIZED] Use correlated subquery for small rowsets (forms).
-                    // This hits the index (type, reference_id) directly per row,
-                     // avoiding the overhead of a large GROUP BY materialization.
                     $stmt = $pdo->prepare(
-                        "SELECT f.*, COALESCE(sa_count.cnt, 0) as submission_count
+                        "SELECT f.*,
+                                COALESCE(sa_count.cnt, 0) as submission_count,
+                                u_creator.id AS creator_id,
+                                u_creator.full_name AS creator_name,
+                                u_creator.email AS creator_email,
+                                u_creator.avatar_url AS creator_avatar,
+                                u_creator.role AS creator_role
                          FROM forms f
                          LEFT JOIN (
                              SELECT reference_id, COUNT(*) as cnt
@@ -733,6 +763,7 @@ try {
                              WHERE type = 'form_submit' AND workspace_id = ?
                              GROUP BY reference_id
                          ) sa_count ON sa_count.reference_id = f.id
+                         LEFT JOIN users u_creator ON u_creator.id = f.created_by
                          WHERE f.workspace_id = ?
                          ORDER BY f.created_at DESC"
                     );
@@ -746,9 +777,10 @@ try {
                         $f['notificationCcEmails'] = $f['notification_cc_emails'] ?? '';
                         $f['notificationSubject'] = $f['notification_subject'] ?? '';
                         $f['stats'] = ['submissions' => (int) ($f['submission_count'] ?? 0)];
+                        $f['creator'] = function_exists('domationFormatCreator') ? domationFormatCreator($f) : null;
                         unset($f['fields_json'], $f['target_list_id'], $f['submission_count'], $f['notification_enabled'], $f['notification_emails'], $f['notification_cc_emails'], $f['notification_subject']);
                         return $f;
-                    }, $stmt->fetchAll());
+                    }, $stmt->fetchAll(PDO::FETCH_ASSOC));
                     jsonResponse(true, $data);
                 }
 
@@ -765,9 +797,10 @@ try {
                 $notifEmails  = trim($data['notificationEmails'] ?? '');
                 $notifCcEmails = trim($data['notificationCcEmails'] ?? '');
                 $notifSubject = trim($data['notificationSubject'] ?? '');
-                $pdo->prepare("INSERT INTO forms (workspace_id, id, name, status, target_list_id, fields_json, notification_enabled, notification_emails, notification_cc_emails, notification_subject, created_at) VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, NOW())")
-                    ->execute([$admin_workspace_id, $id, $data['name'], $data['targetListId'], $fields, $notifEnabled, $notifEmails ?: null, $notifCcEmails ?: null, $notifSubject ?: null]);
-                jsonResponse(true, ['id' => $id, 'status' => 'active']);
+                $actorUserId = function_exists('get_current_user_id') ? get_current_user_id() : null;
+                $pdo->prepare("INSERT INTO forms (workspace_id, id, name, status, target_list_id, fields_json, notification_enabled, notification_emails, notification_cc_emails, notification_subject, created_by, updated_by, created_at) VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, NOW())")
+                    ->execute([$admin_workspace_id, $id, $data['name'], $data['targetListId'], $fields, $notifEnabled, $notifEmails ?: null, $notifCcEmails ?: null, $notifSubject ?: null, $actorUserId, $actorUserId]);
+                jsonResponse(true, ['id' => $id, 'status' => 'active', 'created_by' => $actorUserId, 'updated_by' => $actorUserId]);
             } catch (Exception $e) {
                 jsonResponse(false, null, 'Lỗi hệ thống, vui lòng thử lại.');
             }
@@ -777,6 +810,7 @@ try {
                 if (!$path)
                     jsonResponse(false, null, 'ID required');
                 $data = json_decode(file_get_contents("php://input"), true);
+                $actorUserId = function_exists('get_current_user_id') ? get_current_user_id() : null;
 
                 // [TOGGLE STATUS] PUT ?route=toggle_status
                 if ($route === 'toggle_status') {
@@ -785,7 +819,7 @@ try {
                     $curStatus = $stmtCur->fetchColumn();
                     if ($curStatus === false) jsonResponse(false, null, 'Không tìm thấy biểu mẫu');
                     $newStatus = $curStatus === 'active' ? 'inactive' : 'active';
-                    $pdo->prepare("UPDATE forms SET status = ? WHERE id = ? AND workspace_id = ?")->execute([$newStatus, $path, $admin_workspace_id]);
+                    $pdo->prepare("UPDATE forms SET status = ?, updated_by = ? WHERE id = ? AND workspace_id = ?")->execute([$newStatus, $actorUserId, $path, $admin_workspace_id]);
                     jsonResponse(true, ['id' => $path, 'status' => $newStatus], 'Đã ' . ($newStatus === 'active' ? 'kích hoạt' : 'vô hiệu hoá') . ' biểu mẫu');
                 }
 
@@ -794,8 +828,8 @@ try {
                 $notifEmails  = trim($data['notificationEmails'] ?? '');
                 $notifCcEmails = trim($data['notificationCcEmails'] ?? '');
                 $notifSubject = trim($data['notificationSubject'] ?? '');
-                $pdo->prepare("UPDATE forms SET name = ?, target_list_id = ?, fields_json = ?, notification_enabled = ?, notification_emails = ?, notification_cc_emails = ?, notification_subject = ? WHERE id = ? AND workspace_id = ?")
-                    ->execute([$data['name'], $data['targetListId'], $fields, $notifEnabled, $notifEmails ?: null, $notifCcEmails ?: null, $notifSubject ?: null, $path, $admin_workspace_id]);
+                $pdo->prepare("UPDATE forms SET name = ?, target_list_id = ?, fields_json = ?, notification_enabled = ?, notification_emails = ?, notification_cc_emails = ?, notification_subject = ?, updated_by = ? WHERE id = ? AND workspace_id = ?")
+                    ->execute([$data['name'], $data['targetListId'], $fields, $notifEnabled, $notifEmails ?: null, $notifCcEmails ?: null, $notifSubject ?: null, $actorUserId, $path, $admin_workspace_id]);
                 jsonResponse(true, $data);
             } catch (Exception $e) {
                 jsonResponse(false, null, 'Lỗi hệ thống, vui lòng thử lại.');

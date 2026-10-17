@@ -60,7 +60,7 @@ const UpdateTagConfig: React.FC<UpdateTagConfigProps> = ({ config, onChange, dis
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-20">
-      <div className={`p-5 rounded-[28px] border flex gap-4 items-center shadow-sm transition-colors ${action === 'remove' ? 'bg-rose-50 text-rose-700 border-rose-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>
+      <div className={`p-5 rounded-2xl border flex gap-4 items-center shadow-sm transition-colors ${action === 'remove' ? 'bg-rose-50 text-rose-700 border-rose-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>
         <Sparkles className="w-6 h-6 shrink-0" />
         <p className="text-[11px] font-bold leading-relaxed">
             {action === 'remove' 

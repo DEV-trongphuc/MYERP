@@ -1,6 +1,7 @@
 import { EXTERNAL_ASSET_BASE } from '../../../utils/config';
 import * as React from 'react';
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Search, RefreshCcw, Check, MailOpen, Clock, Download, MousePointer2, MessageSquare, AlertOctagon, Reply, MousePointerClick, Monitor, Smartphone, Tablet, Globe, FastForward, Trash2, Play, SkipForward, UserPlus, UserMinus, Send, Loader2, ChevronDown, Tag, List, Circle, CheckCircle2, Layers, GitMerge, Beaker } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { api } from '../../../services/storageAdapter';
@@ -10,6 +11,7 @@ import LinkClicksTab from '../../common/LinkClicksTab';
 import TechStatsTab from '../../campaigns/TechStatsTab';
 import ConfirmModal from '../../common/ConfirmModal';
 import SelectBranchModal from '../../common/SelectBranchModal';
+import { getMktPortalRoot } from '../../../utils/portalRoot';
 
 const GoogleSheetsIcon = ({ className }: { className?: string }) => (
     <div className={className} style={{ width: className?.includes('w-3') ? '12px' : '20px', height: className?.includes('h-3') ? '12px' : '20px' }}>
@@ -651,21 +653,22 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
 
 
     if (!isOpen && !animateIn) return null;
+    if (typeof document === 'undefined') return null;
 
-    return (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4 !mt-0">
+    return createPortal(
+        <div className="fixed inset-0 z-[2147483642] flex items-center justify-center px-4 !mt-0">
             <div
                 className={`absolute inset-0 bg-slate-950/70 transition-opacity duration-300 ease-out ${animateIn ? 'opacity-100' : 'opacity-0'}`}
                 onClick={handleClose}
             />
             <div
                 style={{ transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }}
-                className={`w-full max-w-5xl rounded-[24px] flex flex-col max-h-[92vh] border transform transition-all duration-500 ${animateIn ? 'scale-100 opacity-100 translate-y-0' : 'scale-97 opacity-0 translate-y-4'} ${isDarkTheme ? 'bg-[#11151d] border-slate-800/80 shadow-[0_24px_60px_rgba(0,0,0,0.6)] text-slate-100' : 'bg-white border-slate-200/80 shadow-[0_24px_50px_rgba(0,0,0,0.1),0_1px_3px_rgba(0,0,0,0.02)] text-slate-800'}`}
+                className={`w-full max-w-5xl rounded-xl flex flex-col max-h-[92vh] border transform transition-all duration-500 ${animateIn ? 'scale-100 opacity-100 translate-y-0' : 'scale-97 opacity-0 translate-y-4'} ${isDarkTheme ? 'bg-[#11151d] border-slate-800/80 shadow-[0_24px_60px_rgba(0,0,0,0.6)] text-slate-100' : 'bg-white border-slate-200/80 shadow-[0_24px_50px_rgba(0,0,0,0.1),0_1px_3px_rgba(0,0,0,0.02)] text-slate-800'}`}
             >
                 {/* Header */}
-                <div className={`px-6 py-5 border-b flex items-center justify-between rounded-t-[24px] ${isDarkTheme ? 'bg-[#11151d] border-slate-800/80' : 'bg-slate-50/50 border-slate-100'}`}>
+                <div className={`px-6 py-5 border-b flex items-center justify-between rounded-t-[18px] ${isDarkTheme ? 'bg-[#11151d] border-slate-800/80' : 'bg-slate-50/50 border-slate-100'}`}>
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 shadow-sm border border-blue-100">
+                        <div className="w-10 h-10 rounded-[14px] bg-blue-50 flex items-center justify-center text-blue-600 shadow-sm border border-blue-100">
                             {stepType === 'zalo_zns' ? (
                                 <img
                                     src={`${EXTERNAL_ASSET_BASE}/imgs/zalolog.png`}
@@ -691,7 +694,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                 
                                 if (type === 'condition') {
                                     return (
-                                        <div className="w-full mt-4 p-4 bg-slate-50/80 rounded-2xl border border-slate-100">
+                                        <div className="w-full mt-4 p-4 bg-slate-50/80 rounded-[14px] border border-slate-100">
                                             <div className="flex items-center gap-2 mb-3">
                                                 <GitMerge className="w-4 h-4 text-slate-400" />
                                                 <h4 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Thống kê điều kiện</h4>
@@ -699,7 +702,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                             <div className="grid grid-cols-2 gap-3">
                                                 <div 
                                                     onClick={() => onBranchClick?.(activeBranchFilter === 'matched' ? null : 'matched')}
-                                                    className={`p-3 rounded-xl border shadow-sm flex flex-col items-center justify-center relative overflow-hidden group transition-all cursor-pointer ${activeBranchFilter === 'matched' ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20' : 'bg-white border-emerald-100 hover:border-emerald-300'}`}
+                                                    className={`p-3 rounded-[14px] border shadow-sm flex flex-col items-center justify-center relative overflow-hidden group transition-all cursor-pointer ${activeBranchFilter === 'matched' ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20' : 'bg-white border-emerald-100 hover:border-emerald-300'}`}
                                                 >
                                                     <div className={`absolute inset-0 bg-emerald-50 transition-opacity ${activeBranchFilter === 'matched' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}></div>
                                                     <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider mb-1 relative z-10 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> Đúng điều kiện</span>
@@ -707,7 +710,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                 </div>
                                                 <div 
                                                     onClick={() => onBranchClick?.(activeBranchFilter === 'timed_out' ? null : 'timed_out')}
-                                                    className={`p-3 rounded-xl border shadow-sm flex flex-col items-center justify-center relative overflow-hidden group transition-all cursor-pointer ${activeBranchFilter === 'timed_out' ? 'bg-rose-50 border-rose-500 ring-2 ring-rose-500/20' : 'bg-white border-rose-100 hover:border-rose-300'}`}
+                                                    className={`p-3 rounded-[14px] border shadow-sm flex flex-col items-center justify-center relative overflow-hidden group transition-all cursor-pointer ${activeBranchFilter === 'timed_out' ? 'bg-rose-50 border-rose-500 ring-2 ring-rose-500/20' : 'bg-white border-rose-100 hover:border-rose-300'}`}
                                                 >
                                                     <div className={`absolute inset-0 bg-rose-50 transition-opacity ${activeBranchFilter === 'timed_out' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}></div>
                                                     <span className="text-[11px] font-bold text-rose-600 uppercase tracking-wider mb-1 relative z-10 flex items-center gap-1.5"><X className="w-3.5 h-3.5" /> Sai điều kiện</span>
@@ -720,7 +723,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                 
                                 if (type === 'split_test') {
                                     return (
-                                        <div className="w-full mt-4 p-4 bg-slate-50/80 rounded-2xl border border-slate-100">
+                                        <div className="w-full mt-4 p-4 bg-slate-50/80 rounded-[14px] border border-slate-100">
                                             <div className="flex items-center gap-2 mb-3">
                                                 <Beaker className="w-4 h-4 text-slate-400" />
                                                 <h4 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Thống kê A/B Test</h4>
@@ -728,7 +731,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                             <div className="grid grid-cols-2 gap-3">
                                                 <div 
                                                     onClick={() => onBranchClick?.(activeBranchFilter === 'path_a' ? null : 'path_a')}
-                                                    className={`p-3 rounded-xl border shadow-sm flex flex-col items-center justify-center relative overflow-hidden group transition-all cursor-pointer ${activeBranchFilter === 'path_a' ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500/20' : 'bg-white border-blue-100 hover:border-blue-300'}`}
+                                                    className={`p-3 rounded-[14px] border shadow-sm flex flex-col items-center justify-center relative overflow-hidden group transition-all cursor-pointer ${activeBranchFilter === 'path_a' ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500/20' : 'bg-white border-blue-100 hover:border-blue-300'}`}
                                                 >
                                                     <div className={`absolute inset-0 bg-blue-50 transition-opacity ${activeBranchFilter === 'path_a' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}></div>
                                                     <span className="text-[11px] font-bold text-blue-600 uppercase tracking-wider mb-1 relative z-10 flex items-center gap-1.5"><span className="w-4 h-4 rounded bg-blue-100 text-blue-700 flex items-center justify-center font-black">A</span> Nhánh A</span>
@@ -736,7 +739,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                 </div>
                                                 <div 
                                                     onClick={() => onBranchClick?.(activeBranchFilter === 'path_b' ? null : 'path_b')}
-                                                    className={`p-3 rounded-xl border shadow-sm flex flex-col items-center justify-center relative overflow-hidden group transition-all cursor-pointer ${activeBranchFilter === 'path_b' ? 'bg-fuchsia-50 border-fuchsia-500 ring-2 ring-fuchsia-500/20' : 'bg-white border-fuchsia-100 hover:border-fuchsia-300'}`}
+                                                    className={`p-3 rounded-[14px] border shadow-sm flex flex-col items-center justify-center relative overflow-hidden group transition-all cursor-pointer ${activeBranchFilter === 'path_b' ? 'bg-fuchsia-50 border-fuchsia-500 ring-2 ring-fuchsia-500/20' : 'bg-white border-fuchsia-100 hover:border-fuchsia-300'}`}
                                                 >
                                                     <div className={`absolute inset-0 bg-fuchsia-50 transition-opacity ${activeBranchFilter === 'path_b' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}></div>
                                                     <span className="text-[11px] font-bold text-fuchsia-600 uppercase tracking-wider mb-1 relative z-10 flex items-center gap-1.5"><span className="w-4 h-4 rounded bg-fuchsia-100 text-fuchsia-700 flex items-center justify-center font-black">B</span> Nhánh B</span>
@@ -751,7 +754,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                     const branches = stepConfig?.branches || [];
                                     const bStats = s.branchStats || {};
                                     return (
-                                        <div className="w-full mt-4 p-4 bg-slate-50/80 rounded-2xl border border-slate-100">
+                                        <div className="w-full mt-4 p-4 bg-slate-50/80 rounded-[14px] border border-slate-100">
                                             <div className="flex items-center gap-2 mb-3">
                                                 <GitMerge className="w-4 h-4 text-slate-400" />
                                                 <h4 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Thống kê rẽ nhánh</h4>
@@ -761,7 +764,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                     <div 
                                                         key={b.id} 
                                                         onClick={() => onBranchClick?.(activeBranchFilter === b.label ? null : b.label)}
-                                                        className={`p-3 rounded-xl border shadow-sm flex flex-col items-center justify-center relative overflow-hidden group transition-all cursor-pointer ${activeBranchFilter === b.label ? 'bg-indigo-50 border-indigo-500 ring-2 ring-indigo-500/20' : 'bg-white border-indigo-100 hover:border-indigo-300'}`}
+                                                        className={`p-3 rounded-[14px] border shadow-sm flex flex-col items-center justify-center relative overflow-hidden group transition-all cursor-pointer ${activeBranchFilter === b.label ? 'bg-indigo-50 border-indigo-500 ring-2 ring-indigo-500/20' : 'bg-white border-indigo-100 hover:border-indigo-300'}`}
                                                     >
                                                         <div className={`absolute inset-0 bg-indigo-50/50 transition-opacity ${activeBranchFilter === b.label ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}></div>
                                                         <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 relative z-10 text-center truncate w-full px-2" title={b.label || "Nhánh "}>{b.label || "Nhánh "}</span>
@@ -770,7 +773,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                 ))}
                                                 <div 
                                                     onClick={() => onBranchClick?.(activeBranchFilter === 'fallback' ? null : 'fallback')}
-                                                    className={`p-3 rounded-xl border shadow-sm flex flex-col items-center justify-center relative overflow-hidden group transition-all cursor-pointer ${activeBranchFilter === 'fallback' ? 'bg-slate-100 border-slate-500 ring-2 ring-slate-500/20' : 'bg-white border-slate-200 hover:border-slate-400'}`}
+                                                    className={`p-3 rounded-[14px] border shadow-sm flex flex-col items-center justify-center relative overflow-hidden group transition-all cursor-pointer ${activeBranchFilter === 'fallback' ? 'bg-slate-100 border-slate-500 ring-2 ring-slate-500/20' : 'bg-white border-slate-200 hover:border-slate-400'}`}
                                                 >
                                                     <div className={`absolute inset-0 bg-slate-50 transition-opacity ${activeBranchFilter === 'fallback' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}></div>
                                                     <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 relative z-10">Mặc định</span>
@@ -1558,11 +1561,11 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                 {/* Footer / Pagination */}
                 {
                     pagination.totalPages > 1 && (
-                        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 rounded-b-[24px] flex items-center justify-between">
+                        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 rounded-b-[18px] flex items-center justify-between">
                             <button
                                 disabled={pagination.page <= 1}
                                 onClick={() => onPageChange(pagination.page - 1)}
-                                className="px-4 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                                className="px-4 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-[var(--radius-md)] hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
                             >
                                 Trước
                             </button>
@@ -1572,7 +1575,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                             <button
                                 disabled={pagination.page >= pagination.totalPages}
                                 onClick={() => onPageChange(pagination.page + 1)}
-                                className="px-4 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                                className="px-4 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-[var(--radius-md)] hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
                             >
                                 Sau
                             </button>
@@ -1606,9 +1609,9 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
 
             {/* Add User Modal */}
             {isAddModalOpen && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-4">
-                    <div className={`w-full max-w-3xl border rounded-2xl shadow-2xl animate-in fade-in zoom-in-97 duration-200 flex flex-col max-h-[90vh] ${isDarkTheme ? 'bg-[#11151d] border-slate-800/80 text-slate-100' : 'bg-white border-slate-200/80 text-slate-800'}`}>
-                        <div className={`px-6 py-4 border-b flex items-center justify-between rounded-t-2xl shrink-0 ${isDarkTheme ? 'bg-[#11151d] border-slate-800/80' : 'bg-slate-50/50 border-slate-100'}`}>
+                <div className="fixed inset-0 z-[2147483645] flex items-center justify-center bg-slate-950/70 p-4">
+                    <div className={`w-full max-w-3xl border rounded-xl shadow-2xl animate-in fade-in zoom-in-97 duration-200 flex flex-col max-h-[90vh] ${isDarkTheme ? 'bg-[#11151d] border-slate-800/80 text-slate-100' : 'bg-white border-slate-200/80 text-slate-800'}`}>
+                        <div className={`px-6 py-4 border-b flex items-center justify-between rounded-t-[18px] shrink-0 ${isDarkTheme ? 'bg-[#11151d] border-slate-800/80' : 'bg-slate-50/50 border-slate-100'}`}>
                             <h3 className={`font-bold flex items-center gap-2 ${isDarkTheme ? 'text-slate-200' : 'text-slate-800'}`}>
                                 <UserPlus className="w-5 h-5 text-blue-600" />
                                 Thêm người dùng vào bước này
@@ -1655,13 +1658,13 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                             value={addSearchTerm} 
                                             onChange={e => setAddSearchTerm(e.target.value)} 
                                             placeholder="Tìm kiếm nhanh..." 
-                                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:border-slate-400 transition-all" 
+                                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-[var(--radius-md)] text-xs font-semibold outline-none focus:border-slate-400 transition-all" 
                                         />
                                     </div>
 
                                     <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-3 p-1">
                                         {availableLists.length === 0 && availableSegments.length === 0 ? (
-                                            <div className="p-get bg-slate-50 border border-slate-200 rounded-2xl text-center">
+                                            <div className="p-4 bg-slate-50 border border-slate-200 rounded-[14px] text-center">
                                                 <p className="text-sm text-slate-500 italic">Hệ thống chưa có danh sách này.</p>
                                             </div>
                                         ) : (
@@ -1673,10 +1676,10 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                 return (
                                                 <label 
                                                     key={list.id} 
-                                                    className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all duration-300 group relative overflow-hidden ${isSelected ? 'border-blue-500 bg-blue-50 shadow-md ring-4 ring-blue-500/5' : 'border-transparent bg-slate-50 hover:bg-white hover:border-slate-200 hover:shadow-sm'} cursor-pointer`}
+                                                    className={`w-full flex items-center justify-between p-4 rounded-[14px] border-2 transition-all duration-300 group relative overflow-hidden ${isSelected ? 'border-blue-500 bg-blue-50 shadow-md ring-4 ring-blue-500/5' : 'border-transparent bg-slate-50 hover:bg-white hover:border-slate-200 hover:shadow-sm'} cursor-pointer`}
                                                 >
                                                     <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-xl transition-all duration-500 ${isSelected ? 'bg-blue-500 text-white shadow-lg' : 'bg-white border border-slate-200 text-slate-400 group-hover:text-slate-600 shadow-sm'}`}>
+                                                        <div className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-[14px] transition-all duration-500 ${isSelected ? 'bg-blue-500 text-white shadow-lg' : 'bg-white border border-slate-200 text-slate-400 group-hover:text-slate-600 shadow-sm'}`}>
                                                             {addSourceTab === 'list' ? <List className="w-5 h-5" /> : (addSourceTab === 'segment' ? <Layers className="w-5 h-5" /> : (list.source === 'MISA CRM' ? <MisaIcon className="w-5 h-5" /> : <GoogleSheetsIcon className="w-5 h-5" />))}
                                                         </div>
                                                         <div className="text-left overflow-hidden">
@@ -1714,7 +1717,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                     Danh sách Email / SĐT / UID (Nhập thủ công)
                                 </label>
                                 <textarea
-                                    className="w-full h-28 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-mono text-slate-700 resize-none"
+                                    className="w-full h-28 px-4 py-3 bg-slate-50 border border-slate-200 rounded-[14px] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-mono text-slate-700 resize-none"
                                     placeholder="example@gmail.com&#10;0912345678&#10;84912345678..."
                                     value={addEmails}
                                     onChange={e => setAddEmails(e.target.value)}
@@ -1734,7 +1737,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                         <button
                                             type="button"
                                             onClick={() => setBranchSelectOpen(!branchSelectOpen)}
-                                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 hover:border-slate-300 transition-all text-sm font-bold text-slate-700 flex items-center justify-between group"
+                                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] hover:bg-slate-100 hover:border-slate-300 transition-all text-sm font-bold text-slate-700 flex items-center justify-between group"
                                         >
                                             <div className="flex items-center gap-2">
                                                 {/* Display Logic */}
@@ -1766,7 +1769,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                     className="fixed inset-0 z-40"
                                                     onClick={() => setBranchSelectOpen(false)}
                                                 ></div>
-                                                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-slate-100 p-2 z-50 animate-in fade-in zoom-in-95 duration-200 ring-4 ring-slate-400/10 max-h-[300px] overflow-y-auto custom-scrollbar">
+                                                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-[14px] shadow-xl border border-slate-100 p-2 z-50 animate-in fade-in zoom-in-95 duration-200 ring-4 ring-slate-400/10 max-h-[300px] overflow-y-auto custom-scrollbar">
                                                     {/* Option 1: Default */}
                                                     <div
                                                         onClick={() => {
@@ -1833,14 +1836,14 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                         Thời gian thực thi (Cho bước Wait)
                                     </label>
                                     <div className="grid grid-cols-2 gap-3">
-                                        <label className={`flex flex-col gap-1 p-3 rounded-xl border border-slate-200 cursor-pointer transition-all ${timingMode === 'native' ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-500/50' : 'hover:bg-slate-50'}`}>
+                                        <label className={`flex flex-col gap-1 p-3 rounded-[14px] border border-slate-200 cursor-pointer transition-all ${timingMode === 'native' ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-500/50' : 'hover:bg-slate-50'}`}>
                                             <div className="flex items-center gap-2">
                                                 <input type="radio" checked={timingMode === 'native'} onChange={() => setTimingMode('native')} className="w-4 h-4 text-blue-600 focus:ring-blue-500" />
                                                 <span className="text-sm font-bold text-slate-700">Chờ theo cài đặt</span>
                                             </div>
                                             <p className="text-[10px] text-slate-500 ml-6 leading-tight">Tuân thủ thời gian đợi của bước này.</p>
                                         </label>
-                                        <label className={`flex flex-col gap-1 p-3 rounded-xl border border-slate-200 cursor-pointer transition-all ${timingMode === 'immediate' ? 'bg-orange-50 border-orange-300 ring-1 ring-orange-500/50' : 'hover:bg-slate-50'}`}>
+                                        <label className={`flex flex-col gap-1 p-3 rounded-[14px] border border-slate-200 cursor-pointer transition-all ${timingMode === 'immediate' ? 'bg-orange-50 border-orange-300 ring-1 ring-orange-500/50' : 'hover:bg-slate-50'}`}>
                                             <div className="flex items-center gap-2">
                                                 <input type="radio" checked={timingMode === 'immediate'} onChange={() => setTimingMode('immediate')} className="w-4 h-4 text-orange-600 focus:ring-orange-500" />
                                                 <span className="text-sm font-bold text-slate-700">Bỏ qua Wait</span>
@@ -1853,11 +1856,11 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
 
                             {/* Deduplication Estimate Display */}
                             {(!addEmails.trim() && addListIds.length === 0) ? null : isEstimating ? (
-                                <div className="flex items-center gap-2 text-blue-600 bg-blue-50 p-3 rounded-xl text-xs font-medium border border-blue-100">
+                                <div className="flex items-center gap-2 text-blue-600 bg-blue-50 p-3 rounded-[14px] text-xs font-medium border border-blue-100">
                                     <Loader2 className="w-4 h-4 animate-spin text-blue-500" /> Đang kiểm tra trùng lặp hệ thống...
                                 </div>
                             ) : estimateData ? (
-                                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4">
+                                <div className="bg-emerald-50 border border-emerald-100 rounded-[14px] p-4">
                                     <div className="flex items-start gap-4">
                                         <div className="w-10 h-10 rounded-full bg-white shadow-sm border border-emerald-100 flex items-center justify-center shrink-0">
                                             <Check className="w-5 h-5 text-emerald-600" />
@@ -1874,10 +1877,10 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                             ) : null}
 
                         </div>
-                        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 rounded-b-2xl shrink-0">
+                        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 rounded-b-[18px] shrink-0">
                             <button
                                 onClick={() => setIsAddModalOpen(false)}
-                                className="px-4 py-2 text-slate-600 font-semibold text-sm hover:bg-white hover:shadow-sm rounded-lg transition-all border border-transparent hover:border-slate-200"
+                                className="px-4 py-2 text-slate-600 font-semibold text-sm hover:bg-white hover:shadow-sm rounded-[var(--radius-md)] transition-all border border-transparent hover:border-slate-200"
                             >
                                 Hủy bỏ
                             </button>
@@ -1918,7 +1921,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                     }).finally(() => setAddingUsers(false));
                                 }}
                                 disabled={addingUsers || isEstimating}
-                                className="px-4 py-2 bg-blue-600 text-white font-bold text-sm rounded-lg hover:bg-blue-700 shadow-lg shadow-blue-600/20 transition-all flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                                className="px-4 py-2 bg-[var(--color-primary)] text-white font-bold text-sm rounded-[var(--radius-md)] hover:opacity-95 shadow-lg transition-all flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                             >
                                 {addingUsers ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
                                 {addingUsers ? 'Đang thêm...' : 'Thêm ngay'}
@@ -1945,10 +1948,10 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
 
             {/* Quick Action: Tag Selection Modal */}
             {tagModalOpen && (
-                <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-md rounded-[24px] shadow-2xl border border-slate-100 p-6 animate-in zoom-in-95 duration-300">
+                <div className="fixed inset-0 z-[2147483645] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white w-full max-w-md rounded-xl shadow-2xl border border-slate-100 p-6 animate-in zoom-in-95 duration-300">
                         <div className="flex items-center gap-3 mb-6">
-                            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-100">
+                            <div className="w-10 h-10 rounded-[14px] bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-100">
                                 <Tag className="w-5 h-5" />
                             </div>
                             <div>
@@ -1961,11 +1964,11 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                             <div>
                                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Chọn Tag</label>
                                 <select
-                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
+                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
                                     value={selectedTag}
                                     onChange={(e) => setSelectedTag(e.target.value)}
                                 >
-                                    <option value="">-- Chọn mớit Tag --</option>
+                                    <option value="">-- Chọn một Tag --</option>
                                     {availableTags.map(tag => (
                                         <option key={tag.id} value={tag.id}>{tag.name}</option>
                                     ))}
@@ -1975,14 +1978,14 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                             <div className="flex gap-3 pt-2">
                                 <button
                                     onClick={() => setTagModalOpen(false)}
-                                    className="flex-1 py-2.5 px-4 bg-slate-50 text-slate-600 font-bold text-sm rounded-xl hover:bg-slate-100 transition-all border border-slate-200"
+                                    className="flex-1 py-2.5 px-4 bg-slate-50 text-slate-600 font-bold text-sm rounded-[var(--radius-md)] hover:bg-slate-100 transition-all border border-slate-200"
                                 >
                                     Hủy bỏ
                                 </button>
                                 <button
                                     onClick={handleBulkAddTag}
                                     disabled={bulkActionLoading || !selectedTag}
-                                    className="flex-[2] py-2.5 px-4 bg-blue-600 text-white font-bold text-sm rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-500/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                    className="flex-[2] py-2.5 px-4 bg-[var(--color-primary)] text-white font-bold text-sm rounded-[var(--radius-md)] hover:opacity-95 shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                                 >
                                     {bulkActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                                     <span>Xác nhận gắn Tag</span>
@@ -1995,10 +1998,10 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
 
             {/* Quick Action: List Selection Modal */}
             {listModalOpen && (
-                <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-md rounded-[24px] shadow-2xl border border-slate-100 p-6 animate-in zoom-in-95 duration-300">
+                <div className="fixed inset-0 z-[2147483645] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white w-full max-w-md rounded-xl shadow-2xl border border-slate-100 p-6 animate-in zoom-in-95 duration-300">
                         <div className="flex items-center gap-3 mb-6">
-                            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-100">
+                            <div className="w-10 h-10 rounded-[14px] bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-100">
                                 <List className="w-5 h-5" />
                             </div>
                             <div>
@@ -2011,11 +2014,11 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                             <div>
                                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Chọn Danh sách</label>
                                 <select
-                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
+                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
                                     value={selectedList}
                                     onChange={(e) => setSelectedList(e.target.value)}
                                 >
-                                    <option value="">-- Chọn mớit List --</option>
+                                    <option value="">-- Chọn một List --</option>
                                     {availableLists.map(list => (
                                         <option key={list.id} value={list.id}>{list.name} ({list.subscribers_count || 0} user)</option>
                                     ))}
@@ -2025,14 +2028,14 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                             <div className="flex gap-3 pt-2">
                                 <button
                                     onClick={() => setListModalOpen(false)}
-                                    className="flex-1 py-2.5 px-4 bg-slate-50 text-slate-600 font-bold text-sm rounded-xl hover:bg-slate-100 transition-all border border-slate-200"
+                                    className="flex-1 py-2.5 px-4 bg-slate-50 text-slate-600 font-bold text-sm rounded-[var(--radius-md)] hover:bg-slate-100 transition-all border border-slate-200"
                                 >
                                     Hủy bỏ
                                 </button>
                                 <button
                                     onClick={handleBulkAddToList}
                                     disabled={bulkActionLoading || !selectedList}
-                                    className="flex-[2] py-2.5 px-4 bg-blue-600 text-white font-bold text-sm rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-500/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                    className="flex-[2] py-2.5 px-4 bg-[var(--color-primary)] text-white font-bold text-sm rounded-[var(--radius-md)] hover:opacity-95 shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                                 >
                                     {bulkActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                                     <span>Xác nhận thêm vào List</span>
@@ -2045,10 +2048,10 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
 
             {/* Quick Action: Status Selection Modal */}
             {statusModalOpen && (
-                <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-md rounded-[24px] shadow-2xl border border-slate-100 p-6 animate-in zoom-in-95 duration-300">
+                <div className="fixed inset-0 z-[2147483645] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white w-full max-w-md rounded-xl shadow-2xl border border-slate-100 p-6 animate-in zoom-in-95 duration-300">
                         <div className="flex items-center gap-3 mb-6">
-                            <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 border border-emerald-100">
+                            <div className="w-10 h-10 rounded-[14px] bg-emerald-50 flex items-center justify-center text-emerald-600 border border-emerald-100">
                                 <Check className="w-5 h-5" />
                             </div>
                             <div>
@@ -2070,7 +2073,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                         <button
                                             key={status.value}
                                             onClick={() => setSelectedStatus(status.value)}
-                                            className={`px-4 py-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-between ${selectedStatus === status.value ? status.bg + ' ring-2 ring-offset-1 select-none' : 'bg-white text-slate-500 border-slate-100 hover:border-slate-300'}`}
+                                            className={`px-4 py-3 rounded-[var(--radius-md)] border text-xs font-bold transition-all flex items-center justify-between ${selectedStatus === status.value ? status.bg + ' ring-2 ring-offset-1 select-none' : 'bg-white text-slate-500 border-slate-100 hover:border-slate-300'}`}
                                         >
                                             {status.label}
                                             {selectedStatus === status.value && <Check className="w-3 h-3" />}
@@ -2082,14 +2085,14 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                             <div className="flex gap-3 pt-2">
                                 <button
                                     onClick={() => setStatusModalOpen(false)}
-                                    className="flex-1 py-2.5 px-4 bg-slate-50 text-slate-600 font-bold text-sm rounded-xl hover:bg-slate-100 transition-all border border-slate-200"
+                                    className="flex-1 py-2.5 px-4 bg-slate-50 text-slate-600 font-bold text-sm rounded-[var(--radius-md)] hover:bg-slate-100 transition-all border border-slate-200"
                                 >
                                     Hủy bỏ
                                 </button>
                                 <button
                                     onClick={handleBulkChangeStatus}
                                     disabled={bulkActionLoading || !selectedStatus}
-                                    className="flex-[2] py-2.5 px-4 bg-emerald-600 text-white font-bold text-sm rounded-xl hover:bg-emerald-700 shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                    className="flex-[2] py-2.5 px-4 bg-emerald-600 text-white font-bold text-sm rounded-[var(--radius-md)] hover:bg-emerald-700 shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                                 >
                                     {bulkActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                                     <span>Xác nhận đổi Trạng thái</span>
@@ -2099,7 +2102,8 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                     </div>
                 </div>
             )}
-        </div >
+        </div >,
+        getMktPortalRoot()
     );
 };
 

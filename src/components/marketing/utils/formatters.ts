@@ -1,4 +1,3 @@
-
 export const formatFileSize = (bytes: number) => {
     if (!bytes || bytes === 0) return '0 B';
     const k = 1024;
@@ -172,13 +171,14 @@ export const extractTemplateVariables = (html: string): ExtractedVariables => {
 };
 
 /**
- * Replace merge tags (e.g. {{firstName}}, {{cert_no}}, {{cert_link}}, {{cert_img}}) in text/HTML,
+ * Replace merge tags (e.g. {{firstName}}, {{program}}, {{consultant_name}}, {{deal_value}}, {{cert_no}}) in text/HTML,
  * with full support for:
- * 1. Custom fields from CSV/Excel (cert_no, cert_link, cert_img, etc.)
- * 2. Case-insensitive and canonical key normalization (certNo, CERT_NO, cert_no)
- * 3. Dynamic links in href / buttons (normalized into real clickable URLs)
- * 4. Dynamic images in img src (resolving to valid image URLs or configured fallback image)
- * 5. Configurable fallbacks via context.fallbacks or context.variable_fallbacks
+ * 1. All 4 groups of MYERP CRM/Student, Consultant (Sale), Deal & Deposit, and System variables
+ * 2. Custom fields from CSV/Excel (cert_no, cert_link, cert_img, etc.)
+ * 3. Case-insensitive and canonical key normalization (certNo, CERT_NO, cert_no)
+ * 4. Dynamic links in href / buttons (normalized into real clickable URLs)
+ * 5. Dynamic images in img src (resolving to valid image URLs or configured fallback image)
+ * 6. Configurable fallbacks via context.fallbacks or context.variable_fallbacks
  */
 export const interpolateMergeTags = (
     text: string,
@@ -234,12 +234,27 @@ export const interpolateMergeTags = (
     const m = String(now.getMonth() + 1).padStart(2, '0');
     const y = now.getFullYear();
 
-    // Standard variable map
+    const consultant = subscriber.consultant || subscriber.owner || context.consultant || {};
+    const formatMoneyIfNumeric = (val: any): string => {
+        if (val === undefined || val === null || val === '') return '';
+        if (typeof val === 'number') return val.toLocaleString('vi-VN') + ' ₫';
+        const trimmed = String(val).trim();
+        if (/^\d+(\.\d+)?$/.test(trimmed)) return Number(trimmed).toLocaleString('vi-VN') + ' ₫';
+        return trimmed;
+    };
+
+    const rawGender = String(subscriber.gender || customAttrs.gender || '').trim().toLowerCase();
+    const normalizedGender =
+        rawGender === 'male' || rawGender === 'nam' ? 'Anh'
+        : rawGender === 'female' || rawGender === 'nữ' || rawGender === 'nu' ? 'Chị'
+        : (subscriber.gender || customAttrs.gender || '');
+
+    // Standard variable map (CRM Contact/Student + Consultant + Deal/Deposit + System)
     const map: Record<string, any> = {
-        first_name: firstName,
-        firstName: firstName,
-        last_name: lastName,
-        lastName: lastName,
+        first_name: firstName || fullName.split(' ').pop() || '',
+        firstName: firstName || fullName.split(' ').pop() || '',
+        last_name: lastName || fullName.split(' ').slice(0, -1).join(' ') || '',
+        lastName: lastName || fullName.split(' ').slice(0, -1).join(' ') || '',
         full_name: fullName,
         fullName: fullName,
         customer_name: fullName,
@@ -251,23 +266,59 @@ export const interpolateMergeTags = (
         phone_number: phone,
         subscriber_id: subscriberId,
         subscriberId: subscriberId,
-        contact_id: subscriberId,
+        contact_id: subscriber.crm_contact_id || subscriber.contact_id || subscriberId,
+        crm_contact_id: subscriber.crm_contact_id || subscriber.crmContactId || subscriber.contact_id || subscriberId,
+        crmContactId: subscriber.crm_contact_id || subscriber.crmContactId || subscriber.contact_id || subscriberId,
+        student_id: subscriber.student_id || subscriber.studentId || subscriber.student_code || customAttrs.student_id || '',
+        studentId: subscriber.student_id || subscriber.studentId || subscriber.student_code || customAttrs.student_id || '',
         subscriber_id_short: String(subscriberId).substring(0, 10),
         contact_id_short: String(subscriberId).substring(0, 10),
-        company: subscriber.companyName || subscriber.company_name || subscriber.company || '',
-        company_name: subscriber.companyName || subscriber.company_name || '',
-        companyName: subscriber.companyName || subscriber.company_name || '',
-        job_title: subscriber.jobTitle || subscriber.job_title || '',
-        jobTitle: subscriber.jobTitle || subscriber.job_title || '',
-        city: subscriber.city || subscriber.last_city || '',
-        country: subscriber.country || '',
-        address: subscriber.address || subscriber.city || '',
-        website: subscriber.website || '',
+        company: subscriber.companyName || subscriber.company_name || subscriber.company || customAttrs.company || '',
+        company_name: subscriber.companyName || subscriber.company_name || subscriber.company || customAttrs.company || '',
+        companyName: subscriber.companyName || subscriber.company_name || subscriber.company || customAttrs.company || '',
+        job_title: subscriber.jobTitle || subscriber.job_title || customAttrs.job_title || '',
+        jobTitle: subscriber.jobTitle || subscriber.job_title || customAttrs.job_title || '',
+        city: subscriber.city || subscriber.last_city || customAttrs.city || '',
+        district: subscriber.district || customAttrs.district || '',
+        ward: subscriber.ward || customAttrs.ward || '',
+        country: subscriber.country || customAttrs.country || '',
+        address: subscriber.address || subscriber.city || customAttrs.address || '',
+        website: subscriber.website || customAttrs.website || '',
         url: subscriber.url || subscriber.website || '',
-        gender: subscriber.gender || '',
-        birthday: subscriber.dateOfBirth || subscriber.date_of_birth || subscriber.birthday || '',
-        date_of_birth: subscriber.dateOfBirth || subscriber.date_of_birth || subscriber.birthday || '',
+        gender: normalizedGender,
+        birthday: subscriber.dateOfBirth || subscriber.date_of_birth || subscriber.birthday || customAttrs.birthday || '',
+        date_of_birth: subscriber.dateOfBirth || subscriber.date_of_birth || subscriber.birthday || customAttrs.birthday || '',
+        program: subscriber.program || subscriber.program_interest || subscriber.course || customAttrs.program || '',
+        study_status: subscriber.study_status || subscriber.studyStatus || customAttrs.study_status || '',
+        studyStatus: subscriber.study_status || subscriber.studyStatus || customAttrs.study_status || '',
+        stage_name: subscriber.stage_name || subscriber.stageName || subscriber.stage || customAttrs.stage_name || '',
+        stageName: subscriber.stage_name || subscriber.stageName || subscriber.stage || customAttrs.stage_name || '',
+        source: subscriber.source || customAttrs.source || '',
+        // Consultant (Sale)
+        consultant_name: subscriber.consultant_name || subscriber.consultantName || subscriber.owner_name || subscriber.ownerName || subscriber.salesperson || consultant.full_name || consultant.name || customAttrs.consultant_name || '',
+        consultantName: subscriber.consultant_name || subscriber.consultantName || subscriber.owner_name || subscriber.ownerName || subscriber.salesperson || consultant.full_name || consultant.name || customAttrs.consultant_name || '',
+        consultant_phone: subscriber.consultant_phone || subscriber.consultantPhone || subscriber.owner_phone || consultant.phone || customAttrs.consultant_phone || '',
+        consultantPhone: subscriber.consultant_phone || subscriber.consultantPhone || subscriber.owner_phone || consultant.phone || customAttrs.consultant_phone || '',
+        consultant_email: subscriber.consultant_email || subscriber.consultantEmail || subscriber.owner_email || consultant.email || customAttrs.consultant_email || '',
+        consultantEmail: subscriber.consultant_email || subscriber.consultantEmail || subscriber.owner_email || consultant.email || customAttrs.consultant_email || '',
+        consultant_title: subscriber.consultant_title || subscriber.consultantTitle || subscriber.owner_title || consultant.job_title || consultant.title || customAttrs.consultant_title || 'Chuyên viên Tư vấn Tuyển sinh',
+        consultantTitle: subscriber.consultant_title || subscriber.consultantTitle || subscriber.owner_title || consultant.job_title || consultant.title || customAttrs.consultant_title || 'Chuyên viên Tư vấn Tuyển sinh',
+        team_name: subscriber.team_name || subscriber.teamName || subscriber.owner_team || consultant.team_name || customAttrs.team_name || 'Ban Tuyển sinh Quốc tế',
+        teamName: subscriber.team_name || subscriber.teamName || subscriber.owner_team || consultant.team_name || customAttrs.team_name || 'Ban Tuyển sinh Quốc tế',
+        // Deal & Deposit
+        deal_title: subscriber.deal_title || subscriber.dealTitle || customAttrs.deal_title || '',
+        dealTitle: subscriber.deal_title || subscriber.dealTitle || customAttrs.deal_title || '',
+        deal_value: formatMoneyIfNumeric(subscriber.deal_value ?? subscriber.dealValue ?? customAttrs.deal_value),
+        dealValue: formatMoneyIfNumeric(subscriber.deal_value ?? subscriber.dealValue ?? customAttrs.deal_value),
+        deposit_amount: formatMoneyIfNumeric(subscriber.deposit_amount ?? subscriber.depositAmount ?? customAttrs.deposit_amount),
+        depositAmount: formatMoneyIfNumeric(subscriber.deposit_amount ?? subscriber.depositAmount ?? customAttrs.deposit_amount),
+        deposit_status: subscriber.deposit_status || subscriber.depositStatus || customAttrs.deposit_status || '',
+        depositStatus: subscriber.deposit_status || subscriber.depositStatus || customAttrs.deposit_status || '',
+        deposit_code: subscriber.deposit_code || subscriber.depositCode || customAttrs.deposit_code || '',
+        depositCode: subscriber.deposit_code || subscriber.depositCode || customAttrs.deposit_code || '',
+        // System & Campaign
         year: y.toString(),
+        current_year: y.toString(),
         date: `${d}/${m}/${y}`,
         current_date: `${d}/${m}/${y}`,
         today: `${d}/${m}/${y}`,
@@ -276,9 +327,10 @@ export const interpolateMergeTags = (
         time: now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
         current_time: now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
         unsubscribe_url: context.unsubscribe_url || context.unsubscribeLink || '#unsubscribe',
+        unsubscribe_link: context.unsubscribe_url || context.unsubscribeLink || '#unsubscribe',
         unsubscribeLink: context.unsubscribe_url || context.unsubscribeLink || '#unsubscribe',
-        campaign_name: context.campaign_name || context.campaignName || '',
-        campaignName: context.campaign_name || context.campaignName || '',
+        campaign_name: context.campaign_name || context.campaignName || context.name || subscriber.campaign_name || '',
+        campaignName: context.campaign_name || context.campaignName || context.name || subscriber.campaign_name || '',
         ...customAttrs,
         ...context
     };
@@ -386,7 +438,6 @@ export const interpolateMergeTags = (
         return strVal;
     });
 };
-
 
 // Dual value declarations for verbatimModuleSyntax compatibility
 export const ExtractedVariables: any = undefined;

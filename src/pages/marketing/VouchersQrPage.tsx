@@ -324,8 +324,22 @@ const Vouchers: React.FC = () => {
                         <div className="p-4 lg:p-5">
                             {loading ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                                    {[1, 2, 3].map(i => (
-                                        <div key={i} className="h-52 rounded-[var(--radius-lg)] bg-[var(--color-bg)] border border-[var(--color-border-light)] animate-pulse" />
+                                    {[1, 2, 3, 4, 5, 6].map(i => (
+                                        <div key={i} className="rounded-[20px] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 flex flex-col gap-4">
+                                            <div className="flex justify-between items-center">
+                                                <div className="w-11 h-11 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                                <div className="w-24 h-6 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-full" />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <div className="h-4 w-3/4 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[8px]" />
+                                                <div className="h-3 w-1/2 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[6px]" />
+                                            </div>
+                                            <div className="h-16 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
+                                            <div className="flex gap-2">
+                                                <div className="h-9 flex-1 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                                                <div className="h-9 flex-[2] animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                                            </div>
+                                        </div>
                                     ))}
                                 </div>
                             ) : filteredCampaigns.length === 0 ? (

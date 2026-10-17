@@ -11,6 +11,8 @@ import SurveyTopBar from './SurveyTopBar.tsx';
 import { toast } from 'react-hot-toast';
 import { api } from '../../services/storageAdapter';
 import { X, Monitor, Tablet, Smartphone } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { getMktPortalRoot } from '../../utils/portalRoot';
 
 
 export interface SurveyEditorProps {
@@ -173,15 +175,57 @@ const SurveyEditor: React.FC<SurveyEditorProps> = ({ surveyIdProp, onBack }) => 
     }, [selectedBlockId]);
 
     const duplicateBlock = useCallback((blockId: string) => {
+        const newBlockId = crypto.randomUUID();
         setSurvey(prev => {
             if (!prev) return prev;
             const idx = prev.blocks.findIndex(b => b.id === blockId);
             if (idx < 0) return prev;
-            const clone = { ...prev.blocks[idx], id: crypto.randomUUID() };
+            const sourceBlock = prev.blocks[idx];
+            const rawClone: SurveyBlock =
+                typeof structuredClone === 'function'
+                    ? structuredClone(sourceBlock)
+                    : JSON.parse(JSON.stringify(sourceBlock));
+
+            const clone: SurveyBlock = {
+                ...rawClone,
+                id: newBlockId,
+                options: rawClone.options
+                    ? rawClone.options.map(opt => ({ ...opt, id: crypto.randomUUID() }))
+                    : undefined,
+                matrixRows: rawClone.matrixRows
+                    ? rawClone.matrixRows.map(row => ({ ...row, id: crypto.randomUUID() }))
+                    : undefined,
+                matrixCols: rawClone.matrixCols
+                    ? rawClone.matrixCols.map(col => ({ ...col, id: crypto.randomUUID() }))
+                    : undefined,
+                logic: rawClone.logic
+                    ? rawClone.logic.map(rule => ({
+                          ...rule,
+                          condition: rule.condition
+                              ? {
+                                    ...rule.condition,
+                                    question_id:
+                                        rule.condition.question_id === blockId
+                                            ? newBlockId
+                                            : rule.condition.question_id,
+                                }
+                              : rule.condition,
+                      }))
+                    : undefined,
+            };
+
+            if (Array.isArray((rawClone as any).likertPoints)) {
+                (clone as any).likertPoints = (rawClone as any).likertPoints.map((pt: any) => ({
+                    ...pt,
+                    ...(pt.id ? { id: crypto.randomUUID() } : {}),
+                }));
+            }
+
             const blocks = [...prev.blocks];
             blocks.splice(idx + 1, 0, clone);
             return { ...prev, blocks };
         });
+        setSelectedBlockId(newBlockId);
         setIsDirty(true);
     }, []);
 
@@ -202,21 +246,58 @@ const SurveyEditor: React.FC<SurveyEditorProps> = ({ surveyIdProp, onBack }) => 
 
 
     if (isLoading) {
-        return (
-            <div className="h-screen flex items-center justify-center bg-slate-50">
-                <div className="text-center">
-                    <div className="w-12 h-12 border-4 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                    <p className="text-slate-500 font-medium">Đang tải khảo sát...</p>
+        return createPortal(
+            <div className="fixed inset-0 z-[2147483630] w-screen h-screen flex flex-col bg-slate-100 dark:bg-[#0B0F19] overflow-hidden font-sans" style={{ zIndex: 2147483630 }}>
+                {/* Top Bar Skeleton */}
+                <div className="h-14 shrink-0 bg-white dark:bg-[#111827] border-b border-slate-200 dark:border-white/[0.07] px-5 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                        <div className="w-48 h-5 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[10px]" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-28 h-8 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                        <div className="w-28 h-8 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                        <div className="w-24 h-9 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                        <div className="w-28 h-9 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                    </div>
                 </div>
-            </div>
+                {/* 3-Column Editor Workspace Skeleton: 320px Left Toolbox + Center Canvas + 380px Right Properties */}
+                <div className="flex-1 flex overflow-hidden">
+                    <div className="w-[320px] shrink-0 bg-white dark:bg-[#111827] border-r border-slate-200 dark:border-white/[0.07] p-4 space-y-3">
+                        <div className="w-36 h-4 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[8px]" />
+                        <div className="grid grid-cols-2 gap-2.5 pt-1">
+                            {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
+                                <div key={n} className="h-16 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
+                            ))}
+                        </div>
+                    </div>
+                    <div className="flex-1 p-8 overflow-y-auto flex justify-center">
+                        <div className="w-full max-w-2xl space-y-4">
+                            <div className="h-44 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
+                            <div className="h-32 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
+                            <div className="h-32 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
+                        </div>
+                    </div>
+                    <div className="w-[380px] shrink-0 bg-white dark:bg-[#111827] border-l border-slate-200 dark:border-white/[0.07] p-5 space-y-4">
+                        <div className="w-40 h-5 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[10px]" />
+                        <div className="h-10 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                        <div className="h-24 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
+                        <div className="h-10 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                        <div className="h-32 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
+                    </div>
+                </div>
+            </div>,
+            getMktPortalRoot()
         );
     }
 
     if (!survey) return null;
 
-    return (
+    return createPortal(
         <DndProvider backend={HTML5Backend}>
-            <div className="h-screen flex flex-col bg-slate-100 overflow-hidden">
+            <div className="fixed inset-0 z-[2147483630] w-screen h-screen flex flex-col bg-slate-100 overflow-hidden font-sans shadow-2xl" style={{ zIndex: 2147483630 }}>
                 {/* Top Bar */}
                 <SurveyTopBar
                     survey={survey}
@@ -271,7 +352,7 @@ const SurveyEditor: React.FC<SurveyEditorProps> = ({ surveyIdProp, onBack }) => 
 
             {/* ── Preview Overlay ─────────────────────────────────────────────── */}
             {isPreviewOpen && (
-                <div className="fixed inset-0 z-[9999] bg-slate-900/80 backdrop-blur-sm flex flex-col items-center">
+                <div className="fixed inset-0 z-[2147483646] bg-slate-900/80 backdrop-blur-sm flex flex-col items-center" style={{ zIndex: 2147483646 }}>
                     {/* Preview top bar */}
                     <div className="w-full h-12 bg-slate-900 flex items-center px-4 gap-4 shrink-0">
                         <span className="text-white/70 text-xs font-bold uppercase tracking-widest">Preview</span>
@@ -284,7 +365,7 @@ const SurveyEditor: React.FC<SurveyEditorProps> = ({ surveyIdProp, onBack }) => 
                                 };
                                 return (
                                     <button key={mode} onClick={() => setPreviewDevice(mode)}
-                                        className={`p-1.5 rounded-md transition-all ${previewDevice === mode ? 'bg-amber-500 text-white' : 'text-slate-400 hover:text-white'}`}
+                                        className={`p-1.5 rounded-md transition-all ${previewDevice === mode ? 'bg-[var(--color-primary)] text-white' : 'text-slate-400 hover:text-white'}`}
                                     >{icons[iconName]}</button>
                                 );
                             })}
@@ -325,7 +406,8 @@ const SurveyEditor: React.FC<SurveyEditorProps> = ({ surveyIdProp, onBack }) => 
                     </div>
                 </div>
             )}
-        </DndProvider>
+        </DndProvider>,
+        getMktPortalRoot()
     );
 };
 

@@ -64,7 +64,7 @@ const VoucherConfigurator: React.FC<Props> = ({ survey, onUpdateSurvey }) => {
                 <span className="text-xs font-medium text-slate-600">Bật tặng Voucher tự động</span>
                 <button 
                     onClick={() => updateConfig({ enabled: !config.enabled })} 
-                    className={`relative w-9 h-5 rounded-full transition-colors ${config.enabled ? 'bg-amber-500' : 'bg-slate-200'}`}
+                    className={`relative w-9 h-5 rounded-full transition-colors ${config.enabled ? 'bg-[var(--color-primary)]' : 'bg-slate-200'}`}
                 >
                     <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${config.enabled ? 'left-4' : 'left-0.5'}`} />
                 </button>
@@ -134,7 +134,7 @@ const VoucherConfigurator: React.FC<Props> = ({ survey, onUpdateSurvey }) => {
                                                                 type="text"
                                                                 value={mapping.condition.value as string}
                                                                 onChange={e => updateMapping(idx, { condition: { ...mapping.condition, value: e.target.value } })}
-                                                                className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded outline-none focus:border-amber-400"
+                                                                className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded outline-none focus:border-[var(--color-primary)]"
                                                                 placeholder="Nhập..."
                                                             />
                                                         </div>

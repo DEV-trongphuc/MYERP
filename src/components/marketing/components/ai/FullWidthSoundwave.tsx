@@ -112,7 +112,7 @@ const FullWidthSoundwave = React.memo(({ text, onStop }: { text: string, onStop:
 
     return (
         <div
-            className="absolute inset-x-0 bottom-0 top-0 z-50 rounded-[24px] flex items-center justify-center bg-[#16181c] border border-white/20 cursor-pointer overflow-hidden p-0"
+            className="absolute inset-x-0 bottom-0 top-0 z-50 rounded-[18px] flex items-center justify-center bg-[#16181c] border border-white/20 cursor-pointer overflow-hidden p-0"
             onClick={onStop}
         >
             {/* Helper Text */}

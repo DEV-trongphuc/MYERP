@@ -23,17 +23,17 @@ function require_permission($pdo, $permission_slug, $workspace_id = null) {
     }
 
     $role = strtolower((string)($auth['role'] ?? ''));
-    $allowedRoles = ['admin', 'superadmin', 'super_admin', 'director', 'marketing', 'manager', 'leader', 'sale_admin', 'saleadmin', 'sale', 'sales'];
+    $allowedRoles = ['admin', 'superadmin', 'super_admin', 'director', 'marketing', 'mkt', 'digital_marketing', 'content', 'ads', 'manager', 'leader', 'team_leader', 'sale_admin', 'saleadmin', 'sale', 'sales'];
     if (!in_array($role, $allowedRoles, true)) {
         jsonResponse(false, null, 'Forbidden: Vai trò của bạn không được phép truy cập.', [], 403);
     }
 
-    // Admin, Superadmin, Director, Marketing have full access to Marketing Automation
-    if (in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'marketing'], true)) {
+    // Admin, Superadmin, Director, Marketing, Manager have full access to Marketing Automation
+    if (in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'marketing', 'mkt', 'digital_marketing', 'content', 'ads', 'manager'], true)) {
         return true;
     }
 
-    // Manager, Leader, Sale Admin, Sale: block workspace/role administrative mutations
+    // Leader, Team Leader, Sale Admin, Sale: block workspace/role administrative mutations
     $restrictedPrefixes = ['workspaces.delete', 'workspaces.create', 'roles.manage', 'roles.delete', 'settings.Write'];
     foreach ($restrictedPrefixes as $prefix) {
         if (strcasecmp($permission_slug, $prefix) === 0) {
@@ -48,7 +48,7 @@ function require_permission($pdo, $permission_slug, $workspace_id = null) {
         }
     }
 
-    // Allow operational marketing/omnichannel permissions for manager, leader, sale_admin, sale
+    // Allow operational marketing/omnichannel permissions for manager, leader, team_leader, sale_admin, sale
     return true;
 }
 
@@ -62,7 +62,7 @@ function is_super_admin() {
         return false;
     }
     $role = strtolower((string)($auth['role'] ?? ''));
-    return in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'marketing'], true);
+    return in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'marketing', 'mkt', 'digital_marketing', 'content', 'ads', 'manager'], true);
 }
 
 /**
@@ -93,4 +93,45 @@ function build_workspace_where($alias = '') {
     }
     return " {$prefix}workspace_id = " . (int)$wsid . " ";
 }
+
+if (!function_exists('get_current_user_id')) {
+    function get_current_user_id(): ?int {
+        if (!empty($GLOBALS['current_admin_id'])) {
+            return (int)$GLOBALS['current_admin_id'];
+        }
+        if (!empty($GLOBALS['domation_auth']['user_id'])) {
+            return (int)$GLOBALS['domation_auth']['user_id'];
+        }
+        if (!empty($_SESSION['user_id'])) {
+            return (int)$_SESSION['user_id'];
+        }
+        return null;
+    }
+}
+
+if (!function_exists('get_current_user_info')) {
+    function get_current_user_info(): array {
+        return is_array($GLOBALS['domation_auth'] ?? null) ? $GLOBALS['domation_auth'] : [];
+    }
+}
+
+if (!function_exists('domationFormatCreator')) {
+    function domationFormatCreator(?array $row): ?array {
+        if (!$row) {
+            return null;
+        }
+        $creatorId = (int)($row['creator_id'] ?? $row['created_by'] ?? 0);
+        if ($creatorId <= 0) {
+            return null;
+        }
+        return [
+            'id'         => $creatorId,
+            'name'       => $row['creator_name'] ?? '',
+            'email'      => $row['creator_email'] ?? '',
+            'avatar_url' => $row['creator_avatar'] ?? null,
+            'role'       => $row['creator_role'] ?? '',
+        ];
+    }
+}
+
 

@@ -1343,12 +1343,14 @@ button[data-loading="true"],
   overflow-x: auto !important;
 }
 
-table {
+table:not([role="presentation"]):not(.email-canvas-table) {
   width: 100%;
   border-collapse: collapse;
 }
 
-th {
+table:not([role="presentation"]):not(.email-canvas-table) > thead > tr > th,
+table:not([role="presentation"]):not(.email-canvas-table) > tbody > tr > th,
+table:not([role="presentation"]):not(.email-canvas-table) > tr > th {
   text-align: left;
   padding: 0.875rem 1.25rem;
   font-size: 0.725rem;
@@ -1360,7 +1362,8 @@ th {
   border-bottom: 0.5px solid var(--color-border);
 }
 
-td {
+table:not([role="presentation"]):not(.email-canvas-table) > tbody > tr > td,
+table:not([role="presentation"]):not(.email-canvas-table) > tr > td {
   padding: 0.875rem 1.25rem;
   border-bottom: 0.5px solid var(--color-border-light);
   font-size: 0.875rem;
@@ -1368,16 +1371,16 @@ td {
   color: var(--color-text);
 }
 
-tbody tr {
+table:not([role="presentation"]):not(.email-canvas-table) > tbody > tr {
   transition: all 0.15s ease;
   cursor: pointer;
 }
 
-tbody tr:hover {
+table:not([role="presentation"]):not(.email-canvas-table) > tbody > tr:hover {
   background: var(--color-bg);
 }
 
-tbody tr:last-child td {
+table:not([role="presentation"]):not(.email-canvas-table) > tbody > tr:last-child > td {
   border-bottom: none;
 }
 
@@ -1757,9 +1760,9 @@ select:focus {
 .stat-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: 18px !important;
   padding: 1.25rem;
-  box-shadow: var(--shadow-xs);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
 }
 
 .stat-label {
@@ -3813,6 +3816,52 @@ tbody tr.no-hover td:first-child::before {
   display: none !important;
 }
 
+/* ==========================================================================
+   EMAIL CANVAS ISOLATION SHIELD
+   Completely isolates Email Editor nested table markup from global ERP styles
+   (prevents red vertical indicator bars, unwanted td padding, hover backgrounds, and border leaks)
+   ========================================================================== */
+.email-canvas-isolated table,
+.email-canvas-isolated tbody,
+.email-canvas-isolated tr,
+.email-canvas-isolated td {
+  border: 0;
+  border-bottom: none !important;
+  margin: 0;
+  cursor: default;
+  transition: none !important;
+}
+
+.email-canvas-isolated td {
+  padding: 0;
+  vertical-align: top;
+  border-bottom: none !important;
+  font-size: inherit;
+  color: inherit;
+}
+
+.email-canvas-isolated tbody tr,
+.email-canvas-isolated tbody tr:hover,
+.email-canvas-isolated tbody tr td,
+.email-canvas-isolated tbody tr:hover td {
+  background-color: transparent !important;
+  cursor: default;
+}
+
+/* Kill all global pseudo-elements (like red slide-in hover indicators) inside email canvas */
+.email-canvas-isolated tbody tr td:first-child::before,
+.email-canvas-isolated tbody tr:hover td:first-child::before,
+.email-canvas-isolated tr::before,
+.email-canvas-isolated tr::after,
+.email-canvas-isolated td::before,
+.email-canvas-isolated td::after {
+  display: none !important;
+  content: none !important;
+  transform: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
 /* ================================================
    PREMIUM SMOOTHNESS & UX UPGRADE
    ================================================ */
@@ -4097,13 +4146,13 @@ button[class*="Eye"]:active {
   margin-top: 2px !important;
 }
 
-/* Snug list tables */
-table th {
+/* Snug list tables (excluding email editor / presentation tables) */
+table:not([role="presentation"]):not(.email-canvas-table) th:not(.email-canvas-cell) {
   padding: 0.75rem 1rem !important; /* Reduced padding from 1rem */
   font-size: 0.725rem !important;
 }
 
-table td {
+table:not([role="presentation"]):not(.email-canvas-table) td:not(.email-canvas-cell) {
   padding: 0.75rem 1rem !important; /* Reduced padding from 1rem */
   font-size: 0.785rem !important;
 }
@@ -4210,6 +4259,7 @@ textarea:not(.chat-input-textarea), .form-textarea, textarea.form-input, textare
   z-index: var(--drawer-backdrop-z, 2147483615);
   cursor: pointer !important;
   will-change: opacity;
+  transition: opacity 0.22s cubic-bezier(0.25, 0.1, 0.25, 1);
   transform: translate3d(0, 0, 0);
   contain: strict;
 }
@@ -4279,12 +4329,30 @@ header, .navbar {
   border-collapse: collapse !important;
 }
 
-/* Ensure single line content and ellipsis for long text in cells */
-table td, table th {
+/* Ensure single line content and ellipsis for long text in cells (excluding email editor / presentation tables) */
+table:not([role="presentation"]):not(.email-canvas-table) td:not(.email-canvas-cell),
+table:not([role="presentation"]):not(.email-canvas-table) th:not(.email-canvas-cell) {
   white-space: nowrap !important;
   text-overflow: ellipsis !important;
   overflow: hidden !important;
   max-width: 240px !important;
+}
+
+/* Explicit protection for Email Editor Canvas & Email HTML Preview tables */
+.email-canvas-scope table,
+table[role="presentation"] {
+  border-collapse: separate;
+  min-width: 0 !important;
+}
+
+.email-canvas-scope td,
+.email-canvas-scope th,
+table[role="presentation"] td,
+table[role="presentation"] th {
+  white-space: normal !important;
+  text-overflow: clip !important;
+  overflow: visible !important;
+  max-width: none !important;
 }
 
 /* Allow text wrap on specific utility cells if needed */
@@ -5272,7 +5340,12 @@ div[role="status"] {
 
 /* Premium KPI Card Hover Styles Synced with Dashboard */
 .stat-card {
+  border-radius: 18px !important;
   transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 .stat-card.total-card:hover {
   box-shadow: 0 6px 16px rgba(163, 20, 34, 0.15) !important;

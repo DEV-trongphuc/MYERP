@@ -16,22 +16,88 @@ $route = $_GET['route'] ?? null;
 // If you're deploying fresh: run api/db_indexes_audit.sql which includes these columns.
 // Existing production installs already have these columns from a previous deploy.
 
+$actionParam = $_GET['action'] ?? null;
+if (!$route && $actionParam) {
+    $route = $actionParam;
+}
+
+if (($method === 'POST' || $method === 'GET') && $route === 'preview') {
+    $data = $method === 'POST' ? (json_decode(file_get_contents("php://input"), true) ?: []) : $_GET;
+    $segmentId = $data['segment_id'] ?? ($data['id'] ?? $path);
+    $criteriaRaw = $data['criteria'] ?? null;
+
+    require_once 'segment_helper.php';
+    ensureAllCrmContactsSyncedForFilter($pdo, (int)$workspace_id);
+
+    if ($criteriaRaw === null && $segmentId) {
+        $stmtSegCrit = $pdo->prepare("SELECT criteria FROM segments WHERE id = ? AND workspace_id = ? LIMIT 1");
+        $stmtSegCrit->execute([$segmentId, $workspace_id]);
+        $criteriaRaw = $stmtSegCrit->fetchColumn() ?: '[]';
+    }
+
+    $criteriaJson = $criteriaRaw !== null ? (is_string($criteriaRaw) ? $criteriaRaw : json_encode($criteriaRaw)) : '[]';
+    $res = buildSegmentWhereClause($criteriaJson, $workspace_id, $segmentId);
+    $where = $res['sql'];
+    $params = $res['params'];
+
+    try {
+        $countParams = array_merge([$workspace_id], $params);
+        $stmtCount = $pdo->prepare("SELECT COUNT(*) FROM subscribers s WHERE s.status IN ('active', 'lead', 'customer') AND s.workspace_id = ? AND $where");
+        $stmtCount->execute($countParams);
+        $count = (int)$stmtCount->fetchColumn();
+
+        $sampleLimit = min(50, max(5, (int)($data['limit'] ?? 15)));
+        $sqlSample = "
+            SELECT
+                s.id,
+                s.contact_id,
+                s.first_name,
+                s.last_name,
+                COALESCE(NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), ''), c.full_name, 'Khách hàng') AS full_name,
+                s.email,
+                COALESCE(NULLIF(s.phone_number, ''), NULLIF(s.phone, ''), c.phone, c.mobile) AS phone_number,
+                COALESCE(NULLIF(s.program, ''), c.program) AS program,
+                COALESCE(NULLIF(s.salesperson, ''), u.full_name) AS salesperson,
+                COALESCE(NULLIF(s.city, ''), c.city) AS city,
+                s.status,
+                COALESCE(s.stage_id, c.stage_id) AS stage_id,
+                COALESCE(NULLIF(s.pipeline_status, ''), c.pipeline_status) AS pipeline_status,
+                ps.name AS stage_name
+            FROM subscribers s
+            LEFT JOIN contacts c ON c.id = s.contact_id AND c.deleted_at IS NULL
+            LEFT JOIN users u ON u.id = COALESCE(c.owner_id, s.owner_id)
+            LEFT JOIN pipeline_stages ps ON ps.id = COALESCE(c.stage_id, s.stage_id)
+            WHERE s.status IN ('active', 'lead', 'customer')
+              AND s.workspace_id = ?
+              AND $where
+            ORDER BY COALESCE(s.last_activity_at, s.joined_at, s.created_at) DESC
+            LIMIT $sampleLimit
+        ";
+        $stmtSample = $pdo->prepare($sqlSample);
+        $stmtSample->execute($countParams);
+        $items = $stmtSample->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        jsonResponse(true, [
+            'count' => $count,
+            'items' => $items,
+            'sample' => $items
+        ]);
+    } catch (Exception $e) {
+        jsonResponse(false, null, 'Lỗi hệ thống khi xem trước phân khúc: ' . $e->getMessage());
+    }
+}
+
 if ($method === 'POST' && $route === 'estimate') {
     $data = json_decode(file_get_contents("php://input"), true);
-    // Criteria can be passed as 'criteria' key. Array or string.
     $criteriaJson = isset($data['criteria']) ? (is_string($data['criteria']) ? $data['criteria'] : json_encode($data['criteria'])) : '[]';
 
     require_once 'segment_helper.php';
+    ensureAllCrmContactsSyncedForFilter($pdo, (int)$workspace_id);
     $res = buildSegmentWhereClause($criteriaJson, $workspace_id);
-
-    // Default to count all ACTIVE subscribers if no criteria? Or 0?
-    // buildSegmentWhereClause returns 1=1 if empty.
 
     $where = $res['sql'];
     $params = $res['params'];
 
-    // Count query
-    // Use alias 's' because segment_helper uses 's.' prefix
     $sql = "SELECT COUNT(*) FROM subscribers s WHERE s.status IN ('active', 'lead', 'customer') AND s.workspace_id = ? AND $where";
 
     try {
@@ -49,12 +115,13 @@ if ($method === 'POST' && $route === 'estimate') {
 if ($method === 'POST' && $route === 'sync') {
     try {
         require_once 'segment_helper.php';
+        ensureAllCrmContactsSyncedForFilter($pdo, (int)$workspace_id);
         $stmt = $pdo->prepare("SELECT id, criteria FROM segments WHERE workspace_id = ?");
         $stmt->execute([$workspace_id]);
         $segments = $stmt->fetchAll();
         $results = [];
         foreach ($segments as $seg) {
-            $res = buildSegmentWhereClause($seg['criteria'], $workspace_id);
+            $res = buildSegmentWhereClause($seg['criteria'], $workspace_id, $seg['id']);
             $stmtC = $pdo->prepare("SELECT COUNT(*) FROM subscribers s WHERE s.status IN ('active', 'lead', 'customer') AND s.workspace_id = ? AND " . $res['sql']);
             array_unshift($res['params'], $workspace_id);
             $stmtC->execute($res['params']);
@@ -385,10 +452,17 @@ switch ($method) {
                 return;
             }
 
+            $creatorCols = "s.id, s.name, s.description, s.criteria, s.subscriber_count as count, s.phone_count, s.auto_cleanup_days as autoCleanupDays, s.notify_on_join as notifyOnJoin, s.notify_subject as notifySubject, s.notify_email as notifyEmail, s.notify_cc as notifyCc, s.created_at, s.created_by, s.updated_by, u_creator.id AS creator_id, u_creator.full_name AS creator_name, u_creator.email AS creator_email, u_creator.avatar_url AS creator_avatar, u_creator.role AS creator_role";
+
             if (!isset($_GET['page']) && !isset($_GET['limit']) && !isset($_GET['search'])) {
-                $stmt = $pdo->prepare("SELECT id, name, description, criteria, subscriber_count as count, auto_cleanup_days as autoCleanupDays, notify_on_join as notifyOnJoin, notify_subject as notifySubject, notify_email as notifyEmail, notify_cc as notifyCc FROM segments WHERE workspace_id = ? ORDER BY created_at DESC");
+                $stmt = $pdo->prepare("SELECT {$creatorCols} FROM segments s LEFT JOIN users u_creator ON u_creator.id = s.created_by WHERE s.workspace_id = ? ORDER BY s.created_at DESC");
                 $stmt->execute([$workspace_id]);
-                jsonResponse(true, $stmt->fetchAll());
+                $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($rows as &$r) {
+                    $r['creator'] = function_exists('domationFormatCreator') ? domationFormatCreator($r) : null;
+                }
+                unset($r);
+                jsonResponse(true, $rows);
                 return;
             }
 
@@ -398,28 +472,26 @@ switch ($method) {
             $search = $_GET['search'] ?? '';
 
             $params = [$workspace_id];
-            $whereClauses = ["workspace_id = ?"];
+            $whereClauses = ["s.workspace_id = ?"];
             if ($search) {
-                $whereClauses[] = "(name LIKE ? OR description LIKE ?)";
+                $whereClauses[] = "(s.name LIKE ? OR s.description LIKE ?)";
                 $params[] = "%$search%";
                 $params[] = "%$search%";
             }
             $whereSql = " WHERE " . implode(" AND ", $whereClauses);
 
-            $stmtCount = $pdo->prepare("SELECT COUNT(*) FROM segments" . $whereSql);
+            $stmtCount = $pdo->prepare("SELECT COUNT(*) FROM segments s" . $whereSql);
             $stmtCount->execute($params);
             $total = (int) $stmtCount->fetchColumn();
 
-            $sql = "SELECT id, name, description, criteria, subscriber_count as count, phone_count, auto_cleanup_days as autoCleanupDays, notify_on_join as notifyOnJoin, notify_subject as notifySubject, notify_email as notifyEmail, notify_cc as notifyCc FROM segments" . $whereSql . " ORDER BY created_at DESC LIMIT $limit OFFSET $offset";
+            $sql = "SELECT {$creatorCols} FROM segments s LEFT JOIN users u_creator ON u_creator.id = s.created_by" . $whereSql . " ORDER BY s.created_at DESC LIMIT $limit OFFSET $offset";
             $stmt = $pdo->prepare($sql);
             $stmt->execute($params);
-            $segments = $stmt->fetchAll();
-
-            // [FIX] Read phone_count from cached column in segments table instead of running
-            // a live COUNT(*) per segment on every page load. With 50 segments/page at 10M
-            // subscribers, the old approach ran 50 full-table COUNT queries = 10-30s load time.
-            // phone_count is now maintained async via segment_count_update_queue worker.
-            // (No per-segment loop needed — phone_count already in SELECT above)
+            $segments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($segments as &$r) {
+                $r['creator'] = function_exists('domationFormatCreator') ? domationFormatCreator($r) : null;
+            }
+            unset($r);
 
             jsonResponse(true, [
                 'data' => $segments,
@@ -439,15 +511,28 @@ switch ($method) {
         try {
             $data = json_decode(file_get_contents("php://input"), true);
             $id = $data['id'] ?? uniqid();
-            $criteria = is_string($data['criteria']) ? $data['criteria'] : json_encode($data['criteria']);
+            $criteria = isset($data['criteria']) ? (is_string($data['criteria']) ? $data['criteria'] : json_encode($data['criteria'])) : '[]';
             $notifyOnJoin = isset($data['notifyOnJoin']) && $data['notifyOnJoin'] ? 1 : 0;
             $notifySubject = $data['notifySubject'] ?? null;
             $notifyEmail = $data['notifyEmail'] ?? null;
             $notifyCc = $data['notifyCc'] ?? null;
-            
-            $stmt = $pdo->prepare("INSERT INTO segments (workspace_id, id, name, description, criteria, subscriber_count, auto_cleanup_days, notify_on_join, notify_subject, notify_email, notify_cc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$workspace_id, $id, $data['name'], $data['description'], $criteria, $data['count'], $data['autoCleanupDays'], $notifyOnJoin, $notifySubject, $notifyEmail, $notifyCc]);
+            $actorUserId = function_exists('get_current_user_id') ? get_current_user_id() : null;
+
+            require_once 'segment_helper.php';
+            ensureAllCrmContactsSyncedForFilter($pdo, (int)$workspace_id);
+            $res = buildSegmentWhereClause($criteria, $workspace_id, $id);
+            $cntParams = array_merge([$workspace_id], $res['params']);
+            $stmtCnt = $pdo->prepare("SELECT COUNT(*), COUNT(CASE WHEN (s.phone_number IS NOT NULL AND s.phone_number != '') OR (s.phone IS NOT NULL AND s.phone != '') THEN 1 END) FROM subscribers s WHERE s.status IN ('active', 'lead', 'customer') AND s.workspace_id = ? AND " . $res['sql']);
+            $stmtCnt->execute($cntParams);
+            [$computedCount, $computedPhoneCount] = $stmtCnt->fetch(PDO::FETCH_NUM) ?: [0, 0];
+
+            $stmt = $pdo->prepare("INSERT INTO segments (workspace_id, id, name, description, criteria, subscriber_count, phone_count, auto_cleanup_days, notify_on_join, notify_subject, notify_email, notify_cc, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$workspace_id, $id, $data['name'] ?? '', $data['description'] ?? '', $criteria, (int)$computedCount, (int)$computedPhoneCount, $data['autoCleanupDays'] ?? null, $notifyOnJoin, $notifySubject, $notifyEmail, $notifyCc, $actorUserId, $actorUserId]);
             $data['id'] = $id;
+            $data['count'] = (int)$computedCount;
+            $data['phone_count'] = (int)$computedPhoneCount;
+            $data['created_by'] = $actorUserId;
+            $data['updated_by'] = $actorUserId;
             jsonResponse(true, $data);
         } catch (Exception $e) {
             jsonResponse(false, null, 'Lỗi hệ thống, vui lòng thử lại.');
@@ -459,14 +544,25 @@ switch ($method) {
             if (!$path)
                 jsonResponse(false, null, 'ID required');
             $data = json_decode(file_get_contents("php://input"), true);
-            $criteria = is_string($data['criteria']) ? $data['criteria'] : json_encode($data['criteria']);
+            $criteria = isset($data['criteria']) ? (is_string($data['criteria']) ? $data['criteria'] : json_encode($data['criteria'])) : '[]';
             $notifyOnJoin = isset($data['notifyOnJoin']) && $data['notifyOnJoin'] ? 1 : 0;
             $notifySubject = $data['notifySubject'] ?? null;
             $notifyEmail = $data['notifyEmail'] ?? null;
             $notifyCc = $data['notifyCc'] ?? null;
-            
-            $stmt = $pdo->prepare("UPDATE segments SET name=?, description=?, criteria=?, subscriber_count=?, auto_cleanup_days=?, notify_on_join=?, notify_subject=?, notify_email=?, notify_cc=? WHERE id=? AND workspace_id=?");
-            $stmt->execute([$data['name'], $data['description'], $criteria, $data['count'], $data['autoCleanupDays'], $notifyOnJoin, $notifySubject, $notifyEmail, $notifyCc, $path, $workspace_id]);
+            $actorUserId = function_exists('get_current_user_id') ? get_current_user_id() : null;
+
+            require_once 'segment_helper.php';
+            ensureAllCrmContactsSyncedForFilter($pdo, (int)$workspace_id);
+            $res = buildSegmentWhereClause($criteria, $workspace_id, $path);
+            $cntParams = array_merge([$workspace_id], $res['params']);
+            $stmtCnt = $pdo->prepare("SELECT COUNT(*), COUNT(CASE WHEN (s.phone_number IS NOT NULL AND s.phone_number != '') OR (s.phone IS NOT NULL AND s.phone != '') THEN 1 END) FROM subscribers s WHERE s.status IN ('active', 'lead', 'customer') AND s.workspace_id = ? AND " . $res['sql']);
+            $stmtCnt->execute($cntParams);
+            [$computedCount, $computedPhoneCount] = $stmtCnt->fetch(PDO::FETCH_NUM) ?: [0, 0];
+
+            $stmt = $pdo->prepare("UPDATE segments SET name=?, description=?, criteria=?, subscriber_count=?, phone_count=?, auto_cleanup_days=?, notify_on_join=?, notify_subject=?, notify_email=?, notify_cc=?, updated_by=? WHERE id=? AND workspace_id=?");
+            $stmt->execute([$data['name'] ?? '', $data['description'] ?? '', $criteria, (int)$computedCount, (int)$computedPhoneCount, $data['autoCleanupDays'] ?? null, $notifyOnJoin, $notifySubject, $notifyEmail, $notifyCc, $actorUserId, $path, $workspace_id]);
+            $data['count'] = (int)$computedCount;
+            $data['phone_count'] = (int)$computedPhoneCount;
             jsonResponse(true, $data);
         } catch (Exception $e) {
             jsonResponse(false, null, 'Lỗi hệ thống, vui lòng thử lại.');

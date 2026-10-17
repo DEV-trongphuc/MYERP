@@ -5,7 +5,7 @@ import {
     Plus, TrendingUp, MousePointerClick,
     CheckCircle2, GitMerge, GitBranch, RefreshCw, FileText, CalendarClock, PieChart, Send, MailOpen, Paperclip, File as FileIcon,
     Search, ChevronLeft, ChevronRight, X, BarChart2, Calendar, Users, MailCheck, Activity, Zap, ExternalLink, Mail, Bell, Clock, Activity as ActivityIcon, MousePointer2, BadgeCheck, FileBarChart, MousePointerClick as ClickIcon,
-    Layers, List, AlertOctagon, UserMinus, History, Tag, Loader2, ShieldCheck, Smartphone, Globe, Laptop, Trash2, Monitor, Flame, Link as LinkIcon, PauseCircle, PlayCircle, ArrowLeft,
+    Layers, List, AlertOctagon, UserMinus, History, Tag, Loader2, ShieldCheck, Smartphone, Globe, Laptop, Trash2, Monitor, Flame, Link as LinkIcon, PauseCircle, PlayCircle,
     Edit2, Check
 } from 'lucide-react';
 import {
@@ -42,7 +42,7 @@ interface CampaignDetailDrawerProps {
 }
 
 const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
-    campaign, isOpen, onClose, allLists, allSegments, allTags, allFlows, onRename
+    campaign, isOpen, onClose: _onClose, allLists, allSegments, allTags, allFlows, onRename
 }) => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('overview');
@@ -210,6 +210,15 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
         fetchingList: boolean;
     }>({ isOpen: false, loading: false, list: [], page: 1, totalPages: 1, total: 0, fetchingList: false });
 
+    const onClose = React.useCallback(() => {
+        setAnimateIn(false);
+        setTimeout(() => {
+            setIsVisible(false);
+            setLocalCampaign(null);
+            _onClose();
+        }, 220);
+    }, [_onClose]);
+
     useEffect(() => {
         if (!isOpen) return;
         return pushOverlay('campaign-detail-drawer', onClose, 2000);
@@ -228,14 +237,20 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
             }
 
             setIsVisible(true);
-            const timer = setTimeout(() => setAnimateIn(true), 10);
-            return () => clearTimeout(timer);
+            let raf2 = 0;
+            const raf1 = requestAnimationFrame(() => {
+                raf2 = requestAnimationFrame(() => setAnimateIn(true));
+            });
+            return () => {
+                cancelAnimationFrame(raf1);
+                cancelAnimationFrame(raf2);
+            };
         } else if (!isOpen) {
             setAnimateIn(false);
             const timer = setTimeout(() => {
                 setIsVisible(false);
                 setLocalCampaign(null);
-            }, 500);
+            }, 220);
             return () => clearTimeout(timer);
         }
     }, [campaign, isOpen]);
@@ -459,7 +474,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
         }
     }, [localCampaign?.attachments]);
 
-    if (!localCampaign) return null;
+    if (!localCampaign || !isVisible) return null;
 
     const stats = localCampaign.stats || { sent: 0, opened: 0, clicked: 0, bounced: 0, spam: 0, unsubscribed: 0, failed: 0 };
     // Real Calculations
@@ -548,7 +563,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
         })();
 
         return (
-            <div className="stat-card bg-white dark:bg-slate-900 p-5 md:p-6 rounded-2xl md:rounded-[24px] border border-slate-100/70 dark:border-slate-800/80 shadow-[0_2px_8px_rgba(0,0,0,0.02)] hover:shadow-[0_12px_36px_rgba(0,0,0,0.035)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden flex items-center justify-between group cursor-pointer">
+            <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-[14px] md:rounded-[18px] border border-slate-100/70 dark:border-slate-800/80 shadow-[0_2px_8px_rgba(0,0,0,0.02)] hover:shadow-[0_12px_36px_rgba(0,0,0,0.035)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden flex items-center justify-between group cursor-pointer">
                 {decorSvg && (
                     <div className="decor-svg" style={{ color: accentColor }}>
                         {decorSvg}
@@ -568,28 +583,30 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
 
     return ReactDOM.createPortal(
         <div
-            className={`fixed inset-0 flex justify-end ${isVisible ? 'pointer-events-auto' : 'pointer-events-none'}`}
-            style={{ zIndex: 2147483625 }}
+            className={`fixed inset-0 z-[2147483625] flex justify-end ${animateIn ? 'pointer-events-auto' : 'pointer-events-none'}`}
+            style={{ zIndex: 2147483625, pointerEvents: animateIn ? 'auto' : 'none' }}
         >
-            <div className={`absolute inset-0 bg-black/80 backdrop-blur-[2px] transition-opacity duration-500 ${animateIn ? 'opacity-100' : 'opacity-0'}`} onClick={onClose} />
-            
-            {/* Floating Back Button on Backdrop */}
-            <div 
-                className={`hidden lg:flex absolute left-0 top-0 bottom-0 w-[var(--sidebar-width,220px)] items-center justify-center z-40 transition-opacity duration-500 ${animateIn ? 'opacity-100' : 'opacity-0'}`}
-                style={{ pointerEvents: 'none' }}
-            >
-                <button
-                    onClick={onClose}
-                    className="w-12 h-12 rounded-full bg-slate-900/60 hover:bg-slate-900/80 text-white flex items-center justify-center shadow-2xl border border-slate-700/50 backdrop-blur-md transition-all duration-300 hover:scale-110 active:scale-95 cursor-pointer"
-                    style={{ pointerEvents: 'auto' }}
-                    title="Quay lại"
-                >
-                    <ArrowLeft className="w-6 h-6" />
-                </button>
-            </div>
+            <div
+                className="drawer-backdrop"
+                onClick={onClose}
+                style={{
+                    opacity: animateIn ? 1 : 0,
+                    transition: 'opacity 0.22s cubic-bezier(0.25, 0.1, 0.25, 1)',
+                    pointerEvents: animateIn ? 'auto' : 'none',
+                    zIndex: 2147483620,
+                    '--drawer-backdrop-z': 2147483620
+                } as React.CSSProperties}
+            />
 
             <div
-                className={`campaign-detail-drawer relative w-full bg-[var(--color-bg)] border-l border-[var(--color-border)] shadow-2xl h-full lg:h-screen flex flex-col transition-all duration-500 cubic-bezier(0.16, 1, 0.3, 1) ${animateIn ? 'translate-x-0 opacity-100' : 'translate-x-full lg:translate-x-[100px] opacity-0'}`}
+                className="drawer-panel fixed top-0 right-0 bottom-0 z-[2147483625] campaign-detail-drawer w-full bg-[var(--color-bg)] border-l border-[var(--color-border)] shadow-2xl h-full lg:h-screen flex flex-col"
+                style={{
+                    zIndex: 2147483625,
+                    opacity: animateIn ? 1 : 0,
+                    transform: animateIn ? 'translate3d(0, 0, 0)' : 'translate3d(48px, 0, 0)',
+                    transition: 'transform 0.22s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.20s cubic-bezier(0.25, 0.1, 0.25, 1)',
+                    pointerEvents: animateIn ? 'auto' : 'none'
+                }}
             >
                 {/* Header */}
                 <div className="bg-[var(--color-surface)] border-b border-[var(--color-border)] px-4 md:px-8 py-4 md:py-5 flex flex-col sm:flex-row justify-between items-start gap-4 shrink-0 shadow-sm z-30">
@@ -708,7 +725,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                         </Button>
                         <button
                             onClick={onClose}
-                            className="p-2 md:p-3 text-slate-400 hover:text-[var(--color-text)] hover:bg-[var(--color-bg)] rounded-xl md:rounded-2xl transition-all"
+                            className="p-2 md:p-3 text-slate-400 hover:text-[var(--color-text)] hover:bg-[var(--color-bg)] rounded-xl md:rounded-[14px] transition-all"
                         >
                             <X className="w-5 h-5 md:w-6 md:h-6" />
                         </button>
@@ -746,11 +763,11 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                     {activeTab === 'overview' && (
                         <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-8">
                             {localCampaign.status === 'sending' && (
-                                <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 rounded-2xl border border-blue-500/30 p-6 shadow-xl shadow-blue-950/20 text-white relative overflow-hidden flex flex-col gap-4">
+                                <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 rounded-[14px] border border-blue-500/30 p-6 shadow-xl shadow-blue-950/20 text-white relative overflow-hidden flex flex-col gap-4">
                                     <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-400/10 rounded-full blur-[60px] pointer-events-none" />
                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
                                         <div className="flex items-center gap-3.5">
-                                            <div className="w-12 h-12 bg-blue-500/20 text-cyan-300 border border-cyan-400/30 rounded-2xl flex items-center justify-center shadow-inner relative">
+                                            <div className="w-12 h-12 bg-blue-500/20 text-cyan-300 border border-cyan-400/30 rounded-[14px] flex items-center justify-center shadow-inner relative">
                                                 <Send className="w-6 h-6 animate-pulse" />
                                                 <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
                                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
@@ -832,8 +849,8 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
 
                             {/* [FIX P8-C3] Dedicated PAUSED banner — shows Circuit Breaker warning + Resume button */}
                             {localCampaign.status === 'paused' && (
-                                <div className="p-1 bg-orange-50 rounded-[28px] overflow-hidden border border-orange-100">
-                                    <div className="bg-white p-6 rounded-[24px] border border-orange-100 shadow-sm flex flex-col gap-4">
+                                <div className="p-1 bg-orange-50 rounded-[18px] overflow-hidden border border-orange-100">
+                                    <div className="bg-white p-6 rounded-[18px] border border-orange-100 shadow-sm flex flex-col gap-4">
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-10 h-10 bg-orange-50 text-orange-600 border border-orange-200 rounded-xl flex items-center justify-center">
@@ -865,7 +882,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                             <button
                                                 onClick={handleTriggerRefresh}
                                                 disabled={refreshLoading}
-                                                className="px-4 py-2 bg-orange-500 text-white text-[10px] font-black uppercase rounded-xl hover:bg-orange-600 transition-all flex items-center gap-2 shadow-md shadow-orange-500/20"
+                                                className="px-4 py-2 bg-[var(--color-primary)] text-white text-[10px] font-black uppercase rounded-xl hover:opacity-95 transition-all flex items-center gap-2 shadow-md shadow-orange-500/20"
                                                 title="Khởi động lại chiến dịch — hệ thống sẽ tiếp tục gửi từ subscriber chưa nhận được email"
                                             >
                                                 {refreshLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PlayCircle className="w-3.5 h-3.5" />}
@@ -885,9 +902,9 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                 return (
                                     <div className="flex flex-col gap-4">
                                         {associatedFlow && (
-                                            <div className="bg-gradient-to-r from-blue-900 via-indigo-950 to-slate-950 p-6 rounded-[24px] shadow-lg shadow-indigo-900/20 text-white flex flex-col md:flex-row items-center justify-between gap-6 animate-in fade-in zoom-in duration-500 border border-white/5">
+                                            <div className="bg-gradient-to-r from-blue-900 via-indigo-950 to-slate-950 p-6 rounded-[18px] shadow-lg shadow-indigo-900/20 text-white flex flex-col md:flex-row items-center justify-between gap-6 animate-in fade-in zoom-in duration-500 border border-white/5">
                                                 <div className="flex items-center gap-4">
-                                                    <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center">
+                                                    <div className="w-12 h-12 bg-white/10 rounded-[14px] flex items-center justify-center">
                                                         <GitBranch className="w-6 h-6 text-orange-300" />
                                                     </div>
                                                     <div>
@@ -910,9 +927,9 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                         )}
 
                                         {(localCampaign.stats?.failed || 0) > 0 && (
-                                            <div className="bg-rose-50 border border-rose-100 p-5 rounded-[24px] flex flex-col md:flex-row items-center justify-between gap-4 animate-in slide-in-from-top-4 duration-500">
+                                            <div className="bg-rose-50 border border-rose-100 p-5 rounded-[18px] flex flex-col md:flex-row items-center justify-between gap-4 animate-in slide-in-from-top-4 duration-500">
                                                 <div className="flex items-center gap-4">
-                                                    <div className="w-12 h-12 bg-rose-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-rose-500/20">
+                                                    <div className="w-12 h-12 bg-rose-500 text-white rounded-[14px] flex items-center justify-center shadow-lg shadow-rose-500/20">
                                                         <AlertOctagon className="w-6 h-6" />
                                                     </div>
                                                     <div>
@@ -1036,7 +1053,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                     {/* Detailed List */}
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                         {funnelData.map((item, idx) => (
-                                            <div key={idx} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3">
+                                            <div key={idx} className="bg-white p-4 rounded-[14px] border border-slate-100 shadow-sm flex items-center gap-3">
                                                 <div className="p-2 rounded-xl bg-slate-50 text-slate-500"><item.icon className="w-4 h-4" /></div>
                                                 <div>
                                                     <p className="text-[10px] text-slate-400 font-bold uppercase">{item.name.split(' (')[0]}</p>
@@ -1105,16 +1122,16 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                                 </div>
                                                 <div className="flex justify-between items-center text-xs group cursor-pointer" onClick={() => handleNavigateToAudienceFilter('unsubscribed')}>
                                                     <div className="flex items-center gap-2">
-                                                        <div className={`w-2 h-2 rounded-full ${isZns ? 'bg-[#ca7900]' : 'bg-[#ca7900]'}`} />
+                                                        <div className={`w-2 h-2 rounded-full ${isZns ? 'bg-[#BD1D2D]' : 'bg-[#BD1D2D]'}`} />
                                                         <span className="text-slate-600 font-bold group-hover:text-blue-600 transition-colors">{isZns ? 'Hủy đăng ký (Unsub)' : 'Hủy đăng ký (Unsub)'}</span>
                                                     </div>
-                                                    <span className="font-mono font-bold text-[#ca7900]">{isZns ? '0.00% (0)' : `${unsubRate}% (${stats.unsubscribed})`}</span>
+                                                    <span className="font-mono font-bold text-[#BD1D2D]">{isZns ? '0.00% (0)' : `${unsubRate}% (${stats.unsubscribed})`}</span>
                                                 </div>
                                             </div>
                                         </div>
                                     </Card>
 
-                                    <div className="p-5 bg-blue-50 border border-blue-100 rounded-[24px] relative overflow-hidden">
+                                    <div className="p-5 bg-blue-50 border border-blue-100 rounded-[18px] relative overflow-hidden">
                                         <div className="absolute -right-4 -top-4 w-20 h-20 bg-blue-200 rounded-full opacity-20 blur-xl" />
                                         <h4 className="text-xs font-black text-blue-800 uppercase tracking-widest mb-3">Thông tin gửi</h4>
                                         <div className="space-y-2 text-[11px]">
@@ -1149,7 +1166,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
 
                     {activeTab === 'content' && (
                         <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-6">
-                            <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl w-fit">
+                            <div className="flex gap-2 p-1 bg-slate-100 rounded-[14px] w-fit">
                                 <button
                                     onClick={() => setPreviewType('main')}
                                     className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${previewType === 'main' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
@@ -1169,7 +1186,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
 
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                 <div className="lg:col-span-2 space-y-4">
-                                    <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm min-h-[950px] flex flex-col">
+                                    <div className="bg-white p-5 rounded-[18px] border border-slate-100 shadow-sm min-h-[950px] flex flex-col">
                                         <div className="mb-4 pb-4 border-b border-slate-50 flex justify-between items-center">
                                             <div>
                                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Tiêu đề bản tin</p>
@@ -1194,7 +1211,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                                 </button>
                                             </div>
                                         </div>
-                                        <div className="h-[900px] bg-[#fcfcfc] rounded-2xl border border-slate-50 shadow-inner overflow-hidden relative flex justify-center items-start">
+                                        <div className="h-[900px] bg-[#fcfcfc] rounded-[14px] border border-slate-50 shadow-inner overflow-hidden relative flex justify-center items-start">
                                             {previewContent.loading ? (
                                                 <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 gap-3">
                                                     <RefreshCw className="w-8 h-8 animate-spin" />
@@ -1202,7 +1219,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                                 </div>
                                             ) : (
                                                 <div className={`h-full transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${previewMode === 'mobile' ? 'w-[400px] py-8' : 'w-full py-0'}`}>
-                                                    <div className={`w-full h-full overflow-hidden transition-all duration-500 ${previewMode === 'mobile' ? 'rounded-[40px] shadow-[0_0_0_12px_#1e293b,0_20px_40px_rgba(0,0,0,0.2)] bg-white relative' : ''}`}>
+                                                    <div className={`email-canvas-scope w-full h-full overflow-hidden transition-all duration-500 ${previewMode === 'mobile' ? 'rounded-[18px] shadow-[0_0_0_12px_#1e293b,0_20px_40px_rgba(0,0,0,0.2)] bg-white relative' : ''}`}>
                                                         {previewMode === 'mobile' && (
                                                             <>
                                                                 <div className="absolute top-0 inset-x-0 h-6 bg-white z-10 flex justify-center">
@@ -1226,7 +1243,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                 </div>
 
                                 <div className="space-y-6">
-                                    <div className="bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm">
+                                    <div className="bg-white p-6 rounded-[18px] border border-slate-100 shadow-sm">
                                         <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest mb-4 flex items-center gap-2">
                                             <Clock className="w-4 h-4 text-blue-500" />
                                             {previewType === 'main' ? 'Lịch trình gửi chính' : 'Lịch nhắc nhở'}
@@ -1234,11 +1251,11 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
 
                                         {previewType === 'main' ? (
                                             <div className="space-y-4">
-                                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                                <div className="p-4 bg-slate-50 rounded-[14px] border border-slate-100">
                                                     <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Trạng thái</p>
                                                     <Badge variant={isSent ? 'success' : 'info'} className="text-[10px] font-bold">{localCampaign.status}</Badge>
                                                 </div>
-                                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                                <div className="p-4 bg-slate-50 rounded-[14px] border border-slate-100">
                                                     <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Thời gian</p>
                                                     <p className="text-xs font-bold text-slate-700">
                                                         {localCampaign.sentAt ? new Date(localCampaign.sentAt).toLocaleString('vi-VN') : (localCampaign.scheduledAt ? new Date(localCampaign.scheduledAt).toLocaleString('vi-VN') : 'Dự kiến ngay')}
@@ -1249,13 +1266,13 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                             const rem = localCampaign.reminders?.find(r => r.id === previewType);
                                             return rem ? (
                                                 <div className="space-y-4">
-                                                    <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100">
+                                                    <div className="p-4 bg-orange-50 rounded-[14px] border border-orange-100">
                                                         <p className="text-[10px] font-bold text-orange-400 uppercase mb-1">Loại kích hoạt</p>
                                                         <p className="text-xs font-bold text-orange-700">
                                                             {rem.type === 'no_open' ? 'Gửi nếu chưa mở Mail chính' : (rem.type === 'no_click' ? 'Gửi nếu chưa nhấn link' : 'Gửi cho tất cả')}
                                                         </p>
                                                     </div>
-                                                    <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                                                    <div className="p-4 bg-blue-50 rounded-[14px] border border-blue-100">
                                                         <p className="text-[10px] font-bold text-blue-400 uppercase mb-1">Thời gian chờ</p>
                                                         <p className="text-xs font-bold text-blue-700">
                                                             {rem.triggerMode === 'delay' ? `Sau ${rem.delayDays} ngày ${rem.delayHours} giờ` : `Vào lúc: ${rem.scheduledAt ? new Date(rem.scheduledAt).toLocaleString('vi-VN') : 'Chưa đặt'}`}
@@ -1267,7 +1284,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                     </div>
 
                                     {previewType !== 'main' && (
-                                        <div className="bg-emerald-50 p-6 rounded-[24px] border border-emerald-100">
+                                        <div className="bg-emerald-50 p-6 rounded-[18px] border border-emerald-100">
                                             <p className="text-[10px] font-bold text-emerald-600 uppercase mb-2 flex items-center gap-1.5"><Zap className="w-3.5 h-3.5" /> Gợi ý</p>
                                             <p className="text-xs text-emerald-800 leading-relaxed font-medium">Nhắc nhở này giúp tăng thêm **15-20%** tỷ lệ chuyển đổi cho những người bỏ lỡ email đầu tiên.</p>
                                         </div>
@@ -1280,7 +1297,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                         const displayedAttachments = parsedAttachments.slice((attachmentPage - 1) * ATTACHMENTS_PER_PAGE, attachmentPage * ATTACHMENTS_PER_PAGE);
 
                                         return (
-                                            <div className="bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm flex flex-col">
+                                            <div className="bg-white p-6 rounded-[18px] border border-slate-100 shadow-sm flex flex-col">
                                                 <div className="flex items-center justify-between mb-4">
                                                     <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
                                                         <Paperclip className="w-4 h-4 text-blue-500" />
@@ -1355,7 +1372,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
 
                                     {/* Link Summary Card */}
                                     {previewType === 'main' && uniqueLinks.length > 0 && (
-                                        <div className="bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm flex flex-col">
+                                        <div className="bg-white p-6 rounded-[18px] border border-slate-100 shadow-sm flex flex-col">
                                             <div className="flex items-center justify-between mb-4">
                                                 <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
                                                     <LinkIcon className="w-4 h-4 text-orange-500" />
@@ -1441,7 +1458,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                             <Button
                                                 onClick={() => setShowRefreshConfirm(true)}
                                                 variant="primary"
-                                                className="!rounded-2xl shadow-xl shadow-amber-600/20"
+                                                className="!rounded-[14px] shadow-xl shadow-amber-600/20"
                                                 icon={Send}
                                             >
                                                 Gửi cho {audienceStats.gap} người mới
@@ -1459,7 +1476,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                 </div>
                                 <div className="p-6 space-y-3">
                                     {targetLists.length > 0 ? targetLists.map(list => (
-                                        <div key={list.id} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
+                                        <div key={list.id} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-[14px] shadow-sm">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center border border-indigo-100"><List className="w-5 h-5" /></div>
                                                 <div>
@@ -1470,7 +1487,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                             <span className="text-sm font-black text-slate-800 bg-slate-100 px-3 py-1 rounded-full">{(list.count || 0).toLocaleString()}</span>
                                         </div>
                                     )) : (
-                                        <p className="text-xs text-slate-400 italic text-center py-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-100 font-bold uppercase tracking-widest">Không có danh sách nào được chọn</p>
+                                        <p className="text-xs text-slate-400 italic text-center py-6 bg-slate-50 rounded-[14px] border-2 border-dashed border-slate-100 font-bold uppercase tracking-widest">Không có danh sách nào được chọn</p>
                                     )}
                                 </div>
                             </Card>
@@ -1483,9 +1500,9 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                 </div>
                                 <div className="p-6 space-y-3">
                                     {targetSegments.length > 0 ? targetSegments.map(segment => (
-                                        <div key={segment.id} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
+                                        <div key={segment.id} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-[14px] shadow-sm">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 bg-orange-50 text-[#ca7900] flex items-center justify-center border border-orange-100"><Layers className="w-5 h-5" /></div>
+                                                <div className="w-10 h-10 bg-orange-50 text-[#BD1D2D] flex items-center justify-center border border-orange-100"><Layers className="w-5 h-5" /></div>
                                                 <div>
                                                     <p className="text-sm font-bold text-slate-800">{segment.name}</p>
                                                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Dynamic Segment</p>
@@ -1494,7 +1511,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                             <span className="text-sm font-black text-slate-800 bg-slate-100 px-3 py-1 rounded-full">{(segment.count || 0).toLocaleString()}</span>
                                         </div>
                                     )) : (
-                                        <p className="text-xs text-slate-400 italic text-center py-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-100 font-bold uppercase tracking-widest">Không có phân khúc nào được chọn</p>
+                                        <p className="text-xs text-slate-400 italic text-center py-6 bg-slate-50 rounded-[14px] border-2 border-dashed border-slate-100 font-bold uppercase tracking-widest">Không có phân khúc nào được chọn</p>
                                     )}
                                 </div>
                             </Card>
@@ -1507,7 +1524,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                 </div>
                                 <div className="p-6 space-y-3">
                                     {targetTags.length > 0 ? targetTags.map(tag => (
-                                        <div key={tag.id} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
+                                        <div key={tag.id} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-[14px] shadow-sm">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center border border-emerald-100"><Tag className="w-5 h-5" /></div>
                                                 <div>
@@ -1518,7 +1535,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                             <span className="text-sm font-black text-slate-800 bg-slate-100 px-3 py-1 rounded-full">{tag.count.toLocaleString()}</span>
                                         </div>
                                     )) : (
-                                        <p className="text-xs text-slate-400 italic text-center py-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-100 font-bold uppercase tracking-widest">Không có nhãn nào được chọn</p>
+                                        <p className="text-xs text-slate-400 italic text-center py-6 bg-slate-50 rounded-[14px] border-2 border-dashed border-slate-100 font-bold uppercase tracking-widest">Không có nhãn nào được chọn</p>
                                     )}
                                 </div>
                             </Card>
@@ -1548,7 +1565,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                 </button>
                             </div>
 
-                            <div className="flex justify-between gap-4 items-center bg-slate-50 p-3 rounded-2xl border border-slate-100 flex-wrap">
+                            <div className="flex justify-between gap-4 items-center bg-slate-50 p-3 rounded-[14px] border border-slate-100 flex-wrap">
                                 <div className="flex-1 relative group bg-white rounded-xl border border-slate-200 h-10 flex items-center overflow-hidden w-full">
                                     <Search className="w-4 h-4 ml-4 text-slate-400" />
                                     <input
@@ -1664,7 +1681,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                 Bạn đang kích hoạt gửi email chính cho những thành viên mới gia nhập danh sách/phân khúc mục tiêu.
                             </p>
                             <div className="space-y-4">
-                                <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex gap-4">
+                                <div className="p-4 bg-amber-50 rounded-[14px] border border-amber-100 flex gap-4">
                                     <Bell className="w-5 h-5 text-amber-600 shrink-0" />
                                     <div className="space-y-1 text-left">
                                         <p className="text-xs font-black text-amber-900 uppercase tracking-wider">Lưu ý về Reminders</p>
@@ -1673,7 +1690,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                         </p>
                                     </div>
                                 </div>
-                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex gap-4">
+                                <div className="p-4 bg-slate-50 rounded-[14px] border border-slate-100 flex gap-4">
                                     <Clock className="w-5 h-5 text-slate-400 shrink-0" />
                                     <div className="space-y-1 text-left">
                                         <p className="text-xs font-black text-slate-900 uppercase tracking-wider">Reminder Ngày cố định</p>
@@ -1692,6 +1709,8 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                     onClose={() => setShowTestModal(false)}
                     campaignId={localCampaign.id}
                     campaignName={localCampaign.name}
+                    defaultSenderEmail={localCampaign.senderEmail || (localCampaign as any).sender_email}
+                    defaultSenderName={localCampaign.senderName || (localCampaign as any).sender_name}
                 />
 
                 <ConfirmModal

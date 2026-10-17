@@ -148,16 +148,31 @@ export function usePageActive(routePath?: string): boolean {
         document.addEventListener('visibilitychange', onChange);
         return () => document.removeEventListener('visibilitychange', onChange);
     }, []);
-    const routeActive = !routePath || location.pathname === routePath;
+    const normalizedCurrent = (location.pathname || '').replace(/\/+$/, '') || '/';
+    const normalizedTarget = routePath ? routePath.replace(/\/+$/, '') || '/' : '';
+    const routeActive = !routePath || normalizedCurrent === normalizedTarget || (normalizedTarget !== '/' && normalizedCurrent.startsWith(`${normalizedTarget}/`));
     return visible && routeActive;
 }
 
-/** Returns a ref'd AbortController factory: each call aborts the previous request; aborted on unmount. */
+/** Returns a ref'd AbortController factory: reuses active signal for same key; aborts when key changes or on unmount. */
 export function useAbortable() {
     const ref = useRef<AbortController | null>(null);
-    useEffect(() => () => ref.current?.abort(), []);
-    return useCallback(() => {
-        ref.current?.abort();
+    const activeKeyRef = useRef<string | null>(null);
+    useEffect(() => {
+        return () => {
+            ref.current?.abort();
+            ref.current = null;
+            activeKeyRef.current = null;
+        };
+    }, []);
+    return useCallback((key?: string) => {
+        if (key && activeKeyRef.current === key && ref.current && !ref.current.signal.aborted) {
+            return ref.current.signal;
+        }
+        if (ref.current && !ref.current.signal.aborted) {
+            ref.current.abort();
+        }
+        activeKeyRef.current = key || null;
         ref.current = new AbortController();
         return ref.current.signal;
     }, []);

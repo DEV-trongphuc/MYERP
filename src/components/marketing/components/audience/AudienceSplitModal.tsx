@@ -1,8 +1,10 @@
 import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Scissors, Loader2, Phone, CheckCircle2, Filter, Plus, FileText, ArrowRight, Trash2, Zap, ChevronDown, Check, Calculator, ArrowDown, Shuffle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../../services/storageAdapter';
+import { getMktPortalRoot } from '../../utils/portalRoot';
 
 interface AudienceSplitModalProps {
     sourceId: string;
@@ -223,7 +225,7 @@ const AudienceSplitModal: React.FC<AudienceSplitModalProps> = ({ sourceId, sourc
         }
     };
 
-    return (
+    return createPortal(
         <div className="fixed inset-0 z-[110000] flex items-center justify-center p-4">
             <div
                 className={`absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity duration-300 ease-out ${animateIn ? 'opacity-100' : 'opacity-0'}`}
@@ -231,16 +233,16 @@ const AudienceSplitModal: React.FC<AudienceSplitModalProps> = ({ sourceId, sourc
             />
             <div
                 style={{ transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }}
-                className={`bg-white rounded-[28px] shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] overflow-hidden ring-1 ring-white/20 font-sans relative transform transition-all duration-500 ${animateIn ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-8'}`}
+                className={`bg-white rounded-[18px] shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] overflow-hidden ring-1 ring-white/20 font-sans relative transform transition-all duration-500 ${animateIn ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-8'}`}
             >
 
                 {isLoading && (
-                    <div className="absolute inset-0 bg-white/80 backdrop-blur-[2px] z-50 flex items-center justify-center rounded-[28px]">
+                    <div className="absolute inset-0 bg-white/80 backdrop-blur-[2px] z-50 flex items-center justify-center rounded-[18px]">
                         <div className="flex flex-col items-center gap-3">
                             <div className="relative">
-                                <div className="absolute inset-0 bg-orange-100 rounded-full animate-ping"></div>
-                                <div className="relative bg-white p-3 rounded-full shadow-xl border border-orange-100">
-                                    <Loader2 className="w-8 h-8 text-[#2563eb] animate-spin" />
+                                <div className="absolute inset-0 bg-red-100 rounded-full animate-ping"></div>
+                                <div className="relative bg-white p-3 rounded-full shadow-xl border border-red-100">
+                                    <Loader2 className="w-8 h-8 text-[var(--color-primary)] animate-spin" />
                                 </div>
                             </div>
                             <p className="text-sm font-bold text-slate-600 animate-pulse">Đang xử lý tách dữ liệu...</p>
@@ -252,7 +254,7 @@ const AudienceSplitModal: React.FC<AudienceSplitModalProps> = ({ sourceId, sourc
                 <div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-white/80 backdrop-blur-md shrink-0 sticky top-0 z-10">
                     <div>
                         <h3 className="text-xl font-black text-slate-800 flex items-center gap-2.5 tracking-tight">
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-50 to-white border border-slate-100 text-orange-500 flex items-center justify-center shadow-sm">
+                            <div className="w-10 h-10 rounded-xl bg-[var(--color-primary-light)] border border-slate-100 text-[var(--color-primary)] flex items-center justify-center shadow-sm">
                                 <Scissors className="w-5 h-5" />
                             </div>
                             Tách Dữ Liệu
@@ -340,7 +342,7 @@ const AudienceSplitModal: React.FC<AudienceSplitModalProps> = ({ sourceId, sourc
 
                         {/* SUB-OPTIONS FOR QUANTITY */}
                         {tab === 'quantity' && (
-                            <div className="mt-4 p-4 bg-white rounded-2xl border border-indigo-100 shadow-sm animate-in slide-in-from-top-1 space-y-4">
+                            <div className="mt-4 p-4 bg-white rounded-[14px] border border-indigo-100 shadow-sm animate-in slide-in-from-top-1 space-y-4">
                                 <div>
                                     <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1.5 block">Số lượng cần tách</label>
                                     <div className="relative">
@@ -414,7 +416,7 @@ const AudienceSplitModal: React.FC<AudienceSplitModalProps> = ({ sourceId, sourc
                     <div className="space-y-3 pt-2 border-t border-slate-100">
                         <h4 className="section-header mt-4">2. Lưu vào đâu?</h4>
 
-                        <div className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm space-y-4">
+                        <div className="p-4 bg-white rounded-[14px] border border-slate-100 shadow-sm space-y-4">
                             {/* Toggle */}
                             <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-200 w-fit gap-0.5">
                                 <button
@@ -495,13 +497,13 @@ const AudienceSplitModal: React.FC<AudienceSplitModalProps> = ({ sourceId, sourc
 
                 {/* Footer */}
                 <div className="px-8 py-5 border-t border-slate-100 flex justify-end gap-3 bg-white sticky bottom-0 z-10 shrink-0">
-                    <button onClick={onClose} className="px-5 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-700 transition-colors bg-slate-50 hover:bg-slate-100 rounded-xl">
+                    <button onClick={onClose} className="px-5 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-700 transition-colors bg-slate-50 hover:bg-slate-100 rounded-[var(--radius-md)]">
                         Hủy bỏ
                     </button>
                     <button
                         onClick={handleSplit}
                         disabled={isLoading}
-                        className="px-8 py-2.5 rounded-xl bg-gradient-to-r from-[#2563eb] to-blue-600 hover:from-[#561dd0] hover:to-blue-700 text-white text-xs font-bold shadow-lg shadow-[#2563eb]/20 flex items-center gap-2 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-8 py-2.5 rounded-[var(--radius-md)] bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-xs font-bold shadow-sm flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
                         Thực hiện Tách
@@ -519,7 +521,8 @@ const AudienceSplitModal: React.FC<AudienceSplitModalProps> = ({ sourceId, sourc
                     margin-left: 4px;
                 }
             `}</style>
-        </div>
+        </div>,
+        getMktPortalRoot()
     );
 };
 

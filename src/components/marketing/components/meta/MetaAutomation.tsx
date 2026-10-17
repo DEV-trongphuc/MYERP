@@ -176,16 +176,16 @@ const MetaAutomation: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm relative z-20">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-[var(--color-surface)] p-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] shadow-xs relative z-20">
 
                 {/* Custom Page Selector with Avatar */}
                 <div className="relative w-full md:w-72">
                     <button
                         onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                        className="w-full flex items-center justify-between bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-xl px-4 py-2.5 font-bold hover:bg-slate-100 transition-colors"
+                        className="w-full h-9 flex items-center justify-between bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] text-xs rounded-[var(--radius-md)] px-3 font-medium hover:bg-[var(--color-bg-subtle)] transition-colors"
                     >
-                        <div className="flex items-center gap-3">
-                            <div className="relative w-6 h-6 rounded-full overflow-hidden border border-[#ffe8cc] bg-[#fff4e0] flex items-center justify-center text-[#2563eb] font-black text-[10px] shrink-0">
+                        <div className="flex items-center gap-2.5">
+                            <div className="relative w-5 h-5 rounded-full overflow-hidden border border-[var(--color-border)] bg-[var(--color-bg-subtle)] flex items-center justify-center text-[var(--color-primary)] font-bold text-[10px] shrink-0">
                                 {selectedConfig?.page_name ? selectedConfig.page_name.charAt(0) : 'P'}
                                 {selectedConfig?.avatar_url && (
                                     <img 
@@ -209,7 +209,7 @@ const MetaAutomation: React.FC = () => {
                                 className="fixed inset-0 z-10"
                                 onClick={() => setIsDropdownOpen(false)}
                             ></div>
-                            <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-xl shadow-xl z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                            <div className="absolute top-full left-0 right-0 mt-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-md)] shadow-xl z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                                 <div className="max-h-60 overflow-y-auto p-1.5 space-y-1">
                                     {configs.length > 0 ? configs.map(c => (
                                         <button
@@ -218,12 +218,12 @@ const MetaAutomation: React.FC = () => {
                                                 setSelectedConfigId(c.id);
                                                 setIsDropdownOpen(false);
                                             }}
-                                            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${selectedConfigId === c.id
-                                                ? 'bg-blue-50 text-blue-600'
-                                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                                            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[var(--radius-md)] text-xs font-medium transition-all ${selectedConfigId === c.id
+                                                ? 'bg-rose-50 text-[var(--color-primary)] font-semibold'
+                                                : 'text-[var(--color-text)] hover:bg-[var(--color-bg-subtle)]'
                                                 }`}
                                         >
-                                            <div className="relative w-8 h-8 rounded-full overflow-hidden border border-[#ffe8cc] bg-[#fff4e0] flex items-center justify-center text-[#2563eb] font-black text-xs shrink-0">
+                                            <div className="relative w-7 h-7 rounded-full overflow-hidden border border-[var(--color-border)] bg-[var(--color-bg-subtle)] flex items-center justify-center text-[var(--color-primary)] font-bold text-xs shrink-0">
                                                 {c.page_name ? c.page_name.charAt(0) : 'F'}
                                                 {c.avatar_url && (
                                                     <img 
@@ -237,15 +237,15 @@ const MetaAutomation: React.FC = () => {
                                                 )}
                                             </div>
                                             <div className="text-left">
-                                                <div className="font-bold truncate">{c.page_name}</div>
-                                                <div className="text-[10px] text-slate-400">ID: {c.id.substring(0, 8)}...</div>
+                                                <div className="font-semibold truncate">{c.page_name}</div>
+                                                <div className="text-[10px] text-[var(--color-text-muted)]">ID: {c.id.substring(0, 8)}...</div>
                                             </div>
                                             {selectedConfigId === c.id && (
-                                                <div className="ml-auto w-2 h-2 rounded-full bg-blue-500"></div>
+                                                <div className="ml-auto w-2 h-2 rounded-full bg-[var(--color-primary)]"></div>
                                             )}
                                         </button>
                                     )) : (
-                                        <div className="text-center py-4 text-slate-400 text-xs">
+                                        <div className="text-center py-4 text-[var(--color-text-muted)] text-xs">
                                             Chưa có Fanpage nào
                                         </div>
                                     )}
@@ -261,7 +261,7 @@ const MetaAutomation: React.FC = () => {
                         <input
                             type="text"
                             placeholder="Tìm kiếm kịch bản..."
-                            className="w-full pl-10 pr-4 py-2 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 ring-emerald-500/20 transition-all font-medium placeholder:font-normal"
+                            className="w-full h-9 pl-9 pr-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-md)] text-xs font-medium focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/10 transition-all placeholder:text-[var(--color-text-muted)]"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
@@ -271,7 +271,7 @@ const MetaAutomation: React.FC = () => {
                     <button
                         onClick={() => { setEditingScenario(null); setIsModalOpen(true); }}
                         disabled={!selectedConfigId}
-                        className="h-11 px-6 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white shadow-lg shadow-orange-500/30 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shrink-0 w-full md:w-auto disabled:opacity-50 disabled:shadow-none hover:-translate-y-0.5"
+                        className="h-9 px-4 bg-[var(--color-primary)] hover:brightness-95 text-white rounded-[var(--radius-md)] text-xs font-semibold shadow-xs transition-all flex items-center justify-center gap-1.5 shrink-0 w-full md:w-auto disabled:opacity-50"
                     >
                         <Plus className="w-4 h-4" />
                         Tạo kịch bản
@@ -281,33 +281,35 @@ const MetaAutomation: React.FC = () => {
 
             {loading ? (
                 <div className="flex justify-center py-20">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--color-primary)]"></div>
                 </div>
             ) : filteredScenarios.length === 0 ? (
-                <div className="text-center py-20 bg-slate-50/50 rounded-[32px] border-2 border-dashed border-slate-200">
-                    <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mx-auto mb-4 text-slate-300">
-                        <Zap className="w-8 h-8" />
+                <div className="text-center py-16 bg-[var(--color-surface)] rounded-[18px] border border-[var(--color-border)] shadow-xs">
+                    <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-[14px] flex items-center justify-center mx-auto mb-3 text-slate-400">
+                        <Zap className="w-6 h-6" />
                     </div>
-                    <p className="text-slate-500 font-medium">Chưa có kịch bản nào cho Page này</p>
+                    <p className="text-sm font-semibold text-[var(--color-text)]">Chưa có kịch bản nào cho Page này</p>
+                    <p className="text-xs text-[var(--color-text-muted)] mt-1 max-w-sm mx-auto">Tạo kịch bản phản hồi tự động để chăm sóc khách hàng 24/7 trên Messenger.</p>
                     <button
                         onClick={() => setIsModalOpen(true)}
                         disabled={!selectedConfigId}
-                        className="mt-4 text-emerald-500 font-bold hover:underline disabled:opacity-50"
+                        className="mt-4 h-9 px-4 bg-[var(--color-primary)] hover:brightness-95 text-white rounded-[var(--radius-md)] text-xs font-semibold inline-flex items-center gap-1.5 shadow-xs disabled:opacity-50"
                     >
-                        Bắt đầu tạo kịch bản đầu tiên
+                        <Plus className="w-4 h-4" />
+                        Tạo kịch bản mới
                     </button>
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filteredScenarios.map((scenario) => (
-                        <div key={scenario.id} className="group bg-white rounded-[28px] border border-slate-100 shadow-sm hover:shadow-xl transition-all p-6 relative overflow-hidden cursor-pointer hover:-translate-y-1" onClick={() => { setEditingScenario(scenario); setIsModalOpen(true); }}>
-                            <div className={`absolute top-0 right-0 w-40 h-40 -mr-12 -mt-12 rounded-full opacity-[0.03] transition-transform group-hover:scale-125 ${scenario.type === 'welcome' ? 'bg-amber-600' :
+                        <div key={scenario.id} className="group bg-[var(--color-surface)] rounded-[18px] border border-[var(--color-border)] shadow-xs hover:shadow-md hover:border-[var(--color-primary-light)] transition-all p-5 relative overflow-hidden cursor-pointer" onClick={() => { setEditingScenario(scenario); setIsModalOpen(true); }}>
+                            <div className={`absolute top-0 right-0 w-40 h-40 -mr-12 -mt-12 rounded-full opacity-[0.03] transition-transform group-hover:scale-125 ${scenario.type === 'welcome' ? 'bg-[var(--color-primary)]' :
                                 scenario.type === 'ai_reply' ? 'bg-purple-500' :
                                     scenario.type === 'holiday' ? 'bg-rose-500' :
                                         'bg-blue-500'}`}></div>
 
                             <div className="flex justify-between items-start mb-6 relative z-10">
-                                <div className={`p-3.5 rounded-2xl shadow-sm ${scenario.type === 'welcome' ? 'bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-orange-500/20' :
+                                <div className={`p-3.5 rounded-[14px] shadow-sm ${scenario.type === 'welcome' ? 'bg-gradient-to-br from-[#BD1D2D] to-[#9A1523] text-white shadow-[var(--color-primary)]/20' :
                                     scenario.type === 'ai_reply' ? 'bg-gradient-to-br from-fuchsia-500 to-purple-600 text-white shadow-purple-500/20' :
                                         scenario.type === 'holiday' ? 'bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-rose-500/20' :
                                             'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-blue-500/20'}`}>
@@ -336,7 +338,7 @@ const MetaAutomation: React.FC = () => {
 
                             <div className="relative z-10 space-y-3">
                                 <div className="flex items-center gap-2">
-                                    <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-widest border ${scenario.type === 'welcome' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                                    <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-widest border ${scenario.type === 'welcome' ? 'bg-amber-50 text-[var(--color-primary)] border-amber-100' :
                                         scenario.type === 'ai_reply' ? 'bg-purple-50 text-purple-600 border-purple-100' :
                                             scenario.type === 'holiday' ? 'bg-rose-50 text-rose-600 border-rose-100' :
                                                 'bg-blue-50 text-blue-600 border-blue-100'}`}>

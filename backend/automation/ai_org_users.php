@@ -71,12 +71,79 @@ if ($orgScopeAdminId) {
 
 // 1. List Users
 if ($method === 'GET' && ($action === 'list' || $action === '')) {
+    if (function_exists('ensureAiOrgUsersSchema')) {
+        ensureAiOrgUsersSchema($pdo);
+    }
     $categoryId = $_GET['category_id'] ?? null;
     if ($categoryId) {
         require_once 'ai_org_middleware.php'; // For resolvePropertyId
         $categoryId = resolvePropertyId($pdo, $categoryId);
         // [SECURITY FIX] Enforce access check for the category
         requireCategoryAccess($categoryId, $currentOrgUser);
+    }
+
+    // Sync active MYERP employees from `users` into `ai_org_users`
+    try {
+        $stmtErpUsers = $pdo->query("SELECT id, full_name, email, phone, avatar_url, role, job_title, department, is_active FROM users WHERE is_active = 1 AND email IS NOT NULL AND email != ''");
+        $erpUsers = $stmtErpUsers ? $stmtErpUsers->fetchAll(PDO::FETCH_ASSOC) : [];
+        if (!empty($erpUsers)) {
+            $stmtFindOrg = $pdo->prepare("SELECT id, role, full_name, avatar, admin_id FROM ai_org_users WHERE erp_user_id = ? OR LOWER(email) = LOWER(?) LIMIT 1");
+            $stmtInsOrg = $pdo->prepare("
+                INSERT INTO ai_org_users (user_id, erp_user_id, email, full_name, role, status, permissions, avatar, admin_id)
+                VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?)
+            ");
+            $stmtUpdOrg = $pdo->prepare("
+                UPDATE ai_org_users
+                SET erp_user_id = ?,
+                    user_id = COALESCE(NULLIF(user_id, ''), ?),
+                    full_name = COALESCE(NULLIF(full_name, ''), ?),
+                    avatar = COALESCE(NULLIF(avatar, ''), ?),
+                    admin_id = COALESCE(NULLIF(admin_id, ''), ?)
+                WHERE id = ?
+            ");
+            foreach ($erpUsers as $eu) {
+                $erpId = (int)$eu['id'];
+                $erpEmail = trim((string)$eu['email']);
+                if ($erpEmail === '') {
+                    continue;
+                }
+                $stmtFindOrg->execute([$erpId, $erpEmail]);
+                $existingOrg = $stmtFindOrg->fetch(PDO::FETCH_ASSOC);
+                $mappedRole = function_exists('mapErpRoleToAiOrgRole')
+                    ? mapErpRoleToAiOrgRole($eu['role'] ?? 'user')
+                    : 'user';
+                $defaultPerms = $mappedRole === 'admin'
+                    ? ['modes' => ['chat', 'training', 'analytics', 'users'], 'access' => 'full']
+                    : ($mappedRole === 'assistant'
+                        ? ['modes' => ['chat', 'training', 'analytics'], 'access' => 'full']
+                        : ['modes' => ['chat'], 'access' => 'limited']);
+                $targetAdminId = ($mappedRole === 'admin') ? null : $orgScopeAdminId;
+
+                if ($existingOrg) {
+                    $stmtUpdOrg->execute([
+                        $erpId,
+                        (string)$erpId,
+                        $eu['full_name'] ?: $erpEmail,
+                        $eu['avatar_url'] ?? null,
+                        ($existingOrg['role'] === 'admin') ? null : $targetAdminId,
+                        $existingOrg['id']
+                    ]);
+                } else {
+                    $stmtInsOrg->execute([
+                        (string)$erpId,
+                        $erpId,
+                        $erpEmail,
+                        $eu['full_name'] ?: $erpEmail,
+                        $mappedRole,
+                        json_encode($defaultPerms),
+                        $eu['avatar_url'] ?? null,
+                        $targetAdminId
+                    ]);
+                }
+            }
+        }
+    } catch (Exception $e) {
+        error_log('[ai_org_users] ERP users sync warning: ' . $e->getMessage());
     }
 
     // Lazy Migration: Ensure ai_org_user_categories exists
@@ -92,16 +159,14 @@ if ($method === 'GET' && ($action === 'list' || $action === '')) {
         // AUTO-SYNC: If we have a categoryId but NO users linked to it yet,
         // we auto-link all existing 'admin' users of THIS ORG so they can manage it.
         if ($categoryId) {
-            $adminScopeCheck = $orgScopeAdminId ? "AND admin_id = ?" : "";
             $checkStmt = $pdo->prepare("SELECT COUNT(*) FROM ai_org_user_categories WHERE category_id = ?");
             $checkStmt->execute([$categoryId]);
             if ($checkStmt->fetchColumn() == 0) {
                 // Link all existing admins of this org to this new category automatically
-                // Link all existing admins of this org to this new category automatically
                 if ($orgScopeAdminId) {
                     $pdo->prepare("
                         INSERT IGNORE INTO ai_org_user_categories (user_id, category_id)
-                        SELECT id, ? FROM ai_org_users WHERE role = 'admin' AND (admin_id = ? OR id = ?)
+                        SELECT id, ? FROM ai_org_users WHERE role = 'admin' AND (admin_id = ? OR id = ? OR admin_id IS NULL)
                     ")->execute([$categoryId, $orgScopeAdminId, $orgScopeAdminId]);
                 } else {
                     $pdo->prepare("
@@ -119,19 +184,29 @@ if ($method === 'GET' && ($action === 'list' || $action === '')) {
             // ORG ISOLATION: Return all users in the org (access is org-wide)
             if ($orgScopeAdminId) {
                 $stmt = $pdo->prepare("
-                    SELECT u.id, u.email, u.full_name, u.gender, u.role, u.status, u.status_reason, u.status_expiry, u.permissions, u.last_login, u.created_at,
-                    IF(uc.id IS NOT NULL, 1, 0) as in_category
+                    SELECT u.id, u.email, COALESCE(NULLIF(u.full_name, ''), erpu.full_name, u.email) as full_name,
+                           u.gender, u.role, u.status, u.status_reason, u.status_expiry, u.permissions, u.last_login, u.created_at,
+                           COALESCE(u.erp_user_id, erpu.id) as erp_user_id,
+                           COALESCE(erpu.avatar_url, u.avatar) as avatar_url,
+                           erpu.job_title, erpu.department, erpu.phone,
+                           IF(uc.id IS NOT NULL, 1, 0) as in_category
                     FROM ai_org_users u
+                    LEFT JOIN users erpu ON (erpu.id = u.erp_user_id OR LOWER(erpu.email) = LOWER(u.email))
                     LEFT JOIN ai_org_user_categories uc ON u.id = uc.user_id AND uc.category_id = ?
-                    WHERE u.admin_id = ? OR u.id = ?
+                    WHERE u.admin_id = ? OR u.id = ? OR u.admin_id IS NULL
                     ORDER BY u.created_at DESC
                 ");
                 $stmt->execute([$categoryId, $orgScopeAdminId, $orgScopeAdminId]);
             } else {
                 $stmt = $pdo->prepare("
-                    SELECT u.id, u.email, u.full_name, u.gender, u.role, u.status, u.status_reason, u.status_expiry, u.permissions, u.last_login, u.created_at,
-                    IF(uc.id IS NOT NULL, 1, 0) as in_category
+                    SELECT u.id, u.email, COALESCE(NULLIF(u.full_name, ''), erpu.full_name, u.email) as full_name,
+                           u.gender, u.role, u.status, u.status_reason, u.status_expiry, u.permissions, u.last_login, u.created_at,
+                           COALESCE(u.erp_user_id, erpu.id) as erp_user_id,
+                           COALESCE(erpu.avatar_url, u.avatar) as avatar_url,
+                           erpu.job_title, erpu.department, erpu.phone,
+                           IF(uc.id IS NOT NULL, 1, 0) as in_category
                     FROM ai_org_users u
+                    LEFT JOIN users erpu ON (erpu.id = u.erp_user_id OR LOWER(erpu.email) = LOWER(u.email))
                     LEFT JOIN ai_org_user_categories uc ON u.id = uc.user_id AND uc.category_id = ?
                     ORDER BY u.created_at DESC
                 ");
@@ -140,10 +215,29 @@ if ($method === 'GET' && ($action === 'list' || $action === '')) {
         } else {
             // ORG ISOLATION: Only show users belonging to this org's admin_id
             if ($orgScopeAdminId) {
-                $stmt = $pdo->prepare("SELECT id, email, full_name, gender, role, status, status_reason, status_expiry, permissions, last_login, created_at FROM ai_org_users WHERE admin_id = ? OR id = ? ORDER BY created_at DESC");
+                $stmt = $pdo->prepare("
+                    SELECT u.id, u.email, COALESCE(NULLIF(u.full_name, ''), erpu.full_name, u.email) as full_name,
+                           u.gender, u.role, u.status, u.status_reason, u.status_expiry, u.permissions, u.last_login, u.created_at,
+                           COALESCE(u.erp_user_id, erpu.id) as erp_user_id,
+                           COALESCE(erpu.avatar_url, u.avatar) as avatar_url,
+                           erpu.job_title, erpu.department, erpu.phone
+                    FROM ai_org_users u
+                    LEFT JOIN users erpu ON (erpu.id = u.erp_user_id OR LOWER(erpu.email) = LOWER(u.email))
+                    WHERE u.admin_id = ? OR u.id = ? OR u.admin_id IS NULL
+                    ORDER BY u.created_at DESC
+                ");
                 $stmt->execute([$orgScopeAdminId, $orgScopeAdminId]);
             } else {
-                $stmt = $pdo->query("SELECT id, email, full_name, gender, role, status, status_reason, status_expiry, permissions, last_login, created_at FROM ai_org_users ORDER BY created_at DESC");
+                $stmt = $pdo->query("
+                    SELECT u.id, u.email, COALESCE(NULLIF(u.full_name, ''), erpu.full_name, u.email) as full_name,
+                           u.gender, u.role, u.status, u.status_reason, u.status_expiry, u.permissions, u.last_login, u.created_at,
+                           COALESCE(u.erp_user_id, erpu.id) as erp_user_id,
+                           COALESCE(erpu.avatar_url, u.avatar) as avatar_url,
+                           erpu.job_title, erpu.department, erpu.phone
+                    FROM ai_org_users u
+                    LEFT JOIN users erpu ON (erpu.id = u.erp_user_id OR LOWER(erpu.email) = LOWER(u.email))
+                    ORDER BY u.created_at DESC
+                ");
             }
         }
         $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -155,19 +249,6 @@ if ($method === 'GET' && ($action === 'list' || $action === '')) {
         }
 
         header('Content-Type: application/json');
-
-        // Extended Sanity Check
-        if ($orgScopeAdminId) {
-            $stmtTotal = $pdo->prepare("SELECT COUNT(*) FROM ai_org_users WHERE admin_id = ? OR id = ?");
-            $stmtTotal->execute([$orgScopeAdminId, $orgScopeAdminId]);
-            $totalUsers = (int) $stmtTotal->fetchColumn();
-        } else {
-            $totalUsers = (int) $pdo->query("SELECT COUNT(*) FROM ai_org_users")->fetchColumn();
-        }
-        $totalLinks = $pdo->query("SELECT COUNT(*) FROM ai_org_user_categories")->fetchColumn();
-        $isAdminInTable = $pdo->prepare("SELECT COUNT(*) FROM ai_org_users WHERE email = ? OR id = ?");
-        $isAdminInTable->execute([$_SESSION['email'] ?? 'admin@autoflow.vn', $currentUserId]);
-        $hasAdmin = $isAdminInTable->fetchColumn() > 0;
 
         echo json_encode([
             'success' => true,

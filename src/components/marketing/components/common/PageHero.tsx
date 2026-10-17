@@ -58,12 +58,6 @@ const PageHero: React.FC<PageHeroProps> = ({
             )}
         >
             <div className="flex-1 min-w-0 text-left">
-                {showStatus && statusText && (
-                    <span className="inline-flex items-center gap-1.5 mb-1 px-2 py-0.5 rounded-full text-[10px] font-semibold leading-4 bg-[var(--color-success-light)] text-[var(--color-success)]">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-success)]" />
-                        <span>{statusText}</span>
-                    </span>
-                )}
                 <h1
                     className={cn(
                         'page-title flex items-center gap-2.5 min-w-0 normal-case text-[var(--color-text)]',

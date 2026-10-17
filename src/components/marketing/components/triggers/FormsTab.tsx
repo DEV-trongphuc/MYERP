@@ -16,6 +16,7 @@ import toast from 'react-hot-toast';
 import ConfirmModal from '../common/ConfirmModal';
 import InputModal from '../common/InputModal';
 import IntegrationGuideModal from '../flows/modals/IntegrationGuideModal';
+import { AppIcon } from '../../../common/AppIcons';
 
 const DB_FIELDS = [
     { value: 'email', label: 'Địa chỉ Email (Bắt buộc)', type: 'email', required: true, icon: Mail },
@@ -184,54 +185,72 @@ const FormsTab: React.FC = () => {
         <div className="space-y-6 pb-40">
 
             {/* Internal Toolbar */}
-            <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                <div>
-                    <h3 className="text-lg font-bold text-slate-800">Danh sách Biểu mẫu</h3>
-                    <p className="text-xs text-slate-500 font-medium">Quản lý các điểm thu thập thông tin Khách hàng.</p>
+            <div className="flex justify-between items-center bg-[var(--color-surface)] p-4 rounded-[20px] border border-[var(--color-border)] shadow-xs">
+                <div className="flex items-center gap-3">
+                    <AppIcon name="trigger_form" size={38} className="shrink-0" />
+                    <div>
+                        <h3 className="text-base font-bold text-[var(--color-text)]">Danh sách Biểu mẫu</h3>
+                        <p className="text-xs text-[var(--color-text-muted)] font-medium">Quản lý các điểm thu thập thông tin Khách hàng và mã nhúng Web.</p>
+                    </div>
                 </div>
                 <Button icon={Plus} size="md" onClick={handleCreateNew}>Tạo Form mới</Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {loading ? (
-                    <div className="col-span-full space-y-4">
-                        {[1, 2, 3].map(i => <div key={i} className="h-32 bg-white rounded-[40px] animate-pulse border border-slate-100" />)}
-                    </div>
+                    <>
+                        {[1, 2, 3, 4, 5, 6].map(i => (
+                            <div key={i} className="rounded-[20px] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 space-y-4">
+                                <div className="flex justify-between items-start gap-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                                        <div className="space-y-2">
+                                            <div className="w-36 h-4 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[8px]" />
+                                            <div className="w-24 h-3 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[6px]" />
+                                        </div>
+                                    </div>
+                                    <div className="w-16 h-6 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[8px]" />
+                                </div>
+                                <div className="h-14 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
+                                <div className="h-9 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                            </div>
+                        ))}
+                    </>
                 ) : forms.length === 0 ? (
-                    <div className="col-span-full py-20 text-center border-2 border-dashed border-slate-200 rounded-[40px] bg-slate-50/50">
-                        <Code2 className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                        <h3 className="text-slate-500 font-bold text-lg">Chưa có biểu mẫu nào</h3>
-                        <p className="text-slate-400 mt-2 text-sm">Tạo form để bắt đầu thu thập Khách hàng.</p>
+                    <div className="col-span-full py-16 text-center border-2 border-dashed border-[var(--color-border)] rounded-[20px] bg-[var(--color-bg)]">
+                        <div className="flex justify-center mb-3">
+                            <AppIcon name="trigger_form" size={44} />
+                        </div>
+                        <h3 className="text-[var(--color-text)] font-bold text-base">Chưa có biểu mẫu nào</h3>
+                        <p className="text-[var(--color-text-muted)] mt-1 text-xs">Tạo form để bắt đầu thu thập Khách hàng.</p>
                     </div>
                 ) : forms.map(form => (
-                    <div key={form.id} className="group bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm hover:shadow-2xl hover:shadow-amber-600/10 hover:border-amber-200 transition-all flex flex-col justify-between gap-6 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-8 opacity-[0.03] text-amber-600 group-hover:scale-125 transition-transform"><Globe className="w-32 h-32" /></div>
-
+                    <div key={form.id} className="group hover-lift bg-[var(--color-surface)] p-5 rounded-[20px] border border-[var(--color-border)] shadow-xs hover:border-[var(--color-primary-light)] transition-all flex flex-col justify-between gap-4 relative overflow-hidden">
                         <div className="flex justify-between items-start relative z-10">
-                            <div className="flex items-center gap-4">
-                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg transition-all ${
-                                    form.status === 'inactive'
-                                        ? 'bg-slate-300 shadow-slate-200/60'
-                                        : 'bg-gradient-to-br from-amber-400 to-orange-500 shadow-amber-600/30 group-hover:rotate-6'
-                                }`}>
-                                    <FileInput className="w-6 h-6" />
-                                </div>
+                            <div className="flex items-center gap-3">
+                                <AppIcon
+                                    name="trigger_form"
+                                    size={38}
+                                    className={`shrink-0 transition-transform group-hover:scale-105 ${
+                                        form.status === 'inactive' ? 'opacity-50 grayscale' : ''
+                                    }`}
+                                />
                                 <div className="min-w-0">
                                     <div className="flex items-center gap-2 flex-wrap">
-                                        <h4 className={`text-base font-bold leading-tight truncate pr-2 ${
-                                            form.status === 'inactive' ? 'text-slate-400' : 'text-slate-800'
+                                        <h4 className={`text-sm font-bold leading-tight truncate pr-2 ${
+                                            form.status === 'inactive' ? 'text-slate-400' : 'text-[var(--color-text)]'
                                         }`} title={form.name}>{form.name}</h4>
                                         {form.status === 'inactive' && (
-                                            <span className="text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full border border-slate-200">INACTIVE</span>
+                                            <span className="text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full border border-slate-200">TẠM DỪNG</span>
                                         )}
                                     </div>
-                                    <div className="flex items-center gap-2 mt-2">
+                                    <div className="flex items-center gap-2 mt-1.5">
                                         <div 
                                             onClick={() => {
                                                 const listName = lists.find(l => l.id === form.targetListId)?.name || 'Danh sách';
                                                 navigate('/marketing/audience', { state: { openListId: form.targetListId, openListName: listName } });
                                             }}
-                                            className="px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-[10px] font-bold text-amber-700 w-max max-w-full flex items-center gap-1.5 cursor-pointer hover:bg-amber-100 hover:border-amber-300 hover:shadow-sm transition-all"
+                                            className="px-2 py-0.5 rounded-md bg-blue-50/70 border border-blue-200/60 text-[10px] font-semibold text-blue-700 w-max max-w-full flex items-center gap-1.5 cursor-pointer hover:bg-blue-100 hover:border-blue-300 transition-all"
                                             title="Bấm để xem danh sách Audience"
                                         >
                                             <Link className="w-3 h-3 shrink-0" />
@@ -242,11 +261,11 @@ const FormsTab: React.FC = () => {
                                     </div>
                                 </div>
                             </div>
-                            <div className="flex gap-1">
+                            <div className="flex items-center gap-1">
                                 <button
                                     onClick={() => handleToggleStatus(form)}
                                     title={form.status === 'inactive' ? 'Kích hoạt' : 'Tạm dừng'}
-                                    className={`p-2 rounded-xl transition-all ${
+                                    className={`p-1.5 rounded-lg transition-all ${
                                         form.status === 'inactive'
                                             ? 'text-slate-300 hover:text-emerald-600 hover:bg-emerald-50'
                                             : 'text-emerald-500 hover:text-amber-600 hover:bg-amber-50'
@@ -254,34 +273,34 @@ const FormsTab: React.FC = () => {
                                 >
                                     <Power className="w-4 h-4" />
                                 </button>
-                                <button onClick={() => handleEditClick(form)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all opacity-0 group-hover:opacity-100" title="Chỉnh sửa">
-                                    <Edit3 className="w-4 h-4" />
+                                <button onClick={() => handleEditClick(form)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all" title="Chỉnh sửa">
+                                    <Edit3 className="w-3.5 h-3.5" />
                                 </button>
-                                <button onClick={() => setConfirmDeleteId(form.id)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all opacity-0 group-hover:opacity-100" title="Xóa">
-                                    <Trash2 className="w-4 h-4" />
+                                <button onClick={() => setConfirmDeleteId(form.id)} className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all" title="Xóa">
+                                    <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                             </div>
                         </div>
 
-                        <div className="space-y-4 relative z-10">
-                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100 group-hover:bg-amber-50/50 group-hover:border-amber-100 transition-colors">
+                        <div className="space-y-3 relative z-10">
+                            <div className="flex items-center justify-between p-2.5 bg-slate-50/70 rounded-xl border border-slate-200/60">
                                 <div className="flex flex-col">
-                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Chuyển đổi</span>
-                                    <span className="text-sm font-black text-slate-700">{(form.stats?.submissions || 0).toLocaleString()} <span className="text-[10px] font-medium text-slate-400">leads</span></span>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Chuyển đổi</span>
+                                    <span className="text-xs font-extrabold text-slate-800">{(form.stats?.submissions || 0).toLocaleString()} <span className="text-[10px] font-medium text-slate-400">leads</span></span>
                                 </div>
-                                <div className="h-8 w-px bg-slate-200"></div>
+                                <div className="h-6 w-px bg-slate-200"></div>
                                 <div className="flex flex-col items-end">
-                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Số trường</span>
-                                    <span className="text-sm font-black text-slate-700">{(form.fields || []).length} <span className="text-[10px] font-medium text-slate-400">fields</span></span>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Số trường</span>
+                                    <span className="text-xs font-extrabold text-slate-800">{(form.fields || []).length} <span className="text-[10px] font-medium text-slate-400">fields</span></span>
                                 </div>
                             </div>
 
                             <button
                                 onClick={() => setSelectedFormForCode(form)}
-                                className="w-full h-11 rounded-xl bg-slate-50 text-slate-600 border border-slate-200 text-[10px] font-bold uppercase tracking-widest hover:bg-slate-100 transition-all flex items-center justify-center gap-2 group/btn"
+                                className="w-full h-9 rounded-xl bg-[var(--color-bg)] text-slate-700 hover:text-[var(--color-primary)] border border-[var(--color-border)] text-xs font-semibold hover:bg-slate-100 hover:border-slate-300 transition-all flex items-center justify-center gap-1.5"
                             >
-                                <Code2 className="w-4 h-4 text-[#2563eb] group-hover/btn:rotate-12 transition-transform" />
-                                API & Nhúng
+                                <Code2 className="w-3.5 h-3.5 text-[var(--color-primary)]" />
+                                API & Nhúng Web
                             </button>
                         </div>
                     </div>
@@ -306,7 +325,7 @@ const FormsTab: React.FC = () => {
                                         e.preventDefault();
                                         setIsAddingList(true);
                                     }}
-                                    className="text-[9px] font-black text-amber-600 hover:text-amber-700 uppercase tracking-tight flex items-center gap-1"
+                                    className="text-[9px] font-black text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] uppercase tracking-tight flex items-center gap-1"
                                 >
                                     <Plus className="w-3 h-3" /> Tạo danh sách nhanh
                                 </button>
@@ -316,7 +335,7 @@ const FormsTab: React.FC = () => {
                     </div>
 
                     {/* SECTION 1.5: Email Notification */}
-                    <div className={`space-y-4 bg-slate-50/40 border border-slate-200/50 px-6 py-6 rounded-[32px] relative overflow-hidden transition-all duration-500 ${formData.notificationEnabled ? 'ring-1 ring-slate-200/60' : ''}`}>
+                    <div className={`space-y-4 bg-slate-50/40 border border-slate-200/50 px-6 py-6 rounded-[18px] relative overflow-hidden transition-all duration-500 ${formData.notificationEnabled ? 'ring-1 ring-slate-200/60' : ''}`}>
                         <div className="flex justify-between items-start relative z-10">
                             <div className="flex items-center gap-4">
                                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm transition-all duration-500 ${formData.notificationEnabled ? 'bg-gradient-to-br from-[#2563eb] to-blue-600 text-white shadow-lg shadow-[#2563eb]/20' : 'bg-slate-100 text-slate-400'}`}>
@@ -372,7 +391,7 @@ const FormsTab: React.FC = () => {
                                     />
                                 </div>
 
-                                <div className="p-4 bg-white/40 shadow-[inset_0_1px_4px_rgba(0,0,0,0.02)] rounded-2xl border border-amber-100/50">
+                                <div className="p-4 bg-white/40 shadow-[inset_0_1px_4px_rgba(0,0,0,0.02)] rounded-2xl border border-slate-200/50">
                                     <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
                                         * Nhập nhiều email bằng cách nhấn <kbd className="bg-slate-100 px-1 inline-block pb-0.5 rounded text-slate-700 font-bold border border-slate-200">Enter</kbd> để xuống dòng. Phân cách bằng dấu phẩy sẽ được tự động hỗ trợ.
                                     </p>
@@ -398,7 +417,7 @@ const FormsTab: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="space-y-3 bg-slate-50/50 p-2 rounded-[24px] border border-slate-200/50 min-h-[200px]">
+                        <div className="space-y-3 bg-slate-50/50 p-2 rounded-[18px] border border-slate-200/50 min-h-[200px]">
                             {formData.fields?.map((field, idx) => {
                                 const FieldIcon = field.isCustom ? Tag : getFieldIcon(field.dbField);
                                 const isEmail = field.dbField === 'email';
@@ -468,8 +487,8 @@ const FormsTab: React.FC = () => {
                                         <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto pt-2 sm:pt-4 border-t sm:border-t-0 border-slate-100 mt-1 sm:mt-0">
                                             {!field.isCustom && (
                                                 <div onClick={() => !isEmail && updateField(field.id, { required: !field.required })} className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg transition-all select-none ${isEmail ? 'opacity-50 pointer-events-none bg-slate-100' : 'hover:bg-slate-50'}`}>
-                                                    <div className={`w-9 h-5 rounded-full p-0.5 transition-all duration-300 flex items-center ${field.required ? 'bg-amber-600 justify-end' : 'bg-slate-300 justify-start'}`}><div className="w-4 h-4 bg-white rounded-full shadow-sm"></div></div>
-                                                    <span className={`text-[9px] font-bold uppercase tracking-wider ${field.required ? 'text-amber-600' : 'text-slate-400'}`}>Bắt buộc</span>
+                                                    <div className={`w-9 h-5 rounded-full p-0.5 transition-all duration-300 flex items-center ${field.required ? 'bg-[var(--color-primary)] justify-end' : 'bg-slate-300 justify-start'}`}><div className="w-4 h-4 bg-white rounded-full shadow-sm"></div></div>
+                                                    <span className={`text-[9px] font-bold uppercase tracking-wider ${field.required ? 'text-[var(--color-primary)]' : 'text-slate-400'}`}>Bắt buộc</span>
                                                 </div>
                                             )}
                                             {!isEmail ? (

@@ -220,7 +220,7 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
     return (
         <div className="space-y-6 animate-in fade-in duration-500 pb-32">
             {!parentEmailStep ? (
-                <div className="p-8 bg-rose-50 border-2 border-dashed border-rose-200 rounded-[32px] text-center space-y-4">
+                <div className="p-8 bg-rose-50 border-2 border-dashed border-rose-200 rounded-2xl text-center space-y-4">
                     <Unlink className="w-8 h-8 mx-auto text-rose-500" />
                     <p className="text-sm font-black text-rose-700 uppercase">Thiếu nguồn kết nối</p>
                     <p className="text-xs text-rose-500">Vui lòng nối bước này SAU Tác vụ/Trigger theo dõi hành vi (VD: Gửi Email, Zalo ZNS, Làm khảo sát).</p>
@@ -253,7 +253,7 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
                             />
                             
                             {config.conditionType === 'survey_score' && (
-                                <div className="p-5 bg-emerald-50 border border-emerald-200 rounded-[28px] space-y-3 mt-4">
+                                <div className="p-5 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-3 mt-4">
                                     <label className="text-[10px] font-black uppercase text-emerald-700 tracking-widest">Logic khoảng điểm</label>
                                     <div className="grid grid-cols-2 gap-3">
                                         <Select
@@ -281,7 +281,7 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
                             )}
 
                             {config.conditionType === 'survey_answer' && (
-                                <div className="p-5 bg-indigo-50 border border-indigo-200 rounded-[28px] space-y-3 mt-4">
+                                <div className="p-5 bg-indigo-50 border border-indigo-200 rounded-2xl space-y-3 mt-4">
                                     <label className="text-[10px] font-black uppercase text-indigo-700 tracking-widest">Logic câu trả lời</label>
                                     
                                     {/* Select Question */}
@@ -345,7 +345,7 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
                             )}
 
                             {config.conditionType === 'survey_screen' && (
-                                <div className="p-5 bg-blue-50 border border-blue-200 rounded-[28px] space-y-3 mt-4">
+                                <div className="p-5 bg-blue-50 border border-blue-200 rounded-2xl space-y-3 mt-4">
                                     <label className="text-[10px] font-black uppercase text-blue-700 tracking-widest">Màn hình Kết thúc</label>
                                     {surveyData ? (
                                         <div className="relative">
@@ -390,6 +390,9 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
                                     { id: 'received_reminder', label: 'Đã nhận Reminder', icon: Bell, desc: 'Đã nhận Email Nhắc nhở' },
                                     { id: 'opened_reminder', label: 'Đã mở Reminder', icon: MailOpen, desc: 'Đã mở Email Nhắc nhở' }
                                 ] : []),
+                                { id: 'deposit_paid', label: 'Đã Đặt cọc / Đóng học phí (MYERP)', icon: CheckSquare, desc: 'Kiểm tra phiếu thu / đặt cọc đã duyệt' },
+                                { id: 'erp_is_student', label: 'Đã là Học viên MYERP', icon: CheckSquare, desc: 'Hồ sơ đã chuyển thành Học viên chính thức' },
+                                { id: 'erp_has_certificate', label: 'Đã cấp Chứng chỉ tốt nghiệp', icon: CheckSquare, desc: 'Học viên đã hoàn thành & nhận chứng chỉ' },
                                 { id: 'unsubscribed', label: 'Hủy đăng ký', icon: UserMinus, desc: 'Phân loại khách rời đi' },
                             ]}
                             value={config.conditionType || (parentEmailStep?.type === 'zalo_zns' ? 'zns_delivered' : 'opened')}
@@ -400,7 +403,7 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
 
                     {/* Reminder ID Input */}
                     {['received_reminder', 'opened_reminder'].includes(config.conditionType) && (
-                        <div className="p-5 bg-amber-50 border border-amber-200 rounded-[28px] space-y-2 mt-4">
+                        <div className="p-5 bg-amber-50 border border-amber-200 rounded-2xl space-y-2 mt-4">
                             <label className="text-[10px] font-black uppercase text-amber-700 tracking-widest">ID Chiến dịch Reminder</label>
                             <Input
                                 placeholder="Nhập ID Reminder (VD: 1, 2...)"
@@ -412,7 +415,7 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
                         </div>
                     )}
 
-                    <div className="p-5 bg-slate-50 border border-slate-200 rounded-[28px] space-y-4">
+                    <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-4">
                         <div className="flex items-center gap-2 mb-2">
                             <Clock className="w-4 h-4 text-slate-500" />
                             <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Thời hạn kiểm tra (Timeout)</span>
@@ -441,7 +444,7 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
                                         onChange({ ...config, waitDuration: 0, waitUnit: 'hours' });
                                     }
                                 }}
-                                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-all duration-300 focus:outline-none ${config.waitDuration === 0 ? 'bg-amber-500' : 'bg-slate-300'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-all duration-300 focus:outline-none ${config.waitDuration === 0 ? 'bg-[var(--color-primary)]' : 'bg-slate-300'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 disabled={disabled}
                             >
                                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 shadow-md ${config.waitDuration === 0 ? 'translate-x-6' : 'translate-x-1'}`} />

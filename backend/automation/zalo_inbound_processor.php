@@ -68,9 +68,11 @@ function handleZaloInboundJob($pdo, $payload)
         // [10M] Update Zalo specific profile
         $stmtZ = $pdo->prepare("UPDATE zalo_subscribers SET manual_email = COALESCE(manual_email, ?), phone_number = COALESCE(phone_number, ?) WHERE id = ?");
         $stmtZ->execute([$email, $phone, $subId]);
+    }
 
-        // Link/Sync to Main Subscriber
-        require_once 'zalo_sync_helpers.php';
+    if ($subId) {
+        // Link/Sync to Main Subscriber & MYERP Contact
+        require_once __DIR__ . '/zalo_sync_helpers.php';
         syncZaloToMain($pdo, $subId);
     }
 

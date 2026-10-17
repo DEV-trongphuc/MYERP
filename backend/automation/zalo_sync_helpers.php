@@ -39,37 +39,52 @@ function syncMainToZalo($pdo, $mainSubId)
         return;
 
     try {
-        $stmt = $pdo->prepare("SELECT email, phone_number, zalo_user_id, first_name, gender, date_of_birth, avatar FROM subscribers WHERE id = ?");
+        require_once __DIR__ . '/../utils/DomationContactMatcher.php';
+
+        $stmt = $pdo->prepare("SELECT id, workspace_id, contact_id, email, phone_number, phone, zalo_user_id, first_name, gender, date_of_birth, avatar FROM subscribers WHERE id = ? LIMIT 1");
         $stmt->execute([$mainSubId]);
-        $sub = $stmt->fetch();
+        $sub = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$sub)
             return;
 
+        $workspace_id = (int)($sub['workspace_id'] ?? 1);
+        $contactId = !empty($sub['contact_id']) ? (int)$sub['contact_id'] : null;
         $email = trim($sub['email'] ?? '');
-        $phone = trim($sub['phone_number'] ?? '');
+        if (strpos($email, '@zalo-oa.vn') !== false) {
+            $email = '';
+        }
+        $phone = trim(!empty($sub['phone_number']) ? $sub['phone_number'] : ($sub['phone'] ?? ''));
+        $phone9 = DomationContactMatcher::normalizePhone9($phone);
+        $zaloUidFromSub = trim($sub['zalo_user_id'] ?? '');
 
-        if (empty($email) && empty($phone))
+        if (empty($email) && empty($phone) && empty($zaloUidFromSub))
             return;
 
-        // Search Zalo subscribers
-        $where = [];
-        $params = [];
+        // Search Zalo subscribers by subscriber_id, zalo_user_id, email, or phone
+        $where = ["subscriber_id = ?"];
+        $params = [$mainSubId];
+        if (!empty($zaloUidFromSub)) {
+            $where[] = "zalo_user_id = ?";
+            $params[] = $zaloUidFromSub;
+        }
         if (!empty($email)) {
-            $where[] = "manual_email = ?";
-            $params[] = $email;
+            $where[] = "LOWER(TRIM(manual_email)) = ?";
+            $params[] = strtolower($email);
         }
         if (!empty($phone)) {
             $where[] = "phone_number = ?";
             $params[] = $phone;
         }
+        if (!empty($phone9)) {
+            $where[] = "RIGHT(REGEXP_REPLACE(phone_number, '[^0-9]', ''), 9) = ?";
+            $params[] = $phone9;
+        }
 
-        if (empty($where))
-            return;
-        $sql = "SELECT id, zalo_user_id, display_name, avatar, gender, birthday, lead_score FROM zalo_subscribers WHERE " . implode(" OR ", $where) . " LIMIT 1";
+        $sql = "SELECT id, subscriber_id, contact_id, zalo_user_id, display_name, avatar, gender, birthday, lead_score, manual_email, phone_number FROM zalo_subscribers WHERE (" . implode(" OR ", $where) . ") ORDER BY updated_at DESC LIMIT 1";
 
         $stmtZ = $pdo->prepare($sql);
         $stmtZ->execute($params);
-        $zaloSub = $stmtZ->fetch();
+        $zaloSub = $stmtZ->fetch(PDO::FETCH_ASSOC);
 
         if ($zaloSub) {
             $zaloUserId = $zaloSub['zalo_user_id'];
@@ -101,10 +116,22 @@ function syncMainToZalo($pdo, $mainSubId)
             $upParams[] = $mainSubId;
             $pdo->prepare("UPDATE subscribers SET " . implode(', ', $updateCols) . " WHERE id = ?")->execute($upParams);
 
-            // 2. Update Zalo Subscriber from Main Info
-            $zUpdateCols = ["manual_email = ?", "phone_number = ?"];
-            $zParams = [$email ?: null, $phone ?: null];
+            // 2. Update Zalo Subscriber from Main Info & link subscriber_id + contact_id
+            $zUpdateCols = ["subscriber_id = ?"];
+            $zParams = [$mainSubId];
 
+            if ($contactId) {
+                $zUpdateCols[] = "contact_id = ?";
+                $zParams[] = $contactId;
+            }
+            if (!empty($email)) {
+                $zUpdateCols[] = "manual_email = ?";
+                $zParams[] = $email;
+            }
+            if (!empty($phone)) {
+                $zUpdateCols[] = "phone_number = ?";
+                $zParams[] = $phone;
+            }
             if (empty($zaloSub['gender']) && !empty($sub['gender'])) {
                 $zUpdateCols[] = "gender = ?";
                 $zParams[] = $sub['gender'];
@@ -133,9 +160,12 @@ function syncMainToZalo($pdo, $mainSubId)
 
                 require_once __DIR__ . '/flow_helpers.php';
                 if (function_exists('logActivity')) {
-                    // [FIX AUDIT-17] Include workspace_id
                     logActivity($pdo, $mainSubId, 'profile_sync', null, 'Sync Profile', "Linked Zalo ID: $zaloUserId (Main to Zalo sync)", null, null, [], $workspace_id);
                 }
+            }
+
+            if (function_exists('domationSyncSubscriberMatchOnly')) {
+                domationSyncSubscriberMatchOnly($pdo, $mainSubId);
             }
         }
     } catch (Exception $e) {
@@ -150,51 +180,73 @@ function syncMainToZalo($pdo, $mainSubId)
 function syncZaloToMain($pdo, $zaloSubId)
 {
     if (!$zaloSubId)
-        return;
+        return null;
 
     try {
-        $stmt = $pdo->prepare("SELECT zalo_user_id, manual_email, phone_number, display_name, avatar, gender, birthday, lead_score FROM zalo_subscribers WHERE id = ?");
-        $stmt->execute([$zaloSubId]);
-        $zs = $stmt->fetch();
+        require_once __DIR__ . '/../utils/DomationContactMatcher.php';
+
+        $stmt = $pdo->prepare("SELECT * FROM zalo_subscribers WHERE id = ? OR zalo_user_id = ? LIMIT 1");
+        $stmt->execute([$zaloSubId, $zaloSubId]);
+        $zs = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$zs)
-            return;
+            return null;
 
-        $email = trim($zs['manual_email'] ?? '');
+        $realZaloRowId = $zs['id'];
+        $zaloUserId = trim($zs['zalo_user_id'] ?? '');
+        $wsId = (int)($zs['workspace_id'] ?? 1);
+        $email = trim(!empty($zs['manual_email']) ? $zs['manual_email'] : ($zs['email'] ?? ''));
+        if (strpos($email, '@zalo-oa.vn') !== false) {
+            $email = '';
+        }
         $phone = trim($zs['phone_number'] ?? '');
+        $phone9 = DomationContactMatcher::normalizePhone9($phone);
+        $emailNorm = DomationContactMatcher::normalizeEmail($email);
 
-        if (empty($email) && empty($phone))
-            return;
-
-        // Find main subscriber
+        // Find main subscriber by subscriber_id, zalo_user_id, phone_norm9/phone_number, or email_norm/email
         $where = [];
         $params = [];
-        if (!empty($email)) {
-            $where[] = "email = ?";
-            $params[] = $email;
+        if (!empty($zs['subscriber_id'])) {
+            $where[] = "id = ?";
+            $params[] = $zs['subscriber_id'];
+        }
+        if (!empty($zaloUserId)) {
+            $where[] = "zalo_user_id = ?";
+            $params[] = $zaloUserId;
+        }
+        if (!empty($phone9)) {
+            $where[] = "phone_norm9 = ?";
+            $params[] = $phone9;
         }
         if (!empty($phone)) {
             $where[] = "phone_number = ?";
             $params[] = $phone;
         }
+        if (!empty($emailNorm)) {
+            $where[] = "(email_norm = ? OR LOWER(TRIM(email)) = ?)";
+            $params[] = $emailNorm;
+            $params[] = $emailNorm;
+        }
 
-        if (empty($where))
-            return;
-        $sql = "SELECT id, zalo_user_id, first_name, gender, date_of_birth, lead_score FROM subscribers WHERE " . implode(" OR ", $where) . " LIMIT 1";
+        $mainSub = null;
+        if (!empty($where)) {
+            $sql = "SELECT * FROM subscribers WHERE (" . implode(" OR ", $where) . ") ORDER BY (contact_id IS NOT NULL) DESC, updated_at DESC LIMIT 1";
+            $stmtM = $pdo->prepare($sql);
+            $stmtM->execute($params);
+            $mainSub = $stmtM->fetch(PDO::FETCH_ASSOC);
+        }
 
-        $stmtM = $pdo->prepare($sql);
-        $stmtM->execute($params);
-        $mainSub = $stmtM->fetch();
-
+        $mainSubId = null;
         if ($mainSub) {
+            $mainSubId = $mainSub['id'];
             // 1. Update Main Subscriber
             $updateCols = ["verified = 1", "zalo_user_id = ?", "last_activity_at = NOW()"];
-            $upParams = [$zs['zalo_user_id']];
+            $upParams = [$zaloUserId];
 
-            if ($zs['avatar']) {
+            if (!empty($zs['avatar'])) {
                 $updateCols[] = "avatar = ?";
                 $upParams[] = $zs['avatar'];
             }
-            if ((empty($mainSub['first_name']) || strlen($mainSub['first_name']) < 2) && !empty($zs['display_name']) && $zs['display_name'] !== 'Zalo User') {
+            if ((empty($mainSub['first_name']) || strlen($mainSub['first_name']) < 2 || $mainSub['first_name'] === 'Zalo User') && !empty($zs['display_name']) && $zs['display_name'] !== 'Zalo User') {
                 $updateCols[] = "first_name = ?";
                 $upParams[] = $zs['display_name'];
             }
@@ -209,30 +261,97 @@ function syncZaloToMain($pdo, $zaloSubId)
                     $upParams[] = $sqlDob;
                 }
             }
+            if (!empty($phone) && empty($mainSub['phone_number'])) {
+                $updateCols[] = "phone_number = ?";
+                $upParams[] = $phone;
+                if (!empty($phone9)) {
+                    $updateCols[] = "phone_norm9 = ?";
+                    $upParams[] = $phone9;
+                }
+            }
+            if (!empty($email) && (empty($mainSub['email']) || strpos((string)$mainSub['email'], '@zalo-oa.vn') !== false)) {
+                $updateCols[] = "email = ?";
+                $upParams[] = $email;
+                if (!empty($emailNorm)) {
+                    $updateCols[] = "email_norm = ?";
+                    $upParams[] = $emailNorm;
+                }
+            }
 
-            $upParams[] = $mainSub['id'];
+            $upParams[] = $mainSubId;
             $pdo->prepare("UPDATE subscribers SET " . implode(', ', $updateCols) . " WHERE id = ?")
                 ->execute($upParams);
 
-            // 2. Link them in Zalo table (ensure email/phone are synced)
-            // (already done in callers or can be added here if needed)
-
-            // 3. Sync Score and Log Activity if first time linking
+            // Sync Score and Log Activity if first time linking
             if (empty($mainSub['zalo_user_id'])) {
-                if ($zs['lead_score'] > 0) {
+                if (($zs['lead_score'] ?? 0) > 0) {
                     $pdo->prepare("UPDATE subscribers SET lead_score = lead_score + ? WHERE id = ?")
-                        ->execute([$zs['lead_score'], $mainSub['id']]);
+                        ->execute([$zs['lead_score'], $mainSubId]);
                 }
 
                 require_once __DIR__ . '/flow_helpers.php';
                 if (function_exists('logActivity')) {
-                    // [FIX AUDIT-17] Include workspace_id
-                    $wsId = $mainSub['workspace_id'] ?? 1;
-                    logActivity($pdo, $mainSub['id'], 'profile_sync', null, 'Sync Profile', "Linked Zalo ID: {$zs['zalo_user_id']} (Zalo to Main sync)", null, null, [], $wsId);
+                    $wsIdLog = $mainSub['workspace_id'] ?? $wsId;
+                    logActivity($pdo, $mainSubId, 'profile_sync', null, 'Sync Profile', "Linked Zalo ID: {$zaloUserId} (Zalo to Main sync)", null, null, [], $wsIdLog);
                 }
             }
+        } elseif (!empty($zaloUserId)) {
+            // Create a new Main Subscriber if none existed
+            $mainSubId = bin2hex(random_bytes(16));
+            $subEmail = !empty($email) ? $email : ($zaloUserId . '@zalo-oa.vn');
+            $sqlDob = zaloToSqlDate($zs['birthday'] ?? null);
+            $pdo->prepare("
+                INSERT INTO subscribers (
+                    id, workspace_id, email, email_norm, first_name, phone_number, phone_norm9,
+                    zalo_user_id, avatar, gender, date_of_birth, source, status,
+                    is_zalo_follower, lead_score, verified, joined_at, last_activity_at, created_at, updated_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, 'Zalo OA', 'active',
+                    ?, ?, 1, NOW(), NOW(), NOW(), NOW()
+                )
+            ")->execute([
+                $mainSubId,
+                $wsId,
+                $subEmail,
+                !empty($emailNorm) ? $emailNorm : null,
+                !empty($zs['display_name']) ? $zs['display_name'] : 'Zalo User',
+                !empty($phone) ? $phone : null,
+                !empty($phone9) ? $phone9 : null,
+                $zaloUserId,
+                $zs['avatar'] ?? null,
+                $zs['gender'] ?? null,
+                $sqlDob,
+                (int)($zs['is_follower'] ?? 1),
+                (int)($zs['lead_score'] ?? 0)
+            ]);
         }
+
+        if ($mainSubId) {
+            // Link subscriber_id on zalo_subscribers
+            $pdo->prepare("UPDATE zalo_subscribers SET subscriber_id = ? WHERE id = ?")
+                ->execute([$mainSubId, $realZaloRowId]);
+
+            // Match-only against MYERP contacts and propagate contact_id
+            $matchedContactId = null;
+            if (function_exists('domationSyncSubscriberMatchOnly')) {
+                $matchedContactId = domationSyncSubscriberMatchOnly($pdo, $mainSubId);
+            }
+            if (!$matchedContactId) {
+                $stmtChkC = $pdo->prepare("SELECT contact_id FROM subscribers WHERE id = ? LIMIT 1");
+                $stmtChkC->execute([$mainSubId]);
+                $matchedContactId = $stmtChkC->fetchColumn() ?: null;
+            }
+            if ($matchedContactId) {
+                $pdo->prepare("UPDATE zalo_subscribers SET contact_id = ? WHERE id = ?")
+                    ->execute([(int)$matchedContactId, $realZaloRowId]);
+            }
+        }
+
+        return $mainSubId;
     } catch (Exception $e) {
         error_log("Error in syncZaloToMain: " . $e->getMessage());
+        return null;
     }
 }
+

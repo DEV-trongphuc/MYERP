@@ -95,7 +95,7 @@ const GlobalWorkspaceView = React.memo(({
     return (
         <div className={`flex-1 flex flex-col items-center justify-start relative z-10 overflow-y-auto custom-scrollbar transition-colors duration-500
             ${variant === 'default'
-                ? (isDarkTheme ? 'px-4 md:px-6 lg:px-12 pt-10 md:pt-16 lg:pt-24 pb-12 bg-[#05070A]' : 'px-4 md:px-6 lg:px-12 pt-10 md:pt-16 lg:pt-24 pb-12 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-brand/10 via-white to-white')
+                ? (isDarkTheme ? 'px-4 md:px-6 lg:px-12 pt-10 md:pt-16 lg:pt-24 pb-12 bg-[#05070A]' : 'px-4 md:px-6 lg:px-12 pt-10 md:pt-16 lg:pt-24 pb-12 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[var(--color-primary)]/10 via-white to-white')
                 : (isDarkTheme ? 'px-0 pt-0 pb-0 bg-slate-950' : 'px-0 pt-0 pb-0 bg-white')
             }`}>
             <div className={`w-full flex flex-col items-center animate-in fade-in duration-500`}>
@@ -105,7 +105,7 @@ const GlobalWorkspaceView = React.memo(({
                     <div className="w-full flex flex-col items-center text-center md:flex-row md:justify-between md:items-start md:text-left gap-6 md:gap-0 mb-6 md:mb-10 px-0 md:px-4 relative">
                         <div className="flex flex-col items-center md:items-start animate-in fade-in slide-in-from-left-5 duration-700">
                             <h1 className={`text-2xl md:text-[32px] font-black leading-tight flex items-center justify-center md:justify-start gap-2 ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
-                                Global Workspace<span className="text-brand text-3xl md:text-4xl leading-none">.</span>
+                                Global Workspace<span className="text-[var(--color-primary)] text-3xl md:text-4xl leading-none">.</span>
                             </h1>
                             <div className="flex items-center justify-center md:justify-start gap-3 mt-2 md:mt-3">
                                 <div className={`hidden md:block w-8 h-[2px] ${isDarkTheme ? 'bg-slate-700' : 'bg-slate-200'}`}></div>
@@ -138,12 +138,12 @@ const GlobalWorkspaceView = React.memo(({
                                 className={`h-10 md:h-11 px-6 border rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 active:scale-95 shadow-sm ${isDarkTheme ? 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
                                 title="Mẹo sử dụng Workspace"
                             >
-                                <Lightbulb className="w-4 h-4 text-amber-600" />
+                                <Lightbulb className="w-4 h-4 text-[var(--color-primary)]" />
                                 <span className="hidden sm:inline">Mẹo</span>
                             </button>
                             <button
                                 onClick={() => docInputRef.current?.click()}
-                                className="h-10 md:h-11 px-6 bg-brand text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:shadow-md transition-all flex items-center gap-2 active:scale-95"
+                                className="h-10 md:h-11 px-6 bg-[var(--color-primary)] text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:shadow-md transition-all flex items-center gap-2 active:scale-95"
                             >
                                 <Upload className="w-4 h-4" />
                                 UPLOAD
@@ -155,7 +155,7 @@ const GlobalWorkspaceView = React.memo(({
 
                 {/* Main Content Container (White Card style) */}
                 <div className={`w-full transition-all duration-500 ${variant === 'default'
-                    ? `${isDarkTheme ? 'bg-[rgba(13,17,23,0.6)] backdrop-blur-md border-slate-800 shadow-none' : 'bg-white border-slate-200 shadow-sm'} rounded-[24px] md:rounded-[32px] border p-4 md:p-8 min-h-[600px] animate-in fade-in slide-in-from-bottom-5 duration-1000 delay-200`
+                    ? `${isDarkTheme ? 'bg-[rgba(13,17,23,0.6)] backdrop-blur-md border-slate-800 shadow-none' : 'bg-white border-slate-200 shadow-sm'} rounded-[18px] md:rounded-[18px] border p-4 md:p-8 min-h-[600px] animate-in fade-in slide-in-from-bottom-5 duration-1000 delay-200`
                     : 'bg-transparent p-0 min-h-0'}
                 `}>
                     {/* Sticky Header: Filters or Bulk Actions */}
@@ -167,8 +167,8 @@ const GlobalWorkspaceView = React.memo(({
                             /* BULK ACTION MODE */
                             <div className="py-3 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
                                 <div className="flex items-center gap-3 overflow-x-auto no-scrollbar">
-                                    <div className="flex items-center h-10 px-4 bg-brand/5 border border-brand/10 rounded-xl shrink-0">
-                                        <span className="text-[10px] font-bold text-brand uppercase tracking-widest leading-none">Đã chọn {selectedGlobalDocs.length}</span>
+                                    <div className="flex items-center h-10 px-4 bg-[var(--color-primary)]/5 border border-[var(--color-primary)]/10 rounded-xl shrink-0">
+                                        <span className="text-[10px] font-bold text-[var(--color-primary)] uppercase tracking-widest leading-none">Đã chọn {selectedGlobalDocs.length}</span>
                                     </div>
 
                                     {selectedGlobalDocs.some(name => {
@@ -253,7 +253,7 @@ const GlobalWorkspaceView = React.memo(({
                         ) : (
                             /* STANDARD FILTER MODE */
                             <div className="py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 animate-in fade-in duration-300 overflow-visible">
-                                <div className={`flex items-center gap-2 p-1 backdrop-blur-md rounded-xl lg:rounded-2xl border w-full lg:w-fit overflow-x-auto no-scrollbar ${isDarkTheme ? 'bg-slate-800/50 border-slate-700/50' : 'bg-slate-100/50 border-slate-200/50'}`}>
+                                <div className={`flex items-center gap-2 p-1 backdrop-blur-md rounded-xl lg:rounded-[14px] border w-full lg:w-fit overflow-x-auto no-scrollbar ${isDarkTheme ? 'bg-slate-800/50 border-slate-700/50' : 'bg-slate-100/50 border-slate-200/50'}`}>
                                     <button
                                         onClick={() => setGlobalTab('files')}
                                         className={`flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 lg:px-6 py-2 rounded-lg lg:rounded-xl text-[10px] lg:text-xs font-bold uppercase tracking-wide transition-all duration-300 whitespace-nowrap ${globalTab === 'files' ? (isDarkTheme ? 'bg-slate-700 text-white shadow-sm border border-slate-600' : 'bg-white text-slate-700 shadow-sm border border-slate-200') : 'text-slate-400 hover:text-slate-300 hover:bg-slate-700/30'}`}
@@ -279,7 +279,7 @@ const GlobalWorkspaceView = React.memo(({
                                                     e.stopPropagation();
                                                     setIsSourceDropdownOpen(!isSourceDropdownOpen);
                                                 }}
-                                                className={`h-10 lg:h-11 px-3 lg:px-4 border rounded-xl text-[10px] lg:text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${isSourceDropdownOpen ? 'border-brand ring-4 ring-brand/5' : (isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300')}`}
+                                                className={`h-10 lg:h-11 px-3 lg:px-4 border rounded-xl text-[10px] lg:text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${isSourceDropdownOpen ? 'border-[var(--color-primary)] ring-4 ring-[var(--color-primary)]/5' : (isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300')}`}
                                             >
                                                 <span className="text-[9px] lg:text-[10px] text-slate-400 uppercase tracking-wider">Nguồn:</span>
                                                 <span className={isDarkTheme ? 'text-slate-200' : 'text-slate-800'}>
@@ -294,7 +294,7 @@ const GlobalWorkspaceView = React.memo(({
                                                         className="fixed inset-0 z-40"
                                                         onClick={() => setIsSourceDropdownOpen(false)}
                                                     />
-                                                    <div className={`absolute top-full mt-2 left-0 lg:left-auto lg:right-0 w-48 border rounded-2xl shadow-lg p-2 animate-in fade-in zoom-in-95 duration-200 z-50 ${isDarkTheme ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
+                                                    <div className={`absolute top-full mt-2 left-0 lg:left-auto lg:right-0 w-48 border rounded-[14px] shadow-lg p-2 animate-in fade-in zoom-in-95 duration-200 z-50 ${isDarkTheme ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
                                                         {[
                                                             { id: 'all', label: 'Tất cả', icon: Layers },
                                                             { id: 'workspace', label: 'Global', icon: Globe },
@@ -324,7 +324,7 @@ const GlobalWorkspaceView = React.memo(({
 
                                         <button
                                             onClick={handleSelectAll}
-                                            className={`h-10 lg:h-11 px-4 lg:px-5 rounded-xl text-[9px] lg:text-[10px] font-bold uppercase tracking-wide transition-all flex items-center gap-2 border whitespace-nowrap shrink-0 ${selectedGlobalDocs.length === globalDbAssets.length && globalDbAssets.length > 0 ? 'bg-brand text-white border-brand shadow-md' : (isDarkTheme ? 'bg-slate-800 text-slate-400 border-slate-700 hover:border-brand/30 hover:text-brand' : 'bg-white text-slate-500 border-slate-200 hover:border-brand/30 hover:text-brand')}`}
+                                            className={`h-10 lg:h-11 px-4 lg:px-5 rounded-xl text-[9px] lg:text-[10px] font-bold uppercase tracking-wide transition-all flex items-center gap-2 border whitespace-nowrap shrink-0 ${selectedGlobalDocs.length === globalDbAssets.length && globalDbAssets.length > 0 ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)] shadow-md' : (isDarkTheme ? 'bg-slate-800 text-slate-400 border-slate-700 hover:border-[var(--color-primary)]/30 hover:text-[var(--color-primary)]' : 'bg-white text-slate-500 border-slate-200 hover:border-[var(--color-primary)]/30 hover:text-[var(--color-primary)]')}`}
                                         >
                                             {selectedGlobalDocs.length === globalDbAssets.length && globalDbAssets.length > 0 ? <CheckCircle className="w-3.5 h-3.5 lg:w-4 lg:h-4" /> : <Check className="w-3.5 h-3.5 lg:w-4 lg:h-4" />}
                                             {selectedGlobalDocs.length === globalDbAssets.length && globalDbAssets.length > 0 ? 'Bỏ chọn' : 'Chọn tất cả'}
@@ -332,13 +332,13 @@ const GlobalWorkspaceView = React.memo(({
                                     </div>
 
                                     <div className="relative group flex-1 w-full lg:w-64">
-                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-3.5 h-3.5 lg:w-4 lg:h-4 text-slate-400 group-focus-within:text-brand transition-colors" />
+                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-3.5 h-3.5 lg:w-4 lg:h-4 text-slate-400 group-focus-within:text-[var(--color-primary)] transition-colors" />
                                         <input
                                             type="text"
                                             value={globalSearchInput}
                                             onChange={(e) => setGlobalSearchInput(e.target.value)}
                                             placeholder="Tìm kiếm tài sản..."
-                                            className={`w-full h-10 lg:h-11 border rounded-xl pl-10 lg:pl-11 pr-4 text-[11px] lg:text-xs font-bold transition-all outline-none ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-200 focus:bg-slate-900 focus:border-brand-accent' : 'bg-slate-50 border-slate-200 text-slate-700 focus:bg-white focus:border-brand-accent'}`}
+                                            className={`w-full h-10 lg:h-11 border rounded-xl pl-10 lg:pl-11 pr-4 text-[11px] lg:text-xs font-bold transition-all outline-none ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-200 focus:bg-slate-900 focus:border-[var(--color-primary)]-accent' : 'bg-slate-50 border-slate-200 text-slate-700 focus:bg-white focus:border-[var(--color-primary)]-accent'}`}
                                         />
                                     </div>
                                 </div>
@@ -353,7 +353,7 @@ const GlobalWorkspaceView = React.memo(({
                             return (
                                 <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                                     {[...Array(12)].map((_, i) => (
-                                        <div key={i} className={`p-3 rounded-2xl border animate-pulse ${isDarkTheme ? 'bg-slate-800/50 border-slate-700' : 'bg-white border-slate-100'}`}>
+                                        <div key={i} className={`p-3 rounded-[14px] border animate-pulse ${isDarkTheme ? 'bg-slate-800/50 border-slate-700' : 'bg-white border-slate-100'}`}>
                                             <div className={`w-full aspect-square rounded-xl mb-3 relative overflow-hidden ${isDarkTheme ? 'bg-gradient-to-br from-slate-700 via-slate-800 to-slate-700' : 'bg-gradient-to-br from-slate-100 via-slate-50 to-slate-100'}`}>
                                                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" style={{ animationDuration: '2s' }} />
                                             </div>
@@ -390,11 +390,11 @@ const GlobalWorkspaceView = React.memo(({
                                                 case 'xlsx':
                                                 case 'csv': return { Icon: FileSpreadsheet, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100' };
                                                 case 'ppt':
-                                                case 'pptx': return { Icon: FileText, color: 'text-orange-500', bg: 'bg-orange-50', border: 'border-orange-100' };
+                                                case 'pptx': return { Icon: FileText, color: 'text-[var(--color-primary)]', bg: 'bg-orange-50', border: 'border-orange-100' };
                                                 case 'txt': return { Icon: FileText, color: 'text-slate-500', bg: 'bg-slate-50', border: 'border-slate-100' };
                                                 case 'zip':
                                                 case 'rar':
-                                                case '7z': return { Icon: Layers, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100' };
+                                                case '7z': return { Icon: Layers, color: 'text-[var(--color-primary)]', bg: 'bg-amber-50', border: 'border-amber-100' };
                                                 case 'html': case 'css': case 'js': case 'jsx': case 'ts': case 'tsx': case 'php': case 'json': case 'sql':
                                                     return { Icon: FileCode, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' };
                                                 case 'mp3': case 'wav': return { Icon: Volume2, color: 'text-pink-500', bg: 'bg-pink-50', border: 'border-pink-100' };
@@ -416,13 +416,13 @@ const GlobalWorkspaceView = React.memo(({
                                                         );
                                                     }
                                                 }}
-                                                className={`group relative p-3 rounded-[24px] border transition-all duration-300 cursor-pointer overflow-hidden hover:shadow-lg hover:-translate-y-1
+                                                className={`group relative p-3 rounded-[18px] border transition-all duration-300 cursor-pointer overflow-hidden hover:shadow-lg hover:-translate-y-1
                                                     ${isDarkTheme ? 'bg-slate-800/40 border-slate-700/60 hover:shadow-slate-900/40' : 'bg-white border-slate-100/60 hover:shadow-slate-200/20'}
-                                                    ${isSelected ? 'ring-2 ring-brand bg-brand/5 shadow-md shadow-brand/5 -translate-y-1' : ''}
+                                                    ${isSelected ? 'ring-2 ring-[var(--color-primary)] bg-[var(--color-primary)]/5 shadow-md shadow-[var(--color-primary)]/5 -translate-y-1' : ''}
                                                 `}
                                             >
                                                 {isSelected && (
-                                                    <div className="absolute inset-0 bg-gradient-to-br from-brand/[0.08] via-transparent to-transparent pointer-events-none" />
+                                                    <div className="absolute inset-0 bg-gradient-to-br from-[var(--color-primary)]/[0.08] via-transparent to-transparent pointer-events-none" />
                                                 )}
 
                                                 {!isGlobalSelectMode && (
@@ -432,7 +432,7 @@ const GlobalWorkspaceView = React.memo(({
                                                                 e.stopPropagation();
                                                                 copyToClipboard(safeUrl || '');
                                                             }}
-                                                            className={`p-2 backdrop-blur-md shadow-md rounded-xl hover:text-brand hover:scale-110 transition-all border ${isDarkTheme ? 'bg-slate-700/90 text-slate-400 border-slate-600' : 'bg-white/90 text-slate-400 border-slate-100'}`}
+                                                            className={`p-2 backdrop-blur-md shadow-md rounded-xl hover:text-[var(--color-primary)] hover:scale-110 transition-all border ${isDarkTheme ? 'bg-slate-700/90 text-slate-400 border-slate-600' : 'bg-white/90 text-slate-400 border-slate-100'}`}
                                                             title="Share Link"
                                                         >
                                                             <LinkIcon className="w-3.5 h-3.5" />
@@ -496,8 +496,8 @@ const GlobalWorkspaceView = React.memo(({
                                                     }}
                                                     className={`absolute top-3 left-3 w-7 h-7 rounded-xl border-2 flex items-center justify-center transition-all duration-300 z-20 cursor-pointer shadow-sm
                                                         ${isSelected
-                                                            ? 'bg-brand border-brand text-white rotate-0 scale-100 shadow-md'
-                                                            : `backdrop-blur-md text-transparent opacity-0 -rotate-12 scale-75 group-hover:opacity-100 group-hover:rotate-0 group-hover:scale-100 hover:border-brand/50 ${isDarkTheme ? 'bg-slate-700/90 border-slate-600' : 'bg-white/90 border-slate-200'}`}
+                                                            ? 'bg-[var(--color-primary)] border-[var(--color-primary)] text-white rotate-0 scale-100 shadow-md'
+                                                            : `backdrop-blur-md text-transparent opacity-0 -rotate-12 scale-75 group-hover:opacity-100 group-hover:rotate-0 group-hover:scale-100 hover:border-[var(--color-primary)]/50 ${isDarkTheme ? 'bg-slate-700/90 border-slate-600' : 'bg-white/90 border-slate-200'}`}
                                                     `}
                                                 >
                                                     <Check className={`w-4 h-4 transition-transform duration-500 ${isSelected ? 'scale-100' : 'scale-50'}`} strokeWidth={4} />
@@ -521,7 +521,7 @@ const GlobalWorkspaceView = React.memo(({
                                                         <div className="absolute bottom-2 left-2 z-10">
                                                             <span className={`text-[7px] px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter backdrop-blur-md border shadow-sm ${(() => {
                                                                 const src = doc.source.toLowerCase();
-                                                                if (src === 'global_training' || (doc as any).isGlobal) return 'bg-amber-600/80 text-white border-amber-300/20';
+                                                                if (src === 'global_training' || (doc as any).isGlobal) return 'bg-[var(--color-primary)]/80 text-white border-amber-300/20';
                                                                 if (src.includes('user') || src === 'file_upload') return 'bg-blue-600/70 text-white border-blue-400/20';
                                                                 if (src.includes('assistant') || src.includes('ai')) return 'bg-red-800/70 text-white border-red-400/20';
                                                                 return 'bg-slate-800/60 text-white border-slate-500/30';
@@ -545,7 +545,7 @@ const GlobalWorkspaceView = React.memo(({
                                                         />
                                                     ) : (
                                                         <div className="flex flex-col items-center gap-2">
-                                                            <div className={`w-12 h-12 rounded-2xl ${bg} ${border} shadow-sm flex items-center justify-center ${color} group-hover:scale-110 transition-all duration-300 border-2`}>
+                                                            <div className={`w-12 h-12 rounded-[14px] ${bg} ${border} shadow-sm flex items-center justify-center ${color} group-hover:scale-110 transition-all duration-300 border-2`}>
                                                                 <Icon className="w-6 h-6" />
                                                             </div>
                                                             <span className="text-[9px] font-black font-mono text-slate-400 uppercase tracking-wider">{fileExt}</span>
@@ -564,11 +564,11 @@ const GlobalWorkspaceView = React.memo(({
                                                     }}
                                                     className={`px-1 relative ${doc.conversationId ? 'cursor-alias' : ''}`}
                                                 >
-                                                    <h5 className={`text-[11px] font-bold truncate group-hover:text-brand transition-colors mb-0.5 ${isDarkTheme ? 'text-slate-300' : 'text-slate-700'}`}>{doc.name}</h5>
+                                                    <h5 className={`text-[11px] font-bold truncate group-hover:text-[var(--color-primary)] transition-colors mb-0.5 ${isDarkTheme ? 'text-slate-300' : 'text-slate-700'}`}>{doc.name}</h5>
                                                     {doc.conversationTitle && (
                                                         <p className="text-[9px] text-slate-400 font-medium truncate mb-1" title={doc.conversationTitle}>
                                                             {(doc.source === 'global_training' || (doc as any).isGlobal)
-                                                                ? <Bot className="w-2.5 h-2.5 inline mr-1 text-amber-600" />
+                                                                ? <Bot className="w-2.5 h-2.5 inline mr-1 text-[var(--color-primary)]" />
                                                                 : <MessageSquare className="w-2.5 h-2.5 inline mr-1" />}
                                                             {doc.conversationTitle}
                                                         </p>
@@ -588,7 +588,7 @@ const GlobalWorkspaceView = React.memo(({
                                         <button
                                             onClick={() => setGlobalPage(prev => Math.max(1, prev - 1))}
                                             disabled={globalPage === 1}
-                                            className={`p-2.5 rounded-xl border transition-all ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-500 hover:text-brand disabled:opacity-20' : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-brand disabled:opacity-30'} disabled:pointer-events-none`}
+                                            className={`p-2.5 rounded-xl border transition-all ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-500 hover:text-[var(--color-primary)] disabled:opacity-20' : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-[var(--color-primary)] disabled:opacity-30'} disabled:pointer-events-none`}
                                         >
                                             <ChevronDown className="w-4 h-4 rotate-90" />
                                         </button>
@@ -597,7 +597,7 @@ const GlobalWorkspaceView = React.memo(({
                                             <button
                                                 key={i}
                                                 onClick={() => setGlobalPage(i + 1)}
-                                                className={`w-10 h-10 rounded-xl text-xs font-bold transition-all ${globalPage === i + 1 ? 'bg-brand text-white shadow-md' : (isDarkTheme ? 'bg-slate-800 border border-slate-700 text-slate-400 hover:border-brand-accent' : 'bg-white border border-slate-100 text-slate-500 hover:border-brand-accent')}`}
+                                                className={`w-10 h-10 rounded-xl text-xs font-bold transition-all ${globalPage === i + 1 ? 'bg-[var(--color-primary)] text-white shadow-md' : (isDarkTheme ? 'bg-slate-800 border border-slate-700 text-slate-400 hover:border-[var(--color-primary)]-accent' : 'bg-white border border-slate-100 text-slate-500 hover:border-[var(--color-primary)]-accent')}`}
                                             >
                                                 {i + 1}
                                             </button>
@@ -606,7 +606,7 @@ const GlobalWorkspaceView = React.memo(({
                                         <button
                                             onClick={() => setGlobalPage(prev => Math.min(totalPages, prev + 1))}
                                             disabled={globalPage === totalPages}
-                                            className={`p-2.5 rounded-xl border transition-all ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-500 hover:text-brand disabled:opacity-20' : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-brand disabled:opacity-30'} disabled:pointer-events-none`}
+                                            className={`p-2.5 rounded-xl border transition-all ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-500 hover:text-[var(--color-primary)] disabled:opacity-20' : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-[var(--color-primary)] disabled:opacity-30'} disabled:pointer-events-none`}
                                         >
                                             <ChevronDown className="w-4 h-4 -rotate-90" />
                                         </button>

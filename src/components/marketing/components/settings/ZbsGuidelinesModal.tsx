@@ -19,7 +19,7 @@ const ZbsGuidelinesModal: React.FC<ZbsGuidelinesModalProps> = ({ isOpen, onClose
                 <div className="max-w-4xl mx-auto space-y-8 pb-10">
                     
                     {/* Header Intro */}
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <div className="bg-white p-6 rounded-[14px] border border-slate-200 shadow-sm">
                         <div className="flex gap-4 items-start">
                             <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
                                 <FileCheck className="w-6 h-6" />

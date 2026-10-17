@@ -13,7 +13,16 @@ if ($method === 'GET') {
     try {
         if ($id) {
             // [FIX P43-I1] Scope single fetch to workspace
-            $stmt = $pdo->prepare("SELECT * FROM voucher_campaigns WHERE id = ? AND (workspace_id = ? OR (? = 1 AND workspace_id IS NULL))");
+            $stmt = $pdo->prepare("
+                SELECT vc.*,
+                    u_creator.id AS creator_id, u_creator.full_name AS creator_name, u_creator.email AS creator_email,
+                    u_creator.phone AS creator_phone, u_creator.avatar_url AS creator_avatar,
+                    u_creator.job_title AS creator_job_title, u_creator.department AS creator_department,
+                    u_creator.role AS creator_role
+                FROM voucher_campaigns vc
+                LEFT JOIN users u_creator ON u_creator.id = vc.created_by
+                WHERE vc.id = ? AND (vc.workspace_id = ? OR (? = 1 AND vc.workspace_id IS NULL))
+            ");
             $stmt->execute([$id, $workspace_id, $workspace_id]);
             $camp = $stmt->fetch();
             if ($camp) {
@@ -29,6 +38,7 @@ if ($method === 'GET') {
                 $camp['claimApprovalRequired'] = !empty($camp['claim_approval_required']);
                 $camp['claimEmailTemplateId'] = $camp['claim_email_template_id'] ?? '';
                 $camp['claimTargetFormId'] = $camp['claim_target_form_id'] ?? '';
+                $camp['creator'] = domationFormatCreator($camp);
                 jsonResponse(true, $camp);
             } else {
                 jsonResponse(false, null, 'Campaign not found');
@@ -58,7 +68,17 @@ if ($method === 'GET') {
             }
 
             // [FIX P43-I3] Scope list to workspace
-            $stmt = $pdo->prepare("SELECT * FROM voucher_campaigns WHERE (workspace_id = ? OR (? = 1 AND workspace_id IS NULL)) ORDER BY created_at DESC");
+            $stmt = $pdo->prepare("
+                SELECT vc.*,
+                    u_creator.id AS creator_id, u_creator.full_name AS creator_name, u_creator.email AS creator_email,
+                    u_creator.phone AS creator_phone, u_creator.avatar_url AS creator_avatar,
+                    u_creator.job_title AS creator_job_title, u_creator.department AS creator_department,
+                    u_creator.role AS creator_role
+                FROM voucher_campaigns vc
+                LEFT JOIN users u_creator ON u_creator.id = vc.created_by
+                WHERE (vc.workspace_id = ? OR (? = 1 AND vc.workspace_id IS NULL))
+                ORDER BY vc.created_at DESC
+            ");
             $stmt->execute([$workspace_id, $workspace_id]);
             $camps = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -75,6 +95,7 @@ if ($method === 'GET') {
                 $c['claimApprovalRequired'] = !empty($c['claim_approval_required']);
                 $c['claimEmailTemplateId'] = $c['claim_email_template_id'] ?? '';
                 $c['claimTargetFormId'] = $c['claim_target_form_id'] ?? '';
+                $c['creator'] = domationFormatCreator($c);
             }
             jsonResponse(true, $camps);
         }
@@ -103,12 +124,13 @@ if ($method === 'GET') {
         $claimApprovalRequired = (!empty($data['claimApprovalRequired']) || !empty($data['claim_approval_required'])) ? 1 : 0;
         $claimEmailTemplateId = $data['claimEmailTemplateId'] ?? $data['claim_email_template_id'] ?? null;
         $claimTargetFormId = $data['claimTargetFormId'] ?? $data['claim_target_form_id'] ?? null;
+        $currentUserId = get_current_user_id();
 
         if ($isNew) {
             $stmt = $pdo->prepare("
                 INSERT INTO voucher_campaigns 
-                (id, workspace_id, name, description, thumbnail_url, rewards, code_type, static_code, start_date, end_date, expiration_days, is_claimable, claim_approval_required, claim_email_template_id, claim_target_form_id, status, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (id, workspace_id, name, description, thumbnail_url, rewards, code_type, static_code, start_date, end_date, expiration_days, is_claimable, claim_approval_required, claim_email_template_id, claim_target_form_id, status, created_by, updated_by, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmt->execute([
                 $campaignId,
@@ -127,6 +149,8 @@ if ($method === 'GET') {
                 $claimEmailTemplateId,
                 $claimTargetFormId,
                 $data['status'] ?? 'draft',
+                $currentUserId,
+                $currentUserId,
                 $now,
                 $now
             ]);
@@ -134,7 +158,7 @@ if ($method === 'GET') {
             $stmt = $pdo->prepare("
                 UPDATE voucher_campaigns 
                 SET name = ?, description = ?, thumbnail_url = ?, rewards = ?, code_type = ?, 
-                    static_code = ?, start_date = ?, end_date = ?, expiration_days = ?, is_claimable = ?, claim_approval_required = ?, claim_email_template_id = ?, claim_target_form_id = ?, status = ?, updated_at = ?
+                    static_code = ?, start_date = ?, end_date = ?, expiration_days = ?, is_claimable = ?, claim_approval_required = ?, claim_email_template_id = ?, claim_target_form_id = ?, status = ?, updated_by = ?, updated_at = ?
                 WHERE id = ? AND workspace_id = ?
             ");
             $stmt->execute([
@@ -152,6 +176,7 @@ if ($method === 'GET') {
                 $claimEmailTemplateId,
                 $claimTargetFormId,
                 $data['status'] ?? 'draft',
+                $currentUserId,
                 $now,
                 $campaignId,
                 $workspace_id
@@ -162,7 +187,7 @@ if ($method === 'GET') {
             }
         }
 
-        jsonResponse(true, ['id' => $campaignId], 'Campaign saved successfully');
+        jsonResponse(true, ['id' => $campaignId, 'created_by' => $currentUserId, 'creator' => get_current_user_info()], 'Campaign saved successfully');
     } catch (Exception $e) {
         jsonResponse(false, null, 'Lỗi hệ thống, vui lòng thử lại.');
     }

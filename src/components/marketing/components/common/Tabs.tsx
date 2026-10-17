@@ -63,17 +63,13 @@ const Tabs: React.FC<TabsProps> = ({
   const sizeConfig = SIZE_CONFIG[size] ?? SIZE_CONFIG.md;
   const cleanClassName = stripLegacyClasses(className);
 
-  // Segmented / Sub-segmented / Glass: single-row container, active tab = var(--color-primary) (#BD1D2D)
-  if (variant === 'segmented' || variant === 'sub-segmented' || variant === 'glass') {
-    const isSub = variant === 'sub-segmented';
-    const itemPadding = isSub ? 'h-7 px-3 text-xs' : sizeConfig.padding;
-    const iconSize = isSub ? 'w-3.5 h-3.5' : sizeConfig.icon;
-
+  // Segmented / Glass: single-row container matching /approvals top toolbar
+  if (variant === 'segmented' || variant === 'glass') {
     return (
       <div
         role="tablist"
         className={cn(
-          'inline-flex items-center gap-1 bg-[var(--color-bg)] p-1 rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-x-auto scrollbar-hide flex-nowrap max-w-full',
+          'inline-flex items-center gap-1 bg-[var(--color-bg-secondary,#f1f5f9)] p-1 rounded-[8px] border border-[var(--color-border)]/60 overflow-x-auto scrollbar-hide flex-nowrap max-w-full',
           cleanClassName,
         )}
       >
@@ -90,20 +86,20 @@ const Tabs: React.FC<TabsProps> = ({
               aria-selected={isActive}
               onClick={() => onChange(item.id)}
               className={cn(
-                'relative rounded-[var(--radius-sm)] font-semibold normal-case transition-colors duration-150 inline-flex items-center whitespace-nowrap shrink-0 outline-none select-none cursor-pointer',
-                itemPadding,
+                'relative rounded-[6px] font-semibold text-xs transition-all duration-150 inline-flex items-center whitespace-nowrap shrink-0 outline-none select-none cursor-pointer',
+                sizeConfig.padding,
                 sizeConfig.gap,
                 isActive
-                  ? 'bg-[var(--color-primary)] text-white shadow-[var(--shadow-xs)]'
-                  : 'bg-transparent text-[var(--color-text-light)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]',
+                  ? 'bg-[var(--color-surface,#ffffff)] text-[var(--color-text)] font-bold shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] border border-[var(--color-border-light,#e2e8f0)]/80'
+                  : 'bg-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-black/5',
               )}
             >
               {Icon && (
                 <Icon
                   className={cn(
-                    iconSize,
+                    sizeConfig.icon,
                     'shrink-0 transition-colors',
-                    isActive ? 'text-white' : 'text-[var(--color-text-muted)]',
+                    isActive ? 'text-[var(--color-text)]' : 'text-[var(--color-text-muted)]',
                   )}
                 />
               )}
@@ -111,10 +107,10 @@ const Tabs: React.FC<TabsProps> = ({
               {hasCount && (
                 <span
                   className={cn(
-                    'ml-0.5 px-1.5 py-0.5 rounded-[var(--radius-sm)] text-[10px] font-bold leading-none',
+                    'ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none',
                     isActive
-                      ? 'bg-white/20 text-white'
-                      : 'bg-[var(--color-surface)] text-[var(--color-text-muted)] border border-[var(--color-border-light)]',
+                      ? 'bg-[var(--color-bg-secondary,#f1f5f9)] text-[var(--color-text)]'
+                      : 'bg-black/5 text-[var(--color-text-muted)]',
                   )}
                 >
                   {item.count !== undefined ? item.count.toLocaleString() : item.badge}
@@ -127,13 +123,13 @@ const Tabs: React.FC<TabsProps> = ({
     );
   }
 
-  // Pill: single-row overflow-x-auto, active tab = var(--color-primary)
-  if (variant === 'pill') {
+  // Sub-segmented / Pill: single-row rounded-full pills matching /approvals Row 2
+  if (variant === 'pill' || variant === 'sub-segmented') {
     return (
       <div
         role="tablist"
         className={cn(
-          'flex items-center gap-1.5 overflow-x-auto scrollbar-hide flex-nowrap max-w-full',
+          'flex items-center gap-2 overflow-x-auto scrollbar-hide flex-nowrap max-w-full',
           cleanClassName,
         )}
       >
@@ -150,17 +146,17 @@ const Tabs: React.FC<TabsProps> = ({
               aria-selected={isActive}
               onClick={() => onChange(item.id)}
               className={cn(
-                'h-8 px-3.5 rounded-[var(--radius-md)] text-xs font-semibold normal-case transition-colors duration-150 inline-flex items-center gap-1.5 border whitespace-nowrap shrink-0 outline-none select-none cursor-pointer',
+                'h-8 px-3.5 rounded-full text-xs transition-all duration-150 inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 outline-none select-none cursor-pointer',
                 isActive
-                  ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)] shadow-[var(--shadow-xs)]'
-                  : 'bg-[var(--color-surface)] text-[var(--color-text-light)] border-[var(--color-border)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg)]',
+                  ? 'border-[1.5px] border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)] font-bold shadow-xs'
+                  : 'border border-[var(--color-border)] bg-[var(--color-surface,#ffffff)] text-[var(--color-text-muted)] font-semibold hover:text-[var(--color-text)] hover:border-[var(--color-border-hover)]',
               )}
             >
               {Icon && (
                 <Icon
                   className={cn(
-                    'w-3.5 h-3.5 shrink-0',
-                    isActive ? 'text-white' : 'text-[var(--color-text-muted)]',
+                    'w-3.5 h-3.5 shrink-0 transition-colors',
+                    isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-muted)]',
                   )}
                 />
               )}
@@ -168,17 +164,17 @@ const Tabs: React.FC<TabsProps> = ({
               {hasCount && (
                 <span
                   className={cn(
-                    'ml-0.5 px-1.5 py-0.5 rounded-[var(--radius-sm)] text-[10px] font-bold leading-none',
+                    'ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none',
                     isActive
-                      ? 'bg-white/20 text-white'
-                      : 'bg-[var(--color-bg)] text-[var(--color-text-muted)]',
+                      ? 'bg-[var(--color-primary)] text-white'
+                      : 'bg-[var(--color-bg-secondary,#f1f5f9)] text-[var(--color-text-muted)]',
                   )}
                 >
                   {item.count !== undefined ? item.count.toLocaleString() : item.badge}
                 </span>
               )}
               {item.countLabel && (
-                <span className={cn('text-[10px] font-medium', isActive ? 'text-white/90' : 'text-[var(--color-text-muted)]')}>
+                <span className={cn('text-[10px] font-medium', isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-muted)]')}>
                   {item.countLabel}
                 </span>
               )}

@@ -76,7 +76,7 @@ const ManualAddModal: React.FC<ManualAddModalProps> = ({ isOpen, onClose, onAdd,
                             onChange={e => setNewDoc({ ...newDoc, content: e.target.value })}
                             rows={20}
                             placeholder="Dán hoặc soạn nội dung để AI ghi nhớ..."
-                            className={`w-full p-4 bg-slate-50 border-2 rounded-2xl text-xs font-bold text-slate-700 outline-none focus:bg-white transition-all resize-none shadow-sm ${(newDoc.content || '').length > 15000 ? 'border-rose-400 focus:border-rose-500' : 'border-slate-200 focus:border-emerald-500'}`}
+                            className={`w-full p-4 bg-slate-50 border-2 rounded-[14px] text-xs font-bold text-slate-700 outline-none focus:bg-white transition-all resize-none shadow-sm ${(newDoc.content || '').length > 15000 ? 'border-rose-400 focus:border-rose-500' : 'border-slate-200 focus:border-emerald-500'}`}
                         />
                         <div className="text-right text-[10px] text-slate-400 font-bold mt-1">{(newDoc.content || '').length.toLocaleString()}/15,000 ký tự</div>
                         {(newDoc.content || '').length > 15000 && (
@@ -86,7 +86,7 @@ const ManualAddModal: React.FC<ManualAddModalProps> = ({ isOpen, onClose, onAdd,
                         )}
                     </div>
                 </div>
-                <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex gap-3">
+                <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-[14px] flex gap-3">
                     <Sparkles className="w-5 h-5 text-emerald-500 shrink-0" />
                     <p className="text-[10px] text-emerald-700 font-medium leading-relaxed">Hệ thống sẽ tự động tách đoạn và tạo Vector Embedding để AI có thể tìm thấy dữ liệu này khi khách hỏi.</p>
                 </div>

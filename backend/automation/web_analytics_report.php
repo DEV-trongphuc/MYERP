@@ -2,6 +2,7 @@
 // api/web_analytics_report.php - Get web analytics reports
 header('Content-Type: application/json');
 require_once 'db_connect.php';
+require_once 'auth_middleware.php';
 
 try {
     /** @var PDO $pdo */

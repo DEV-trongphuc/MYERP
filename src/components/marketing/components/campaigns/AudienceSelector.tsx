@@ -461,7 +461,7 @@ const AudienceSelector: React.FC<AudienceSelectorProps> = ({
     };
 
     return (
-        <div className={`relative bg-white rounded-[24px] border shadow-sm overflow-hidden transition-all min-h-[520px] flex flex-col ${error ? 'border-rose-500 ring-4 ring-rose-50' : 'border-slate-200'}`}>
+        <div className={`relative bg-white rounded-[18px] border shadow-sm overflow-hidden transition-all min-h-[520px] flex flex-col ${error ? 'border-rose-500 ring-4 ring-rose-50' : 'border-slate-200'}`}>
             <div className="px-6 pt-6 pb-2 flex justify-between items-center border-b border-slate-100">
                 <div className="flex gap-6 overflow-x-auto scrollbar-hide">
                     <button onClick={() => setActiveTab('lists')} className={`pb-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'lists' ? 'border-blue-600 text-slate-800' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
@@ -608,7 +608,7 @@ const AudienceSelector: React.FC<AudienceSelectorProps> = ({
                                                     value={rawData}
                                                     onChange={e => setRawData(e.target.value)}
                                                     placeholder="Dán dữ liệu nhãn, họ tên, email, sđt... (Dòng đầu tiên là tiêu đề)"
-                                                    className="w-full h-48 p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-[11px] font-mono focus:border-[#2563eb] outline-none resize-none transition-all"
+                                                    className="w-full h-48 p-4 bg-slate-50 border-2 border-slate-200 rounded-[14px] text-[11px] font-mono focus:border-[#2563eb] outline-none resize-none transition-all"
                                                     autoFocus
                                                 />
                                                 {!rawData && (
@@ -624,10 +624,10 @@ const AudienceSelector: React.FC<AudienceSelectorProps> = ({
                                         <div className="space-y-4">
                                             <div
                                                 onClick={() => fileInputRef.current?.click()}
-                                                className={`h-48 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all ${fileName ? 'border-blue-400 bg-blue-50' : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'}`}
+                                                className={`h-48 border-2 border-dashed rounded-[14px] flex flex-col items-center justify-center cursor-pointer transition-all ${fileName ? 'border-blue-400 bg-blue-50' : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'}`}
                                             >
                                                 <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
-                                                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-4 transition-all ${fileName ? 'bg-blue-500 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}>
+                                                <div className={`w-14 h-14 rounded-[14px] flex items-center justify-center mb-4 transition-all ${fileName ? 'bg-blue-500 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}>
                                                     <Upload className="w-7 h-7" />
                                                 </div>
                                                 <p className="text-[11px] font-bold text-slate-700">{fileName || 'Kéo thả hoặc nhấp để chọn tệp CSV'}</p>
@@ -646,7 +646,7 @@ const AudienceSelector: React.FC<AudienceSelectorProps> = ({
                                 </div>
                             ) : (
                                 <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-                                    <div className="bg-emerald-50 border border-emerald-100 p-5 rounded-2xl flex items-center gap-4">
+                                    <div className="bg-emerald-50 border border-emerald-100 p-5 rounded-[14px] flex items-center gap-4">
                                         <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-emerald-600 shadow-sm"><CheckCircle2 className="w-5 h-5" /></div>
                                         <div>
                                             <p className="text-xs font-black text-emerald-800 uppercase tracking-tight">Dữ liệu sẵn sàng</p>

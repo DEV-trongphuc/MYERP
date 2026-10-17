@@ -1,8 +1,9 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GitMerge, Trash2, RotateCcw, Copy, Send, Users, Snowflake, Cake, Layers, AlertCircle, FileInput, Tag, ShoppingCart, Link, CheckCircle, ListPlus, BellRing } from 'lucide-react';
+import { GitMerge, Trash2, RotateCcw, Copy, Send, Users, Snowflake, Cake, Layers, AlertCircle, FileInput, Tag, ShoppingCart, Link, CheckCircle, ListPlus, BellRing, Bot, Zap, ClipboardList, UserPlus, Mail, Clock, MessageSquare } from 'lucide-react';
 import { Flow, Campaign, FormDefinition, PurchaseEvent, CustomEvent, Segment } from '../../types';
 import { Avatar } from '../../../../components/ui/Avatar';
+import { AppIcon } from '../../../common/AppIcons';
 
 interface FlowCardProps {
     flow: Flow;
@@ -50,121 +51,78 @@ const FlowCard = React.memo<FlowCardProps>((
     const stepCount = (flow as any).step_count ?? flow.steps?.length ?? 0;
     const trigger = flow.steps?.find(s => s.type === 'trigger');
     const triggerConfig = trigger?.config || {};
-    const triggerType = triggerConfig.type || 'segment';
+    const rawTriggerType = triggerConfig.type || (flow as any).trigger_type || '';
+    const flowNameLower = (flow.name || '').toLowerCase();
 
     const theme = React.useMemo(() => {
         if (isArchived) return {
             icon: GitMerge,
+            appIconKey: 'flow_archive',
             accent: 'slate' as const,
             gradientMain: 'from-slate-100 to-slate-200 text-slate-500 dark:text-slate-400',
+            iconBg: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700',
+            chipBg: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700',
             label: 'Đã xóa'
         };
 
-        if (triggerType === 'date' && triggerConfig.dateField === 'lastActivity') {
+        // 1. AI Capture / Bot Trigger (Theme: rose #f43f5e)
+        if (
+            rawTriggerType === 'ai_capture' ||
+            rawTriggerType === 'ai_chatbot_lead' ||
+            rawTriggerType === 'ai' ||
+            rawTriggerType === 'bot' ||
+            flowNameLower.includes('ai chatbot') ||
+            flowNameLower.includes('lead từ ai') ||
+            flowNameLower.includes('ai capture')
+        ) {
+            return {
+                icon: Bot,
+                appIconKey: 'flow_ai_bot',
+                accent: 'rose' as const,
+                gradientMain: 'from-rose-500 to-red-600',
+                iconBg: 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200/80 dark:border-rose-800/40',
+                chipBg: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800/40',
+                label: 'Lead từ AI Chatbot'
+            };
+        }
+
+        // 2. Date: Inactivity / Winback (Theme: sky/blue #0284c7)
+        if (
+            (rawTriggerType === 'date' && triggerConfig.dateField === 'lastActivity') ||
+            flowNameLower.includes('inactivity') ||
+            flowNameLower.includes('ngủ đông') ||
+            flowNameLower.includes('winback')
+        ) {
             return {
                 icon: Snowflake,
+                appIconKey: 'flow_inactivity',
                 accent: 'blue' as const,
                 gradientMain: 'from-blue-500 to-indigo-600',
+                iconBg: 'bg-sky-50 text-sky-600 dark:bg-sky-950/40 dark:text-sky-400 border border-sky-200/80 dark:border-sky-800/40',
+                chipBg: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/30 dark:text-sky-300 dark:border-sky-800/40',
                 label: `Ngủ đông > ${triggerConfig.inactiveAmount || 30} ngày`
             };
         }
 
-        if (triggerType === 'date' && triggerConfig.dateField === 'dateOfBirth') {
+        // 3. Date: Birthday
+        if (
+            (rawTriggerType === 'date' && triggerConfig.dateField === 'dateOfBirth') ||
+            flowNameLower.includes('sinh nhật') ||
+            flowNameLower.includes('birthday')
+        ) {
             return {
                 icon: Cake,
+                appIconKey: 'flow_birthday',
                 accent: 'pink' as const,
                 gradientMain: 'from-pink-400 to-rose-500',
+                iconBg: 'bg-pink-50 text-pink-600 dark:bg-pink-950/40 dark:text-pink-400 border border-pink-200/80 dark:border-pink-800/40',
+                chipBg: 'bg-pink-50 text-pink-700 border-pink-200 dark:bg-pink-950/30 dark:text-pink-300 dark:border-pink-800/40',
                 label: 'Sinh nhật'
             };
         }
 
-        if (triggerType === 'form') {
-            let formName = linkedForm ? linkedForm.name : (triggerConfig.targetId ? `Form ${triggerConfig.targetId.substring(0, 6)}...` : 'Form không xác định');
-            let accent = 'yellow';
-            let gradient = 'from-[#f59e0b] to-[#d97706]';
-
-            if (!linkedForm && triggerConfig.targetId) {
-                accent = 'rose';
-                gradient = 'from-rose-400 to-red-500';
-                formName = `Form đã xóa [${(triggerConfig.targetId || '').substring(0, 6)}]`;
-            }
-
-            return {
-                icon: FileInput,
-                accent: accent as any,
-                gradientMain: gradient,
-                label: formName,
-                isLink: !!linkedForm,
-                onLinkClick: () => linkedForm && onOpenForm?.(linkedForm)
-            };
-        }
-
-        if (triggerType === 'purchase') {
-            let label = linkedPurchaseEvent ? linkedPurchaseEvent.name : 'Sự kiện mua hàng';
-            let accent = 'pink';
-            let gradient = 'from-pink-400 to-rose-500';
-
-            if (!linkedPurchaseEvent && triggerConfig.targetId) {
-                label = `Event Mua [${(triggerConfig.targetId || '').substring(0, 6)}] đã xóa`;
-                accent = 'rose';
-                gradient = 'from-rose-400 to-red-500';
-            }
-
-            return {
-                icon: ShoppingCart,
-                accent: accent as any,
-                gradientMain: gradient,
-                label: label,
-                isLink: !!linkedPurchaseEvent,
-                onLinkClick: () => linkedPurchaseEvent && onOpenPurchase?.(linkedPurchaseEvent)
-            };
-        }
-
-        if (triggerType === 'custom_event') {
-            let label = linkedCustomEvent ? linkedCustomEvent.name : 'Sự kiện tùy chỉnh';
-            let accent = 'violet';
-            let gradient = 'from-blue-400 to-fuchsia-500';
-
-            if (!linkedCustomEvent && triggerConfig.targetId) {
-                label = `Event [${(triggerConfig.targetId || '').substring(0, 6)}] đã xóa`;
-                accent = 'rose';
-                gradient = 'from-rose-400 to-red-500';
-            }
-
-            return {
-                icon: GitMerge,
-                accent: accent as any,
-                gradientMain: gradient,
-                label: label,
-                isLink: !!linkedCustomEvent,
-                onLinkClick: () => linkedCustomEvent && onOpenCustomEvent?.(linkedCustomEvent)
-            };
-        }
-
-        if (triggerType === 'campaign') {
-            const campaignName = linkedCampaign ? linkedCampaign.name : (triggerConfig.targetId ? 'Chiến dịch đã xóa' : 'Chưa chọn chiến dịch');
-            return {
-                icon: Send,
-                accent: 'violet' as const,
-                gradientMain: 'from-blue-500 to-purple-600',
-                label: campaignName,
-                isLink: !!linkedCampaign,
-                onLinkClick: () => linkedCampaign && onOpenCampaign?.(linkedCampaign)
-            };
-        }
-
-        if (triggerType === 'tag') {
-            return {
-                icon: Tag,
-                accent: 'teal' as const,
-                gradientMain: 'from-teal-400 to-emerald-500',
-                label: `Được gắn tag: ${linkedTag || triggerConfig.targetId || ''}`,
-                isLink: !!linkedTag,
-                onLinkClick: () => linkedTag && onOpenTag?.(linkedTag)
-            };
-        }
-
-        if (triggerType === 'date' && triggerConfig.dateField === 'custom_field_date') {
+        // 4. Date: Custom Field Date
+        if (rawTriggerType === 'date' && triggerConfig.dateField === 'custom_field_date') {
             const fieldKey = triggerConfig.customFieldKey || 'custom field';
             const offsetType = triggerConfig.offsetType || 'on';
             const offsetValue = triggerConfig.offsetValue ?? 0;
@@ -175,46 +133,217 @@ const FlowCard = React.memo<FlowCardProps>((
                     : `Đúng ngày [${fieldKey}]`;
             return {
                 icon: BellRing,
-                accent: 'violet' as const,
-                gradientMain: 'from-blue-500 to-purple-700',
+                appIconKey: 'flow_custom_event',
+                accent: 'purple' as const,
+                gradientMain: 'from-purple-500 to-indigo-600',
+                iconBg: 'bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400 border border-purple-200/80 dark:border-purple-800/40',
+                chipBg: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800/40',
                 label: offsetLabel
             };
         }
 
-        if (triggerType === 'segment') {
-            const isListSubtype = triggerConfig.targetSubtype === 'list' || triggerConfig.targetSubtype === 'sync' || !!linkedList;
+        // 5. Purchase Success / Cart (Theme: pink #ec4899)
+        if (
+            rawTriggerType === 'purchase' ||
+            flowNameLower.includes('mua hàng') ||
+            flowNameLower.includes('đơn hàng') ||
+            flowNameLower.includes('purchase')
+        ) {
+            let label = linkedPurchaseEvent ? linkedPurchaseEvent.name : 'Sự kiện mua hàng';
+            let isDeleted = !linkedPurchaseEvent && triggerConfig.targetId;
 
-            if (isListSubtype) {
-                const resolved  = !!linkedList;
-                const label     = resolved
-                    ? linkedList.name
-                    : (triggerConfig.targetId ? 'Đang tải...' : 'Chưa chọn danh sách');
-                const hasTarget = resolved || !!triggerConfig.targetId;
-                return {
-                    icon: ListPlus,
-                    accent: 'emerald' as const,
-                    gradientMain: 'from-emerald-600 to-teal-700',
-                    label,
-                    isLink: hasTarget,
-                    onLinkClick: () => {
-                        if (linkedList && onOpenList) {
-                            onOpenList(linkedList);
-                        } else if (triggerConfig.targetId) {
-                            navigate(`/marketing/audience?list_id=${triggerConfig.targetId}`);
-                        }
-                    }
-                };
+            if (isDeleted) {
+                label = `Event Mua [${(triggerConfig.targetId || '').substring(0, 6)}] đã xóa`;
             }
 
+            return {
+                icon: ShoppingCart,
+                appIconKey: 'flow_purchase',
+                accent: 'pink' as any,
+                gradientMain: 'from-pink-400 to-rose-500',
+                iconBg: isDeleted
+                    ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200/80 dark:border-rose-800/40'
+                    : 'bg-pink-50 text-pink-600 dark:bg-pink-950/40 dark:text-pink-400 border border-pink-200/80 dark:border-pink-800/40',
+                chipBg: isDeleted
+                    ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800/40'
+                    : 'bg-pink-50 text-pink-700 border-pink-200 dark:bg-pink-950/30 dark:text-pink-300 dark:border-pink-800/40',
+                label: label,
+                isLink: !!linkedPurchaseEvent,
+                onLinkClick: () => linkedPurchaseEvent && onOpenPurchase?.(linkedPurchaseEvent)
+            };
+        }
+
+        // 6. Survey Response / Feedback (Theme: amber #fbbf24)
+        if (
+            rawTriggerType === 'survey' ||
+            flowNameLower.includes('khảo sát') ||
+            flowNameLower.includes('survey') ||
+            flowNameLower.includes('feedback')
+        ) {
+            return {
+                icon: ClipboardList,
+                appIconKey: 'flow_survey',
+                accent: 'amber' as any,
+                gradientMain: 'from-amber-400 to-yellow-500',
+                iconBg: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/40',
+                chipBg: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800/40',
+                label: triggerConfig.targetId ? `Khảo sát: ${triggerConfig.targetId}` : 'Phản hồi Khảo sát'
+            };
+        }
+
+        // 7. Zalo OA Follow (Theme: cyan #06b6d4)
+        if (
+            rawTriggerType === 'zalo_follow' ||
+            rawTriggerType === 'zalo' ||
+            flowNameLower.includes('zalo')
+        ) {
+            return {
+                icon: UserPlus,
+                appIconKey: 'flow_zalo',
+                accent: 'cyan' as any,
+                gradientMain: 'from-cyan-500 to-blue-500',
+                iconBg: 'bg-cyan-50 text-cyan-600 dark:bg-cyan-950/40 dark:text-cyan-400 border border-cyan-200/80 dark:border-cyan-800/40',
+                chipBg: 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/30 dark:text-cyan-300 dark:border-cyan-800/40',
+                label: 'Quan tâm Zalo OA'
+            };
+        }
+
+        // 8. Form Submission (Theme: amber #f59e0b)
+        if (rawTriggerType === 'form' || flowNameLower.includes('form')) {
+            let formName = linkedForm ? linkedForm.name : (triggerConfig.targetId ? `Form ${triggerConfig.targetId.substring(0, 6)}...` : 'Form đăng ký');
+            let isDeleted = !linkedForm && triggerConfig.targetId;
+
+            if (isDeleted) {
+                formName = `Form đã xóa [${(triggerConfig.targetId || '').substring(0, 6)}]`;
+            }
+
+            return {
+                icon: FileInput,
+                appIconKey: 'flow_form',
+                accent: 'amber' as any,
+                gradientMain: 'from-amber-500 to-yellow-600',
+                iconBg: isDeleted
+                    ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200/80 dark:border-rose-800/40'
+                    : 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200/80 dark:border-amber-800/40',
+                chipBg: isDeleted
+                    ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800/40'
+                    : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800/40',
+                label: formName,
+                isLink: !!linkedForm,
+                onLinkClick: () => linkedForm && onOpenForm?.(linkedForm)
+            };
+        }
+
+        // 9. Custom Event (Theme: violet #8b5cf6, Zap)
+        if (rawTriggerType === 'custom_event') {
+            let label = linkedCustomEvent ? linkedCustomEvent.name : 'Sự kiện tùy chỉnh';
+            let isDeleted = !linkedCustomEvent && triggerConfig.targetId;
+
+            if (isDeleted) {
+                label = `Event [${(triggerConfig.targetId || '').substring(0, 6)}] đã xóa`;
+            }
+
+            return {
+                icon: Zap,
+                appIconKey: 'flow_custom_event',
+                accent: 'violet' as any,
+                gradientMain: 'from-purple-500 to-indigo-600',
+                iconBg: isDeleted
+                    ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200/80 dark:border-rose-800/40'
+                    : 'bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400 border border-purple-200/80 dark:border-purple-800/40',
+                chipBg: isDeleted
+                    ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800/40'
+                    : 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800/40',
+                label: label,
+                isLink: !!linkedCustomEvent,
+                onLinkClick: () => linkedCustomEvent && onOpenCustomEvent?.(linkedCustomEvent)
+            };
+        }
+
+        // 10. Tag Trigger (Theme: emerald #10b981, Tag)
+        if (rawTriggerType === 'tag' || flowNameLower.includes('gắn tag') || flowNameLower.includes('nhãn')) {
+            return {
+                icon: Tag,
+                appIconKey: 'flow_tag',
+                accent: 'emerald' as const,
+                gradientMain: 'from-emerald-500 to-teal-600',
+                iconBg: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-800/40',
+                chipBg: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800/40',
+                label: `Tag: ${linkedTag || triggerConfig.targetId || (triggerConfig.tags ? triggerConfig.tags.join(', ') : 'Gắn nhãn')}`,
+                isLink: !!linkedTag,
+                onLinkClick: () => linkedTag && onOpenTag?.(linkedTag)
+            };
+        }
+
+        // 11. Campaign Tracking (Theme: violet #8b5cf6, Send)
+        if (rawTriggerType === 'campaign') {
+            const campaignName = linkedCampaign ? linkedCampaign.name : (triggerConfig.targetId ? 'Chiến dịch đã xóa' : 'Chưa chọn chiến dịch');
+            return {
+                icon: Send,
+                appIconKey: 'flow_mail',
+                accent: 'violet' as const,
+                gradientMain: 'from-purple-500 to-indigo-600',
+                iconBg: 'bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400 border border-purple-200/80 dark:border-purple-800/40',
+                chipBg: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800/40',
+                label: campaignName,
+                isLink: !!linkedCampaign,
+                onLinkClick: () => linkedCampaign && onOpenCampaign?.(linkedCampaign)
+            };
+        }
+
+        // 12. List vs Smart Segment
+        const isListSubtype =
+            rawTriggerType === 'list' ||
+            rawTriggerType === 'added_to_list' ||
+            triggerConfig.targetSubtype === 'list' ||
+            triggerConfig.targetSubtype === 'sync' ||
+            !!linkedList ||
+            flowNameLower.includes('danh sách') ||
+            flowNameLower.includes('list');
+
+        if (isListSubtype) {
+            const resolved  = !!linkedList;
+            const label     = resolved
+                ? linkedList.name
+                : (triggerConfig.targetId ? 'Đang tải...' : 'Gia nhập Danh sách');
+            const hasTarget = resolved || !!triggerConfig.targetId;
+            return {
+                icon: ListPlus,
+                appIconKey: 'flow_list',
+                accent: 'indigo' as const,
+                gradientMain: 'from-indigo-500 to-blue-600',
+                iconBg: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400 border border-indigo-200/80 dark:border-indigo-800/40',
+                chipBg: 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/30 dark:text-indigo-300 dark:border-indigo-800/40',
+                label,
+                isLink: hasTarget,
+                onLinkClick: () => {
+                    if (linkedList && onOpenList) {
+                        onOpenList(linkedList);
+                    } else if (triggerConfig.targetId) {
+                        navigate(`/marketing/audience?list_id=${triggerConfig.targetId}`);
+                    }
+                }
+            };
+        }
+
+        if (
+            rawTriggerType === 'segment' ||
+            triggerConfig.targetSubtype === 'segment' ||
+            flowNameLower.includes('phân khúc') ||
+            flowNameLower.includes('segment')
+        ) {
             const resolved  = !!linkedSegment;
             const label     = resolved
                 ? linkedSegment!.name
-                : (triggerConfig.targetId ? 'Đang tải...' : 'Chưa chọn phân khúc');
+                : (triggerConfig.targetId ? 'Đang tải...' : 'Phân khúc động (Smart)');
             const hasTarget = resolved || !!triggerConfig.targetId;
             return {
                 icon: Layers,
-                accent: 'amber' as const,
-                gradientMain: 'from-amber-400 to-orange-500',
+                appIconKey: 'flow_smart_segment',
+                accent: 'orange' as const,
+                gradientMain: 'from-orange-500 to-amber-600',
+                iconBg: 'bg-orange-50 text-orange-600 dark:bg-orange-950/40 dark:text-orange-400 border border-orange-200/80 dark:border-orange-800/40',
+                chipBg: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800/40',
                 label,
                 isLink: hasTarget,
                 onLinkClick: () => {
@@ -227,14 +356,36 @@ const FlowCard = React.memo<FlowCardProps>((
             };
         }
 
-        // Default fallback
+        // 13. Keywords for ambiguous names: "trial" / "mail" / "system mail" / "email" / "hệ thống"
+        if (
+            flowNameLower.includes('trial') ||
+            flowNameLower.includes('mail') ||
+            flowNameLower.includes('email') ||
+            flowNameLower.includes('system') ||
+            flowNameLower.includes('hệ thống')
+        ) {
+            return {
+                icon: Mail,
+                appIconKey: 'flow_mail',
+                accent: 'indigo' as const,
+                gradientMain: 'from-indigo-500 to-blue-600',
+                iconBg: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400 border border-indigo-200/80 dark:border-indigo-800/40',
+                chipBg: 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/30 dark:text-indigo-300 dark:border-indigo-800/40',
+                label: 'Email tự động'
+            };
+        }
+
+        // Default fallback (Phân khúc / Smart Segment)
         return {
-            icon: Users,
-            accent: 'violet' as const,
-            gradientMain: 'from-blue-500 to-fuchsia-500',
-            label: 'Dựa trên phân khúc'
+            icon: Layers,
+            appIconKey: 'flow_smart_segment',
+            accent: 'orange' as const,
+            gradientMain: 'from-orange-500 to-amber-600',
+            iconBg: 'bg-orange-50 text-orange-600 dark:bg-orange-950/40 dark:text-orange-400 border border-orange-200/80 dark:border-orange-800/40',
+            chipBg: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800/40',
+            label: 'Phân khúc động (Smart)'
         };
-    }, [isArchived, triggerType, triggerConfig, linkedCampaign, linkedForm, linkedPurchaseEvent, linkedCustomEvent, linkedSegment, linkedList, linkedTag, onOpenCampaign, onOpenForm, onOpenList, onOpenSegment, onOpenTag, onOpenPurchase, onOpenCustomEvent]);
+    }, [isArchived, rawTriggerType, triggerConfig, flow.name, flowNameLower, linkedCampaign, linkedForm, linkedPurchaseEvent, linkedCustomEvent, linkedSegment, linkedList, linkedTag, onOpenCampaign, onOpenForm, onOpenList, onOpenSegment, onOpenTag, onOpenPurchase, onOpenCustomEvent, navigate]);
 
     const Icon = theme.icon;
     const creatorName = (flow.config as any)?.creator?.name || 'Hệ thống';
@@ -280,12 +431,7 @@ const FlowCard = React.memo<FlowCardProps>((
                 )}
                 <td className="px-4 py-3 min-w-[240px]">
                     <div className="flex items-center gap-3 min-w-0">
-                        <div
-                            className="w-9 h-9 shrink-0 rounded-[var(--radius-md)] flex items-center justify-center"
-                            style={{ backgroundColor: 'rgba(189, 29, 45, 0.1)', color: 'var(--color-primary)' }}
-                        >
-                            <Icon className="w-4 h-4" />
-                        </div>
+                        <AppIcon name={theme.appIconKey} size={36} className="shrink-0 rounded-[10px] shadow-2xs" />
                         <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 min-w-0">
                                 <span className="font-semibold text-[var(--color-text)] truncate">{flow.name}</span>
@@ -295,18 +441,18 @@ const FlowCard = React.memo<FlowCardProps>((
                                     </span>
                                 )}
                             </div>
-                            <div className="flex items-center gap-1.5 mt-0.5 text-xs text-[var(--color-text-muted)]">
+                            <div className="flex items-center gap-1.5 mt-0.5 text-xs">
                                 {(theme as any).isLink ? (
                                     <button
                                         type="button"
                                         onClick={(e) => { e.stopPropagation(); (theme as any).onLinkClick?.(); }}
-                                        className="inline-flex items-center gap-1 text-[var(--color-primary)] hover:underline font-medium truncate max-w-[240px]"
+                                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-[8px] border transition-colors cursor-pointer font-medium truncate max-w-[240px] hover:opacity-90 ${theme.chipBg}`}
                                     >
                                         <Link className="w-3 h-3 shrink-0" />
                                         <span className="truncate">{theme.label}</span>
                                     </button>
                                 ) : (
-                                    <span className="truncate max-w-[240px]">{theme.label}</span>
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-[8px] border text-xs truncate max-w-[240px] ${theme.chipBg}`}>{theme.label}</span>
                                 )}
                             </div>
                         </div>
@@ -391,7 +537,7 @@ const FlowCard = React.memo<FlowCardProps>((
     return (
         <div
             onClick={onClick}
-            className={`group relative bg-[var(--color-surface)] border rounded-[var(--radius-lg)] h-full flex flex-col justify-between p-4 transition-all duration-200 cursor-pointer overflow-hidden ${
+            className={`hover-lift group relative bg-[var(--color-surface)] border rounded-xl p-5 shadow-[0_2px_8px_rgba(0,0,0,0.02)] h-full flex flex-col justify-between transition-all duration-300 cursor-pointer overflow-hidden ${
                 isArchived
                     ? selected
                         ? 'border-[var(--color-primary)] ring-2 ring-[var(--color-primary-light)]'
@@ -414,12 +560,7 @@ const FlowCard = React.memo<FlowCardProps>((
                                 />
                             </div>
                         )}
-                        <div
-                            className="w-10 h-10 rounded-[var(--radius-md)] flex items-center justify-center shrink-0"
-                            style={{ backgroundColor: 'rgba(189, 29, 45, 0.1)', color: 'var(--color-primary)' }}
-                        >
-                            <Icon className="w-5 h-5" />
-                        </div>
+                        <AppIcon name={theme.appIconKey} size={42} className="shrink-0 rounded-[12px] shadow-xs group-hover:scale-105 transition-transform duration-300" />
                     </div>
                     <div className="flex items-center gap-1.5">
                         {hasWarning && !isArchived && (
@@ -433,28 +574,31 @@ const FlowCard = React.memo<FlowCardProps>((
                 </div>
 
                 <div>
-                    <h3 className="text-[15px] font-bold text-[var(--color-text)] leading-snug mb-1 line-clamp-2">
+                    <h3 className="text-sm font-bold text-[var(--color-text)] leading-snug mb-1.5 line-clamp-2 group-hover:text-[var(--color-primary)] transition-colors">
                         {flow.name}
                     </h3>
-                    <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-text-muted)]">
+                    <div className="flex items-center gap-1.5 text-xs font-medium">
                         {(theme as any).isLink ? (
                             <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); (theme as any).onLinkClick?.(); }}
-                                className="inline-flex items-center gap-1.5 text-[var(--color-primary)] bg-[var(--color-primary-light)] px-2 py-0.5 rounded-[var(--radius-sm)] transition-colors cursor-pointer font-semibold max-w-full"
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[10px] border transition-colors cursor-pointer font-medium max-w-full hover:opacity-90 ${theme.chipBg}`}
+                                title="Nhấn để xem chi tiết liên kết"
                             >
                                 <Link className="w-3 h-3 shrink-0" />
                                 <span className="truncate max-w-[200px]">{theme.label}</span>
                             </button>
                         ) : (
-                            <span className="truncate max-w-[220px]">{theme.label}</span>
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-[10px] border text-xs font-medium max-w-[220px] truncate ${theme.chipBg}`}>
+                                {theme.label}
+                            </span>
                         )}
                     </div>
                 </div>
             </div>
 
             <div className="pt-3 mt-3 space-y-3">
-                <div className="grid grid-cols-3 gap-1 p-1 bg-[var(--color-bg)] rounded-[var(--radius-md)] border border-[var(--color-border-light)]">
+                <div className="grid grid-cols-3 gap-1 p-1 bg-[var(--color-bg)] rounded-[14px] border border-[var(--color-border-light)]">
                     <div className="flex flex-col items-center justify-center py-1.5 px-1">
                         <div className="flex items-center gap-1 mb-0.5">
                             <Layers className="w-3 h-3 text-[var(--color-text-muted)]" />
@@ -464,7 +608,7 @@ const FlowCard = React.memo<FlowCardProps>((
                     </div>
                     <div className="flex flex-col items-center justify-center py-1.5 px-1 border-l border-[var(--color-border-light)]">
                         <div className="flex items-center gap-1 mb-0.5">
-                            <Users className="w-3 h-3 text-[var(--color-primary)]" />
+                            <Users className="w-3 h-3 text-blue-500" />
                             <span className="text-[10px] font-semibold text-[var(--color-text-muted)] uppercase">Tham gia</span>
                         </div>
                         <span className="text-xs font-bold tabular-nums text-[var(--color-text)]">{enrolled.toLocaleString('vi-VN')}</span>
@@ -498,7 +642,7 @@ const FlowCard = React.memo<FlowCardProps>((
                                 <button
                                     type="button"
                                     onClick={() => onRestore?.()}
-                                    className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-emerald-600 hover:bg-emerald-50 transition-colors"
+                                    className="w-7 h-7 flex items-center justify-center rounded-[10px] border border-[var(--color-border)] bg-[var(--color-surface)] text-emerald-600 hover:bg-emerald-50 transition-colors"
                                     title="Khôi phục"
                                 >
                                     <RotateCcw className="w-3.5 h-3.5" />
@@ -506,7 +650,7 @@ const FlowCard = React.memo<FlowCardProps>((
                                 <button
                                     type="button"
                                     onClick={() => onDelete(true)}
-                                    className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-rose-600 hover:bg-rose-50 transition-colors"
+                                    className="w-7 h-7 flex items-center justify-center rounded-[10px] border border-[var(--color-border)] bg-[var(--color-surface)] text-rose-600 hover:bg-rose-50 transition-colors"
                                     title="Xóa vĩnh viễn"
                                 >
                                     <Trash2 className="w-3.5 h-3.5" />
@@ -517,7 +661,7 @@ const FlowCard = React.memo<FlowCardProps>((
                                 <button
                                     type="button"
                                     onClick={() => onDuplicate?.(flow)}
-                                    className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-primary)] hover:bg-[var(--color-bg)] transition-colors"
+                                    className="w-7 h-7 flex items-center justify-center rounded-[10px] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-primary)] hover:bg-[var(--color-bg)] transition-colors"
                                     title="Nhân bản"
                                 >
                                     <Copy className="w-3.5 h-3.5" />
@@ -525,7 +669,7 @@ const FlowCard = React.memo<FlowCardProps>((
                                 <button
                                     type="button"
                                     onClick={() => onDelete(false)}
-                                    className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                    className="w-7 h-7 flex items-center justify-center rounded-[10px] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-rose-600 hover:bg-rose-50 transition-colors"
                                     title="Thùng rác"
                                 >
                                     <Trash2 className="w-3.5 h-3.5" />

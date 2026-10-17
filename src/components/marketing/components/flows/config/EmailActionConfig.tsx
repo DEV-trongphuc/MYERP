@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Eye, Layout, Mail, Info, User, ShieldCheck, Zap, FileText, Code, Check, Braces, ChevronDown, Paperclip, File as FileIcon, X, Filter, Plus, AlertCircle, Loader2, Layers, Edit3 } from 'lucide-react';
 import { api } from '../../../services/storageAdapter';
 import { Template, Attachment, TemplateGroup } from '../../../types';
@@ -14,6 +15,7 @@ import ConfirmModal from '../../common/ConfirmModal';
 import { MultiFileUploadModal } from '../../campaigns/MultiFileUploadModal';
 import FileLibraryModal from '../../common/FileLibraryModal';
 import { useSettings } from '../../contexts/SettingsContext';
+import { getMktPortalRoot } from '../../../utils/portalRoot';
 
 interface EmailActionConfigProps {
     config: Record<string, any>;
@@ -78,7 +80,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
         });
     }, []);  
 
-    // [AUTO-SELECT] Nếu bước chưa có email người gửi HOᡀC email đã lưu không còn tồn tại → tự chọn lại
+    // [AUTO-SELECT] Nếu bước chưa có email người gửi HOẶC email đã lưu không còn tồn tại → tự chọn lại
     useEffect(() => {
         if (senderEmails.length === 0) return;
         if (!config.senderEmail || !senderEmails.includes(config.senderEmail)) {
@@ -249,7 +251,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                     />
                     <button
                         onClick={() => setShowPersonalization({ target: showPersonalization.target === 'subject' ? null : 'subject' })}
-                        className={`absolute right-4 top-[32px] p-1.5 transition-colors ${showPersonalization.target === 'subject' ? 'text-[#ca7900]' : 'text-slate-400 hover:text-[#ca7900]'}`}
+                        className={`absolute right-4 top-[32px] p-1.5 transition-colors ${showPersonalization.target === 'subject' ? 'text-[var(--color-primary)]' : 'text-slate-400 hover:text-[var(--color-primary)]'}`}
                         title="Cá nhân hóa tiêu đề"
                         disabled={disabled}
                     >
@@ -257,16 +259,16 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                     </button>
 
                     {showPersonalization.target === 'subject' && (
-                        <div className="absolute right-0 top-20 z-50 w-56 bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 animate-in zoom-in-95">
+                        <div className="absolute right-0 top-20 z-50 w-56 bg-white rounded-[14px] shadow-2xl border border-slate-100 p-2 animate-in zoom-in-95">
                             <p className="text-[9px] font-black uppercase text-slate-400 p-2 tracking-widest">Cá nhân hóa tiêu đề</p>
                             <div className="grid grid-cols-1 gap-1">
                                 {MERGE_TAGS.map(tag => (
                                     <button
                                         key={tag.value}
                                         onClick={() => injectTag(tag.value, 'subject')}
-                                        className="w-full text-left px-3 py-2 rounded-xl hover:bg-orange-50 text-xs font-bold text-slate-700 transition-colors flex justify-between items-center"
+                                        className="w-full text-left px-3 py-2 rounded-[var(--radius-md)] hover:bg-rose-50/50 text-xs font-bold text-slate-700 transition-colors flex justify-between items-center"
                                     >
-                                        {tag.label} <code className="text-[9px] text-orange-500 font-mono">{tag.value}</code>
+                                        {tag.label} <code className="text-[9px] text-[var(--color-primary)] font-mono">{tag.value}</code>
                                     </button>
                                 ))}
                             </div>
@@ -296,11 +298,11 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                                         localStorage.setItem('mailflow_last_sender_email', email.value);
                                     }
                                 }}
-                                className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all text-left ${config.senderEmail === email.value ? 'border-[#2563eb] bg-orange-50/50 ring-4 ring-orange-50' : 'border-slate-100 bg-white hover:border-slate-200'} ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                className={`flex items-center justify-between p-4 rounded-[14px] border-2 transition-all text-left ${config.senderEmail === email.value ? 'border-[#2563eb] bg-blue-50/40 ring-4 ring-blue-50' : 'border-slate-100 bg-white hover:border-slate-200'} ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
                                 disabled={disabled}
                             >
                                 <div className="flex items-center gap-3">
-                                    <div className={`p-2 rounded-xl ${config.senderEmail === email.value ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                    <div className={`p-2 rounded-[var(--radius-md)] ${config.senderEmail === email.value ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
                                         <ShieldCheck className="w-4 h-4" />
                                     </div>
                                     <div>
@@ -314,7 +316,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                                 {config.senderEmail === email.value && <Zap className="w-4 h-4 text-blue-600 fill-blue-600" />}
                             </button>
                         )) : (
-                            <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center gap-3 text-rose-600">
+                            <div className="p-4 bg-rose-50 border border-rose-100 rounded-[14px] flex items-center gap-3 text-rose-600">
                                 <Info className="w-5 h-5 shrink-0" />
                                 <p className="text-xs font-bold">Chưa có email xác minh. Hãy vào Cài đặt để thêm.</p>
                             </div>
@@ -329,7 +331,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                     <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">Nội dung Email</label>
                     <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[9px] font-black uppercase rounded-full tracking-widest">Thiết kế chuẩn</span>
                 </div>
-                <div className="flex bg-slate-100 p-1 rounded-xl">
+                <div className="flex bg-slate-100 p-1 rounded-[var(--radius-md)]">
                     <button
                         onClick={() => handleModeChange('template')}
                         className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${sourceMode === 'template' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
@@ -348,14 +350,14 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
 
                 {sourceMode === 'template' && (
                     <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
-                        {/* Cònh báo khi template đã bị xóa */}
+                        {/* Cảnh báo khi template đã bị xóa */}
                         {templateDeleted && (
-                            <div className="flex items-start gap-3 p-4 bg-rose-50 border-2 border-rose-200 rounded-2xl animate-in fade-in">
+                            <div className="flex items-start gap-3 p-4 bg-rose-50 border-2 border-rose-200 rounded-[14px] animate-in fade-in">
                                 <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
                                 <div className="flex-1">
                                     <p className="text-sm font-bold text-rose-700">⚠️ Mẫu email đã bị xóa!</p>
                                     <p className="text-xs text-rose-600 mt-1">
-                                        Mẫu email được chọn cho bước này không còn tồn tại trong hệ thống. Email sẽ <strong>không gử được</strong> cho đến khi chọn lại mẫu mới.
+                                        Mẫu email được chọn cho bước này không còn tồn tại trong hệ thống. Email sẽ <strong>không gửi được</strong> cho đến khi chọn lại mẫu mới.
                                     </p>
                                     <button
                                         onClick={() => { onChange({ ...config, templateId: undefined }); setTemplateDeleted(false); setShowPicker(true); }}
@@ -368,7 +370,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                             </div>
                         )}
                         {selectedTemplate ? (
-                            <div className="group relative rounded-[24px] border-2 border-[#2563eb]/20 hover:border-[#2563eb] transition-all overflow-hidden bg-white shadow-lg hover:shadow-xl">
+                            <div className="group relative rounded-xl border-2 border-[#2563eb]/20 hover:border-[#2563eb] transition-all overflow-hidden bg-white shadow-lg hover:shadow-xl">
                                 <div className="aspect-[16/9] bg-slate-50 relative overflow-hidden">
                                     {selectedTemplate.htmlContent ? (
                                         <iframe
@@ -385,13 +387,13 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                                     <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end">
                                         <div>
                                             <h4 className="font-bold text-white text-sm drop-shadow-lg">{selectedTemplate.name}</h4>
-                                            <p className="text-[9px] font-black text-orange-300 uppercase tracking-widest drop-shadow">{selectedTemplate.category}</p>
+                                            <p className="text-[9px] font-black text-blue-300 uppercase tracking-widest drop-shadow">{selectedTemplate.category}</p>
                                         </div>
                                         <div className="flex gap-2 flex-nowrap shrink-0 ml-4 max-w-full overflow-x-auto pb-1 custom-scrollbar">
-                                            <button onClick={() => setShowPicker(true)} className="px-3 py-2 bg-slate-900/50 backdrop-blur-md text-white rounded-xl text-[10px] font-black uppercase hover:bg-slate-800 transition-all whitespace-nowrap shadow-sm shrink-0 flex items-center" title="Đổi sang mẫu email khác">Đổi mẫu</button>
+                                            <button onClick={() => setShowPicker(true)} className="px-3 py-2 bg-slate-900/50 backdrop-blur-md text-white rounded-[var(--radius-md)] text-[10px] font-black uppercase hover:bg-slate-800 transition-all whitespace-nowrap shadow-sm shrink-0 flex items-center" title="Đổi sang mẫu email khác">Đổi mẫu</button>
                                             <button
                                                 onClick={() => setIsEditingTemplate(true)}
-                                                className="px-3 py-2 bg-white text-[#2563eb] rounded-xl text-[10px] font-black uppercase hover:bg-orange-50 transition-all flex items-center gap-1 shadow-sm whitespace-nowrap shrink-0"
+                                                className="px-3 py-2 bg-white text-[#2563eb] rounded-[var(--radius-md)] text-[10px] font-black uppercase hover:bg-blue-50 transition-all flex items-center gap-1 shadow-sm whitespace-nowrap shrink-0"
                                                 title="Sửa mẫu trực tiếp"
                                             >
                                                 <Edit3 className="w-3.5 h-3.5" /> Sửa mẫu
@@ -406,7 +408,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                                                         setPreviewData({ template: selectedTemplate });
                                                     }
                                                 }}
-                                                className="px-3 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-blue-750 transition-all flex items-center gap-1 shadow-sm whitespace-nowrap shrink-0"
+                                                className="px-3 py-2 bg-blue-600 text-white rounded-[var(--radius-md)] text-[10px] font-black uppercase hover:bg-blue-700 transition-all flex items-center gap-1 shadow-sm whitespace-nowrap shrink-0"
                                                 title="Xem trước mẫu"
                                             >
                                                 <Eye className="w-3.5 h-3.5" /> Xem
@@ -418,10 +420,10 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                         ) : (
                             <button
                                 onClick={() => setShowPicker(true)}
-                                                                className={`w-full py-12 border-2 border-dashed border-slate-200 rounded-[28px] bg-slate-50/50 text-slate-400 flex flex-col items-center justify-center gap-3 hover:bg-white hover:border-blue-300 hover:text-blue-600 transition-all group shadow-inner ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
-                                                                disabled={disabled}
+                                className={`w-full py-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50 text-slate-400 flex flex-col items-center justify-center gap-3 hover:bg-white hover:border-blue-300 hover:text-blue-600 transition-all group shadow-inner ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                disabled={disabled}
                             >
-                                <div className="p-3 bg-white rounded-xl shadow-sm group-hover:scale-110 transition-transform"><Layout className="w-6 h-6" /></div>
+                                <div className="p-3 bg-white rounded-[var(--radius-md)] shadow-sm group-hover:scale-110 transition-transform"><Layout className="w-6 h-6" /></div>
                                 <span className="text-xs font-bold uppercase tracking-wider">Chọn mẫu từ thư viện</span>
                             </button>
                         )}
@@ -447,7 +449,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                                     {showVarDropdown && (
                                         <>
                                             <div className="fixed inset-0 z-20" onClick={() => setShowVarDropdown(false)}></div>
-                                            <div className="absolute right-0 top-full mt-1 w-64 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-30 animate-in fade-in zoom-in-95">
+                                            <div className="absolute right-0 top-full mt-1 w-64 bg-white rounded-[14px] shadow-xl border border-slate-100 overflow-hidden z-30 animate-in fade-in zoom-in-95">
                                                 <div className="bg-slate-50 px-4 py-2 border-b border-slate-100">
                                                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Click để chèn</p>
                                                 </div>
@@ -459,7 +461,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                                                             className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center justify-between group transition-colors rounded-lg"
                                                         >
                                                             <span className="text-xs font-bold text-slate-700">{tag.label}</span>
-                                                            <code className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 font-mono group-hover:text-[#ca7900] group-hover:bg-orange-50">{tag.value}</code>
+                                                            <code className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 font-mono group-hover:text-[var(--color-primary)] group-hover:bg-rose-50/50">{tag.value}</code>
                                                         </button>
                                                     ))}
                                                 </div>
@@ -470,14 +472,14 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
 
                                 <button
                                     onClick={() => setPreviewData({ template: null, html: config.customHtml })}
-                                    className="bg-blue-600 text-white px-3 py-1.5 rounded-bl-xl text-[10px] font-bold uppercase hover:bg-blue-750 transition-colors flex items-center gap-1"
+                                    className="bg-blue-600 text-white px-3 py-1.5 rounded-bl-xl text-[10px] font-bold uppercase hover:bg-blue-700 transition-colors flex items-center gap-1"
                                 >
                                     <Eye className="w-3 h-3" /> Preview HTML
                                 </button>
                             </div>
                             <textarea
                                 ref={textAreaRef}
-                                className="w-full h-64 bg-[#1e293b] text-indigo-100 font-mono text-xs p-4 pt-10 rounded-xl outline-none border-2 border-transparent focus:border-blue-500 transition-all resize-y leading-relaxed custom-scrollbar"
+                                className="w-full h-64 bg-[#1e293b] text-indigo-100 font-mono text-xs p-4 pt-10 rounded-[14px] outline-none border-2 border-transparent focus:border-blue-500 transition-all resize-y leading-relaxed custom-scrollbar"
                                 placeholder="<html><body><h1>Paste your HTML here...</h1></body></html>"
                                 value={config.customHtml || ''}
                                 onChange={(e) => onChange({ ...config, customHtml: e.target.value })}
@@ -494,7 +496,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                 <label className="text-xs font-black text-slate-400 uppercase tracking-widest block ml-1">Tệp đính kèm (Attachments)</label>
                 <div className="space-y-4">
                     {/* Toggle for Personalized Mode */}
-                    <div className={`mb-4 p-4 rounded-2xl border-2 transition-all flex items-center justify-between cursor-pointer ${isPersonalizedMode ? 'bg-blue-50/50 border-blue-200' : 'bg-slate-50 border-slate-100'} ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`} onClick={() => !disabled && setIsPersonalizedMode(!isPersonalizedMode)}>
+                    <div className={`mb-4 p-4 rounded-[14px] border-2 transition-all flex items-center justify-between cursor-pointer ${isPersonalizedMode ? 'bg-blue-50/50 border-blue-200' : 'bg-slate-50 border-slate-100'} ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`} onClick={() => !disabled && setIsPersonalizedMode(!isPersonalizedMode)}>
                         <div className="flex items-center gap-3">
                             <div className={`w-10 h-6 rounded-full p-1 transition-colors duration-300 flex items-center ${isPersonalizedMode ? 'bg-blue-600 justify-end' : 'bg-slate-300 justify-start'}`}>
                                 <div className="w-4 h-4 bg-white rounded-full shadow-md"></div>
@@ -509,7 +511,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
 
                     {/* Personalized Mode Info */}
                     {isPersonalizedMode && (
-                        <div className="p-4 bg-blue-50/50 border border-blue-100/50 rounded-2xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+                        <div className="p-4 bg-blue-50/50 border border-blue-100/50 rounded-[14px] flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
                             <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
                             <p className="text-[10px] text-blue-700 font-medium leading-relaxed italic">
                                 Khi chế độ này BẬT, tên file đính kèm phải chứa địa chỉ email của người nhận (VD: `invoice_john@example.com.pdf`). File chỉ được gửi nếu khớp email.
@@ -526,7 +528,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                                 if (isPersonalizedMode) setIsUploadModalOpen(true);
                                 else fileInputRef.current?.click();
                             }}
-                            className="flex-1 cursor-pointer py-3.5 border-2 border-dashed rounded-2xl flex items-center justify-center gap-2 text-slate-400 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50/30 transition-all"
+                            className="flex-1 cursor-pointer py-3.5 border-2 border-dashed rounded-[14px] flex items-center justify-center gap-2 text-slate-400 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50/30 transition-all"
                         >
                             {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                             <span className="text-[10px] font-bold uppercase">
@@ -539,7 +541,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                         <button
                             type="button"
                             onClick={() => !disabled && setIsLibraryOpen(true)}
-                            className="px-4 py-3.5 border-2 border-dashed border-blue-200 rounded-2xl flex items-center gap-1.5 text-blue-500 hover:text-blue-700 hover:border-blue-400 hover:bg-blue-50/40 transition-all text-[10px] font-bold uppercase shrink-0"
+                            className="px-4 py-3.5 border-2 border-dashed border-blue-200 rounded-[14px] flex items-center gap-1.5 text-blue-500 hover:text-blue-700 hover:border-blue-400 hover:bg-blue-50/40 transition-all text-[10px] font-bold uppercase shrink-0"
                             title="Chọn file từ thư viện đã upload"
                         >
                             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -552,7 +554,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
 
                     {/* Attachment List */}
                     {attachments.length > 0 ? attachments.map((att) => (
-                        <div key={att.id} className={`border rounded-2xl p-3 animate-in fade-in slide-in-from-bottom-2 transition-colors ${att.logic !== 'all' ? 'bg-blue-50/30 border-blue-100' : 'bg-white border-slate-100'}`}>
+                        <div key={att.id} className={`border rounded-[14px] p-3 animate-in fade-in slide-in-from-bottom-2 transition-colors ${att.logic !== 'all' ? 'bg-blue-50/30 border-blue-100' : 'bg-white border-slate-100'}`}>
                             <div className="flex items-start justify-between gap-3">
                                 <div className="flex items-center gap-3 overflow-hidden">
                                     <a href={att.url || '#'} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 group flex-1 min-w-0" title="Bấm để xem tệp">
@@ -580,39 +582,41 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                     )) : null}
 
                     {attachments.length === 0 && (
-                        <div className="p-4 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl text-center text-slate-400 text-xs italic">
+                        <div className="p-4 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[14px] text-center text-slate-400 text-xs italic">
                             Chưa có tệp đính kèm.
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* Overlay for Picker Backdrop */}
-            {showPicker && <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[90]" onClick={() => setShowPicker(false)}></div>}
-
-            {showPicker && (
-                <div className="bg-white rounded-[32px] border-2 border-slate-100 shadow-2xl animate-in fade-in zoom-in-95 duration-200 fixed inset-4 md:inset-12 lg:inset-20 z-[100] overflow-hidden flex flex-col max-w-6xl mx-auto my-auto max-h-[90vh]">
-                    <div className="p-5 border-b border-slate-100 flex justify-between items-center shrink-0">
-                        <h3 className="font-bold text-slate-800 text-lg">Chọn mẫu Email</h3>
-                        <button onClick={() => setShowPicker(false)} className="p-2 hover:bg-slate-100 text-slate-500 rounded-full transition-colors"><X className="w-5 h-5" /></button>
+            {/* Overlay for Picker Backdrop via Portal */}
+            {showPicker && typeof document !== 'undefined' && createPortal(
+                <>
+                    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[2147483642]" onClick={() => setShowPicker(false)}></div>
+                    <div className="bg-white rounded-xl border-2 border-slate-100 shadow-2xl animate-in fade-in zoom-in-95 duration-200 fixed inset-4 md:inset-12 lg:inset-20 z-[2147483643] overflow-hidden flex flex-col max-w-6xl mx-auto my-auto max-h-[90vh]">
+                        <div className="p-5 border-b border-slate-100 flex justify-between items-center shrink-0">
+                            <h3 className="font-bold text-slate-800 text-lg">Chọn mẫu Email</h3>
+                            <button onClick={() => setShowPicker(false)} className="p-2 hover:bg-slate-100 text-slate-500 rounded-full transition-colors"><X className="w-5 h-5" /></button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-2 md:p-6 custom-scrollbar bg-slate-50/50">
+                            <TemplateSelector
+                                templates={templates}
+                                selectedId={config.templateId}
+                                onSelect={(t) => { 
+                                    if (!disabled) { 
+                                        onChange({ 
+                                            ...config, 
+                                            templateId: t.id,
+                                            subject: config.subject || t.name 
+                                        }); 
+                                        setShowPicker(false); 
+                                    } 
+                                }}
+                            />
+                        </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-2 md:p-6 custom-scrollbar bg-slate-50/50">
-                        <TemplateSelector
-                            templates={templates}
-                            selectedId={config.templateId}
-                            onSelect={(t) => { 
-                                if (!disabled) { 
-                                    onChange({ 
-                                        ...config, 
-                                        templateId: t.id,
-                                        subject: config.subject || t.name 
-                                    }); 
-                                    setShowPicker(false); 
-                                } 
-                            }}
-                        />
-                    </div>
-                </div>
+                </>,
+                getMktPortalRoot()
             )}
 
             <EmailPreviewDrawer
@@ -663,8 +667,8 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
             />
 
             {/* AI Email Editor Modal (Quick edit) */}
-            {isEditingTemplate && selectedTemplate && (
-                <div className="fixed inset-0 z-[200000] bg-slate-900/40 backdrop-blur-sm">
+            {isEditingTemplate && selectedTemplate && typeof document !== 'undefined' && createPortal(
+                <div className="fixed inset-0 z-[2147483645] bg-slate-900/40 backdrop-blur-sm">
                     <EmailEditor
                         template={templates.find(t => t.id === selectedTemplate.id) || selectedTemplate}
                         groups={groups}
@@ -696,7 +700,8 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                         }}
                         onCancel={() => setIsEditingTemplate(false)}
                     />
-                </div>
+                </div>,
+                getMktPortalRoot()
             )}
         </div>
     );

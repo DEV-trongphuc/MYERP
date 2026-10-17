@@ -1837,7 +1837,7 @@ function buildContactOmnichannelFilterClause(PDO $db, string $alias, array $para
         } elseif ($flowFilterLower === 'not_in_flow') {
             $clauses[] = "COALESCE({$a}.active_flow_count, 0) = 0";
         } else {
-            $clauses[] = "({$a}.active_flow_names LIKE ? OR EXISTS (SELECT 1 FROM domation_flow_enrollments dfe JOIN domation_flows df ON df.id = dfe.flow_id WHERE dfe.contact_id = {$a}.id AND dfe.status IN ('active','waiting') AND (df.name LIKE ? OR CAST(df.id AS CHAR) = ?)))";
+            $clauses[] = "({$a}.active_flow_names LIKE ? OR EXISTS (SELECT 1 FROM subscriber_flow_states dfe JOIN flows df ON df.id = dfe.flow_id WHERE dfe.contact_id = {$a}.id AND dfe.status IN ('active','waiting','processing') AND (df.name LIKE ? OR CAST(df.id AS CHAR) = ?)))";
             $outParams[] = '%' . $flowFilter . '%';
             $outParams[] = '%' . $flowFilter . '%';
             $outParams[] = $flowFilter;
@@ -1851,13 +1851,13 @@ function buildContactOmnichannelFilterClause(PDO $db, string $alias, array $para
         if ($voucherFilterLower === 'has_active_voucher') {
             $clauses[] = "({$a}.active_voucher_code IS NOT NULL AND {$a}.active_voucher_code != '')";
         } elseif ($voucherFilterLower === 'used_voucher') {
-            $clauses[] = "EXISTS (SELECT 1 FROM domation_vouchers dv WHERE dv.contact_id = {$a}.id AND dv.status = 'used')";
+            $clauses[] = "EXISTS (SELECT 1 FROM voucher_codes dv WHERE dv.contact_id = {$a}.id AND dv.status = 'used')";
         } elseif ($voucherFilterLower === 'expired_unredeemed') {
-            $clauses[] = "EXISTS (SELECT 1 FROM domation_vouchers dv WHERE dv.contact_id = {$a}.id AND dv.status = 'active' AND dv.expires_at < NOW())";
+            $clauses[] = "EXISTS (SELECT 1 FROM voucher_codes dv WHERE dv.contact_id = {$a}.id AND dv.status IN ('unused','available','active') AND dv.expires_at < NOW())";
         } elseif ($voucherFilterLower === 'no_voucher') {
-            $clauses[] = "(({$a}.active_voucher_code IS NULL OR {$a}.active_voucher_code = '') AND NOT EXISTS (SELECT 1 FROM domation_vouchers dv WHERE dv.contact_id = {$a}.id))";
+            $clauses[] = "(({$a}.active_voucher_code IS NULL OR {$a}.active_voucher_code = '') AND NOT EXISTS (SELECT 1 FROM voucher_codes dv WHERE dv.contact_id = {$a}.id))";
         } else {
-            $clauses[] = "({$a}.active_voucher_code LIKE ? OR EXISTS (SELECT 1 FROM domation_vouchers dv WHERE dv.contact_id = {$a}.id AND dv.code LIKE ?))";
+            $clauses[] = "({$a}.active_voucher_code LIKE ? OR EXISTS (SELECT 1 FROM voucher_codes dv WHERE dv.contact_id = {$a}.id AND dv.code LIKE ?))";
             $outParams[] = '%' . $voucherFilter . '%';
             $outParams[] = '%' . $voucherFilter . '%';
         }

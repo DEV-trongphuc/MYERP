@@ -27,27 +27,18 @@ export const generateFlowStepLabels = (flow: Flow): Record<string, StepLabelInfo
                 // Add children to queue in specific order for consistent numbering
                 if (step.nextStepId) queue.push(step.nextStepId);
                 if (step.yesStepId) queue.push(step.yesStepId);
-            if (step.noStepId) queue.push(step.noStepId);
-            if (step.pathAStepId) queue.push(step.pathAStepId);
-            if (step.pathBStepId) queue.push(step.pathBStepId);
-            if (step.type === 'advanced_condition') {
-                if (Array.isArray(step.config?.branches)) {
-                    step.config.branches.forEach((b: any) => { if (b?.stepId) queue.push(b.stepId); });
+                if (step.noStepId) queue.push(step.noStepId);
+                if (step.pathAStepId) queue.push(step.pathAStepId);
+                if (step.pathBStepId) queue.push(step.pathBStepId);
+                if (step.type === 'advanced_condition') {
+                    if (Array.isArray(step.config?.branches)) {
+                        step.config.branches.forEach((b: any) => {
+                            const targetStepId = b?.nextStepId || b?.stepId;
+                            if (targetStepId) queue.push(targetStepId);
+                        });
+                    }
+                    if (step.config?.defaultStepId) queue.push(step.config.defaultStepId);
                 }
-                if (step.config?.defaultStepId) queue.push(step.config.defaultStepId);
-            }
-            if (step.type === 'advanced_condition') {
-                if (Array.isArray(step.config?.branches)) {
-                    step.config.branches.forEach((b: any) => { if (b?.stepId) queue.push(b.stepId); });
-                }
-                if (step.config?.defaultStepId) queue.push(step.config.defaultStepId);
-            }
-            if (step.type === 'advanced_condition') {
-                if (Array.isArray(step.config?.branches)) {
-                    step.config.branches.forEach((b: any) => { if (b?.stepId) queue.push(b.stepId); });
-                }
-                if (step.config?.defaultStepId) queue.push(step.config.defaultStepId);
-            }
             }
         }
     } else {
@@ -55,21 +46,50 @@ export const generateFlowStepLabels = (flow: Flow): Record<string, StepLabelInfo
         sortedSteps.push(...flow.steps);
     }
 
-    // Filter relevant steps for numbering (Actions)
-    const actionSteps = sortedSteps.filter(s => ['action', 'update_tag', 'condition', 'wait', 'list_action', 'remove_action', 'split_test', 'link_flow'].includes(s.type));
+    // Filter relevant steps for numbering (Actions & Logic Steps)
+    const actionSteps = sortedSteps.filter(s =>
+        [
+            'action',
+            'update_tag',
+            'condition',
+            'advanced_condition',
+            'zalo_zns',
+            'crm_action',
+            'wait',
+            'list_action',
+            'remove_action',
+            'split_test',
+            'link_flow'
+        ].includes(s.type)
+    );
 
     // Map index
     const stepIndexMap: Record<string, number> = {};
-    actionSteps.forEach((s, idx) => { stepIndexMap[s.id] = idx; });
+    actionSteps.forEach((s, idx) => {
+        stepIndexMap[s.id] = idx;
+    });
 
     // Build Parent Map
-    const parentMap: Record<string, { id: string, branch: string }> = {};
+    const parentMap: Record<string, { id: string; branch: string }> = {};
     flow.steps.forEach(s => {
         if (s.nextStepId) parentMap[s.nextStepId] = { id: s.id, branch: 'next' };
         if (s.yesStepId) parentMap[s.yesStepId] = { id: s.id, branch: 'yes' };
         if (s.noStepId) parentMap[s.noStepId] = { id: s.id, branch: 'no' };
         if (s.pathAStepId) parentMap[s.pathAStepId] = { id: s.id, branch: 'A' };
         if (s.pathBStepId) parentMap[s.pathBStepId] = { id: s.id, branch: 'B' };
+        if (s.type === 'advanced_condition') {
+            if (Array.isArray(s.config?.branches)) {
+                s.config.branches.forEach((b: any, bIdx: number) => {
+                    const targetStepId = b?.nextStepId || b?.stepId;
+                    if (targetStepId) {
+                        parentMap[targetStepId] = { id: s.id, branch: `B${bIdx + 1}` };
+                    }
+                });
+            }
+            if (s.config?.defaultStepId) {
+                parentMap[s.config.defaultStepId] = { id: s.id, branch: 'ELSE' };
+            }
+        }
     });
 
     const labelMap: Record<string, string> = {};
@@ -90,61 +110,31 @@ export const generateFlowStepLabels = (flow: Flow): Record<string, StepLabelInfo
                 } else if (parentType === 'split_test') {
                     const suffix = parentInfo.branch === 'A' ? 'A' : 'B';
                     stepDisplayLabel = `${parentLabel}.${suffix}`;
+                } else if (parentType === 'advanced_condition') {
+                    stepDisplayLabel = `${parentLabel}.${parentInfo.branch}.1`;
                 } else {
                     if (parentLabel.includes('.')) {
                         const parts = parentLabel.split('.');
-                        const lastPart = parts.pop(); // Remove last number if exists
-                        // Check if last part is a number or a Branch Name (IF/ELSE/A/B)
+                        const lastPart = parts.pop();
                         if (lastPart && !isNaN(Number(lastPart))) {
-                            // Increment: "Step 2.IF.1" -> "Step 2.IF.2"
                             const num = parseInt(lastPart);
                             stepDisplayLabel = parts.join('.') + '.' + (num + 1);
                         } else {
-                            // First number in new branch segment: "Step 2.IF" -> "Step 2.IF.1"
-                            // Re-attach the popped part (Branch Name)
                             stepDisplayLabel = parentLabel + '.1';
-                        }
-                    } else {
-                        // Main line: "Step 1" -> "Step 2"
-                        // Just rely on loop index? No, index is global topology.
-                        // Ideally we follow the thread.
-                        // But for main line, simple increment of "Step X" is tricky if we jumped around.
-                        // Let's stick to parent-based logic if possible.
-                        // If parent is "Step X", and it's a 'next' link, we usually just want "Step X+1".
-                        // BUT, if we are in a merged path, it gets complicated.
-                        // Simpler: If not in a branch, just use Global Index + 1 ?
-                        // The user wants nested numbering primarily.
-
-                        // Let's trust the global topology for the root level integer?
-                        // `Step ${idx + 1}` is fine for linear.
-
-                        // Let's refine the "Main Line" continuation inside a branch:
-                        const match = parentLabel.match(/Step (\d+)(\..+)?/);
-                        if (match) {
-                            if (match[2]) {
-                                // We are deep.
-                                // Handled by the .includes('.') logic above.
-                            } else {
-                                // Top level. "Step 1" -> "Step 2".
-                                // Topological index is safest for top level to ensure uniqueness and order.
-                            }
                         }
                     }
                 }
             }
         } else {
-            if (idx === 0) stepDisplayLabel = "Step 1";
+            if (idx === 0) stepDisplayLabel = 'Step 1';
         }
 
-        // CORRECTION: Ensure we don't end up with "Step 2.IF" as the label for a step.
-        // If the step itself IS the first step of the branch, it should be "Step 2.IF.1" (or just "Step 2.IF" if that's the style).
-        // User liked "Step 2.IF" -> "Step 2.IF.2". So "Step 2.IF" is implied as "Step 2.IF.1".
-        // My previous logic: `stepDisplayLabel = ${parentLabel}.${suffix}` -> "Step 2.IF". This is assigned to the first step in the branch.
-        // User complaint: "Step 5 update tag... that is step 3 of IF side".
-        // So user expects: Step 2 (Condition) -> Step 2.IF.1 (Update Tag) -> Step 2.IF.2 ...
-        // My logic above produces "Step 2.IF" for the first one. Let's append '.1'.
-
-        if (stepDisplayLabel.endsWith('.IF') || stepDisplayLabel.endsWith('.ELSE') || stepDisplayLabel.endsWith('.A') || stepDisplayLabel.endsWith('.B')) {
+        if (
+            stepDisplayLabel.endsWith('.IF') ||
+            stepDisplayLabel.endsWith('.ELSE') ||
+            stepDisplayLabel.endsWith('.A') ||
+            stepDisplayLabel.endsWith('.B')
+        ) {
             stepDisplayLabel += '.1';
         }
 

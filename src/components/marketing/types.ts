@@ -186,6 +186,18 @@ export interface EmailBlockStyle {
   buttonBg?: string;
   buttonColor?: string;
 
+  // Survey Card Specific
+  surveyId?: string;
+  surveySlug?: string;
+  surveyTitle?: string;
+  surveyDescription?: string;
+  surveyBadgeText?: string;
+  surveyButtonText?: string;
+  surveyAccentColor?: string;
+  surveyCardBgColor?: string;
+  surveyBorderColor?: string;
+  surveyButtonTextColor?: string;
+
   noStack?: boolean;
 }
 
@@ -281,7 +293,7 @@ export interface VoucherCode {
     claimedSourceId?: string;
 }
 
-export type EmailBlockType = 'section' | 'row' | 'column' | 'text' | 'image' | 'button' | 'spacer' | 'divider' | 'social' | 'video' | 'html' | 'list' | 'header' | 'countdown' | 'quote' | 'timeline' | 'review' | 'order_list' | 'check_list' | 'table' | 'voucher' | 'otp';
+export type EmailBlockType = 'section' | 'row' | 'column' | 'text' | 'image' | 'button' | 'spacer' | 'divider' | 'social' | 'video' | 'html' | 'list' | 'header' | 'countdown' | 'quote' | 'timeline' | 'review' | 'order_list' | 'check_list' | 'table' | 'voucher' | 'otp' | 'survey_card';
 
 export interface EmailBlock {
   id: string;

@@ -590,10 +590,38 @@ const RespondentsList: React.FC<{ surveyId: string; survey?: Survey | null }> = 
 };
 
 // ─── Main SurveyReportModal ───────────────────────────────────────────────────
-const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose }) => {
+const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose }) => {
     const [tab, setTab] = useState<'overview' | 'questions' | 'respondents'>('overview');
     const [analytics, setAnalytics] = useState<any>(null);
     const [loading, setLoading] = useState(false);
+    const [isVisible, setIsVisible] = useState(false);
+    const [animateIn, setAnimateIn] = useState(false);
+
+    const onClose = React.useCallback(() => {
+        setAnimateIn(false);
+        setTimeout(() => {
+            setIsVisible(false);
+            _onClose();
+        }, 220);
+    }, [_onClose]);
+
+    useEffect(() => {
+        if (isOpen && survey) {
+            setIsVisible(true);
+            let raf2 = 0;
+            const raf1 = requestAnimationFrame(() => {
+                raf2 = requestAnimationFrame(() => setAnimateIn(true));
+            });
+            return () => {
+                cancelAnimationFrame(raf1);
+                cancelAnimationFrame(raf2);
+            };
+        } else {
+            setAnimateIn(false);
+            const timer = setTimeout(() => setIsVisible(false), 220);
+            return () => clearTimeout(timer);
+        }
+    }, [isOpen, survey]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -610,7 +638,7 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose }) => {
             .finally(() => setLoading(false));
     }, [isOpen, survey?.id]);
 
-    if (!isOpen || !survey) return null;
+    if (!isVisible || !survey) return null;
 
     const ov = analytics?.overview;
     const questions: QuestionAnalytics[] = analytics?.questions ?? [];
@@ -626,12 +654,31 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose }) => {
     };
 
     return createPortal(
-        <div className="fixed inset-0 flex overflow-hidden" style={{ zIndex: 2147483625 }}>
+        <div className="fixed inset-0 z-[2147483625] flex overflow-hidden" style={{ zIndex: 2147483625, pointerEvents: animateIn ? 'auto' : 'none' }}>
             {/* Backdrop */}
-            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
+            <div
+                className="drawer-backdrop"
+                onClick={onClose}
+                style={{
+                    opacity: animateIn ? 1 : 0,
+                    transition: 'opacity 0.22s cubic-bezier(0.25, 0.1, 0.25, 1)',
+                    pointerEvents: animateIn ? 'auto' : 'none',
+                    zIndex: 2147483620,
+                    '--drawer-backdrop-z': 2147483620
+                } as React.CSSProperties}
+            />
 
             {/* Panel — full height, flush to top */}
-            <div className="absolute inset-y-0 right-0 w-full max-w-[1100px] bg-white flex flex-col shadow-2xl shadow-slate-900/30 animate-in slide-in-from-right duration-300">
+            <div
+                className="drawer-panel fixed top-0 right-0 bottom-0 z-[2147483625] w-full lg:w-[calc(100vw-var(--sidebar-width,220px))] max-w-none bg-white flex flex-col shadow-2xl shadow-slate-900/30"
+                style={{
+                    zIndex: 2147483625,
+                    opacity: animateIn ? 1 : 0,
+                    transform: animateIn ? 'translate3d(0, 0, 0)' : 'translate3d(48px, 0, 0)',
+                    transition: 'transform 0.22s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.20s cubic-bezier(0.25, 0.1, 0.25, 1)',
+                    pointerEvents: animateIn ? 'auto' : 'none'
+                }}
+            >
 
                 {/* ── HEADER ────────────────────────────────────────────── */}
                 <div className="px-8 pt-6 pb-0 flex-shrink-0 bg-white">

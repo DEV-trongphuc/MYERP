@@ -118,6 +118,16 @@ class LeadDistributionController {
             respond(500, null, 'Lỗi khi phân bổ lead: ' . $e->getMessage(), false);
         }
 
+        try {
+            if (!class_exists('DomationContactMatcher') && file_exists(__DIR__ . '/../utils/DomationContactMatcher.php')) {
+                require_once __DIR__ . '/../utils/DomationContactMatcher.php';
+            }
+            if (class_exists('DomationContactMatcher')) {
+                DomationContactMatcher::syncContactToSubscriber($this->db, (int)$contactId, (int)$tid);
+            }
+        } catch (\Throwable $eSyncSub) {
+        }
+
         // Dispatch Notification to consultant (after commit)
         try {
             require_once __DIR__ . '/../NotificationService.php';

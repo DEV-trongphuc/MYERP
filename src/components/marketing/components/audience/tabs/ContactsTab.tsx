@@ -17,7 +17,6 @@ export const CONTACT_COLUMN_LABELS: Record<string, string> = {
     status: 'Trạng thái',
     source: 'Nguồn',
     lastActivity: 'Hoạt động gần nhất',
-    leadScore: 'Điểm Lead',
     tags: 'Tags',
     salesperson: 'Phụ trách',
     joinedAt: 'Ngày tham gia',
@@ -37,6 +36,7 @@ interface ContactsTabProps {
     selectedIds: Set<string>;
     onToggleSelection: (id: string) => void;
     onToggleSelectAll: () => void;
+    onClearSelection?: () => void;
     onSelectSubscriber: (sub: Subscriber) => void;
     formatRelativeTime: (dateString?: string) => string;
     currentPage: number;
@@ -94,10 +94,11 @@ interface ContactRowProps {
     onToggle: (id: string) => void;
     onSelect: (sub: Subscriber) => void;
     renderLastActive: (sub: Subscriber) => React.ReactNode;
+    onActionMenu: (e: React.MouseEvent, sub: Subscriber) => void;
     onContextMenu: (e: React.MouseEvent, sub: Subscriber) => void;
 }
 
-const ContactRow = React.memo<ContactRowProps>(({ sub, isSelected, columns, onToggle, onSelect, renderLastActive, onContextMenu }) => {
+const ContactRow = React.memo<ContactRowProps>(({ sub, isSelected, columns, onToggle, onSelect, renderLastActive, onActionMenu, onContextMenu }) => {
     const fullName = `${getCleanName(sub.firstName)} ${getCleanName(sub.lastName)}`.trim() || 'Chưa có tên';
     const email = sub.email || '';
     const isVirtualEmail = email.includes('@no-email.domation') || email.includes('@zalo-oa.vn') || email.includes('@facebook.com');
@@ -112,25 +113,25 @@ const ContactRow = React.memo<ContactRowProps>(({ sub, isSelected, columns, onTo
                 return (
                     <div className="flex items-center gap-3 min-w-0">
                         <Avatar name={fullName} src={sub.avatar} size={32} className="shrink-0" />
-                        <div className="min-w-0">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                                <span className="text-[13px] font-semibold text-[var(--color-text)] truncate max-w-[220px]">{fullName}</span>
-                                {contactId ? (
+                        <div className="min-w-0 flex-1">
+                            <span className="text-[13px] font-semibold text-[var(--color-text)] truncate max-w-[220px] block leading-tight">{fullName}</span>
+                            {contactId ? (
+                                <div className="mt-1">
                                     <button
                                         type="button"
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             window.dispatchEvent(new CustomEvent('open-customer-drawer', { detail: { initialTab: 'journey360', id: Number(contactId) } }));
                                         }}
-                                        className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-primary-light)] text-[var(--color-primary)] hover:opacity-80 transition-opacity"
+                                        className="inline-flex items-center text-[11px] font-mono text-[var(--color-text-muted)] bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-1.5 py-0.5 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-[var(--color-text)] transition-colors"
                                         title="Mở hồ sơ CRM 360°"
                                     >
                                         CRM #{contactId}
                                     </button>
-                                ) : null}
-                            </div>
+                                </div>
+                            ) : null}
                             {!columns.includes('phone') && displayEmail && (
-                                <div className="text-xs text-[var(--color-text-muted)] truncate max-w-[260px]">{displayEmail}</div>
+                                <div className="text-xs text-[var(--color-text-muted)] truncate max-w-[260px] mt-0.5">{displayEmail}</div>
                             )}
                         </div>
                     </div>
@@ -150,8 +151,6 @@ const ContactRow = React.memo<ContactRowProps>(({ sub, isSelected, columns, onTo
                 return <span className="text-[13px] text-[var(--color-text-light)]">{sourceLabel(sub)}</span>;
             case 'lastActivity':
                 return renderLastActive(sub);
-            case 'leadScore':
-                return <span className="text-[13px] font-semibold tabular-nums text-[var(--color-text)]">{Number(sub.leadScore || 0)}</span>;
             case 'tags': {
                 const tags = Array.isArray(sub.tags) ? sub.tags : [];
                 if (tags.length === 0) return <span className="text-xs text-[var(--color-text-muted)]">—</span>;
@@ -194,7 +193,7 @@ const ContactRow = React.memo<ContactRowProps>(({ sub, isSelected, columns, onTo
             <td className="px-4 py-3 text-right w-12">
                 <button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); onContextMenu(e, sub); }}
+                    onClick={(e) => { e.stopPropagation(); onActionMenu(e, sub); }}
                     className="p-1.5 rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:text-[var(--color-primary)] hover:bg-[var(--color-bg)] transition-colors"
                     title="Thao tác"
                 >
@@ -208,7 +207,7 @@ ContactRow.displayName = 'ContactRow';
 
 const ContactsTab = React.memo<ContactsTabProps>(({
     loading, error, onRetry, hasActiveFilters, onClearFilters, onImport,
-    subscribers, selectedIds, onToggleSelection, onToggleSelectAll, onSelectSubscriber,
+    subscribers, selectedIds, onToggleSelection, onToggleSelectAll, onClearSelection, onSelectSubscriber,
     formatRelativeTime, currentPage, totalPages, totalCount, onPageChange, onBulkDelete,
     onBulkTag, onBulkAddToList, isGlobalSelected, onToggleGlobalSelection, visibleColumns, itemsPerPage
 }) => {
@@ -262,12 +261,25 @@ const ContactsTab = React.memo<ContactsTabProps>(({
         );
     }, [formatRelativeTime]);
 
-    // --- CONTEXT MENU ---
-    const [contextMenu, setContextMenu] = React.useState<{ x: number, y: number, sub: Subscriber } | null>(null);
+    // --- CONTEXT / ROW ACTION MENU ---
+    const [contextMenu, setContextMenu] = React.useState<{ x: number, y: number, sub: Subscriber, align?: 'left' | 'right' | 'auto' } | null>(null);
+
+    const handleActionMenu = React.useCallback((e: React.MouseEvent, sub: Subscriber) => {
+        e.stopPropagation();
+        const rect = e.currentTarget.getBoundingClientRect();
+        setContextMenu({
+            x: rect.right,
+            y: rect.bottom + 4,
+            sub,
+            align: 'right'
+        });
+    }, []);
+
     const handleContextMenu = React.useCallback((e: React.MouseEvent, sub: Subscriber) => {
         e.preventDefault();
-        setContextMenu({ x: e.clientX, y: e.clientY, sub });
+        setContextMenu({ x: e.clientX, y: e.clientY, sub, align: 'auto' });
     }, []);
+
     const closeContextMenu = React.useCallback(() => setContextMenu(null), []);
 
     const ensureSelected = (id: string) => {
@@ -280,6 +292,7 @@ const ContactsTab = React.memo<ContactsTabProps>(({
                 <ContextMenu
                     x={contextMenu.x}
                     y={contextMenu.y}
+                    align={contextMenu.align}
                     onClose={closeContextMenu}
                     items={[
                         { id: 'edit', label: 'Xem / chỉnh sửa', icon: Edit, onClick: () => onSelectSubscriber(contextMenu.sub) },
@@ -300,6 +313,7 @@ const ContactsTab = React.memo<ContactsTabProps>(({
                                 visibleColumnsCount={columns.length}
                                 isGlobalSelected={isGlobalSelected}
                                 onToggleSelectAll={onToggleSelectAll}
+                                onClearSelection={onClearSelection}
                                 onBulkTag={onBulkTag}
                                 onBulkAddToList={onBulkAddToList}
                                 onBulkDelete={() => {
@@ -333,7 +347,7 @@ const ContactsTab = React.memo<ContactsTabProps>(({
                                 <td colSpan={colSpan} className="px-4 py-2 text-center text-xs text-[var(--color-text-light)]">
                                     {isGlobalSelected ? (
                                         <>Đã chọn tất cả <b className="text-[var(--color-primary)]">{totalCount.toLocaleString('vi-VN')}</b> liên hệ.{' '}
-                                            <button type="button" onClick={() => onToggleGlobalSelection(false)} className="ml-1 font-semibold text-[var(--color-primary)] hover:underline">Bỏ chọn</button></>
+                                            <button type="button" onClick={() => { onToggleGlobalSelection(false); onClearSelection?.(); }} className="ml-1 font-semibold text-[var(--color-primary)] hover:underline">Bỏ chọn</button></>
                                     ) : (
                                         <>Đã chọn {subscribers.length} liên hệ trên trang này.{' '}
                                             <button type="button" onClick={() => onToggleGlobalSelection(true)} className="ml-1 font-semibold text-[var(--color-primary)] hover:underline">
@@ -344,7 +358,7 @@ const ContactsTab = React.memo<ContactsTabProps>(({
                             </tr>
                         )}
 
-                        {isFirstLoad && Array.from({ length: 8 }).map((_, i) => (
+                        {loading && Array.from({ length: 8 }).map((_, i) => (
                             <tr key={`sk-${i}`} className="border-b border-[var(--color-border-light)]">
                                 <td className="pl-4 pr-2 py-3"><Skeleton variant="rounded" width={16} height={16} /></td>
                                 {columns.map(col => (
@@ -352,16 +366,19 @@ const ContactsTab = React.memo<ContactsTabProps>(({
                                         {col === 'name' ? (
                                             <div className="flex items-center gap-3">
                                                 <Skeleton variant="circular" width={32} height={32} />
-                                                <Skeleton variant="text" width={120} height={14} />
+                                                <div className="space-y-1.5">
+                                                    <Skeleton variant="text" width={130} height={14} />
+                                                    <Skeleton variant="text" width={90} height={11} />
+                                                </div>
                                             </div>
-                                        ) : <Skeleton variant="text" width={80} height={12} />}
+                                        ) : <Skeleton variant="text" width={85} height={12} />}
                                     </td>
                                 ))}
                                 <td className="px-4 py-3" />
                             </tr>
                         ))}
 
-                        {!isFirstLoad && subscribers.map(sub => (
+                        {!loading && subscribers.map(sub => (
                             <ContactRow
                                 key={sub.id}
                                 sub={sub}
@@ -370,6 +387,7 @@ const ContactsTab = React.memo<ContactsTabProps>(({
                                 onToggle={onToggleSelection}
                                 onSelect={onSelectSubscriber}
                                 renderLastActive={renderLastActive}
+                                onActionMenu={handleActionMenu}
                                 onContextMenu={handleContextMenu}
                             />
                         ))}

@@ -106,7 +106,7 @@ const WebTrackingModals: React.FC<WebTrackingModalsProps> = ({
                             Sao chép đoạn mã dưới đây và dán vào trước thẻ đóng <code className={`font-bold rounded px-1.5 ${isDarkTheme ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-700'}`}>&lt;/head&gt;</code> trên website của bạn để bắt đầu thu thập dữ liệu và kích hoạt hệ thống bảo mật.
                         </p>
 
-                        <div className={`border rounded-2xl p-4 flex items-center justify-between group ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                        <div className={`border rounded-[14px] p-4 flex items-center justify-between group ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
                             <div className="flex items-center gap-3">
                                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm border group-hover:scale-105 transition-transform ${isDarkTheme ? 'bg-slate-950 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-600'}`}>
                                     {includeAiChat ? (
@@ -126,13 +126,13 @@ const WebTrackingModals: React.FC<WebTrackingModalsProps> = ({
                             </div>
                             <button
                                 onClick={() => setIncludeAiChat(!includeAiChat)}
-                                className={`relative w-12 h-6 rounded-full transition-colors duration-205 outline-none ${includeAiChat ? 'bg-amber-600' : 'bg-slate-200'}`}
+                                className={`relative w-12 h-6 rounded-full transition-colors duration-205 outline-none ${includeAiChat ? 'bg-[var(--color-primary)]' : 'bg-slate-200'}`}
                             >
                                 <div className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform duration-200 shadow-sm ${includeAiChat ? 'translate-x-6' : 'translate-x-0'}`} />
                             </button>
                         </div>
 
-                        <div className={`rounded-2xl p-6 relative group border shadow-inner ${isDarkTheme ? 'bg-slate-950 border-slate-850' : 'bg-slate-900 border-slate-805'}`}>
+                        <div className={`rounded-[14px] p-6 relative group border shadow-inner ${isDarkTheme ? 'bg-slate-950 border-slate-850' : 'bg-slate-900 border-slate-805'}`}>
                             <pre className={`font-mono text-xs overflow-x-auto whitespace-pre-wrap break-all leading-relaxed ${isDarkTheme ? 'text-slate-350' : 'text-slate-300'}`}>
                                 {includeAiChat ? (
                                     `<!-- MailFlow Pro Tracker & AI Chat -->
@@ -164,7 +164,7 @@ const WebTrackingModals: React.FC<WebTrackingModalsProps> = ({
                                 { title: 'AI Security Shield', desc: 'Lớp màng bảo vệ WAF lọc bỏ lưu lượng truy cập ảo, đảm bảo dữ liệu luôn làm sạch và an toàn.' },
                                 { title: 'Privacy Compliance', desc: 'Mã hóa dữ liệu định danh theo chuẩn quốc tế, bảo vệ quyền riêng tư người dùng tối đa.' }
                             ].map((feat, i) => (
-                                <div key={i} className={`p-4 border rounded-2xl group/feat transition-all duration-300 ${isDarkTheme ? 'bg-slate-900 border-slate-850 hover:bg-slate-850/30 hover:border-slate-700' : 'bg-slate-50 border-slate-100 hover:bg-white hover:border-slate-300'}`}>
+                                <div key={i} className={`p-4 border rounded-[14px] group/feat transition-all duration-300 ${isDarkTheme ? 'bg-slate-900 border-slate-850 hover:bg-slate-850/30 hover:border-slate-700' : 'bg-slate-50 border-slate-100 hover:bg-white hover:border-slate-300'}`}>
                                     <h4 className={`flex items-center gap-2 font-bold text-sm mb-1.5 ${isDarkTheme ? 'text-slate-300' : 'text-slate-800'}`}>
                                         <div className={`w-1.5 h-1.5 rounded-full transition-colors ${isDarkTheme ? 'bg-slate-600 group-hover/feat:bg-slate-400' : 'bg-slate-400 group-hover/feat:bg-slate-600'}`}></div>
                                         {feat.title}

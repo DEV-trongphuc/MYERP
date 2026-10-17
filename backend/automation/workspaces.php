@@ -85,15 +85,26 @@ if ($method === 'GET' && $action === 'users') {
             session_write_close();
         }
 
-        $stmt = $pdo->prepare("
-            SELECT wu.id as mapping_id, u.id as user_id, u.email, u.name as full_name, u.picture, r.id as role_id, r.name as role_name
-            FROM workspace_users wu
-            JOIN users u ON TRIM(u.id) COLLATE utf8mb4_unicode_ci = TRIM(wu.user_id) COLLATE utf8mb4_unicode_ci
-            LEFT JOIN roles r ON r.id = wu.role_id
-            WHERE wu.workspace_id = ?
-        ");
-        $stmt->execute([$workspace_id]);
-        $finalData = $stmt->fetchAll();
+        try {
+            $stmt = $pdo->prepare("
+                SELECT wu.id as mapping_id, u.id as user_id, u.email, u.full_name AS name, u.full_name, u.avatar_url AS picture, u.last_login_at AS last_login, r.id as role_id, r.name as role_name
+                FROM workspace_users wu
+                JOIN users u ON TRIM(u.id) COLLATE utf8mb4_unicode_ci = TRIM(wu.user_id) COLLATE utf8mb4_unicode_ci
+                LEFT JOIN roles r ON r.id = wu.role_id
+                WHERE wu.workspace_id = ?
+            ");
+            $stmt->execute([$workspace_id]);
+            $finalData = $stmt->fetchAll();
+        } catch (Exception $eRoles) {
+            $stmt = $pdo->prepare("
+                SELECT wu.id as mapping_id, u.id as user_id, u.email, u.full_name AS name, u.full_name, u.avatar_url AS picture, u.last_login_at AS last_login, wu.role_id, u.role as role_name
+                FROM workspace_users wu
+                JOIN users u ON TRIM(u.id) COLLATE utf8mb4_unicode_ci = TRIM(wu.user_id) COLLATE utf8mb4_unicode_ci
+                WHERE wu.workspace_id = ?
+            ");
+            $stmt->execute([$workspace_id]);
+            $finalData = $stmt->fetchAll();
+        }
 
         // [FIX NH-01] Removed debug fallback that returned raw workspace_users bindings.
         // That response exposed internal DB schema fields and the raw user_id/role_id mappings
@@ -220,25 +231,29 @@ if ($method === 'POST' && $action === 'remove_user') {
         $targetRow = $stmtTarget->fetch();
 
         if ($targetRow) {
-            // Check if target is an admin-role user
-            $stmtRoleCheck = $pdo->prepare("SELECT r.name FROM roles r WHERE r.id = ?");
-            $stmtRoleCheck->execute([$targetRow['role_id']]);
-            $roleName = $stmtRoleCheck->fetchColumn();
+            try {
+                // Check if target is an admin-role user
+                $stmtRoleCheck = $pdo->prepare("SELECT r.name FROM roles r WHERE r.id = ?");
+                $stmtRoleCheck->execute([$targetRow['role_id']]);
+                $roleName = $stmtRoleCheck->fetchColumn();
 
-            if (in_array($roleName, ['admin', 'super_admin', 'owner'])) {
-                // Count remaining admins in this workspace after removal
-                $stmtAdminCount = $pdo->prepare("
-                    SELECT COUNT(*) FROM workspace_users wu
-                    JOIN roles r ON r.id = wu.role_id
-                    WHERE wu.workspace_id = ? AND r.name IN ('admin','super_admin','owner') AND wu.id != ?
-                ");
-                $stmtAdminCount->execute([$workspace_id, $mapping_id]);
-                $remainingAdmins = (int)$stmtAdminCount->fetchColumn();
+                if (in_array($roleName, ['admin', 'super_admin', 'owner'])) {
+                    // Count remaining admins in this workspace after removal
+                    $stmtAdminCount = $pdo->prepare("
+                        SELECT COUNT(*) FROM workspace_users wu
+                        JOIN roles r ON r.id = wu.role_id
+                        WHERE wu.workspace_id = ? AND r.name IN ('admin','super_admin','owner') AND wu.id != ?
+                    ");
+                    $stmtAdminCount->execute([$workspace_id, $mapping_id]);
+                    $remainingAdmins = (int)$stmtAdminCount->fetchColumn();
 
-                if ($remainingAdmins === 0) {
-                    jsonResponse(false, null, 'Không thể xóa admin cuối cùng khỏi workspace. Hãy thêm admin khác trước.');
-                    exit;
+                    if ($remainingAdmins === 0) {
+                        jsonResponse(false, null, 'Không thể xóa admin cuối cùng khỏi workspace. Hãy thêm admin khác trước.');
+                        exit;
+                    }
                 }
+            } catch (Exception $eRoleCheck) {
+                // Ignore if roles table does not exist
             }
         }
 

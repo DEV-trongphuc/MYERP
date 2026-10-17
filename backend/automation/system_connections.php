@@ -51,7 +51,7 @@ function checkConnections($pdo) {
 
         // Analytics active if logs exist
         try {
-            $rs = (int)$pdo->query("SELECT count(*) FROM tracking_logs")->fetchColumn();
+            $rs = (int)$pdo->query("SELECT count(*) FROM mail_delivery_logs")->fetchColumn();
             if ($rs == 0) $status["tracking"] = false; else $status["tracking"] = true;
         } catch(Exception $e) {}
 

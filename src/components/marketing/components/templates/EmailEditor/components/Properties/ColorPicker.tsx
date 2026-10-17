@@ -1,5 +1,7 @@
 // components/templates/EmailEditor/components/Properties/ColorPicker.tsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { getMktPortalRoot } from '../../../../../utils/portalRoot';
 import { Ban, Pipette, Palette } from 'lucide-react';
 import { EmailBlock, EmailBlockStyle, EmailBodyStyle } from '../../../../../types';
 import { PREMIUM_COLORS, SUGGESTED_GRADIENTS } from '../../constants/editorConstants';
@@ -108,7 +110,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ label, value, onChange, block
                 bottom: showAbove ? `${screenHeight - rect.top + 8}px` : 'auto',
                 left: `${left}px`,
                 width: `${width}px`,
-                zIndex: 9999,
+                zIndex: 2147483647,
                 maxHeight: '450px',
                 overflowY: 'auto'
             });
@@ -167,84 +169,83 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ label, value, onChange, block
                 )}
             </div>
 
-            <div className={`relative border rounded-xl p-1.5 transition-all ${isOpen ? 'ring-2 ring-blue-600 border-blue-600' : 'border-slate-200'}`}>
+            <div
+                ref={triggerRef}
+                className={`relative flex items-center gap-2.5 px-3 py-2 bg-white border rounded-xl transition-all cursor-pointer ${
+                    isOpen ? 'border-[var(--color-primary)] ring-2 ring-[var(--color-primary)]/20 shadow-xs' : 'border-slate-200 hover:border-slate-300 shadow-xs'
+                }`}
+                onClick={toggleOpen}
+            >
+                {/* Color swatch - always shows border so white is visible */}
+                <div
+                    className="w-6 h-6 rounded-lg border border-black/10 shrink-0 shadow-xs"
+                    style={mode === 'solid' ? swatchStyle : { background: value }}
+                />
                 {mode === 'solid' ? (
-                    <div ref={triggerRef} className="flex items-center gap-2 cursor-pointer" onClick={toggleOpen}>
-                        {/* Color swatch - always shows border so white is visible */}
-                        <div
-                            className="w-6 h-6 rounded-full border-2 border-slate-200 flex-shrink-0 shadow-sm"
-                            style={swatchStyle}
-                        />
-                        {/* Hex input on white bg */}
-                        <div className="flex-1 bg-white border border-slate-200 rounded-xl px-2.5 py-2 flex items-center gap-1.5 shadow-sm group-focus-within:border-blue-400 transition-colors">
-                            <input
-                                type="text"
-                                value={value || ''}
-                                onChange={(e) => onChange(e.target.value, 'solid')}
-                                onClick={(e) => e.stopPropagation()}
-                                className="flex-1 bg-transparent text-[11px] md:text-xs font-mono font-black text-slate-700 outline-none w-0 placeholder:text-slate-300"
-                                style={{ minWidth: 0 }}
-                                placeholder="#ffffff"
-                            />
-                        </div>
-                    </div>
+                    <input
+                        type="text"
+                        value={value || ''}
+                        onChange={(e) => onChange(e.target.value, 'solid')}
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex-1 bg-transparent text-xs font-mono font-bold text-slate-800 placeholder:text-slate-400 focus:outline-none min-w-0"
+                        style={{ border: 'none', outline: 'none', boxShadow: 'none' }}
+                        placeholder="#ffffff"
+                    />
                 ) : (
-                    <div ref={triggerRef} className="flex items-center gap-2 cursor-pointer" onClick={toggleOpen}>
-                        <div className="w-6 h-6 rounded-full border-2 border-slate-200 shadow-sm flex-shrink-0" style={{ background: value }} />
-                        <span className="flex-1 text-[10px] text-slate-500 font-bold tracking-tight uppercase truncate">Linear Gradient</span>
-                    </div>
+                    <span className="flex-1 text-[11px] text-slate-600 font-semibold truncate">Linear Gradient</span>
                 )}
+            </div>
 
-                {isOpen && (
-                    <>
-                        <div className="fixed inset-0 z-[9998]" onClick={() => setIsOpen(false)} />
-                        <div
-                            style={popoverStyle}
-                            className="bg-white border border-slate-100 rounded-3xl shadow-2xl p-4 animate-in fade-in zoom-in-95 custom-scrollbar"
-                        >
-                            {/* Clear / Transparent */}
-                            <div className="mb-4">
-                                <button
-                                    onClick={() => { onChange('transparent', mode); setIsOpen(false); }}
-                                    className="w-full flex items-center justify-center gap-2.5 py-3 border border-slate-100 rounded-2xl hover:bg-rose-50 hover:border-rose-100 transition-all text-[11px] font-black uppercase text-slate-400 hover:text-rose-500 shadow-sm"
-                                >
-                                    <Ban className="w-3.5 h-3.5 text-rose-400" /> Không màu (Transparent)
-                                </button>
-                            </div>
+            {isOpen && createPortal(
+                <>
+                    <div className="fixed inset-0 z-[2147483646]" style={{ zIndex: 2147483646 }} onClick={() => setIsOpen(false)} />
+                    <div
+                        style={popoverStyle}
+                        className="bg-white border border-slate-100 rounded-[18px] shadow-2xl p-4 animate-in fade-in zoom-in-95 custom-scrollbar"
+                    >
+                        {/* Clear / Transparent */}
+                        <div className="mb-4">
+                            <button
+                                onClick={() => { onChange('transparent', mode); setIsOpen(false); }}
+                                className="w-full flex items-center justify-center gap-2.5 py-3 border border-slate-100 rounded-[14px] hover:bg-rose-50 hover:border-rose-100 transition-all text-[11px] font-black uppercase text-slate-400 hover:text-rose-500 shadow-sm"
+                            >
+                                <Ban className="w-3.5 h-3.5 text-rose-400" /> Không màu (Transparent)
+                            </button>
+                        </div>
 
-                            {mode === 'solid' && (
-                                <div className="space-y-4">
-                                    {/* Hex input with live preview */}
-                                    <div>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Nhập màu hex</p>
-                                        <div className="flex gap-2.5 items-center">
-                                            {/* Preview swatch */}
-                                            <div
-                                                className="w-10 h-10 rounded-2xl border-2 border-slate-100 flex-shrink-0 shadow-inner"
-                                                style={
-                                                    hexPreviewColor
-                                                        ? { backgroundColor: hexPreviewColor }
-                                                        : isTransparent
-                                                            ? { backgroundImage: CHECKER_BG, backgroundSize: '8px 8px' }
-                                                            : { backgroundColor: value }
-                                                }
+                        {mode === 'solid' && (
+                            <div className="space-y-4">
+                                {/* Hex input with live preview */}
+                                <div>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Nhập màu hex</p>
+                                    <div className="flex gap-2.5 items-center">
+                                        {/* Preview swatch */}
+                                        <div
+                                            className="w-10 h-10 rounded-[14px] border-2 border-slate-100 flex-shrink-0 shadow-inner"
+                                            style={
+                                                hexPreviewColor
+                                                    ? { backgroundColor: hexPreviewColor }
+                                                    : isTransparent
+                                                        ? { backgroundImage: CHECKER_BG, backgroundSize: '8px 8px' }
+                                                        : { backgroundColor: value }
+                                            }
+                                        />
+                                        <div className="flex-1 bg-white border border-slate-200 rounded-[14px] px-3 py-2 flex items-center shadow-sm">
+                                            <input
+                                                type="text"
+                                                placeholder="#ffffff"
+                                                value={hexInput}
+                                                onChange={e => handleHexInputChange(e.target.value)}
+                                                onKeyDown={e => e.key === 'Enter' && handleHexApply()}
+                                                onClick={e => e.stopPropagation()}
+                                                className="flex-1 bg-transparent text-xs font-mono font-black text-slate-700 outline-none w-0"
+                                                style={{ minWidth: 0, border: 'none', outline: 'none', boxShadow: 'none' }}
+                                                autoFocus
                                             />
-                                            <div className="flex-1 bg-white border border-slate-200 rounded-2xl px-3 py-2 flex items-center shadow-sm">
-                                                <input
-                                                    type="text"
-                                                    placeholder="#ffffff"
-                                                    value={hexInput}
-                                                    onChange={e => handleHexInputChange(e.target.value)}
-                                                    onKeyDown={e => e.key === 'Enter' && handleHexApply()}
-                                                    onClick={e => e.stopPropagation()}
-                                                    className="flex-1 bg-transparent text-xs font-mono font-black text-slate-700 outline-none w-0"
-                                                    style={{ minWidth: 0 }}
-                                                    autoFocus
-                                                />
-                                            </div>
+                                        </div>
                                             <button
                                                 onClick={handleHexApply}
-                                                className="bg-blue-600 hover:bg-blue-700 text-white rounded-2xl px-4 py-2 text-[11px] font-black transition-all shadow-md active:scale-95 shrink-0"
+                                                className="bg-blue-600 hover:bg-blue-700 text-white rounded-[14px] px-4 py-2 text-[11px] font-black transition-all shadow-md active:scale-95 shrink-0"
                                             >OK</button>
                                         </div>
                                         {/* Native color picker */}
@@ -344,9 +345,9 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ label, value, onChange, block
                                 </div>
                             )}
                         </div>
-                    </>
+                    </>,
+                    getMktPortalRoot()
                 )}
-            </div>
         </div>
     );
 };

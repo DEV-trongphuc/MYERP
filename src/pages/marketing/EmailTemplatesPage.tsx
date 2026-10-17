@@ -5,7 +5,8 @@ import { Template, TemplateGroup, EmailBlock } from '../../components/marketing/
 import { logAction } from '../../components/marketing/services/historyService';
 import {
     Edit3, Copy, Trash2, Plus, Layout, Eye, Sparkles, FolderOpen, Globe,
-    FolderPlus, Check, X, AlertCircle, Image as ImageIcon, SearchX, User
+    FolderPlus, Check, X, AlertCircle, Image as ImageIcon, SearchX, User,
+    Folder, ChevronDown, Search, Users
 } from 'lucide-react';
 import PageHero from '../../components/marketing/components/common/PageHero';
 import Button from '../../components/marketing/components/common/Button';
@@ -25,6 +26,7 @@ import { CardGridSkeleton } from '../../components/marketing/components/common/P
 import { useIsAdmin } from '../../components/marketing/hooks/useAuthUser';
 import { usePermissionGuard } from '../../components/marketing/components/common/PermissionGuard';
 import { Avatar } from '../../components/ui/Avatar';
+import { useAuth } from '../../contexts/AuthContext';
 
 // [PERF] Lazy-load heavy editors and modals only when opened
 const EmailEditor = lazy(() => import('../../components/marketing/components/templates/EmailEditor/index'));
@@ -54,6 +56,25 @@ const fmtTemplateDate = (tpl: Template) => {
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const year = d.getFullYear();
     return `${day}/${month}/${year}`;
+};
+
+const getTemplateVisibility = (tpl: Template): 'personal' | 'shared' | 'system' => {
+    if (tpl.id.startsWith('sys_')) return 'system';
+    const rawVis = (tpl as any).visibility || (tpl.bodyStyle as any)?.visibility;
+    return rawVis === 'personal' ? 'personal' : 'shared';
+};
+
+const isOwnTemplate = (tpl: Template, currentUserId?: number, currentUserEmail?: string): boolean => {
+    if (tpl.id.startsWith('sys_')) return false;
+    const createdBy = Number((tpl as any).created_by || (tpl.bodyStyle as any)?.creator?.id || (tpl as any).creator?.id || 0);
+    if (currentUserId && currentUserId > 0 && createdBy > 0 && createdBy === Number(currentUserId)) {
+        return true;
+    }
+    const creatorEmail = String((tpl as any).creator?.email || (tpl.bodyStyle as any)?.creator?.email || '').trim().toLowerCase();
+    if (currentUserEmail && creatorEmail && creatorEmail === currentUserEmail.trim().toLowerCase()) {
+        return true;
+    }
+    return false;
 };
 
 const VisualTemplate: React.FC<{ template: Template }> = memo(({ template }) => {
@@ -99,7 +120,7 @@ const VisualTemplate: React.FC<{ template: Template }> = memo(({ template }) => 
     }, []);
 
     return (
-        <div ref={containerRef} className="w-full h-full bg-white dark:bg-slate-900 relative overflow-hidden flex items-start justify-center">
+        <div ref={containerRef} className="email-canvas-scope w-full h-full bg-white dark:bg-slate-900 relative overflow-hidden flex items-start justify-center">
             {isVisible && html ? (
                 <div
                     className="absolute top-0 left-0 origin-top-left"
@@ -132,6 +153,7 @@ VisualTemplate.displayName = 'VisualTemplate';
 interface TemplateCardProps {
     template: Template;
     isSelected: boolean;
+    canModify: boolean;
     groupName: string;
     onToggleSelect: (id: string) => void;
     onPreview: (template: Template) => void;
@@ -143,6 +165,7 @@ interface TemplateCardProps {
 const TemplateCard: React.FC<TemplateCardProps> = memo(({
     template,
     isSelected,
+    canModify,
     groupName,
     onToggleSelect,
     onPreview,
@@ -151,20 +174,22 @@ const TemplateCard: React.FC<TemplateCardProps> = memo(({
     onDelete
 }) => {
     const isSystem = template.id.startsWith('sys_');
-    const creatorName = (template.bodyStyle as any)?.creator?.name || 'Hệ thống';
-    const creatorPic = (template.bodyStyle as any)?.creator?.picture;
+    const visibility = getTemplateVisibility(template);
+    const creatorObj = (template as any).creator || (template.bodyStyle as any)?.creator;
+    const creatorName = isSystem ? 'Hệ thống' : (creatorObj?.name || creatorObj?.full_name || 'Hệ thống');
+    const creatorPic = creatorObj?.avatar_url || creatorObj?.picture || creatorObj?.avatar;
     const isEditorBlock = Boolean(template.blocks && template.blocks.length > 0);
 
     return (
         <div
-            className={`bg-[var(--color-surface)] rounded-[var(--radius-lg)] border overflow-hidden group transition-all duration-200 flex flex-col h-[340px] relative shadow-[var(--shadow-xs)] hover:shadow-md ${
+            className={`bg-[var(--color-surface)] rounded-[18px] border overflow-hidden group transition-all duration-200 flex flex-col h-[340px] relative shadow-[var(--shadow-xs)] hover:shadow-md ${
                 isSelected
                     ? 'border-[var(--color-primary)] ring-2 ring-[var(--color-primary-light)]'
                     : 'border-[var(--color-border)] hover:border-[var(--color-primary)]'
             }`}
         >
-            {/* Selection Checkbox (user templates only) */}
-            {!isSystem && (
+            {/* Selection Checkbox (modifiable user templates only) */}
+            {!isSystem && canModify && (
                 <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); onToggleSelect(template.id); }}
@@ -202,13 +227,13 @@ const TemplateCard: React.FC<TemplateCardProps> = memo(({
                         <Eye className="w-3.5 h-3.5" /> Xem chi tiết
                     </button>
 
-                    {isSystem ? (
+                    {isSystem || !canModify ? (
                         <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); onDuplicate(template); }}
                             className="h-8 px-3.5 bg-[var(--color-primary)] text-white rounded-[var(--radius-md)] font-semibold text-xs hover:opacity-90 transition-opacity shadow-sm inline-flex items-center gap-1.5"
                         >
-                            <Copy className="w-3.5 h-3.5" /> Sử dụng mẫu
+                            <Copy className="w-3.5 h-3.5" /> {isSystem ? 'Sử dụng mẫu' : 'Nhân bản về Của tôi'}
                         </button>
                     ) : (
                         <div className="flex items-center gap-1.5">
@@ -240,11 +265,19 @@ const TemplateCard: React.FC<TemplateCardProps> = memo(({
                     )}
                 </div>
 
-                {/* Top-Right Format Badge */}
+                {/* Top-Right Format & Visibility Badge */}
                 <div className="absolute top-3 right-3 flex items-center gap-1.5 pointer-events-none">
-                    {isSystem && (
+                    {isSystem ? (
                         <span className="bg-[var(--color-primary)] text-white px-2 py-0.5 rounded-[var(--radius-sm)] text-[10px] font-semibold shadow-xs">
                             Mẫu chuẩn
+                        </span>
+                    ) : visibility === 'personal' ? (
+                        <span className="bg-amber-500/95 text-white px-2 py-0.5 rounded-[var(--radius-sm)] text-[10px] font-semibold shadow-xs inline-flex items-center gap-1">
+                            <User className="w-2.5 h-2.5" /> Của tôi
+                        </span>
+                    ) : (
+                        <span className="bg-emerald-600/95 text-white px-2 py-0.5 rounded-[var(--radius-sm)] text-[10px] font-semibold shadow-xs inline-flex items-center gap-1">
+                            <Users className="w-2.5 h-2.5" /> Dùng chung
                         </span>
                     )}
                     <span className="bg-[var(--color-surface)]/95 backdrop-blur px-2 py-0.5 rounded-[var(--radius-sm)] text-[10px] font-semibold text-[var(--color-text-secondary)] shadow-xs inline-flex items-center gap-1 border border-[var(--color-border)]">
@@ -296,8 +329,54 @@ const TemplateCard: React.FC<TemplateCardProps> = memo(({
 TemplateCard.displayName = 'TemplateCard';
 
 const Templates: React.FC = () => {
-    const isAdmin = useIsAdmin();
-    const { guard: adminGuard, PermModal: AdminPermModal } = usePermissionGuard(isAdmin);
+    const { user: erpUser } = useAuth();
+    const domationIsAdmin = useIsAdmin();
+    const effectiveIsAdmin = useMemo(() => {
+        if (domationIsAdmin) return true;
+        const r = String(erpUser?.role || '').toLowerCase();
+        return ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'marketing'].includes(r);
+    }, [domationIsAdmin, erpUser?.role]);
+
+    const { guard: adminGuard, PermModal: AdminPermModal } = usePermissionGuard(effectiveIsAdmin);
+
+    const currentUserId = useMemo(() => Number(erpUser?.id || 0), [erpUser?.id]);
+    const currentUserEmail = useMemo(() => String(erpUser?.email || ''), [erpUser?.email]);
+
+    const getCurrentCreatorInfo = useCallback(() => {
+        if (erpUser) {
+            return {
+                id: erpUser.id,
+                name: erpUser.full_name || erpUser.name || erpUser.username || 'Người dùng',
+                email: erpUser.email || '',
+                avatar_url: erpUser.avatar_url || erpUser.avatar || '',
+                picture: erpUser.avatar_url || erpUser.avatar || '/imgs/ICON.png'
+            };
+        }
+        try {
+            const raw = JSON.parse(localStorage.getItem('Ideas_user') || localStorage.getItem('user') || localStorage.getItem('currentUser') || '{}');
+            if (raw && (raw.full_name || raw.name)) {
+                return {
+                    id: raw.id,
+                    name: raw.full_name || raw.name,
+                    email: raw.email || '',
+                    avatar_url: raw.avatar_url || raw.avatar || raw.picture || '',
+                    picture: raw.avatar_url || raw.avatar || raw.picture || '/imgs/ICON.png'
+                };
+            }
+        } catch {
+            // ignore
+        }
+        return { name: 'Hệ thống', picture: '/imgs/ICON.png' };
+    }, [erpUser]);
+
+    const canModifyTemplate = useCallback((tpl?: Template | null) => {
+        if (!tpl) return true;
+        if (tpl.id.startsWith('sys_')) return false;
+        if (effectiveIsAdmin) return true;
+        if (isOwnTemplate(tpl, currentUserId, currentUserEmail)) return true;
+        if (getTemplateVisibility(tpl) === 'personal') return true;
+        return false;
+    }, [effectiveIsAdmin, currentUserId, currentUserEmail]);
 
     const [userTemplates, setUserTemplates] = useState<Template[]>([]);
     const [groups, setGroups] = useState<TemplateGroup[]>([]);
@@ -326,6 +405,28 @@ const Templates: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
+    const [isFolderPopoverOpen, setIsFolderPopoverOpen] = useState(false);
+    const [folderSearchTerm, setFolderSearchTerm] = useState('');
+    const folderPopoverRef = useRef<HTMLDivElement>(null);
+
+    // Close folder popover on outside click or escape
+    useEffect(() => {
+        if (!isFolderPopoverOpen) return;
+        const handleClickOutside = (e: MouseEvent) => {
+            if (folderPopoverRef.current && !folderPopoverRef.current.contains(e.target as Node)) {
+                setIsFolderPopoverOpen(false);
+            }
+        };
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setIsFolderPopoverOpen(false);
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [isFolderPopoverOpen]);
 
     // Confirm Delete & Bulk State
     const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; ids: string[]; type: 'template' | 'group' }>({
@@ -406,55 +507,77 @@ const Templates: React.FC = () => {
         return () => controller.abort();
     }, [fetchUserTemplates, fetchGroups]);
 
-    const handleSaveTemplate = adminGuard(async (data: Partial<Template>, shouldExit: boolean = false) => {
+    const handleSaveTemplate = async (data: Partial<Template>, shouldExit: boolean = false) => {
         if (savingTemplateRef.current) return;
+        const isExisting = Boolean(editingTemplate && editingTemplate.id && !editingTemplate.id.startsWith('sys_'));
+        if (isExisting && !canModifyTemplate(editingTemplate)) {
+            adminGuard(() => {})();
+            return;
+        }
         savingTemplateRef.current = true;
         try {
             let res;
-            const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('currentUser') || '{}');
-            const creatorInfo = user.name ? { name: user.name, picture: user.picture || '/imgs/ICON.png' } : null;
+            const creatorInfo = getCurrentCreatorInfo();
+            const resolvedVisibility: 'personal' | 'shared' = effectiveIsAdmin
+                ? (((data as any).visibility || (data.bodyStyle as any)?.visibility || (editingTemplate as any)?.visibility || (editingTemplate?.bodyStyle as any)?.visibility || 'shared') === 'personal' ? 'personal' : 'shared')
+                : 'personal';
 
-            if (editingTemplate && editingTemplate.id && !editingTemplate.id.startsWith('sys_')) {
+            if (isExisting && editingTemplate) {
+                const existingCreator = (editingTemplate as any).creator || (editingTemplate.bodyStyle as any)?.creator || creatorInfo;
                 const updatedBodyStyle = {
                     ...data.bodyStyle,
-                    creator: (editingTemplate.bodyStyle as any)?.creator || creatorInfo || { name: 'Hệ thống', picture: '/imgs/ICON.png' }
+                    visibility: resolvedVisibility,
+                    creator: existingCreator
                 };
                 res = await api.put(`templates/${editingTemplate.id}`, {
                     ...editingTemplate,
                     ...data,
+                    visibility: resolvedVisibility,
+                    creator: existingCreator,
                     bodyStyle: updatedBodyStyle,
                     lastModified: new Date().toISOString()
-                });
+                } as any);
                 if (res.success) {
                     showToast('Đã cập nhật mẫu email');
                     logAction('Cập nhật mẫu email', `Mẫu: ${data.name || editingTemplate.name}`);
                     setUserTemplates(prev => prev.map(t => t.id === editingTemplate.id ? {
                         ...t,
                         ...res.data,
+                        visibility: resolvedVisibility,
+                        creator: existingCreator,
+                        bodyStyle: updatedBodyStyle,
                         created_at: t.created_at || (t as any).createdAt || new Date().toISOString()
-                    } : t));
+                    } as Template : t));
                 }
             } else {
                 const updatedBodyStyle = {
                     ...data.bodyStyle,
-                    creator: creatorInfo || { name: 'Hệ thống', picture: '/imgs/ICON.png' }
+                    visibility: resolvedVisibility,
+                    creator: creatorInfo
                 };
                 res = await api.post('templates', {
                     ...data,
+                    visibility: resolvedVisibility,
+                    created_by: creatorInfo.id,
+                    creator: creatorInfo,
                     bodyStyle: updatedBodyStyle,
                     category: data.category || 'promotional',
                     thumbnail: data.thumbnail || 'https://placehold.co/600x400/f1f5f9/94a3b8?text=Email+Template',
                     lastModified: new Date().toISOString()
-                });
+                } as any);
                 if (res.success) {
-                    showToast('Đã tạo mẫu email mới');
+                    showToast(resolvedVisibility === 'personal' ? 'Đã tạo mẫu email cá nhân mới' : 'Đã tạo mẫu email dùng chung mới');
                     logAction('Tạo mẫu email mới', `Mẫu: ${data.name}`);
-                    setEditingTemplate(res.data);
                     const newTemplateWithDate = {
                         ...res.data,
+                        visibility: resolvedVisibility,
+                        created_by: creatorInfo.id,
+                        creator: creatorInfo,
+                        bodyStyle: updatedBodyStyle,
                         created_at: new Date().toISOString(),
                         createdAt: new Date().toISOString()
-                    };
+                    } as Template;
+                    setEditingTemplate(newTemplateWithDate);
                     setUserTemplates(prev => [newTemplateWithDate, ...prev]);
                 }
             }
@@ -474,9 +597,23 @@ const Templates: React.FC = () => {
         } finally {
             savingTemplateRef.current = false;
         }
-    }, 'lưu mẫu thiết kế');
+    };
 
-    const handleDelete = adminGuard(async (ids: string[], type: 'template' | 'group' = 'template') => {
+    const handleDelete = async (ids: string[], type: 'template' | 'group' = 'template') => {
+        if (type === 'group') {
+            if (!effectiveIsAdmin) {
+                adminGuard(() => {})();
+                return;
+            }
+        } else {
+            const targetTemplates = userTemplates.filter(t => ids.includes(t.id));
+            const hasUnauthorized = targetTemplates.some(t => !canModifyTemplate(t));
+            if (hasUnauthorized) {
+                adminGuard(() => {})();
+                return;
+            }
+        }
+
         if (deletingRef.current) return;
         deletingRef.current = true;
         try {
@@ -516,10 +653,15 @@ const Templates: React.FC = () => {
             deletingRef.current = false;
             setDeleteConfirm({ isOpen: false, ids: [], type: 'template' });
         }
-    }, 'xóa mẫu/nhóm');
+    };
 
-    const handleBulkMove = adminGuard(async (toGroupId: string) => {
+    const handleBulkMove = async (toGroupId: string) => {
         if (selectedIds.length === 0) return;
+        const targetTemplates = userTemplates.filter(t => selectedIds.includes(t.id));
+        if (targetTemplates.some(t => !canModifyTemplate(t))) {
+            adminGuard(() => {})();
+            return;
+        }
         setIsMovingGroups(true);
         try {
             const res = await api.put('templates', {
@@ -540,14 +682,14 @@ const Templates: React.FC = () => {
         } finally {
             setIsMovingGroups(false);
         }
-    }, 'di chuyển vị trí mẫu');
+    };
 
     const toggleSelect = useCallback((id: string) => {
         setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
     }, []);
 
     const handleSelectAll = (filtered: Template[]) => {
-        const selectableIds = filtered.filter(t => !t.id.startsWith('sys_')).map(t => t.id);
+        const selectableIds = filtered.filter(t => !t.id.startsWith('sys_') && canModifyTemplate(t)).map(t => t.id);
         if (selectableIds.length === 0) return;
         const allSelected = selectableIds.every(id => selectedIds.includes(id));
         if (allSelected) {
@@ -583,6 +725,10 @@ const Templates: React.FC = () => {
     }, 'tạo nhóm');
 
     const handleStartEdit = useCallback(async (template: Template) => {
+        if (!template.id.startsWith('sys_') && !canModifyTemplate(template)) {
+            adminGuard(() => {})();
+            return;
+        }
         if (template.id.startsWith('sys_')) {
             setEditingTemplate(template);
             setIsEditorOpen(true);
@@ -609,9 +755,9 @@ const Templates: React.FC = () => {
             toast.dismiss(loadToast);
             showToast('Lỗi kết nối khi tải mẫu', 'error');
         }
-    }, [showToast]);
+    }, [showToast, canModifyTemplate, adminGuard]);
 
-    const handleDuplicate = adminGuard(async (tpl: Template) => {
+    const handleDuplicate = async (tpl: Template) => {
         if (duplicatingRef.current) return;
         duplicatingRef.current = true;
         try {
@@ -629,25 +775,35 @@ const Templates: React.FC = () => {
                 htmlContent = compileHTML(fullTpl.blocks, fullTpl.bodyStyle, fullTpl.name);
             }
 
-            const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('currentUser') || '{}');
-            const creatorInfo = user.name ? { name: user.name, picture: user.picture || '/imgs/ICON.png' } : null;
+            const creatorInfo = getCurrentCreatorInfo();
+            const targetVisibility: 'personal' | 'shared' = effectiveIsAdmin ? 'shared' : 'personal';
+
+            const updatedBodyStyle = {
+                ...fullTpl.bodyStyle,
+                visibility: targetVisibility,
+                creator: creatorInfo
+            };
 
             const newTpl = {
                 name: newName,
                 category: fullTpl.category,
                 thumbnail: fullTpl.thumbnail,
                 blocks: fullTpl.blocks,
-                bodyStyle: {
-                    ...fullTpl.bodyStyle,
-                    creator: creatorInfo || { name: 'Hệ thống', picture: '/imgs/ICON.png' }
-                },
+                visibility: targetVisibility,
+                created_by: creatorInfo.id,
+                creator: creatorInfo,
+                bodyStyle: updatedBodyStyle,
                 htmlContent
             };
 
-            const res = await api.post('templates', newTpl);
+            const res = await api.post('templates', newTpl as any);
             if (res.success) {
                 const duplicatedWithDate = {
                     ...(res.data as any),
+                    visibility: targetVisibility,
+                    created_by: creatorInfo.id,
+                    creator: creatorInfo,
+                    bodyStyle: updatedBodyStyle,
                     created_at: new Date().toISOString(),
                     createdAt: new Date().toISOString()
                 } as Template;
@@ -664,7 +820,7 @@ const Templates: React.FC = () => {
         } finally {
             duplicatingRef.current = false;
         }
-    }, 'nhân bản mẫu');
+    };
 
     const handleApplyAIGenerated = useCallback((newBlocks: EmailBlock[]) => {
         setIsAIModalOpen(false);
@@ -686,13 +842,23 @@ const Templates: React.FC = () => {
     // ── Filtering & Sorting Logic ────────────────────────────────────────────
     const allMergedTemplates = useMemo(() => [...userTemplates, ...SYSTEM_TEMPLATES], [userTemplates]);
 
+    const personalTemplatesCount = useMemo(() => {
+        return userTemplates.filter(t => isOwnTemplate(t, currentUserId, currentUserEmail) || getTemplateVisibility(t) === 'personal').length;
+    }, [userTemplates, currentUserId, currentUserEmail]);
+
+    const sharedTemplatesCount = useMemo(() => {
+        return userTemplates.filter(t => !t.id.startsWith('sys_') && getTemplateVisibility(t) !== 'personal').length;
+    }, [userTemplates]);
+
     const filteredTemplates = useMemo(() => {
         const q = debouncedSearch.trim().toLowerCase();
         const list = allMergedTemplates.filter(t => {
             const isSys = t.id.startsWith('sys_');
+            const vis = getTemplateVisibility(t);
             const matchesGroup =
                 filterGroupId === 'all' ? true :
-                filterGroupId === 'personal' ? !isSys :
+                filterGroupId === 'personal' ? (!isSys && (isOwnTemplate(t, currentUserId, currentUserEmail) || vis === 'personal')) :
+                filterGroupId === 'shared' ? (!isSys && vis !== 'personal') :
                 filterGroupId === 'system' ? isSys :
                 t.groupId === filterGroupId;
             const matchesSearch = !q || (t.name || '').toLowerCase().includes(q);
@@ -706,7 +872,7 @@ const Templates: React.FC = () => {
             return [...list].sort((a, b) => (b.name || '').localeCompare(a.name || '', 'vi'));
         }
         return list;
-    }, [allMergedTemplates, filterGroupId, debouncedSearch, sortBy]);
+    }, [allMergedTemplates, filterGroupId, debouncedSearch, sortBy, currentUserId, currentUserEmail]);
 
     const totalPages = Math.max(1, Math.ceil(filteredTemplates.length / PAGE_SIZE));
     const paginatedTemplates = useMemo(() => {
@@ -745,15 +911,65 @@ const Templates: React.FC = () => {
         return '';
     }, [previewTemplate]);
 
-    const groupFilterOptions = useMemo(() => [
-        { value: 'all', label: `Tất cả (${allMergedTemplates.length})` },
-        { value: 'personal', label: `Mẫu của tôi (${userTemplates.length})` },
-        { value: 'system', label: `Mẫu hệ thống (${SYSTEM_TEMPLATES.length})` },
-        ...groups.map(g => ({
-            value: g.id,
-            label: `${g.name} (${allMergedTemplates.filter(t => t.groupId === g.id).length})`
-        }))
-    ], [allMergedTemplates, userTemplates.length, groups]);
+    // Top 3 most recently used/interacted groups + active group if not in top 3
+    const topGroups = useMemo(() => {
+        const scored = groups.map(g => {
+            const templates = allMergedTemplates.filter(t => t.groupId === g.id);
+            const count = templates.length;
+            let latestTime = 0;
+            templates.forEach(t => {
+                const raw = t.lastModified || t.created_at || (t as any).createdAt;
+                if (raw) {
+                    const ts = new Date(raw).getTime();
+                    if (!isNaN(ts) && ts > latestTime) latestTime = ts;
+                }
+            });
+            return { group: g, count, latestTime };
+        });
+
+        scored.sort((a, b) => {
+            if (b.latestTime !== a.latestTime) return b.latestTime - a.latestTime;
+            if (b.count !== a.count) return b.count - a.count;
+            return a.group.name.localeCompare(b.group.name, 'vi');
+        });
+
+        const top3 = scored.slice(0, 3).map(s => s.group);
+        const isCustomActive = filterGroupId !== 'all' && filterGroupId !== 'personal' && filterGroupId !== 'shared' && filterGroupId !== 'system';
+        if (isCustomActive && !top3.some(g => g.id === filterGroupId)) {
+            const activeGroup = groups.find(g => g.id === filterGroupId);
+            if (activeGroup) {
+                return [...top3, activeGroup];
+            }
+        }
+        return top3;
+    }, [groups, allMergedTemplates, filterGroupId]);
+
+    const filteredGroups = useMemo(() => {
+        if (!folderSearchTerm.trim()) return groups;
+        const term = folderSearchTerm.trim().toLowerCase();
+        return groups.filter(g => g.name.toLowerCase().includes(term));
+    }, [groups, folderSearchTerm]);
+
+    const currentFolderDisplay = useMemo(() => {
+        if (filterGroupId === 'all') {
+            return { name: 'Tất cả thư mục', count: allMergedTemplates.length };
+        }
+        if (filterGroupId === 'personal') {
+            return { name: 'Của tôi', count: personalTemplatesCount };
+        }
+        if (filterGroupId === 'shared') {
+            return { name: 'Dùng chung', count: sharedTemplatesCount };
+        }
+        if (filterGroupId === 'system') {
+            return { name: 'Mẫu hệ thống', count: SYSTEM_TEMPLATES.length };
+        }
+        const g = groups.find(item => item.id === filterGroupId);
+        if (g) {
+            const count = allMergedTemplates.filter(t => t.groupId === g.id).length;
+            return { name: g.name, count };
+        }
+        return { name: 'Chọn thư mục', count: allMergedTemplates.length };
+    }, [filterGroupId, allMergedTemplates, personalTemplatesCount, sharedTemplatesCount, groups]);
 
     const pillClass = (active: boolean) =>
         `h-9 px-3 rounded-[var(--radius-md)] text-[13px] font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-colors border ${
@@ -772,6 +988,7 @@ const Templates: React.FC = () => {
                         onSave={(data) => handleSaveTemplate(data, false)}
                         onCancel={() => { setIsEditorOpen(false); setEditingTemplate(undefined); }}
                         customMergeTags={customMergeTags}
+                        canSetShared={effectiveIsAdmin}
                     />
                 </Suspense>
             ) : (
@@ -802,7 +1019,7 @@ const Templates: React.FC = () => {
                     />
 
                     {/* Main panel */}
-                    <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] shadow-[var(--shadow-xs)] overflow-hidden">
+                    <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[18px] shadow-[var(--shadow-xs)] relative">
                         {/* Single-row Toolbar: category pills left, filter + sort + SearchBox right */}
                         <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-[var(--color-border)]">
                             <div className="flex items-center gap-1.5 max-w-full overflow-x-auto no-scrollbar">
@@ -826,7 +1043,19 @@ const Templates: React.FC = () => {
                                     <User className="w-3.5 h-3.5 shrink-0" />
                                     <span>Của tôi</span>
                                     <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${filterGroupId === 'personal' ? 'bg-white/20 text-white' : 'bg-[var(--color-bg)] text-[var(--color-text-muted)]'}`}>
-                                        {userTemplates.length}
+                                        {personalTemplatesCount}
+                                    </span>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => handleFilterGroupChange('shared')}
+                                    className={pillClass(filterGroupId === 'shared')}
+                                >
+                                    <Users className="w-3.5 h-3.5 shrink-0" />
+                                    <span>Dùng chung</span>
+                                    <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${filterGroupId === 'shared' ? 'bg-white/20 text-white' : 'bg-[var(--color-bg)] text-[var(--color-text-muted)]'}`}>
+                                        {sharedTemplatesCount}
                                     </span>
                                 </button>
 
@@ -842,7 +1071,7 @@ const Templates: React.FC = () => {
                                     </span>
                                 </button>
 
-                                {groups.map(group => {
+                                {topGroups.map(group => {
                                     const active = filterGroupId === group.id;
                                     const count = allMergedTemplates.filter(t => t.groupId === group.id).length;
                                     return (
@@ -858,7 +1087,7 @@ const Templates: React.FC = () => {
                                                     {count}
                                                 </span>
                                             </button>
-                                            {active && (
+                                            {active && effectiveIsAdmin && (
                                                 <div className="inline-flex items-center ml-1 gap-0.5">
                                                     <button
                                                         type="button"
@@ -882,28 +1111,207 @@ const Templates: React.FC = () => {
                                     );
                                 })}
 
-                                <button
-                                    type="button"
-                                    onClick={() => { setEditingGroup(null); setNewGroupName(''); setIsGroupModalOpen(true); }}
-                                    className="h-9 px-2.5 rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] text-xs font-semibold text-[var(--color-text-secondary)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] inline-flex items-center gap-1 shrink-0 transition-colors"
-                                    title="Tạo nhóm mẫu mới"
-                                >
-                                    <FolderPlus className="w-3.5 h-3.5" />
-                                    <span>Nhóm mới</span>
-                                </button>
+                                {effectiveIsAdmin && (
+                                    <button
+                                        type="button"
+                                        onClick={() => { setEditingGroup(null); setNewGroupName(''); setIsGroupModalOpen(true); }}
+                                        className="h-9 px-2.5 rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] text-xs font-semibold text-[var(--color-text-secondary)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] inline-flex items-center gap-1 shrink-0 transition-colors"
+                                        title="Tạo nhóm mẫu mới"
+                                    >
+                                        <FolderPlus className="w-3.5 h-3.5" />
+                                        <span>Nhóm mới</span>
+                                    </button>
+                                )}
                             </div>
 
                             <div className="ml-auto flex flex-wrap items-center gap-2">
-                                {groups.length > 0 && (
-                                    <div className="w-[165px]">
-                                        <Select
-                                            size="sm"
-                                            value={filterGroupId}
-                                            onChange={handleFilterGroupChange}
-                                            options={groupFilterOptions}
-                                        />
-                                    </div>
-                                )}
+                                {/* Custom wide dropdown popover for folder filtering */}
+                                <div ref={folderPopoverRef} className="relative">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsFolderPopoverOpen(prev => !prev)}
+                                        className="h-9 px-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-semibold inline-flex items-center justify-between gap-2 min-w-[160px] max-w-[220px] text-[var(--color-text)] hover:border-[var(--color-primary)] transition-colors cursor-pointer"
+                                        title={currentFolderDisplay.name}
+                                    >
+                                        <div className="flex items-center gap-1.5 truncate">
+                                            <Folder className="w-3.5 h-3.5 shrink-0 text-[var(--color-text-muted)]" />
+                                            <span className="truncate">{currentFolderDisplay.name}</span>
+                                            <span className="text-[11px] text-[var(--color-text-muted)] font-normal shrink-0">
+                                                ({currentFolderDisplay.count})
+                                            </span>
+                                        </div>
+                                        <ChevronDown className={`w-3.5 h-3.5 shrink-0 text-[var(--color-text-muted)] transition-transform duration-200 ${isFolderPopoverOpen ? 'rotate-180' : ''}`} />
+                                    </button>
+
+                                    {isFolderPopoverOpen && (
+                                        <div className="absolute top-full mt-1.5 left-0 sm:left-auto sm:right-0 w-[540px] sm:w-[620px] max-w-[calc(100vw-2rem)] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[18px] shadow-2xl z-50 p-3 flex flex-col gap-2.5">
+                                            {/* Top: Search box */}
+                                            <div className="relative">
+                                                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
+                                                <input
+                                                    type="text"
+                                                    value={folderSearchTerm}
+                                                    onChange={(e) => setFolderSearchTerm(e.target.value)}
+                                                    placeholder="Tìm kiếm thư mục / nhóm mẫu..."
+                                                    className="w-full h-8.5 pl-8.5 pr-8 text-xs rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
+                                                    autoFocus
+                                                />
+                                                {folderSearchTerm && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFolderSearchTerm('')}
+                                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-[var(--color-text)] p-0.5"
+                                                    >
+                                                        <X className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            {/* Quick options row */}
+                                            <div className="flex flex-wrap items-center gap-1.5 pb-2 border-b border-[var(--color-border)]">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        handleFilterGroupChange('all');
+                                                        setIsFolderPopoverOpen(false);
+                                                    }}
+                                                    className={`px-2.5 py-1.5 rounded-[var(--radius-md)] text-xs font-semibold inline-flex items-center gap-1.5 transition-colors border cursor-pointer ${
+                                                        filterGroupId === 'all'
+                                                            ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]'
+                                                            : 'bg-[var(--color-bg)] text-[var(--color-text-secondary)] border-transparent hover:border-[var(--color-border)] hover:text-[var(--color-text)]'
+                                                    }`}
+                                                >
+                                                    <Globe className="w-3.5 h-3.5 shrink-0" />
+                                                    <span>Tất cả</span>
+                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${filterGroupId === 'all' ? 'bg-white/20 text-white' : 'bg-[var(--color-surface)] text-[var(--color-text-muted)]'}`}>
+                                                        {allMergedTemplates.length}
+                                                    </span>
+                                                </button>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        handleFilterGroupChange('personal');
+                                                        setIsFolderPopoverOpen(false);
+                                                    }}
+                                                    className={`px-2.5 py-1.5 rounded-[var(--radius-md)] text-xs font-semibold inline-flex items-center gap-1.5 transition-colors border cursor-pointer ${
+                                                        filterGroupId === 'personal'
+                                                            ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]'
+                                                            : 'bg-[var(--color-bg)] text-[var(--color-text-secondary)] border-transparent hover:border-[var(--color-border)] hover:text-[var(--color-text)]'
+                                                    }`}
+                                                >
+                                                    <User className="w-3.5 h-3.5 shrink-0" />
+                                                    <span>Của tôi</span>
+                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${filterGroupId === 'personal' ? 'bg-white/20 text-white' : 'bg-[var(--color-surface)] text-[var(--color-text-muted)]'}`}>
+                                                        {personalTemplatesCount}
+                                                    </span>
+                                                </button>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        handleFilterGroupChange('shared');
+                                                        setIsFolderPopoverOpen(false);
+                                                    }}
+                                                    className={`px-2.5 py-1.5 rounded-[var(--radius-md)] text-xs font-semibold inline-flex items-center gap-1.5 transition-colors border cursor-pointer ${
+                                                        filterGroupId === 'shared'
+                                                            ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]'
+                                                            : 'bg-[var(--color-bg)] text-[var(--color-text-secondary)] border-transparent hover:border-[var(--color-border)] hover:text-[var(--color-text)]'
+                                                    }`}
+                                                >
+                                                    <Users className="w-3.5 h-3.5 shrink-0" />
+                                                    <span>Dùng chung</span>
+                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${filterGroupId === 'shared' ? 'bg-white/20 text-white' : 'bg-[var(--color-surface)] text-[var(--color-text-muted)]'}`}>
+                                                        {sharedTemplatesCount}
+                                                    </span>
+                                                </button>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        handleFilterGroupChange('system');
+                                                        setIsFolderPopoverOpen(false);
+                                                    }}
+                                                    className={`px-2.5 py-1.5 rounded-[var(--radius-md)] text-xs font-semibold inline-flex items-center gap-1.5 transition-colors border cursor-pointer ${
+                                                        filterGroupId === 'system'
+                                                            ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]'
+                                                            : 'bg-[var(--color-bg)] text-[var(--color-text-secondary)] border-transparent hover:border-[var(--color-border)] hover:text-[var(--color-text)]'
+                                                    }`}
+                                                >
+                                                    <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                                                    <span>Mẫu hệ thống</span>
+                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${filterGroupId === 'system' ? 'bg-white/20 text-white' : 'bg-[var(--color-surface)] text-[var(--color-text-muted)]'}`}>
+                                                        {SYSTEM_TEMPLATES.length}
+                                                    </span>
+                                                </button>
+                                            </div>
+
+                                            {/* Main body: 3-column grid */}
+                                            <div className="grid grid-cols-3 gap-2 max-h-[300px] overflow-y-auto p-1 custom-scrollbar">
+                                                {filteredGroups.length === 0 ? (
+                                                    <div className="col-span-3 py-6 text-center text-xs text-[var(--color-text-muted)]">
+                                                        {folderSearchTerm ? 'Không tìm thấy nhóm thư mục phù hợp' : 'Chưa có nhóm thư mục nào'}
+                                                    </div>
+                                                ) : (
+                                                    filteredGroups.map(group => {
+                                                        const count = allMergedTemplates.filter(t => t.groupId === group.id).length;
+                                                        const isSelected = filterGroupId === group.id;
+                                                        return (
+                                                            <button
+                                                                key={group.id}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    handleFilterGroupChange(group.id);
+                                                                    setIsFolderPopoverOpen(false);
+                                                                }}
+                                                                className={`h-11 px-2.5 rounded-[var(--radius-md)] border text-left text-xs font-medium flex items-center justify-between gap-1.5 transition-all cursor-pointer ${
+                                                                    isSelected
+                                                                        ? 'bg-[var(--color-primary)]/10 border-[var(--color-primary)] text-[var(--color-primary)] font-semibold shadow-xs'
+                                                                        : 'bg-[var(--color-bg)] border-[var(--color-border)] text-[var(--color-text)] hover:border-[var(--color-primary)]/50 hover:bg-[var(--color-surface)]'
+                                                                }`}
+                                                                title={group.name}
+                                                            >
+                                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                                    <Folder className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-muted)]'}`} />
+                                                                    <span className="truncate">{group.name}</span>
+                                                                </div>
+                                                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full shrink-0 font-normal ${
+                                                                    isSelected
+                                                                        ? 'bg-[var(--color-primary)] text-white'
+                                                                        : 'bg-[var(--color-surface)] text-[var(--color-text-muted)] border border-[var(--color-border)]'
+                                                                }`}>
+                                                                    {count}
+                                                                </span>
+                                                            </button>
+                                                        );
+                                                    })
+                                                )}
+                                            </div>
+
+                                            {/* Footer */}
+                                            <div className="pt-2 border-t border-[var(--color-border)] flex items-center justify-between text-xs">
+                                                <span className="text-[11px] text-[var(--color-text-muted)]">
+                                                    {groups.length} nhóm thư mục
+                                                </span>
+                                                {effectiveIsAdmin && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setIsFolderPopoverOpen(false);
+                                                            setEditingGroup(null);
+                                                            setNewGroupName('');
+                                                            setIsGroupModalOpen(true);
+                                                        }}
+                                                        className="inline-flex items-center gap-1 font-semibold text-[var(--color-primary)] hover:underline cursor-pointer"
+                                                    >
+                                                        <FolderPlus className="w-3.5 h-3.5" />
+                                                        <span>+ Tạo nhóm mới</span>
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                                 <div className="w-[145px]">
                                     <Select
                                         size="sm"
@@ -968,6 +1376,7 @@ const Templates: React.FC = () => {
                                         key={template.id}
                                         template={template}
                                         isSelected={selectedIds.includes(template.id)}
+                                        canModify={canModifyTemplate(template)}
                                         groupName={getGroupName(template.groupId)}
                                         onToggleSelect={toggleSelect}
                                         onPreview={setPreviewTemplate}
@@ -991,7 +1400,7 @@ const Templates: React.FC = () => {
                     {/* Bulk Action Bar */}
                     {selectedIds.length > 0 && (
                         <div className="fixed bottom-6 left-4 right-4 lg:left-1/2 lg:-translate-x-1/2 lg:w-auto z-50">
-                            <div className="bg-slate-900/95 backdrop-blur-md border border-white/10 px-4 py-3 rounded-[var(--radius-lg)] shadow-xl flex flex-wrap items-center gap-3 lg:min-w-[520px]">
+                            <div className="bg-slate-900/95 backdrop-blur-md border border-white/10 px-4 py-3 rounded-[18px] shadow-xl flex flex-wrap items-center gap-3 lg:min-w-[520px]">
                                 <div className="flex items-center gap-2.5 pr-3 border-r border-white/10">
                                     <span className="w-7 h-7 bg-[var(--color-primary)] rounded-[var(--radius-md)] flex items-center justify-center font-bold text-white text-xs">
                                         {selectedIds.length}
@@ -1070,7 +1479,7 @@ const Templates: React.FC = () => {
                         isOpen={!!previewTemplate}
                         onClose={() => setPreviewTemplate(null)}
                         onEdit={() => {
-                            if (!isAdmin) {
+                            if (!canModifyTemplate(previewTemplate)) {
                                 adminGuard(() => { })();
                                 return;
                             }

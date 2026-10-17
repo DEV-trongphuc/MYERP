@@ -394,7 +394,7 @@ if (!function_exists('runWorkerCampaign')) {
                 $pdo->commit();
 
                 // [OPTIMIZATION] Pre-build the Recipient Fetch SQL to compile ONCE before the loop
-                $sqlFetch = "SELECT s.id, s.email, s.first_name, s.last_name, s.phone_number, s.custom_attributes FROM subscribers s WHERE s.status IN ('active', 'lead', 'customer') AND s.workspace_id = ?";
+                $sqlFetch = "SELECT s.id, s.contact_id, s.email, s.first_name, s.last_name, s.phone_number, s.company_name, s.job_title, s.city, s.district, s.ward, s.country, s.address, s.gender, s.date_of_birth, s.anniversary_date, s.joined_at, s.custom_attributes, s.program, s.stage_id, s.owner_id, s.salesperson FROM subscribers s WHERE s.status IN ('active', 'lead', 'customer') AND s.workspace_id = ?";
                 $execParams = array_merge([$workspace_id], $queryBaseParams);
                 if (($campaign['type'] ?? 'email') === 'zalo_zns') {
                     $sqlFetch .= " AND (s.phone_number IS NOT NULL AND s.phone_number != '')";
@@ -518,7 +518,7 @@ if (!function_exists('runWorkerCampaign')) {
                             foreach ($stmtBatchCap->fetchAll(PDO::FETCH_ASSOC) as $row) {
                                 // [FIX] Use string key to match $sub['id'] which is a string UUID.
                                 // PHP array keys cast integers automatically only for numeric strings.
-                                // UUID strings are non-numeric  both sides must use the raw string.
+                                // UUID strings are non-numeric — both sides must use the raw string.
                                 $sId = $row['subscriber_id'];
                                 if (!isset($capCache[$sId])) {
                                     $capCache[$sId] = ['email' => 0, 'zalo' => 0, 'meta' => 0];
@@ -573,7 +573,7 @@ if (!function_exists('runWorkerCampaign')) {
                         $recipientIndexInBatch = 0;
                         $bouncedIds = [];
 
-                        // [RATE LIMITER] Uses sesAcquireRateSlot()  shared file-lock across ALL
+                        // [RATE LIMITER] Uses sesAcquireRateSlot() — shared file-lock across ALL
                         // PHP workers (campaign + flow). Guarantees combined total = 10/s regardless
                         // of how many workers are active. Defined in flow_helpers.php.
 
@@ -607,8 +607,8 @@ if (!function_exists('runWorkerCampaign')) {
                                 'variable_fallbacks' => $campConfig['variable_fallbacks'] ?? [],
                                 'config' => $campConfig
                             ];
-                            $personalHtml = replaceMergeTags($currentHtml, $sub, $context);
-                            $personalSubject = replaceMergeTags($currentSubject, $sub, $context);
+                            $personalHtml = replaceMergeTags($currentHtml, $sub, $context, $pdo);
+                            $personalSubject = replaceMergeTags($currentSubject, $sub, $context, $pdo);
 
                             // Periodically check if campaign was explicitly paused/stopped mid-batch
                             if ($recipientIndexInBatch % 20 === 0) {
@@ -667,7 +667,7 @@ if (!function_exists('runWorkerCampaign')) {
 
                                 $templateData = [];
                                 $missingParams = [];
-                                // [FIX] Per-field length limits  same as FlowExecutor zalo_zns
+                                // [FIX] Per-field length limits — same as FlowExecutor zalo_zns
                                 // Zalo ZNS short fields (id, ma_giao_dich...) max 20 chars; others max 100
                                 $znsShortFieldMap = [
                                     'id'           => 20,
@@ -678,7 +678,7 @@ if (!function_exists('runWorkerCampaign')) {
                                     'invoice_id'   => 20,
                                 ];
                                 foreach ($mappedParams as $tKey => $subField) {
-                                    $val = replaceMergeTags($subField, $sub, $context);
+                                    $val = replaceMergeTags($subField, $sub, $context, $pdo);
                                     if ($val === '') {
                                         $missingParams[] = $tKey;
                                     }
@@ -810,7 +810,7 @@ if (!function_exists('runWorkerCampaign')) {
                                             }
                                         }
 
-                                        $flowEnrollments[] = ['sid' => $subId, 'fid' => $fid, 'step' => $flowTriggerNextStepId, 'schedule' => $initialSchedule];
+                                        $flowEnrollments[] = ['sid' => $subId, 'cid' => $sub['contact_id'] ?? null, 'fid' => $fid, 'step' => $flowTriggerNextStepId, 'schedule' => $initialSchedule];
                                         $successActivities[] = [$subId, 'enter_flow', $fid, $linkedFlow['name'], "Enrolled from Campaign '{$cName}'", $cid, $fid];
 
                                         // Update local cache to prevent duplicate enrollment in same batch if loop continues?
@@ -908,8 +908,8 @@ if (!function_exists('runWorkerCampaign')) {
                             $binds = [];
                             $fidStats = [];
                             foreach ($flowEnrollments as $en) {
-                                $binds[] = "(?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW())";
-                                $vals = array_merge($vals, [$en['sid'], $en['fid'], $en['step'], $en['schedule']]);
+                                $binds[] = "(?, ?, ?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW())";
+                                $vals = array_merge($vals, [$workspace_id, $en['sid'], $en['cid'] ?? null, $en['fid'], $en['step'], $en['schedule']]);
                                 $fidStats[$en['fid']] = ($fidStats[$en['fid']] ?? 0) + 1;
 
                                 $jobDispatches[] = [
@@ -923,7 +923,7 @@ if (!function_exists('runWorkerCampaign')) {
                             // ON DUPLICATE KEY UPDATE re-enrolls only if status is NOT active (waiting/processing).
                             // This allows recurring campaigns to correctly re-enroll completed subscribers.
                             $sqlFlow = "INSERT INTO subscriber_flow_states 
-                                (subscriber_id, flow_id, step_id, scheduled_at, status, created_at, updated_at, last_step_at) 
+                                (workspace_id, subscriber_id, contact_id, flow_id, step_id, scheduled_at, status, created_at, updated_at, last_step_at) 
                                 VALUES " . implode(',', $binds) . "
                                 ON DUPLICATE KEY UPDATE
                                     step_id      = IF(status NOT IN ('waiting','processing'), VALUES(step_id), step_id),

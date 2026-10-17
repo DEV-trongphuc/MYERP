@@ -8,7 +8,7 @@ import {
     Users, GanttChartSquare, RefreshCw, BarChart2,
     Monitor, Smartphone, Tablet,
     Copy, MousePointer, MessageSquare, Sparkles, ArrowLeft, ShieldCheck, Filter,
-    Webhook, Bot, Share2
+    Bot, Share2
 } from 'lucide-react';
 import PageHero from '../../components/marketing/components/common/PageHero';
 import StatCard from '../../components/marketing/components/common/StatCard';
@@ -23,37 +23,25 @@ import {
 // Sub-components
 import { WebProperty, WebStats, Visitor, VisitorStats } from '../../components/marketing/components/web-tracking/types';
 import { useNavigation } from '../../components/marketing/contexts/NavigationContext';
-import { useLocation, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const OverviewTab = React.lazy(() => import('../../components/marketing/components/web-tracking/OverviewTab'));
 const VisitorsTab = React.lazy(() => import('../../components/marketing/components/web-tracking/VisitorsTab'));
 const ConversationsTab = React.lazy(() => import('../../components/marketing/components/web-tracking/conversations/ConversationsTab'));
 const WebTrackingModals = React.lazy(() => import('../../components/marketing/components/web-tracking/WebTrackingModals'));
-const ApiTriggersView = React.lazy(() => import('../../components/marketing/views/ApiTriggers'));
-const MetaMessengerView = React.lazy(() => import('../../components/marketing/views/MetaMessenger'));
-const AITrainingView = React.lazy(() => import('../../components/marketing/views/AITraining'));
-
-type OmniModule = 'web' | 'ai' | 'meta' | 'api-triggers';
 
 const WebTracking: React.FC = () => {
     const { setCustomBackAction } = useNavigation();
     const location = useLocation();
-    const [, setSearchParams] = useSearchParams();
-    const [omniModule, setOmniModule] = useState<OmniModule>('web');
+    const navigate = useNavigate();
 
     useEffect(() => {
         const params = new URLSearchParams(location.search);
         const tabParam = params.get('tab');
-        if (tabParam === 'ai') setOmniModule('ai');
-        else if (tabParam === 'api-triggers') setOmniModule('api-triggers');
-        else if (tabParam === 'meta') setOmniModule('meta');
-        else setOmniModule('web');
-    }, [location.search]);
-
-    const switchOmniModule = (next: OmniModule) => {
-        setOmniModule(next);
-        setSearchParams(next === 'web' ? {} : { tab: next }, { replace: true });
-    };
+        if (tabParam === 'ai') navigate('/marketing/ai-training', { replace: true });
+        else if (tabParam === 'api-triggers') navigate('/marketing/api-triggers', { replace: true });
+        else if (tabParam === 'meta') navigate('/marketing/social-bot', { replace: true });
+    }, [location.search, navigate]);
 
     const [websites, setWebsites] = useState<WebProperty[]>([]);
     const [loading, setLoading] = useState(true);
@@ -352,10 +340,10 @@ const WebTracking: React.FC = () => {
             case 'pageview': return <Globe className="w-4 h-4 text-blue-500" />;
             case 'click': return <MousePointerClick className="w-4 h-4 text-emerald-500" />;
             case 'canvas_click': return <GanttChartSquare className="w-4 h-4 text-indigo-500" />;
-            case 'scroll': return <ArrowUpRight className="w-4 h-4 text-orange-400" />;
+            case 'scroll': return <ArrowUpRight className="w-4 h-4 text-[var(--color-primary)]" />;
             case 'identify': return <Users className="w-4 h-4 text-purple-500" />;
             case 'copy': return <Copy className="w-4 h-4 text-rose-500" />;
-            case 'select': return <MousePointer className="w-4 h-4 text-amber-600" />;
+            case 'select': return <MousePointer className="w-4 h-4 text-[var(--color-primary)]" />;
             case 'form': return <Sparkles className="w-4 h-4 text-[#2563eb]" />;
             default: return <Activity className="w-4 h-4 text-slate-400" />;
         }
@@ -411,10 +399,6 @@ const WebTracking: React.FC = () => {
         [websites, websiteSearch]
     );
 
-    if (omniModule === 'ai') return <React.Suspense fallback={null}><AITrainingView /></React.Suspense>;
-    if (omniModule === 'meta') return <React.Suspense fallback={null}><MetaMessengerView /></React.Suspense>;
-    if (omniModule === 'api-triggers') return <React.Suspense fallback={null}><ApiTriggersView /></React.Suspense>;
-
     return (
         <MktPage className="pb-12">
             {view === 'list' && (
@@ -439,27 +423,27 @@ const WebTracking: React.FC = () => {
                         />
                         <StatCard
                             loading={loading}
-                            title="Đang hoạt động"
-                            value={websites.length.toLocaleString('vi-VN')}
-                            icon={<Activity />}
+                            title="Bật AI Livechat"
+                            value={websites.filter(w => Boolean(w.ai_enabled)).length.toLocaleString('vi-VN')}
+                            icon={<Bot />}
                             color="#BD1D2D"
-                            breakdown={<span>Realtime Tracker Online</span>}
+                            breakdown={<span>Tên miền kích hoạt trợ lý AI</span>}
                         />
                         <StatCard
                             loading={loading}
-                            title="Bảo vệ chống Bot"
-                            value={websites.length.toLocaleString('vi-VN')}
-                            icon={<ShieldCheck />}
+                            title="Tài liệu AI"
+                            value={websites.reduce((sum, w) => sum + (Number(w.docs_count ?? w.stats?.docs_count ?? 0) || 0), 0).toLocaleString('vi-VN')}
+                            icon={<Sparkles />}
                             color="#BD1D2D"
-                            breakdown={<span>Premium Bot & IP Shield</span>}
+                            breakdown={<span>Nguồn tri thức đã huấn luyện</span>}
                         />
                         <StatCard
                             loading={loading}
-                            title="Tích hợp Đa kênh"
-                            value="4"
-                            icon={<Share2 />}
+                            title="Hội thoại ghi nhận"
+                            value={websites.reduce((sum, w) => sum + (Number(w.queries_count ?? w.stats?.queries_count ?? 0) || 0), 0).toLocaleString('vi-VN')}
+                            icon={<MessageSquare />}
                             color="#BD1D2D"
-                            breakdown={<span>Web, AI Chat, Meta, Webhook</span>}
+                            breakdown={<span>Tổng phiên tương tác trên web</span>}
                         />
                     </MktStatGrid>
 
@@ -467,14 +451,11 @@ const WebTracking: React.FC = () => {
                         <MktToolbar
                             left={
                                 <Tabs
-                                    activeId={omniModule}
-                                    onChange={(id) => switchOmniModule(id as OmniModule)}
+                                    activeId="web"
+                                    onChange={() => {}}
                                     variant="segmented"
                                     items={[
                                         { id: 'web', label: 'Website Tracking', icon: Globe, count: websites.length },
-                                        { id: 'ai', label: 'AI Training', icon: Bot },
-                                        { id: 'meta', label: 'Meta Messenger', icon: MessageSquare },
-                                        { id: 'api-triggers', label: 'API & Webhook', icon: Webhook },
                                     ]}
                                 />
                             }
@@ -496,7 +477,25 @@ const WebTracking: React.FC = () => {
                         {loading ? (
                             <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {[0, 1, 2].map((i) => (
-                                    <div key={i} className="h-44 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] animate-pulse" />
+                                    <div key={i} className="rounded-[20px] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 flex flex-col justify-between gap-5">
+                                        <div className="flex justify-between items-start gap-3">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                                                <div className="space-y-2">
+                                                    <div className="w-36 h-4 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[8px]" />
+                                                    <div className="w-28 h-3 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[6px]" />
+                                                </div>
+                                            </div>
+                                            <div className="w-8 h-8 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[10px]" />
+                                        </div>
+                                        <div className="space-y-3">
+                                            <div className="h-9 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div className="h-9 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                                                <div className="h-9 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                                            </div>
+                                        </div>
+                                    </div>
                                 ))}
                             </div>
                         ) : websites.length === 0 ? (
@@ -544,13 +543,18 @@ const WebTracking: React.FC = () => {
 
                                         <div className="space-y-3">
                                             <div className="flex items-center justify-between px-3 py-2 bg-[var(--color-bg)] rounded-[var(--radius-md)] border border-[var(--color-border-light)] text-xs">
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                                                    <span className="font-semibold text-[var(--color-text)]">Online</span>
+                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                    <span className={`w-2 h-2 rounded-full shrink-0 ${site.ai_enabled ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                                                    <span className="font-semibold text-[var(--color-text)] truncate">
+                                                        {site.ai_enabled ? 'AI Chat: Đang bật' : 'Tracking Pixel'}
+                                                    </span>
                                                 </div>
-                                                <div className="flex items-center gap-1 text-[var(--color-text-muted)]">
-                                                    <ShieldCheck className="w-3.5 h-3.5 text-[var(--color-primary)]" />
-                                                    <span className="font-medium">Premium Shield</span>
+                                                <div className="flex items-center gap-1 text-[var(--color-text-muted)] shrink-0">
+                                                    <span className="font-medium">
+                                                        {site.created_at
+                                                            ? new Date(site.created_at.replace(' ', 'T')).toLocaleDateString('vi-VN')
+                                                            : `${Number(site.queries_count ?? site.stats?.queries_count ?? 0)} hội thoại`}
+                                                    </span>
                                                 </div>
                                             </div>
 
@@ -601,7 +605,7 @@ const WebTracking: React.FC = () => {
                             title="Làm mới dữ liệu"
                             disabled={statsLoading}
                         >
-                            <RefreshCw className={`w-4 h-4 ${statsLoading ? 'animate-spin' : ''}`} />
+                            <RefreshCw className="w-4 h-4" />
                         </Button>
                         <Button variant="primary" icon={Code} onClick={() => setShowScript(true)}>
                             Cài đặt mã
@@ -710,7 +714,18 @@ const WebTracking: React.FC = () => {
 
                         {/* Tab Content */}
                         <div className="p-4 md:p-6">
-                            <React.Suspense fallback={null}>
+                            <React.Suspense
+                                fallback={
+                                    <div className="space-y-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                            {[0, 1, 2, 3].map((i) => (
+                                                <div key={i} className="h-24 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
+                                            ))}
+                                        </div>
+                                        <div className="h-64 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
+                                    </div>
+                                }
+                            >
                                 {tab === 'overview' && (
                                     <OverviewTab
                                         stats={stats}

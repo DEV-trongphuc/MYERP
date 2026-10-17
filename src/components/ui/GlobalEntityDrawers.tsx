@@ -172,7 +172,7 @@ export const GlobalEntityDrawers: React.FC = () => {
     const handleOpenCustomer = (e: Event) => {
       const custom = e as CustomEvent;
       if (custom.detail) {
-        const c = custom.detail.contact || custom.detail.contactId || custom.detail.id;
+        const c = custom.detail.contact || custom.detail.contactId || custom.detail.id || ((custom.detail.phone || custom.detail.email) ? custom.detail : undefined);
         const tab = custom.detail.initialTab || 'info';
         if (c) openCustomerDrawer(c, tab);
       }

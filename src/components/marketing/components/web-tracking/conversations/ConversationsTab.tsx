@@ -9,11 +9,20 @@ import {
 } from 'lucide-react';
 import Modal from '../../common/Modal';
 import ConfirmModal from '../../common/ConfirmModal';
-import CustomerProfileModal from '../../audience/CustomerProfileModal';
 import { ZaloUserProfileModal } from '../../zalo/ZaloUserProfileModal';
+import { MetaCustomerProfileModal } from '../../meta/MetaCustomerProfileModal';
 import { api } from '../../../services/storageAdapter';
 import { toast } from 'react-hot-toast';
 import { API_BASE_URL } from '../../../utils/config';
+
+const openCrmContact360 = (arg1: any, arg2?: any) => {
+    if (arg1 && typeof arg1.stopPropagation === 'function') arg1.stopPropagation();
+    if (arg2 && typeof arg2.stopPropagation === 'function') arg2.stopPropagation();
+    const rawId = (arg1 && typeof arg1.stopPropagation === 'function') ? arg2 : arg1;
+    const id = Number(rawId);
+    if (!id || Number.isNaN(id)) return;
+    window.dispatchEvent(new CustomEvent('open-customer-drawer', { detail: { id, initialTab: 'journey360' } }));
+};
 
 // Local helper for date formatting
 const formatDate = (dateStr: string, mode: 'time' | 'datetime' = 'datetime') => {
@@ -94,7 +103,7 @@ const renderContent = (content: string, role: string, onActionClick?: (action: s
                             href={url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="block overflow-hidden rounded-2xl border border-slate-100 shadow-sm transition-all hover:scale-[1.02] hover:shadow-xl hover:shadow-orange-500/5 group/img"
+                            className="block overflow-hidden rounded-[14px] border border-slate-100 shadow-sm transition-all hover:scale-[1.02] hover:shadow-xl hover:shadow-[var(--color-primary)]/5 group/img"
                         >
                             <img
                                 src={url}
@@ -122,19 +131,19 @@ const renderContent = (content: string, role: string, onActionClick?: (action: s
                         rel="noopener noreferrer"
                         className="block group mt-2 mb-2 no-underline"
                     >
-                        <div className="flex items-center gap-3 p-3 bg-slate-50 border-2 border-slate-200 rounded-xl transition-all group-hover:border-amber-600 group-hover:bg-white group-hover:shadow-lg group-hover:shadow-amber-600/10">
+                        <div className="flex items-center gap-3 p-3 bg-slate-50 border-2 border-slate-200 rounded-xl transition-all group-hover:border-[var(--color-primary)] group-hover:bg-white group-hover:shadow-lg group-hover:shadow-[var(--color-primary)]/10">
                             <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${ext === 'pdf' ? 'bg-rose-100 text-rose-500' :
                                 ext.includes('doc') ? 'bg-blue-100 text-blue-500' :
-                                    ext.includes('xls') ? 'bg-amber-100 text-amber-600' :
+                                    ext.includes('xls') ? 'bg-amber-100 text-[var(--color-primary)]' :
                                         'bg-slate-200 text-slate-600'
                                 }`}>
                                 <FileText className="w-5 h-5" />
                             </div>
                             <div className="flex-1 min-w-0">
-                                <h5 className="text-[13px] font-bold text-slate-700 truncate group-hover:text-amber-600 transition-colors">{fileName}</h5>
+                                <h5 className="text-[13px] font-bold text-slate-700 truncate group-hover:text-[var(--color-primary)] transition-colors">{fileName}</h5>
                                 <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">{ext.toUpperCase()} FILE • Bấm để tải</p>
                             </div>
-                            <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition-all">
+                            <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center group-hover:bg-[var(--color-primary)] group-hover:text-white transition-all">
                                 <Maximize2 className="w-4 h-4 rotate-45" />
                             </div>
                         </div>
@@ -233,10 +242,10 @@ const renderContent = (content: string, role: string, onActionClick?: (action: s
                         key={`action-${i}`}
                         onClick={() => onActionClick?.(action)}
                         className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 ${onActionClick
-                            ? 'bg-amber-100 text-amber-700 border border-amber-200 hover:bg-amber-200 hover:scale-105'
+                            ? 'bg-amber-100 text-[#9A1523] border border-amber-200 hover:bg-amber-200 hover:scale-105'
                             : 'bg-slate-50 text-slate-400 border border-slate-100 cursor-default grayscale'}`}
                     >
-                        <Sparkles className={`w-3.5 h-3.5 ${onActionClick ? 'text-amber-600' : 'text-slate-300'}`} />
+                        <Sparkles className={`w-3.5 h-3.5 ${onActionClick ? 'text-[var(--color-primary)]' : 'text-slate-300'}`} />
                         {action}
                     </button>
                 ))}
@@ -251,6 +260,12 @@ interface Conversation {
     id: string;
     visitor_id: string;
     subscriber_id?: string;
+    contact_id?: number | null;
+    owner_id?: number | null;
+    salesperson?: string | null;
+    phone?: string;
+    phone_number?: string;
+    tags?: string[] | string;
     property_id: string;
     status: 'ai' | 'human' | 'closed';
     first_name?: string;
@@ -295,6 +310,8 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
     const [showCrmModal, setShowCrmModal] = useState(false);
     const [showZaloProfileModal, setShowZaloProfileModal] = useState(false);
     const [selectedZaloSubId, setSelectedZaloSubId] = useState<string | null>(null);
+    const [showMetaProfileModal, setShowMetaProfileModal] = useState(false);
+    const [selectedMetaSubId, setSelectedMetaSubId] = useState<string | null>(null);
     const [showBlockIPModal, setShowBlockIPModal] = useState(false);
     const [ipToBlock, setIpToBlock] = useState<{ ip: string; visitorName: string } | null>(null);
     const [blockReason, setBlockReason] = useState('');
@@ -520,47 +537,46 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
             const zaloSubId = selectedConv.visitor_id.replace('zalo_', '');
             setSelectedZaloSubId(zaloSubId);
             setShowZaloProfileModal(true);
+        } else if (selectedConv.visitor_id.startsWith('meta_')) {
+            const metaSubId = selectedConv.visitor_id.replace('meta_', '');
+            setSelectedMetaSubId(metaSubId);
+            setShowMetaProfileModal(true);
         } else {
             // It's a web visitor
+            let sub: any = null;
             setCrmLoading(true);
             try {
                 // Priority 1: Fetch by subscriber_id if we have it
                 if (selectedConv.subscriber_id) {
                     const res = await api.get(`subscribers/${selectedConv.subscriber_id}`);
                     if (res.success) {
-                        setCrmSubscriber(res.data);
-                        setShowCrmModal(true);
-                        return;
+                        sub = res.data;
                     }
                 }
 
                 // Priority 2: Fetch by visitor_id (Linked on backend but maybe not updated locally)
-                if (selectedConv.visitor_id) {
+                if (!sub && selectedConv.visitor_id) {
                     const res = await api.get(`subscribers?visitor_id=${selectedConv.visitor_id}`);
                     if (res.success) {
-                        setCrmSubscriber(res.data);
-                        setShowCrmModal(true);
+                        sub = res.data;
                         const subId = (res.data as any).id;
                         if (subId && !selectedConv.subscriber_id) {
                             setSelectedConv(prev => prev ? { ...prev, subscriber_id: subId } : null);
                             setConversations(prev => prev.map(c => c.visitor_id === selectedConv.visitor_id ? { ...c, subscriber_id: subId } : c));
                         }
-                        return;
                     }
                 }
 
                 // Priority 3: Fetch by email if we have it
-                if (selectedConv.email) {
+                if (!sub && selectedConv.email) {
                     const res = await api.get(`subscribers?email=${encodeURIComponent(selectedConv.email)}`);
                     if (res.success) {
-                        setCrmSubscriber(res.data);
-                        setShowCrmModal(true);
+                        sub = res.data;
                         const subId = (res.data as any).id;
                         if (subId && !selectedConv.subscriber_id) {
                             setSelectedConv(prev => prev ? { ...prev, subscriber_id: subId } : null);
                             setConversations(prev => prev.map(c => c.visitor_id === selectedConv.visitor_id ? { ...c, subscriber_id: subId } : c));
                         }
-                        return;
                     }
                 }
             } catch (e) {
@@ -569,24 +585,15 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
                 setCrmLoading(false);
             }
 
-            // Fallback: Construct a "lite" subscriber object for guests or if fetch failed
-            const guestSub: any = {
-                id: selectedConv.visitor_id,
-                email: selectedConv.email || '',
-                firstName: selectedConv.first_name || 'Khách vãng lai',
-                lastName: selectedConv.last_name || '',
-                status: selectedConv.status || 'lead',
-                tags: [],
-                joinedAt: new Date().toISOString(),
-                listIds: [],
-                notes: [],
-                stats: { emailsSent: 0, emailsOpened: 0, linksClicked: 0 },
-                customAttributes: {},
-                avatar: selectedConv.avatar,
-                leadScore: selectedConv.lead_score || 0
-            };
-            setCrmSubscriber(guestSub);
-            setShowCrmModal(true);
+            const targetObj = sub || selectedConv;
+            const contactId = (selectedConv as any).contact_id || sub?.contact_id || sub?.myerp_contact_id;
+            if (contactId) {
+                window.dispatchEvent(new CustomEvent('open-customer-drawer', { detail: { id: Number(contactId), initialTab: 'journey360' } }));
+            } else {
+                const phone = sub?.phone || (selectedConv as any).phone;
+                const email = sub?.email || selectedConv.email;
+                window.dispatchEvent(new CustomEvent('open-customer-drawer', { detail: { phone, email, contact: targetObj, initialTab: 'journey360' } }));
+            }
         }
     };
 
@@ -704,9 +711,9 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
     };
 
     return (
-        <div className="flex flex-col lg:flex-row gap-6 h-[800px] max-w-[1400px] mx-auto bg-slate-50/30 p-4 rounded-[32px] border border-slate-100 shadow-inner overflow-hidden">
+        <div className="flex flex-col lg:flex-row gap-6 h-[800px] max-w-[1400px] mx-auto bg-slate-50/30 p-4 rounded-[18px] border border-slate-100 shadow-inner overflow-hidden">
             {/* Left: Conversations List */}
-            <div className="w-full lg:w-80 flex flex-col gap-4 bg-white rounded-[28px] border border-slate-100 shadow-sm overflow-hidden flex-shrink-0">
+            <div className="w-full lg:w-80 flex flex-col gap-4 bg-white rounded-[18px] border border-slate-100 shadow-sm overflow-hidden flex-shrink-0">
                 <div className="p-5 border-b border-slate-50">
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-lg font-extrabold text-slate-800 tracking-tight">Conversations</h3>
@@ -728,7 +735,7 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
                     </div>
 
                     {/* Sub-tabs */}
-                    <div className="bg-slate-50 p-1 rounded-2xl flex flex-wrap gap-1 border border-slate-100 mb-4">
+                    <div className="bg-slate-50 p-1 rounded-[14px] flex flex-wrap gap-1 border border-slate-100 mb-4">
 
                         <button
                             onClick={() => { setSource('web'); setPage(1); }}
@@ -867,7 +874,7 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
                                             <Bot className="w-3 h-3 text-white" /> AI AUTOMATION
                                         </span>
                                     )}
-                                    {(c.subscriber_id || c.visitor_id.startsWith('zalo_')) && <div className="w-2 h-2 rounded-full bg-amber-600 shadow-sm"></div>}
+                                    {(c.subscriber_id || c.visitor_id.startsWith('zalo_')) && <div className="w-2 h-2 rounded-full bg-[var(--color-primary)] shadow-sm"></div>}
                                 </div>
                             </div>
                         ))
@@ -894,7 +901,7 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
                             <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/30">
                                 <div className="flex items-center gap-3 group/header">
                                     <div
-                                        className="w-10 h-10 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 shadow-sm cursor-pointer hover:border-amber-600 hover:scale-105 transition-all overflow-hidden"
+                                        className="w-10 h-10 rounded-[14px] bg-white border border-slate-200 flex items-center justify-center text-slate-400 shadow-sm cursor-pointer hover:border-[#9A1523] hover:scale-105 transition-all overflow-hidden"
                                         onClick={handleOpenProfile}
                                         title="Xem hồ sơ"
                                     >
@@ -907,44 +914,66 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
                                     <div>
                                         <div className="flex items-center gap-2">
                                             <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest">
-                                                {selectedConv.first_name ? `${selectedConv.first_name} ${selectedConv.last_name || ''}` : (selectedConv.zalo_name && selectedConv.zalo_name !== 'Zalo User' ? selectedConv.zalo_name : null) || selectedConv.email || (selectedConv.visitor_id.startsWith('zalo_') ? `Zalo User (${selectedConv.visitor_id.replace('zalo_', '')})` : 'Visitor')}
+                                                {selectedConv.first_name ? `${selectedConv.first_name} ${selectedConv.last_name || ''}` : (selectedConv.zalo_name && selectedConv.zalo_name !== 'Zalo User' ? selectedConv.zalo_name : null) || selectedConv.email || (selectedConv.visitor_id.startsWith('zalo_') ? `Zalo User (${selectedConv.visitor_id.replace('zalo_', '')})` : (selectedConv.visitor_id.startsWith('meta_') ? `Messenger (${selectedConv.visitor_id.replace('meta_', '')})` : 'Visitor'))}
                                             </h4>
-                                            {(selectedConv.subscriber_id || selectedConv.visitor_id.startsWith('zalo_')) && <UserCheck className="w-3 h-3 text-amber-600" />}
+                                            {(selectedConv.subscriber_id || selectedConv.visitor_id.startsWith('zalo_') || selectedConv.visitor_id.startsWith('meta_')) && <UserCheck className="w-3 h-3 text-[var(--color-primary)]" />}
+                                            {selectedConv.contact_id && (
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        openCrmContact360(selectedConv.contact_id);
+                                                    }}
+                                                    className="text-[11px] font-mono text-[var(--color-text-muted)] bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded px-1.5 py-0.5 cursor-pointer flex items-center gap-1 transition-colors"
+                                                    title="Mở Hồ sơ CRM 360"
+                                                >
+                                                    CRM #{selectedConv.contact_id}
+                                                    <ExternalLink className="w-2.5 h-2.5" />
+                                                </button>
+                                            )}
                                         </div>
                                         <div className="flex items-center gap-2 mt-0.5">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse"></div>
+                                            <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-primary)] animate-pulse"></div>
                                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest opacity-60">Đang truy cập • {selectedConv.visit_count || 1} lần xem</span>
                                         </div>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    {!selectedConv.visitor_id.startsWith('zalo_') && ( // Only show these buttons for non-Zalo conversations
-                                        <>
-                                            <button
-                                                onClick={() => toggleStatus(selectedConv.status === 'ai' ? 'human' : 'ai')}
-                                                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm ${selectedConv.status === 'ai' ? 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:text-slate-800 hover:border-slate-300' : 'bg-slate-800 text-white shadow-slate-900/20'
-                                                    }`}>
-                                                {selectedConv.status === 'ai' ? 'Tiếp quản' : 'Bật lại AI'}
-                                            </button>
-                                            <button
-                                                onClick={() => {
-                                                    if (selectedConv.is_blocked) return;
-                                                    if (!(selectedConv as any).ip_address) {
-                                                        toast.error('Không tìm thấy IP');
-                                                        return;
-                                                    }
-                                                    setIpToBlock({
-                                                        ip: selectedConv.ip_address || '',
-                                                        visitorName: selectedConv.first_name || selectedConv.email || 'Visitor'
-                                                    });
-                                                    setShowBlockIPModal(true);
-                                                }}
-                                                className={`p-2.5 rounded-xl transition-all border ${selectedConv.is_blocked ? 'bg-rose-600 text-white border-rose-600 shadow-md cursor-default' : 'text-rose-400 hover:text-rose-600 hover:bg-rose-50 border-transparent hover:border-rose-100'}`}
-                                                title={selectedConv.is_blocked ? "IP đã bị chặn" : "Chặn IP này"}
-                                            >
-                                                <ShieldAlert className="w-5 h-5" />
-                                            </button>
-                                        </>
+                                    {selectedConv.contact_id && (
+                                        <button
+                                            type="button"
+                                            onClick={() => openCrmContact360(selectedConv.contact_id)}
+                                            className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-all flex items-center gap-1.5 cursor-pointer"
+                                        >
+                                            <ExternalLink className="w-3.5 h-3.5" />
+                                            Hồ sơ CRM 360
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => toggleStatus(selectedConv.status === 'ai' ? 'human' : 'ai')}
+                                        className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm cursor-pointer ${selectedConv.status === 'ai' ? 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:text-slate-800 hover:border-slate-300' : 'bg-slate-800 text-white shadow-slate-900/20'
+                                            }`}>
+                                        {selectedConv.status === 'ai' ? 'Tiếp quản' : 'Bật lại AI'}
+                                    </button>
+                                    {!selectedConv.visitor_id.startsWith('zalo_') && !selectedConv.visitor_id.startsWith('meta_') && (
+                                        <button
+                                            onClick={() => {
+                                                if (selectedConv.is_blocked) return;
+                                                if (!(selectedConv as any).ip_address) {
+                                                    toast.error('Không tìm thấy IP');
+                                                    return;
+                                                }
+                                                setIpToBlock({
+                                                    ip: selectedConv.ip_address || '',
+                                                    visitorName: selectedConv.first_name || selectedConv.email || 'Visitor'
+                                                });
+                                                setShowBlockIPModal(true);
+                                            }}
+                                            className={`p-2.5 rounded-xl transition-all border ${selectedConv.is_blocked ? 'bg-rose-600 text-white border-rose-600 shadow-md cursor-default' : 'text-rose-400 hover:text-rose-600 hover:bg-rose-50 border-transparent hover:border-rose-100'}`}
+                                            title={selectedConv.is_blocked ? "IP đã bị chặn" : "Chặn IP này"}
+                                        >
+                                            <ShieldAlert className="w-5 h-5" />
+                                        </button>
                                     )}
                                 </div>
                             </div>
@@ -954,7 +983,7 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
                                 {messages.map((m) => (
                                     <div key={m.id} className={`flex ${m.sender === 'visitor' ? 'justify-start' : 'justify-end'}`}>
                                         <div className={`max-w-[75%] space-y-1`}>
-                                            <div className={`p-4 rounded-[22px] text-xs font-medium shadow-sm leading-relaxed ${m.sender === 'visitor' ? 'bg-amber-600 text-white rounded-tl-none' :
+                                            <div className={`p-4 rounded-[14px] text-xs font-medium shadow-sm leading-relaxed ${m.sender === 'visitor' ? 'bg-[var(--color-primary)] text-white rounded-tl-none' :
                                                 'bg-slate-100 text-slate-700 rounded-tr-none'
                                                 }`}>
                                                 {m.sender === 'ai' && <div className="flex items-center gap-1.5 mb-1.5 opacity-80"><Bot className="w-3.5 h-3.5" /><span className="text-[9px] font-black uppercase tracking-widest">AI Agent</span></div>}
@@ -980,20 +1009,26 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
                                 )}
                             </div>
 
-                            <div className={`p-4 bg-white border-t border-slate-100 transition-all ${selectedConv.status === 'ai' ? 'opacity-50 grayscale pointer-events-none select-none' : ''}`}>
+                            <div className={`p-4 bg-white border-t border-slate-100 transition-all ${selectedConv.status === 'ai' ? 'opacity-75' : ''}`}>
                                 {selectedConv.visitor_id.startsWith('zalo_') && (
                                     <div className="mb-2 flex items-center gap-2 px-1">
                                         <Bot className="w-3.5 h-3.5 text-blue-500" />
                                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Zalo Mode</span>
                                     </div>
                                 )}
+                                {selectedConv.visitor_id.startsWith('meta_') && (
+                                    <div className="mb-2 flex items-center gap-2 px-1">
+                                        <Bot className="w-3.5 h-3.5 text-blue-600" />
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Messenger Mode</span>
+                                    </div>
+                                )}
                                 <div className="relative group">
                                     <textarea
                                         value={reply}
                                         onChange={e => setReply(e.target.value)}
-                                        placeholder={selectedConv.status === 'ai' ? "AI đang trả lời khách..." : "Nhập nội dung trả lời khách..."}
+                                        placeholder={selectedConv.status === 'ai' ? "AI đang trả lời khách... (Bấm 'Dừng AI' hoặc 'Tiếp quản' để chat trực tiếp)" : "Nhập nội dung trả lời khách..."}
                                         disabled={selectedConv.status === 'ai'}
-                                        className="w-full pl-4 pr-14 py-3 bg-slate-50 border border-slate-100 rounded-[20px] text-xs font-medium focus:outline-none focus:ring-2 focus:ring-slate-800/10 focus:bg-white focus:border-slate-800 transition-all resize-none min-h-[52px]"
+                                        className="w-full pl-4 pr-14 py-3 bg-slate-50 border border-slate-100 rounded-[14px] text-xs font-medium focus:outline-none focus:ring-2 focus:ring-slate-800/10 focus:bg-white focus:border-slate-800 transition-all resize-none min-h-[52px]"
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter' && !e.shiftKey) {
                                                 e.preventDefault();
@@ -1003,22 +1038,23 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
                                     />
                                     <button
                                         onClick={handleSendReply}
-                                        disabled={!reply.trim()}
+                                        disabled={!reply.trim() || selectedConv.status === 'ai'}
                                         className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-slate-800 text-white rounded-xl shadow-lg shadow-slate-800/20 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 disabled:shadow-none"
                                     >
                                         <Send className="w-4 h-4" />
                                     </button>
                                 </div>
                                 <div className="mt-2 flex items-center justify-between px-1">
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 grayscale opacity-70">
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 opacity-70">
                                         Shift + Enter để xuống dòng
                                     </span>
                                     {selectedConv.status === 'ai' && (
                                         <button
+                                            type="button"
                                             onClick={() => toggleStatus('human')}
-                                            className="text-[10px] font-black text-slate-800 uppercase tracking-widest hover:underline"
+                                            className="pointer-events-auto text-[10px] font-black text-[var(--color-primary)] uppercase tracking-widest hover:underline cursor-pointer"
                                         >
-                                            Dừng AI
+                                            Dừng AI & Tiếp quản
                                         </button>
                                     )}
                                 </div>
@@ -1026,7 +1062,7 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
                         </>
                     ) : (
                         <div className="flex-1 flex flex-col items-center justify-center space-y-4 opacity-30">
-                            <div className="w-16 h-16 rounded-3xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-300 shadow-inner">
+                            <div className="w-16 h-16 rounded-[18px] bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-300 shadow-inner">
                                 <MessageSquare className="w-8 h-8" />
                             </div>
                             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Chọn một hội thoại để bắt đầu</p>
@@ -1123,11 +1159,11 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
                     selectedConv?.email && (
                         <div className="p-6 bg-amber-50 border-t border-amber-100">
                             <div className="flex items-center gap-3 mb-3 min-w-0">
-                                <div className="w-8 h-8 rounded-xl bg-amber-600 flex items-center justify-center text-white shadow-lg shadow-amber-600/30 shrink-0">
+                                <div className="w-8 h-8 rounded-xl bg-[var(--color-primary)] flex items-center justify-center text-white shadow-lg shadow-[var(--color-primary)]/30 shrink-0">
                                     <UserCheck className="w-4 h-4" />
                                 </div>
                                 <div className="min-w-0">
-                                    <h4 className="text-[10px] font-black text-amber-700 uppercase tracking-widest leading-none mb-1">Lead Synced</h4>
+                                    <h4 className="text-[10px] font-black text-[#9A1523] uppercase tracking-widest leading-none mb-1">Lead Synced</h4>
                                     <div className="flex items-center gap-2 min-w-0">
                                         <p className="text-[11px] font-black text-slate-700 truncate" title={selectedConv.email}>{selectedConv.email}</p>
                                         {selectedConv.lead_score !== undefined && selectedConv.lead_score > 0 && (
@@ -1156,7 +1192,7 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
                 confirmLabel="Xác nhận chặn"
                 message={
                     <div className="space-y-4">
-                        <div className="p-4 bg-rose-50 rounded-2xl border border-rose-100">
+                        <div className="p-4 bg-rose-50 rounded-[14px] border border-rose-100">
                             <p className="text-sm font-medium text-rose-800 leading-relaxed">
                                 Bạn đang thực hiện chặn địa chỉ IP <span className="font-black underline">{ipToBlock?.ip}</span> của <span className="font-black">{ipToBlock?.visitorName}</span>.
                             </p>
@@ -1167,7 +1203,7 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Lý do chặn (không bắt buộc)</label>
                             <textarea
-                                className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm focus:outline-none focus:ring-4 focus:ring-rose-500/10 focus:border-rose-300 transition-all min-h-[100px] resize-none"
+                                className="w-full bg-slate-50 border border-slate-200 rounded-[14px] p-4 text-sm focus:outline-none focus:ring-4 focus:ring-rose-500/10 focus:border-rose-300 transition-all min-h-[100px] resize-none"
                                 placeholder="Ví dụ: Spam click, Attack detection..."
                                 value={blockReason}
                                 onChange={(e) => setBlockReason(e.target.value)}
@@ -1198,51 +1234,6 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
                 }
             />
 
-            {
-                showCrmModal && crmSubscriber && (
-                    <CustomerProfileModal
-                        subscriber={crmSubscriber}
-                        onClose={() => setShowCrmModal(false)}
-                        onUpdate={handleUpdateSubscriber}
-                        onDelete={handleDeleteSubscriber}
-                        allLists={allLists}
-                        allSegments={allSegments}
-                        allFlows={allFlows}
-                        allTags={allTags}
-                        checkMatch={checkSegmentMatch}
-                        onAddToList={async (subId, listId) => {
-                            try {
-                                const res = await api.post('bulk_operations', {
-                                    action: 'add_to_list',
-                                    subscriberIds: [subId],
-                                    listId: listId
-                                });
-                                if (res.success) {
-                                    toast.success('Đã thêm vào danh sách');
-                                    // Refresh subscriber data
-                                    const fresh = await api.get(`subscribers/${subId}`);
-                                    if (fresh.success) setCrmSubscriber(fresh.data);
-                                }
-                            } catch (e) { toast.error('Lỗi khi thêm vào danh sách'); }
-                        }}
-                        onRemoveFromList={async (subId, listId) => {
-                            try {
-                                const res = await api.post('bulk_operations', {
-                                    action: 'remove_from_list',
-                                    subscriberIds: [subId],
-                                    listId: listId
-                                });
-                                if (res.success) {
-                                    toast.success('Đã gỡ khỏi danh sách');
-                                    // Refresh subscriber data
-                                    const fresh = await api.get(`subscribers/${subId}`);
-                                    if (fresh.success) setCrmSubscriber(fresh.data);
-                                }
-                            } catch (e) { toast.error('Lỗi khi gỡ khỏi danh sách'); }
-                        }}
-                    />
-                )
-            }
             {/* Export Modal */}
             <ConfirmModal
                 isOpen={showExportModal}
@@ -1253,7 +1244,7 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
                 confirmLabel="Xác nhận xuất CSV"
                 message={
                     <div className="space-y-6">
-                        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex items-start gap-4 text-left">
+                        <div className="bg-slate-50 p-4 rounded-[14px] border border-slate-200 flex items-start gap-4 text-left">
                             <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-slate-400 shadow-sm shrink-0 border border-slate-100">
                                 <FileText className="w-5 h-5" />
                             </div>
@@ -1284,7 +1275,7 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
                         <div className="grid grid-cols-2 gap-4">
                             <button
                                 onClick={() => setExportRange('current')}
-                                className={`p-4 rounded-2xl border-2 transition-all text-left group ${exportRange === 'current' ? 'border-slate-800 bg-slate-50' : 'border-slate-100 hover:border-slate-200 bg-slate-50/50'}`}
+                                className={`p-4 rounded-[14px] border-2 transition-all text-left group ${exportRange === 'current' ? 'border-slate-800 bg-slate-50' : 'border-slate-100 hover:border-slate-200 bg-slate-50/50'}`}
                             >
                                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-3 transition-colors ${exportRange === 'current' ? 'bg-slate-800 text-white shadow-lg shadow-slate-800/20' : 'bg-white text-slate-400 border border-slate-200'}`}>
                                     <Zap className="w-4 h-4" />
@@ -1295,7 +1286,7 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
 
                             <button
                                 onClick={() => setExportRange('custom')}
-                                className={`p-4 rounded-2xl border-2 transition-all text-left group ${exportRange === 'custom' ? 'border-slate-800 bg-slate-50' : 'border-slate-100 hover:border-slate-200 bg-slate-50/50'}`}
+                                className={`p-4 rounded-[14px] border-2 transition-all text-left group ${exportRange === 'custom' ? 'border-slate-800 bg-slate-50' : 'border-slate-100 hover:border-slate-200 bg-slate-50/50'}`}
                             >
                                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-3 transition-colors ${exportRange === 'custom' ? 'bg-slate-800 text-white shadow-lg shadow-slate-800/20' : 'bg-white text-slate-400 border border-slate-200'}`}>
                                     <Clock className="w-4 h-4" />
@@ -1306,7 +1297,7 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
                         </div>
 
                         {exportRange === 'custom' && (
-                            <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 animate-in slide-in-from-top-2 duration-300">
+                            <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-[14px] border border-slate-100 animate-in slide-in-from-top-2 duration-300">
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Ngày bắt đầu</label>
                                     <input
@@ -1322,7 +1313,7 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
                                         type="date"
                                         value={customExportEnd}
                                         onChange={(e) => setCustomExportEnd(e.target.value)}
-                                        className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-4 focus:ring-amber-600/10 outline-none transition-all"
+                                        className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-4 focus:ring-[var(--color-primary)]/10 outline-none transition-all"
                                     />
                                 </div>
                             </div>
@@ -1330,6 +1321,31 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
                     </div>
                 }
             />
+            {showZaloProfileModal && selectedZaloSubId && (
+                <ZaloUserProfileModal
+                    subscriberId={selectedZaloSubId}
+                    userId={selectedZaloSubId}
+                    isOpen={showZaloProfileModal}
+                    onClose={() => {
+                        setShowZaloProfileModal(false);
+                        setSelectedZaloSubId(null);
+                    }}
+                    onUpdate={() => fetchConversations(page)}
+                />
+            )}
+
+            {showMetaProfileModal && selectedMetaSubId && (
+                <MetaCustomerProfileModal
+                    subscriberId={selectedMetaSubId}
+                    userId={selectedMetaSubId}
+                    isOpen={showMetaProfileModal}
+                    onClose={() => {
+                        setShowMetaProfileModal(false);
+                        setSelectedMetaSubId(null);
+                    }}
+                    onUpdate={() => fetchConversations(page)}
+                />
+            )}
         </div>
     );
 }

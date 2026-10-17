@@ -1273,6 +1273,15 @@ class ContactController {
         }
         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'CREATE', 'contact', $id, json_encode(['full_name' => trim($b['full_name'] ?? '')]));
         logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'note', 'Tạo Khách hàng mới', "Khách hàng \"{$b['full_name']}\" đã được thêm vào hệ thống.", 'contact', $id);
+        try {
+            if (!class_exists('DomationContactMatcher') && file_exists(__DIR__ . '/../utils/DomationContactMatcher.php')) {
+                require_once __DIR__ . '/../utils/DomationContactMatcher.php';
+            }
+            if (class_exists('DomationContactMatcher')) {
+                DomationContactMatcher::syncContactToSubscriber($this->db, (int)$id, (int)($auth['tenant_id'] ?? 1));
+            }
+        } catch (\Throwable $eSyncSub) {
+        }
         $this->show($auth, $id);
     }
 
@@ -1957,6 +1966,15 @@ class ContactController {
         // CUSTOMER_UPDATE notification disabled per user request
         
         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'UPDATE', 'contact', $id, json_encode(['full_name' => $currentContact['full_name'] ?? '']));
+        try {
+            if (!class_exists('DomationContactMatcher') && file_exists(__DIR__ . '/../utils/DomationContactMatcher.php')) {
+                require_once __DIR__ . '/../utils/DomationContactMatcher.php';
+            }
+            if (class_exists('DomationContactMatcher')) {
+                DomationContactMatcher::syncContactToSubscriber($this->db, (int)$id, (int)($auth['tenant_id'] ?? 1));
+            }
+        } catch (\Throwable $eSyncSub) {
+        }
         $sql = "SELECT c.*, 
                     CASE 
                         WHEN comp.deleted_at IS NOT NULL THEN CONCAT(comp.name, ' (Đã xóa)')
@@ -2322,6 +2340,16 @@ class ContactController {
             'note' => $fullNote,
             'notify_user_ids' => $notifyUserIds
         ], JSON_UNESCAPED_UNICODE));
+
+        try {
+            if (!class_exists('DomationContactMatcher') && file_exists(__DIR__ . '/../utils/DomationContactMatcher.php')) {
+                require_once __DIR__ . '/../utils/DomationContactMatcher.php';
+            }
+            if (class_exists('DomationContactMatcher')) {
+                DomationContactMatcher::syncContactToSubscriber($this->db, (int)$id, (int)($auth['tenant_id'] ?? 1));
+            }
+        } catch (\Throwable $eSyncSub) {
+        }
 
         respond(200, null, 'Đã cập nhật stage thành công');
     }
@@ -4296,6 +4324,412 @@ class ContactController {
         } catch (\Throwable $e) {
             respond(200, ['contact_id' => $contactId, 'content' => $content], 'Đã ghi nhận ghi chú');
         }
+    }
+
+    /**
+     * POST /api/contacts/static-list
+     * Creates a new static list or populates an existing static list in Domation Marketing
+     * from either explicit contact_ids or 100% of contacts matching the current multi-tier filter
+     * (ignoring pagination limit).
+     */
+    public function createOrPopulateStaticList(array $auth): void {
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $b = getBody();
+        if (!is_array($b)) {
+            $b = [];
+        }
+
+        $filterInput = array_merge($_GET, is_array($b['filters'] ?? null) ? $b['filters'] : [], $b);
+
+        $listMode = strtolower(trim((string)($b['list_mode'] ?? (!empty($b['list_id']) ? 'existing' : 'new'))));
+        $listId = (int)($b['list_id'] ?? 0);
+        $listName = trim((string)($b['list_name'] ?? $b['name'] ?? ''));
+        $listDesc = trim((string)($b['description'] ?? 'Đồng bộ từ bộ lọc Khách hàng & Lead (/contacts)'));
+        $onlyWithEmail = !empty($b['only_with_email']) && in_array(strtolower((string)$b['only_with_email']), ['1', 'true', 'yes'], true);
+
+        if ($listMode === 'existing' && $listId <= 0) {
+            respond(422, null, 'Vui lòng chọn danh sách tĩnh có sẵn (list_id)', false);
+        }
+        if ($listMode === 'new' && $listName === '') {
+            $listName = 'Danh sách CRM ' . date('d/m/Y H:i');
+        }
+
+        // Build RBAC & Multi-Tier WHERE clause identical to index()
+        $search = trim((string)($filterInput['search'] ?? ''));
+        $allPipeline = isset($filterInput['all_pipeline']) && in_array(strtolower((string)$filterInput['all_pipeline']), ['1', 'true', 'yes'], true);
+        $isGlobalPipelineSearch = ($search !== '') || $allPipeline;
+        $status = (string)($filterInput['status'] ?? '');
+        $segment = (string)($filterInput['segment'] ?? 'all');
+        $uncontacted = !empty($filterInput['uncontacted']) && in_array(strtolower((string)$filterInput['uncontacted']), ['1', 'true', 'yes'], true);
+        if ($status === 'not_contacted') {
+            $uncontacted = true;
+            $status = '';
+        }
+        $stage = (string)($filterInput['stage_id'] ?? '');
+        $dataType = (string)($filterInput['data_type'] ?? '');
+        $studentSubTab = (string)($filterInput['student_sub_tab'] ?? '');
+        $leadStatus = trim((string)($filterInput['lead_status'] ?? ''));
+        $leadStatusOp = strtolower(trim((string)($filterInput['lead_status_op'] ?? 'in')));
+        $showLost = isset($filterInput['show_lost']) && in_array(strtolower((string)$filterInput['show_lost']), ['1', 'true', 'yes'], true);
+        $statusOp = strtolower(trim((string)($filterInput['status_op'] ?? 'in')));
+        $multiProgram = !empty($filterInput['multi_program']) && in_array(strtolower((string)$filterInput['multi_program']), ['1', 'true', 'yes', '2'], true);
+
+        $where = ['c.tenant_id = ?', 'c.deleted_at IS NULL', 'c.owner_id IS NOT NULL'];
+        $params = [$tid];
+
+        $role = strtolower($auth['role'] ?? '');
+        $isAcademicUser = in_array($role, ['academic', 'hoc_vu', 'hoc_thuat', 'dao_tao', 'tro_giang', 'teacher', 'giang_vien', 'giao_vien', 'tutor'], true);
+        if (!$isAcademicUser) {
+            $stmtDept = $this->db->prepare("SELECT u.department, u.job_title, u.team_id, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ? LIMIT 1");
+            $stmtDept->execute([$auth['user_id']]);
+            $uRow = $stmtDept->fetch();
+            if ($uRow) {
+                $comb = mb_strtolower(($uRow['department'] ?? '') . ' ' . ($uRow['job_title'] ?? '') . ' ' . ($uRow['team_name'] ?? ''));
+                if (
+                    (int)($uRow['team_id'] ?? 0) === 5 ||
+                    strpos($comb, 'học vụ') !== false ||
+                    strpos($comb, 'hoc_vu') !== false ||
+                    strpos($comb, 'học thuật') !== false ||
+                    strpos($comb, 'hoc_thuat') !== false ||
+                    strpos($comb, 'đào tạo') !== false ||
+                    strpos($comb, 'dao_tao') !== false ||
+                    strpos($comb, 'academic') !== false ||
+                    strpos($comb, 'giảng viên') !== false ||
+                    strpos($comb, 'giáo viên') !== false ||
+                    strpos($comb, 'trợ giảng') !== false ||
+                    strpos($comb, 'tutor') !== false ||
+                    strpos($comb, 'teacher') !== false
+                ) {
+                    $isAcademicUser = true;
+                }
+            }
+        }
+
+        if ($isAcademicUser) {
+            $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('application_started', 'nop_ho_so') ORDER BY order_index ASC LIMIT 1");
+            $stmtStage->execute([$tid]);
+            $minOrderIndex = $stmtStage->fetchColumn();
+            if ($minOrderIndex === false) $minOrderIndex = 9;
+            $stListStmt = $this->db->prepare("SELECT id FROM pipeline_stages WHERE tenant_id = ? AND order_index >= ?");
+            $stListStmt->execute([$tid, (int)$minOrderIndex]);
+            $allowedStageIds = $stListStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            if (!empty($allowedStageIds)) {
+                $where[] = "(c.stage_id IN (" . implode(',', array_map('intval', $allowedStageIds)) . ") OR c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien', 'deposit_tuition_payment', 'dong_le_phi_ho_so', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))";
+            } else {
+                $where[] = "(c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien'))";
+            }
+        } elseif ($role === 'sale_admin' || $role === 'saleadmin') {
+            $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('application_started', 'nop_ho_so') ORDER BY order_index ASC LIMIT 1");
+            $stmtStage->execute([$tid]);
+            $minOrderIndex = $stmtStage->fetchColumn();
+            if ($minOrderIndex === false) $minOrderIndex = 9;
+            $stListStmt = $this->db->prepare("SELECT id FROM pipeline_stages WHERE tenant_id = ? AND order_index >= ?");
+            $stListStmt->execute([$tid, (int)$minOrderIndex]);
+            $allowedStageIds = $stListStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            if (!empty($allowedStageIds)) {
+                $where[] = "c.stage_id IN (" . implode(',', array_map('intval', $allowedStageIds)) . ")";
+            } else {
+                $where[] = "1=0";
+            }
+        } elseif ($role === 'accountant') {
+            $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('application_started', 'nop_ho_so') ORDER BY order_index ASC LIMIT 1");
+            $stmtStage->execute([$tid]);
+            $minOrderIndex = $stmtStage->fetchColumn();
+            if ($minOrderIndex === false) $minOrderIndex = 8;
+            $stListStmt = $this->db->prepare("SELECT id FROM pipeline_stages WHERE tenant_id = ? AND order_index >= ?");
+            $stListStmt->execute([$tid, (int)$minOrderIndex]);
+            $allowedStageIds = $stListStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            if (!empty($allowedStageIds)) {
+                $where[] = "(c.stage_id IN (" . implode(',', array_map('intval', $allowedStageIds)) . ") OR c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien', 'deposit_tuition_payment', 'dong_le_phi_ho_so', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))";
+            } else {
+                $where[] = "(c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien', 'deposit_tuition_payment', 'dong_le_phi_ho_so', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))";
+            }
+        }
+
+        $scope = $this->getScope($auth, 'leads', 'read');
+        if ($scope === 'all') {
+            // Tenant-wide access
+        } elseif ($scope === 'team' || $scope === 'own') {
+            $teamMemberIds = ($scope === 'team') ? $this->getTeamUserAndConsultantIds($auth) : $this->getUserAndConsultantIds($auth);
+            if (empty($teamMemberIds)) {
+                $teamMemberIds = [(int)($auth['user_id'] ?? $auth['id'] ?? 0)];
+            }
+            $idsClause = implode(',', array_map('intval', $teamMemberIds));
+            $collabChecks = [];
+            foreach ($teamMemberIds as $idVal) {
+                $collabChecks[] = "FIND_IN_SET(" . (int)$idVal . ", c.collaborator_ids)";
+            }
+            $collabClause = !empty($collabChecks) ? implode(' OR ', $collabChecks) : '1=0';
+            $coopChecks = [];
+            foreach ($teamMemberIds as $idVal) {
+                $coopChecks[] = "JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE '{}' END), JSON_QUOTE(CAST(" . (int)$idVal . " AS CHAR)))";
+            }
+            $coopClause = !empty($coopChecks) ? implode(' OR ', $coopChecks) : '1=0';
+            $where[] = "(c.owner_id IN ($idsClause) OR c.created_by IN ($idsClause) OR ($collabClause) OR c.id IN (SELECT contact_id FROM cooperation_slips WHERE $coopClause))";
+        } else {
+            $where[] = '1=0';
+        }
+
+        require_once __DIR__ . '/../utils/search_helpers.php';
+
+        $explicitIds = [];
+        if (!empty($b['contact_ids']) && is_array($b['contact_ids'])) {
+            $explicitIds = array_values(array_unique(array_filter(array_map('intval', $b['contact_ids']), fn($v) => $v > 0)));
+        }
+
+        if (!empty($explicitIds)) {
+            $inPlaceholders = implode(',', array_fill(0, count($explicitIds), '?'));
+            $where[] = "c.id IN ($inPlaceholders)";
+            foreach ($explicitIds as $eid) {
+                $params[] = $eid;
+            }
+        } else {
+            if ($search !== '') {
+                $searchRes = buildContactSearchClause($search, 'c.');
+                if (!empty($searchRes['clause'])) {
+                    $where[] = $searchRes['clause'];
+                    foreach ($searchRes['params'] as $sp) {
+                        $params[] = $sp;
+                    }
+                }
+            }
+            if ($status && !$isGlobalPipelineSearch) {
+                if ($statusOp === 'not_in') {
+                    $where[] = 'c.status != ?';
+                } else {
+                    $where[] = 'c.status = ?';
+                }
+                $params[] = $status;
+            }
+
+            if ($dataType !== '') {
+                $errorCond = "(
+                    EXISTS (SELECT 1 FROM tickets tk WHERE tk.contact_id = c.id AND tk.status IN ('open', 'in_progress'))
+                    OR EXISTS (
+                        SELECT 1 FROM data_reports dr 
+                        JOIN leads l2 ON dr.lead_id = l2.id 
+                        WHERE c.phone IS NOT NULL AND c.phone != '' AND l2.phone = c.phone AND dr.status IN ('pending', 'approved')
+                    )
+                )";
+                $personalCond = "(
+                    c.source IN ('ca_nhan', 'gioi_thieu', 'databank', 'referral', 'ref')
+                    OR c.source LIKE 'ca_nhan%'
+                    OR c.source = 'Nhân viên kinh doanh tự tìm kiếm'
+                    OR (c.created_by = c.owner_id AND c.created_by NOT IN (1, 100009))
+                )";
+                if ($dataType === 'error_ticket') {
+                    $where[] = $errorCond;
+                } elseif ($dataType === 'personal') {
+                    $where[] = "NOT $errorCond";
+                    $where[] = $personalCond;
+                } elseif ($dataType === 'distributed') {
+                    $where[] = "NOT $errorCond";
+                    $where[] = "NOT $personalCond";
+                }
+            }
+
+            $baseFilterInput = $filterInput;
+            $baseFilterInput['_defer_stage_filter'] = true;
+            unset($baseFilterInput['uncontacted']);
+            applyCrmAdvancedMultiTierFilters($this->db, 'c.', $baseFilterInput, $where, $params);
+
+            $omniClause = buildContactOmnichannelFilterClause($this->db, 'c', $filterInput, $params);
+            if ($omniClause !== '') {
+                $where[] = $omniClause;
+            }
+
+            $stageSlug = !empty($filterInput['stage_slug']) ? trim((string)$filterInput['stage_slug']) : '';
+            if (!$isGlobalPipelineSearch) {
+                switch ($segment) {
+                    case 'tiem_nang':
+                        if (empty($stage) && empty($stageSlug) && empty($filterInput['stage_id']) && empty($filterInput['stages']) && empty($filterInput['stage_ids'])) {
+                            $where[] = "(c.stage_id != 44 AND (c.pipeline_status IS NULL OR c.pipeline_status NOT IN ('enrolled', 'hoc_vien', 'won')) AND c.status != 'customer')";
+                        }
+                        break;
+                    case 'hot':        $where[] = 'c.lead_score >= 80'; break;
+                    case 'customer':
+                        if ($studentSubTab !== 'le_phi' && $studentSubTab !== 'nop_ho_so') {
+                            $where[] = "(c.status = 'customer' OR EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND (ps.system_slug IN ('enrolled', 'hoc_vien') OR ps.is_won = 1)) OR c.pipeline_status IN ('enrolled', 'hoc_vien'))";
+                        }
+                        break;
+                    case 'has_deal':   $where[] = "EXISTS (SELECT 1 FROM deals d WHERE d.contact_id = c.id AND d.deleted_at IS NULL)"; break;
+                    case 'no_contact': $where[] = "c.last_contact < DATE_SUB(NOW(), INTERVAL 30 DAY)"; break;
+                    case 'new_week':   $where[] = "c.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)"; break;
+                }
+
+                if ($segment === 'customer' && $studentSubTab !== '') {
+                    if ($studentSubTab === 'le_phi') {
+                        $where[] = "(EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.system_slug IN ('deposit_tuition_payment', 'dong_le_phi_ho_so')) OR c.pipeline_status IN ('deposit_tuition_payment', 'dong_le_phi_ho_so'))";
+                    } elseif ($studentSubTab === 'nop_ho_so') {
+                        $where[] = "(EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.system_slug IN ('application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so')) OR c.pipeline_status IN ('application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))";
+                    } elseif ($studentSubTab === 'chinh_thuc') {
+                        $where[] = "(EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND (ps.system_slug IN ('enrolled', 'hoc_vien') OR ps.is_won = 1)) OR c.pipeline_status IN ('enrolled', 'hoc_vien') OR c.status = 'customer')";
+                    }
+                }
+            }
+
+            if ($leadStatus !== '') {
+                $statuses = array_filter(array_map('trim', explode(',', $leadStatus)));
+                if (!empty($statuses)) {
+                    if (count($statuses) === 1 && in_array('active', $statuses, true)) {
+                        if ($leadStatusOp === 'not_in') {
+                            $where[] = "(c.lead_status IN ('lost', 'nurture'))";
+                        } else {
+                            $where[] = "(c.lead_status = 'active' OR c.lead_status IS NULL OR c.lead_status = '')";
+                        }
+                    } else {
+                        $placeholders = implode(',', array_fill(0, count($statuses), '?'));
+                        if ($leadStatusOp === 'not_in') {
+                            $where[] = "(c.lead_status NOT IN ($placeholders) OR c.lead_status IS NULL)";
+                        } else {
+                            $where[] = "c.lead_status IN ($placeholders)";
+                        }
+                        foreach ($statuses as $st) {
+                            $params[] = $st;
+                        }
+                    }
+                }
+            } elseif (!$showLost && !$isGlobalPipelineSearch) {
+                $where[] = "(c.lead_status NOT IN ('lost', 'nurture') OR c.lead_status IS NULL)";
+            }
+
+            if (!$isGlobalPipelineSearch || !empty($filterInput['stages']) || !empty($filterInput['stage_ids'])) {
+                applyCrmStageMultiFilter($this->db, 'c.', $filterInput, $where, $params);
+            }
+
+            if (($uncontacted || $segment === 'not_contacted') && !$isGlobalPipelineSearch) {
+                $where[] = "(
+                    (c.last_contact IS NULL OR c.last_contact = '')
+                    AND NOT EXISTS (SELECT 1 FROM activities a1 WHERE a1.contact_id = c.id AND a1.deleted_at IS NULL)
+                    AND NOT EXISTS (SELECT 1 FROM activities a2 WHERE a2.related_type IN ('contact', 'lead') AND a2.related_id = c.id AND a2.deleted_at IS NULL)
+                    AND NOT EXISTS (
+                        SELECT 1 FROM notes n 
+                        WHERE n.tenant_id = c.tenant_id AND n.entity_type = 'contact' AND n.entity_id = c.id 
+                          AND n.body NOT LIKE '[Tự động]%' 
+                          AND n.body NOT LIKE '[Phân bổ]%' 
+                          AND n.body NOT LIKE '[Giao data]%'
+                          AND n.body NOT LIKE '[Auto]%'
+                          AND n.body NOT LIKE '[Import]%'
+                          AND n.body NOT LIKE '[Tái phân bổ]%'
+                          AND n.body NOT LIKE 'Tái phân bổ%'
+                          AND n.body NOT LIKE 'Giao lại%'
+                    )
+                )";
+            }
+
+            if ($multiProgram) {
+                $where[] = "(
+                    c.duplicate_with_id > 0
+                    OR c.id IN (SELECT duplicate_with_id FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND duplicate_with_id > 0)
+                    OR (c.person_id > 0 AND c.person_id IN (
+                        SELECT person_id FROM contacts 
+                        WHERE tenant_id = ? AND deleted_at IS NULL AND person_id > 0 
+                        GROUP BY person_id 
+                        HAVING COUNT(DISTINCT COALESCE(NULLIF(TRIM(program), ''), '__empty__')) >= 2 
+                            OR COUNT(DISTINCT stage_id) >= 2 
+                            OR SUM(CASE WHEN duplicate_with_id > 0 THEN 1 ELSE 0 END) > 0
+                    ))
+                    OR (c.phone != '' AND c.phone IS NOT NULL AND c.phone IN (
+                        SELECT phone FROM contacts 
+                        WHERE tenant_id = ? AND deleted_at IS NULL AND phone != '' AND phone IS NOT NULL 
+                        GROUP BY phone 
+                        HAVING COUNT(DISTINCT COALESCE(NULLIF(TRIM(program), ''), '__empty__')) >= 2 
+                            OR COUNT(DISTINCT stage_id) >= 2 
+                            OR SUM(CASE WHEN duplicate_with_id > 0 THEN 1 ELSE 0 END) > 0
+                    ))
+                )";
+                $params[] = $tid;
+                $params[] = $tid;
+                $params[] = $tid;
+            }
+        }
+
+        if ($onlyWithEmail) {
+            $where[] = "(c.email IS NOT NULL AND TRIM(c.email) != '' AND c.email NOT LIKE '%@no-email.domation')";
+        }
+
+        $whereStr = implode(' AND ', $where);
+        $stmtContacts = $this->db->prepare("SELECT c.id FROM contacts c WHERE $whereStr ORDER BY c.id DESC LIMIT 100000");
+        $stmtContacts->execute($params);
+        $matchedContactIds = array_map('intval', $stmtContacts->fetchAll(PDO::FETCH_COLUMN) ?: []);
+        $totalMatched = count($matchedContactIds);
+
+        // Ensure all CRM contacts are synced into subscribers
+        require_once __DIR__ . '/../automation/segment_helper.php';
+        ensureAllCrmContactsSyncedForFilter($this->db, $tid);
+
+        // Resolve or create the static list in `lists`
+        if ($listMode === 'existing' && $listId > 0) {
+            $stmtList = $this->db->prepare("SELECT id, name FROM lists WHERE id = ? AND workspace_id = ? LIMIT 1");
+            $stmtList->execute([$listId, $tid]);
+            $existingList = $stmtList->fetch(PDO::FETCH_ASSOC);
+            if (!$existingList) {
+                respond(404, null, 'Không tìm thấy danh sách tĩnh đã chọn', false);
+            }
+            $listName = (string)$existingList['name'];
+        } else {
+            $stmtInsList = $this->db->prepare("INSERT INTO lists (workspace_id, name, description, subscriber_count, phone_count, created_at) VALUES (?, ?, ?, 0, 0, NOW())");
+            $stmtInsList->execute([$tid, $listName, $listDesc]);
+            $listId = (int)$this->db->lastInsertId();
+        }
+
+        $addedCount = 0;
+        if (!empty($matchedContactIds)) {
+            $subscriberIds = [];
+            foreach (array_chunk($matchedContactIds, 1000) as $cidChunk) {
+                $ph = implode(',', array_fill(0, count($cidChunk), '?'));
+                $stmtSub = $this->db->prepare("SELECT id FROM subscribers WHERE workspace_id = ? AND contact_id IN ($ph)");
+                $stmtSub->execute(array_merge([$tid], $cidChunk));
+                $foundSubIds = $stmtSub->fetchAll(PDO::FETCH_COLUMN) ?: [];
+                foreach ($foundSubIds as $sid) {
+                    $subscriberIds[(int)$sid] = (int)$sid;
+                }
+            }
+
+            $subscriberIds = array_values($subscriberIds);
+            foreach (array_chunk($subscriberIds, 500) as $subChunk) {
+                $valParts = [];
+                $insParams = [];
+                foreach ($subChunk as $sid) {
+                    $valParts[] = "(?, ?, ?)";
+                    $insParams[] = $tid;
+                    $insParams[] = $sid;
+                    $insParams[] = $listId;
+                }
+                if (!empty($valParts)) {
+                    $stmtBulk = $this->db->prepare("INSERT IGNORE INTO subscriber_lists (workspace_id, subscriber_id, list_id) VALUES " . implode(', ', $valParts));
+                    $stmtBulk->execute($insParams);
+                    $addedCount += $stmtBulk->rowCount();
+                }
+            }
+        }
+
+        // Recalculate subscriber_count & phone_count for the static list
+        $stmtRecount = $this->db->prepare("
+            SELECT 
+                COUNT(DISTINCT sl.subscriber_id) AS total_count,
+                COUNT(DISTINCT CASE WHEN s.phone_number IS NOT NULL AND TRIM(s.phone_number) != '' THEN sl.subscriber_id END) AS phone_count
+            FROM subscriber_lists sl
+            INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ?
+            WHERE sl.list_id = ?
+        ");
+        $stmtRecount->execute([$tid, $listId]);
+        $counts = $stmtRecount->fetch(PDO::FETCH_ASSOC) ?: ['total_count' => 0, 'phone_count' => 0];
+        $subCount = (int)($counts['total_count'] ?? 0);
+        $phoneCount = (int)($counts['phone_count'] ?? 0);
+
+        $this->db->prepare("UPDATE lists SET subscriber_count = ?, phone_count = ? WHERE id = ? AND workspace_id = ?")
+            ->execute([$subCount, $phoneCount, $listId, $tid]);
+
+        respond(200, [
+            'success' => true,
+            'list_id' => $listId,
+            'list_name' => $listName,
+            'added_count' => $addedCount,
+            'total_matched' => $totalMatched,
+            'subscriber_count' => $subCount,
+            'phone_count' => $phoneCount,
+        ], "Đã đồng bộ {$totalMatched} khách hàng vào danh sách tĩnh \"{$listName}\"");
     }
 }
 

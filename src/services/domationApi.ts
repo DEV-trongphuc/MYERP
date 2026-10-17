@@ -1,4 +1,5 @@
 import api from '../api/axios';
+import '../components/marketing/utils/config';
 
 export interface DomationResponse<T = any> {
   success: boolean;
@@ -55,7 +56,7 @@ export const DOMATION_DEFAULT_TTL = 60_000;
  * sibling widgets firing the same request and keep-alive remount storms, while staying safe for existing
  * polling loops (campaign sending progress, live traffic, chat, sync status…) which re-poll every ≥ 5 s.
  */
-const BURST_TTL = 2_000;
+const BURST_TTL = 15_000;
 /** Stale entries are kept this long for instant paint (`peek` / stale-while-revalidate in the hook). */
 const MAX_STALE_MS = 10 * 60_000;
 const MAX_ENTRIES = 300;
@@ -142,7 +143,21 @@ const ENDPOINT_PHP_ALIAS: Record<string, string> = {
   vouchers: 'voucher_campaigns',
   web_properties: 'web_tracking',
   visitors: 'web_tracking',
+  short_links: 'links_qr',
+  survey_submit: 'survey_public',
+  purchases: 'purchase_events',
 };
+
+const CORE_ERP_ENDPOINTS = new Set<string>([
+  'users',
+  'pipeline-stages',
+  'contacts',
+  'deals',
+  'tags',
+  'branches',
+  'teams',
+  'auth',
+]);
 
 /**
  * Resolve DOMATION endpoint paths directly to `/automation/{script}.php`
@@ -150,13 +165,25 @@ const ENDPOINT_PHP_ALIAS: Record<string, string> = {
  * and preserves `?action=list|get|...` query parameters without collision).
  */
 function normalizeDomationPath(endpoint: string): string {
-  const clean = String(endpoint || '')
+  const rawStr = String(endpoint || '').trim();
+  const hasExplicitDomationPrefix = /^\/?(domation|automation)\//i.test(rawStr);
+  const clean = rawStr
     .replace(/^\/+/, '')
     .replace(/^(domation|automation)\/+/, '');
   const [pathString, queryString] = clean.split('?');
   const parts = pathString.split('/').filter(Boolean);
   const resource = parts[0] || '';
   const subId = parts[1];
+
+  // If the path starts with a core MYERP REST endpoint (e.g. '/users', '/pipeline-stages'),
+  // do NOT rewrite it to `/automation/*.php` unless explicitly prefixed with `domation/` or `automation/`
+  // ( note: `/tags` is a core ERP endpoint when called as `/tags`, while `'tags'` without leading slash is Domation tags — wait! Let's check how `erpApi.get('/users')` vs `domationApi.get('tags')` is called! )
+  if (!hasExplicitDomationPrefix && rawStr.startsWith('/') && CORE_ERP_ENDPOINTS.has(resource)) {
+    return `/${clean}`;
+  }
+  if (!hasExplicitDomationPrefix && (resource === 'users' || resource === 'pipeline-stages' || resource === 'contacts' || resource === 'deals' || resource === 'branches' || resource === 'teams' || resource === 'auth')) {
+    return `/${clean}`;
+  }
 
   let phpFile = resource.replace(/\.php$/, '');
   if (ENDPOINT_PHP_ALIAS[phpFile]) {
@@ -189,6 +216,8 @@ function cleanupParams(params: Record<string, any> | undefined | null): Record<s
   const cleanParams: Record<string, any> = {};
   if (!params || typeof params !== 'object') return cleanParams;
   Object.entries(params).forEach(([key, value]) => {
+    if (key === 'signal' && value && typeof (value as any).aborted === 'boolean') return;
+    if (typeof AbortSignal !== 'undefined' && value instanceof AbortSignal) return;
     if (value !== undefined && value !== null && value !== '') {
       cleanParams[key] = value;
     }
@@ -290,7 +319,7 @@ function resolveTtl(endpoint: string, params: Record<string, any>, options?: Dom
   }
   const discriminators = [params.action, params.type, params.mode, params.view].filter((v) => typeof v === 'string').join(' ');
   if (VOLATILE_RE.test(endpoint) || (discriminators && VOLATILE_RE.test(discriminators))) return 0;
-  if (REFERENCE_ROOTS.has(getDomationEndpointRoot(endpoint)) && !/[?]/.test(endpoint)) return DOMATION_DEFAULT_TTL;
+  if (REFERENCE_ROOTS.has(getDomationEndpointRoot(endpoint))) return DOMATION_DEFAULT_TTL;
   return BURST_TTL;
 }
 
@@ -667,7 +696,11 @@ export const domationApi = {
     const cleanParams = cleanupParams(params);
     const key = `${path}::${stableStringify(cleanParams)}`;
     const root = getDomationEndpointRoot(endpoint);
-    const signal = options?.signal;
+    const signal: AbortSignal | undefined =
+      options?.signal ||
+      (params && typeof params === 'object' && params.signal && typeof params.signal.aborted === 'boolean'
+        ? (params.signal as AbortSignal)
+        : undefined);
 
     if (signal?.aborted) throw createDomationAbortError();
 

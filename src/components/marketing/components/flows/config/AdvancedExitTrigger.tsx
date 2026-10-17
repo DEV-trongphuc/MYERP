@@ -204,7 +204,7 @@ const AdvancedExitTrigger: React.FC<AdvancedExitTriggerProps> = ({ config, onCha
         const colorName = colorClass.split('-')[1]; // e.g. amber, emerald
 
         return (
-            <div className={`border rounded-[20px] p-1 transition-all ${isEnabled ? 'bg-white border-emerald-500 shadow-sm' : 'bg-slate-50 border-slate-200'}`}>
+            <div className={`border rounded-xl p-1 transition-all ${isEnabled ? 'bg-white border-emerald-500 shadow-sm' : 'bg-slate-50 border-slate-200'}`}>
                 {/* Header / Enable Switch */}
                 <div
                     className="flex items-center justify-between cursor-pointer p-4 pb-2"

@@ -181,7 +181,12 @@ if (!function_exists('logActivity')) {
             'zns_skipped',
             'delete_contact',
             'web_activity',
-            'survey_submit'
+            'survey_submit',
+            'crm_action',
+            'crm_update_stage',
+            'crm_create_task',
+            'crm_assign_owner',
+            'crm_notify_owner'
         ];
 
         // If it's a system progress event (wait, enter, exit, tag update, etc.), skip logging to keep Flow history clean
@@ -773,71 +778,394 @@ if (!function_exists('canonicalizeVarKey')) {
     }
 }
 
+if (!function_exists('enrichSubscriberWithCrmData')) {
+    /**
+     * Enrich subscriber array with MYERP CRM contact, consultant (owner), team, pipeline stage,
+     * latest deal, and latest deposit data for full Merge Tag resolution.
+     */
+    function enrichSubscriberWithCrmData(?PDO $pdo, array $subscriber, array $context = []): array
+    {
+        if (!$pdo) {
+            $pdo = $GLOBALS['pdo'] ?? null;
+        }
+        if (!$pdo) {
+            return $subscriber;
+        }
+
+        $contactId = !empty($subscriber['contact_id']) ? (int)$subscriber['contact_id'] : 0;
+        $email = trim((string)($subscriber['email'] ?? ''));
+        $phone = trim((string)($subscriber['phone_number'] ?? ($subscriber['phone'] ?? '')));
+
+        static $crmEnrichCache = [];
+        $cacheKey = $contactId > 0 ? "cid:{$contactId}" : ($email !== '' ? "em:" . strtolower($email) : ($phone !== '' ? "ph:{$phone}" : ''));
+
+        $crmData = null;
+        if ($cacheKey !== '' && array_key_exists($cacheKey, $crmEnrichCache)) {
+            $crmData = $crmEnrichCache[$cacheKey];
+        } elseif ($cacheKey !== '') {
+            try {
+                if ($contactId <= 0) {
+                    if (!class_exists('DomationContactMatcher') && file_exists(__DIR__ . '/../utils/DomationContactMatcher.php')) {
+                        require_once __DIR__ . '/../utils/DomationContactMatcher.php';
+                    }
+                    if (class_exists('DomationContactMatcher')) {
+                        $matchedId = DomationContactMatcher::findExistingContactId($pdo, $email !== '' ? $email : null, $phone !== '' ? $phone : null, 1);
+                        if ($matchedId) {
+                            $contactId = (int)$matchedId;
+                        }
+                    }
+                }
+
+                if ($contactId > 0) {
+                    $stmtC = $pdo->prepare("
+                        SELECT c.*, c.id AS crm_contact_id,
+                               ps.name AS stage_name, ps.system_slug AS stage_slug, ps.is_won AS stage_is_won,
+                               pr.name AS project_name, pr.code AS project_code,
+                               u.full_name AS owner_name, u.phone AS owner_phone, u.email AS owner_email, u.job_title AS owner_job_title,
+                               tm.name AS team_name
+                        FROM contacts c
+                        LEFT JOIN pipeline_stages ps ON ps.id = c.stage_id
+                        LEFT JOIN projects pr ON pr.id = c.project_id
+                        LEFT JOIN users u ON u.id = c.owner_id
+                        LEFT JOIN teams tm ON tm.id = u.team_id
+                        WHERE c.id = ? AND c.deleted_at IS NULL
+                        LIMIT 1
+                    ");
+                    $stmtC->execute([$contactId]);
+                    $contactRow = $stmtC->fetch(PDO::FETCH_ASSOC);
+
+                    if ($contactRow) {
+                        $dealRow = null;
+                        $depRow = null;
+                        $tuitionRemainingVal = 0.0;
+                        try {
+                            $stmtDeal = $pdo->prepare("SELECT title, value FROM deals WHERE contact_id = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 1");
+                            $stmtDeal->execute([$contactId]);
+                            $dealRow = $stmtDeal->fetch(PDO::FETCH_ASSOC) ?: null;
+                        } catch (Throwable $eD) {}
+
+                        try {
+                            $stmtDep = $pdo->prepare("SELECT price AS amount, status, id AS deposit_code FROM deposits WHERE contact_id = ? ORDER BY id DESC LIMIT 1");
+                            $stmtDep->execute([$contactId]);
+                            $depRow = $stmtDep->fetch(PDO::FETCH_ASSOC) ?: null;
+                        } catch (Throwable $eDep) {}
+
+                        try {
+                            $stmtDebt = $pdo->prepare("
+                                SELECT COALESCE(SUM(GREATEST(0, COALESCE(dm.expected_amount, 0) - COALESCE(dm.actual_amount, 0))), 0)
+                                FROM deposit_milestones dm
+                                INNER JOIN deposits dep ON dep.id = dm.deposit_id
+                                WHERE dep.contact_id = ? AND dep.status != 'rejected'
+                                  AND dm.status NOT IN ('paid', 'approved', 'completed', 'cancelled', 'rejected')
+                            ");
+                            $stmtDebt->execute([$contactId]);
+                            $tuitionRemainingVal = (float)$stmtDebt->fetchColumn();
+                        } catch (Throwable $eMilestone) {}
+
+                        if ($tuitionRemainingVal <= 0 && isset($contactRow['expected_revenue'])) {
+                            $expRev = (float)($contactRow['expected_revenue'] ?? 0);
+                            $totSpent = (float)($contactRow['total_spent'] ?? 0);
+                            if ($expRev > $totSpent) {
+                                $tuitionRemainingVal = $expRev - $totSpent;
+                            }
+                        }
+
+                        $crmData = [
+                            'contact' => $contactRow,
+                            'deal' => $dealRow,
+                            'deposit' => $depRow,
+                            'tuition_remaining_val' => $tuitionRemainingVal,
+                        ];
+                    }
+                }
+            } catch (Throwable $e) {
+                $crmData = null;
+            }
+
+            if (count($crmEnrichCache) >= 300) {
+                array_shift($crmEnrichCache);
+            }
+            $crmEnrichCache[$cacheKey] = $crmData;
+        }
+
+        $c = $crmData['contact'] ?? [];
+        $deal = $crmData['deal'] ?? [];
+        $dep = $crmData['deposit'] ?? [];
+        $tuitionRemainingVal = (float)($crmData['tuition_remaining_val'] ?? 0.0);
+
+        if (!empty($c['crm_contact_id'])) {
+            $subscriber['crm_contact_id'] = (int)$c['crm_contact_id'];
+            $subscriber['contact_id'] = (int)$c['crm_contact_id'];
+        }
+
+        $crmFullName = !empty($c['full_name']) ? trim((string)$c['full_name']) : (!empty($c['name']) ? trim((string)$c['name']) : '');
+
+        // Split CRM full name if subscriber first_name/last_name are missing
+        if (empty($subscriber['first_name']) && empty($subscriber['last_name']) && $crmFullName !== '') {
+            $parts = preg_split('/\s+/u', $crmFullName);
+            if (count($parts) > 1) {
+                $subscriber['first_name'] = array_pop($parts);
+                $subscriber['last_name'] = implode(' ', $parts);
+            } else {
+                $subscriber['first_name'] = $crmFullName;
+                $subscriber['last_name'] = '';
+            }
+        }
+        if ($crmFullName !== '' && empty($subscriber['full_name'])) {
+            $subscriber['full_name'] = $crmFullName;
+        }
+
+        if (empty($subscriber['email']) && !empty($c['email'])) {
+            $subscriber['email'] = $c['email'];
+        }
+        if (empty($subscriber['phone_number']) && empty($subscriber['phone']) && !empty($c['phone'])) {
+            $subscriber['phone_number'] = $c['phone'];
+        }
+        if (empty($subscriber['gender']) && !empty($c['gender'])) {
+            $subscriber['gender'] = $c['gender'];
+        }
+        $dobVal = !empty($c['birthday']) ? $c['birthday'] : (!empty($c['dob']) ? $c['dob'] : ($subscriber['date_of_birth'] ?? ''));
+        if ($dobVal !== '') {
+            $subscriber['date_of_birth'] = $dobVal;
+        }
+        if (empty($subscriber['job_title']) && !empty($c['job_title'])) {
+            $subscriber['job_title'] = $c['job_title'];
+        }
+        if (empty($subscriber['company_name']) && !empty($c['company'])) {
+            $subscriber['company_name'] = $c['company'];
+        }
+        if (empty($subscriber['address']) && !empty($c['address'])) {
+            $subscriber['address'] = $c['address'];
+        }
+        if (empty($subscriber['city']) && !empty($c['city'])) {
+            $subscriber['city'] = $c['city'];
+        }
+        $subscriber['district'] = !empty($c['district']) ? $c['district'] : ($subscriber['district'] ?? '');
+        $subscriber['ward'] = !empty($c['ward']) ? $c['ward'] : ($subscriber['ward'] ?? '');
+
+        $subscriber['program'] = !empty($c['program']) ? $c['program'] : (!empty($c['project_name']) ? $c['project_name'] : ($subscriber['program'] ?? ''));
+        $subscriber['student_id'] = !empty($c['student_id']) ? $c['student_id'] : ($subscriber['student_id'] ?? '');
+        $subscriber['student_code'] = $subscriber['student_id'] ?: (!empty($c['crm_contact_id']) ? ('HV-' . str_pad((string)$c['crm_contact_id'], 4, '0', STR_PAD_LEFT)) : '');
+        $subscriber['class_name'] = !empty($c['project_name']) ? $c['project_name'] : ($subscriber['program'] ?? '');
+        $subscriber['class_code'] = !empty($c['project_code']) ? $c['project_code'] : ($subscriber['class_code'] ?? '');
+        $subscriber['study_status'] = !empty($c['study_status']) ? $c['study_status'] : ($subscriber['study_status'] ?? '');
+        $subscriber['source'] = !empty($c['source']) ? $c['source'] : ($subscriber['source'] ?? '');
+        $subscriber['stage_name'] = !empty($c['stage_name']) ? $c['stage_name'] : ($subscriber['stage_name'] ?? '');
+        $subscriber['pipeline_status'] = !empty($c['stage_slug']) ? $c['stage_slug'] : (!empty($c['pipeline_status']) ? $c['pipeline_status'] : ($subscriber['pipeline_status'] ?? ''));
+
+        // Certificate code from custom_attributes if present
+        $customAttrsArr = [];
+        if (!empty($subscriber['custom_attributes'])) {
+            $customAttrsArr = is_array($subscriber['custom_attributes'])
+                ? $subscriber['custom_attributes']
+                : (json_decode((string)$subscriber['custom_attributes'], true) ?: []);
+        }
+        $subscriber['certificate_code'] = !empty($customAttrsArr['certificate_code'])
+            ? (string)$customAttrsArr['certificate_code']
+            : (!empty($customAttrsArr['cert_no']) ? (string)$customAttrsArr['cert_no'] : ($subscriber['certificate_code'] ?? ''));
+
+        $subscriber['tuition_remaining'] = $tuitionRemainingVal > 0
+            ? (number_format($tuitionRemainingVal, 0, ',', '.') . ' đ')
+            : ($subscriber['tuition_remaining'] ?? '0 đ');
+
+        // Consultant / Owner fields (fallback to current logged-in sender if contact has no owner)
+        $authUser = $GLOBALS['domation_auth'] ?? [];
+        $subscriber['consultant_name'] = !empty($c['owner_name'])
+            ? $c['owner_name']
+            : (!empty($subscriber['salesperson']) ? $subscriber['salesperson'] : ($authUser['full_name'] ?? ''));
+        $subscriber['consultant_phone'] = !empty($c['owner_phone'])
+            ? $c['owner_phone']
+            : ($authUser['phone'] ?? '');
+        $subscriber['consultant_email'] = !empty($c['owner_email'])
+            ? $c['owner_email']
+            : ($GLOBALS['current_admin_email'] ?? ($authUser['email'] ?? ''));
+        $subscriber['consultant_title'] = !empty($c['owner_job_title'])
+            ? $c['owner_job_title']
+            : 'Chuyên viên tư vấn';
+        $subscriber['consultant_role'] = $subscriber['consultant_title'];
+        $subscriber['team_name'] = !empty($c['team_name'])
+            ? $c['team_name']
+            : 'Phòng Tư vấn Tuyển sinh';
+
+        // Deal & Deposit fields
+        $subscriber['deal_title'] = $deal['title'] ?? ($subscriber['deal_title'] ?? '');
+        $rawDealVal = isset($deal['value']) ? (float)$deal['value'] : (isset($c['expected_revenue']) ? (float)$c['expected_revenue'] : 0.0);
+        $subscriber['deal_value'] = $rawDealVal > 0 ? (number_format($rawDealVal, 0, ',', '.') . ' đ') : ($subscriber['deal_value'] ?? '');
+
+        $rawDepVal = isset($dep['amount']) ? (float)$dep['amount'] : 0.0;
+        $subscriber['deposit_amount'] = $rawDepVal > 0 ? (number_format($rawDepVal, 0, ',', '.') . ' đ') : ($subscriber['deposit_amount'] ?? '');
+        $subscriber['deposit_status'] = $dep['status'] ?? ($subscriber['deposit_status'] ?? '');
+        $subscriber['deposit_code'] = !empty($dep['deposit_code']) ? ('DEP-' . $dep['deposit_code']) : ($subscriber['deposit_code'] ?? '');
+
+        return $subscriber;
+    }
+}
+
 /**
  * Replace merge tags in content
  */
-function replaceMergeTags($html, $subscriber, $context = [])
+function replaceMergeTags($html, $subscriber, $context = [], $pdo = null)
 {
     if (empty($html))
         return "";
 
+    if ($context instanceof PDO) {
+        $pdo = $context;
+        $context = [];
+    }
+
+    $subscriber = enrichSubscriberWithCrmData($pdo ?? ($GLOBALS['pdo'] ?? null), is_array($subscriber) ? $subscriber : [], is_array($context) ? $context : []);
+
     $firstName = $subscriber['first_name'] ?? ($subscriber['firstName'] ?? '');
     $lastName = $subscriber['last_name'] ?? ($subscriber['lastName'] ?? '');
-    $fullName = trim($firstName . ' ' . $lastName);
+    $fullName = '';
+    if (!empty($subscriber['full_name'])) {
+        $fullName = trim((string)$subscriber['full_name']);
+    } elseif (!empty($subscriber['fullName'])) {
+        $fullName = trim((string)$subscriber['fullName']);
+    } elseif (!empty($subscriber['name'])) {
+        $fullName = trim((string)$subscriber['name']);
+    } else {
+        $fullName = trim($lastName !== '' ? ($lastName . ' ' . $firstName) : $firstName);
+    }
     $email = $subscriber['email'] ?? '';
 
-    // Standard Map (Old logic + Fallbacks)
+    $rawGender = trim((string)($subscriber['gender'] ?? ''));
+    $gLower = function_exists('mb_strtolower') ? mb_strtolower($rawGender, 'UTF-8') : strtolower($rawGender);
+    $salutation = ($gLower === 'nam' || $gLower === 'male')
+        ? 'Anh'
+        : (($gLower === 'nữ' || $gLower === 'nu' || $gLower === 'female') ? 'Chị' : 'Bạn');
+
+    // Standard Map (with full MYERP CRM + Consultant + Deal + Deposit variables)
     $subscriberId = $subscriber['subscriber_id'] ?? $subscriber['id'] ?? '';
+    $crmContactId = !empty($subscriber['crm_contact_id'])
+        ? (string)$subscriber['crm_contact_id']
+        : (!empty($subscriber['contact_id']) ? (string)$subscriber['contact_id'] : (string)$subscriberId);
     $phoneNumber = $subscriber['phone_number'] ?? $subscriber['phone'] ?? '';
+    $dobFormatted = !empty($subscriber['date_of_birth'])
+        ? (strtotime($subscriber['date_of_birth']) ? date('d/m/Y', strtotime($subscriber['date_of_birth'])) : $subscriber['date_of_birth'])
+        : '';
+    $annivFormatted = !empty($subscriber['anniversary_date'])
+        ? (strtotime($subscriber['anniversary_date']) ? date('d/m/Y', strtotime($subscriber['anniversary_date'])) : $subscriber['anniversary_date'])
+        : '';
+    $joinedFormatted = !empty($subscriber['joined_at'])
+        ? (strtotime($subscriber['joined_at']) ? date('d/m/Y', strtotime($subscriber['joined_at'])) : $subscriber['joined_at'])
+        : '';
+
+    $consultantTitle = $subscriber['consultant_title'] ?? ($subscriber['consultant_role'] ?? 'Chuyên viên tư vấn');
+
     $map = [
         'first_name' => $firstName,
         'firstName' => $firstName,
         'last_name' => $lastName,
         'lastName' => $lastName,
+        'name' => $fullName ?: 'Bạn',
         'full_name' => $fullName ?: 'Bạn',
         'fullName' => $fullName ?: 'Bạn',
         'customer_name' => $fullName ?: 'Bạn',
         'customerName' => $fullName ?: 'Bạn',
+        'salutation' => $salutation,
+        'danh_xung' => $salutation,
         'email' => $email,
         'company_name' => $subscriber['company_name'] ?? '',
+        'companyName' => $subscriber['company_name'] ?? '',
+        'company' => $subscriber['company_name'] ?? '',
         'phone' => $phoneNumber,
         'phone_number' => $phoneNumber,
+        'phoneNumber' => $phoneNumber,
         'job_title' => $subscriber['job_title'] ?? '',
-        'company' => $subscriber['company_name'] ?? '',
+        'jobTitle' => $subscriber['job_title'] ?? '',
         'city' => $subscriber['city'] ?? ($subscriber['last_city'] ?? ''),
+        'district' => $subscriber['district'] ?? '',
+        'ward' => $subscriber['ward'] ?? '',
         'country' => $subscriber['country'] ?? '',
         'address' => $subscriber['address'] ?? ($subscriber['city'] ?? ($subscriber['last_city'] ?? '')),
         'gender' => $subscriber['gender'] ?? '',
-        'birthday' => $subscriber['date_of_birth'] ?? '',
-        'date_of_birth' => $subscriber['date_of_birth'] ?? '',
-        'anniversary' => $subscriber['anniversary_date'] ?? '',
-        'anniversary_date' => $subscriber['anniversary_date'] ?? '',
-        'joined_at' => $subscriber['joined_at'] ? date('d/m/Y', strtotime($subscriber['joined_at'])) : '',
+        'dob' => $dobFormatted,
+        'birthday' => $dobFormatted,
+        'date_of_birth' => $dobFormatted,
+        'dateOfBirth' => $dobFormatted,
+        'anniversary' => $annivFormatted,
+        'anniversary_date' => $annivFormatted,
+        'anniversaryDate' => $annivFormatted,
+        'joined_at' => $joinedFormatted,
+        'joinedAt' => $joinedFormatted,
+        // Education, Student, Class & CRM Lead variables
+        'program' => $subscriber['program'] ?? '',
+        'student_id' => $subscriber['student_id'] ?? ($subscriber['student_code'] ?? ''),
+        'studentId' => $subscriber['student_id'] ?? ($subscriber['student_code'] ?? ''),
+        'student_code' => $subscriber['student_code'] ?? ($subscriber['student_id'] ?? ''),
+        'studentCode' => $subscriber['student_code'] ?? ($subscriber['student_id'] ?? ''),
+        'class_name' => $subscriber['class_name'] ?? ($subscriber['program'] ?? ''),
+        'className' => $subscriber['class_name'] ?? ($subscriber['program'] ?? ''),
+        'class_code' => $subscriber['class_code'] ?? '',
+        'classCode' => $subscriber['class_code'] ?? '',
+        'study_status' => $subscriber['study_status'] ?? '',
+        'studyStatus' => $subscriber['study_status'] ?? '',
+        'certificate_code' => $subscriber['certificate_code'] ?? '',
+        'certificateCode' => $subscriber['certificate_code'] ?? '',
+        'cert_no' => $subscriber['certificate_code'] ?? '',
+        'tuition_remaining' => $subscriber['tuition_remaining'] ?? '0 đ',
+        'tuitionRemaining' => $subscriber['tuition_remaining'] ?? '0 đ',
+        'source' => $subscriber['source'] ?? '',
+        'stage_name' => $subscriber['stage_name'] ?? '',
+        'stageName' => $subscriber['stage_name'] ?? '',
+        'pipeline_status' => $subscriber['pipeline_status'] ?? '',
+        'pipelineStatus' => $subscriber['pipeline_status'] ?? '',
+        // Consultant / Owner variables
+        'consultant_name' => $subscriber['consultant_name'] ?? '',
+        'consultantName' => $subscriber['consultant_name'] ?? '',
+        'owner_name' => $subscriber['consultant_name'] ?? '',
+        'ownerName' => $subscriber['consultant_name'] ?? '',
+        'consultant_phone' => $subscriber['consultant_phone'] ?? '',
+        'consultantPhone' => $subscriber['consultant_phone'] ?? '',
+        'owner_phone' => $subscriber['consultant_phone'] ?? '',
+        'ownerPhone' => $subscriber['consultant_phone'] ?? '',
+        'consultant_email' => $subscriber['consultant_email'] ?? '',
+        'consultantEmail' => $subscriber['consultant_email'] ?? '',
+        'owner_email' => $subscriber['consultant_email'] ?? '',
+        'ownerEmail' => $subscriber['consultant_email'] ?? '',
+        'consultant_title' => $consultantTitle,
+        'consultantTitle' => $consultantTitle,
+        'consultant_role' => $consultantTitle,
+        'consultantRole' => $consultantTitle,
+        'owner_title' => $consultantTitle,
+        'owner_role' => $consultantTitle,
+        'team_name' => $subscriber['team_name'] ?? 'Phòng Tư vấn Tuyển sinh',
+        'teamName' => $subscriber['team_name'] ?? 'Phòng Tư vấn Tuyển sinh',
+        // Deal & Deposit variables
+        'deal_title' => $subscriber['deal_title'] ?? '',
+        'dealTitle' => $subscriber['deal_title'] ?? '',
+        'deal_value' => $subscriber['deal_value'] ?? '',
+        'dealValue' => $subscriber['deal_value'] ?? '',
+        'deposit_amount' => $subscriber['deposit_amount'] ?? '',
+        'depositAmount' => $subscriber['deposit_amount'] ?? '',
+        'deposit_status' => $subscriber['deposit_status'] ?? '',
+        'depositStatus' => $subscriber['deposit_status'] ?? '',
+        'deposit_code' => $subscriber['deposit_code'] ?? '',
+        'depositCode' => $subscriber['deposit_code'] ?? '',
+        // System & Date variables
         'year' => date('Y'),
         'date' => date('d/m/Y'),
         'current_date' => date('d/m/Y'),
         'time' => date('H:i'),
         'current_time' => date('H:i'),
-        // New special variables
-        'today' => date('d/m/Y'),           // Ngày hôm nay (dd/mm/yyyy)
-        'today_ymd' => date('Y-m-d'),        // Ngày hôm nay (yyyy-mm-dd)
-        'today_dmy' => date('d-m-Y'),        // Ngày hôm nay (dd-mm-yyyy)
-        'subscriber_id' => $subscriberId,    // ID của subscriber (full 32 chars)
-        'subscriber_id_short' => substr((string) $subscriberId, 0, 10), // [ZNS] ID ngắn 10 ký tự cho ZNS fields có max length
-        'contact_id' => $subscriberId,       // Alias for subscriber_id
-        'contact_id_short' => substr((string) $subscriberId, 0, 10), // Alias short
-        'random_id' => str_pad((string) rand(0, 9999999999), 10, '0', STR_PAD_LEFT), // [ZNS] Random 10 chữ số
-        'random_6' => str_pad((string) rand(0, 999999), 6, '0', STR_PAD_LEFT),       // [ZNS] Random 6 chữ số
-        // [FIX] camelCase aliases to match frontend email editor variables
-        'phoneNumber' => $phoneNumber,
-        'companyName' => $subscriber['company_name'] ?? '',
-        'jobTitle' => $subscriber['job_title'] ?? '',
-        // [BUG-FIX] unsubscribeLink CANNOT reference $map here — $map is still being built.
-        // Referencing $map['unsubscribe_url'] inside the $map array definition is a PHP self-
-        // reference bug: $map does not yet exist, so it always resolves to empty string.
-        // Fix: use $context['unsubscribe_url'] directly. A post-build step below will
-        // also inject it from the merged context to handle late-binding cases.
-        'unsubscribeLink' => $context['unsubscribe_url'] ?? '',
+        'today' => date('d/m/Y'),
+        'today_ymd' => date('Y-m-d'),
+        'today_dmy' => date('d-m-Y'),
+        'subscriber_id' => $subscriberId,
+        'subscriberId' => $subscriberId,
+        'subscriber_id_short' => substr((string) $subscriberId, 0, 10),
+        'contact_id' => $crmContactId,
+        'contactId' => $crmContactId,
+        'crm_contact_id' => $crmContactId,
+        'crmContactId' => $crmContactId,
+        'contact_id_short' => substr((string) $crmContactId, 0, 10),
+        'random_id' => str_pad((string) rand(0, 9999999999), 10, '0', STR_PAD_LEFT),
+        'random_6' => str_pad((string) rand(0, 999999), 6, '0', STR_PAD_LEFT),
+        'unsubscribe_url' => $context['unsubscribe_url'] ?? ($context['unsubscribeLink'] ?? ''),
+        'unsubscribeLink' => $context['unsubscribe_url'] ?? ($context['unsubscribeLink'] ?? ''),
+        'campaign_name' => $context['campaign_name'] ?? ($context['campaignName'] ?? ''),
         'campaignName' => $context['campaign_name'] ?? ($context['campaignName'] ?? ''),
     ];
 
@@ -1161,7 +1489,7 @@ function isSubscriberMatch($sub, $criteriaJson)
 
                 $hasTag = false;
                 foreach ($currentSubTags as $st) {
-                    if (strcasecmp($st, $cond['value']) === 0) {
+                    if (strcasecmp($st, $cond['value'] ?? '') === 0 || mb_stripos((string)$st, (string)($cond['value'] ?? '')) !== false) {
                         $hasTag = true;
                         break;
                     }
@@ -1173,14 +1501,19 @@ function isSubscriberMatch($sub, $criteriaJson)
                 } else if ($op === 'not_contains' && $hasTag) {
                     $groupMatch = false;
                     break;
+                } else if (($op === 'is_set' || $op === 'is_not_empty') && empty($currentSubTags)) {
+                    $groupMatch = false;
+                    break;
+                } else if (($op === 'is_not_set' || $op === 'is_empty') && !empty($currentSubTags)) {
+                    $groupMatch = false;
+                    break;
                 }
                 continue;
-            } else if ($field === 'lastActivityDays') {
-                $lastAct = $sub['last_activity_at'] ?? null;
-                $refDate = $lastAct ? $lastAct : ($sub['joined_at'] ?? date('Y-m-d'));
-                $actualVal = (time() - strtotime($refDate)) / (86400); // days
+            } else if ($field === 'lastActivityDays' || $field === 'last_activity_days') {
+                $lastAct = !empty($sub['last_activity_at']) ? $sub['last_activity_at'] : (!empty($sub['joined_at']) ? $sub['joined_at'] : ($sub['created_at'] ?? date('Y-m-d')));
+                $actualVal = (time() - strtotime($lastAct)) / 86400; // days
             } else {
-                // Map frontend field names to DB columns (handles both camelCase and snake_case)
+                // Map frontend field names to DB columns (handles both camelCase, snake_case, and CRM fields)
                 $map = [
                     'firstName' => 'first_name',
                     'first_name' => 'first_name',
@@ -1198,6 +1531,8 @@ function isSubscriberMatch($sub, $criteriaJson)
                     'source' => 'source',
                     'salesperson' => 'salesperson',
                     'city' => 'city',
+                    'district' => 'district',
+                    'ward' => 'ward',
                     'country' => 'country',
                     'address' => 'address',
                     'dateOfBirth' => 'date_of_birth',
@@ -1211,7 +1546,18 @@ function isSubscriberMatch($sub, $criteriaJson)
                     'verified' => 'verified',
                     'os' => 'last_os',
                     'device' => 'last_device',
-                    'browser' => 'last_browser'
+                    'browser' => 'last_browser',
+                    'program' => 'program',
+                    'crm_program' => 'program',
+                    'stage_id' => 'stage_id',
+                    'crm_stage' => 'stage_id',
+                    'crm_stage_id' => 'stage_id',
+                    'pipeline_status' => 'pipeline_status',
+                    'crm_pipeline_status' => 'pipeline_status',
+                    'lead_status' => 'lead_status',
+                    'crm_lead_status' => 'lead_status',
+                    'owner_id' => 'owner_id',
+                    'crm_owner_id' => 'owner_id',
                 ];
 
                 $dbField = $map[$field] ?? null;
@@ -1219,8 +1565,6 @@ function isSubscriberMatch($sub, $criteriaJson)
                 if ($dbField && isset($sub[$dbField])) {
                     $actualVal = $sub[$dbField];
                 } else {
-                    // Not a standard field? Check CUSTOM ATTRIBUTES
-                    // 1. Check if sub has custom_attributes (already decoded or needs decoding)
                     $customAttrs = [];
                     if (isset($sub['custom_attributes'])) {
                         $customAttrs = is_array($sub['custom_attributes'])
@@ -1231,7 +1575,6 @@ function isSubscriberMatch($sub, $criteriaJson)
                     if (isset($customAttrs[$field])) {
                         $actualVal = $customAttrs[$field];
                     } else {
-                        // Final fallback: direct check for $sub[$field] might work if already hydrated
                         $actualVal = $sub[$field] ?? "";
                     }
                 }
@@ -1242,44 +1585,85 @@ function isSubscriberMatch($sub, $criteriaJson)
 
             switch ($op) {
                 case 'contains':
-                    if (strpos(strtolower($actualVal), $val) !== false)
+                    if (mb_stripos($actualVal, $val, 0, 'UTF-8') !== false)
                         $isMatch = true;
                     break;
                 case 'not_contains':
-                    if (strpos(strtolower($actualVal), $val) === false)
+                    if (mb_stripos($actualVal, $val, 0, 'UTF-8') === false)
                         $isMatch = true;
                     break;
                 case 'equals':
                 case 'is':
-                    if (strtolower($actualVal) == $val)
+                    if (mb_strtolower($actualVal, 'UTF-8') === mb_strtolower($val, 'UTF-8'))
                         $isMatch = true;
                     break;
                 case 'is_not':
-                    if (strtolower($actualVal) != $val)
+                    if (mb_strtolower($actualVal, 'UTF-8') !== mb_strtolower($val, 'UTF-8'))
                         $isMatch = true;
                     break;
                 case 'starts_with':
                     if (substr(strtolower($actualVal), 0, strlen($val)) === $val)
                         $isMatch = true;
                     break;
+                case 'ends_with':
+                    if ($val === '' || substr(strtolower($actualVal), -strlen($val)) === $val)
+                        $isMatch = true;
+                    break;
+                case 'is_set':
+                case 'is_not_empty':
+                    if (trim($actualVal) !== '')
+                        $isMatch = true;
+                    break;
+                case 'is_not_set':
+                case 'is_empty':
+                    if (trim($actualVal) === '')
+                        $isMatch = true;
+                    break;
                 case 'greater_than':
                     if ((float) $actualVal > (float) $val)
+                        $isMatch = true;
+                    break;
+                case 'greater_than_or_equal':
+                    if ((float) $actualVal >= (float) $val)
                         $isMatch = true;
                     break;
                 case 'less_than':
                     if ((float) $actualVal < (float) $val)
                         $isMatch = true;
                     break;
+                case 'less_than_or_equal':
+                    if ((float) $actualVal <= (float) $val)
+                        $isMatch = true;
+                    break;
                 case 'after':
-                    if (strtotime($actualVal) > strtotime($val))
+                case 'is_after':
+                    if ($actualVal && strtotime($actualVal) > strtotime($val))
                         $isMatch = true;
                     break;
                 case 'before':
-                    if (strtotime($actualVal) < strtotime($val))
+                case 'is_before':
+                    if ($actualVal && strtotime($actualVal) < strtotime($val))
                         $isMatch = true;
                     break;
                 case 'on':
-                    if (date('Y-m-d', strtotime($actualVal)) === $val)
+                case 'is_on':
+                    if ($actualVal && date('Y-m-d', strtotime($actualVal)) === $val)
+                        $isMatch = true;
+                    break;
+                case 'in_last_days':
+                    if ($actualVal && strtotime($actualVal) >= strtotime('-' . max(0, (int)$val) . ' days'))
+                        $isMatch = true;
+                    break;
+                case 'before_days':
+                    if ($actualVal && strtotime($actualVal) < strtotime('-' . max(0, (int)$val) . ' days'))
+                        $isMatch = true;
+                    break;
+                case 'is_today':
+                    if ($actualVal && date('m-d', strtotime($actualVal)) === date('m-d'))
+                        $isMatch = true;
+                    break;
+                case 'is_this_month':
+                    if ($actualVal && date('m', strtotime($actualVal)) === date('m'))
                         $isMatch = true;
                     break;
             }
@@ -1346,20 +1730,19 @@ function checkAndHandleHardBounce($pdo, $subscriberId, $errorMessage)
 
     return false;
 }
+
 /**
- * Fetch a comprehensive subscriber profile for flow evaluation
+ * Fetch a comprehensive subscriber profile for flow evaluation (including live MYERP CRM fields)
  */
 function getSubscriberProfileForFlow($pdo, $subscriberId)
 {
-    // [PERF P36-FH] Changed SELECT * -> explicit columns.
-    // SELECT * loads ~50 cols including large TEXT (custom_attributes, notes, address etc.)
-    // over the network on EVERY flow subscriber evaluation. Explicit columns reduce
-    // per-call transfer by ~60-80% on busy installations (1000+ subs/hour).
     $stmt = $pdo->prepare(
-        "SELECT id, workspace_id, email, first_name, last_name, phone_number, status, source,
-                gender, date_of_birth, city, country, address, company_name, job_title,
+        "SELECT id, workspace_id, contact_id, email, first_name, last_name, phone_number, status, source,
+                gender, date_of_birth, anniversary_date, city, district, ward, country, address,
+                company_name, job_title, salesperson, verified, meta_psid, is_zalo_follower,
+                owner_id, program, stage_id, pipeline_status, lead_status,
                 last_os, last_browser, last_device, last_city, last_country, last_ip,
-                zalo_user_id, custom_attributes, lead_score, joined_at, last_activity_at,
+                zalo_user_id, custom_attributes, lead_score, joined_at, created_at, last_activity_at,
                 stats_sent, stats_opened, stats_clicked
          FROM subscribers WHERE id = ? LIMIT 1"
     );
@@ -1367,10 +1750,257 @@ function getSubscriberProfileForFlow($pdo, $subscriberId)
     $sub = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($sub) {
-        // [10M UPGRADE] Fetch Relational Tags for proper evaluation
+        // 1. Fetch Relational Tags
         $stmtT = $pdo->prepare("SELECT t.name FROM subscriber_tags st JOIN domation_tags t ON st.tag_id = t.id WHERE st.subscriber_id = ?");
         $stmtT->execute([$subscriberId]);
-        $sub['tags_array'] = $stmtT->fetchAll(PDO::FETCH_COLUMN);
+        $tagsArray = $stmtT->fetchAll(PDO::FETCH_COLUMN) ?: [];
+
+        // 2. Default CRM enrichment keys from subscriber columns
+        $sub['crm_stage_id'] = !empty($sub['stage_id']) ? (string)$sub['stage_id'] : '';
+        $sub['crm_stage_name'] = '';
+        $sub['crm_pipeline_status'] = $sub['pipeline_status'] ?? '';
+        $sub['crm_lead_status'] = $sub['lead_status'] ?? '';
+        $sub['crm_temperature'] = '';
+        $sub['crm_program'] = $sub['program'] ?? '';
+        $sub['crm_owner_id'] = !empty($sub['owner_id']) ? (string)$sub['owner_id'] : '';
+        $sub['crm_branch_id'] = '';
+        $sub['crm_deposit_status'] = 'none';
+        $sub['crm_deposit_amount'] = 0;
+        $sub['crm_expected_revenue'] = 0;
+        $sub['survey_score'] = '';
+        // Deep MYERP Student / Class / Tuition / Deal / Ticket / Certificate fields
+        $sub['erp_is_student'] = 'no';
+        $sub['erp_student_status'] = '';
+        $sub['erp_class_id'] = '';
+        $sub['erp_class_name'] = $sub['program'] ?? '';
+        $sub['erp_tuition_status'] = 'unpaid';
+        $sub['erp_deal_status'] = 'no_deal';
+        $sub['erp_deal_value'] = 0;
+        $sub['erp_sla_uncontacted_hours'] = 0;
+        $sub['erp_ticket_status'] = 'no_ticket';
+        $sub['erp_has_certificate'] = 'no';
+
+        // 3. Enrich from MYERP CRM contacts, pipeline_stages, deposits, deals, tickets, and certificates
+        try {
+            $contactId = !empty($sub['contact_id']) ? (int)$sub['contact_id'] : 0;
+            if ($contactId <= 0 && (!empty($sub['email']) || !empty($sub['phone_number']))) {
+                if (!class_exists('DomationContactMatcher') && file_exists(__DIR__ . '/../utils/DomationContactMatcher.php')) {
+                    require_once __DIR__ . '/../utils/DomationContactMatcher.php';
+                }
+                if (class_exists('DomationContactMatcher')) {
+                    $matchedId = DomationContactMatcher::findExistingContactId($pdo, $sub['email'] ?? null, $sub['phone_number'] ?? null, 1);
+                    if ($matchedId) {
+                        $contactId = (int)$matchedId;
+                        $sub['contact_id'] = $contactId;
+                    }
+                }
+            }
+
+            if ($contactId > 0) {
+                $stmtCrm = $pdo->prepare("
+                    SELECT c.stage_id, c.pipeline_status, c.lead_status, c.status AS contact_status,
+                           c.temperature, c.program, c.project_id, c.student_id, c.study_status,
+                           c.owner_id, c.expected_revenue, c.total_spent, c.last_contact, c.created_at,
+                           c.tags, c.district, c.ward, c.city,
+                           ps.name AS stage_name, ps.system_slug AS stage_slug, ps.is_won AS stage_is_won,
+                           pr.name AS project_name, pr.code AS project_code
+                    FROM contacts c
+                    LEFT JOIN pipeline_stages ps ON ps.id = c.stage_id
+                    LEFT JOIN projects pr ON pr.id = c.project_id
+                    WHERE c.id = ? AND c.deleted_at IS NULL
+                    LIMIT 1
+                ");
+                $stmtCrm->execute([$contactId]);
+                $crmRow = $stmtCrm->fetch(PDO::FETCH_ASSOC);
+
+                if ($crmRow) {
+                    $sub['crm_stage_id'] = !empty($crmRow['stage_id']) ? (string)$crmRow['stage_id'] : $sub['crm_stage_id'];
+                    $sub['crm_stage_name'] = $crmRow['stage_name'] ?? '';
+                    $sub['crm_pipeline_status'] = !empty($crmRow['stage_slug']) ? $crmRow['stage_slug'] : (!empty($crmRow['pipeline_status']) ? $crmRow['pipeline_status'] : $sub['crm_pipeline_status']);
+                    $sub['crm_lead_status'] = !empty($crmRow['lead_status']) ? $crmRow['lead_status'] : $sub['crm_lead_status'];
+                    $sub['crm_temperature'] = $crmRow['temperature'] ?? '';
+                    $sub['crm_program'] = !empty($crmRow['program']) ? $crmRow['program'] : (!empty($crmRow['project_name']) ? $crmRow['project_name'] : $sub['crm_program']);
+                    $sub['crm_owner_id'] = !empty($crmRow['owner_id']) ? (string)$crmRow['owner_id'] : $sub['crm_owner_id'];
+                    $sub['crm_branch_id'] = '';
+                    $sub['crm_expected_revenue'] = isset($crmRow['expected_revenue']) ? (float)$crmRow['expected_revenue'] : 0;
+                    $sub['erp_class_id'] = !empty($crmRow['project_id']) ? (string)$crmRow['project_id'] : $sub['crm_program'];
+                    $sub['erp_class_name'] = !empty($crmRow['project_name']) ? $crmRow['project_name'] : $sub['crm_program'];
+
+                    // Determine erp_is_student & erp_student_status
+                    $studyStLower = mb_strtolower(trim((string)($crmRow['study_status'] ?? '')), 'UTF-8');
+                    $pipeLower = mb_strtolower(trim((string)($sub['crm_pipeline_status'] ?? '')), 'UTF-8');
+                    $isStudentBool = (
+                        ($crmRow['contact_status'] ?? '') === 'customer'
+                        || in_array($pipeLower, ['enrolled', 'hoc_vien', 'dong_deal', 'thanh_cong', 'won'], true)
+                        || !empty(trim((string)($crmRow['student_id'] ?? '')))
+                        || $studyStLower !== ''
+                        || !empty($crmRow['stage_is_won'])
+                    );
+                    $sub['erp_is_student'] = $isStudentBool ? 'yes' : 'no';
+
+                    if (in_array($studyStLower, ['completed', 'graduated', 'hoan_thanh', 'hoàn thành', 'tot_nghiep', 'tốt nghiệp'], true)) {
+                        $sub['erp_student_status'] = 'completed';
+                        $sub['erp_has_certificate'] = 'yes';
+                    } elseif (in_array($studyStLower, ['reserved', 'deferred', 'bao_luu', 'bảo lưu'], true)) {
+                        $sub['erp_student_status'] = 'reserved';
+                    } elseif (in_array($studyStLower, ['suspended', 'tam_ngung', 'tạm ngưng'], true)) {
+                        $sub['erp_student_status'] = 'suspended';
+                    } elseif (in_array($studyStLower, ['dropped', 'bo_hoc', 'bỏ học', 'nghi_hoc', 'nghỉ học'], true)) {
+                        $sub['erp_student_status'] = 'dropped';
+                    } elseif ($isStudentBool || in_array($studyStLower, ['studying', 'dang_hoc', 'đang học', 'active'], true)) {
+                        $sub['erp_student_status'] = 'studying';
+                    }
+
+                    // SLA uncontacted hours
+                    if (empty($crmRow['last_contact']) && !empty($crmRow['created_at'])) {
+                        $stmtActCheck = $pdo->prepare("SELECT 1 FROM activities WHERE (contact_id = ? OR (related_type IN ('contact', 'lead') AND related_id = ?)) AND deleted_at IS NULL LIMIT 1");
+                        $stmtActCheck->execute([$contactId, $contactId]);
+                        if (!$stmtActCheck->fetchColumn()) {
+                            $sub['erp_sla_uncontacted_hours'] = max(0, (int)floor((time() - strtotime($crmRow['created_at'])) / 3600));
+                        }
+                    }
+
+                    if (empty($sub['district']) && !empty($crmRow['district'])) {
+                        $sub['district'] = $crmRow['district'];
+                    }
+                    if (empty($sub['ward']) && !empty($crmRow['ward'])) {
+                        $sub['ward'] = $crmRow['ward'];
+                    }
+                    if (empty($sub['city']) && !empty($crmRow['city'])) {
+                        $sub['city'] = $crmRow['city'];
+                    }
+
+                    if (!empty($crmRow['tags'])) {
+                        $crmTags = json_decode($crmRow['tags'], true);
+                        if (is_array($crmTags)) {
+                            foreach ($crmTags as $ct) {
+                                if (is_string($ct) && trim($ct) !== '' && !in_array($ct, $tagsArray, true)) {
+                                    $tagsArray[] = trim($ct);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Query deposit & tuition milestone summary for contact
+                $stmtDep = $pdo->prepare("
+                    SELECT
+                        MAX(CASE WHEN status IN ('approved', 'completed') THEN 1 ELSE 0 END) AS has_approved,
+                        MAX(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS has_pending,
+                        COALESCE(SUM(CASE WHEN status IN ('approved', 'completed') THEN price ELSE 0 END), 0) AS approved_amount
+                    FROM deposits
+                    WHERE contact_id = ?
+                ");
+                $stmtDep->execute([$contactId]);
+                $depSummary = $stmtDep->fetch(PDO::FETCH_ASSOC);
+                if ($depSummary) {
+                    if (!empty($depSummary['has_approved'])) {
+                        $sub['crm_deposit_status'] = 'approved';
+                    } elseif (!empty($depSummary['has_pending'])) {
+                        $sub['crm_deposit_status'] = 'pending';
+                    } else {
+                        $sub['crm_deposit_status'] = 'none';
+                    }
+                    $sub['crm_deposit_amount'] = (float)($depSummary['approved_amount'] ?? 0);
+                }
+
+                // Tuition status (paid / has_debt / overdue / unpaid)
+                $hasOverdueMilestone = false;
+                $hasDebtMilestone = false;
+                try {
+                    $stmtMs = $pdo->prepare("
+                        SELECT
+                            MAX(CASE WHEN dm.status NOT IN ('paid', 'approved', 'completed', 'cancelled', 'rejected') AND dm.expected_pay_date IS NOT NULL AND dm.expected_pay_date < CURDATE() THEN 1 ELSE 0 END) AS is_overdue,
+                            MAX(CASE WHEN dm.status NOT IN ('paid', 'approved', 'completed', 'cancelled', 'rejected') AND COALESCE(dm.expected_amount, 0) > COALESCE(dm.actual_amount, 0) THEN 1 ELSE 0 END) AS is_debt
+                        FROM deposit_milestones dm
+                        INNER JOIN deposits dep ON dep.id = dm.deposit_id
+                        WHERE dep.contact_id = ? AND dep.status != 'rejected'
+                    ");
+                    $stmtMs->execute([$contactId]);
+                    $msRow = $stmtMs->fetch(PDO::FETCH_ASSOC);
+                    $hasOverdueMilestone = !empty($msRow['is_overdue']);
+                    $hasDebtMilestone = !empty($msRow['is_debt']);
+                } catch (Throwable $eMs) {}
+
+                $expRev = (float)($crmRow['expected_revenue'] ?? 0);
+                $totSpent = (float)($crmRow['total_spent'] ?? 0);
+                $hasContactDebt = ($expRev > 0 && $expRev > $totSpent) || ($sub['crm_deposit_status'] === 'pending');
+
+                if ($hasOverdueMilestone) {
+                    $sub['erp_tuition_status'] = 'overdue';
+                } elseif ($hasDebtMilestone || $hasContactDebt) {
+                    $sub['erp_tuition_status'] = 'has_debt';
+                } elseif ($sub['crm_deposit_status'] === 'approved' || ($totSpent > 0 && $totSpent >= $expRev)) {
+                    $sub['erp_tuition_status'] = 'paid';
+                } else {
+                    $sub['erp_tuition_status'] = 'unpaid';
+                }
+
+                // Deals summary
+                try {
+                    $stmtDealSum = $pdo->prepare("
+                        SELECT
+                            COUNT(d.id) AS total_deals,
+                            COALESCE(SUM(d.value), 0) AS total_val,
+                            MAX(CASE WHEN ps.is_won = 1 OR ps.system_slug IN ('enrolled', 'hoc_vien', 'dong_deal', 'thanh_cong', 'won') THEN 1 ELSE 0 END) AS has_won,
+                            MAX(CASE WHEN ps.is_lost = 1 OR ps.system_slug IN ('lost', 'rejected', 'churned') THEN 1 ELSE 0 END) AS has_lost,
+                            MAX(CASE WHEN COALESCE(ps.is_won, 0) = 0 AND COALESCE(ps.is_lost, 0) = 0 THEN 1 ELSE 0 END) AS has_open
+                        FROM deals d
+                        LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id
+                        WHERE d.contact_id = ? AND d.deleted_at IS NULL
+                    ");
+                    $stmtDealSum->execute([$contactId]);
+                    $dealSum = $stmtDealSum->fetch(PDO::FETCH_ASSOC);
+                    if ($dealSum && (int)$dealSum['total_deals'] > 0) {
+                        $sub['erp_deal_value'] = (float)$dealSum['total_val'];
+                        if (!empty($dealSum['has_won'])) {
+                            $sub['erp_deal_status'] = 'won';
+                        } elseif (!empty($dealSum['has_open'])) {
+                            $sub['erp_deal_status'] = 'open';
+                        } elseif (!empty($dealSum['has_lost'])) {
+                            $sub['erp_deal_status'] = 'lost';
+                        }
+                    }
+                } catch (Throwable $eDl) {}
+
+                // Tickets summary
+                try {
+                    $stmtTk = $pdo->prepare("
+                        SELECT
+                            COUNT(id) AS total_tickets,
+                            MAX(CASE WHEN status IN ('open', 'in_progress', 'waiting') THEN 1 ELSE 0 END) AS has_open,
+                            MAX(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) AS has_in_progress,
+                            MAX(CASE WHEN status IN ('resolved', 'closed') THEN 1 ELSE 0 END) AS has_resolved
+                        FROM tickets
+                        WHERE contact_id = ?
+                    ");
+                    $stmtTk->execute([$contactId]);
+                    $tkRow = $stmtTk->fetch(PDO::FETCH_ASSOC);
+                    if ($tkRow && (int)$tkRow['total_tickets'] > 0) {
+                        if (!empty($tkRow['has_open'])) {
+                            $sub['erp_ticket_status'] = 'has_open_ticket';
+                        } elseif (!empty($tkRow['has_resolved'])) {
+                            $sub['erp_ticket_status'] = 'resolved';
+                        }
+                    }
+                } catch (Throwable $eTk) {}
+            }
+        } catch (Throwable $eCrm) {}
+
+        // 4. Populate survey_score and certificate check from custom_attributes if present
+        if (!empty($sub['custom_attributes'])) {
+            $ca = is_array($sub['custom_attributes']) ? $sub['custom_attributes'] : (json_decode($sub['custom_attributes'], true) ?: []);
+            if (isset($ca['survey_score'])) {
+                $sub['survey_score'] = $ca['survey_score'];
+            } elseif (isset($ca['nps_score'])) {
+                $sub['survey_score'] = $ca['nps_score'];
+            }
+            if (!empty($ca['cert_no']) || !empty($ca['certificate_code'])) {
+                $sub['erp_has_certificate'] = 'yes';
+            }
+        }
+
+        $sub['tags_array'] = $tagsArray;
     }
 
     return $sub;
@@ -1383,16 +2013,12 @@ function getSubscriberProfileForFlow($pdo, $subscriberId)
 function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $conditions)
 {
     if (empty($conditions)) {
-        // [FIX F-5] Return false for empty conditions — an empty rule set should NOT auto-match.
-        // Callers (FlowExecutor advanced_condition) already guard with !empty($conditions) before
-        // calling this function, so real flows are unaffected. This stricter semantic prevents
-        // accidental auto-match if this function is ever called from new code without the guard.
         return false;
     }
 
     foreach ($conditions as $cond) {
-        $field = $cond['field'];
-        $op = $cond['operator'];
+        $field = $cond['field'] ?? '';
+        $op = $cond['operator'] ?? 'equals';
         $val = trim($cond['value'] ?? '');
 
         // -----------------------------------------------------------------
@@ -1403,7 +2029,7 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
         $isSpecialField = false; // handled separately (web_activity, activity_history, lastActivityDays)
         $condMatch = false;
 
-        // --- Profile scalar fields ---
+        // --- Profile & MYERP CRM scalar fields ---
         $profileFieldMap = [
             'email' => 'email',
             'first_name' => 'first_name',
@@ -1421,9 +2047,12 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
             'gender' => 'gender',
             'country' => 'country',
             'city' => 'city',
+            'district' => 'district',
+            'ward' => 'ward',
             'address' => 'address',
             'salesperson' => 'salesperson',
             'meta_psid' => 'meta_psid',
+            'is_zalo_follower' => 'is_zalo_follower',
             'verified' => 'verified',
             'lead_score' => 'lead_score',
             'leadScore' => 'lead_score',
@@ -1441,10 +2070,45 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
             'anniversaryDate' => 'anniversary_date',
             'last_activity_at' => 'last_activity_at',
             'lastActivityAt' => 'last_activity_at',
+            // Deep MYERP CRM fields
+            'program' => 'crm_program',
+            'crm_program' => 'crm_program',
+            'owner_id' => 'crm_owner_id',
+            'crm_owner_id' => 'crm_owner_id',
+            'branch_id' => 'crm_branch_id',
+            'crm_branch_id' => 'crm_branch_id',
+            'stage_id' => 'crm_stage_id',
+            'crm_stage' => 'crm_stage_id',
+            'crm_stage_id' => 'crm_stage_id',
+            'stage_name' => 'crm_stage_name',
+            'crm_stage_name' => 'crm_stage_name',
+            'pipeline_status' => 'crm_pipeline_status',
+            'crm_pipeline_status' => 'crm_pipeline_status',
+            'lead_status' => 'crm_lead_status',
+            'crm_lead_status' => 'crm_lead_status',
+            'temperature' => 'crm_temperature',
+            'crm_temperature' => 'crm_temperature',
+            'deposit_status' => 'crm_deposit_status',
+            'crm_deposit_status' => 'crm_deposit_status',
+            'deposit_amount' => 'crm_deposit_amount',
+            'crm_deposit_amount' => 'crm_deposit_amount',
+            'expected_revenue' => 'crm_expected_revenue',
+            'crm_expected_revenue' => 'crm_expected_revenue',
+            'survey_score' => 'survey_score',
+            // Deep MYERP Student, Class, Tuition, Deal, SLA, Ticket & Certificate fields
+            'erp_is_student' => 'erp_is_student',
+            'erp_student_status' => 'erp_student_status',
+            'erp_class_id' => 'erp_class_id',
+            'erp_class_name' => 'erp_class_name',
+            'erp_tuition_status' => 'erp_tuition_status',
+            'erp_deal_status' => 'erp_deal_status',
+            'erp_deal_value' => 'erp_deal_value',
+            'erp_sla_uncontacted_hours' => 'erp_sla_uncontacted_hours',
+            'erp_ticket_status' => 'erp_ticket_status',
+            'erp_has_certificate' => 'erp_has_certificate',
         ];
 
-        if ($field === 'tags') {
-            // [10M UPGRADE] Use pre-fetched relational tags
+        if ($field === 'tags' || $field === 'crm_tags') {
             if (isset($subProfile['tags_array'])) {
                 $actualVal = $subProfile['tags_array'];
             } else {
@@ -1454,11 +2118,37 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
             }
             $isArrayField = true;
 
+        } elseif ($field === 'erp_class_id' || $field === 'erp_class_name') {
+            $classIdVal = (string)($subProfile['erp_class_id'] ?? '');
+            $classNameVal = (string)($subProfile['erp_class_name'] ?? ($subProfile['crm_program'] ?? ''));
+            if (!is_numeric($val) && $val !== '') {
+                $actualVal = $classNameVal ?: $classIdVal;
+            } else {
+                $actualVal = $classIdVal ?: $classNameVal;
+            }
+
+        } elseif (in_array($field, ['crm_stage', 'crm_stage_id', 'stage_id'], true)) {
+            // Allow matching against stage_id, stage_name, or pipeline_status slug seamlessly
+            $stageIdVal = (string)($subProfile['crm_stage_id'] ?? ($subProfile['stage_id'] ?? ''));
+            $stageNameVal = (string)($subProfile['crm_stage_name'] ?? '');
+            $stageSlugVal = (string)($subProfile['crm_pipeline_status'] ?? ($subProfile['pipeline_status'] ?? ''));
+            if (!is_numeric($val) && $val !== '') {
+                if (mb_strtolower($stageNameVal, 'UTF-8') === mb_strtolower($val, 'UTF-8') || mb_stripos($stageNameVal, $val, 0, 'UTF-8') !== false) {
+                    $actualVal = $stageNameVal;
+                } elseif (mb_strtolower($stageSlugVal, 'UTF-8') === mb_strtolower($val, 'UTF-8')) {
+                    $actualVal = $stageSlugVal;
+                } else {
+                    $actualVal = $stageNameVal ?: $stageIdVal;
+                }
+            } else {
+                $actualVal = $stageIdVal;
+            }
+
         } elseif (isset($profileFieldMap[$field])) {
-            $actualVal = $subProfile[$profileFieldMap[$field]] ?? '';
+            $mappedKey = $profileFieldMap[$field];
+            $actualVal = $subProfile[$mappedKey] ?? ($subProfile[$field] ?? '');
 
         } elseif ($field === 'custom_field') {
-            // Handle explicit custom field selection from UI
             $attrKey = $cond['key'] ?? '';
             if ($attrKey && !empty($subProfile['custom_attributes'])) {
                 $customAttrs = is_array($subProfile['custom_attributes'])
@@ -1470,18 +2160,17 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
             }
 
         } elseif ($field === 'lastActivityDays' || $field === 'last_activity_days') {
-            // Days since last activity — compare as number
+            // [BUG-FIX #3] Days since last activity — fallback to joined_at then created_at
             $isSpecialField = true;
-            $lastAt = $subProfile['last_activity_at'] ?? $subProfile['joined_at'] ?? null;
+            $lastAt = !empty($subProfile['last_activity_at'])
+                ? $subProfile['last_activity_at']
+                : (!empty($subProfile['joined_at']) ? $subProfile['joined_at'] : ($subProfile['created_at'] ?? null));
             if ($lastAt) {
                 $diffDays = (int) floor((time() - strtotime($lastAt)) / 86400);
             } else {
                 $diffDays = 9999; // never active
             }
             $condMatch = false;
-            // [BUG-FIX #9] Correct strict vs. non-strict comparison:
-            // 'greater_than' must be strict (>), 'greater_than_or_equal' must be (>=).
-            // Previously both mapped to >=, making them equivalent (wrong).
             if ($op === 'greater_than') {
                 $condMatch = ($diffDays > (int) $val);
             } elseif ($op === 'greater_than_or_equal') {
@@ -1490,11 +2179,13 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
                 $condMatch = ($diffDays < (int) $val);
             } elseif ($op === 'less_than_or_equal') {
                 $condMatch = ($diffDays <= (int) $val);
-            } elseif ($op === 'equals') {
+            } elseif ($op === 'equals' || $op === 'is') {
                 $condMatch = ($diffDays === (int) $val);
+            } elseif ($op === 'is_not') {
+                $condMatch = ($diffDays !== (int) $val);
             }
 
-        } elseif ($field === 'web_activity') {
+        } elseif ($field === 'web_activity' || $field === 'web_page_visited') {
             // Check web visit history (subscriber_activity WHERE type LIKE 'web_%')
             $isSpecialField = true;
             $lookbackLimit = (int) ($cond['lookback'] ?? 50);
@@ -1504,8 +2195,6 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
             static $webHistoryCache = [];
             $cacheKey = $subscriberId . '_web_' . $lookbackLimit;
             if (!isset($webHistoryCache[$cacheKey])) {
-                // [FIX] LRU-style cap: $webHistoryCache stores full HTML-length text arrays
-                // for each subscriber. At 5,000 subscribers this can exhaust all available RAM.
                 if (count($webHistoryCache) > 200) {
                     array_shift($webHistoryCache);
                 }
@@ -1524,7 +2213,6 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
             $keywords = array_filter(array_map('trim', preg_split('/[,|]/', $val, -1, PREG_SPLIT_NO_EMPTY)));
             $found = false;
             foreach ($historyItems as $line) {
-                // Use mb_stripos for proper Unicode/Vietnamese case-insensitive matching
                 $kwMatch = empty($keywords) ? true : false;
                 foreach ($keywords as $kw) {
                     if ($kw !== '' && mb_stripos($line, $kw, 0, 'UTF-8') !== false) {
@@ -1532,21 +2220,15 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
                         break;
                     }
                 }
-                // page_url empty → always match (no URL filter)
                 $pageMatch = empty($pageUrl) || mb_stripos($line, $pageUrl, 0, 'UTF-8') !== false;
                 if ($kwMatch && $pageMatch) {
                     $found = true;
                     break;
                 }
             }
-            $condMatch = ($op === 'not_contains') ? !$found : $found;
+            $condMatch = ($op === 'not_contains' || $op === 'is_not_set' || $op === 'is_empty') ? !$found : $found;
 
         } elseif ($field === 'activity_history') {
-            // Flexible activity history check:
-            // cond['activity_type'] = 'click_link' | 'open_email' | 'custom_event' | 'purchase' | 'zns_sent' | 'unsubscribe' | ... (comma-sep for OR)
-            // cond['value'] = keyword to search in details
-            // cond['lookback'] = number of records to check (default 50)
-            // cond['days'] = only check within last N days (optional)
             $isSpecialField = true;
             $activityTypes = array_filter(array_map('trim', preg_split('/[,|]/', $cond['activity_type'] ?? '', -1, PREG_SPLIT_NO_EMPTY)));
             $lookbackLimit = max(1, (int) ($cond['lookback'] ?? 50));
@@ -1575,7 +2257,6 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
             $keywords = array_filter(array_map('trim', preg_split('/[,|]/', $val, -1, PREG_SPLIT_NO_EMPTY)));
             $found = false;
             if (empty($keywords)) {
-                // No keyword filter — just check if any activity exists
                 $found = !empty($activityItems);
             } else {
                 foreach ($activityItems as $line) {
@@ -1587,11 +2268,10 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
                     }
                 }
             }
-            $condMatch = ($op === 'not_contains' || $op === 'is_not_set') ? !$found : $found;
+            $condMatch = ($op === 'not_contains' || $op === 'is_not_set' || $op === 'is_empty') ? !$found : $found;
 
         } else {
             // Fallback: try custom_attributes JSON field
-            $isSpecialField = true;
             if (!empty($subProfile['custom_attributes'])) {
                 $customAttrs = is_array($subProfile['custom_attributes'])
                     ? $subProfile['custom_attributes']
@@ -1600,8 +2280,7 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
             } else {
                 $actualVal = '';
             }
-            // Fall through to scalar evaluation below
-            $isSpecialField = false; // let scalar logic handle it
+            $isSpecialField = false;
         }
 
         // Skip scalar evaluation if special field already set $condMatch
@@ -1619,6 +2298,8 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
         if ($isArrayField && is_array($actualVal)) {
             switch ($op) {
                 case 'contains':
+                case 'equals':
+                case 'is':
                     foreach ($actualVal as $item) {
                         if (mb_stripos($item, $val) !== false) {
                             $condMatch = true;
@@ -1627,6 +2308,7 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
                     }
                     break;
                 case 'not_contains':
+                case 'is_not':
                     $condMatch = true;
                     foreach ($actualVal as $item) {
                         if (mb_stripos($item, $val) !== false) {
@@ -1636,9 +2318,11 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
                     }
                     break;
                 case 'is_set':
+                case 'is_not_empty':
                     $condMatch = !empty($actualVal);
                     break;
                 case 'is_not_set':
+                case 'is_empty':
                     $condMatch = empty($actualVal);
                     break;
                 default:
@@ -1646,10 +2330,7 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
             }
         } else {
             // --- B. SCALAR LOGIC ---
-            $isDateOp = in_array($op, ['is_before', 'is_after', 'is_on']);
-            // [FIX] Custom attribute values decoded from JSON can be arrays.
-            // Casting an array directly to string produces the literal "Array",
-            // making all comparisons wrong and triggering PHP "Array to string" warnings.
+            $isDateOp = in_array($op, ['is_before', 'is_after', 'is_on', 'before', 'after', 'on', 'in_last_days', 'before_days', 'is_today', 'is_this_month'], true);
             if (is_array($actualVal)) {
                 $actualVal = json_encode($actualVal, JSON_UNESCAPED_UNICODE);
             }
@@ -1666,44 +2347,54 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
 
             switch ($op) {
                 case 'equals':
+                case 'is':
                     $condMatch = ($checkVal === $targetVal);
                     break;
                 case 'is_not':
                     $condMatch = ($checkVal !== $targetVal);
                     break;
                 case 'contains':
-                    $condMatch = (mb_strpos($checkVal, $targetVal, 0, 'UTF-8') !== false);
+                    $condMatch = ($targetVal !== '' && mb_strpos($checkVal, $targetVal, 0, 'UTF-8') !== false);
                     break;
                 case 'not_contains':
-                    $condMatch = (mb_strpos($checkVal, $targetVal, 0, 'UTF-8') === false);
+                    $condMatch = ($targetVal === '' || mb_strpos($checkVal, $targetVal, 0, 'UTF-8') === false);
                     break;
                 case 'starts_with':
-                    // [PHP 7 COMPAT] str_starts_with() is PHP 8.0+ only — fallback for PHP 7.x
                     $condMatch = ($targetVal === '' || substr($checkVal, 0, strlen($targetVal)) === $targetVal);
                     break;
                 case 'ends_with':
-                    // [PHP 7 COMPAT] str_ends_with() is PHP 8.0+ only — fallback for PHP 7.x
                     $condMatch = ($targetVal === '' || substr($checkVal, -strlen($targetVal)) === $targetVal);
                     break;
                 case 'is_set':
-                    $condMatch = ($actualVal !== '' && $actualVal !== null);
+                case 'is_not_empty':
+                    $condMatch = (trim((string)$actualVal) !== '' && $actualVal !== null);
                     break;
                 case 'is_not_set':
-                    $condMatch = ($actualVal === '' || $actualVal === null);
+                case 'is_empty':
+                    $condMatch = (trim((string)$actualVal) === '' || $actualVal === null);
                     break;
                 case 'greater_than':
                     $condMatch = (is_numeric($actualVal) && is_numeric($val) && (float) $actualVal > (float) $val);
                     break;
+                case 'greater_than_or_equal':
+                    $condMatch = (is_numeric($actualVal) && is_numeric($val) && (float) $actualVal >= (float) $val);
+                    break;
                 case 'less_than':
                     $condMatch = (is_numeric($actualVal) && is_numeric($val) && (float) $actualVal < (float) $val);
+                    break;
+                case 'less_than_or_equal':
+                    $condMatch = (is_numeric($actualVal) && is_numeric($val) && (float) $actualVal <= (float) $val);
                     break;
                 case 'in_list':
                     $listItems = array_filter(array_map('trim', preg_split("/[\r\n,]+/", $targetVal)));
                     $condMatch = in_array($checkVal, $listItems);
                     break;
                 case 'is_on':
+                case 'on':
                 case 'is_before':
+                case 'before':
                 case 'is_after':
+                case 'after':
                     if (!$actualVal) {
                         $condMatch = false;
                     } else {
@@ -1713,12 +2404,46 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
                             $condMatch = false;
                             break;
                         }
-                        if ($op === 'is_on')
+                        if ($op === 'is_on' || $op === 'on')
                             $condMatch = ($dbTs === $userTs);
-                        if ($op === 'is_before')
+                        if ($op === 'is_before' || $op === 'before')
                             $condMatch = ($dbTs < $userTs);
-                        if ($op === 'is_after')
+                        if ($op === 'is_after' || $op === 'after')
                             $condMatch = ($dbTs > $userTs);
+                    }
+                    break;
+                case 'in_last_days':
+                    if (!$actualVal) {
+                        $condMatch = false;
+                    } else {
+                        $dbTs = strtotime($actualVal);
+                        $days = max(0, (int)$val);
+                        $condMatch = ($dbTs !== false && $dbTs >= strtotime("-{$days} days") && $dbTs <= (time() + 86400));
+                    }
+                    break;
+                case 'before_days':
+                    if (!$actualVal) {
+                        $condMatch = false;
+                    } else {
+                        $dbTs = strtotime($actualVal);
+                        $days = max(0, (int)$val);
+                        $condMatch = ($dbTs !== false && $dbTs < strtotime("-{$days} days"));
+                    }
+                    break;
+                case 'is_today':
+                    if (!$actualVal) {
+                        $condMatch = false;
+                    } else {
+                        $dbTs = strtotime($actualVal);
+                        $condMatch = ($dbTs !== false && date('m-d', $dbTs) === date('m-d'));
+                    }
+                    break;
+                case 'is_this_month':
+                    if (!$actualVal) {
+                        $condMatch = false;
+                    } else {
+                        $dbTs = strtotime($actualVal);
+                        $condMatch = ($dbTs !== false && date('m', $dbTs) === date('m'));
                     }
                     break;
             }

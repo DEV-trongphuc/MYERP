@@ -1,5 +1,7 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { X, Keyboard } from 'lucide-react';
+import { getMktPortalRoot } from '../../../utils/portalRoot';
 
 interface ShortcutProps {
     keys: string[];
@@ -64,15 +66,19 @@ export const KeyboardHelpModal: React.FC<KeyboardHelpModalProps> = ({ isOpen, on
         }
     ];
 
-    return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 animate-in fade-in duration-300">
+    return createPortal(
+        <div
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-[1px] animate-in fade-in duration-300"
+            onClick={onClose}
+        >
             <div
-                className={`w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 ${isDarkTheme ? 'bg-[#0F172A] border border-slate-800' : 'bg-white'}`}
+                className={`w-full max-w-md rounded-[18px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 ${isDarkTheme ? 'bg-[#0F172A] border border-slate-800' : 'bg-white'}`}
+                onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
                 <div className={`px-6 py-4 flex items-center justify-between border-b ${isDarkTheme ? 'border-slate-800 bg-slate-900/50' : 'border-slate-100 bg-slate-50/50'}`}>
                     <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-brand/10 text-brand">
+                        <div className="p-2 rounded-[var(--radius-md)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]">
                             <Keyboard className="w-5 h-5" />
                         </div>
                         <h3 className={`font-bold ${isDarkTheme ? 'text-slate-100' : 'text-slate-900'}`}>Phím tắt hệ thống</h3>
@@ -111,6 +117,7 @@ export const KeyboardHelpModal: React.FC<KeyboardHelpModalProps> = ({ isOpen, on
                     <p className="text-xs">Mẹo: Sử dụng phím tắt giúp bạn làm việc nhanh hơn gấp 2 lần!</p>
                 </div>
             </div>
-        </div>
+        </div>,
+        getMktPortalRoot()
     );
 };

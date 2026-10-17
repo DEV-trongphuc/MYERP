@@ -1,13 +1,14 @@
 import { EXTERNAL_ASSET_BASE } from '../../utils/config';
 import * as React from 'react';
 import { useEffect, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import { getMktPortalRoot } from '../../utils/portalRoot';
 import { api } from '../../services/storageAdapter';
 import {
     Send, Plus, Calendar, Image as ImageIcon,
     Eye, MessageCircle, CheckCircle,
     RefreshCw, BarChart2, UploadCloud, X, Search, Filter,
-    Share2, MousePointer2, Users, MailOpen, MousePointerClick, MessageSquare, Trash2, Info,
-    ArrowLeft
+    Share2, MousePointer2, Users, MailOpen, MousePointerClick, MessageSquare, Trash2, Info
 } from 'lucide-react';
 import Button from '../common/Button';
 import Badge from '../common/Badge';
@@ -312,9 +313,9 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
                         <div
                             key={camp.id}
                             onClick={() => fetchDetails(camp.id)}
-                            className="bg-white p-4 rounded-3xl border border-slate-100 flex items-center gap-6 hover:shadow-xl hover:border-blue-100 transition-all cursor-pointer group relative overflow-hidden"
+                            className="bg-white p-4 rounded-[18px] border border-slate-100 flex items-center gap-6 hover:shadow-xl hover:border-blue-100 transition-all cursor-pointer group relative overflow-hidden"
                         >
-                            <div className="w-24 h-24 bg-slate-50 rounded-2xl overflow-hidden flex-shrink-0 relative border border-slate-50 shadow-inner">
+                            <div className="w-24 h-24 bg-slate-50 rounded-[14px] overflow-hidden flex-shrink-0 relative border border-slate-50 shadow-inner">
                                 {camp.image_url ? (
                                     <img src={camp.image_url} alt="" className="w-full h-full object-cover" />
                                 ) : (
@@ -327,7 +328,7 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-1">
                                     <h3 className="font-black text-slate-800 text-sm truncate uppercase tracking-tight">{camp.title}</h3>
-                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${camp.status === 'sent' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${camp.status === 'sent' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-[var(--color-primary)]'}`}>
                                         {camp.status}
                                     </span>
                                 </div>
@@ -378,7 +379,7 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
                         </div>
                     ))}
                     {filteredCampaigns.length === 0 && (
-                        <div className="py-20 text-center bg-slate-50/50 rounded-[40px] border-2 border-dashed border-slate-100">
+                        <div className="py-20 text-center bg-slate-50/50 rounded-[18px] border-2 border-dashed border-slate-100">
                             <Share2 className="w-12 h-12 text-slate-100 mx-auto mb-4" />
                             <p className="text-slate-400 text-xs font-black uppercase tracking-widest italic">Không có chiến dịch nào</p>
                         </div>
@@ -387,12 +388,12 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
             )}
 
             {/* CREATE MODAL */}
-            {isCreateOpen && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
-                    <div className="bg-white rounded-[40px] w-full max-w-4xl max-h-[95vh] overflow-hidden shadow-2xl flex flex-col">
+            {isCreateOpen && createPortal(
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-[1px] z-[2147483642] flex items-center justify-center p-4 animate-in fade-in duration-300" style={{ zIndex: 2147483642 }}>
+                    <div className="bg-white rounded-[18px] w-full max-w-4xl max-h-[95vh] overflow-hidden shadow-2xl flex flex-col">
                         <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
                             <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-blue-600 rounded-2xl shadow-xl shadow-blue-500/20 flex items-center justify-center">
+                                <div className="w-12 h-12 bg-blue-600 rounded-[14px] shadow-xl shadow-blue-500/20 flex items-center justify-center">
                                     <Send className="w-6 h-6 text-white" />
                                 </div>
                                 <div>
@@ -406,13 +407,13 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
                         <div className="flex-1 overflow-y-auto p-8 bg-white cursor-default">
                             <div className="grid grid-cols-1 lg:grid-cols-5 gap-10">
                                 <div className="lg:col-span-3 space-y-8">
-                                    <div className="bg-orange-50/50 border border-orange-100 p-4 rounded-2xl flex gap-3 animate-in fade-in slide-in-from-top-2 duration-500">
-                                        <div className="w-8 h-8 bg-white rounded-xl shadow-sm flex items-center justify-center text-[#2563eb] shrink-0 border border-orange-50">
+                                    <div className="bg-red-50/50 border border-red-100 p-4 rounded-[14px] flex gap-3 animate-in fade-in slide-in-from-top-2 duration-500">
+                                        <div className="w-8 h-8 bg-white rounded-[var(--radius-md)] shadow-sm flex items-center justify-center text-[#2563eb] shrink-0 border border-red-50">
                                             <Info className="w-4 h-4" />
                                         </div>
                                         <div className="space-y-1">
                                             <p className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Lưu ý chính sách Zalo</p>
-                                            <p className="text-[11px] text-[#ca7900] font-bold leading-relaxed">Tin nhắn chỉ được gửi tới người dùng đã tương tác với OA trong vòng 7 ngày gần nhất. Hệ thống sẽ tự động lọc danh sách này.</p>
+                                            <p className="text-[11px] text-[var(--color-primary)] font-bold leading-relaxed">Tin nhắn chỉ được gửi tới người dùng đã tương tác với OA trong vòng 7 ngày gần nhất. Hệ thống sẽ tự động lọc danh sách này.</p>
                                         </div>
                                     </div>
 
@@ -474,7 +475,7 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
                                         </div>
                                         <div className="space-y-3">
                                             {newCamp.buttons.map((btn, i) => (
-                                                <div key={i} className="flex gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-100 animate-in slide-in-from-left-2 duration-300">
+                                                <div key={i} className="flex gap-3 bg-slate-50 p-3 rounded-[14px] border border-slate-100 animate-in slide-in-from-left-2 duration-300">
                                                     <Input className="flex-1" placeholder="Tên nút" value={btn.title} onChange={e => {
                                                         const btns = [...newCamp.buttons]; btns[i].title = e.target.value; setNewCamp({ ...newCamp, buttons: btns });
                                                     }} />
@@ -493,7 +494,7 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
                                 <div className="lg:col-span-2 space-y-10">
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Hình ảnh đính kèm</label>
-                                        <div className="relative aspect-video rounded-[32px] border-2 border-dashed border-slate-100 hover:bg-blue-50 transition-all flex flex-col items-center justify-center overflow-hidden bg-slate-50 group">
+                                        <div className="relative aspect-video rounded-[18px] border-2 border-dashed border-slate-100 hover:bg-blue-50 transition-all flex flex-col items-center justify-center overflow-hidden bg-slate-50 group">
                                             {selectedFile ? (
                                                 <>
                                                     <img src={URL.createObjectURL(selectedFile)} alt="Preview" className="absolute inset-0 w-full h-full object-cover" />
@@ -503,7 +504,7 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
                                                 </>
                                             ) : (
                                                 <div className="text-center space-y-3">
-                                                    <div className="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center mx-auto text-slate-300">
+                                                    <div className="w-12 h-12 bg-white rounded-[14px] shadow-sm flex items-center justify-center mx-auto text-slate-300">
                                                         <UploadCloud className="w-6 h-6" />
                                                     </div>
                                                     <div>
@@ -518,8 +519,8 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
 
                                     <div className="space-y-4">
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Xem trước tin nhắn</label>
-                                        <div className="bg-slate-50 p-2 rounded-[40px] border border-slate-100 shadow-inner">
-                                            <div className="bg-white rounded-[32px] shadow-sm overflow-hidden border border-slate-100">
+                                        <div className="bg-slate-50 p-2 rounded-[18px] border border-slate-100 shadow-inner">
+                                            <div className="bg-white rounded-[14px] shadow-sm overflow-hidden border border-slate-100">
                                                 {selectedFile ? <img src={URL.createObjectURL(selectedFile)} className="w-full aspect-[16/9] object-cover" /> : <div className="w-full aspect-[16/9] bg-slate-50 flex items-center justify-center text-slate-200"><ImageIcon className="w-10 h-10" /></div>}
                                                 <div className="p-5 space-y-2">
                                                     <p className="text-sm font-black text-slate-800 uppercase line-clamp-1">{newCamp.title || 'Tiêu đề'}</p>
@@ -546,36 +547,22 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
                                 icon={Send}
                                 onClick={handleCreate}
                                 isLoading={creating}
-                                className="text-xs py-3 px-8 shadow-2xl shadow-blue-500/20 rounded-2xl"
+                                className="text-xs py-3 px-8 shadow-2xl shadow-blue-500/20 rounded-[var(--radius-md)]"
                             >
                                 Gửi Chiến Dịch
                             </Button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                getMktPortalRoot()
             )}
 
             {/* DETAIL MODAL (DRAWER) */}
-            {selectedCampaign && (
-                <div className="fixed inset-0 z-[100] flex justify-end">
-                    <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity duration-300" onClick={() => setSelectedCampaign(null)} />
-                    
-                    {/* Floating Back Button on Backdrop */}
-                    <div 
-                        className="hidden lg:flex absolute left-0 top-0 bottom-0 right-[900px] items-center justify-center z-40"
-                        style={{ pointerEvents: 'none' }}
-                    >
-                        <button
-                            onClick={() => setSelectedCampaign(null)}
-                            className="w-12 h-12 rounded-full bg-slate-900/60 hover:bg-slate-900/80 text-white flex items-center justify-center shadow-2xl border border-slate-700/50 backdrop-blur-md transition-all duration-300 hover:scale-110 active:scale-95 cursor-pointer"
-                            style={{ pointerEvents: 'auto' }}
-                            title="Quay lại"
-                        >
-                            <ArrowLeft className="w-6 h-6" />
-                        </button>
-                    </div>
+            {selectedCampaign && createPortal(
+                <div className="fixed inset-0 z-[2147483625] flex justify-end" style={{ zIndex: 2147483625 }}>
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px] transition-opacity duration-300" onClick={() => setSelectedCampaign(null)} />
 
-                    <div className="relative bg-white w-full max-w-[900px] h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-500 rounded-none overflow-hidden">
+                    <div className="relative bg-white w-full max-w-[900px] h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-500 rounded-l-[18px] overflow-hidden">
                         <div className="p-5 border-b border-slate-50 flex justify-between items-center bg-slate-50/30">
                             <div className="flex items-center gap-3">
                                 <BarChart2 className="w-5 h-5 text-blue-600" />
@@ -630,8 +617,8 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
                                 <h4 className="font-black text-slate-800 uppercase tracking-widest text-[10px] flex items-center gap-2">
                                     <MessageSquare className="w-4 h-4 text-indigo-500" /> Xem lại nội dung đã gửi
                                 </h4>
-                                <div className="bg-slate-50 p-1.5 rounded-[32px] border border-slate-100 shadow-inner max-w-[340px] mx-auto">
-                                    <div className="bg-white rounded-[26px] shadow-sm overflow-hidden border border-slate-100">
+                                <div className="bg-slate-50 p-1.5 rounded-[18px] border border-slate-100 shadow-inner max-w-[340px] mx-auto">
+                                    <div className="bg-white rounded-[14px] shadow-sm overflow-hidden border border-slate-100">
                                         {selectedCampaign.image_url ? (
                                             <img src={selectedCampaign.image_url} className="w-full aspect-[16/9] object-cover" alt="" />
                                         ) : (
@@ -690,7 +677,7 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
                                     </div>
                                 </div>
 
-                                <div className="border border-slate-50 rounded-[32px] overflow-hidden shadow-sm">
+                                <div className="border border-slate-50 rounded-[18px] overflow-hidden shadow-sm">
                                     <table className="w-full text-[12px]">
                                         <thead className="bg-slate-50/50 text-slate-400 font-black text-[9px] uppercase tracking-widest text-left">
                                             <tr>
@@ -717,7 +704,7 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
                                                         </div>
                                                     </td>
                                                     <td className="p-4 text-center">
-                                                        <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest ${track.status === 'seen' ? 'bg-emerald-50 text-emerald-600' : track.status === 'reacted' ? 'bg-orange-50 text-orange-600' : 'bg-blue-50 text-blue-600'}`}>
+                                                        <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest ${track.status === 'seen' ? 'bg-emerald-50 text-emerald-600' : track.status === 'reacted' ? 'bg-red-50 text-[var(--color-primary)]' : 'bg-blue-50 text-blue-600'}`}>
                                                             {track.status === 'seen' ? 'Xem' : track.status === 'reacted' ? 'Chat' : 'Gửi'}
                                                         </span>
                                                     </td>
@@ -740,7 +727,8 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
                             </div>
                         </div>
                     </div>
-                </div>
+                </div>,
+                getMktPortalRoot()
             )}
 
 
@@ -775,7 +763,7 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
 // Sub-components
 const HeroStatCard = ({ label, value, icon: Icon, color, decor }: any) => {
     return (
-        <div className="stat-card bg-[var(--color-surface)] p-5 md:p-6 rounded-[var(--radius-xl)] border border-[var(--color-border-light)] shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-xl)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden min-h-[100px] group cursor-pointer w-full">
+        <div className="bg-[var(--color-surface)] p-5 md:p-6 rounded-[18px] border border-[var(--color-border-light)] shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-xl)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden min-h-[100px] flex items-center justify-between group cursor-pointer w-full">
             {decor && (
                 <div className="decor-svg" style={{ color: color }}>
                     {decor}
@@ -830,20 +818,20 @@ const DetailBox = ({ label, value, subLabel, color, icon: Icon }: any) => {
             text: 'text-slate-800',
             label: 'text-slate-400',
             iconColor: 'text-white',
-            iconBg: 'bg-gradient-to-br from-[#2563eb] to-[#ca7900] shadow-orange-500/20'
+            iconBg: 'bg-[var(--color-primary)] shadow-[var(--color-primary)]/20'
         }
     };
 
     const theme = themes[color] || themes.blue;
 
     return (
-        <div className={`p-5 rounded-[24px] border border-slate-100 shadow-sm flex items-center justify-between bg-white hover:shadow-md transition-all duration-300 group`}>
+        <div className={`p-5 rounded-[18px] border border-slate-100 shadow-sm flex items-center justify-between bg-white hover:shadow-md transition-all duration-300 group`}>
             <div className="flex-1">
                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{label}</p>
                 <h4 className="text-2xl font-black text-slate-800 tracking-tight">{value}</h4>
                 {subLabel && <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tight">{subLabel}</p>}
             </div>
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${theme.iconBg} ${theme.iconColor} shadow-lg shrink-0 transition-transform group-hover:scale-110`}>
+            <div className={`w-12 h-12 rounded-[14px] flex items-center justify-center ${theme.iconBg} ${theme.iconColor} shadow-lg shrink-0 transition-transform group-hover:scale-110`}>
                 <Icon className="w-6 h-6" />
             </div>
         </div>

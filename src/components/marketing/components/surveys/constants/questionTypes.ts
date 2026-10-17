@@ -42,7 +42,7 @@ export const IS_QUESTION_TYPE = (type: string): boolean =>
   !QUESTION_TYPE_DEFINITIONS.find(q => q.type === type)?.isLayout;
 
 export const DEFAULT_THEME = {
-  primaryColor: '#f59e0b',
+  primaryColor: '#BD1D2D',
   backgroundColor: '#f8fafc',
   cardBackground: '#ffffff',
   textColor: '#1e293b',
@@ -125,7 +125,7 @@ export function createDefaultBlock(type: import('../../../types/survey').Questio
     case 'image_block':
       return { ...base, label: 'Hình ảnh', imageWidth: '100%', imageAlign: 'center' };
     case 'button_block':
-      return { ...base, label: 'Nút bấm', buttonText: 'Nhấn vào đây', buttonUrl: '', buttonStyle: 'filled', buttonAlign: 'center', buttonColor: '#f59e0b' };
+      return { ...base, label: 'Nút bấm', buttonText: 'Nhấn vào đây', buttonUrl: '', buttonStyle: 'filled', buttonAlign: 'center', buttonColor: '#BD1D2D' };
     case 'link_block':
       return { ...base, label: 'Liên kết', linkText: 'Xem thêm', linkUrl: '', linkAlign: 'left' };
     case 'banner_block':

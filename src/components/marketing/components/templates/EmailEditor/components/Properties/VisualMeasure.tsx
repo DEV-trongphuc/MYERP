@@ -31,7 +31,7 @@ const VisualMeasure: React.FC<VisualMeasureProps> = ({ label, value, onChange, m
     };
 
     return (
-        <div className="space-y-2 p-3 bg-slate-50 rounded-2xl border border-slate-100">
+        <div className="space-y-2 p-3 bg-slate-50 rounded-[14px] border border-slate-100">
             <div className="flex justify-between items-center">
                 <div className="flex items-center gap-1.5">
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{label}</label>

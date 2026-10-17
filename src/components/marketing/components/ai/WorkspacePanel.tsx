@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
     X, Search, Grid3x3, Plus, Trash2, FileText, Image as ImageIcon,
     File, Download, ExternalLink, MoreVertical, Database
 } from 'lucide-react';
 import { FileAttachment } from '../../types';
 import { formatFileSize } from '../../utils/formatters';
+import { getMktPortalRoot } from '../../utils/portalRoot';
 
 interface WorkspacePanelProps {
     isOpen: boolean;
@@ -36,7 +38,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
     const getFileIcon = (doc: FileAttachment) => {
         const ext = doc.name.split('.').pop()?.toLowerCase();
         if (doc.type?.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(ext || '')) {
-            return <ImageIcon className="w-5 h-5 text-amber-600" />;
+            return <ImageIcon className="w-5 h-5 text-[var(--color-primary)]" />;
         }
         if (ext === 'pdf') {
             return <FileText className="w-5 h-5 text-rose-500" />;
@@ -44,7 +46,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
         return <File className="w-5 h-5 text-slate-500" />;
     };
 
-    return (
+    return createPortal(
         <>
             {/* Backdrop */}
             {isOpen && (
@@ -62,8 +64,8 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
                 {/* Header */}
                 <div className="h-20 flex items-center justify-between px-6 border-b border-slate-100 bg-white">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-brand/10 flex items-center justify-center">
-                            <Database className="w-5 h-5 text-brand" />
+                        <div className="w-10 h-10 rounded-xl bg-[var(--color-primary)]/10 flex items-center justify-center">
+                            <Database className="w-5 h-5 text-[var(--color-primary)]" />
                         </div>
                         <div>
                             <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight">
@@ -108,7 +110,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
                             placeholder="Tìm trong Workspace..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder:text-slate-400 focus:bg-white focus:border-brand focus:ring-2 focus:ring-brand/20 outline-none transition-all"
+                            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder:text-slate-400 focus:bg-white focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/20 outline-none transition-all"
                         />
                     </div>
                 </div>
@@ -118,25 +120,25 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
                     <button
                         onClick={() => setActiveTab('all')}
                         className={`pb-3 text-sm font-bold transition-colors relative ${activeTab === 'all'
-                            ? 'text-brand'
+                            ? 'text-[var(--color-primary)]'
                             : 'text-slate-400 hover:text-slate-600'
                             }`}
                     >
                         Tất cả tệp
                         {activeTab === 'all' && (
-                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand rounded-t-full" />
+                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--color-primary)] rounded-t-full" />
                         )}
                     </button>
                     <button
                         onClick={() => setActiveTab('drafts')}
                         className={`pb-3 text-sm font-bold transition-colors relative ${activeTab === 'drafts'
-                            ? 'text-brand'
+                            ? 'text-[var(--color-primary)]'
                             : 'text-slate-400 hover:text-slate-600'
                             }`}
                     >
                         Bản nhập
                         {activeTab === 'drafts' && (
-                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand rounded-t-full" />
+                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--color-primary)] rounded-t-full" />
                         )}
                     </button>
                     <button
@@ -157,7 +159,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
                             </p>
                             <button
                                 onClick={onUploadFile}
-                                className="mt-2 px-4 py-2 bg-brand text-white rounded-xl text-sm font-bold hover:bg-brand/90 transition-colors"
+                                className="mt-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-xl text-sm font-bold hover:bg-[var(--color-primary)]/90 transition-colors"
                             >
                                 Tải tệp đầu tiên
                             </button>
@@ -167,18 +169,18 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
                             <div
                                 key={doc.id || idx}
                                 onClick={() => onFileClick(doc)}
-                                className="group relative bg-white border border-slate-200 rounded-xl p-4 hover:border-brand hover:shadow-md transition-all cursor-pointer"
+                                className="group relative bg-white border border-slate-200 rounded-xl p-4 hover:border-[var(--color-primary)] hover:shadow-md transition-all cursor-pointer"
                             >
                                 <div className="flex items-start gap-3">
                                     {/* Icon */}
-                                    <div className="w-10 h-10 rounded-lg bg-slate-50 flex items-center justify-center shrink-0 group-hover:bg-brand/10 transition-colors">
+                                    <div className="w-10 h-10 rounded-lg bg-slate-50 flex items-center justify-center shrink-0 group-hover:bg-[var(--color-primary)]/10 transition-colors">
                                         {getFileIcon(doc)}
                                     </div>
 
                                     {/* Info */}
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-start justify-between gap-2">
-                                            <h3 className="text-sm font-semibold text-slate-800 truncate group-hover:text-brand transition-colors">
+                                            <h3 className="text-sm font-semibold text-slate-800 truncate group-hover:text-[var(--color-primary)] transition-colors">
                                                 {doc.name}
                                             </h3>
                                             {doc.source === 'workspace' && (
@@ -223,7 +225,8 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
                     )}
                 </div>
             </div>
-        </>
+        </>,
+        getMktPortalRoot()
     );
 };
 

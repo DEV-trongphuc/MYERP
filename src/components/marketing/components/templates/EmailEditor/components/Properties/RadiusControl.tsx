@@ -63,7 +63,7 @@ const RadiusControl: React.FC<RadiusControlProps> = ({ label, values, onChange }
     ];
 
     return (
-        <div className="space-y-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 transition-all">
+        <div className="space-y-4 p-4 bg-slate-50 rounded-[14px] border border-slate-100 transition-all">
             {/* Header */}
             <div className="flex justify-between items-center">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{label}</label>
@@ -92,7 +92,7 @@ const RadiusControl: React.FC<RadiusControlProps> = ({ label, values, onChange }
                                 type="number"
                                 value={singleVal}
                                 onChange={(e) => onChange({ borderRadius: `${Math.max(0, parseInt(e.target.value) || 0)}px` })}
-                                className="w-full text-right text-[11px] font-black text-slate-700 bg-slate-50 border border-slate-200 rounded-lg py-1.5 pr-6 pl-1 outline-none focus:border-amber-600"
+                                className="w-full text-right text-[11px] font-black text-slate-700 bg-slate-50 border border-slate-200 rounded-lg py-1.5 pr-6 pl-1 outline-none focus:border-[var(--color-primary)]"
                             />
                             <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400">px</span>
                         </div>
@@ -127,7 +127,7 @@ const RadiusControl: React.FC<RadiusControlProps> = ({ label, values, onChange }
                                     </div>
                                     <input
                                         type="number"
-                                        className="w-full pl-8 pr-6 py-2 text-right text-[11px] font-black rounded-xl border border-slate-200 outline-none focus:border-amber-600 transition-all bg-white text-slate-700 shadow-sm group-hover:border-slate-300"
+                                        className="w-full pl-8 pr-6 py-2 text-right text-[11px] font-black rounded-xl border border-slate-200 outline-none focus:border-[var(--color-primary)] transition-all bg-white text-slate-700 shadow-sm group-hover:border-slate-300"
                                         value={getCorner(idx)}
                                         onChange={e => updateCorner(idx, Math.max(0, parseInt(e.target.value) || 0))}
                                         placeholder="0"

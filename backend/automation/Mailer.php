@@ -16,12 +16,12 @@ class Mailer {
     private static $breovCh = null; // [PERF] Persistent Brevo API cURL handle (connection reuse)
     private $logBuffer = []; // Optimization: Batch logging
 
-    public function __construct($pdo, $baseUrl = API_BASE_URL, $defaultSender = 'marketing@ka-en.com.vn', $workspaceId = 0)
+    public function __construct($pdo, $baseUrl = API_BASE_URL, $defaultSender = 'marketing@ideas.edu.vn', $workspaceId = 0)
     {
         $this->pdo = $pdo;
         // Đảm bảo baseUrl không có dấu / ở cuối để nối chuỗi cho chuẩn
         $this->baseUrl = rtrim($baseUrl, '/');
-        $this->defaultSender = $defaultSender;
+        $this->defaultSender = ($defaultSender && $defaultSender !== 'marketing@ka-en.com.vn') ? $defaultSender : 'marketing@ideas.edu.vn';
         $this->workspaceId = (int) $workspaceId;
         $this->loadSettings();
     }
@@ -35,30 +35,178 @@ class Mailer {
 
     private function loadSettings()
     {
-        // [FIX P38-ML] SELECT * loaded ALL settings (tokens, API keys, large text blobs).
-        // Only 9 SMTP-related keys are actually accessed anywhere in this class.
-        // [FIX SCHEMA-30] mkt_system_settings now has composite PK (workspace_id, key).
-        // SMTP keys are stored under workspace_id=0 (global/shared) OR specific workspace_id.
-        // [SEC-TENANT] Load global (0) settings first, then overlay with workspace-specific rows.
-        // This follows the logic in api/settings.php.
-        $stmt = $this->pdo->prepare(
-            "SELECT `key`, `value` FROM mkt_system_settings 
-             WHERE workspace_id IN (0, ?) 
-             AND `key` IN ('smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from_email',
-                           'smtp_from_name','smtp_encryption','smtp_enabled','internal_qa_emails')
-             ORDER BY workspace_id ASC"
-        );
-        $stmt->execute([$this->workspaceId]);
         $this->smtpSettings = [];
-        foreach ($stmt->fetchAll() as $row) {
-            $this->smtpSettings[$row['key']] = $row['value'];
+
+        // 1. Load MYERP core system_settings first (so /settings SES & AppScript config works seamlessly)
+        try {
+            $sysStmt = $this->pdo->query(
+                "SELECT setting_key, setting_value FROM system_settings 
+                 WHERE setting_key IN (
+                     'email_provider','appscript_webhook_url',
+                     'ses_host','ses_username','ses_password','ses_sender_email','ses_sender_name',
+                     'smtp_port','verified_from_senders','qa_test_emails','automation_sandbox_mode'
+                 )"
+            );
+            if ($sysStmt) {
+                $sysMap = [];
+                foreach ($sysStmt->fetchAll(PDO::FETCH_ASSOC) as $sRow) {
+                    $sysMap[$sRow['setting_key']] = $sRow['setting_value'];
+                }
+                if (!empty($sysMap['email_provider'])) {
+                    $this->smtpSettings['email_provider'] = $sysMap['email_provider'];
+                }
+                if (!empty($sysMap['appscript_webhook_url'])) {
+                    $this->smtpSettings['appscript_webhook_url'] = $sysMap['appscript_webhook_url'];
+                }
+                if (!empty($sysMap['ses_host'])) {
+                    $this->smtpSettings['smtp_host'] = $sysMap['ses_host'];
+                }
+                if (!empty($sysMap['ses_username'])) {
+                    $this->smtpSettings['smtp_user'] = $sysMap['ses_username'];
+                }
+                if (!empty($sysMap['ses_password'])) {
+                    $this->smtpSettings['smtp_pass'] = $sysMap['ses_password'];
+                }
+                if (!empty($sysMap['smtp_port'])) {
+                    $this->smtpSettings['smtp_port'] = $sysMap['smtp_port'];
+                }
+                if (!empty($sysMap['ses_sender_name'])) {
+                    $this->smtpSettings['smtp_from_name'] = $sysMap['ses_sender_name'];
+                }
+                if (!empty($sysMap['qa_test_emails'])) {
+                    $this->smtpSettings['internal_qa_emails'] = str_replace([',', ';'], "\n", (string)$sysMap['qa_test_emails']);
+                }
+                $combinedFrom = [];
+                if (!empty($sysMap['verified_from_senders'])) {
+                    foreach (preg_split('/[,;\n\r]+/', (string)$sysMap['verified_from_senders']) as $em) {
+                        $em = strtolower(trim($em));
+                        if ($em !== '' && filter_var($em, FILTER_VALIDATE_EMAIL)) {
+                            $combinedFrom[$em] = $em;
+                        }
+                    }
+                }
+                if (!empty($sysMap['ses_sender_email'])) {
+                    $sesEm = strtolower(trim((string)$sysMap['ses_sender_email']));
+                    if ($sesEm !== '' && filter_var($sesEm, FILTER_VALIDATE_EMAIL)) {
+                        $combinedFrom[$sesEm] = $sesEm;
+                    }
+                }
+                if (!empty($combinedFrom)) {
+                    $this->smtpSettings['smtp_from_email'] = implode(', ', array_values($combinedFrom));
+                    $this->smtpSettings['verified_from_senders'] = implode(', ', array_values($combinedFrom));
+                }
+                if (!empty($this->smtpSettings['smtp_host']) && !empty($this->smtpSettings['smtp_user']) && !empty($this->smtpSettings['smtp_pass'])) {
+                    $this->smtpSettings['smtp_enabled'] = '1';
+                }
+            }
+        } catch (\Throwable $ignoreSys) {
         }
+
+        // 2. Overlay with workspace-specific mkt_system_settings (if non-empty)
+        try {
+            $stmt = $this->pdo->prepare(
+                "SELECT `key`, `value` FROM mkt_system_settings 
+                 WHERE workspace_id IN (0, ?) 
+                 AND `key` IN ('smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from_email',
+                               'smtp_from_name','smtp_encryption','smtp_enabled','internal_qa_emails',
+                               'verified_from_senders','email_provider','appscript_webhook_url')
+                 ORDER BY workspace_id ASC"
+            );
+            $stmt->execute([$this->workspaceId]);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $k = $row['key'];
+                $v = $row['value'];
+                if ($v !== null && trim((string)$v) !== '') {
+                    if ($k === 'smtp_from_email' && !empty($this->smtpSettings['smtp_from_email'])) {
+                        // Merge verified sender emails from both sources
+                        $merged = [];
+                        foreach (preg_split('/[,;\n\r]+/', $v . ',' . $this->smtpSettings['smtp_from_email']) as $em) {
+                            $em = strtolower(trim($em));
+                            if ($em !== '' && filter_var($em, FILTER_VALIDATE_EMAIL) && $em !== 'marketing@ka-en.com.vn' && $em !== 'test@ka-en.com.vn') {
+                                $merged[$em] = $em;
+                            }
+                        }
+                        if (!empty($merged)) {
+                            $this->smtpSettings['smtp_from_email'] = implode(', ', array_values($merged));
+                        }
+                    } else {
+                        $this->smtpSettings[$k] = $v;
+                    }
+                }
+            }
+            if (!empty($this->smtpSettings['smtp_host']) && !empty($this->smtpSettings['smtp_user']) && !empty($this->smtpSettings['smtp_pass']) && !isset($this->smtpSettings['smtp_enabled'])) {
+                $this->smtpSettings['smtp_enabled'] = '1';
+            }
+        } catch (\Throwable $ignoreMkt) {
+        }
+    }
+
+    public function getVerifiedSenders(): array
+    {
+        $senders = [];
+        $rawSources = [
+            $this->smtpSettings['verified_from_senders'] ?? '',
+            $this->smtpSettings['smtp_from_email'] ?? '',
+        ];
+        foreach ($rawSources as $raw) {
+            if (!empty($raw)) {
+                foreach (preg_split('/[,;\n\r]+/', (string)$raw) as $em) {
+                    $em = strtolower(trim($em));
+                    if ($em !== '' && filter_var($em, FILTER_VALIDATE_EMAIL) && $em !== 'marketing@ka-en.com.vn' && $em !== 'test@ka-en.com.vn') {
+                        $senders[$em] = $em;
+                    }
+                }
+            }
+        }
+
+        // Check verified_senders table
+        try {
+            $vsStmt = $this->pdo->prepare("SELECT email FROM verified_senders WHERE workspace_id IN (0, ?) AND is_verified = 1 ORDER BY is_default DESC, id ASC");
+            $vsStmt->execute([$this->workspaceId]);
+            foreach ($vsStmt->fetchAll(PDO::FETCH_COLUMN) as $em) {
+                $em = strtolower(trim((string)$em));
+                if ($em !== '' && filter_var($em, FILTER_VALIDATE_EMAIL) && $em !== 'marketing@ka-en.com.vn') {
+                    $senders[$em] = $em;
+                }
+            }
+        } catch (\Throwable $ignoreVs) {
+        }
+
+        if (!empty($this->smtpSettings['smtp_user']) && filter_var($this->smtpSettings['smtp_user'], FILTER_VALIDATE_EMAIL)) {
+            $uEm = strtolower(trim($this->smtpSettings['smtp_user']));
+            $senders[$uEm] = $uEm;
+        }
+
+        if (empty($senders)) {
+            foreach (['tuyensinh@ideas.edu.vn', 'cskh@ideas.edu.vn', 'marketing@ideas.edu.vn', 'systemnoti@ideas.edu.vn'] as $defEm) {
+                $senders[$defEm] = $defEm;
+            }
+        }
+
+        return array_values($senders);
+    }
+
+    public function getDefaultSenderEmail(): string
+    {
+        if (!empty($this->dynamicSender) && filter_var($this->dynamicSender, FILTER_VALIDATE_EMAIL)) {
+            return $this->dynamicSender;
+        }
+        $verified = $this->getVerifiedSenders();
+        return $verified[0] ?? $this->defaultSender;
+    }
+
+    public function getDefaultSenderName(): string
+    {
+        if (!empty($this->dynamicSenderName)) {
+            return $this->dynamicSenderName;
+        }
+        return !empty($this->smtpSettings['smtp_from_name']) ? $this->smtpSettings['smtp_from_name'] : 'Viện Quốc Tế IDEAS';
     }
 
     public function setDynamicSender($email)
     {
-        if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $this->dynamicSender = $email;
+        if ($email && filter_var(trim((string)$email), FILTER_VALIDATE_EMAIL)) {
+            $this->dynamicSender = strtolower(trim((string)$email));
         } else {
             $this->dynamicSender = null;
         }
@@ -66,7 +214,7 @@ class Mailer {
 
     public function setDynamicSenderName($name)
     {
-        $this->dynamicSenderName = !empty($name) ? trim($name) : null;
+        $this->dynamicSenderName = !empty($name) ? trim((string)$name) : null;
     }
 
     /**
@@ -82,39 +230,52 @@ class Mailer {
             $this->loadSettings();
         }
 
-        $fromEmail = $this->dynamicSender;
-
-        if (!$fromEmail) {
-            $fromEmailRaw = $this->smtpSettings['smtp_from_email'] ?? '';
-            $fromEmailArray = array_map('trim', explode(',', $fromEmailRaw));
-            $fromEmail = filter_var($fromEmailArray[0] ?? '', FILTER_VALIDATE_EMAIL) ? $fromEmailArray[0] : null;
-        }
-
-        if (!$fromEmail) {
-            $fromEmail = (isset($this->smtpSettings['smtp_user']) && filter_var($this->smtpSettings['smtp_user'], FILTER_VALIDATE_EMAIL))
-                ? $this->smtpSettings['smtp_user'] : $this->defaultSender;
-        }
+        $fromEmail = $this->getDefaultSenderEmail();
 
         // [GUARD] Prevent PHPMailer "From address not set" fatal exception on empty sender.
-        // This can happen when all SMTP settings are misconfigured or defaultSender is blank.
         if (empty($fromEmail) || !filter_var($fromEmail, FILTER_VALIDATE_EMAIL)) {
-            $error = "[Mailer] dispatchRaw aborted: no valid from-address resolved. Check smtp_from_email / smtp_user in mkt_system_settings for workspace {$this->workspaceId}.";
+            $error = "[Mailer] dispatchRaw aborted: no valid from-address resolved. Check smtp_from_email / verified_from_senders in settings.";
             error_log($error);
             return false;
         }
 
-        $fromName = $this->dynamicSenderName ?: ($this->smtpSettings['smtp_from_name'] ?? "Marketing System");
+        $fromName = $this->getDefaultSenderName();
 
         $success = false;
-        if (isset($this->smtpSettings['smtp_enabled']) && $this->smtpSettings['smtp_enabled'] === '1') {
+        $provider = strtolower($this->smtpSettings['email_provider'] ?? '');
+        $appscriptUrl = trim($this->smtpSettings['appscript_webhook_url'] ?? '');
+
+        if (isset($this->smtpSettings['smtp_enabled']) && $this->smtpSettings['smtp_enabled'] === '1' && !empty($this->smtpSettings['smtp_host'])) {
             $host = strtolower($this->smtpSettings['smtp_host'] ?? '');
-            // [OPTIMIZATION] Prefer SMTP Keep-Alive for Brevo Relay to reach 14+ emails/sec
-            // Only use Brevo API if it's NOT a relay host or if specifically desired. 
             if ((strpos($host, 'brevo') !== false || strpos($host, 'sendinblue') !== false) && strpos($host, 'smtp') === false) {
                 $success = $this->sendViaBrevoAPI($toEmail, $subject, $htmlContent, $fromEmail, $fromName, $attachments, $error, $ccEmails, $bccEmails);
             } else {
                 $success = $this->sendViaPHPMailer($toEmail, $subject, $htmlContent, $fromEmail, $fromName, $attachments, $error, $ccEmails, $bccEmails);
             }
+        } elseif ($provider === 'appscript' && !empty($appscriptUrl)) {
+            $payload = json_encode([
+                'type' => 'custom',
+                'email' => $toEmail,
+                'fromEmail' => $fromEmail,
+                'fromName' => $fromName,
+                'cc' => !empty($ccEmails) ? implode(',', $ccEmails) : '',
+                'bcc' => !empty($bccEmails) ? implode(',', $bccEmails) : '',
+                'subject' => $subject,
+                'htmlBody' => $htmlContent
+            ]);
+            $ch = curl_init($appscriptUrl);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 20);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+            $res = curl_exec($ch);
+            if ($res === false) {
+                $error = "AppScript cURL Error: " . curl_error($ch);
+            }
+            curl_close($ch);
+            $success = ($res !== false);
         } else {
             $headers = array('MIME-Version: 1.0', 'Content-type: text/html; charset=UTF-8', 'From: ' . $fromName . ' <' . $fromEmail . '>', 'Reply-To: ' . $fromEmail);
             if (!empty($ccEmails)) {
@@ -127,11 +288,8 @@ class Mailer {
         }
 
         $this->sentInSession++;
-        // [PERF] SMTP Pooling: Reconnect every 500 emails (increased from 200).
-        // At 14 mails/sec, this reduces reconnect frequency: every 36s instead of every 14s.
-        // Each TLS reconnect costs ~0.3-0.5s. Raising to 500 recovers ~2-3% throughput.
         if ($this->sentInSession >= 500) {
-            $this->closeConnection(); // smtpClose() + reset instance
+            $this->closeConnection();
             $this->sentInSession = 0;
         }
 
@@ -193,14 +351,12 @@ class Mailer {
 
         $cleanHtmlContent = $htmlContent;
 
-        // 1. Resolve HTML with Tracking (Optimized with Local Cache Template)
+        // 1. Resolve HTML with Tracking (Safe Per-Content Cache)
         if (!$isQACopy) {
-            // [PERF FIX] Use caller-supplied templateHash when available so that ALL subscribers
-            // in the same campaign/flow-step share ONE cache slot. Without this, passing
-            // personalized $htmlContent (per-subscriber {{first_name}} replaced) causes
-            // a different md5 key for every subscriber → cache misses 100% of the time.
-            // Callers compute: $templateHash = md5($rawHtml . $campaignId) once per batch.
-            $cacheKey = $templateHash ?? md5($htmlContent . ($campaignId ?? '') . ($flowId ?? '') . ($stepId ?? $reminderId ?? ''));
+            // [FIX BUG-1] Always include $htmlContent in the cache key so personalized HTML
+            // (where merge tags like {{full_name}}, {{email}}, {{program}} were already replaced)
+            // never leaks Recipient #1's data to Recipients #2..N when a static $templateHash is passed.
+            $cacheKey = md5($htmlContent . '|' . ($campaignId ?? '') . '|' . ($flowId ?? '') . '|' . ($stepId ?? $reminderId ?? '') . '|' . ($variant ?? ''));
 
             if (!isset(self::$htmlTemplateCache[$cacheKey])) {
                 // If not cached, build the template with PLACEHOLDERS for sid and email
@@ -210,9 +366,22 @@ class Mailer {
                 // Check for unsubscribe tags matching {{unsubscribe_url}} or {{unsubscribeLink}} (including URL encoded brackets)
                 $trackingHtml = preg_replace('/(?:\{\{|%7B%7B)\s*unsubscribe(?:_url|Link)\s*(?:\}\}|%7D%7D)/i', $unsubPlaceholder, $trackingHtml);
 
+                // [FIX BUG-2] Also detect any href that was already resolved to webhook.php?type=unsubscribe or unsubscribe.php
+                // by replaceMergeTags() before Mailer::send() was called, normalizing it to $unsubPlaceholder.
+                $trackingHtml = preg_replace(
+                    '/(href\s*=\s*(["\']))[^"\']*(?:webhook\.php\?type=unsubscribe|unsubscribe\.php)[^"\']*(\2)/i',
+                    '$1' . $unsubPlaceholder . '$3',
+                    $trackingHtml
+                );
+                $trackingHtml = preg_replace(
+                    '/https?:\/\/[^"\'\s>]*?(?:webhook\.php\?type=unsubscribe|unsubscribe\.php)[^"\'\s>]*/i',
+                    $unsubPlaceholder,
+                    $trackingHtml
+                );
+
                 // Auto-fix any link that visually contains "unsubscribe" or "hủy đăng ký", replacing its href
                 $trackingHtml = preg_replace_callback(
-                    '/<a[^>]*href=["\']([^"\']*)["\'][^>]*>(?P<text>.*?(?:unsubscribe|hủy đăng ký|huy dang ky).*?)<\/a>/si',
+                    '/<a[^>]*href=["\']([^"\']*)["\'][^>]*>(?P<text>.*?(?:unsubscribe|hủy đăng ký|huy dang ky|ngừng nhận tin).*?)<\/a>/si',
                     function($m) use ($unsubPlaceholder) {
                         return preg_replace('/href=(["\'])' . preg_quote($m[1], '/') . '\1/i', 'href="' . $unsubPlaceholder . '"', $m[0], 1);
                     },
@@ -220,7 +389,11 @@ class Mailer {
                 );
 
                 $skipAutoFooter = (strpos($trackingHtml, '<!-- skip-unsubscribe-footer -->') !== false);
-                $hasUnsubTag = (strpos($trackingHtml, $unsubPlaceholder) !== false);
+                $hasUnsubTag = (
+                    strpos($trackingHtml, $unsubPlaceholder) !== false ||
+                    stripos($trackingHtml, 'webhook.php?type=unsubscribe') !== false ||
+                    stripos($trackingHtml, 'unsubscribe.php') !== false
+                );
 
                 if (!$hasUnsubTag && !$skipAutoFooter) {
                     $footerHtml = "
@@ -247,10 +420,10 @@ class Mailer {
             }
 
             // Replace personal data into the cached template (Fast string replacement)
-            $unsubUrl = $this->baseUrl . "/webhook.php?type=unsubscribe&sid=$subscriberId" .
-                ($flowId ? "&fid=$flowId" : "") .
-                ($campaignId ? "&cid=$campaignId" : "") .
-                ($stepId ? "&rid=$stepId" : ($reminderId ? "&rid=$reminderId" : ""));
+            $unsubUrl = $this->baseUrl . "/webhook.php?type=unsubscribe&sid=" . urlencode((string)$subscriberId) .
+                ($flowId ? "&fid=" . urlencode((string)$flowId) : "") .
+                ($campaignId ? "&cid=" . urlencode((string)$campaignId) : "") .
+                ($stepId ? "&rid=" . urlencode((string)$stepId) : ($reminderId ? "&rid=" . urlencode((string)$reminderId) : ""));
 
             $trackedHtml = str_replace(
                 ["[[SID_PLACEHOLDER]]", "[[EMAIL_PLACEHOLDER]]", "{{unsub_url_placeholder}}", "[[T_PLACEHOLDER]]", "[[VAR_PLACEHOLDER]]"],
@@ -376,7 +549,13 @@ class Mailer {
             if ($originalUrl === '' || preg_match('/^(?:#|mailto:|tel:|javascript:|data:|\{\{)/i', $originalUrl)) {
                 return $m[0];
             }
-            if (strpos($originalUrl, $this->baseUrl . '/webhook.php') !== false || strpos($originalUrl, '/webhook.php?type=') !== false) {
+            if (
+                strpos($originalUrl, $this->baseUrl . '/webhook.php') !== false ||
+                stripos($originalUrl, 'webhook.php?type=click') !== false ||
+                stripos($originalUrl, 'webhook.php?type=unsubscribe') !== false ||
+                stripos($originalUrl, '/webhook.php?type=') !== false ||
+                stripos($originalUrl, 'unsubscribe.php') !== false
+            ) {
                 return $m[0];
             }
 

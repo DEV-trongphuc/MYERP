@@ -49,7 +49,7 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ value, onChange, options, l
                 </button>
 
                 {isOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl shadow-2xl py-2 z-50 max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in slide-in-from-top-2 zoom-in-95">
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-[14px] shadow-2xl py-2 z-50 max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in slide-in-from-top-2 zoom-in-95">
                         {options.map((option) => (
                             <button
                                 key={option.value}

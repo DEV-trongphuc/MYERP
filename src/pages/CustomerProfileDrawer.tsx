@@ -28,6 +28,7 @@ const DepositDetailDrawer = lazy(() => import('../components/DepositDetailDrawer
 const TicketDrawer = lazy(() => import('./TicketDrawer').then(module => ({ default: module.TicketDrawer })));
 import { CustomerJourneyAIPanel } from '../components/CustomerJourneyAIPanel';
 import { CustomerOmnichannelJourneyTab } from '../components/contacts/CustomerOmnichannelJourneyTab';
+import { CrmSendTemplateEmailModal, CrmBulkMarketingModal } from '../components/crm/CrmMarketingModals';
 import { canViewOmnichannelJourney } from '../utils/roleUtils';
 import { ReportDataModal } from '../components/ui/ReportDataModal';
 import { Skeleton, StatRowSkeleton } from '../components/ui/Skeleton';
@@ -385,13 +386,13 @@ const resolveAttachmentUrl = (url: string | null | undefined): string => {
 
 const TABS = [
   { id: 'info', label: 'Thông tin chung', icon: <User size={16} /> },
-  { id: 'journey360', label: 'Hành trình & Đa kênh 360°', icon: <Activity size={14} /> },
   { id: 'timeline', label: 'Tương tác', icon: <History size={16} /> },
   { id: 'learning', label: 'Học tập & Học vụ', icon: <BookOpen size={16} /> },
   { id: 'tags', label: 'Phân loại', icon: <TagIcon size={16} /> },
   { id: 'tasks', label: 'Công việc', icon: <CheckSquare size={16} /> },
   { id: 'docs', label: 'Hồ sơ & Tài liệu', icon: <Paperclip size={16} /> },
   { id: 'scoring', label: 'Scoring', icon: <Target size={16} /> },
+  { id: 'journey360', label: 'Hành trình', icon: <Activity size={14} /> },
   { id: 'deals', label: 'Thanh toán', icon: <CreditCard size={16} /> },
   { id: 'expenses', label: 'Chi phí', icon: <DollarSign size={16} /> },
   { id: 'tickets', label: 'Helpdesk', icon: <LifeBuoy size={16} /> },
@@ -2132,6 +2133,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   }, [contact, formData]);
 
   const [showCallLogger, setShowCallLogger] = useState(false);
+  const [showSendTemplateEmailModal, setShowSendTemplateEmailModal] = useState(false);
+  const [showBulkMarketingModal, setShowBulkMarketingModal] = useState<{ isOpen: boolean; mode: 'list' | 'flow' }>({ isOpen: false, mode: 'list' });
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [meetingToComplete, setMeetingToComplete] = useState<any | null>(null);
   const [proofImageFile, setProofImageFile] = useState<File | null>(null);
@@ -5717,6 +5720,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       showDriveLinkModal ||
       showExtractIdModal ||
       showAcademicEmailModal ||
+      showSendTemplateEmailModal ||
+      showBulkMarketingModal.isOpen ||
       showCloneModal ||
       showManageModal ||
       showAvatarModal ||
@@ -5752,6 +5757,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         if (showExpenseModal) { setShowExpenseModal(false); return; }
         if (showExtractIdModal) { setShowExtractIdModal(false); return; }
         if (showDriveLinkModal) { setShowDriveLinkModal(false); return; }
+        if (showSendTemplateEmailModal) { setShowSendTemplateEmailModal(false); return; }
+        if (showBulkMarketingModal.isOpen) { setShowBulkMarketingModal(prev => ({ ...prev, isOpen: false })); return; }
         if (showAcademicEmailModal) { setShowAcademicEmailModal(false); return; }
         if (showCloneModal) { setShowCloneModal(false); return; }
         if (showManageModal) { setShowManageModal(false); return; }
@@ -8159,13 +8166,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           </div>
                         )}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Mail size={12} className="text-muted" />
+                          <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} onClick={() => setShowSendTemplateEmailModal(true)} title="Gửi Email Mẫu cá nhân hóa">
+                            <Mail size={12} style={{ color: 'var(--color-primary)' }} />
                           </div>
                           {(isProfileLoading && !formData.email && !contact?.email) ? (
                             <Skeleton width={130} height={16} borderRadius={4} />
                           ) : (
-                            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>{formData.email || 'contact@email.com'}</span>
+                            <span onClick={() => setShowSendTemplateEmailModal(true)} style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', cursor: 'pointer' }} title="Nhấn để gửi Email mẫu">{formData.email || 'contact@email.com'}</span>
                           )}
                           {formData.email && (
                             <button
@@ -9313,7 +9320,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               const tabGroups = [
                                 {
                                   title: 'Thông tin & Nhật ký',
-                                  tabs: ['info', 'journey360', 'timeline', 'tags', 'tasks', 'scoring']
+                                  tabs: ['info', 'timeline', 'tags', 'tasks', 'scoring', 'journey360']
                                 },
                                 {
                                   title: 'Học tập & Học vụ',
@@ -9540,7 +9547,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               const tabGroups = [
                                 {
                                   title: 'Thông tin & Nhật ký',
-                                  tabs: ['info', 'journey360', 'timeline', 'tags', 'tasks', 'scoring']
+                                  tabs: ['info', 'timeline', 'tags', 'tasks', 'scoring', 'journey360']
                                 },
                                 {
                                   title: 'Học tập & Học vụ',
@@ -13268,6 +13275,28 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           <p style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', marginTop: 2, marginBottom: 0 }}>Lưu vết toàn bộ quá trình chăm sóc khách hàng</p>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, position: 'relative' }}>
+                          {/* Send Template Email Button */}
+                          <button
+                            type="button"
+                            className="btn outline sm"
+                            onClick={() => setShowSendTemplateEmailModal(true)}
+                            style={{ fontWeight: 700, borderRadius: '8px', padding: '6px 10px', fontSize: '0.78rem', height: '34px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                            title="Gửi Email mẫu cá nhân hóa & tự động lưu nhật ký"
+                          >
+                            <Mail size={13} style={{ color: 'var(--color-primary)' }} />
+                            <span>Gửi Email mẫu</span>
+                          </button>
+                          {/* Marketing List / Flow Button */}
+                          <button
+                            type="button"
+                            className="btn outline sm"
+                            onClick={() => setShowBulkMarketingModal({ isOpen: true, mode: 'flow' })}
+                            style={{ fontWeight: 700, borderRadius: '8px', padding: '6px 10px', fontSize: '0.78rem', height: '34px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                            title="Thêm vào Danh sách Marketing hoặc kích hoạt Kịch bản Automation"
+                          >
+                            <Sparkles size={13} style={{ color: 'var(--color-primary)' }} />
+                            <span>List / Flow</span>
+                          </button>
                           {/* Add Interaction Button */}
                           <button 
                             className="btn primary sm" 
@@ -16010,6 +16039,47 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       </>
      )}
     </AnimatePresence>
+
+      <CrmSendTemplateEmailModal
+        isOpen={showSendTemplateEmailModal}
+        onClose={() => setShowSendTemplateEmailModal(false)}
+        zIndex={effectiveZIndex + 25}
+        contacts={[{
+          ...contact,
+          ...formData,
+          id: Number(effectiveContactId || contact?.id || 0),
+          full_name: fullName,
+          email: formData?.email || contact?.email,
+          phone: formData?.phone || contact?.phone,
+          program: formData?.program || contact?.program,
+          stage_name: formData?.stage_name || contact?.stage_name,
+        }]}
+        onSuccess={() => {
+          fetchData('timeline');
+          fetchData('info');
+        }}
+      />
+      <CrmBulkMarketingModal
+        isOpen={showBulkMarketingModal.isOpen}
+        onClose={() => setShowBulkMarketingModal(prev => ({ ...prev, isOpen: false }))}
+        initialMode={showBulkMarketingModal.mode}
+        zIndex={effectiveZIndex + 25}
+        contactIds={[Number(effectiveContactId || contact?.id || 0)].filter(Boolean)}
+        contacts={[{
+          ...contact,
+          ...formData,
+          id: Number(effectiveContactId || contact?.id || 0),
+          full_name: fullName,
+          email: formData?.email || contact?.email,
+          phone: formData?.phone || contact?.phone,
+          program: formData?.program || contact?.program,
+          stage_name: formData?.stage_name || contact?.stage_name,
+        }]}
+        onSuccess={() => {
+          fetchData('timeline');
+          fetchData('info');
+        }}
+      />
 
       <CallLoggerModal
         isOpen={showCallLogger}

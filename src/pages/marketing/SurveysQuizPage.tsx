@@ -4,8 +4,8 @@ import { Survey } from '../../components/marketing/types/survey';
 import {
     Plus, BarChart2, Globe, Trash2, FileText,
     LayoutGrid, Ticket, PenSquare, PenLine,
-    Link2, Copy, Check, ExternalLink, QrCode, Lightbulb, Loader2,
-    Users, Star, List, PauseCircle
+    Link2, Copy, Check, ExternalLink, QrCode, Lightbulb,
+    Users, Star, List, PauseCircle, ClipboardList, Clock, HelpCircle
 } from 'lucide-react';
 import Modal from '../../components/marketing/components/common/Modal';
 import ConfirmModal from '../../components/marketing/components/common/ConfirmModal';
@@ -17,7 +17,6 @@ import StatGrid from '../../components/marketing/components/common/StatGrid';
 import Panel from '../../components/marketing/components/common/Panel';
 import Toolbar from '../../components/marketing/components/common/Toolbar';
 import SearchBox from '../../components/marketing/components/common/SearchBox';
-import Skeleton from '../../components/marketing/components/common/Skeleton';
 import { api } from '../../components/marketing/services/storageAdapter';
 import { toast } from 'react-hot-toast';
 import { useTheme } from '../../components/marketing/contexts/ThemeContext';
@@ -29,10 +28,10 @@ const SurveyGuideModal = React.lazy(() => import('../../components/marketing/com
 
 // ─── Status config ───────────────────────────────────────────────────────────
 const STATUS = {
-    draft:  { label: 'Bản nháp',   dotClass: 'bg-slate-400',                 badgeClass: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700' },
-    active: { label: 'Đang chạy',  dotClass: 'bg-emerald-500 animate-pulse', badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/50' },
-    paused: { label: 'Tạm dừng',   dotClass: 'bg-amber-500',                 badgeClass: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/50' },
-    closed: { label: 'Đã đóng',    dotClass: 'bg-rose-500',                  badgeClass: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/50' },
+    draft:  { label: 'Bản nháp',   dotClass: 'bg-amber-500',                 badgeClass: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/50', iconBg: 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200/80 dark:border-amber-800/40' },
+    active: { label: 'Đang chạy',  dotClass: 'bg-emerald-500 animate-pulse', badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/50', iconBg: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-800/40' },
+    paused: { label: 'Tạm dừng',   dotClass: 'bg-rose-500',                  badgeClass: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/50', iconBg: 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200/80 dark:border-rose-800/40' },
+    closed: { label: 'Đã đóng',    dotClass: 'bg-slate-400',                 badgeClass: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700', iconBg: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700' },
 };
 
 // ─── Confirm Delete Modal ────────────────────────────────────────────────────
@@ -293,8 +292,8 @@ const CreateSurveyModal: React.FC<{
                         disabled={!name.trim() || isLoading}
                         className="h-9 px-4 inline-flex items-center gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white text-[13px] font-semibold hover:bg-[var(--color-primary-hover)] disabled:opacity-50 transition-colors"
                     >
-                        {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                        Tạo khảo sát
+                        <Plus className="w-4 h-4" />
+                        {isLoading ? 'Đang tạo...' : 'Tạo khảo sát'}
                     </button>
                 </div>
             </div>
@@ -315,6 +314,7 @@ const SurveyCard: React.FC<{
     const responses = survey.response_count ?? 0;
     const nps = survey.avg_nps;
     const statusCfg = STATUS[survey.status as keyof typeof STATUS] ?? STATUS.draft;
+    const publicUrl = survey.slug ? `${window.location.origin}/s/${survey.slug}` : null;
 
     if (viewMode === 'list') {
         return (
@@ -324,8 +324,8 @@ const SurveyCard: React.FC<{
             >
                 <td className="px-4 py-3">
                     <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-9 h-9 rounded-[var(--radius-md)] bg-[var(--color-primary-light)] text-[var(--color-primary)] flex items-center justify-center flex-shrink-0">
-                            <FileText className="w-4 h-4" />
+                        <div className={`w-9 h-9 rounded-[12px] flex items-center justify-center flex-shrink-0 ${statusCfg.iconBg}`}>
+                            <ClipboardList className="w-4 h-4" />
                         </div>
                         <div className="min-w-0">
                             <p className="text-[13px] font-semibold text-[var(--color-text)] group-hover:text-[var(--color-primary)] transition-colors truncate max-w-[320px]">
@@ -347,15 +347,21 @@ const SurveyCard: React.FC<{
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                     {survey.slug ? (
-                        <button
-                            type="button"
-                            onClick={onSlugClick}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[var(--radius-sm)] bg-[var(--color-primary-light)] text-[var(--color-primary)] text-xs font-medium hover:opacity-85 transition-opacity"
-                            title="Xem / chia sẻ khảo sát"
+                        <div
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (publicUrl) {
+                                    navigator.clipboard.writeText(publicUrl);
+                                    toast.success('Đã sao chép link');
+                                }
+                            }}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[10px] bg-[var(--color-bg)] border border-[var(--color-border)] text-xs text-[var(--color-text-muted)] font-mono hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                            title="Sao chép link khảo sát"
                         >
-                            <Link2 className="w-3 h-3 flex-shrink-0" />
-                            <span className="truncate max-w-[180px] font-mono">/s/{survey.slug}</span>
-                        </button>
+                            <Link2 className="w-3.5 h-3.5 flex-shrink-0" />
+                            <span className="truncate max-w-[180px]">/s/{survey.slug}</span>
+                            <Copy className="w-3 h-3 ml-1 opacity-60" />
+                        </div>
                     ) : (
                         <span className="text-xs text-[var(--color-text-muted)] italic">Chưa xuất bản</span>
                     )}
@@ -391,7 +397,7 @@ const SurveyCard: React.FC<{
                         <button
                             type="button"
                             onClick={onEdit}
-                            className="h-8 px-2.5 inline-flex items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-medium text-[var(--color-text)] hover:bg-[var(--color-bg)] transition-colors"
+                            className="h-8 px-2.5 inline-flex items-center gap-1 rounded-[12px] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-medium text-[var(--color-text)] hover:bg-[var(--color-bg)] transition-colors"
                             title="Thiết kế khảo sát"
                         >
                             <PenLine className="w-3.5 h-3.5" />
@@ -400,7 +406,7 @@ const SurveyCard: React.FC<{
                         <button
                             type="button"
                             onClick={onAnalytics}
-                            className="h-8 px-2.5 inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--color-primary)] text-white text-xs font-semibold hover:bg-[var(--color-primary-hover)] transition-colors"
+                            className="h-8 px-2.5 inline-flex items-center gap-1 rounded-[12px] bg-[var(--color-primary)] text-white text-xs font-semibold hover:bg-[var(--color-primary-hover)] transition-colors shadow-xs"
                             title="Xem báo cáo"
                         >
                             <BarChart2 className="w-3.5 h-3.5" />
@@ -409,7 +415,7 @@ const SurveyCard: React.FC<{
                         <button
                             type="button"
                             onClick={onDelete}
-                            className="p-1.5 rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                            className="p-1.5 rounded-[10px] text-[var(--color-text-muted)] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
                             title="Xoá khảo sát"
                         >
                             <Trash2 className="w-4 h-4" />
@@ -421,13 +427,13 @@ const SurveyCard: React.FC<{
     }
 
     return (
-        <div className="group h-full flex flex-col justify-between rounded-[var(--radius-lg)] bg-[var(--color-surface)] border border-[var(--color-border)] p-4 hover:border-[var(--color-primary)]/40 hover:shadow-[var(--shadow-sm)] transition-all">
+        <div className="hover-lift bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[18px] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all duration-300 hover:border-[var(--color-primary-light)] flex flex-col justify-between group h-full">
             <div>
-                {/* Top: icon + status + toggle + delete */}
-                <div className="flex items-start justify-between gap-2 mb-3">
-                    <div className="flex items-center gap-2.5">
-                        <div className="w-10 h-10 rounded-[var(--radius-md)] bg-[var(--color-primary-light)] text-[var(--color-primary)] flex items-center justify-center flex-shrink-0">
-                            <FileText className="w-5 h-5" />
+                {/* Top row: Status icon + Status badge + Toggle + Delete */}
+                <div className="flex items-center justify-between gap-2 mb-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={`w-10 h-10 rounded-[14px] flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:scale-105 ${statusCfg.iconBg}`}>
+                            <ClipboardList className="w-5 h-5" />
                         </div>
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${statusCfg.badgeClass}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.dotClass}`} />
@@ -435,10 +441,10 @@ const SurveyCard: React.FC<{
                         </span>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                         <label
                             className="relative inline-flex items-center cursor-pointer"
-                            title={survey.status === 'active' ? 'Tạm dừng' : 'Kích hoạt'}
+                            title={survey.status === 'active' ? 'Tạm dừng khảo sát' : 'Kích hoạt khảo sát'}
                         >
                             <input
                                 type="checkbox"
@@ -451,7 +457,7 @@ const SurveyCard: React.FC<{
                         <button
                             type="button"
                             onClick={onDelete}
-                            className="p-1.5 rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                            className="p-1.5 rounded-[10px] text-[var(--color-text-muted)] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
                             title="Xoá khảo sát"
                         >
                             <Trash2 className="w-4 h-4" />
@@ -462,24 +468,30 @@ const SurveyCard: React.FC<{
                 {/* Title */}
                 <h3
                     onClick={onAnalytics}
-                    className="text-[14px] font-semibold text-[var(--color-text)] group-hover:text-[var(--color-primary)] transition-colors line-clamp-1 mb-2 cursor-pointer"
+                    className="text-sm font-bold text-[var(--color-text)] group-hover:text-[var(--color-primary)] transition-colors line-clamp-2 mt-2 mb-2 cursor-pointer leading-snug"
                     title={survey.name}
                 >
                     {survey.name}
                 </h3>
 
-                {/* Slug link */}
-                <div className="mb-3">
+                {/* URL Chip: subtle clean neutral chip */}
+                <div className="mb-2">
                     {survey.slug ? (
-                        <button
-                            type="button"
-                            onClick={onSlugClick}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[var(--radius-sm)] bg-[var(--color-primary-light)] text-[var(--color-primary)] text-xs font-medium hover:opacity-85 transition-opacity max-w-full"
-                            title="Xem / chia sẻ khảo sát"
+                        <div
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[10px] bg-[var(--color-bg)] border border-[var(--color-border)] text-xs text-[var(--color-text-muted)] font-mono hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer group/chip max-w-full"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (publicUrl) {
+                                    navigator.clipboard.writeText(publicUrl);
+                                    toast.success('Đã sao chép link');
+                                }
+                            }}
+                            title="Nhấn để sao chép liên kết"
                         >
-                            <Link2 className="w-3 h-3 flex-shrink-0" />
-                            <span className="truncate font-mono">/s/{survey.slug}</span>
-                        </button>
+                            <Link2 className="w-3.5 h-3.5 shrink-0 text-[var(--color-text-muted)] group-hover/chip:text-[var(--color-primary)] transition-colors" />
+                            <span className="truncate max-w-[200px]">/s/{survey.slug}</span>
+                            <Copy className="w-3 h-3 ml-auto opacity-60 group-hover/chip:opacity-100 shrink-0" />
+                        </div>
                     ) : (
                         <span className="inline-block text-xs text-[var(--color-text-muted)] italic py-1">
                             Chưa xuất bản
@@ -489,32 +501,38 @@ const SurveyCard: React.FC<{
             </div>
 
             <div>
-                {/* Stats panel */}
-                <div className="bg-[var(--color-bg)] border border-[var(--color-border-light)] rounded-[var(--radius-md)] px-3 py-2.5 flex items-center justify-between gap-3 mb-3">
-                    <div>
-                        <span className="block text-[11px] font-medium text-[var(--color-text-muted)]">Lượt trả lời</span>
-                        <span className="text-sm font-bold text-[var(--color-text)] tabular-nums">
-                            {responses.toLocaleString('vi-VN')}
-                        </span>
-                    </div>
-                    <div className="text-right">
-                        <span className="block text-[11px] font-medium text-[var(--color-text-muted)]">Điểm NPS</span>
-                        {nps !== undefined && nps !== null ? (
-                            <span className={`text-sm font-bold tabular-nums ${nps >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                {nps > 0 ? `+${nps}` : nps}
+                {/* Metrics row: 2-column stats with subtle icons */}
+                <div className="grid grid-cols-2 gap-2 p-2.5 bg-[var(--color-bg)] rounded-[14px] border border-[var(--color-border-light)] my-3">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-[10px] bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                            <Users className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                            <span className="block text-[10px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider truncate">Lượt trả lời</span>
+                            <span className="text-xs font-bold text-[var(--color-text)] tabular-nums">
+                                {responses.toLocaleString('vi-VN')}
                             </span>
-                        ) : (
-                            <span className="text-xs font-medium text-[var(--color-text-muted)]">—</span>
-                        )}
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 border-l border-[var(--color-border-light)] pl-2">
+                        <div className="w-8 h-8 rounded-[10px] bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                            <Star className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                            <span className="block text-[10px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider truncate">Điểm NPS</span>
+                            <span className={`text-xs font-bold tabular-nums ${nps !== undefined && nps !== null ? (nps >= 0 ? 'text-emerald-600' : 'text-rose-600') : 'text-[var(--color-text-muted)]'}`}>
+                                {nps !== undefined && nps !== null ? (nps > 0 ? `+${nps}` : nps) : '—'}
+                            </span>
+                        </div>
                     </div>
                 </div>
 
-                {/* CTA buttons */}
-                <div className="flex items-center gap-2">
+                {/* Bottom row CTA buttons */}
+                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                     <button
                         type="button"
                         onClick={onEdit}
-                        className="h-9 px-3 flex-1 inline-flex items-center justify-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[13px] font-medium text-[var(--color-text)] hover:bg-[var(--color-bg)] transition-colors"
+                        className="border border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-bg-subtle)] rounded-[12px] h-9 px-3.5 font-semibold text-xs flex-1 inline-flex items-center justify-center gap-1.5 transition-colors"
                     >
                         <PenLine className="w-3.5 h-3.5" />
                         Thiết kế
@@ -522,7 +540,7 @@ const SurveyCard: React.FC<{
                     <button
                         type="button"
                         onClick={onAnalytics}
-                        className="h-9 px-3 flex-[1.4] inline-flex items-center justify-center gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white text-[13px] font-semibold hover:bg-[var(--color-primary-hover)] transition-colors"
+                        className="bg-[var(--color-primary)] text-white hover:brightness-95 rounded-[12px] h-9 px-3.5 font-semibold text-xs shadow-xs flex-[1.4] inline-flex items-center justify-center gap-1.5 transition-colors"
                     >
                         <BarChart2 className="w-3.5 h-3.5" />
                         Xem báo cáo
@@ -670,8 +688,47 @@ const Surveys: React.FC = () => {
         return (
             <React.Suspense
                 fallback={
-                    <div className="w-full h-[70vh] flex items-center justify-center">
-                        <Loader2 className="w-6 h-6 animate-spin text-[var(--color-primary)]" />
+                    <div className="w-full h-[80vh] flex flex-col bg-slate-100 dark:bg-[#0B0F19] rounded-[20px] border border-[var(--color-border)] overflow-hidden">
+                        {/* Top Bar Skeleton */}
+                        <div className="h-14 shrink-0 bg-white dark:bg-[#111827] border-b border-slate-200 dark:border-white/[0.07] px-5 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                                <div className="w-48 h-5 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[10px]" />
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-28 h-8 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                                <div className="w-28 h-8 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                            </div>
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-24 h-9 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                                <div className="w-28 h-9 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                            </div>
+                        </div>
+                        {/* 3-Column Editor Workspace Skeleton: 320px Left Toolbox + Center Canvas + 380px Right Properties */}
+                        <div className="flex-1 flex overflow-hidden">
+                            <div className="w-[320px] shrink-0 bg-white dark:bg-[#111827] border-r border-slate-200 dark:border-white/[0.07] p-4 space-y-3">
+                                <div className="w-36 h-4 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[8px]" />
+                                <div className="grid grid-cols-2 gap-2.5 pt-1">
+                                    {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
+                                        <div key={n} className="h-16 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="flex-1 p-8 overflow-y-auto flex justify-center">
+                                <div className="w-full max-w-2xl space-y-4">
+                                    <div className="h-44 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
+                                    <div className="h-32 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
+                                    <div className="h-32 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
+                                </div>
+                            </div>
+                            <div className="w-[380px] shrink-0 bg-white dark:bg-[#111827] border-l border-slate-200 dark:border-white/[0.07] p-5 space-y-4">
+                                <div className="w-40 h-5 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[10px]" />
+                                <div className="h-10 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                                <div className="h-24 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
+                                <div className="h-10 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                                <div className="h-32 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
+                            </div>
+                        </div>
                     </div>
                 }
             >
@@ -693,8 +750,6 @@ const Surveys: React.FC = () => {
             <PageHero
                 title="Khảo sát & Bài test"
                 subtitle="Thu thập phản hồi khách hàng, phân tích mức độ hài lòng và thiết lập dữ liệu (Zero-party Data) cho luồng Automation."
-                showStatus
-                statusText={`${surveyStats.active} Đang chạy`}
                 actions={[
                     { label: 'Hướng dẫn chi tiết', icon: Lightbulb, onClick: () => setIsGuideOpen(true) },
                     { label: 'Tạo khảo sát', icon: Plus, primary: true, onClick: () => setShowCreate(true) },
@@ -823,15 +878,25 @@ const Surveys: React.FC = () => {
                     {!hasLoaded ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-4">
                             {[...Array(6)].map((_, i) => (
-                                <div key={i} className="h-[196px] rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4 flex flex-col gap-3">
+                                <div key={i} className="rounded-[20px] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 flex flex-col gap-4">
                                     <div className="flex justify-between items-start">
-                                        <Skeleton variant="rounded" width={40} height={40} className="rounded-[var(--radius-md)]" />
-                                        <Skeleton variant="rounded" width={64} height={20} />
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-11 h-11 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                            <div className="space-y-2">
+                                                <div className="w-40 h-4 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[8px]" />
+                                                <div className="w-24 h-3 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[6px]" />
+                                            </div>
+                                        </div>
+                                        <div className="w-16 h-6 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-full" />
                                     </div>
-                                    <Skeleton variant="text" width="75%" height={18} />
-                                    <Skeleton variant="text" width="45%" height={14} />
-                                    <div className="mt-auto">
-                                        <Skeleton variant="rounded" width="100%" height={36} />
+                                    <div className="grid grid-cols-3 gap-2.5 pt-1">
+                                        <div className="h-14 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                        <div className="h-14 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                        <div className="h-14 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                    </div>
+                                    <div className="flex items-center gap-2 pt-1">
+                                        <div className="h-9 flex-1 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                                        <div className="h-9 flex-[1.4] animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
                                     </div>
                                 </div>
                             ))}

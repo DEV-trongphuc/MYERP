@@ -232,11 +232,14 @@ class FlowExecutor
                     $config = $step['config'];
 
                     // [BUG-FIX #10] Build resolver context before calling replaceMergeTags.
-                    // Previously $resolverContext was always [], so {{unsubscribeLink}},
-                    // {{campaignName}} were never resolved in flow action emails.
-                    $unsubToken = urlencode($subscriber['email'] ?? $subscriberId);
+                    // Use /webhook.php?type=unsubscribe&sid=... matching Mailer.php and worker_campaign.php.
+                    $unsubUrl = rtrim($this->apiUrl, '/') . '/webhook.php?type=unsubscribe&sid=' . urlencode((string)$subscriberId)
+                        . ($flowId ? '&fid=' . urlencode((string)$flowId) : '')
+                        . ($campaignId ? '&cid=' . urlencode((string)$campaignId) : '')
+                        . ($currentStepId ? '&rid=' . urlencode((string)$currentStepId) : '');
                     $resolverContext = [
-                        'unsubscribe_url' => ($this->apiUrl . '/unsubscribe.php?token=' . $unsubToken . '&flow_id=' . $flowId),
+                        'unsubscribe_url' => $unsubUrl,
+                        'unsubscribeLink' => $unsubUrl,
                         'campaign_name' => $flowName,
                         'campaignName' => $flowName,
                         'variable_fallbacks' => $config['variable_fallbacks'] ?? ($config['fallbacks'] ?? []),
@@ -245,8 +248,8 @@ class FlowExecutor
 
                     $htmlContent = resolveEmailContent($this->pdo, $config['templateId'] ?? '', $config['customHtml'] ?? '', $config['contentBody'] ?? '', $resolverContext);
 
-                    $finalHtml = replaceMergeTags($htmlContent, $subscriber, $resolverContext);
-                    $finalSubject = replaceMergeTags($config['subject'] ?? '', $subscriber, $resolverContext);
+                    $finalHtml = replaceMergeTags($htmlContent, $subscriber, $resolverContext, $this->pdo);
+                    $finalSubject = replaceMergeTags($config['subject'] ?? '', $subscriber, $resolverContext, $this->pdo);
 
 
                     // Attachments
@@ -271,7 +274,7 @@ class FlowExecutor
                     }
 
                     // [SES SHARED RATE LIMITER] Acquire slot from cross-process file-lock.
-                    // Shared with worker_campaign.php â†’ campaign + flow combined â‰¤ 10/s total.
+                    // Shared with worker_campaign.php → campaign + flow combined ≤ 10/s total.
                     // Full implementation in sesAcquireRateSlot() (flow_helpers.php).
                     sesAcquireRateSlot(); // 100ms interval = 10/s shared across all workers
 
@@ -299,7 +302,7 @@ class FlowExecutor
                             }
                             $contextData['total_sent_today']['email'] = ($contextData['total_sent_today']['email'] ?? 0) + 1;
                         } else {
-                            // [Váº¬N HÃ€NH] Log as skipped but ADVANCE the flow so Zalo/ZNS steps can still trigger
+                            // [VẬN HÀNH] Log as skipped but ADVANCE the flow so Zalo/ZNS steps can still trigger
                             logActivity($this->pdo, $subscriberId, 'skipped_email', $currentStepId, $flowName, "Skipped: Virtual email ({$subscriber['email']})", $flowId, $campaignId, [], $subscriber['workspace_id']);
                             $logs[] = "  -> Step '{$step['label']}' skipped (Virtual Email). Advancing flow.";
                         }
@@ -354,11 +357,11 @@ class FlowExecutor
                         break;
                     }
 
-                    // 48h window check Ã¢â‚¬â€ Zalo CS requires subscriber to have interacted within 48h
+                    // 48h window check — Zalo CS requires subscriber to have interacted within 48h
                     // [BUG-FIX] Bug #6: Previously using `$lastInteract && (time() - strtotime() > 48h)`
                     // When lastInteract=NULL (never interacted), the condition evaluated to FALSE
-                    // so the code allowed sending Ã¢â‚¬â€ but Zalo API requires recent interaction.
-                    // Fix: treat NULL as "no interaction" Ã¢â€ â€™ block sending.
+                    // so the code allowed sending — but Zalo API requires recent interaction.
+                    // Fix: treat NULL as "no interaction" → block sending.
                     if (!$lastInteract || (time() - strtotime($lastInteract) > 48 * 3600)) {
                         $logs[] = "  -> Zalo CS step skipped: Out of 48h interaction window (last: " . ($lastInteract ?? 'never') . ").";
                         $nextStepId = $step['nextStepId'] ?? null;
@@ -383,7 +386,7 @@ class FlowExecutor
                         'variable_fallbacks' => $config['variable_fallbacks'] ?? ($config['fallbacks'] ?? []),
                         'config' => $config
                     ];
-                    $finalText = replaceMergeTags($config['content'] ?? '', $subscriber, $csContext);
+                    $finalText = replaceMergeTags($config['content'] ?? '', $subscriber, $csContext, $this->pdo);
                     $res = sendConsultationMessage($this->pdo, $oaConfigId, $zaloUserId, $finalText, null, $subscriber['workspace_id']);
 
                     if ($res['success']) {
@@ -401,7 +404,7 @@ class FlowExecutor
                         $logs[] = "  -> Zalo CS failed: " . ($res['message'] ?? 'Unknown');
                         // Fallback ZNS
                         $fallbackTemplateId = $config['fallback_zns_template_id'] ?? null;
-                        // [FIX] Track if we paused for time restriction Ã¢â‚¬â€ if true, skip
+                        // [FIX] Track if we paused for time restriction — if true, skip
                         // $nextStepId/$isInstantStep below to preserve the 'waiting' status.
                         // (Can't use break here since we're inside an if-block, not a loop/switch)
                         $zaloFallbackPaused = false;
@@ -423,7 +426,7 @@ class FlowExecutor
                                     'config' => $config
                                 ];
                                 foreach ($rawTemplateData as $key => $value) {
-                                    $fbVal = is_string($value) ? replaceMergeTags($value, $subscriber, $fbZnsContext) : $value;
+                                    $fbVal = is_string($value) ? replaceMergeTags($value, $subscriber, $fbZnsContext, $this->pdo) : $value;
                                     // [FIX] Apply same per-field ZNS length limits as primary zalo_zns step
                                     if (is_string($fbVal)) {
                                         $fbMax = $fbShortFieldMap[$key] ?? 100;
@@ -447,7 +450,7 @@ class FlowExecutor
                         }
                     }
                     // [FIX] Only advance chain if we did NOT pause for time restriction.
-                    // $zaloFallbackPaused=true means status='waiting' was already set above Ã¢â‚¬â€ 
+                    // $zaloFallbackPaused=true means status='waiting' was already set above —
                     // overwriting with isInstantStep=true would cause the worker to skip the delay.
                     if (!($zaloFallbackPaused ?? false)) {
                         $nextStepId = $step['nextStepId'] ?? null;
@@ -539,7 +542,7 @@ class FlowExecutor
                     ];
 
                     foreach ($rawData as $key => $value) {
-                        $val = is_string($value) ? replaceMergeTags($value, $subscriber, $znsContext) : $value;
+                        $val = is_string($value) ? replaceMergeTags($value, $subscriber, $znsContext, $this->pdo) : $value;
 
                         if ($val === '') {
                             $missingParams[] = $key;
@@ -555,10 +558,10 @@ class FlowExecutor
 
                         // [FIX v2] Per-field length limits for Zalo ZNS known short fields.
                         // Zalo enforces different max lengths per template param type:
-                        //   - 'id', 'ma_giao_dich', 'ma_don_hang', 'tracking_id' Ã¢â€ â€™ max 20 chars
-                        //   - All others Ã¢â€ â€™ max 100 chars (safe default)
+                        //   - 'id', 'ma_giao_dich', 'ma_don_hang', 'tracking_id' → max 20 chars
+                        //   - All others → max 100 chars (safe default)
                         // Previously all fields were truncated at 100 chars, but UUID (36 chars)
-                        // still exceeded the 20-char limit for 'id' Ã¢â€ â€™ Zalo API error -1121.
+                        // still exceeded the 20-char limit for 'id' → Zalo API error -1121.
                         $znsShortFieldMap = [
                             'id'            => 20,
                             'ma_giao_dich'  => 20,
@@ -676,7 +679,7 @@ class FlowExecutor
                             'variable_fallbacks' => $config['variable_fallbacks'] ?? ($config['fallbacks'] ?? []),
                             'config' => $config
                         ];
-                        $msgConfig['text'] = replaceMergeTags($config['content'], $subscriber, $metaContext);
+                        $msgConfig['text'] = replaceMergeTags($config['content'], $subscriber, $metaContext, $this->pdo);
                     }
                     if (!empty($config['attachment_url'])) {
                         $msgConfig['attachment_url'] = $config['attachment_url'];
@@ -787,6 +790,13 @@ class FlowExecutor
                             $offsetType = $step['config']['offsetType'] ?? 'before';
                             $untilTime = $step['config']['untilTime'] ?? '09:00';
                             $attrValue = $subscriber[$attrKey] ?? null;
+                            if ((!$attrValue || $attrValue === '0000-00-00') && !empty($subscriber['custom_attributes'])) {
+                                $customAttrs = is_array($subscriber['custom_attributes'])
+                                    ? $subscriber['custom_attributes']
+                                    : (json_decode($subscriber['custom_attributes'], true) ?: []);
+                                $cleanAttrKey = preg_replace('/^custom_/', '', $attrKey);
+                                $attrValue = $customAttrs[$attrKey] ?? $customAttrs[$cleanAttrKey] ?? null;
+                            }
 
                             if (!$attrValue || $attrValue === '0000-00-00') {
                                 // Skip
@@ -856,11 +866,11 @@ class FlowExecutor
                     $waitDur = (int) ($step['config']['waitDuration'] ?? 1);
                     $waitUnit = $step['config']['waitUnit'] ?? 'hours';
 
-                    // [FIX] Khai bÃƒÂ¡o target/campaign ID tÃ¡Â»Â« bÃ†Â°Ã¡Â»â€ºc Trigger
+                    // [FIX] Khai báo target/campaign ID từ bước Trigger
                     $linkedCampaignId = null;
                     foreach ($flowSteps as $fs) {
                         if ($fs['type'] === 'trigger' && in_array($fs['config']['type'] ?? '', ['campaign', 'survey'])) {
-                            // CÃ¡ÂºÂ¥u hÃƒÂ¬nh lÃ†Â°u trong targetId hoÃ¡ÂºÂ·c campaignId
+                            // Cấu hình lưu trong targetId hoặc campaignId
                             $linkedCampaignId = $fs['config']['targetId'] ?? ($fs['config']['campaignId'] ?? null);
                             break;
                         }
@@ -870,7 +880,7 @@ class FlowExecutor
                     $startTime = !empty($lastStepAt) ? $lastStepAt : (!empty($itemUpdatedAt) ? $itemUpdatedAt : $queueCreatedAt);
                     // [FIX] Guard against empty string or MySQL zero-date ("0000-00-00 00:00:00")
                     // from DB. Passing either into new DateTime() throws an uncatchable Fatal Error:
-                    // "Failed to parse time string" Ã¢â‚¬â€ crashing the entire worker process.
+                    // "Failed to parse time string" — crashing the entire worker process.
                     if (empty($startTime) || strpos($startTime, '0000-00-00') !== false || trim($startTime) === '') {
                         $startTime = 'now';
                     }
@@ -973,6 +983,35 @@ class FlowExecutor
                                 $isMatched = (($latestResp['end_screen_id'] ?? 'default') === $targetScreen);
                             }
                         }
+                    } elseif (in_array($condType, ['deposit_paid', 'has_deposit', 'has_deal', 'stage_matches', 'erp_is_student', 'erp_student_status', 'erp_tuition_status', 'erp_has_certificate', 'erp_ticket_status', 'erp_deal_status'], true)) {
+                        $subProfile = getSubscriberProfileForFlow($this->pdo, $subscriberId);
+                        if ($condType === 'deposit_paid' || $condType === 'has_deposit') {
+                            $depStatus = strtolower((string) ($subProfile['crm_deposit_status'] ?? 'none'));
+                            $isMatched = in_array($depStatus, ['approved', 'paid', 'completed', 'confirmed'], true) || ((float) ($subProfile['crm_deposit_amount'] ?? 0) > 0 && $depStatus !== 'cancelled' && $depStatus !== 'rejected');
+                        } elseif ($condType === 'has_deal') {
+                            $isMatched = ((float) ($subProfile['crm_expected_revenue'] ?? 0) > 0 || ($subProfile['erp_deal_status'] ?? 'none') !== 'none');
+                        } elseif ($condType === 'stage_matches') {
+                            $targetStage = trim((string) ($step['config']['stageId'] ?? $step['config']['targetValue'] ?? ''));
+                            $actualStageId = (string) ($subProfile['crm_stage_id'] ?? $subProfile['stage_id'] ?? '');
+                            $actualStageName = (string) ($subProfile['crm_stage_name'] ?? '');
+                            $isMatched = ($targetStage !== '' && ($actualStageId === $targetStage || mb_strtolower($actualStageName, 'UTF-8') === mb_strtolower($targetStage, 'UTF-8')));
+                        } elseif ($condType === 'erp_is_student') {
+                            $isMatched = !empty($subProfile['erp_is_student']);
+                        } elseif ($condType === 'erp_student_status') {
+                            $targetSt = strtolower(trim((string) ($step['config']['studentStatus'] ?? $step['config']['targetValue'] ?? 'studying')));
+                            $isMatched = (strtolower((string) ($subProfile['erp_student_status'] ?? 'none')) === $targetSt);
+                        } elseif ($condType === 'erp_tuition_status') {
+                            $targetTuit = strtolower(trim((string) ($step['config']['tuitionStatus'] ?? $step['config']['targetValue'] ?? 'paid_full')));
+                            $isMatched = (strtolower((string) ($subProfile['erp_tuition_status'] ?? 'none')) === $targetTuit);
+                        } elseif ($condType === 'erp_has_certificate') {
+                            $isMatched = !empty($subProfile['erp_has_certificate']);
+                        } elseif ($condType === 'erp_ticket_status') {
+                            $targetTk = strtolower(trim((string) ($step['config']['ticketStatus'] ?? $step['config']['targetValue'] ?? 'has_open')));
+                            $isMatched = (strtolower((string) ($subProfile['erp_ticket_status'] ?? 'none')) === $targetTk);
+                        } elseif ($condType === 'erp_deal_status') {
+                            $targetDealSt = strtolower(trim((string) ($step['config']['dealStatus'] ?? $step['config']['targetValue'] ?? 'won')));
+                            $isMatched = (strtolower((string) ($subProfile['erp_deal_status'] ?? 'none')) === $targetDealSt);
+                        }
                     } elseif ($condType === 'opened') {
                         $types = ['open_email', 'open_zns'];
                     } elseif ($condType === 'clicked') {
@@ -988,7 +1027,7 @@ class FlowExecutor
                     } elseif ($condType === 'zns_replied') {
                         // [VERIFIED 2026-04-23] DB audit: ZNS reply is logged as 'staff_reply'
                         // by the CRM/support module. 'reply_zns' and 'zns_replied' do NOT exist
-                        // in subscriber_activity. 'zns_clicked' also absent Ã¢â‚¬â€ Zalo click/reply
+                        // in subscriber_activity. 'zns_clicked' also absent — Zalo click/reply
                         // webhooks are not configured on this installation.
                         $types = ['staff_reply'];
                     } elseif ($condType === 'zns_failed') {
@@ -998,17 +1037,17 @@ class FlowExecutor
                     elseif ($condType === 'delivered') {
                         $types = ['receive_email'];
                     }
-                    // [FIX] Reminder conditions Ã¢â‚¬â€ check subscriber_activity for reminder events
+                    // [FIX] Reminder conditions — check subscriber_activity for reminder events
                     elseif ($condType === 'received_reminder') {
                         $types = ['receive_email']; // receive_email logged when reminder is sent
                     } elseif ($condType === 'opened_reminder') {
                         $types = ['open_email']; // open_email logged when reminder is opened
                     }
 
-                    // reminderId from frontend config Ã¢â‚¬â€ if set, filter activities to this specific reminder campaign
+                    // reminderId from frontend config — if set, filter activities to this specific reminder campaign
                     $reminderId = $step['config']['reminderId'] ?? null;
 
-                    // [FIX] 'unsubscribe' is a global event Ã¢â‚¬â€ NOT scoped to flow_id.
+                    // [FIX] 'unsubscribe' is a global event — NOT scoped to flow_id.
                     // Reminder conditions are also global but can be scoped by reminderId (campaign_id).
                     $isGlobalEvent = in_array($condType, ['unsubscribed', 'received_reminder', 'opened_reminder']);
 
@@ -1019,7 +1058,7 @@ class FlowExecutor
                         $activities = [];
                         foreach ($cachedActivities as $act) {
                             if (in_array($act['type'], $types)) {
-                                // [FIX] Global events (unsubscribe) have no flow_id Ã¢â‚¬â€ always include them
+                                // [FIX] Global events (unsubscribe) have no flow_id — always include them
                                 if ($isGlobalEvent) {
                                     // For reminder conditions: filter by reminderId (campaign_id) if provided
                                     if (($condType === 'received_reminder' || $condType === 'opened_reminder') && !empty($reminderId)) {
@@ -1054,7 +1093,7 @@ class FlowExecutor
                         foreach ($types as $t)
                             $params[] = $t;
 
-                        // [FIX] 'unsubscribe' is global Ã¢â‚¬â€ do NOT filter by flow_id
+                        // [FIX] 'unsubscribe' is global — do NOT filter by flow_id
                         // For reminder conditions: optionally filter by reminderId (campaign_id)
                         if (!$isGlobalEvent) {
                             if ($linkedCampaignId) {
@@ -1083,10 +1122,10 @@ class FlowExecutor
                             if (!in_array($act['type'], $types))
                                 continue;
 
-                            // [SMART MATCH] PhÃƒÂ¢n loÃ¡ÂºÂ¡i Ã„â€˜Ã¡Â»â€˜i soÃƒÂ¡t: Trigger vs Step cÃ¡Â»Â¥ thÃ¡Â»Æ’
+                            // [SMART MATCH] Phân loại đối soát: Trigger vs Step cụ thể
                             $isFromTarget = false;
 
-                            // 0. KiÃ¡Â»Æ’m tra xem bÃ†Â°Ã¡Â»â€ºc Ã„â€˜ÃƒÂ­ch cÃƒÂ³ phÃ¡ÂºÂ£i lÃƒÂ  Trigger khÃƒÂ´ng
+                            // 0. Kiểm tra xem bước đích có phải là Trigger không
                             $isTargetingTrigger = false;
                             if ($targetStepId) {
                                 foreach ($flowSteps as $fs) {
@@ -1097,16 +1136,16 @@ class FlowExecutor
                                 }
                             }
 
-                            // 1. TrÃ†Â°Ã¡Â»Âng hÃ¡Â»Â£p chÃ¡Â»Â Ã„â€˜Ã¡Â»Â£i kÃ¡ÂºÂ¿t quÃ¡ÂºÂ£ tÃ¡Â»Â« Trigger Campaign (TrÃ†Â°Ã¡Â»Âng hÃ¡Â»Â£p cÃ¡Â»Â§a anh hiÃ¡Â»â€¡n tÃ¡ÂºÂ¡i)
+                            // 1. Trường hợp chờ đợi kết quả từ Trigger Campaign (Trường hợp của anh hiện tại)
                             if ($isTargetingTrigger && $linkedCampaignId && !empty($act['campaign_id']) && (string) $act['campaign_id'] === (string) $linkedCampaignId) {
                                 $isFromTarget = true;
                             }
-                            // 2. TrÃ†Â°Ã¡Â»Âng hÃ¡Â»Â£p chÃ¡Â»Â Ã„â€˜Ã¡Â»Â£i mÃ¡Â»â„¢t bÃ†Â°Ã¡Â»â€ºc GÃ¡Â»Â­i Mail cÃ¡Â»Â¥ thÃ¡Â»Æ’ TRONG Flow
-                            // (VÃƒÂ­ dÃ¡Â»Â¥: BÃ†Â°Ã¡Â»â€ºc 2 GÃ¡Â»Â­i Mail -> BÃ†Â°Ã¡Â»â€ºc 3 KiÃ¡Â»Æ’m tra Mail bÃ†Â°Ã¡Â»â€ºc 2)
+                            // 2. Trường hợp chờ đợi một bước Gửi Mail cụ thể TRONG Flow
+                            // (Ví dụ: Bước 2 Gửi Mail -> Bước 3 Kiểm tra Mail bước 2)
                             elseif ($targetStepId && trim($act['reference_id'] ?? '') === trim($targetStepId)) {
                                 $isFromTarget = true;
                             }
-                            // 3. NÃ¡ÂºÂ¿u khÃƒÂ´ng chÃ¡Â»â€° Ã„â€˜Ã¡Â»â€¹nh Ã„â€˜ÃƒÂ­ch Ã„â€˜Ã¡ÂºÂ¿n, chÃ¡ÂºÂ¥p nhÃ¡ÂºÂ­n mÃ¡Â»Âi hoÃ¡ÂºÂ¡t Ã„â€˜Ã¡Â»â„¢ng thuÃ¡Â»â„¢c Flow nÃƒÂ y 
+                            // 3. Nếu không chỉ định đích đến, chấp nhận mọi hoạt động thuộc Flow này 
                             elseif (!$targetStepId) {
                                 $isFromTarget = true;
                             }
@@ -1167,11 +1206,11 @@ class FlowExecutor
                         $logs[] = "  -> Condition Timed Out. Moving to ELSE.";
                         $isInstantStep = true;
                     } else {
-                        // CHÃ†Â¯A KHÃ¡Â»Å¡P VÃƒâ‚¬ CHÃ†Â¯A HÃ¡ÂºÂ¾T GIÃ¡Â»Å“ -> TIÃ¡ÂºÂ¾P TÃ¡Â»Â¤C Ã„ÂÃ¡Â»Â¢I
+                        // CHƯA KHỚP VÀ CHƯA HẾT GIỜ -> TIẾP TỤC ĐỢI
                         $logs[] = "  -> Condition not met yet. Still waiting...";
                         $status = 'waiting';
                         $shouldContinueChain = false;
-                        // [FIX] T\u0103ng t\u1eeb 5 ph\u00fat l\u00ean 15 ph\u00fat \u2014 gi\u1ea3m t\u1ea3i worker khi c\u00f3 nhi\u1ec1u subscriber ch\u1edd condition
+                        // [FIX] Tăng từ 5 phút lên 15 phút — giảm tải worker khi có nhiều subscriber chờ condition
                         $nextScheduledAt = date('Y-m-d H:i:s', strtotime('+15 minutes'));
                     }
                     break;
@@ -1217,8 +1256,8 @@ class FlowExecutor
                 case 'split_test':
                     $ratioA = (int) ($step['config']['ratioA'] ?? 50);
                     // [FIX BUG-C2] hexdec() on 8-char hex can overflow on 32-bit PHP, returning
-                    // a negative integer. ($negativeInt % 100) is also negative Ã¢â€ â€™ always < $ratioA
-                    // Ã¢â€ â€™ always Path A or always Path B depending on value. abs(crc32()) is safe
+                    // a negative integer. ($negativeInt % 100) is also negative → always < $ratioA
+                    // → always Path A or always Path B depending on value. abs(crc32()) is safe
                     // on both 32-bit and 64-bit PHP and produces a uniform distribution.
                     $hash = abs(crc32($subscriberId . $currentStepId));
                     $isPathA = (($hash % 100) < $ratioA);
@@ -1255,7 +1294,7 @@ class FlowExecutor
                             // [FIX] tags.id is VARCHAR using uniqid(), NOT auto-increment.
                             // The original INSERT omitted the `id` column entirely.
                             // MySQL strict mode ('NO_DEFAULT_VALUE') throws:
-                            // "Field 'id' doesn't have a default value" Ã¢â‚¬â€ crashing the flow.
+                            // "Field 'id' doesn't have a default value" — crashing the flow.
                             if (!$tagId) {
                                 $newTagId = uniqid();
                                 // [FIX BUG-FLOW-TAG-2] Added workspace_id so auto-created tags are workspace-scoped
@@ -1298,6 +1337,40 @@ class FlowExecutor
                             domationSyncSubscriberMatchOnly($this->pdo, $subscriberId);
                         }
                     }
+
+                    // Sync tags to MYERP CRM contacts.tags JSON column if linked
+                    try {
+                        $crmContactId = (int) ($subscriber['contact_id'] ?? 0);
+                        if ($crmContactId <= 0) {
+                            $stmtCid = $this->pdo->prepare("SELECT contact_id FROM subscribers WHERE id = ? LIMIT 1");
+                            $stmtCid->execute([$subscriberId]);
+                            $crmContactId = (int) $stmtCid->fetchColumn();
+                        }
+                        if ($crmContactId > 0 && !empty($tags)) {
+                            $stmtCt = $this->pdo->prepare("SELECT tags FROM contacts WHERE id = ? AND deleted_at IS NULL LIMIT 1");
+                            $stmtCt->execute([$crmContactId]);
+                            $rawCrmTags = $stmtCt->fetchColumn();
+                            $crmTags = is_string($rawCrmTags) ? (json_decode($rawCrmTags, true) ?: []) : [];
+                            if (!is_array($crmTags)) $crmTags = [];
+                            if ($action === 'remove') {
+                                $crmTags = array_values(array_filter($crmTags, function ($t) use ($tags) {
+                                    return !in_array($t, $tags, true);
+                                }));
+                            } else {
+                                foreach ($tags as $tName) {
+                                    if (!in_array($tName, $crmTags, true)) {
+                                        $crmTags[] = $tName;
+                                    }
+                                }
+                            }
+                            $this->pdo->prepare("UPDATE contacts SET tags = ?, updated_at = NOW() WHERE id = ? AND deleted_at IS NULL")
+                                ->execute([json_encode(array_values($crmTags), JSON_UNESCAPED_UNICODE), $crmContactId]);
+                        }
+                    } catch (\Throwable $eTagSync) {
+                        error_log("[FlowExecutor] CRM tag sync warning: " . $eTagSync->getMessage());
+                    }
+
+                    unset(self::$profileCache[$subscriberId]);
                     logActivity($this->pdo, $subscriberId, 'update_tag', $currentStepId, $flowName, "Tags $action: " . implode(',', $tags), $flowId, null, [], $subscriber['workspace_id']);
                     $logs[] = "  -> Tags updated.";
                     $nextStepId = $step['nextStepId'] ?? null;
@@ -1331,7 +1404,7 @@ class FlowExecutor
                         $this->pdo->prepare("UPDATE subscribers SET status='unsubscribed' WHERE id=? AND workspace_id = ?")->execute([$subscriberId, $subscriber['workspace_id']]);
                         logActivity($this->pdo, $subscriberId, 'unsubscribe', $currentStepId, $flowName, "Unsubscribed via flow", $flowId, null, [], $subscriber['workspace_id']);
                     } elseif ($aType === 'delete_contact') {
-                        // [FIX] Log BEFORE delete Ã¢â‚¬â€  logActivity would fail (FK/orphan) if run after DELETE
+                        // [FIX] Log BEFORE delete — logActivity would fail (FK/orphan) if run after DELETE
                         logActivity($this->pdo, $subscriberId, 'delete_contact', $currentStepId, $flowName, "Deleted via flow", $flowId, null, [], $subscriber['workspace_id']);
                         // Delete all related records to prevent orphan data
                         $this->pdo->prepare("DELETE FROM subscriber_lists WHERE workspace_id = ? AND subscriber_id=?")->execute([$subscriber['workspace_id'], $subscriberId]);
@@ -1352,6 +1425,260 @@ class FlowExecutor
                     $shouldContinueChain = false;
                     $status = 'completed';
                     $logs[] = "  -> Remove action executed ($aType). Flow complete.";
+                    break;
+
+                case 'crm_action':
+                case 'crm_update_stage':
+                case 'crm_create_task':
+                case 'crm_assign_owner':
+                case 'crm_notify_owner':
+                    $crmConfig = $step['config'] ?? [];
+                    $crmActionType = $step['type'] === 'crm_action'
+                        ? ($crmConfig['crmActionType'] ?? $crmConfig['actionType'] ?? 'update_stage')
+                        : str_replace('crm_', '', $step['type']);
+
+                    // Resolve contact_id for subscriber
+                    $crmContactId = (int) ($subscriber['contact_id'] ?? 0);
+                    if ($crmContactId <= 0) {
+                        $stmtCid = $this->pdo->prepare("SELECT contact_id FROM subscribers WHERE id = ? LIMIT 1");
+                        $stmtCid->execute([$subscriberId]);
+                        $crmContactId = (int) $stmtCid->fetchColumn();
+                    }
+                    if ($crmContactId <= 0 && function_exists('domationSyncSubscriberMatchOnly')) {
+                        $crmContactId = (int) (domationSyncSubscriberMatchOnly($this->pdo, $subscriberId) ?? 0);
+                    }
+
+                    if ($crmActionType === 'update_stage' || $crmActionType === 'crm_update_stage') {
+                        $rawStageId = $crmConfig['stage_id'] ?? $crmConfig['stageId'] ?? '';
+                        $newStageId = $rawStageId !== '' ? (int) $rawStageId : null;
+                        $newPipelineStatus = $crmConfig['pipelineStatus'] ?? $crmConfig['pipeline_status'] ?? null;
+                        $newLeadStatus = $crmConfig['leadStatus'] ?? $crmConfig['lead_status'] ?? null;
+                        $newTemperature = $crmConfig['temperature'] ?? null;
+
+                        if ($crmContactId > 0) {
+                            $setCols = [];
+                            $setParams = [];
+                            if ($newStageId !== null && $newStageId > 0) {
+                                $setCols[] = "stage_id = ?";
+                                $setParams[] = $newStageId;
+                            }
+                            if (!empty($newPipelineStatus)) {
+                                $setCols[] = "pipeline_status = ?";
+                                $setParams[] = $newPipelineStatus;
+                            }
+                            if (!empty($newLeadStatus)) {
+                                $setCols[] = "lead_status = ?";
+                                $setParams[] = $newLeadStatus;
+                            }
+                            if (!empty($newTemperature)) {
+                                $setCols[] = "temperature = ?";
+                                $setParams[] = $newTemperature;
+                            }
+                            if (!empty($setCols)) {
+                                $setCols[] = "updated_at = NOW()";
+                                $setParams[] = $crmContactId;
+                                $this->pdo->prepare("UPDATE contacts SET " . implode(', ', $setCols) . " WHERE id = ? AND deleted_at IS NULL")->execute($setParams);
+                            }
+                        }
+
+                        // Sync subscriber mirror columns
+                        $subCols = [];
+                        $subParams = [];
+                        if ($newStageId !== null && $newStageId > 0) {
+                            $subCols[] = "stage_id = ?";
+                            $subParams[] = $newStageId;
+                        }
+                        if (!empty($newPipelineStatus)) {
+                            $subCols[] = "pipeline_status = ?";
+                            $subParams[] = $newPipelineStatus;
+                        }
+                        if (!empty($newLeadStatus)) {
+                            $subCols[] = "lead_status = ?";
+                            $subParams[] = $newLeadStatus;
+                        }
+                        if (!empty($subCols)) {
+                            $subParams[] = $subscriberId;
+                            $this->pdo->prepare("UPDATE subscribers SET " . implode(', ', $subCols) . " WHERE id = ?")->execute($subParams);
+                        }
+
+                        unset(self::$profileCache[$subscriberId]);
+                        logActivity($this->pdo, $subscriberId, 'crm_update_stage', $currentStepId, $flowName, "CRM Stage updated (Stage: " . ($newStageId ?? $newPipelineStatus ?? 'N/A') . ")", $flowId, null, [], $subscriber['workspace_id']);
+                        $logs[] = "  -> CRM Stage updated for contact {$crmContactId}.";
+                    } elseif ($crmActionType === 'create_task' || $crmActionType === 'crm_create_task') {
+                        if ($crmContactId > 0) {
+                            $taskType = $crmConfig['task_type'] ?? $crmConfig['taskType'] ?? 'task';
+                            $rawSubject = $crmConfig['subject'] ?? $crmConfig['taskSubject'] ?? $crmConfig['task_title'] ?? $crmConfig['title'] ?? ($step['label'] ?? 'Tác vụ tự động từ Flow');
+                            $rawBody = $crmConfig['body'] ?? $crmConfig['taskBody'] ?? $crmConfig['task_description'] ?? $crmConfig['description'] ?? '';
+                            if (isset($crmConfig['due_in_hours']) && (int)$crmConfig['due_in_hours'] > 0) {
+                                $dueHours = (int) $crmConfig['due_in_hours'];
+                                $dueDate = date('Y-m-d H:i:s', strtotime("+{$dueHours} hours"));
+                            } else {
+                                $dueDays = (int) ($crmConfig['due_days'] ?? $crmConfig['dueDays'] ?? $crmConfig['dueInDays'] ?? 1);
+                                $dueDate = date('Y-m-d H:i:s', strtotime("+{$dueDays} days"));
+                            }
+
+                            $taskSubject = replaceMergeTags($rawSubject, $subscriber, ['campaign_name' => $flowName], $this->pdo);
+                            $taskBody = replaceMergeTags($rawBody, $subscriber, ['campaign_name' => $flowName], $this->pdo);
+
+                            // Determine owner_id
+                            $rawOwner = $crmConfig['owner_id'] ?? $crmConfig['ownerId'] ?? null;
+                            $taskOwnerId = !empty($rawOwner) ? (int) $rawOwner : null;
+                            if (!$taskOwnerId) {
+                                $stmtOw = $this->pdo->prepare("SELECT owner_id FROM contacts WHERE id = ? AND deleted_at IS NULL LIMIT 1");
+                                $stmtOw->execute([$crmContactId]);
+                                $taskOwnerId = (int) $stmtOw->fetchColumn() ?: null;
+                            }
+
+                            $this->pdo->prepare("
+                                INSERT INTO activities (tenant_id, contact_id, type, subject, body, status, due_date, user_id, created_by, created_at, updated_at)
+                                VALUES (1, ?, ?, ?, ?, 'planned', ?, ?, ?, NOW(), NOW())
+                            ")->execute([$crmContactId, $taskType, $taskSubject, $taskBody, $dueDate, $taskOwnerId, $taskOwnerId]);
+
+                            logActivity($this->pdo, $subscriberId, 'crm_create_task', $currentStepId, $flowName, "Created CRM Task: {$taskSubject}", $flowId, null, [], $subscriber['workspace_id']);
+                            $logs[] = "  -> CRM Task created for contact {$crmContactId}: {$taskSubject}";
+                        } else {
+                            $logs[] = "  -> CRM Task skipped: No linked CRM contact_id.";
+                        }
+                    } elseif ($crmActionType === 'assign_owner' || $crmActionType === 'crm_assign_owner') {
+                        $rawOwner = $crmConfig['owner_id'] ?? $crmConfig['ownerId'] ?? null;
+                        $targetOwnerId = !empty($rawOwner) ? (int) $rawOwner : null;
+                        if (!$targetOwnerId && !empty($crmConfig['ownerIds']) && is_array($crmConfig['ownerIds'])) {
+                            $validOwners = array_values(array_filter(array_map('intval', $crmConfig['ownerIds'])));
+                            if (!empty($validOwners)) {
+                                $idx = abs(crc32($subscriberId . $currentStepId)) % count($validOwners);
+                                $targetOwnerId = $validOwners[$idx];
+                            }
+                        }
+
+                        $onlyIfUnassigned = ($crmConfig['only_if_unassigned'] ?? true) !== false;
+
+                        if ($targetOwnerId) {
+                            $stmtUser = $this->pdo->prepare("SELECT full_name FROM users WHERE id = ? LIMIT 1");
+                            $stmtUser->execute([$targetOwnerId]);
+                            $ownerRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
+                            $ownerName = $ownerRow['full_name'] ?? null;
+
+                            $shouldAssign = true;
+                            if ($onlyIfUnassigned && $crmContactId > 0) {
+                                $stmtCurr = $this->pdo->prepare("SELECT owner_id FROM contacts WHERE id = ? AND deleted_at IS NULL LIMIT 1");
+                                $stmtCurr->execute([$crmContactId]);
+                                $currOwner = (int) $stmtCurr->fetchColumn();
+                                if ($currOwner > 0) {
+                                    $shouldAssign = false;
+                                }
+                            }
+
+                            if ($shouldAssign) {
+                                if ($crmContactId > 0) {
+                                    $this->pdo->prepare("UPDATE contacts SET owner_id = ?, updated_at = NOW() WHERE id = ? AND deleted_at IS NULL")
+                                        ->execute([$targetOwnerId, $crmContactId]);
+                                }
+                                $this->pdo->prepare("UPDATE subscribers SET owner_id = ?, salesperson = COALESCE(?, salesperson) WHERE id = ?")
+                                    ->execute([$targetOwnerId, $ownerName, $subscriberId]);
+
+                                unset(self::$profileCache[$subscriberId]);
+                                logActivity($this->pdo, $subscriberId, 'crm_assign_owner', $currentStepId, $flowName, "Assigned owner: " . ($ownerName ?: $targetOwnerId), $flowId, null, [], $subscriber['workspace_id']);
+                                $logs[] = "  -> CRM Owner assigned ({$targetOwnerId}) for subscriber {$subscriberId}.";
+                            } else {
+                                $logs[] = "  -> CRM Assign Owner skipped: Contact {$crmContactId} already has an owner.";
+                            }
+                        } else {
+                            $logs[] = "  -> CRM Assign Owner skipped: No ownerId configured.";
+                        }
+                    } elseif ($crmActionType === 'notify_owner' || $crmActionType === 'crm_notify_owner') {
+                        $rawNotifyUser = $crmConfig['user_id'] ?? $crmConfig['userId'] ?? $crmConfig['owner_id'] ?? $crmConfig['ownerId'] ?? null;
+                        $notifyUserId = !empty($rawNotifyUser) ? (int) $rawNotifyUser : null;
+                        if (!$notifyUserId && $crmContactId > 0) {
+                            $stmtOw = $this->pdo->prepare("SELECT owner_id FROM contacts WHERE id = ? AND deleted_at IS NULL LIMIT 1");
+                            $stmtOw->execute([$crmContactId]);
+                            $notifyUserId = (int) $stmtOw->fetchColumn() ?: null;
+                        }
+                        if (!$notifyUserId && !empty($subscriber['owner_id'])) {
+                            $notifyUserId = (int) $subscriber['owner_id'];
+                        }
+
+                        $rawTitle = $crmConfig['notifyTitle'] ?? $crmConfig['title'] ?? "Thông báo từ Flow: {$flowName}";
+                        $rawMessage = $crmConfig['notifyMessage'] ?? $crmConfig['message'] ?? $crmConfig['content'] ?? "Khách hàng {{fullName}} ({{email}}) vừa đi đến bước {$step['label']} trong luồng {$flowName}.";
+                        $finalTitle = replaceMergeTags($rawTitle, $subscriber, ['campaign_name' => $flowName], $this->pdo);
+                        $finalMessage = replaceMergeTags($rawMessage, $subscriber, ['campaign_name' => $flowName], $this->pdo);
+
+                        if ($notifyUserId) {
+                            try {
+                                $linkUrl = $crmContactId > 0 ? "/crm/contacts?id={$crmContactId}" : "/automation/flows";
+                                $this->pdo->prepare("
+                                    INSERT INTO notifications (tenant_id, user_id, type, title, body, link, is_read, created_at)
+                                    VALUES (1, ?, 'automation_flow', ?, ?, ?, 0, NOW())
+                                ")->execute([$notifyUserId, $finalTitle, $finalMessage, $linkUrl]);
+                            } catch (\Throwable $eNotif) {
+                                // Fallback: log as CRM activity note if notifications table schema differs
+                                if ($crmContactId > 0) {
+                                    try {
+                                        $this->pdo->prepare("
+                                            INSERT INTO activities (tenant_id, contact_id, type, subject, body, status, done_at, user_id, created_by, created_at, updated_at)
+                                            VALUES (1, ?, 'note', ?, ?, 'done', NOW(), ?, ?, NOW(), NOW())
+                                        ")->execute([$crmContactId, $finalTitle, $finalMessage, $notifyUserId, $notifyUserId]);
+                                    } catch (\Throwable $eAct) {}
+                                }
+                            }
+                            logActivity($this->pdo, $subscriberId, 'crm_notify_owner', $currentStepId, $flowName, "Notified user #{$notifyUserId}: {$finalTitle}", $flowId, null, [], $subscriber['workspace_id']);
+                            $logs[] = "  -> Notified CRM owner #{$notifyUserId}.";
+                        } else {
+                            $logs[] = "  -> CRM Notify Owner skipped: No owner resolved.";
+                        }
+                    } elseif ($crmActionType === 'create_support_ticket' || $crmActionType === 'create_ticket') {
+                        $rawAssignee = $crmConfig['assignee_id'] ?? $crmConfig['assigneeId'] ?? $crmConfig['owner_id'] ?? $crmConfig['ownerId'] ?? null;
+                        $assigneeId = !empty($rawAssignee) ? (int) $rawAssignee : null;
+                        if (!$assigneeId && $crmContactId > 0) {
+                            $stmtOw = $this->pdo->prepare("SELECT owner_id FROM contacts WHERE id = ? AND deleted_at IS NULL LIMIT 1");
+                            $stmtOw->execute([$crmContactId]);
+                            $assigneeId = (int) $stmtOw->fetchColumn() ?: null;
+                        }
+                        if (!$assigneeId && !empty($subscriber['owner_id'])) {
+                            $assigneeId = (int) $subscriber['owner_id'];
+                        }
+                        if (!$assigneeId) {
+                            $assigneeId = 1;
+                        }
+
+                        $rawTicketSubject = $crmConfig['ticket_subject'] ?? $crmConfig['subject'] ?? "Hỗ trợ học viên / khách hàng {{full_name}}";
+                        $rawTicketDesc = $crmConfig['ticket_description'] ?? $crmConfig['description'] ?? $crmConfig['body'] ?? "Ticket tự động khởi tạo từ kịch bản Marketing: {$flowName}.";
+                        $finalTicketSubject = replaceMergeTags($rawTicketSubject, $subscriber, ['campaign_name' => $flowName], $this->pdo);
+                        $finalTicketDesc = replaceMergeTags($rawTicketDesc, $subscriber, ['campaign_name' => $flowName], $this->pdo);
+
+                        $priority = strtolower((string) ($crmConfig['priority'] ?? 'medium'));
+                        if (!in_array($priority, ['low', 'medium', 'high', 'urgent'], true)) {
+                            $priority = 'medium';
+                        }
+                        $dueHours = max(1, (int) ($crmConfig['due_in_hours'] ?? $crmConfig['dueInHours'] ?? 24));
+                        $dueDate = date('Y-m-d H:i:s', time() + ($dueHours * 3600));
+                        $customerName = trim(($subscriber['first_name'] ?? '') . ' ' . ($subscriber['last_name'] ?? '')) ?: ($subscriber['email'] ?? 'Khách hàng');
+                        $relatedContactsJson = $crmContactId > 0 ? json_encode([(int) $crmContactId]) : null;
+
+                        try {
+                            $this->pdo->prepare("
+                                INSERT INTO tickets (tenant_id, created_by, assignee_id, contact_id, subject, customer_name, description, status, priority, due_date, related_contacts, created_at)
+                                VALUES (1, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, NOW())
+                            ")->execute([
+                                $assigneeId,
+                                $assigneeId,
+                                $crmContactId > 0 ? $crmContactId : null,
+                                $finalTicketSubject,
+                                $customerName,
+                                $finalTicketDesc,
+                                $priority,
+                                $dueDate,
+                                $relatedContactsJson
+                            ]);
+                            $newTicketId = (int) $this->pdo->lastInsertId();
+                            logActivity($this->pdo, $subscriberId, 'crm_create_ticket', $currentStepId, $flowName, "Created Ticket #{$newTicketId}: {$finalTicketSubject}", $flowId, null, [], $subscriber['workspace_id']);
+                            $logs[] = "  -> Created MYERP Support Ticket #{$newTicketId} (Assignee #{$assigneeId}).";
+                        } catch (\Throwable $eTk) {
+                            $logs[] = "  -> CRM Create Ticket failed: " . $eTk->getMessage();
+                        }
+                    }
+
+                    $nextStepId = $step['nextStepId'] ?? null;
+                    $isInstantStep = true;
                     break;
 
                 case 'link_flow':
@@ -1434,7 +1761,7 @@ class FlowExecutor
                                         }
                                     }
 
-                                    // [FIX P0] Status was 'processing' Ã¢â‚¬â€ workers only poll WHERE status='waiting',
+                                    // [FIX P0] Status was 'processing' — workers only poll WHERE status='waiting',
                                     // so linked-flow subscribers were invisible until a timeout reclaim cycle.
                                     // Changed to 'waiting' so the dispatched priority worker picks up instantly.
                                     // [HARDENING] Extract step type for the linked flow's first step
@@ -1448,9 +1775,9 @@ class FlowExecutor
                                     }
 
                                     $this->pdo->prepare(
-                                        "INSERT INTO subscriber_flow_states (subscriber_id, workspace_id, flow_id, step_id, step_type, scheduled_at, status, created_at, updated_at, last_step_at)
-                                         VALUES (?, ?, ?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW())"
-                                    )->execute([$subscriberId, $subscriber['workspace_id'] ?? 1, $linkedId, $lStart, $lStartType, $linkedInitialSchedule]);
+                                        "INSERT INTO subscriber_flow_states (subscriber_id, workspace_id, contact_id, flow_id, step_id, step_type, scheduled_at, status, created_at, updated_at, last_step_at)
+                                         VALUES (?, ?, ?, ?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW())"
+                                    )->execute([$subscriberId, $subscriber['workspace_id'] ?? 1, $subscriber['contact_id'] ?? null, $linkedId, $lStart, $lStartType, $linkedInitialSchedule]);
                                     $newQ = $this->pdo->lastInsertId();
                                     if ($newQ) {
                                         dispatchFlowWorker($this->pdo, 'flows', ['priority_queue_id' => $newQ, 'subscriber_id' => $subscriberId, 'priority_flow_id' => $linkedId]);
@@ -1465,7 +1792,7 @@ class FlowExecutor
                         }
                     }
                     // [FIX] Single stat_completed increment here (terminal step for current flow).
-                    // DO NOT also increment inside the canEnroll block Ã¢â‚¬â€ that causes double-counting
+                    // DO NOT also increment inside the canEnroll block — that causes double-counting
                     // when a linked enrollment succeeds.
                     $this->bufferStatsUpdate('flows', $flowId, 'stat_completed', 1, $subscriber['workspace_id']);
                     $shouldContinueChain = false;

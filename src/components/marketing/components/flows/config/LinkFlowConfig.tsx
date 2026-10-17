@@ -82,7 +82,7 @@ const LinkFlowConfig: React.FC<LinkFlowConfigProps> = ({ config, onChange, curre
              {loading ? (
                  <div className="flex justify-center py-10"><Activity className="w-6 h-6 animate-spin text-slate-200" /></div>
              ) : filteredFlows.length === 0 ? (
-                 <div className="text-center py-12 border-2 border-dashed border-slate-100 rounded-[32px] bg-slate-50/50">
+                 <div className="text-center py-12 border-2 border-dashed border-slate-100 rounded-2xl bg-slate-50/50">
                      <AlertOctagon className="w-8 h-8 text-slate-200 mx-auto mb-3" />
                      <p className="text-xs font-bold text-slate-400">Không tìm thấy kịch bản phù hợp.</p>
                  </div>

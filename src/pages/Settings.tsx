@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import dbSchemaJson from '../assets/db_schema.json';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useAuth } from '../contexts/AuthContext';
+import { isMarketing } from '../utils/roleUtils';
 import { useUIStore } from '../store/uiStore';
 import { withRouterFreezer } from '../components/RouterFreezer';
 import { Mail, Settings2, Save, Send, Server, Database, Activity, ChevronDown, ChevronUp, Zap, Shield, MessageCircle, RefreshCw, Settings as SettingsIcon, BarChart2, Clock, Calendar, Users, CheckCircle, Plus, Trash2, Edit2, FileSpreadsheet, Upload, Download, X, Search, UserCheck, FileText, Tag, Scale, Layers, HelpCircle, Filter, Briefcase, GripVertical, Info, ChevronRight, ArrowLeft, ChevronLeft, CheckSquare, DollarSign, LifeBuoy, Eye, Globe, Copy, ArrowUpRight, Sparkles } from 'lucide-react';
@@ -99,6 +101,8 @@ const DEFAULT_REPORT_REASONS = [
 
 const SettingsInner = () => {
   const { t } = useLanguage();
+  const { user } = useAuth();
+  const isMktUser = Boolean(user?.role === 'marketing' || isMarketing(user));
   const { showConfirm } = useUIStore();
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   useEffect(() => {
@@ -509,6 +513,7 @@ const SettingsInner = () => {
   };
 
   const [testEmail, setTestEmail] = useState('');
+  const [testSenderEmail, setTestSenderEmail] = useState('');
   const [testType, setTestType] = useState('system');
   // Collapse state for Input Webhook Code
   const [showInputScript, setShowInputScript] = useState(false);
@@ -1264,6 +1269,8 @@ const SettingsInner = () => {
         targetTab = 'database_maintenance';
       } else if (tabParam === 'tags') {
         targetTab = 'tag_management';
+      } else if (tabParam === 'marketing' || tabParam === 'automation' || tabParam === 'marketing_automation') {
+        targetTab = 'marketing_automation';
       }
       setActiveTab(targetTab);
       if (window.location.hash === '#auto-approve') {
@@ -1272,8 +1279,10 @@ const SettingsInner = () => {
           if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 300);
       }
+    } else if (isMktUser && window.innerWidth > 768) {
+      setActiveTab('marketing_automation');
     }
-  }, []);
+  }, [isMktUser]);
 
   useEffect(() => {
     if (activeTab === 'legacy_mapping') {
@@ -1711,13 +1720,21 @@ const SettingsInner = () => {
 
   const handleTestEmail = async () => {
     if (!testEmail) return toast.error(t("Vui lòng nhập Email người nhận test."));
+    const chosenSender = (testSenderEmail || sesSenderEmail || 'tuyensinh@ideas.edu.vn').trim();
     setTesting(true);
     try {
       const json = await fetchAPI('test_email', {
         method: 'POST',
-        body: JSON.stringify({ email: testEmail, type: testType })
+        body: JSON.stringify({
+          email: testEmail,
+          type: testType,
+          sender_email: chosenSender,
+          from_email: chosenSender,
+          sender_name: sesSenderName || 'IDEAS TEAM',
+          from_name: sesSenderName || 'IDEAS TEAM'
+        })
       });
-      if (json.success) toast.success(t("Gửi mail test thành công! Vui lòng kiểm tra hộp thư đến."));
+      if (json.success) toast.success(t("Gửi mail test thành công (từ ") + chosenSender + t(")! Vui lòng kiểm tra hộp thư đến."));
       else toast.error(t("Gửi mail thất bại. Vui lòng kiểm tra lại cấu hình SMTP/AppScript."));
     } catch {
       toast.error(t("Lỗi kết nối khi gửi mail test"));
@@ -8974,6 +8991,33 @@ function doPost(e) {
           <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', lineHeight: 1.5, margin: 0 }}>
             {t('Gửi một email thử nghiệm để đảm bảo hệ thống đã kết nối thành công với AppScript hoặc Amazon SES.')}
           </p>
+
+          <div>
+            <label className="form-label" style={{ fontWeight: 600 }}>{t('Chọn Email gửi đi (Đã xác minh trong App)')}</label>
+            {(() => {
+              const verifiedList = Array.from(new Set(
+                `${verifiedFromSenders || ''},${sesSenderEmail || ''}`
+                  .split(/[,;\n\r]+/)
+                  .map(s => s.trim())
+                  .filter(s => s.includes('@'))
+              ));
+              const senderOpts = (verifiedList.length > 0 ? verifiedList : ['tuyensinh@ideas.edu.vn', 'cskh@ideas.edu.vn', 'marketing@ideas.edu.vn']).map(em => ({
+                value: em,
+                label: `${em}${em === sesSenderEmail ? ' (Mặc định)' : ' (Đã xác minh)'}`
+              }));
+              const activeVal = testSenderEmail && senderOpts.some(o => o.value === testSenderEmail)
+                ? testSenderEmail
+                : (sesSenderEmail || senderOpts[0]?.value || 'tuyensinh@ideas.edu.vn');
+              return (
+                <CustomSelect
+                  options={senderOpts}
+                  value={activeVal}
+                  onChange={val => setTestSenderEmail(val.toString())}
+                  width="100%"
+                />
+              );
+            })()}
+          </div>
 
           <div>
             <label className="form-label" style={{ fontWeight: 600 }}>{t('Chọn loại test')}</label>

@@ -23,7 +23,7 @@ const AudienceTabContent: React.FC<AudienceTabContentProps> = ({ stats }) => {
                 {/* Device & OS Section - 5 cols */}
                 <div className="lg:col-span-5 space-y-8">
                     {/* Device Stats Card */}
-                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                    <div className="bg-white p-5 rounded-[14px] border border-slate-100 shadow-sm">
                         <div className="flex items-center gap-2.5 mb-6">
                             <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white bg-blue-500 border border-blue-500 shadow-lg shadow-blue-500/20">
                                 <Smartphone className="w-4 h-4" />
@@ -96,7 +96,7 @@ const AudienceTabContent: React.FC<AudienceTabContentProps> = ({ stats }) => {
                     </div>
 
                     {/* OS Stats Card */}
-                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                    <div className="bg-white p-5 rounded-[14px] border border-slate-100 shadow-sm">
                         <div className="flex items-center gap-2.5 mb-6">
                             <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white bg-slate-700 border border-slate-700 shadow-lg shadow-slate-700/20">
                                 <Terminal className="w-4 h-4" />
@@ -170,7 +170,7 @@ const AudienceTabContent: React.FC<AudienceTabContentProps> = ({ stats }) => {
                 </div>
 
                 {/* Location Ranking - 7 cols */}
-                <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
+                <div className="lg:col-span-7 bg-white rounded-[14px] border border-slate-100 shadow-sm overflow-hidden flex flex-col">
                     <div className="px-6 py-4 border-b border-slate-50 flex items-center justify-between bg-slate-50/20">
                         <div className="flex items-center gap-2.5">
                             <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white bg-indigo-500 border border-indigo-500 shadow-lg shadow-indigo-500/20">

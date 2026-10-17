@@ -186,7 +186,7 @@ const ScenarioFlowModal: React.FC<{
                         <button
                             onClick={handleSave}
                             disabled={loading}
-                            className="flex items-center gap-2 h-9 px-5 rounded-xl text-sm font-bold text-white bg-orange-500 hover:bg-orange-600 shadow-md shadow-orange-500/20 active:scale-95 transition-all disabled:opacity-50"
+                            className="flex items-center gap-2 h-9 px-5 rounded-xl text-sm font-bold text-white bg-[var(--color-primary)] hover:bg-[#9A1523] shadow-md shadow-[var(--color-primary)]/20 active:scale-95 transition-all disabled:opacity-50"
                         >
                             {loading ? (
                                 <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -270,7 +270,7 @@ const ScenarioCard: React.FC<{
 
     return (
         <div
-            className={`rounded-[20px] transition-all duration-300 group relative flex flex-col md:flex-row md:items-center p-5 gap-5 border cursor-pointer hover:-translate-y-0.5
+            className={`rounded-[14px] transition-all duration-300 group relative flex flex-col md:flex-row md:items-center p-5 gap-5 border cursor-pointer hover:-translate-y-0.5
                 ${isDark ? 'bg-slate-800/60 border-slate-700 hover:border-blue-500/40 hover:shadow-[0_8px_30px_rgba(59,130,246,0.1)]' : 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-[0_12px_30px_rgba(0,0,0,0.06)] shadow-sm'}
                 ${!scenario.is_active ? 'opacity-60 saturate-50' : ''}`}
             onClick={onEdit}
@@ -282,7 +282,7 @@ const ScenarioCard: React.FC<{
             </div>
 
             {/* Icon */}
-            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-inner ml-2 transition-all ${scenario.is_active ? 'bg-gradient-to-br from-amber-400 to-amber-600 shadow-amber-500/20' : (isDark ? 'bg-slate-700' : 'bg-slate-200')}`}>
+            <div className={`w-14 h-14 rounded-[14px] flex items-center justify-center shrink-0 shadow-inner ml-2 transition-all ${scenario.is_active ? 'bg-gradient-to-br from-[#BD1D2D] to-[#9A1523] shadow-[var(--color-primary)]/20' : (isDark ? 'bg-slate-700' : 'bg-slate-200')}`}>
                 <PieChart className={`w-6 h-6 ${scenario.is_active ? 'text-white' : (isDark ? 'text-slate-500' : 'text-slate-400')}`} />
             </div>
 
@@ -309,7 +309,7 @@ const ScenarioCard: React.FC<{
                     <span className={`text-[11px] font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Từ khóa:</span>
                     <div className="flex flex-wrap gap-1.5">
                         {keywords.slice(0, 4).map((kw, i) => (
-                            <span key={i} className={`text-[10px] font-bold px-2 py-0.5 rounded border inline-block max-w-[120px] truncate ${isDark ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+                            <span key={i} className={`text-[10px] font-bold px-2 py-0.5 rounded border inline-block max-w-[120px] truncate ${isDark ? 'bg-[var(--color-primary)]/10 border-[var(--color-primary)]/20 text-amber-400' : 'bg-amber-50 border-amber-200 text-[#9A1523]'}`}>
                                 {kw}
                             </span>
                         ))}
@@ -576,10 +576,10 @@ const ScenarioManager: React.FC<Props> = ({ propertyId, isDarkTheme, brandColor 
             )}
 
             {/* Header */}
-            <div className={`flex flex-col md:flex-row md:items-start justify-between gap-5 p-6 rounded-[24px] ${isDark ? 'bg-slate-800' : 'bg-slate-50 border border-slate-100 shadow-sm'}`}>
+            <div className={`flex flex-col md:flex-row md:items-start justify-between gap-5 p-6 rounded-[18px] ${isDark ? 'bg-slate-800' : 'bg-slate-50 border border-slate-100 shadow-sm'}`}>
                 <div className="flex items-center gap-4">
                     <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 shadow-sm border ${isDark ? 'bg-slate-700 border-slate-600' : 'bg-white border-slate-200'}`}>
-                        <Play className={`w-5 h-5 ml-0.5 ${isDark ? 'fill-amber-500 text-amber-500' : 'fill-amber-600 text-amber-600'}`} />
+                        <Play className={`w-5 h-5 ml-0.5 ${isDark ? 'fill-amber-500 text-[var(--color-primary)]' : 'fill-amber-600 text-[var(--color-primary)]'}`} />
                     </div>
                     <div>
                         <h3 className={`text-lg font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-800'}`}>Kịch Bản Trả Lời Tự Động</h3>
@@ -621,7 +621,7 @@ const ScenarioManager: React.FC<Props> = ({ propertyId, isDarkTheme, brandColor 
                     </div>
                     
                     <button onClick={openCreate}
-                        className="flex items-center gap-2 h-11 px-5 rounded-[16px] text-[13px] font-bold bg-orange-500 hover:bg-orange-600 text-white shadow-lg shadow-orange-500/30 active:scale-95 transition-all ml-1">
+                        className="flex items-center gap-2 h-11 px-5 rounded-[16px] text-[13px] font-bold bg-[var(--color-primary)] hover:bg-[#9A1523] text-white shadow-lg shadow-[var(--color-primary)]/30 active:scale-95 transition-all ml-1">
                         <Plus className="w-4 h-4" /> Tạo Kịch Bản
                     </button>
                 </div>
@@ -629,9 +629,9 @@ const ScenarioManager: React.FC<Props> = ({ propertyId, isDarkTheme, brandColor 
 
             {/* Global disabled banner */}
             {!globalEnabled && (
-                <div className={`flex items-center gap-3 px-5 py-4 rounded-xl border ${isDark ? 'border-amber-600/20 bg-amber-600/5' : 'border-amber-200 bg-amber-50'}`}>
-                    <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
-                    <p className={`text-sm font-medium ${isDark ? 'text-amber-400' : 'text-amber-700'}`}>
+                <div className={`flex items-center gap-3 px-5 py-4 rounded-xl border ${isDark ? 'border-[var(--color-primary)]/20 bg-[var(--color-primary)]/5' : 'border-amber-200 bg-amber-50'}`}>
+                    <AlertCircle className="w-5 h-5 text-[var(--color-primary)] shrink-0" />
+                    <p className={`text-sm font-medium ${isDark ? 'text-amber-400' : 'text-[#9A1523]'}`}>
                         Tính năng Kịch Bản đang <strong>tắt</strong>. Chatbot sẽ dùng AI hoàn toàn. Bật lại để áp dụng kịch bản.
                     </p>
                 </div>
@@ -640,21 +640,21 @@ const ScenarioManager: React.FC<Props> = ({ propertyId, isDarkTheme, brandColor 
             {/* Loading */}
             {loading && (
                 <div className="space-y-3">
-                    {[1, 2, 3].map(i => <div key={i} className={`h-24 rounded-2xl animate-pulse ${isDark ? 'bg-slate-800/50' : 'bg-slate-100'}`} />)}
+                    {[1, 2, 3].map(i => <div key={i} className={`h-24 rounded-[14px] animate-pulse ${isDark ? 'bg-slate-800/50' : 'bg-slate-100'}`} />)}
                 </div>
             )}
 
             {/* Empty state */}
             {!loading && scenarios.length === 0 && (
-                <div className={`flex flex-col items-center justify-center py-20 px-6 rounded-[24px] border border-dashed text-center ${isDark ? 'border-slate-700 bg-slate-800/10' : 'border-slate-200 bg-slate-50/50'}`}>
-                    <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mb-6 shadow-sm border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
+                <div className={`flex flex-col items-center justify-center py-20 px-6 rounded-[18px] border border-dashed text-center ${isDark ? 'border-slate-700 bg-slate-800/10' : 'border-slate-200 bg-slate-50/50'}`}>
+                    <div className={`w-20 h-20 rounded-[18px] flex items-center justify-center mb-6 shadow-sm border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
                         <Bot className={`w-10 h-10 ${isDark ? 'text-slate-600' : 'text-blue-300'}`} />
                     </div>
                     <h4 className={`text-lg font-black mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Chưa có kịch bản mẫu nào</h4>
                     <p className={`text-sm font-medium mb-8 max-w-sm leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
                         Tạo luồng tư vấn với canvas thả-nối nhánh chuyên nghiệp, giúp chốt sales tự nhiên và dễ cấu hình.
                     </p>
-                    <button onClick={openCreate} className="flex items-center gap-2 h-12 px-8 rounded-2xl text-[14px] font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xl shadow-blue-500/20 active:scale-95 transition-all">
+                    <button onClick={openCreate} className="flex items-center gap-2 h-12 px-8 rounded-[14px] text-[14px] font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xl shadow-blue-500/20 active:scale-95 transition-all">
                         <Plus className="w-5 h-5" /> Bắt đầu tạo ngay
                     </button>
                 </div>

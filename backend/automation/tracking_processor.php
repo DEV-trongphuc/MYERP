@@ -413,6 +413,10 @@ function processTrackingEvent($pdo, $type, $payload)
             }
         }
 
+        if ($sid && function_exists('domationSyncSubscriberMatchOnly')) {
+            domationSyncSubscriberMatchOnly($pdo, (string)$sid);
+        }
+
         return true;
     }
 
@@ -464,7 +468,11 @@ function processTrackingEvent($pdo, $type, $payload)
             }
         }
 
-        logActivity($pdo, $sid, 'unsubscribe', $rid, 'Unsubscribe', "Unsubscribed via Link", $fid, $cid);
+        logActivity($pdo, $sid, 'unsubscribe', $rid, 'Unsubscribe', "Unsubscribed via Link", $fid, $cid, [], $wId);
+
+        if (function_exists('domationSyncSubscriberMatchOnly')) {
+            domationSyncSubscriberMatchOnly($pdo, (string)$sid);
+        }
 
         // [WARNING] triggerFlows('unsubscribe') must NOT send any marketing emails.
         // The subscriber is already marked 'unsubscribed' above. Any flow triggered here

@@ -54,12 +54,12 @@ const EditDocModal: React.FC<EditDocModalProps> = ({ isOpen, onClose, onUpdate, 
                         value={editingDoc.content}
                         onChange={e => setEditingDoc({ ...editingDoc, content: e.target.value })}
                         rows={20}
-                        className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-emerald-500 transition-all resize-none shadow-inner"
+                        className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-[14px] text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-emerald-500 transition-all resize-none shadow-inner"
                     />
                     <div className="text-right text-[10px] text-slate-400 font-bold mt-1">{(editingDoc.content || '').length.toLocaleString()}/15,000 ký tự</div>
                 </div>
 
-                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-[14px] border border-slate-100">
                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Loại dữ liệu: <span className="text-slate-700">{editingDoc.source_type}</span></div>
                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Cập nhật: <span className="text-slate-700">{new Date(editingDoc.updated_at || editingDoc.created_at).toLocaleString()}</span></div>
                 </div>

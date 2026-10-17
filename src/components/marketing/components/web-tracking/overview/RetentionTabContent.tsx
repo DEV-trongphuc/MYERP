@@ -53,9 +53,9 @@ const RetentionTabContent: React.FC<RetentionTabContentProps> = ({ property, dev
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-top-4 duration-500">
             {/* Header Info - Lightened */}
-            <div className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="bg-white p-8 rounded-[18px] border border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div className="flex items-start gap-5">
-                    <div className="w-14 h-14 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center flex-shrink-0 border border-slate-100">
+                    <div className="w-14 h-14 bg-slate-50 text-slate-400 rounded-[14px] flex items-center justify-center flex-shrink-0 border border-slate-100">
                         <Users className="w-8 h-8" />
                     </div>
                     <div>
@@ -76,7 +76,7 @@ const RetentionTabContent: React.FC<RetentionTabContentProps> = ({ property, dev
                             Tìm hiểu
                         </button>
                     </div>
-                    <div className="flex p-1 bg-slate-100 rounded-2xl border border-slate-200">
+                    <div className="flex p-1 bg-slate-100 rounded-[14px] border border-slate-200">
                         {[
                             { id: 'day', label: 'Ngày' },
                             { id: 'week', label: 'Tuần' },
@@ -99,10 +99,10 @@ const RetentionTabContent: React.FC<RetentionTabContentProps> = ({ property, dev
 
             {loading ? (
                 <div className="space-y-4 animate-pulse">
-                    <div className="h-[450px] bg-slate-50 rounded-[32px] border border-slate-100"></div>
+                    <div className="h-[450px] bg-slate-50 rounded-[18px] border border-slate-100"></div>
                 </div>
             ) : retention.length > 0 ? (
-                <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
+                <div className="bg-white rounded-[18px] border border-slate-100 shadow-sm overflow-hidden">
                     <div className="overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
                         <table className="w-full border-collapse">
                             <thead>
@@ -160,7 +160,7 @@ const RetentionTabContent: React.FC<RetentionTabContentProps> = ({ property, dev
                     </div>
                 </div>
             ) : (
-                <div className="bg-white p-20 rounded-[32px] border border-slate-100 shadow-sm text-center flex flex-col items-center gap-4">
+                <div className="bg-white p-20 rounded-[18px] border border-slate-100 shadow-sm text-center flex flex-col items-center gap-4">
                     <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-2 border border-slate-100">
                         <Users className="w-10 h-10 text-slate-200" />
                     </div>
@@ -186,7 +186,7 @@ const RetentionTabContent: React.FC<RetentionTabContentProps> = ({ property, dev
                 size="xl"
             >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="p-8 bg-slate-50 border border-slate-100 rounded-[32px] relative overflow-hidden group">
+                    <div className="p-8 bg-slate-50 border border-slate-100 rounded-[18px] relative overflow-hidden group">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-white rounded-full -mr-16 -mt-16 group-hover:scale-110 transition-transform duration-500"></div>
                         <h4 className="flex items-center gap-2 font-black text-lg mb-6 text-slate-800 relative">
                             <div className="p-2 bg-blue-600 text-white rounded-xl">
@@ -210,7 +210,7 @@ const RetentionTabContent: React.FC<RetentionTabContentProps> = ({ property, dev
                         </ul>
                     </div>
 
-                    <div className="p-8 bg-slate-50 border border-slate-100 rounded-[32px] relative overflow-hidden group">
+                    <div className="p-8 bg-slate-50 border border-slate-100 rounded-[18px] relative overflow-hidden group">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-orange-100/30 rounded-full -mr-16 -mt-16 group-hover:scale-110 transition-transform duration-500"></div>
                         <h4 className="font-black text-lg mb-6 text-slate-800 relative flex items-center gap-2">
                             <div className="p-2 bg-white text-slate-400 rounded-xl border border-slate-100">
@@ -222,7 +222,7 @@ const RetentionTabContent: React.FC<RetentionTabContentProps> = ({ property, dev
                             <p className="text-sm text-slate-500 leading-relaxed font-medium">
                                 Chỉ số Retention cao chứng tỏ website của bạn đủ sức hấp dẫn. Nếu tỷ lệ giảm quá nhanh ở các tuần đầu/ngày đầu, bạn cần xem xét lại chiến lược giữ chân Khách hàng (Email Marketing, Zalo ZNS...).
                             </p>
-                            <div className="p-5 bg-white border border-slate-100 rounded-[24px] flex items-start gap-4 mt-6">
+                            <div className="p-5 bg-white border border-slate-100 rounded-[18px] flex items-start gap-4 mt-6">
                                 <blockquote className="text-xs text-orange-800 font-bold italic leading-relaxed">
                                     "Phân tích Cohort giúp bạn biết được liệu các cập nhật website gần đây có thực sự làm Khách hàng hài lòng hơn hay không."
                                 </blockquote>
@@ -230,7 +230,7 @@ const RetentionTabContent: React.FC<RetentionTabContentProps> = ({ property, dev
                         </div>
                     </div>
                 </div>
-                <div className="mt-8 p-6 bg-slate-900 rounded-[24px] text-white">
+                <div className="mt-8 p-6 bg-slate-900 rounded-[18px] text-white">
                     <h5 className="font-bold text-sm mb-2 text-blue-400">Mẹo nhỏ:</h5>
                     <p className="text-xs text-slate-300 leading-relaxed">
                         Hãy theo dõi các tuần có tỷ lệ retention cao đột biến để tìm ra nguyên nhân (ví dụ: một chiến dịch email thành công, hoặc một bài viết blog chất lượng) và nhân bản nó.

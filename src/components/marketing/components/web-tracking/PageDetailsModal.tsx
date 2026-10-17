@@ -83,7 +83,7 @@ const PageDetailsModal: React.FC<PageDetailsModalProps> = ({
         if (s.includes('google')) return <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Google_Favicon_2025.svg/250px-Google_Favicon_2025.svg.png" className="w-5 h-5 object-contain" alt="Google" />;
         if (s.includes('facebook') || s === 'fb') return <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/2021_Facebook_icon.svg/960px-2021_Facebook_icon.svg.png" className="w-5 h-5 object-contain" alt="Facebook" />;
         if (s.includes('zalo')) return <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/Icon_of_Zalo.svg/960px-Icon_of_Zalo.svg.png" className="w-5 h-5 object-contain" alt="Zalo" />;
-        return <div className={`w-3 h-3 rounded-full ${medium === 'organic' ? 'bg-green-500' : medium === 'paid' ? 'bg-orange-500' : 'bg-blue-500'}`} />;
+        return <div className={`w-3 h-3 rounded-full ${medium === 'organic' ? 'bg-green-500' : medium === 'paid' ? 'bg-[var(--color-primary)]' : 'bg-blue-500'}`} />;
     };
 
     useEffect(() => {
@@ -163,7 +163,7 @@ const PageDetailsModal: React.FC<PageDetailsModalProps> = ({
                             {/* Stats Skeleton */}
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                 {[...Array(6)].map((_, i) => (
-                                    <div key={i} className="bg-slate-100 p-4 rounded-2xl h-24"></div>
+                                    <div key={i} className="bg-slate-100 p-4 rounded-[14px] h-24"></div>
                                 ))}
                             </div>
 
@@ -191,7 +191,7 @@ const PageDetailsModal: React.FC<PageDetailsModalProps> = ({
                         <div className="space-y-6">
                             {/* Overview Stats */}
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl hover:border-slate-200 transition-colors">
+                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px] hover:border-slate-200 transition-colors">
                                     <div className="flex items-center gap-2 mb-2">
                                         <Eye className="w-4 h-4 text-slate-400" />
                                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Lượt xem</span>
@@ -199,7 +199,7 @@ const PageDetailsModal: React.FC<PageDetailsModalProps> = ({
                                     <p className="text-2xl font-black text-slate-800">{details.overview.totalViews.toLocaleString()}</p>
                                 </div>
 
-                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl hover:border-slate-200 transition-colors">
+                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px] hover:border-slate-200 transition-colors">
                                     <div className="flex items-center gap-2 mb-2">
                                         <Users className="w-4 h-4 text-slate-400" />
                                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Visitors</span>
@@ -207,7 +207,7 @@ const PageDetailsModal: React.FC<PageDetailsModalProps> = ({
                                     <p className="text-2xl font-black text-slate-800">{details.overview.uniqueVisitors.toLocaleString()}</p>
                                 </div>
 
-                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl hover:border-slate-200 transition-colors">
+                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px] hover:border-slate-200 transition-colors">
                                     <div className="flex items-center gap-2 mb-2">
                                         <Clock className="w-4 h-4 text-slate-400" />
                                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Thời gian</span>
@@ -215,7 +215,7 @@ const PageDetailsModal: React.FC<PageDetailsModalProps> = ({
                                     <p className="text-2xl font-black text-slate-800">{formatDuration(Math.round(details.overview.avgTimeOnPage || 0))}</p>
                                 </div>
 
-                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl hover:border-slate-200 transition-colors">
+                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px] hover:border-slate-200 transition-colors">
                                     <div className="flex items-center gap-2 mb-2">
                                         <MousePointer2 className="w-4 h-4 text-slate-400" />
                                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Scroll</span>
@@ -223,7 +223,7 @@ const PageDetailsModal: React.FC<PageDetailsModalProps> = ({
                                     <p className="text-2xl font-black text-slate-800">{Math.round(details.overview.avgScrollDepth || 0)}%</p>
                                 </div>
 
-                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl hover:border-slate-200 transition-colors">
+                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px] hover:border-slate-200 transition-colors">
                                     <div className="flex items-center gap-2 mb-2">
                                         <TrendingDown className="w-4 h-4 text-slate-400" />
                                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Bounce</span>
@@ -234,7 +234,7 @@ const PageDetailsModal: React.FC<PageDetailsModalProps> = ({
                                     </p>
                                 </div>
 
-                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl hover:border-slate-200 transition-colors">
+                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px] hover:border-slate-200 transition-colors">
                                     <div className="flex items-center gap-2 mb-2">
                                         <TrendingUp className={`w-4 h-4 ${details.overview.avgLoadTime > 2500 ? 'text-rose-500' : 'text-slate-400'}`} />
                                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Avg Load</span>
@@ -254,7 +254,7 @@ const PageDetailsModal: React.FC<PageDetailsModalProps> = ({
                             {/* Events */}
                             <div>
                                 <div className="flex items-center gap-3 mb-4">
-                                    <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-lg bg-gradient-to-br from-purple-500 to-indigo-600">
+                                    <div className="w-10 h-10 rounded-[14px] flex items-center justify-center text-white shadow-lg bg-gradient-to-br from-purple-500 to-indigo-600">
                                         <Activity className="w-5 h-5" />
                                     </div>
                                     <div className="flex-1">
@@ -308,7 +308,7 @@ const PageDetailsModal: React.FC<PageDetailsModalProps> = ({
                                                 );
                                             })
                                         ) : (
-                                            <div className="py-12 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                                            <div className="py-12 text-center bg-slate-50/50 rounded-[14px] border border-dashed border-slate-200">
                                                 <Activity className="w-8 h-8 text-slate-200 mx-auto mb-2" />
                                                 <p className="text-slate-400 text-xs font-medium italic">Không có dữ liệu {eventTab}</p>
                                             </div>
@@ -320,7 +320,7 @@ const PageDetailsModal: React.FC<PageDetailsModalProps> = ({
                             {/* Traffic Sources */}
                             <div>
                                 <div className="flex items-center gap-3 mb-4">
-                                    <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-lg bg-gradient-to-br from-orange-400 to-orange-600">
+                                    <div className="w-10 h-10 rounded-[14px] flex items-center justify-center text-white shadow-lg bg-gradient-to-br from-[#BD1D2D] to-[#9A1523]">
                                         <Globe className="w-5 h-5" />
                                     </div>
                                     <div>
@@ -339,7 +339,7 @@ const PageDetailsModal: React.FC<PageDetailsModalProps> = ({
                                                     </div>
                                                     <div className="min-w-0">
                                                         <p className="text-[11px] font-bold text-slate-700 capitalize mb-0.5">{source.source}</p>
-                                                        <span className={`text-[8px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${source.medium === 'paid' ? 'bg-orange-50 text-orange-600' :
+                                                        <span className={`text-[8px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${source.medium === 'paid' ? 'bg-orange-50 text-[var(--color-primary)]' :
                                                             source.medium === 'organic' ? 'bg-emerald-50 text-emerald-600' :
                                                                 'bg-slate-100 text-slate-500'
                                                             }`}>

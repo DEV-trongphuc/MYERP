@@ -194,7 +194,7 @@ const GeneralTabContent: React.FC<GeneralTabContentProps> = ({ stats, formatDura
                         size="xl"
                     >
                         <div className="space-y-8 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
-                            <div className="p-8 bg-slate-50 border border-slate-100 rounded-[32px] relative overflow-hidden group">
+                            <div className="p-8 bg-slate-50 border border-slate-100 rounded-[18px] relative overflow-hidden group">
                                 <h4 className="flex items-center gap-2 font-black text-lg mb-4 text-slate-800 relative">
                                     <div className="p-2 bg-rose-600 text-white rounded-xl">
                                         <BookOpen className="w-5 h-5" />
@@ -207,7 +207,7 @@ const GeneralTabContent: React.FC<GeneralTabContentProps> = ({ stats, formatDura
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="p-8 bg-white border border-slate-100 rounded-[32px] shadow-sm">
+                                <div className="p-8 bg-white border border-slate-100 rounded-[18px] shadow-sm">
                                     <h5 className="font-black text-slate-800 mb-6 flex items-center gap-2">
                                         <div className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
                                             <TrendingUp className="w-4 h-4" />
@@ -217,12 +217,12 @@ const GeneralTabContent: React.FC<GeneralTabContentProps> = ({ stats, formatDura
                                     <p className="text-xs text-slate-500 leading-relaxed font-medium mb-4">
                                         Không có con số "chuẩn" cho mỗi lĩnh vực. Tỷ lệ thoát phụ thuộc rất lớn vào loại trang web và mục đích của trang.
                                     </p>
-                                    <div className="p-4 bg-orange-50 border border-orange-100 rounded-2xl italic text-[11px] text-orange-800 font-bold">
+                                    <div className="p-4 bg-orange-50 border border-orange-100 rounded-[14px] italic text-[11px] text-orange-800 font-bold">
                                         "Ví dụ: Một trang blog trả lời đúng câu hỏi người dùng tìm kiếm có thể có tỷ lệ thoát 90%+ nhưng vẫn là chất lượng tốt."
                                     </div>
                                 </div>
 
-                                <div className="p-8 bg-white border border-slate-100 rounded-[32px] shadow-sm">
+                                <div className="p-8 bg-white border border-slate-100 rounded-[18px] shadow-sm">
                                     <h5 className="font-black text-slate-800 mb-6 flex items-center gap-2">
                                         <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
                                             <Table className="w-4 h-4" />
@@ -234,7 +234,7 @@ const GeneralTabContent: React.FC<GeneralTabContentProps> = ({ stats, formatDura
                                             { label: 'Bán lẻ / TMĐT', range: '20% - 40%', color: 'text-emerald-500' },
                                             { label: 'Dịch vụ', range: '10% - 30%', color: 'text-emerald-500' },
                                             { label: 'Tạo Khách hàng tiềm năng', range: '30% - 50%', color: 'text-blue-500' },
-                                            { label: 'Nội dung (Content site)', range: '40% - 60%', color: 'text-amber-600' },
+                                            { label: 'Nội dung (Content site)', range: '40% - 60%', color: 'text-[var(--color-primary)]' },
                                             { label: 'Blog / Landing Page', range: '70% - 90%', color: 'text-rose-500' }
                                         ].map((item, i) => (
                                             <div key={i} className="flex items-center justify-between text-[11px] font-bold py-2 border-b border-slate-50 last:border-0">
@@ -249,7 +249,7 @@ const GeneralTabContent: React.FC<GeneralTabContentProps> = ({ stats, formatDura
                     </Modal>
 
                     {/* Chart Section - Enhanced */}
-                    <div className="bg-gradient-to-br from-white to-slate-50/30 p-6 rounded-3xl border border-slate-200/60 shadow-[0_8px_30px_-6px_rgba(0,0,0,0.08)]">
+                    <div className="bg-gradient-to-br from-white to-slate-50/30 p-6 rounded-[18px] border border-slate-200/60 shadow-[0_8px_30px_-6px_rgba(0,0,0,0.08)]">
                         <div className="flex items-center justify-between mb-5">
                             <div>
                                 <h3 className="text-base font-black text-slate-800 flex items-center gap-2.5 tracking-tight">
@@ -261,7 +261,7 @@ const GeneralTabContent: React.FC<GeneralTabContentProps> = ({ stats, formatDura
                                 <p className="text-[10px] text-slate-500 mt-1.5 font-semibold ml-11">Thống kê lưu lượng truy cập theo Thời gian</p>
                             </div>
                         </div>
-                        <div className="min-h-[350px] bg-white rounded-2xl p-4 border border-slate-100">
+                        <div className="min-h-[350px] bg-white rounded-[14px] p-4 border border-slate-100">
                             {stats?.chart && stats.chart.length > 0 ? (
                                 <Chart options={chartOptions} series={chartSeries} type="area" height={350} />
                             ) : (

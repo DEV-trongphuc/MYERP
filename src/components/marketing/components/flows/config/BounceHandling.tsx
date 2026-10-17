@@ -51,7 +51,7 @@ const BounceHandling: React.FC<BounceHandlingProps> = ({ value, onChange, disabl
                             key={opt.id}
                             onClick={() => !disabled && onChange(opt.id)}
                             className={`
-                                relative p-5 rounded-[20px] border-2 cursor-pointer transition-all duration-300
+                                relative p-5 rounded-xl border-2 cursor-pointer transition-all duration-300
                                 flex flex-col justify-between h-full
                                 ${isActive ? `bg-white ${opt.activeBorder} shadow-lg` : 'bg-slate-50 border-transparent hover:bg-white hover:border-slate-200'}
                             `}

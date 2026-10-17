@@ -17,10 +17,10 @@ const InstructionSettings: React.FC<InstructionSettingsProps> = ({
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
             <div className="lg:col-span-2 space-y-8">
-                <div className="bg-slate-50/50 p-8 rounded-[32px] border border-slate-200 space-y-8 transition-all">
+                <div className="bg-slate-50/50 p-8 rounded-[18px] border border-slate-200 space-y-8 transition-all">
                     <div className="flex items-center justify-between border-b border-slate-200 pb-5">
                         <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-slate-800 shadow-sm border border-slate-100">
+                            <div className="w-12 h-12 bg-white rounded-[14px] flex items-center justify-center text-slate-800 shadow-sm border border-slate-100">
                                 <Bot className="w-6 h-6" />
                             </div>
                             <div>
@@ -31,13 +31,13 @@ const InstructionSettings: React.FC<InstructionSettingsProps> = ({
                     </div>
 
                     <div className="space-y-1.5">
-                        <div className="relative w-full group overflow-hidden rounded-[20px] border-2 border-slate-800 bg-[#1e1e1e] focus-within:border-amber-600 transition-all shadow-inner">
+                        <div className="relative w-full group overflow-hidden rounded-[14px] border-2 border-slate-800 bg-[#1e1e1e] focus-within:border-[var(--color-primary)] transition-all shadow-inner">
                             <textarea
                                 value={settings.system_instruction || ''}
                                 onChange={e => setSettings({ ...settings, system_instruction: e.target.value })}
                                 rows={35}
                                 placeholder={`Bạn là tư vấn viên chuyên nghiệp về lĩnh vực ...\nTONE: Chuyên nghiệp, lịch sự, tư vấn đầy đủ nhưng đúng trọng tâm, KHÔNG emoji, KHÔNG nói kiểu ("theo dữ liệu...").\nXưng 'em', gọi khách 'anh/chị'`}
-                                className="relative w-full p-5 bg-transparent text-[11px] font-mono text-slate-300 caret-white outline-none resize-none leading-relaxed z-10 block focus:border-amber-600"
+                                className="relative w-full p-5 bg-transparent text-[11px] font-mono text-slate-300 caret-white outline-none resize-none leading-relaxed z-10 block focus:border-[var(--color-primary)]"
                                 style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
                             />
                         </div>
@@ -46,10 +46,10 @@ const InstructionSettings: React.FC<InstructionSettingsProps> = ({
                     <div className="pt-6 border-t border-dashed border-slate-200">
                         <div
                             onClick={() => setShowAdvanced(!showAdvanced)}
-                            className={`flex items-center justify-between cursor-pointer group select-none bg-slate-900 p-4 border border-slate-800 shadow-lg transition-all relative z-20 ${showAdvanced ? 'rounded-t-[20px] border-b-0' : 'rounded-[20px] hover:shadow-xl'}`}
+                            className={`flex items-center justify-between cursor-pointer group select-none bg-slate-900 p-4 border border-slate-800 shadow-lg transition-all relative z-20 ${showAdvanced ? 'rounded-t-[20px] border-b-0' : 'rounded-[14px] hover:shadow-xl'}`}
                         >
                             <div className="flex items-center gap-3">
-                                <div className={`p-2 rounded-lg transition-colors ${showAdvanced ? 'bg-amber-600 text-slate-900' : 'bg-slate-800 text-slate-400 group-hover:text-amber-600'}`}>
+                                <div className={`p-2 rounded-lg transition-colors ${showAdvanced ? 'bg-[var(--color-primary)] text-slate-900' : 'bg-slate-800 text-slate-400 group-hover:text-[var(--color-primary)]'}`}>
                                     <Settings className="w-4 h-4" />
                                 </div>
                                 <div>
@@ -70,7 +70,7 @@ const InstructionSettings: React.FC<InstructionSettingsProps> = ({
                                                 <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
                                                 Độ chính xác (Min Score)
                                             </label>
-                                            <span className="text-xs font-bold text-amber-600 font-mono bg-slate-800 px-2 py-0.5 rounded border border-slate-700 shadow-sm">{settings.similarity_threshold || 0.45}</span>
+                                            <span className="text-xs font-bold text-[var(--color-primary)] font-mono bg-slate-800 px-2 py-0.5 rounded border border-slate-700 shadow-sm">{settings.similarity_threshold || 0.45}</span>
                                         </div>
                                         <input
                                             type="range"
@@ -88,7 +88,7 @@ const InstructionSettings: React.FC<InstructionSettingsProps> = ({
                                                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
                                                 Số lượng kết quả (Top K)
                                             </label>
-                                            <span className="text-xs font-bold text-amber-600 font-mono bg-slate-800 px-2 py-0.5 rounded border border-slate-700 shadow-sm">{settings.top_k || 12}</span>
+                                            <span className="text-xs font-bold text-[var(--color-primary)] font-mono bg-slate-800 px-2 py-0.5 rounded border border-slate-700 shadow-sm">{settings.top_k || 12}</span>
                                         </div>
                                         <input
                                             type="range"

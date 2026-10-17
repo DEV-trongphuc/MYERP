@@ -38,7 +38,7 @@ const CustomSelect = ({ label, value, options, onChange, className }: { label?: 
             </div>
 
             {isOpen && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden z-[50] animate-in fade-in zoom-in-95 duration-200">
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-[14px] shadow-xl border border-slate-100 overflow-hidden z-[50] animate-in fade-in zoom-in-95 duration-200">
                     <div className="max-h-[200px] overflow-y-auto p-1.5 space-y-0.5">
                         {options.map((opt) => (
                             <div
@@ -343,9 +343,9 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
             <div className="flex flex-col bg-white max-h-[90vh]">
                 {/* Header */}
                 <div className={`p-8 border-b border-slate-50 flex justify-between items-center relative overflow-hidden`}>
-                    <div className={`absolute inset-0 opacity-10 ${formData.type === 'welcome' ? 'bg-gradient-to-r from-amber-400 to-orange-500' : formData.type === 'holiday' ? 'bg-gradient-to-r from-rose-500 to-red-600' : 'bg-gradient-to-r from-blue-500 to-indigo-600'}`}></div>
+                    <div className={`absolute inset-0 opacity-10 ${formData.type === 'welcome' ? 'bg-gradient-to-r from-[#BD1D2D] to-[#9A1523]' : formData.type === 'holiday' ? 'bg-gradient-to-r from-rose-500 to-red-600' : 'bg-gradient-to-r from-blue-500 to-indigo-600'}`}></div>
                     <div className="relative z-10 flex items-center gap-4">
-                        <div className={`w-14 h-14 rounded-2xl shadow-xl flex items-center justify-center text-white ${formData.type === 'welcome' ? 'bg-gradient-to-br from-amber-400 to-orange-500 shadow-orange-500/30' : formData.type === 'holiday' ? 'bg-gradient-to-br from-rose-500 to-red-600 shadow-rose-500/30' : 'bg-gradient-to-br from-blue-500 to-indigo-600 shadow-blue-500/30'}`}>
+                        <div className={`w-14 h-14 rounded-[14px] shadow-xl flex items-center justify-center text-white ${formData.type === 'welcome' ? 'bg-gradient-to-br from-[#BD1D2D] to-[#9A1523] shadow-[var(--color-primary)]/30' : formData.type === 'holiday' ? 'bg-gradient-to-br from-rose-500 to-red-600 shadow-rose-500/30' : 'bg-gradient-to-br from-blue-500 to-indigo-600 shadow-blue-500/30'}`}>
                             {formData.type === 'welcome' ? <Star className="w-7 h-7" /> : formData.type === 'holiday' ? <Calendar className="w-7 h-7" /> : <Zap className="w-7 h-7" />}
                         </div>
                         <div>
@@ -376,7 +376,7 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
                                         label="Loại kích hoạt"
                                         value={formData.type}
                                         options={[
-                                            { value: 'welcome', label: <div className="flex items-center gap-2"><Star className="w-4 h-4 text-amber-600" /><span>Quan tâm</span></div> },
+                                            { value: 'welcome', label: <div className="flex items-center gap-2"><Star className="w-4 h-4 text-[var(--color-primary)]" /><span>Quan tâm</span></div> },
                                             { value: 'first_message', label: <div className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-rose-500" /><span>Bắt chuyện</span></div> },
                                             { value: 'keyword', label: <div className="flex items-center gap-2"><MessageCircle className="w-4 h-4 text-indigo-500" /><span>Từ khóa</span></div> },
                                             { value: 'ai_reply', label: <div className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-emerald-500" /><span>AI chăm sóc</span></div> },
@@ -400,14 +400,14 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
                                 <input
                                     type="text"
                                     placeholder="VD: Chào mừng khách mới, Tư vấn giá..."
-                                    className="w-full px-5 py-4 bg-white border border-slate-100 focus:border-blue-500/30 focus:ring-4 focus:ring-blue-500/5 rounded-2xl text-sm font-bold transition-all outline-none shadow-sm"
+                                    className="w-full px-5 py-4 bg-white border border-slate-100 focus:border-blue-500/30 focus:ring-4 focus:ring-blue-500/5 rounded-[14px] text-sm font-bold transition-all outline-none shadow-sm"
                                     value={formData.title}
                                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                                 />
                             </div>
 
                             {formData.type === 'keyword' && (
-                                <div className="space-y-4 p-6 bg-indigo-50/50 rounded-[32px] border border-indigo-100 animate-in slide-in-from-top-2">
+                                <div className="space-y-4 p-6 bg-indigo-50/50 rounded-[18px] border border-indigo-100 animate-in slide-in-from-top-2">
                                     <div className="flex items-center justify-between">
                                         <label className="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2">
                                             <MessageCircle className="w-4 h-4" /> Từ khóa kích hoạt
@@ -416,11 +416,11 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
                                     <input
                                         type="text"
                                         placeholder="VD: giá cả, sản phẩm, hỗ trợ (phân cách bằng dấu phẩy)"
-                                        className="w-full px-5 py-4 bg-white border border-indigo-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 rounded-2xl text-sm font-bold transition-all outline-none text-indigo-700 shadow-sm"
+                                        className="w-full px-5 py-4 bg-white border border-indigo-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 rounded-[14px] text-sm font-bold transition-all outline-none text-indigo-700 shadow-sm"
                                         value={formData.trigger_text}
                                         onChange={(e) => setFormData({ ...formData, trigger_text: e.target.value })}
                                     />
-                                    <div className="bg-white/50 p-4 rounded-2xl border border-indigo-100 space-y-2">
+                                    <div className="bg-white/50 p-4 rounded-[14px] border border-indigo-100 space-y-2">
                                         <div className="flex items-center gap-2 text-[10px] font-bold text-indigo-400 uppercase tracking-tight">
                                             <AlertCircle className="w-3.5 h-3.5" /> Lưu ý:
                                         </div>
@@ -433,7 +433,7 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
                             )}
 
                             {formData.type === 'ai_reply' && (
-                                <div className="space-y-4 p-6 bg-emerald-50/50 rounded-[32px] border border-emerald-100 animate-in slide-in-from-top-2">
+                                <div className="space-y-4 p-6 bg-emerald-50/50 rounded-[18px] border border-emerald-100 animate-in slide-in-from-top-2">
                                     <div className="flex items-center justify-between">
                                         <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-2">
                                             <Sparkles className="w-4 h-4" /> Kích hoạt Trí Tuệ Nhân Tạo (AI)
@@ -451,7 +451,7 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
                                                 onChange={(val) => setFormData({ ...formData, ai_chatbot_id: val })}
                                             />
                                         </div>
-                                        <div className="bg-white/50 p-4 rounded-2xl border border-emerald-100 space-y-2">
+                                        <div className="bg-white/50 p-4 rounded-[14px] border border-emerald-100 space-y-2">
                                             <div className="flex items-center gap-2 text-[10px] font-bold text-emerald-500 uppercase tracking-tight">
                                                 <Info className="w-3.5 h-3.5" /> Cơ chế hoạt động:
                                             </div>
@@ -467,7 +467,7 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
 
                             {/* Scheduling Section */}
                             {(formData.type === 'holiday' || formData.schedule_type) && (
-                                <div className={`bg-white p-6 rounded-[32px] border ${formData.type === 'holiday' ? 'border-rose-100 shadow-rose-500/5' : 'border-slate-100'} shadow-sm space-y-6`}>
+                                <div className={`bg-white p-6 rounded-[18px] border ${formData.type === 'holiday' ? 'border-rose-100 shadow-rose-500/5' : 'border-slate-100'} shadow-sm space-y-6`}>
                                     <div className="flex items-center justify-between">
                                         <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
                                             <Clock className={`w-4 h-4 ${formData.type === 'holiday' ? 'text-rose-500' : 'text-emerald-500'}`} />
@@ -490,7 +490,7 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
 
                                     {/* Priority Override */}
                                     {formData.type === 'holiday' && (
-                                        <div className="flex items-center justify-between gap-4 bg-rose-50/50 p-4 rounded-2xl border border-rose-100">
+                                        <div className="flex items-center justify-between gap-4 bg-rose-50/50 p-4 rounded-[14px] border border-rose-100">
                                             <div className="flex-1">
                                                 <div
                                                     onClick={() => setFormData({ ...formData, priority_override: formData.priority_override == 1 ? 0 : 1 })}
@@ -648,11 +648,11 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
                                             </div>
 
                                             {isPerDay && formData.schedule_type !== 'full' && (
-                                                <div className="space-y-3 bg-slate-50/50 p-4 rounded-[24px] border border-slate-100 animate-in fade-in slide-in-from-top-2">
+                                                <div className="space-y-3 bg-slate-50/50 p-4 rounded-[18px] border border-slate-100 animate-in fade-in slide-in-from-top-2">
                                                     {DAYS.map(day => {
                                                         if (!perDaySchedule[day.id]) return null;
                                                         return (
-                                                            <div key={day.id} className="flex items-center gap-4 bg-white p-3 rounded-2xl border border-slate-100/50 shadow-sm">
+                                                            <div key={day.id} className="flex items-center gap-4 bg-white p-3 rounded-[14px] border border-slate-100/50 shadow-sm">
                                                                 <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center text-[10px] font-black">{day.label}</div>
                                                                 <div className="flex-1 grid grid-cols-2 gap-4">
                                                                     <div className="flex items-center gap-2">
@@ -686,11 +686,11 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
 
                             {/* Content Output - Hide if AI */}
                             {formData.type !== 'ai_reply' && (
-                                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm space-y-6">
+                                <div className="bg-white p-6 rounded-[18px] border border-slate-100 shadow-sm space-y-6">
                                     <div className="flex items-center justify-between">
                                         <div className="flex-1"></div>
                                         {formData.type === 'welcome' && (
-                                            <span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-full text-[9px] font-black uppercase tracking-widest border border-amber-100">Chỉ gửi 1 lần</span>
+                                            <span className="px-3 py-1 bg-amber-50 text-[var(--color-primary)] rounded-full text-[9px] font-black uppercase tracking-widest border border-amber-100">Chỉ gửi 1 lần</span>
                                         )}
                                     </div>
 
@@ -698,7 +698,7 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
                                         <textarea
                                             placeholder="Nhập nội dung tin nhắn phản hồi..."
                                             rows={5}
-                                            className="w-full p-5 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-emerald-500/10 rounded-3xl text-sm font-medium transition-all outline-none resize-none shadow-inner"
+                                            className="w-full p-5 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-emerald-500/10 rounded-[18px] text-sm font-medium transition-all outline-none resize-none shadow-inner"
                                             value={formData.content}
                                             onChange={(e) => setFormData({ ...formData, content: e.target.value })}
                                         ></textarea>
@@ -735,7 +735,7 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
 
                                                     <div
                                                         onClick={() => !uploading && fileInputRef.current?.click()}
-                                                        className={`group relative overflow-hidden bg-white border-2 border-dashed ${uploading ? 'border-blue-200' : 'border-slate-200 hover:border-blue-400 hover:bg-blue-50/30'} rounded-[32px] p-10 transition-all cursor-pointer flex flex-col items-center justify-center gap-4`}
+                                                        className={`group relative overflow-hidden bg-white border-2 border-dashed ${uploading ? 'border-blue-200' : 'border-slate-200 hover:border-blue-400 hover:bg-blue-50/30'} rounded-[18px] p-10 transition-all cursor-pointer flex flex-col items-center justify-center gap-4`}
                                                     >
                                                         <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${uploading ? 'bg-blue-100' : 'bg-blue-50 group-hover:scale-110 group-hover:rotate-3'}`}>
                                                             {uploading ? (
@@ -757,9 +757,9 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
                                                         {(formData.image_url) && !uploading && (
                                                             <div className="absolute inset-0 bg-white p-2">
                                                                 {formData.message_type === 'image' ? (
-                                                                    <img src={formData.image_url} alt="Preview" className="w-full h-full object-contain rounded-2xl" />
+                                                                    <img src={formData.image_url} alt="Preview" className="w-full h-full object-contain rounded-[14px]" />
                                                                 ) : (
-                                                                    <video src={formData.image_url} className="w-full h-full object-contain rounded-2xl" />
+                                                                    <video src={formData.image_url} className="w-full h-full object-contain rounded-[14px]" />
                                                                 )}
                                                                 <div className="absolute top-4 right-4 p-2 bg-white/90 backdrop-blur shadow-lg rounded-full text-slate-400 hover:text-rose-500 transition-colors" onClick={(e) => { e.stopPropagation(); setFormData({ ...formData, image_url: '', attachment_id: '' }); }}>
                                                                     <Trash2 className="w-4 h-4" />
@@ -786,7 +786,7 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
 
                                     <div className="space-y-3">
                                         {formData.buttons.map((btn: any, idx: number) => (
-                                            <div key={idx} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm animate-in slide-in-from-left-4 duration-300 group">
+                                            <div key={idx} className="bg-white p-4 rounded-[14px] border border-slate-100 shadow-sm animate-in slide-in-from-left-4 duration-300 group">
                                                 <div className="space-y-3">
                                                     {/* Row 1: Type, Title, Delete */}
                                                     <div className="flex gap-2 items-center">
@@ -870,7 +870,7 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
                                                                 <textarea
                                                                     placeholder="Nhập nội dung tin nhắn sẽ phản hồi..."
                                                                     rows={3}
-                                                                    className="w-full p-4 bg-slate-50 border border-transparent focus:border-blue-500/10 rounded-2xl text-xs font-medium transition-all outline-none resize-none"
+                                                                    className="w-full p-4 bg-slate-50 border border-transparent focus:border-blue-500/10 rounded-[14px] text-xs font-medium transition-all outline-none resize-none"
                                                                     value={btn.auto_response_content || ''}
                                                                     onChange={(e) => handleButtonChange(idx, 'auto_response_content', e.target.value)}
                                                                 ></textarea>
@@ -897,7 +897,7 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
                                             </div>
                                         ))}
                                         {formData.buttons.length === 0 && (
-                                            <div className="text-center py-6 border-2 border-dashed border-slate-200 rounded-2xl">
+                                            <div className="text-center py-6 border-2 border-dashed border-slate-200 rounded-[14px]">
                                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Chưa có nút bấm nào</p>
                                             </div>
                                         )}
@@ -919,7 +919,7 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
                         <div className="lg:w-5/12 bg-slate-100 p-8 flex items-start justify-center relative">
                             <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(#cbd5e1 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
                             <div className="sticky top-0 flex flex-col items-center justify-center pt-4 w-full">
-                                <div className="w-[320px] bg-white rounded-[44px] shadow-2xl border-[8px] border-slate-800 overflow-hidden relative z-10 flex flex-col h-[620px] scale-95 origin-top">
+                                <div className="w-[320px] bg-white rounded-[18px] shadow-2xl border-[8px] border-slate-800 overflow-hidden relative z-10 flex flex-col h-[620px] scale-95 origin-top">
                                     {/* StatusBar */}
                                     <div className="h-7 bg-slate-800 w-full flex justify-center items-center">
                                         <div className="w-16 h-1 bg-slate-700 rounded-full"></div>
@@ -941,7 +941,7 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
 
                                     <div className="flex-1 bg-[#e2e8f0] p-4 space-y-4 overflow-y-auto">
                                         <div className="flex items-end gap-2">
-                                            <div className="bg-white rounded-r-2xl rounded-tl-2xl overflow-hidden shadow-sm max-w-[85%] border border-slate-100">
+                                            <div className="bg-white rounded-r-[14px] rounded-tl-[14px] overflow-hidden shadow-sm max-w-[85%] border border-slate-100">
                                                 {formData.type === 'ai_reply' ? (
                                                     <div className="p-3 text-[11px] text-slate-800 space-y-3">
                                                         <div className="flex items-center gap-2 text-emerald-600 font-black text-[9px] uppercase tracking-wider mb-2">
@@ -993,13 +993,13 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
                 <div className="sticky bottom-0 bg-white border-t border-slate-100 px-8 py-5 flex justify-end gap-3 shrink-0 z-10">
                     <button
                         onClick={onClose}
-                        className="px-6 py-3 bg-white text-slate-600 rounded-2xl text-sm font-bold hover:bg-slate-100 transition-all border border-slate-200 shadow-sm"
+                        className="px-6 py-3 bg-white text-slate-600 rounded-[14px] text-sm font-bold hover:bg-slate-100 transition-all border border-slate-200 shadow-sm"
                     >
                         Hủy
                     </button>
                     <button
                         onClick={handleSubmit}
-                        className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-2xl text-sm font-bold hover:shadow-lg hover:scale-105 transition-all shadow-blue-500/30"
+                        className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-[14px] text-sm font-bold hover:shadow-lg hover:scale-105 transition-all shadow-blue-500/30"
                     >
                         Lưu kịch bản
                     </button>

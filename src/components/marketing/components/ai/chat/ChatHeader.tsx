@@ -58,7 +58,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(({
         <div className={`sticky top-0 h-14 flex items-center justify-between px-3 sm:px-6 border-b z-30 shrink-0 select-none transition-all duration-500 ${isDarkTheme ? 'bg-[#0B0F17]/90 border-slate-800 text-slate-100' : 'bg-white/80 border-slate-100 text-slate-800'} backdrop-blur-sm`}>
             <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                 <div
-                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-brand to-brand-accent flex items-center justify-center text-white shadow-md relative group cursor-pointer transition-transform active:scale-95 shrink-0"
+                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary)]-accent flex items-center justify-center text-white shadow-md relative group cursor-pointer transition-transform active:scale-95 shrink-0"
                     onClick={() => setIsSidebarOpen(true)}
                 >
                     {activeBot?.settings?.bot_avatar ? (
@@ -91,7 +91,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(({
                 {showOrgSettings && onOpenOrgSettings && (
                     <button
                         onClick={onOpenOrgSettings}
-                        className={`p-2 rounded-xl transition-all active:scale-95 ${isDarkTheme ? 'text-slate-500 hover:text-amber-400 hover:bg-slate-800' : 'text-slate-400 hover:text-brand hover:bg-brand/5'}`}
+                        className={`p-2 rounded-xl transition-all active:scale-95 ${isDarkTheme ? 'text-slate-500 hover:text-amber-400 hover:bg-slate-800' : 'text-slate-400 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5'}`}
                         title="Quản trị tổ chức"
                     >
                         <Settings className="w-4 h-4" />
@@ -100,14 +100,14 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(({
                 {/* Feedback button */}
                 <button
                     onClick={onOpenFeedback}
-                    className={`p-2 rounded-xl transition-all active:scale-95 ${isDarkTheme ? 'text-slate-500 hover:text-amber-400 hover:bg-slate-800' : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'}`}
+                    className={`p-2 rounded-xl transition-all active:scale-95 ${isDarkTheme ? 'text-slate-500 hover:text-amber-400 hover:bg-slate-800' : 'text-slate-400 hover:text-[#9A1523] hover:bg-amber-50'}`}
                     title="Gửi feedback / báo lỗi"
                 >
                     <Flag className="w-4 h-4" />
                 </button>
                 <button
                     onClick={() => setIsChatSearchOpen?.(!isChatSearchOpen)}
-                    className={`p-2 rounded-xl transition-all active:scale-95 ${isChatSearchOpen ? (isDarkTheme ? 'bg-slate-800 text-brand' : 'bg-slate-100 text-brand') : (isDarkTheme ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600')}`}
+                    className={`p-2 rounded-xl transition-all active:scale-95 ${isChatSearchOpen ? (isDarkTheme ? 'bg-slate-800 text-[var(--color-primary)]' : 'bg-slate-100 text-[var(--color-primary)]') : (isDarkTheme ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600')}`}
                     title="Tìm kiếm tin nhắn"
                 >
                     <Search className="w-4 h-4" />
@@ -119,7 +119,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(({
                     title="Tóm tắt nội dung & Key Takeaways"
                 >
                     {/* Brand Gradient Background */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-brand to-brand-accent group-hover:opacity-90 transition-opacity" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-primary)]-accent group-hover:opacity-90 transition-opacity" />
 
                     <div className="relative flex items-center gap-1.5 pt-0.5">
                         <Sparkles className={`w-4 h-4 ${isSummarizing ? 'animate-spin' : ''}`} />

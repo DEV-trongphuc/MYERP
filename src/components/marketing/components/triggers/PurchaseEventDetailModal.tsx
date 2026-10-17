@@ -1,9 +1,11 @@
 import { EXTERNAL_API_BASE } from '../../utils/config';
 import * as React from 'react';
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ShoppingCart, Code2, Copy, CheckCircle2, X } from 'lucide-react';
 import { PurchaseEvent } from '../../types';
 import Button from '../common/Button';
+import { getMktPortalRoot } from '../../utils/portalRoot';
 
 interface PurchaseEventDetailModalProps {
     event: PurchaseEvent | null;
@@ -38,7 +40,7 @@ const PurchaseEventDetailModal: React.FC<PurchaseEventDetailModalProps> = ({ eve
       currency: 'VND',
       items: [
         { name: 'Sản phẩm A', quantity: 2, price: 500000 },
-        { name: 'Sản phẩm Bỏ quantity: 1, price: 500000 }
+        { name: 'Sản phẩm B', quantity: 1, price: 500000 }
       ]
     }
   });
@@ -57,18 +59,18 @@ const PurchaseEventDetailModal: React.FC<PurchaseEventDetailModalProps> = ({ eve
     }
   }'`;
 
-    return (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center">
+    return createPortal(
+        <div className="fixed inset-0 z-[110000] flex items-center justify-center p-4">
             <div
                 className={`absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity duration-300 ease-out ${animateIn ? 'opacity-100' : 'opacity-0'}`}
                 onClick={onClose}
             />
             <div
                 style={{ transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }}
-                className={`bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden transform transition-all duration-500 ${animateIn ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-8'}`}
+                className={`bg-white rounded-[18px] shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden transform transition-all duration-500 ${animateIn ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-8'}`}
             >
                 {/* Header */}
-                <div className="bg-gradient-to-r from-pink-500 to-rose-600 p-6 text-white relative">
+                <div className="bg-[var(--color-primary)] p-6 text-white relative">
                     <button
                         onClick={onClose}
                         className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition-colors"
@@ -76,12 +78,12 @@ const PurchaseEventDetailModal: React.FC<PurchaseEventDetailModalProps> = ({ eve
                         <X className="w-5 h-5" />
                     </button>
                     <div className="flex items-center gap-4">
-                        <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center">
-                            <ShoppingCart className="w-7 h-7" />
+                        <div className="w-12 h-12 rounded-[14px] bg-white/20 flex items-center justify-center">
+                            <ShoppingCart className="w-6 h-6" />
                         </div>
                         <div>
-                            <h2 className="text-2xl font-bold">{event.name}</h2>
-                            <p className="text-pink-100 text-sm mt-1">Sự kiện Mua hàng</p>
+                            <h2 className="text-xl font-bold">{event.name}</h2>
+                            <p className="text-white/80 text-xs mt-0.5">Sự kiện Mua hàng</p>
                         </div>
                     </div>
                 </div>
@@ -89,7 +91,7 @@ const PurchaseEventDetailModal: React.FC<PurchaseEventDetailModalProps> = ({ eve
                 {/* Content */}
                 <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
                     {/* Event Info */}
-                    <div className="bg-slate-50 rounded-2xl p-4 mb-6">
+                    <div className="bg-slate-50 rounded-[14px] p-4 mb-6">
                         <div className="grid grid-cols-2 gap-4 text-sm">
                             <div>
                                 <span className="text-slate-500 font-semibold">Event ID:</span>
@@ -121,7 +123,7 @@ const PurchaseEventDetailModal: React.FC<PurchaseEventDetailModalProps> = ({ eve
                     {/* Integration Code */}
                     <div className="space-y-4">
                         <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                            <Code2 className="w-5 h-5 text-pink-600" />
+                            <Code2 className="w-5 h-5 text-[var(--color-primary)]" />
                             Mã tích hợp
                         </h3>
 
@@ -131,7 +133,7 @@ const PurchaseEventDetailModal: React.FC<PurchaseEventDetailModalProps> = ({ eve
                                 <label className="text-sm font-semibold text-slate-600">JavaScript (Website)</label>
                                 <button
                                     onClick={() => handleCopy(jsSnippet, 'js')}
-                                    className="text-xs font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1.5"
+                                    className="text-xs font-bold text-[var(--color-primary)] hover:opacity-80 flex items-center gap-1.5"
                                 >
                                     {copiedKey === 'js' ? (
                                         <>
@@ -157,7 +159,7 @@ const PurchaseEventDetailModal: React.FC<PurchaseEventDetailModalProps> = ({ eve
                                 <label className="text-sm font-semibold text-slate-600">cURL (API)</label>
                                 <button
                                     onClick={() => handleCopy(curlSnippet, 'curl')}
-                                    className="text-xs font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1.5"
+                                    className="text-xs font-bold text-[var(--color-primary)] hover:opacity-80 flex items-center gap-1.5"
                                 >
                                     {copiedKey === 'curl' ? (
                                         <>
@@ -186,7 +188,8 @@ const PurchaseEventDetailModal: React.FC<PurchaseEventDetailModalProps> = ({ eve
                     </Button>
                 </div>
             </div>
-        </div>
+        </div>,
+        getMktPortalRoot()
     );
 };
 

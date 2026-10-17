@@ -67,12 +67,73 @@ if (!empty($input['bcc_emails'])) {
 // 2. RESOLVE PRIMARY RECIPIENTS
 $targetRecipients = []; // Keyed by email lower to deduplicate: ['email' => ..., 'first_name' => ..., 'id' => ...]
 
+$subSelectCols = "id, contact_id, email, first_name, last_name, phone_number, company_name, job_title, city, district, ward, country, address, gender, date_of_birth, anniversary_date, joined_at, custom_attributes, program, stage_id, owner_id, salesperson";
+
+// From CRM contact_id or contact_ids (CustomerProfileDrawer / ContactsPage)
+$crmContactIds = [];
+if (!empty($input['contact_id'])) {
+    $crmContactIds[] = (int) $input['contact_id'];
+}
+if (!empty($input['contact_ids']) && is_array($input['contact_ids'])) {
+    foreach ($input['contact_ids'] as $cid) {
+        if ((int) $cid > 0) $crmContactIds[] = (int) $cid;
+    }
+}
+$crmContactIds = array_values(array_unique(array_filter($crmContactIds)));
+
+if (!empty($crmContactIds)) {
+    // Sync CRM contacts into Domation subscribers so they have a valid subscriber record & full profile
+    if (file_exists(__DIR__ . '/../utils/DomationContactMatcher.php')) {
+        require_once __DIR__ . '/../utils/DomationContactMatcher.php';
+    } elseif (file_exists(__DIR__ . '/DomationContactMatcher.php')) {
+        require_once __DIR__ . '/DomationContactMatcher.php';
+    }
+    if (class_exists('DomationContactMatcher') && method_exists('DomationContactMatcher', 'syncContactToSubscriber')) {
+        foreach ($crmContactIds as $cid) {
+            try {
+                DomationContactMatcher::syncContactToSubscriber($pdo, (int) $cid, $workspaceId);
+            } catch (\Throwable $eSync) {}
+        }
+    } elseif (function_exists('domationSyncContactFromCrm')) {
+        foreach ($crmContactIds as $cid) {
+            try {
+                domationSyncContactFromCrm($pdo, (int) $cid);
+            } catch (\Throwable $eSync) {}
+        }
+    }
+
+    $phCrm = implode(',', array_fill(0, count($crmContactIds), '?'));
+    // First look up from subscribers by contact_id
+    $stmtSubCrm = $pdo->prepare("SELECT $subSelectCols FROM subscribers WHERE contact_id IN ($phCrm) AND workspace_id = ?");
+    $stmtSubCrm->execute([...$crmContactIds, $workspaceId]);
+    $foundContactIds = [];
+    foreach ($stmtSubCrm->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $e = strtolower(trim($row['email'] ?? ''));
+        if (filter_var($e, FILTER_VALIDATE_EMAIL) && !isVirtualEmail($e)) {
+            $targetRecipients[$e] = $row;
+            $foundContactIds[(int) $row['contact_id']] = true;
+        }
+    }
+
+    // Fallback: look up directly from MYERP contacts table for any contact not yet in subscribers
+    $stmtContacts = $pdo->prepare("SELECT id as contact_id, name, email, phone as phone_number, city, district, ward, address, gender, program, stage_id, owner_id FROM contacts WHERE id IN ($phCrm) AND deleted_at IS NULL");
+    $stmtContacts->execute($crmContactIds);
+    foreach ($stmtContacts->fetchAll(PDO::FETCH_ASSOC) as $cRow) {
+        $e = strtolower(trim($cRow['email'] ?? ''));
+        if (filter_var($e, FILTER_VALIDATE_EMAIL) && !isset($targetRecipients[$e])) {
+            $cRow['first_name'] = $cRow['name'] ?? '';
+            $cRow['last_name'] = '';
+            $targetRecipients[$e] = $cRow;
+        }
+    }
+}
+
 // From direct subscriber IDs
 if (!empty($input['subscriber_ids']) && is_array($input['subscriber_ids'])) {
     $cleanIds = array_filter(array_map('trim', $input['subscriber_ids']));
     if (!empty($cleanIds)) {
         $placeholders = implode(',', array_fill(0, count($cleanIds), '?'));
-        $stmt = $pdo->prepare("SELECT id, email, first_name, last_name, phone_number, company_name FROM subscribers WHERE id IN ($placeholders) AND workspace_id = ?");
+        $stmt = $pdo->prepare("SELECT $subSelectCols FROM subscribers WHERE id IN ($placeholders) AND workspace_id = ?");
         $stmt->execute([...$cleanIds, $workspaceId]);
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $e = strtolower(trim($row['email'] ?? ''));
@@ -83,12 +144,54 @@ if (!empty($input['subscriber_ids']) && is_array($input['subscriber_ids'])) {
     }
 }
 
-// From recipients array (objects with email, first_name, etc.)
+// From recipients array (objects with email, first_name, contact_id, custom_attributes, etc.)
 if (!empty($input['recipients']) && is_array($input['recipients'])) {
     foreach ($input['recipients'] as $rec) {
         $e = is_string($rec) ? strtolower(trim($rec)) : strtolower(trim($rec['email'] ?? ''));
-        if (filter_var($e, FILTER_VALIDATE_EMAIL) && !isset($targetRecipients[$e])) {
-            $targetRecipients[$e] = is_array($rec) ? $rec : ['email' => $e];
+        if (!filter_var($e, FILTER_VALIDATE_EMAIL)) {
+            continue;
+        }
+        if (!isset($targetRecipients[$e])) {
+            if (is_array($rec)) {
+                // If caller passed numeric CRM contact ID in 'id', move it to 'contact_id' so 'id' is reserved for subscribers.id (CHAR(36))
+                if (isset($rec['id']) && is_numeric($rec['id']) && empty($rec['contact_id'])) {
+                    $rec['contact_id'] = (int) $rec['id'];
+                    unset($rec['id']);
+                }
+                $targetRecipients[$e] = $rec;
+            } else {
+                $targetRecipients[$e] = ['email' => $e];
+            }
+        } elseif (is_array($rec)) {
+            // Merge custom_attributes and non-empty fields from $rec into existing recipient without losing DB subscriber id / contact_id
+            $existingId = $targetRecipients[$e]['id'] ?? null;
+            $existingContactId = $targetRecipients[$e]['contact_id'] ?? null;
+            $existingCustom = $targetRecipients[$e]['custom_attributes'] ?? [];
+            if (is_string($existingCustom)) {
+                $existingCustom = json_decode($existingCustom, true) ?: [];
+            }
+            $incomingCustom = $rec['custom_attributes'] ?? [];
+            if (is_string($incomingCustom)) {
+                $incomingCustom = json_decode($incomingCustom, true) ?: [];
+            }
+            foreach ($rec as $rk => $rv) {
+                if ($rk === 'id' || $rk === 'custom_attributes') continue;
+                if ($rv !== null && $rv !== '' && empty($targetRecipients[$e][$rk])) {
+                    $targetRecipients[$e][$rk] = $rv;
+                }
+            }
+            if (!empty($incomingCustom) && is_array($incomingCustom)) {
+                $targetRecipients[$e]['custom_attributes'] = array_merge(
+                    is_array($existingCustom) ? $existingCustom : [],
+                    $incomingCustom
+                );
+            }
+            if (!empty($existingId)) {
+                $targetRecipients[$e]['id'] = $existingId;
+            }
+            if (!empty($existingContactId)) {
+                $targetRecipients[$e]['contact_id'] = $existingContactId;
+            }
         }
     }
 }
@@ -134,10 +237,14 @@ if (empty($targetRecipients)) {
     exit;
 }
 
-// For recipients that don't have full profile from input, look up from DB to enrich merge tags
+// For recipients that don't have a valid subscriber UUID from input, look up from DB to enrich merge tags
 $emailsToLookup = [];
 foreach ($targetRecipients as $e => $rec) {
-    if (empty($rec['first_name']) && empty($rec['id'])) {
+    if (empty($rec['id']) || is_numeric($rec['id'])) {
+        if (isset($rec['id']) && is_numeric($rec['id']) && empty($rec['contact_id'])) {
+            $targetRecipients[$e]['contact_id'] = (int) $rec['id'];
+        }
+        unset($targetRecipients[$e]['id']);
         $emailsToLookup[] = $e;
     }
 }
@@ -146,50 +253,134 @@ if (!empty($emailsToLookup)) {
     $chunks = array_chunk($emailsToLookup, 100);
     foreach ($chunks as $chunk) {
         $ph = implode(',', array_fill(0, count($chunk), '?'));
-        $stmt = $pdo->prepare("SELECT id, email, first_name, last_name, phone_number, company_name FROM subscribers WHERE email IN ($ph) AND workspace_id = ?");
+        $stmt = $pdo->prepare("SELECT $subSelectCols FROM subscribers WHERE LOWER(TRIM(email)) IN ($ph) AND workspace_id = ?");
         $stmt->execute([...$chunk, $workspaceId]);
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $e = strtolower(trim($row['email']));
             if (isset($targetRecipients[$e])) {
-                $targetRecipients[$e] = array_merge($targetRecipients[$e], $row);
+                $incomingCustom = $targetRecipients[$e]['custom_attributes'] ?? [];
+                if (is_string($incomingCustom)) {
+                    $incomingCustom = json_decode($incomingCustom, true) ?: [];
+                }
+                $dbCustom = $row['custom_attributes'] ?? [];
+                if (is_string($dbCustom)) {
+                    $dbCustom = json_decode($dbCustom, true) ?: [];
+                }
+                $targetRecipients[$e] = array_merge($row, array_filter($targetRecipients[$e], fn($v) => $v !== null && $v !== ''));
+                $targetRecipients[$e]['id'] = $row['id'];
+                if (!empty($row['contact_id'])) {
+                    $targetRecipients[$e]['contact_id'] = $row['contact_id'];
+                }
+                if (!empty($dbCustom) || !empty($incomingCustom)) {
+                    $targetRecipients[$e]['custom_attributes'] = array_merge(
+                        is_array($dbCustom) ? $dbCustom : [],
+                        is_array($incomingCustom) ? $incomingCustom : []
+                    );
+                }
             }
         }
     }
 }
 
+// Ensure every recipient has a valid subscribers.id (CHAR(36)) so open/click/unsubscribe tracking always links to a real subscriber
+foreach ($targetRecipients as $e => &$recRef) {
+    if (empty($recRef['id'])) {
+        $cid = (int) ($recRef['contact_id'] ?? 0);
+        if ($cid <= 0) {
+            // Try finding CRM contact by email first
+            try {
+                $stmtFindC = $pdo->prepare("SELECT id FROM contacts WHERE LOWER(TRIM(email)) = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 1");
+                $stmtFindC->execute([$e]);
+                $cid = (int) ($stmtFindC->fetchColumn() ?: 0);
+                if ($cid > 0) {
+                    $recRef['contact_id'] = $cid;
+                }
+            } catch (\Throwable $eFindC) {}
+        }
+        if ($cid > 0 && class_exists('DomationContactMatcher') && method_exists('DomationContactMatcher', 'syncContactToSubscriber')) {
+            try {
+                $syncedSubId = DomationContactMatcher::syncContactToSubscriber($pdo, $cid, $workspaceId);
+                if (!empty($syncedSubId)) {
+                    $recRef['id'] = $syncedSubId;
+                }
+            } catch (\Throwable $eSyncSub) {}
+        }
+        if (empty($recRef['id'])) {
+            $newSubId = 'sub_' . bin2hex(random_bytes(8));
+            $firstName = trim((string) ($recRef['first_name'] ?? $recRef['name'] ?? ''));
+            $lastName = trim((string) ($recRef['last_name'] ?? ''));
+            $phone = trim((string) ($recRef['phone_number'] ?? $recRef['phone'] ?? ''));
+            try {
+                $pdo->prepare("
+                    INSERT INTO subscribers (id, workspace_id, contact_id, email, email_norm, first_name, last_name, phone_number, status, source, joined_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', 'quick_send', NOW(), NOW())
+                ")->execute([
+                    $newSubId,
+                    $workspaceId,
+                    $cid > 0 ? $cid : null,
+                    $e,
+                    $e,
+                    $firstName,
+                    $lastName,
+                    $phone !== '' ? $phone : null
+                ]);
+                $recRef['id'] = $newSubId;
+            } catch (\Throwable $eInsSub) {
+                // Fallback if email already exists in subscribers
+                try {
+                    $stmtExist = $pdo->prepare("SELECT id, contact_id FROM subscribers WHERE LOWER(TRIM(email)) = ? LIMIT 1");
+                    $stmtExist->execute([$e]);
+                    $existRow = $stmtExist->fetch(PDO::FETCH_ASSOC);
+                    if ($existRow && !empty($existRow['id'])) {
+                        $recRef['id'] = $existRow['id'];
+                        if (!empty($existRow['contact_id']) && empty($recRef['contact_id'])) {
+                            $recRef['contact_id'] = (int) $existRow['contact_id'];
+                        }
+                    }
+                } catch (\Throwable $eEx2) {}
+            }
+        }
+    }
+}
+unset($recRef);
+
 // 3. SEND BATCH
 try {
-    $stmtSettings = $pdo->prepare("SELECT `value` FROM mkt_system_settings WHERE `key` = 'smtp_user' AND workspace_id IN (0, ?) ORDER BY workspace_id DESC LIMIT 1");
-    $stmtSettings->execute([$workspaceId]);
-    $defaultSender = $stmtSettings->fetchColumn() ?: "marketing@ka-en.com.vn";
-    
-    $mailer = new Mailer($pdo, API_BASE_URL, $defaultSender, $workspaceId);
+    $mailer = new Mailer($pdo, API_BASE_URL, 'marketing@ideas.edu.vn', $workspaceId);
     
     // Set dynamic sender email and name if provided
-    $fromEmail = trim($input['from_email'] ?? '');
-    $fromName = trim($input['from_name'] ?? '');
+    $fromEmail = trim((string)($input['from_email'] ?? ($input['sender_email'] ?? ($input['senderEmail'] ?? ''))));
+    $fromName = trim((string)($input['from_name'] ?? ($input['sender_name'] ?? ($input['senderName'] ?? ''))));
     if (!empty($fromEmail) && filter_var($fromEmail, FILTER_VALIDATE_EMAIL)) {
         $mailer->setDynamicSender($fromEmail);
+    } else {
+        $mailer->setDynamicSender($mailer->getDefaultSenderEmail());
     }
     if (!empty($fromName)) {
         $mailer->setDynamicSenderName($fromName);
     }
 
     $attachments = $input['attachments'] ?? [];
+    $currentUserId = get_current_user_id() ?: null;
     
     $sentCount = 0;
     $failedCount = 0;
     $errors = [];
     $total = count($targetRecipients);
-
-    $templateHash = md5($htmlContent . 'quick_send');
+    $sentSubscriberIds = [];
 
     foreach ($targetRecipients as $e => $sub) {
         $sub['email'] = $e;
         $sub['id'] = $sub['id'] ?? $sub['subscriber_id'] ?? null;
         
-        $personalSubject = replaceMergeTags($subject, $sub);
-        $personalHtml = replaceMergeTags($htmlContent, $sub);
+        $unsubSid = urlencode((string) ($sub['id'] ?? $e));
+        $mergeContext = [
+            'unsubscribe_url' => API_BASE_URL . '/webhook.php?type=unsubscribe&sid=' . $unsubSid,
+            'campaign_name' => $templateName,
+            'campaignName' => $templateName,
+        ];
+        $personalSubject = replaceMergeTags($subject, $sub, $mergeContext, $pdo);
+        $personalHtml = replaceMergeTags($htmlContent, $sub, $mergeContext, $pdo);
         
         $filteredAtts = Mailer::filterAttachments($attachments, $e);
         
@@ -202,7 +393,7 @@ try {
             null,
             $templateName,
             $filteredAtts,
-            $templateHash,
+            null,
             null,
             "Quick Send",
             false,
@@ -217,7 +408,27 @@ try {
         if ($res === true) {
             $sentCount++;
             if (!empty($sub['id'])) {
+                $sentSubscriberIds[] = (string) $sub['id'];
+                try {
+                    $pdo->prepare("UPDATE subscribers SET stats_sent = COALESCE(stats_sent, 0) + 1, last_send_at = NOW(), last_activity_at = NOW() WHERE id = ?")
+                        ->execute([$sub['id']]);
+                } catch (\Throwable $eStat) {}
                 logActivity($pdo, $sub['id'], 'receive_email', null, $templateName, "Quick send: $personalSubject", null, null, [], $workspaceId);
+            }
+            // Log email activity in MYERP CRM activities table when recipient is linked to a CRM contact
+            $recContactId = (int) ($sub['contact_id'] ?? 0);
+            if ($recContactId > 0) {
+                try {
+                    $plainPreview = trim(preg_replace('/\s+/', ' ', strip_tags($personalHtml)));
+                    $bodyPreview = mb_substr($plainPreview, 0, 500, 'UTF-8');
+                    $actOwnerId = $currentUserId ?: (!empty($sub['owner_id']) ? (int) $sub['owner_id'] : null);
+                    $pdo->prepare("
+                        INSERT INTO activities (tenant_id, contact_id, type, subject, body, status, done_at, user_id, created_by, created_at, updated_at)
+                        VALUES (1, ?, 'email', ?, ?, 'done', NOW(), ?, ?, NOW(), NOW())
+                    ")->execute([$recContactId, $personalSubject, $bodyPreview, $actOwnerId, $currentUserId]);
+                } catch (\Throwable $eCrmAct) {
+                    error_log("[quick_send_email] CRM activity log warning: " . $eCrmAct->getMessage());
+                }
             }
         } else {
             $failedCount++;
@@ -226,6 +437,25 @@ try {
     }
 
     $mailer->closeConnection();
+
+    // Flush buffered activity logs & refresh CRM omnichannel stats
+    if (function_exists('flushActivityLogBuffer')) {
+        flushActivityLogBuffer($pdo);
+    }
+    try {
+        require_once __DIR__ . '/worker_tracking_aggregator.php';
+        if (function_exists('syncActivityBuffer')) {
+            syncActivityBuffer($pdo);
+        }
+    } catch (\Throwable $eSyncBuf) {}
+
+    if (!empty($sentSubscriberIds) && function_exists('domationSyncSubscriberMatchOnly')) {
+        foreach (array_unique($sentSubscriberIds) as $sentSid) {
+            try {
+                domationSyncSubscriberMatchOnly($pdo, (string) $sentSid);
+            } catch (\Throwable $eSyncMatch) {}
+        }
+    }
 
     echo json_encode([
         'success' => true,

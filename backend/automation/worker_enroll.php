@@ -66,7 +66,7 @@ try {
             $pdo->prepare("UPDATE segments SET subscriber_count = ?, synced_at = NOW() WHERE id = ? AND workspace_id = ?")
                 ->execute([$allCount, $segId, $wsId]);
         } else {
-            $segRes = buildSegmentWhereClause($seg['criteria'], $workspace_id, $segId);
+            $segRes = buildSegmentWhereClause($seg['criteria'], $wsId, $segId);
             // [SECURITY FIX] Added workspace_id scope
             $stmtC = $pdo->prepare("SELECT COUNT(*) FROM subscribers s WHERE s.workspace_id = ? AND (" . $segRes['sql'] . ")");
             $stmtC->execute(array_merge([$wsId], $segRes['params']));
@@ -99,7 +99,7 @@ try {
                 $pdo->prepare("UPDATE segments SET subscriber_count = ?, synced_at = NOW() WHERE id = ? AND workspace_id = ?")
                     ->execute([$allCount2, $seg['id'], $wsId]);
             } else {
-                $segRes = buildSegmentWhereClause($seg['criteria'], $workspace_id, $seg['id']);
+                $segRes = buildSegmentWhereClause($seg['criteria'], $wsId, $seg['id']);
                 // [SECURITY FIX] Added workspace_id scope
                 $stmtC = $pdo->prepare("SELECT COUNT(*) FROM subscribers s WHERE s.workspace_id = ? AND (" . $segRes['sql'] . ")");
                 $stmtC->execute(array_merge([$wsId], $segRes['params']));
@@ -157,7 +157,7 @@ foreach ($activeFlows as $flow) {
 
     if ($segDef) {
         // It's a Segment
-        $segRes = buildSegmentWhereClause($segDef['criteria'], $workspace_id, $tConfig['targetId']);
+        $segRes = buildSegmentWhereClause($segDef['criteria'], $wsId, $tConfig['targetId']);
         $segSql = $segRes['sql'];
         $segParams = $segRes['params'];
     } else {
@@ -221,9 +221,9 @@ foreach ($activeFlows as $flow) {
         }
     }
 
-    // [SECURITY FIX] Added s.workspace_id = ? to ensure subscribers only enter flows from their own workspace.
-    $sqlIns = "INSERT INTO subscriber_flow_states (subscriber_id, flow_id, step_id, step_type, scheduled_at, status, created_at, updated_at, last_step_at)
-               SELECT s.id, ?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW()
+    // [SECURITY FIX] Added s.workspace_id = ? and s.contact_id to ensure subscribers only enter flows from their own workspace.
+    $sqlIns = "INSERT INTO subscriber_flow_states (workspace_id, subscriber_id, contact_id, flow_id, step_id, step_type, scheduled_at, status, created_at, updated_at, last_step_at)
+               SELECT s.workspace_id, s.id, s.contact_id, ?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW()
                FROM subscribers s
                WHERE s.workspace_id = ? 
                AND s.status IN ('active', 'lead', 'customer') 

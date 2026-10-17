@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { getMktPortalRoot } from '../../utils/portalRoot';
 import {
     X, Send, Mail, Users, Paperclip, Calendar, CheckCircle2,
     ShieldCheck, Sparkles, Smartphone, Monitor, AlertCircle,
@@ -248,8 +250,8 @@ export const PreSendReviewModal: React.FC<PreSendReviewModalProps> = ({
 
     if (!isOpen) return null;
 
-    return (
-        <div className="fixed inset-0 z-[250] flex items-center justify-center p-2 sm:p-4 md:p-6 animate-in fade-in duration-200">
+    return createPortal(
+        <div className="fixed inset-0 z-[2147483645] flex items-center justify-center p-2 sm:p-4 md:p-6 animate-in fade-in duration-200" style={{ zIndex: 2147483645 }}>
             {/* Backdrop */}
             <div 
                 className="absolute inset-0 bg-black/80 backdrop-blur-[2px]"
@@ -257,12 +259,12 @@ export const PreSendReviewModal: React.FC<PreSendReviewModalProps> = ({
             />
 
             {/* Modal Box */}
-            <div className="relative bg-white dark:bg-slate-900 rounded-[28px] shadow-2xl overflow-hidden max-w-7xl w-full h-[94vh] flex flex-col border border-slate-200/80 dark:border-slate-800 animate-in zoom-in-95 duration-300">
+            <div className="relative bg-white dark:bg-slate-900 rounded-[18px] shadow-2xl overflow-hidden max-w-7xl w-full h-[94vh] flex flex-col border border-slate-200/80 dark:border-slate-800 animate-in zoom-in-95 duration-300">
                 
                 {/* Modern Clean Header */}
                 <div className="px-6 py-4 bg-white dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between shrink-0 z-10">
                     <div className="flex items-center gap-3.5">
-                        <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+                        <div className="w-10 h-10 rounded-[14px] bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
                             <Eye className="w-5 h-5" />
                         </div>
                         <div>
@@ -327,7 +329,7 @@ export const PreSendReviewModal: React.FC<PreSendReviewModalProps> = ({
                     <div className="lg:col-span-5 xl:col-span-4 border-r border-slate-200/80 dark:border-slate-800 p-5 md:p-6 overflow-y-auto custom-scrollbar space-y-5 bg-white dark:bg-slate-900">
                         
                         {/* 1. Sample Subscriber Switcher Card */}
-                        <div className="p-5 bg-gradient-to-br from-blue-50/90 via-indigo-50/40 to-white dark:from-blue-950/30 dark:to-indigo-950/20 border border-blue-200/80 dark:border-blue-800/40 rounded-2xl shadow-xs space-y-3.5">
+                        <div className="p-5 bg-gradient-to-br from-blue-50/90 via-indigo-50/40 to-white dark:from-blue-950/30 dark:to-indigo-950/20 border border-blue-200/80 dark:border-blue-800/40 rounded-[14px] shadow-xs space-y-3.5">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                     <div className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs font-bold">
@@ -384,7 +386,7 @@ export const PreSendReviewModal: React.FC<PreSendReviewModalProps> = ({
                         </div>
 
                         {/* 2. Unified Campaign Overview Card */}
-                        <div className="p-5 bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl space-y-4">
+                        <div className="p-5 bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-[14px] space-y-4">
                             <h4 className="text-[11px] font-black text-slate-400 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
                                 <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" /> Thông tin chiến dịch
                             </h4>
@@ -474,7 +476,7 @@ export const PreSendReviewModal: React.FC<PreSendReviewModalProps> = ({
                         {/* Interactive Email Sandbox Mockup Window */}
                         <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden">
                             <div 
-                                className={`h-full max-h-full transition-all duration-300 flex flex-col bg-white dark:bg-slate-900 shadow-2xl rounded-2xl overflow-hidden border border-slate-200/90 dark:border-slate-800 ${
+                                className={`h-full max-h-full transition-all duration-300 flex flex-col bg-white dark:bg-slate-900 shadow-2xl rounded-[14px] overflow-hidden border border-slate-200/90 dark:border-slate-800 ${
                                     previewDevice === 'mobile'
                                         ? 'w-[380px] max-w-full'
                                         : 'w-full max-w-[760px]'
@@ -557,7 +559,8 @@ export const PreSendReviewModal: React.FC<PreSendReviewModalProps> = ({
                 </div>
 
             </div>
-        </div>
+        </div>,
+        getMktPortalRoot()
     );
 };
 

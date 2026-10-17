@@ -33,6 +33,7 @@ import { SalesLeadPerformanceDeck } from '../components/Dashboard/SalesLeadPerfo
 import { ReportDataModal } from '../components/ui/ReportDataModal';
 import { TableContextMenu } from '../components/ui/TableContextMenu';
 import { pushOverlay, removeOverlay } from '../utils/overlayStack';
+import { CrmSendTemplateEmailModal, CrmBulkMarketingModal, CrmFilterToStaticListModal } from '../components/crm/CrmMarketingModals';
 
 const PAGE_SIZE = 10;
 
@@ -2522,14 +2523,44 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     });
   };
 
+  const [showCrmEmailModal, setShowCrmEmailModal] = useState(false);
+  const [crmBulkMarketingModal, setCrmBulkMarketingModal] = useState<{ isOpen: boolean; mode: 'list' | 'flow' }>({ isOpen: false, mode: 'list' });
+  const [showFilterStaticListModal, setShowFilterStaticListModal] = useState(false);
+
+  const buildCurrentStaticListFilterParams = () => {
+    const isSearching = Boolean(debouncedSearch);
+    const params: Record<string, any> = {
+      segment,
+      student_sub_tab: segment === 'customer' ? studentSubTab : undefined,
+      search: debouncedSearch || undefined,
+    };
+    if (isSearching) {
+      params.all_pipeline = 1;
+      params.show_lost = 1;
+      params.include_lost = 1;
+    }
+    applyActiveFiltersToParams(params, isSearching);
+    return params;
+  };
+
+  const activeFilterSummaryList = useMemo(() => {
+    const badges: string[] = [];
+    if (debouncedSearch) badges.push(`Từ khóa: "${debouncedSearch}"`);
+    if (quickPipelineStage && quickPipelineStage !== 'all') {
+      const st = PIPELINE_TABS.find(t => t.id === quickPipelineStage);
+      badges.push(`Giai đoạn: ${st?.label || quickPipelineStage}`);
+    }
+    if (activeFilters.source) badges.push(`Nguồn: ${activeFilters.source}`);
+    if (activeFilters.tag) badges.push(`Tag: ${activeFilters.tag}`);
+    if (activeFilters.city) badges.push(`Tỉnh/TP: ${activeFilters.city}`);
+    if (activeFilters.financialStatus) badges.push(`Tài chính: ${activeFilters.financialStatus}`);
+    if (filterUncontacted) badges.push('Chưa tương tác');
+    return badges;
+  }, [debouncedSearch, quickPipelineStage, PIPELINE_TABS, activeFilters, filterUncontacted]);
+
   const bulkEmail = () => {
     if (selected.size === 0) return;
-    const emails = contacts.filter(c => selected.has(c.id) && c.email).map(c => c.email);
-    if (emails.length === 0) {
-      addToast('Không có liên hệ nào trong danh sách đã chọn có địa chỉ Email!', 'warning');
-      return;
-    }
-    window.open(`mailto:${emails.join(',')}`);
+    setShowCrmEmailModal(true);
   };
 
   const bulkAssign = () => {
@@ -2794,6 +2825,30 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   <span className="hide-on-mobile">Nhập dữ liệu</span>
                 </button>
               )}
+              {user?.role !== 'viewer' && (
+                <button
+                  type="button"
+                  className="btn outline sm"
+                  onClick={() => setShowFilterStaticListModal(true)}
+                  title="Đóng băng tệp khách hàng theo bộ lọc hiện tại thành Danh sách tĩnh Email / Marketing"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    whiteSpace: 'nowrap',
+                    borderRadius: '8px',
+                    padding: '6px 12px',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    color: '#059669',
+                    borderColor: 'rgba(16, 185, 129, 0.35)',
+                    background: 'rgba(16, 185, 129, 0.08)'
+                  }}
+                >
+                  <List size={14} />
+                  <span className="hide-on-mobile">Tạo Danh sách tĩnh (Mkt)</span>
+                </button>
+              )}
               {user?.role !== 'viewer' && user?.role !== 'sale' && (
                 <div style={{ position: 'relative' }} ref={exportDropdownRef}>
                   <button 
@@ -2901,6 +2956,38 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                           <div>
                             <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text)' }}>Xuất toàn bộ dữ liệu</div>
                             <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Tất cả 100% trường khách hàng (hồ sơ, đào tạo, CRM...)</div>
+                          </div>
+                        </button>
+
+                        <div style={{ height: '1px', background: 'var(--color-border-light)', margin: '2px 0' }} />
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowExportDropdown(false);
+                            setShowFilterStaticListModal(true);
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '10px',
+                            padding: '8px 10px',
+                            border: 'none',
+                            background: 'transparent',
+                            color: 'var(--color-text)',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            transition: 'background-color 0.15s'
+                          }}
+                          className="hover-bg-alt"
+                        >
+                          <div style={{ marginTop: '2px', color: '#059669' }}>
+                            <List size={15} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#059669' }}>Lưu Danh sách tĩnh (Email / Mkt)</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Đóng băng toàn bộ khách hàng khớp bộ lọc sang Marketing</div>
                           </div>
                         </button>
                       </motion.div>
@@ -3460,6 +3547,30 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                               >
                                 <Download size={13} />
                                 <span>Xuất toàn bộ (100% trường)</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setShowMobileActions(false);
+                                  setShowFilterStaticListModal(true);
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  width: '100%',
+                                  padding: '8px 12px',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  color: '#059669',
+                                  borderRadius: '8px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  textAlign: 'left',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <List size={13} />
+                                <span>Lưu Danh sách tĩnh (Mkt)</span>
                               </button>
                             </>
                           )}
@@ -5665,7 +5776,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
             <span style={{ color:'white', fontWeight:700, fontSize:'0.875rem' }}>{selected.size} đã chọn</span>
             <div style={{ flex:1 }}/>
             {[
-              { label:'Email', action:bulkEmail },
+              { label:'Gửi Email', action:bulkEmail },
+              { label:'Marketing / Flow', action: () => setCrmBulkMarketingModal({ isOpen: true, mode: 'list' }) },
               { label:'Tag',   action:bulkTag   },
               ...(!isSale ? [
                 { label:'Gán',  action:bulkAssign},
@@ -7555,6 +7667,37 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       />
 
       {/* Rich Floating Hover Tooltip for Interaction Note, Program, Admission Date & Tags (Light Surface, No Badge Border, Lucide Icons) */}
+      <CrmSendTemplateEmailModal
+        isOpen={showCrmEmailModal}
+        onClose={() => setShowCrmEmailModal(false)}
+        contacts={contacts.filter(c => selected.has(c.id))}
+        onSuccess={() => {
+          setSelected(new Set());
+          fetchData(true);
+        }}
+      />
+      <CrmBulkMarketingModal
+        isOpen={crmBulkMarketingModal.isOpen}
+        onClose={() => setCrmBulkMarketingModal(prev => ({ ...prev, isOpen: false }))}
+        initialMode={crmBulkMarketingModal.mode}
+        contactIds={Array.from(selected).map(Number)}
+        contacts={contacts.filter(c => selected.has(c.id))}
+        onSuccess={() => {
+          setSelected(new Set());
+          fetchData(true);
+        }}
+      />
+      <CrmFilterToStaticListModal
+        isOpen={showFilterStaticListModal}
+        onClose={() => setShowFilterStaticListModal(false)}
+        filterParams={showFilterStaticListModal ? buildCurrentStaticListFilterParams() : {}}
+        selectedContactIds={Array.from(selected).map(Number)}
+        totalMatchingCount={total}
+        activeFilterSummary={activeFilterSummaryList}
+        onSuccess={() => {
+          fetchData(true);
+        }}
+      />
       <ContactsFloatingTooltip triggerRef={hoveredCellTriggerRef} pipelineStages={pipelineStages} />
     </div>
   );

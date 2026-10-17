@@ -6,6 +6,20 @@ initializeSystem($pdo);
 require_once 'auth_middleware.php';
 $workspace_id = get_current_workspace_id();
 
+domationEnsureSchemaOnce('flows_attribution_v1', function () use ($pdo) {
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM flows")->fetchAll(PDO::FETCH_COLUMN);
+        if (is_array($cols)) {
+            if (!in_array('created_by', $cols, true)) {
+                @$pdo->exec("ALTER TABLE flows ADD COLUMN created_by INT NULL");
+            }
+            if (!in_array('updated_by', $cols, true)) {
+                @$pdo->exec("ALTER TABLE flows ADD COLUMN updated_by INT NULL");
+            }
+        }
+    } catch (Throwable $e) {}
+});
+
 /**
  * [SECURITY HARDENING] Centralized Flow Ownership Verification
  * Prevents cross-tenant data leaks by ensuring the requested flow belongs to the current workspace.
@@ -168,7 +182,7 @@ if ($method === 'POST' && isset($_GET['route']) && $_GET['route'] === 'flow-snap
         $body = json_decode(file_get_contents('php://input'), true);
         $label = trim($body['label'] ?? 'Chá»‰nh sá»­a');
         $flowData = $body['flow_data'] ?? null;
-        $createdBy = $body['created_by'] ?? null;
+        $createdBy = $GLOBALS['domation_auth']['full_name'] ?? ($GLOBALS['current_admin_email'] ?? ($body['created_by'] ?? null));
         if (!$flowData)
             jsonResponse(false, null, 'Flow data required');
         $snapshotId = $body['id'] ?? bin2hex(random_bytes(16));
@@ -1580,7 +1594,89 @@ if ($method === 'POST' && isset($_GET['route']) && $_GET['route'] === 'test-step
     }
 }
 
-// --- ROUTE: Migrate Users (Handle Continuation) ---
+// --- ROUTE: Active User Count in Flow ---
+if (isset($_GET['route']) && $_GET['route'] === 'active-count') {
+    try {
+        $flowId = $_GET['id'] ?? null;
+        if (!$flowId) {
+            jsonResponse(false, ['count' => 0], 'Flow ID required');
+        }
+        verifyFlowOwnership($pdo, $flowId, $workspace_id);
+        $stmtCnt = $pdo->prepare("SELECT COUNT(*) FROM subscriber_flow_states WHERE flow_id = ? AND status IN ('waiting', 'active', 'running', 'processing')");
+        $stmtCnt->execute([$flowId]);
+        $activeCount = (int) $stmtCnt->fetchColumn();
+        jsonResponse(true, ['count' => $activeCount]);
+    } catch (Exception $e) {
+        jsonResponse(true, ['count' => 0]);
+    }
+}
+
+// --- ROUTE: Sync Flow Stats ---
+if (isset($_GET['route']) && $_GET['route'] === 'sync') {
+    try {
+        $flowId = $_GET['id'] ?? null;
+        if (!$flowId) {
+            jsonResponse(false, null, 'Flow ID required');
+        }
+        verifyFlowOwnership($pdo, $flowId, $workspace_id);
+
+        $stmtEnrolled = $pdo->prepare("SELECT COUNT(DISTINCT subscriber_id) FROM subscriber_flow_states WHERE flow_id = ?");
+        $stmtEnrolled->execute([$flowId]);
+        $enrolled = (int) $stmtEnrolled->fetchColumn();
+
+        $stmtCompleted = $pdo->prepare("SELECT COUNT(DISTINCT subscriber_id) FROM subscriber_flow_states WHERE flow_id = ? AND status = 'completed'");
+        $stmtCompleted->execute([$flowId]);
+        $completed = (int) $stmtCompleted->fetchColumn();
+
+        $stmtAct = $pdo->prepare("
+            SELECT
+                COALESCE(SUM(CASE WHEN type IN ('send_email', 'email_sent', 'receive_email') THEN 1 ELSE 0 END), 0) AS total_sent,
+                COALESCE(SUM(CASE WHEN type IN ('open_email', 'email_opened') THEN 1 ELSE 0 END), 0) AS total_opened,
+                COUNT(DISTINCT CASE WHEN type IN ('open_email', 'email_opened') THEN subscriber_id END) AS unique_opened,
+                COALESCE(SUM(CASE WHEN type IN ('click_link', 'email_clicked') THEN 1 ELSE 0 END), 0) AS total_clicked,
+                COUNT(DISTINCT CASE WHEN type IN ('click_link', 'email_clicked') THEN subscriber_id END) AS unique_clicked
+            FROM subscriber_activity
+            WHERE flow_id = ?
+        ");
+        $stmtAct->execute([$flowId]);
+        $actStats = $stmtAct->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $totalSent = max(0, (int) ($actStats['total_sent'] ?? 0));
+        $totalOpened = max(0, (int) ($actStats['total_opened'] ?? 0));
+        $uniqueOpened = max(0, (int) ($actStats['unique_opened'] ?? 0));
+        $totalClicked = max(0, (int) ($actStats['total_clicked'] ?? 0));
+        $uniqueClicked = max(0, (int) ($actStats['unique_clicked'] ?? 0));
+        $openRate = $totalSent > 0 ? round(($uniqueOpened / $totalSent) * 100, 2) : 0;
+        $clickRate = $totalSent > 0 ? round(($uniqueClicked / $totalSent) * 100, 2) : 0;
+
+        $stmtUpd = $pdo->prepare("
+            UPDATE flows
+            SET stat_enrolled = GREATEST(COALESCE(stat_enrolled, 0), ?),
+                stat_completed = GREATEST(COALESCE(stat_completed, 0), ?),
+                stat_total_sent = GREATEST(COALESCE(stat_total_sent, 0), ?),
+                stat_total_opened = GREATEST(COALESCE(stat_total_opened, 0), ?),
+                stat_unique_opened = GREATEST(COALESCE(stat_unique_opened, 0), ?),
+                stat_total_clicked = GREATEST(COALESCE(stat_total_clicked, 0), ?),
+                stat_unique_clicked = GREATEST(COALESCE(stat_unique_clicked, 0), ?),
+                stat_open_rate = CASE WHEN ? > 0 THEN ? ELSE COALESCE(stat_open_rate, 0) END,
+                stat_click_rate = CASE WHEN ? > 0 THEN ? ELSE COALESCE(stat_click_rate, 0) END
+            WHERE id = ?
+        ");
+        $stmtUpd->execute([
+            $enrolled, $completed, $totalSent, $totalOpened, $uniqueOpened,
+            $totalClicked, $uniqueClicked, $totalSent, $openRate, $totalSent, $clickRate, $flowId
+        ]);
+
+        $stmtRow = $pdo->prepare("SELECT * FROM flows WHERE id = ?");
+        $stmtRow->execute([$flowId]);
+        $flowRow = $stmtRow->fetch(PDO::FETCH_ASSOC);
+        jsonResponse(true, $flowRow ? formatFlow($flowRow) : ['id' => $flowId], 'Đã đồng bộ dữ liệu thống kê Flow');
+    } catch (Exception $e) {
+        jsonResponse(false, null, 'Lỗi đồng bộ dữ liệu Flow: ' . $e->getMessage());
+    }
+}
+
+// --- ROUTE: Migrate Users (Handle Continuation / Cancellation) ---
 if (isset($_GET['route']) && $_GET['route'] === 'migrate-users') {
     if ($method !== 'POST')
         jsonResponse(false, null, 'Method not allowed');
@@ -1593,8 +1689,10 @@ if (isset($_GET['route']) && $_GET['route'] === 'migrate-users') {
         $input = json_decode(file_get_contents("php://input"), true);
         $action = $input['action'] ?? 'stop';
 
-        if ($action === 'stop') {
-            jsonResponse(true, ['message' => 'Users stopped']);
+        if ($action === 'stop' || $action === 'cancel') {
+            $stmtCancel = $pdo->prepare("UPDATE subscriber_flow_states SET status = 'cancelled', updated_at = NOW() WHERE flow_id = ? AND status IN ('waiting', 'active', 'running', 'processing')");
+            $stmtCancel->execute([$flowId]);
+            jsonResponse(true, ['message' => 'Users stopped', 'cancelled' => $stmtCancel->rowCount()]);
         }
 
         if ($action === 'continue') {
@@ -1688,8 +1786,10 @@ if (isset($_GET['route']) && $_GET['route'] === 'migrate-users') {
 
             jsonResponse(true, ['message' => 'Users moved to new step', 'count' => $count]);
         }
+
+        jsonResponse(false, null, 'Unsupported migrate-users action: ' . $action, 400);
     } catch (Exception $e) {
-        jsonResponse(false, null, 'Lá»—i há»‡ thá»‘ng, vui lÃ²ng thá»­ láº¡i.');
+        jsonResponse(false, null, 'Lỗi hệ thống, vui lòng thử lại.');
     }
 }
 
@@ -2272,8 +2372,18 @@ function formatFlow($row)
         'openRate' => (float) ($row['stat_open_rate'] ?? 0.0),
         'clickRate' => (float) ($row['stat_click_rate'] ?? 0.0),
     ];
-    $row['createdAt'] = $row['created_at'];
-    $row['archivedAt'] = $row['archived_at'];
+    $row['createdAt'] = $row['created_at'] ?? null;
+    $row['updatedAt'] = $row['updated_at'] ?? null;
+    $row['archivedAt'] = $row['archived_at'] ?? null;
+    $row['created_by'] = isset($row['created_by']) && $row['created_by'] !== null ? (int)$row['created_by'] : null;
+    $row['updated_by'] = isset($row['updated_by']) && $row['updated_by'] !== null ? (int)$row['updated_by'] : null;
+    $row['creator'] = !empty($row['creator_id']) ? [
+        'id' => (int)$row['creator_id'],
+        'name' => $row['creator_name'] ?? '',
+        'email' => $row['creator_email'] ?? '',
+        'avatar_url' => $row['creator_avatar'] ?? null,
+        'role' => $row['creator_role'] ?? null,
+    ] : null;
     unset(
         $row['stat_enrolled'],
         $row['stat_completed'],
@@ -2287,15 +2397,17 @@ function formatFlow($row)
         $row['stat_zalo_sent'],
         $row['stat_zns_sent'],
         $row['stat_meta_sent'],
-        // [FIX P12-H4] Also unset the new ZNS click columns added by P11-C1/H3.
-        // Without this, they appear both in stats.totalZaloClicked (correct)
-        // AND as raw stat_total_zalo_clicked key (duplicate) in the response.
         $row['stat_total_zalo_clicked'],
         $row['stat_unique_zalo_clicked'],
         $row['stat_open_rate'],
         $row['stat_click_rate'],
         $row['created_at'],
-        $row['archived_at']
+        $row['archived_at'],
+        $row['creator_id'],
+        $row['creator_name'],
+        $row['creator_email'],
+        $row['creator_avatar'],
+        $row['creator_role']
     );
     return $row;
 }
@@ -2802,7 +2914,8 @@ if (isset($_GET['route']) && $_GET['route'] === 'duplicate') {
             $configJson = json_encode($confObj, JSON_UNESCAPED_UNICODE);
         }
 
-        $sql = "INSERT INTO flows (workspace_id, id, name, description, status, steps, config, trigger_type, stat_enrolled, stat_completed, stat_total_sent, stat_total_opened, stat_unique_opened, stat_total_clicked, stat_unique_clicked, stat_total_failed, stat_total_unsubscribed, stat_zalo_sent, stat_zns_sent, stat_meta_sent, created_at, updated_at) VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NOW(), NOW())";
+        $currentUserId = !empty($GLOBALS['current_admin_id']) ? (int)$GLOBALS['current_admin_id'] : null;
+        $sql = "INSERT INTO flows (workspace_id, id, name, description, status, steps, config, trigger_type, created_by, updated_by, stat_enrolled, stat_completed, stat_total_sent, stat_total_opened, stat_unique_opened, stat_total_clicked, stat_unique_clicked, stat_total_failed, stat_total_unsubscribed, stat_zalo_sent, stat_zns_sent, stat_meta_sent, created_at, updated_at) VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NOW(), NOW())";
         $stmtInsert = $pdo->prepare($sql);
         $stmtInsert->execute([
             $workspace_id,
@@ -2811,7 +2924,9 @@ if (isset($_GET['route']) && $_GET['route'] === 'duplicate') {
             $original['description'] ?? '',
             $stepsJson,
             $configJson,
-            $original['trigger_type']
+            $original['trigger_type'],
+            $currentUserId,
+            $currentUserId
         ]);
 
         logSystemActivity($pdo, 'flows', 'duplicate', $newId, $newName, ['original_flow_id' => $flowId]);
@@ -2885,8 +3000,11 @@ switch ($method) {
             session_write_close();
         try {
             if ($path) {
-                // [FIX P39-F1] Explicit columns â€” avoids loading all columns unnecessarily when only specific fields are used
-                $stmt = $pdo->prepare("SELECT id, workspace_id, name, status, trigger_type, steps, config, stat_enrolled, stat_completed, created_at, updated_at FROM flows WHERE id = ? AND workspace_id = ?");
+                $stmt = $pdo->prepare("SELECT f.id, f.workspace_id, f.name, f.status, f.trigger_type, f.steps, f.config, f.stat_enrolled, f.stat_completed, f.created_at, f.updated_at, f.created_by, f.updated_by,
+                    u_creator.id AS creator_id, u_creator.full_name AS creator_name, u_creator.email AS creator_email, u_creator.avatar_url AS creator_avatar, u_creator.role AS creator_role
+                    FROM flows f
+                    LEFT JOIN users u_creator ON u_creator.id = f.created_by
+                    WHERE f.id = ? AND f.workspace_id = ?");
                 $stmt->execute([$path, $workspace_id]);
                 $flow = $stmt->fetch();
 
@@ -3136,16 +3254,17 @@ switch ($method) {
                 $stmtCount->execute($paramsFlow);
                 $totalFlows = (int) $stmtCount->fetchColumn();
 
-                // [PERF-F2] Explicit columns — steps IS included for FlowCard (needs trigger step + count)
-                // The 'steps' column can be large (50-200KB per flow). We parse it PHP-side and
-                // strip all non-trigger steps before sending to the client — saves 70-95% bandwidth.
-                $stmt = $pdo->prepare("SELECT id, workspace_id, name, status, trigger_type, steps, config,
-                    stat_enrolled, stat_completed, stat_total_sent, stat_total_opened, stat_unique_opened,
-                    stat_total_clicked, stat_unique_clicked, stat_total_failed, stat_total_unsubscribed,
-                    stat_zalo_sent, stat_zns_sent, stat_meta_sent,
-                    stat_total_zalo_clicked, stat_unique_zalo_clicked, stat_open_rate, stat_click_rate,
-                    created_at, updated_at, archived_at
-                    FROM flows WHERE $whereSqlFlow ORDER BY created_at DESC LIMIT $limit OFFSET $offset");
+                $stmt = $pdo->prepare("SELECT f.id, f.workspace_id, f.name, f.status, f.trigger_type, f.steps, f.config,
+                    f.stat_enrolled, f.stat_completed, f.stat_total_sent, f.stat_total_opened, f.stat_unique_opened,
+                    f.stat_total_clicked, f.stat_unique_clicked, f.stat_total_failed, f.stat_total_unsubscribed,
+                    f.stat_zalo_sent, f.stat_zns_sent, f.stat_meta_sent,
+                    f.stat_total_zalo_clicked, f.stat_unique_zalo_clicked, f.stat_open_rate, f.stat_click_rate,
+                    f.created_at, f.updated_at, f.archived_at, f.created_by, f.updated_by,
+                    u_creator.id AS creator_id, u_creator.full_name AS creator_name, u_creator.email AS creator_email,
+                    u_creator.avatar_url AS creator_avatar, u_creator.role AS creator_role
+                    FROM (SELECT * FROM flows WHERE $whereSqlFlow ORDER BY created_at DESC LIMIT $limit OFFSET $offset) f
+                    LEFT JOIN users u_creator ON u_creator.id = f.created_by
+                    ORDER BY f.created_at DESC");
                 $stmt->execute($paramsFlow);
                 $rawFlows = $stmt->fetchAll();
 
@@ -3208,11 +3327,12 @@ switch ($method) {
 
             $steps = json_encode($data['steps'] ?? []);
             $config = json_encode($data['config'] ?? (object) []);
-            $sql = "INSERT INTO flows (workspace_id, id, name, description, status, steps, config, trigger_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+            $currentUserId = !empty($GLOBALS['current_admin_id']) ? (int)$GLOBALS['current_admin_id'] : null;
+            $sql = "INSERT INTO flows (workspace_id, id, name, description, status, steps, config, trigger_type, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             $stmt = $pdo->prepare($sql);
-            $stmt->execute([$workspace_id, $id, $data['name'] ?? 'Flow má»›i', $data['description'] ?? '', $data['status'] ?? 'draft', $steps, $config, $triggerType]);
-            logSystemActivity($pdo, 'flows', 'create', $id, $data['name'] ?? 'Flow má»›i', ['status' => $data['status'] ?? 'draft']);
-            jsonResponse(true, ['id' => $id]);
+            $stmt->execute([$workspace_id, $id, $data['name'] ?? 'Flow mới', $data['description'] ?? '', $data['status'] ?? 'draft', $steps, $config, $triggerType, $currentUserId, $currentUserId]);
+            logSystemActivity($pdo, 'flows', 'create', $id, $data['name'] ?? 'Flow mới', ['status' => $data['status'] ?? 'draft']);
+            jsonResponse(true, ['id' => $id, 'created_by' => $currentUserId, 'updated_by' => $currentUserId]);
         } catch (Throwable $e) {
             jsonResponse(false, null, 'Lá»—i há»‡ thá»‘ng, vui lÃ²ng thá»­ láº¡i.');
         }
@@ -3328,9 +3448,10 @@ switch ($method) {
             }
 
             // Prevent injection of raw queries, always use bind
-            $sql = "UPDATE flows SET name=?, description=?, status=?, steps=?, config=?, trigger_type=?, stat_enrolled=?, stat_completed=?, stat_total_sent=?, stat_total_opened=?, stat_unique_opened=?, stat_total_clicked=?, stat_unique_clicked=?, stat_total_failed=?, stat_total_unsubscribed=?, stat_zalo_sent=?, archived_at=? WHERE id=? AND workspace_id=?";
+            $currentUserId = !empty($GLOBALS['current_admin_id']) ? (int)$GLOBALS['current_admin_id'] : null;
+            $sql = "UPDATE flows SET name=?, description=?, status=?, steps=?, config=?, trigger_type=?, updated_by=?, stat_enrolled=?, stat_completed=?, stat_total_sent=?, stat_total_opened=?, stat_unique_opened=?, stat_total_clicked=?, stat_unique_clicked=?, stat_total_failed=?, stat_total_unsubscribed=?, stat_zalo_sent=?, archived_at=? WHERE id=? AND workspace_id=?";
             $stmt = $pdo->prepare($sql);
-            $stmt->execute([$data['name'], $data['description'], $data['status'], $steps, $config, $triggerType, (int) ($stats['enrolled'] ?? 0), (int) ($stats['completed'] ?? 0), (int) ($stats['totalSent'] ?? 0), (int) ($stats['totalOpened'] ?? 0), (int) ($stats['uniqueOpened'] ?? 0), (int) ($stats['totalClicked'] ?? 0), (int) ($stats['uniqueClicked'] ?? 0), (int) ($stats['totalFailed'] ?? 0), (int) ($stats['totalUnsubscribed'] ?? 0), (int) ($stats['zaloSent'] ?? 0), $data['archivedAt'] ?? null, $path, $workspace_id]);
+            $stmt->execute([$data['name'], $data['description'], $data['status'], $steps, $config, $triggerType, $currentUserId, (int) ($stats['enrolled'] ?? 0), (int) ($stats['completed'] ?? 0), (int) ($stats['totalSent'] ?? 0), (int) ($stats['totalOpened'] ?? 0), (int) ($stats['uniqueOpened'] ?? 0), (int) ($stats['totalClicked'] ?? 0), (int) ($stats['uniqueClicked'] ?? 0), (int) ($stats['totalFailed'] ?? 0), (int) ($stats['totalUnsubscribed'] ?? 0), (int) ($stats['zaloSent'] ?? 0), $data['archivedAt'] ?? null, $path, $workspace_id]);
             logSystemActivity($pdo, 'flows', 'update', $path, $data['name'], ['status' => $data['status']]);
 
             // [FIX] Decode stepsArr UNCONDITIONALLY here so it is available for both the active

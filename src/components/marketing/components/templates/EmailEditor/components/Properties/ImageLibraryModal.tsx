@@ -347,7 +347,7 @@ const ImageLibraryModal: React.FC<ImageLibraryModalProps> = ({ isOpen, onClose, 
             />
 
             {/* Modal */}
-            <div className="fixed inset-x-4 top-2 md:top-4 bottom-2 md:bottom-4 md:inset-x-[5%] lg:inset-x-[10%] xl:inset-x-[15%] z-[200006] flex flex-col bg-white rounded-[28px] shadow-2xl overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+            <div className="fixed inset-x-4 top-2 md:top-4 bottom-2 md:bottom-4 md:inset-x-[5%] lg:inset-x-[10%] xl:inset-x-[15%] z-[200006] flex flex-col bg-white rounded-[18px] shadow-2xl overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
 
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
@@ -448,7 +448,7 @@ const ImageLibraryModal: React.FC<ImageLibraryModalProps> = ({ isOpen, onClose, 
                                                 if (onSelect) { onSelect(file.url); onClose(); }
                                             }
                                         }}
-                                        className={`group relative rounded-2xl border-2 transition-all duration-200 cursor-pointer overflow-hidden ${
+                                        className={`group relative rounded-[14px] border-2 transition-all duration-200 cursor-pointer overflow-hidden ${
                                             selected.has(uniqueKey)
                                                 ? 'border-rose-400 ring-2 ring-rose-100 shadow-lg shadow-rose-50'
                                                 : 'border-slate-100 bg-white hover:border-blue-300 hover:shadow-md'
@@ -564,7 +564,7 @@ const ImageLibraryModal: React.FC<ImageLibraryModalProps> = ({ isOpen, onClose, 
 
                 {/* Bulk delete confirm overlay */}
                 {bulkDeleteConfirm && (
-                    <div className="absolute inset-0 z-30 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center gap-4 rounded-[28px]">
+                    <div className="absolute inset-0 z-30 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center gap-4 rounded-[18px]">
                         <div className="w-14 h-14 rounded-full bg-rose-100 flex items-center justify-center">
                             <Trash2 className="w-7 h-7 text-rose-600" />
                         </div>

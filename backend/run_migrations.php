@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 325;
+$targetVersion = 329;
 $currentVersion = 186;
 
 // Query current DB version
@@ -4673,6 +4673,28 @@ try {
         $logMsg("Nâng cấp lên phiên bản 325 hoàn tất.", "success");
     }
 
+    if ($currentVersion < 326) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 326: Đồng bộ Schema Marketing Automation ⮂ MYERP CRM...", "info");
+        try {
+            require_once __DIR__ . '/migrations/326_marketing_erp_deep_integration.php';
+            $logMsg("Đồng bộ Schema phiên bản 326 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi chạy migration 326: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 326 hoàn tất.", "success");
+    }
+
+    if ($currentVersion < 329) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 329: Thêm Composite Indexes cho Deep Segment, Import Sync & Omnichannel...", "info");
+        try {
+            require_once __DIR__ . '/migrations/329_marketing_deep_segment_import_sync_indexes.php';
+            $logMsg("Thêm composite indexes phiên bản 329 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi chạy migration 329: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 329 hoàn tất.", "success");
+    }
+
     // Reconnect $conn if it timed out during heavy PDO migration
     try {
         $alive = false;
@@ -4691,9 +4713,9 @@ try {
     } catch (Throwable $eReconn) {}
 
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '325') ON DUPLICATE KEY UPDATE setting_value = '325'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '329') ON DUPLICATE KEY UPDATE setting_value = '329'");
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 325", "success");
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 329", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");

@@ -677,12 +677,12 @@ const GoogleSheetsSetup: React.FC<GoogleSheetsSetupProps> = ({ onBack, onComplet
                 return (
                     <div className="space-y-6">
                         {/* Improved Table without overflow-hidden on container to allow dropdowns */}
-                        <div className="bg-white border border-slate-100 rounded-[28px] shadow-sm relative z-0">
+                        <div className="bg-white border border-slate-100 rounded-[18px] shadow-sm relative z-0">
                             <table className="w-full">
                                 <thead className="bg-slate-50/50 border-b border-slate-100">
                                     <tr>
-                                        <th className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-left px-8 py-4 first:rounded-tl-[28px]">Trường hệ thống</th>
-                                        <th className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-left px-8 py-4 last:rounded-tr-[28px]">Cột tương ứng trong Sheet</th>
+                                        <th className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-left px-8 py-4 first:rounded-tl-[18px]">Trường hệ thống</th>
+                                        <th className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-left px-8 py-4 last:rounded-tr-[18px]">Cột tương ứng trong Sheet</th>
                                         <th className="w-16"></th>
                                     </tr>
                                 </thead>
@@ -799,7 +799,7 @@ const GoogleSheetsSetup: React.FC<GoogleSheetsSetupProps> = ({ onBack, onComplet
 
                                     {/* Suggestion/Add Row Button at the bottom */}
                                     <tr>
-                                        <td colSpan={3} className="p-4 last:rounded-bl-[28px] last:rounded-br-[28px]">
+                                        <td colSpan={3} className="p-4 last:rounded-bl-[18px] last:rounded-br-[18px]">
                                             <button
                                                 onClick={addMappingRow}
                                                 className="w-full py-4 border-2 border-dashed border-slate-100 rounded-2xl flex items-center justify-center gap-3 text-slate-400 hover:border-[#2563eb]/30 hover:bg-amber-50/30 hover:text-[#2563eb] transition-all group"
@@ -840,7 +840,7 @@ const GoogleSheetsSetup: React.FC<GoogleSheetsSetupProps> = ({ onBack, onComplet
                                 <p className="text-[10px] text-slate-400 font-medium ml-1">Hệ thống sẽ tự động tạo danh sách này và nạp dữ liệu vào.</p>
                             </div>
 
-                            <div className="p-5 bg-slate-900 rounded-[24px] border border-slate-800 text-white flex gap-4 items-start relative overflow-hidden group">
+                            <div className="p-5 bg-slate-900 rounded-[18px] border border-slate-800 text-white flex gap-4 items-start relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-[#0f9d58] rounded-full blur-[60px] opacity-10 group-hover:opacity-20 transition-opacity"></div>
                                 <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center backdrop-blur-md shrink-0 border border-white/10">
                                     <Zap className="w-5 h-5 text-[#0f9d58]" />
@@ -858,7 +858,7 @@ const GoogleSheetsSetup: React.FC<GoogleSheetsSetupProps> = ({ onBack, onComplet
                         {/* Virtual Email Toggle */}
                         <div className="space-y-4">
                             <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest pl-1">Nhận diện nâng cao</h4>
-                            <div className="bg-orange-50/30 border border-orange-100 p-6 rounded-[28px] space-y-4">
+                            <div className="bg-orange-50/30 border border-orange-100 p-6 rounded-[18px] space-y-4">
                                 <label className="flex items-center justify-between cursor-pointer group">
                                     <div className="flex-1 pr-8">
                                         <h5 className="text-sm font-bold text-slate-800 group-hover:text-orange-700 transition-colors">Tạo Email ảo cho người chỉ có SĐT</h5>
@@ -868,7 +868,7 @@ const GoogleSheetsSetup: React.FC<GoogleSheetsSetupProps> = ({ onBack, onComplet
                                     </div>
                                     <div
                                         onClick={() => setConfig({ ...config, createVirtualEmail: !config.createVirtualEmail })}
-                                        className={`relative w-14 h-8 rounded-full transition-all duration-300 ${config.createVirtualEmail ? 'bg-orange-500' : 'bg-slate-200'}`}
+                                        className={`relative w-14 h-8 rounded-full transition-all duration-300 ${config.createVirtualEmail ? 'bg-[var(--color-primary)]' : 'bg-slate-200'}`}
                                     >
                                         <div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-sm transition-all duration-300 ${config.createVirtualEmail ? 'translate-x-6' : ''}`} />
                                     </div>

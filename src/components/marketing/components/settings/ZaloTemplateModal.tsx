@@ -161,7 +161,7 @@ const ZaloTemplateModal: React.FC<ZaloTemplateModalProps> = ({ isOpen, onClose, 
             );
         } else if (s === 'PENDING_REVIEW') {
             return (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-black uppercase tracking-wider border border-amber-100 shadow-sm">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-[var(--color-primary)] rounded-lg text-[10px] font-black uppercase tracking-wider border border-amber-100 shadow-sm">
                     <RefreshCw className="w-3 h-3 animate-spin" />
                     PENDING
                 </div>
@@ -256,7 +256,7 @@ const ZaloTemplateModal: React.FC<ZaloTemplateModalProps> = ({ isOpen, onClose, 
                         {isLoading ? (
                             <div className="space-y-3">
                                 {[1, 2, 3].map(i => (
-                                    <div key={i} className="h-24 bg-slate-100 rounded-2xl animate-pulse" />
+                                    <div key={i} className="h-24 bg-slate-100 rounded-[14px] animate-pulse" />
                                 ))}
                             </div>
                         ) : filteredTemplates.length === 0 ? (
@@ -309,7 +309,7 @@ const ZaloTemplateModal: React.FC<ZaloTemplateModalProps> = ({ isOpen, onClose, 
                                                     ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
                                                     : t.status === 'REJECT'
                                                         ? 'bg-rose-50 text-rose-600 border-rose-100'
-                                                        : 'bg-amber-50 text-amber-600 border-amber-100'
+                                                        : 'bg-amber-50 text-[var(--color-primary)] border-amber-100'
                                                 }
                                             `}>
                                                 {t.status === 'ENABLE' || t.status === 'approved' ? 'Active' : t.status === 'REJECT' ? 'Reject' : 'Pending'}
@@ -382,14 +382,14 @@ const ZaloTemplateModal: React.FC<ZaloTemplateModalProps> = ({ isOpen, onClose, 
                                                 ))}
                                             </div>
                                         ) : (
-                                            <div className="p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center">
+                                            <div className="p-6 bg-slate-50 rounded-[14px] border border-dashed border-slate-200 text-center">
                                                 <p className="text-sm text-slate-500 italic">Không có tham số nào</p>
                                             </div>
                                         )}
                                     </div>
 
                                     {/* JSON Payload (Collapsed by default idea, but here full) */}
-                                    {/* <div className="p-5 bg-slate-900 rounded-2xl text-slate-300 font-mono text-[10px] leading-relaxed overflow-x-auto shadow-inner">
+                                    {/* <div className="p-5 bg-slate-900 rounded-[14px] text-slate-300 font-mono text-[10px] leading-relaxed overflow-x-auto shadow-inner">
                                         <p className="text-slate-500 font-bold mb-2 uppercase tracking-wider text-[9px]">Payload Example</p>
                                         <pre>
                                             {JSON.stringify(
@@ -411,7 +411,7 @@ const ZaloTemplateModal: React.FC<ZaloTemplateModalProps> = ({ isOpen, onClose, 
                                     </div>
 
                                     {isLoadingDetail ? (
-                                        <div className="w-[300px] h-[550px] bg-white rounded-[40px] shadow-2xl border-8 border-slate-800 flex items-center justify-center">
+                                        <div className="w-[300px] h-[550px] bg-white rounded-[18px] shadow-2xl border-8 border-slate-800 flex items-center justify-center">
                                             <div className="flex flex-col items-center gap-3">
                                                 <RefreshCw className="w-8 h-8 text-blue-500 animate-spin" />
                                                 <p className="text-xs font-bold text-slate-400">Đang tải preview...</p>
@@ -419,7 +419,7 @@ const ZaloTemplateModal: React.FC<ZaloTemplateModalProps> = ({ isOpen, onClose, 
                                         </div>
                                     ) : selectedTemplate.template_data?.detail?.previewUrl ? (
                                         <div className="relative group">
-                                            <div className="w-[360px] h-[600px] bg-white rounded-[40px] shadow-2xl border-[10px] border-slate-800 overflow-hidden relative transform transition-transform duration-500 hover:scale-[1.02]">
+                                            <div className="w-[360px] h-[600px] bg-white rounded-[18px] shadow-2xl border-[10px] border-slate-800 overflow-hidden relative transform transition-transform duration-500 hover:scale-[1.02]">
                                                 {/* Notch */}
                                                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-6 bg-slate-800 rounded-b-xl z-20" />
 
@@ -441,7 +441,7 @@ const ZaloTemplateModal: React.FC<ZaloTemplateModalProps> = ({ isOpen, onClose, 
                                             </a>
                                         </div>
                                     ) : (
-                                        <div className="w-[300px] h-[580px] bg-white rounded-[40px] shadow-xl border-[8px] border-slate-200/50 flex flex-col items-center justify-center p-8 text-center gap-4">
+                                        <div className="w-[300px] h-[580px] bg-white rounded-[18px] shadow-xl border-[8px] border-slate-200/50 flex flex-col items-center justify-center p-8 text-center gap-4">
                                             <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-2">
                                                 <AlertTriangle className="w-8 h-8 text-slate-300" />
                                             </div>

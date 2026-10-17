@@ -566,6 +566,12 @@ class DealController {
             }
             
             $this->db->commit();
+            if (!empty($contactId) && !empty($stageInfo['is_won'])) {
+                try {
+                    require_once __DIR__ . '/../automation/trigger_helper.php';
+                    DomationEventDispatcher::dispatch($this->db, (int) $contactId, 'erp_deal_won', ['deal_id' => $id]);
+                } catch (\Throwable $eAuto) {}
+            }
             respond(200, null, 'Đã cập nhật stage thành công');
         } catch (Exception $e) {
             if ($this->db->inTransaction()) $this->db->rollBack();

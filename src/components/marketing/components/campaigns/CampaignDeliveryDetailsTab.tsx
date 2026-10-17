@@ -299,7 +299,7 @@ const CampaignDeliveryDetailsTab: React.FC<Props> = ({ campaign, allLists, allTa
             {/* ... stats ... */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 {/* Card 1: Tổng gửi */}
-                <div className="stat-card bg-white dark:bg-slate-900 p-5 md:p-6 rounded-[24px] border border-slate-100/70 dark:border-slate-800/80 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex items-center justify-between group hover:shadow-[0_12px_36px_rgba(0,0,0,0.035)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden min-h-[100px]">
+                <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-[18px] border border-slate-100/70 dark:border-slate-800/80 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex items-center justify-between group hover:shadow-[0_12px_36px_rgba(0,0,0,0.035)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden min-h-[100px]">
                     <div className="decor-svg" style={{ color: '#3b82f6' }}>
                         <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
                             <path d="M10 50 Q 50 10 90 50 T 90 90" stroke="currentColor" strokeWidth="2" stroke-dasharray="3 3" />
@@ -319,7 +319,7 @@ const CampaignDeliveryDetailsTab: React.FC<Props> = ({ campaign, allLists, allTa
                 </div>
 
                 {/* Card 2: Thành công */}
-                <div className="stat-card bg-white dark:bg-slate-900 p-5 md:p-6 rounded-[24px] border border-slate-100/70 dark:border-slate-800/80 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex items-center justify-between group hover:shadow-[0_12px_36px_rgba(0,0,0,0.035)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden min-h-[100px]">
+                <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-[18px] border border-slate-100/70 dark:border-slate-800/80 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex items-center justify-between group hover:shadow-[0_12px_36px_rgba(0,0,0,0.035)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden min-h-[100px]">
                     <div className="decor-svg" style={{ color: '#10b981' }}>
                         <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
                             <rect x="20" y="20" width="60" height="15" rx="7.5" fill="currentColor" fillOpacity="0.6" />
@@ -337,7 +337,7 @@ const CampaignDeliveryDetailsTab: React.FC<Props> = ({ campaign, allLists, allTa
                 </div>
 
                 {/* Card 3: Lượt mở */}
-                <div className="stat-card bg-white dark:bg-slate-900 p-5 md:p-6 rounded-[24px] border border-slate-100/70 dark:border-slate-800/80 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex items-center justify-between group hover:shadow-[0_12px_36px_rgba(0,0,0,0.035)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden min-h-[100px]">
+                <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-[18px] border border-slate-100/70 dark:border-slate-800/80 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex items-center justify-between group hover:shadow-[0_12px_36px_rgba(0,0,0,0.035)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden min-h-[100px]">
                     <div className="decor-svg" style={{ color: '#8b5cf6' }}>
                         <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
                             <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="2" stroke-dasharray="4 4" />
@@ -356,7 +356,7 @@ const CampaignDeliveryDetailsTab: React.FC<Props> = ({ campaign, allLists, allTa
                 </div>
 
                 {/* Card 4: Thất bại */}
-                <div className="stat-card bg-white dark:bg-slate-900 p-5 md:p-6 rounded-[24px] border border-slate-100/70 dark:border-slate-800/80 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex items-center justify-between group hover:shadow-[0_12px_36px_rgba(0,0,0,0.035)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden min-h-[100px]">
+                <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-[18px] border border-slate-100/70 dark:border-slate-800/80 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex items-center justify-between group hover:shadow-[0_12px_36px_rgba(0,0,0,0.035)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden min-h-[100px]">
                     <div className="decor-svg" style={{ color: '#ec4899' }}>
                         <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
                             <circle cx="50" cy="50" r="30" stroke="currentColor" strokeWidth="2" />
@@ -373,7 +373,7 @@ const CampaignDeliveryDetailsTab: React.FC<Props> = ({ campaign, allLists, allTa
                 </div>
             </div>
 
-            <div className="flex justify-between gap-4 items-center bg-slate-50 p-3 rounded-2xl border border-slate-100 flex-wrap">
+            <div className="flex justify-between gap-4 items-center bg-slate-50 p-3 rounded-[14px] border border-slate-100 flex-wrap">
                 <div className="flex gap-2 flex-1 min-w-[300px]">
                     <div className="flex-1 relative group bg-white rounded-xl border border-slate-200 h-10 flex items-center overflow-hidden w-full">
                         <Search className="w-4 h-4 ml-4 text-slate-400" />
@@ -709,11 +709,11 @@ const CampaignDeliveryDetailsTab: React.FC<Props> = ({ campaign, allLists, allTa
                 size="lg"
             >
                 <div className="space-y-4">
-                    <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                    <div className="p-4 bg-slate-50 border border-slate-100 rounded-[14px]">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Tiêu đề (Personalized Subject)</p>
                         <p className="text-sm font-bold text-slate-700">{previewModal.loading ? '...' : previewModal.subject}</p>
                     </div>
-                    <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-inner h-[500px]">
+                    <div className="border border-slate-200 rounded-[14px] overflow-hidden bg-white shadow-inner h-[500px]">
                         {previewModal.loading ? (
                             <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-3 animate-pulse">
                                 <RefreshCw className="w-8 h-8 animate-spin" />

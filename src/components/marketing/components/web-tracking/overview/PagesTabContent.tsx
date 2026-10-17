@@ -46,7 +46,7 @@ const PagesTabContent: React.FC<PagesTabContentProps> = ({
                 <div className="lg:col-span-8 space-y-2">
                     <div className="flex flex-col md:flex-row md:items-center justify-between mb-2 gap-3">
                         <div className="flex items-center gap-2.5">
-                            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-amber-600 text-white shadow-lg shadow-amber-600/20">
+                            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-[var(--color-primary)] text-white shadow-lg shadow-[var(--color-primary)]/20">
                                 <FileText className="w-4 h-4" />
                             </div>
                             <div>
@@ -104,7 +104,7 @@ const PagesTabContent: React.FC<PagesTabContentProps> = ({
                                                     <div className="flex-1 max-w-[200px] h-1.5 bg-slate-100 rounded-full overflow-hidden">
                                                         <div
                                                             className={`h-full rounded-full transition-all duration-1000 ease-out ${scrollPercent >= 50 ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]' :
-                                                                scrollPercent >= 25 ? 'bg-amber-600 shadow-[0_0_8px_rgba(245,158,11,0.3)]' :
+                                                                scrollPercent >= 25 ? 'bg-[var(--color-primary)] shadow-[0_0_8px_rgba(245,158,11,0.3)]' :
                                                                     'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.3)]'
                                                                 }`}
                                                             style={{ width: `${scrollPercent}%` }}
@@ -136,7 +136,7 @@ const PagesTabContent: React.FC<PagesTabContentProps> = ({
                             );
                         })}
                         {(!displayedPages || displayedPages.length === 0) && (
-                            <div className="py-20 text-center text-slate-400 text-sm italic font-medium bg-white rounded-2xl border border-slate-100">Không tìm thấy trang nào</div>
+                            <div className="py-20 text-center text-slate-400 text-sm italic font-medium bg-white rounded-[14px] border border-slate-100">Không tìm thấy trang nào</div>
                         )}
                     </div>
 
@@ -144,7 +144,7 @@ const PagesTabContent: React.FC<PagesTabContentProps> = ({
                     {filteredPages.length > 10 && (
                         <button
                             onClick={() => setShowAll(!showAll)}
-                            className="w-full py-3 px-4 bg-white hover:bg-slate-50 border border-slate-200 hover:border-blue-300 rounded-2xl transition-all flex items-center justify-center gap-2 text-sm font-semibold text-slate-600 hover:text-blue-600 group"
+                            className="w-full py-3 px-4 bg-white hover:bg-slate-50 border border-slate-200 hover:border-blue-300 rounded-[14px] transition-all flex items-center justify-center gap-2 text-sm font-semibold text-slate-600 hover:text-blue-600 group"
                         >
                             <span>{showAll ? 'Thu gọn' : `Xem thêm ${filteredPages.length - 10} trang`}</span>
                             <ChevronDown className={`w-4 h-4 transition-transform ${showAll ? 'rotate-180' : ''}`} />
@@ -248,7 +248,7 @@ const PagesTabContent: React.FC<PagesTabContentProps> = ({
                 size="xl"
             >
                 <div className="space-y-8 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
-                    <div className="p-8 bg-slate-50 border border-slate-100 rounded-[32px] relative overflow-hidden group">
+                    <div className="p-8 bg-slate-50 border border-slate-100 rounded-[18px] relative overflow-hidden group">
                         <h4 className="flex items-center gap-2 font-black text-lg mb-4 text-slate-800 relative">
                             <div className="p-2 bg-rose-600 text-white rounded-xl">
                                 <BookOpen className="w-5 h-5" />
@@ -261,7 +261,7 @@ const PagesTabContent: React.FC<PagesTabContentProps> = ({
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="p-8 bg-white border border-slate-100 rounded-[32px] shadow-sm">
+                        <div className="p-8 bg-white border border-slate-100 rounded-[18px] shadow-sm">
                             <h5 className="font-black text-slate-800 mb-6 flex items-center gap-2">
                                 <div className="w-8 h-8 bg-teal-50 text-teal-600 rounded-lg flex items-center justify-center">
                                     <TrendingUp className="w-4 h-4" />
@@ -271,12 +271,12 @@ const PagesTabContent: React.FC<PagesTabContentProps> = ({
                             <p className="text-xs text-slate-500 leading-relaxed font-medium mb-4">
                                 Không có con số "chuẩn" cho mọi lĩnh vực. Tỷ lệ thoát phụ thuộc rất lớn vào loại trang web và mục đích của trang.
                             </p>
-                            <div className="p-4 bg-orange-50 border border-orange-100 rounded-2xl italic text-[11px] text-orange-800 font-bold">
+                            <div className="p-4 bg-orange-50 border border-orange-100 rounded-[14px] italic text-[11px] text-orange-800 font-bold">
                                 "Ví dụ: Một trang blog trả lời đúng câu hỏi người dùng tìm kiếm có thể có tỷ lệ thoát 90%+ nhưng vẫn là trải nghiệm tốt."
                             </div>
                         </div>
 
-                        <div className="p-8 bg-white border border-slate-100 rounded-[32px] shadow-sm">
+                        <div className="p-8 bg-white border border-slate-100 rounded-[18px] shadow-sm">
                             <h5 className="font-black text-slate-800 mb-6 flex items-center gap-2">
                                 <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
                                     <Table className="w-4 h-4" />
@@ -288,7 +288,7 @@ const PagesTabContent: React.FC<PagesTabContentProps> = ({
                                     { label: 'Bán lẻ / TMĐT', range: '20% - 40%', color: 'text-teal-500' },
                                     { label: 'Dịch vụ', range: '10% - 30%', color: 'text-teal-500' },
                                     { label: 'Tạo Khách hàng tiềm năng', range: '30% - 50%', color: 'text-blue-500' },
-                                    { label: 'Nội dung (Content site)', range: '40% - 60%', color: 'text-amber-600' },
+                                    { label: 'Nội dung (Content site)', range: '40% - 60%', color: 'text-[var(--color-primary)]' },
                                     { label: 'Blog / Landing Page', range: '70% - 90%', color: 'text-rose-500' }
                                 ].map((item, i) => (
                                     <div key={i} className="flex items-center justify-between text-[11px] font-bold py-2 border-b border-slate-50 last:border-0">
@@ -300,7 +300,7 @@ const PagesTabContent: React.FC<PagesTabContentProps> = ({
                         </div>
                     </div>
 
-                    <div className="p-8 bg-slate-900 rounded-[32px] text-white">
+                    <div className="p-8 bg-slate-900 rounded-[18px] text-white">
                         <h5 className="font-black text-sm mb-4 text-rose-400">Cách giảm tỷ lệ thoát:</h5>
                         <ul className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[11px] font-bold text-slate-300">
                             <li className="flex items-center gap-3 bg-white/5 p-3 rounded-xl border border-white/10 italic">

@@ -264,6 +264,41 @@ EOD;
     return $prompt;
 }
 
+function ensureOmnichannelChatbotCols($pdo)
+{
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
+    try {
+        $msCols = $pdo->query("SHOW COLUMNS FROM `meta_subscribers`")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('subscriber_id', $msCols, true)) {
+            $pdo->exec("ALTER TABLE `meta_subscribers` ADD COLUMN `subscriber_id` CHAR(36) NULL DEFAULT NULL");
+        }
+        if (!in_array('contact_id', $msCols, true)) {
+            $pdo->exec("ALTER TABLE `meta_subscribers` ADD COLUMN `contact_id` INT NULL DEFAULT NULL");
+        }
+        if (!in_array('workspace_id', $msCols, true)) {
+            $pdo->exec("ALTER TABLE `meta_subscribers` ADD COLUMN `workspace_id` INT NULL DEFAULT 1");
+        }
+    } catch (\Throwable $e) {
+    }
+    try {
+        $zsCols = $pdo->query("SHOW COLUMNS FROM `zalo_subscribers`")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('subscriber_id', $zsCols, true)) {
+            $pdo->exec("ALTER TABLE `zalo_subscribers` ADD COLUMN `subscriber_id` CHAR(36) NULL DEFAULT NULL");
+        }
+        if (!in_array('contact_id', $zsCols, true)) {
+            $pdo->exec("ALTER TABLE `zalo_subscribers` ADD COLUMN `contact_id` INT NULL DEFAULT NULL");
+        }
+        if (!in_array('manual_email', $zsCols, true)) {
+            $pdo->exec("ALTER TABLE `zalo_subscribers` ADD COLUMN `manual_email` VARCHAR(255) NULL DEFAULT NULL");
+        }
+    } catch (\Throwable $e) {
+    }
+}
+
 try {
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $action = $_GET['action'] ?? '';
@@ -288,6 +323,7 @@ try {
             'delete_conversation',
             'send_human_reply',
             'update_status',
+            'toggle_conversation_status',
             'update_visitor_info'
         ];
 
@@ -553,14 +589,17 @@ try {
                 $params[] = $toDate . ' 23:59:59';
             }
 
+            ensureOmnichannelChatbotCols($pdo);
+
             if ($idFilter === 'has_phone') {
-                $where[] = "(s.phone IS NOT NULL AND s.phone != '') OR (v.phone IS NOT NULL AND v.phone != '')";
+                $where[] = "((s.phone IS NOT NULL AND s.phone != '') OR (s.phone_number IS NOT NULL AND s.phone_number != '') OR (v.phone IS NOT NULL AND v.phone != '') OR (ct.phone IS NOT NULL AND ct.phone != ''))";
             } elseif ($idFilter === 'has_email') {
-                $where[] = "(s.email IS NOT NULL AND s.email != '') OR (v.email IS NOT NULL AND v.email != '')";
+                $where[] = "((s.email IS NOT NULL AND s.email != '') OR (v.email IS NOT NULL AND v.email != '') OR (ct.email IS NOT NULL AND ct.email != ''))";
             }
 
             if (!empty($subIdParam)) {
-                $where[] = "v.subscriber_id = ?";
+                $where[] = "(v.subscriber_id = ? OR s.id = ?)";
+                $params[] = $subIdParam;
                 $params[] = $subIdParam;
             }
 
@@ -571,50 +610,111 @@ try {
             $baseFields = "c.id, c.visitor_id, c.property_id, c.last_message, c.last_message_at, c.status";
 
             if ($source === 'web') {
-                // Web: Only join web_visitors and subscribers
-                $selectFields = "$baseFields, 
-                    s.first_name, s.last_name, s.avatar, s.phone, s.email, s.lead_score,
-                    v.ip_address, v.subscriber_id, 'web' as source";
+                // Web: Join web_visitors, subscribers, contacts, users
+                $selectFields = "$baseFields,
+                    COALESCE(NULLIF(s.first_name, ''), ct.name) as first_name,
+                    s.last_name,
+                    COALESCE(NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), ''), ct.name, 'Web Visitor') as visitor_name,
+                    s.avatar,
+                    s.avatar as visitor_avatar,
+                    COALESCE(NULLIF(s.phone_number, ''), NULLIF(s.phone, ''), NULLIF(v.phone, ''), ct.phone) as phone,
+                    COALESCE(NULLIF(s.phone_number, ''), NULLIF(s.phone, ''), NULLIF(v.phone, ''), ct.phone) as visitor_phone,
+                    COALESCE(NULLIF(s.email, ''), NULLIF(v.email, ''), ct.email) as email,
+                    COALESCE(NULLIF(s.email, ''), NULLIF(v.email, ''), ct.email) as visitor_email,
+                    s.lead_score,
+                    v.ip_address,
+                    COALESCE(s.id, v.subscriber_id) as subscriber_id,
+                    COALESCE(c.contact_id, v.contact_id, s.contact_id) as contact_id,
+                    COALESCE(ct.owner_id, s.owner_id) as owner_id,
+                    COALESCE(u.full_name, s.salesperson) as salesperson,
+                    v.id as channel_record_id,
+                    NULL as zalo_user_id,
+                    NULL as psid,
+                    'web' as source";
                 $joins = "LEFT JOIN web_visitors v ON c.visitor_id = v.id
-                         LEFT JOIN subscribers s ON v.subscriber_id = s.id AND v.subscriber_id != ''";
+                         LEFT JOIN subscribers s ON v.subscriber_id = s.id AND v.subscriber_id != ''
+                         LEFT JOIN contacts ct ON ct.id = COALESCE(c.contact_id, v.contact_id, s.contact_id) AND ct.deleted_at IS NULL
+                         LEFT JOIN users u ON u.id = COALESCE(ct.owner_id, s.owner_id)";
 
             } elseif ($source === 'zalo') {
-                // Zalo: Only join zalo tables
+                // Zalo: Join zalo_subscribers, subscribers, contacts, users
                 $selectFields = "$baseFields,
-                    COALESCE(s.first_name, zs.display_name) as first_name,
-                    s.last_name, COALESCE(s.avatar, zs.avatar) as avatar,
-                    s.phone, s.email, s.lead_score, NULL as ip_address, NULL as subscriber_id,
+                    COALESCE(NULLIF(s.first_name, ''), NULLIF(zs.display_name, ''), ct.name) as first_name,
+                    s.last_name,
+                    COALESCE(NULLIF(zs.display_name, ''), NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), ''), ct.name, 'Zalo User') as visitor_name,
+                    COALESCE(zs.avatar, s.avatar) as avatar,
+                    COALESCE(zs.avatar, s.avatar) as visitor_avatar,
+                    COALESCE(NULLIF(zs.phone_number, ''), NULLIF(s.phone_number, ''), NULLIF(s.phone, ''), ct.phone) as phone,
+                    COALESCE(NULLIF(zs.phone_number, ''), NULLIF(s.phone_number, ''), NULLIF(s.phone, ''), ct.phone) as visitor_phone,
+                    COALESCE(NULLIF(zs.manual_email, ''), NULLIF(s.email, ''), ct.email) as email,
+                    COALESCE(NULLIF(zs.manual_email, ''), NULLIF(s.email, ''), ct.email) as visitor_email,
+                    COALESCE(s.lead_score, zs.lead_score) as lead_score,
+                    NULL as ip_address,
+                    COALESCE(zs.subscriber_id, s.id) as subscriber_id,
+                    COALESCE(c.contact_id, zs.contact_id, s.contact_id) as contact_id,
+                    COALESCE(ct.owner_id, s.owner_id) as owner_id,
+                    COALESCE(u.full_name, s.salesperson) as salesperson,
+                    zs.id as channel_record_id,
+                    zs.zalo_user_id as zalo_user_id,
+                    NULL as psid,
                     zc.name as zalo_oa_name, zc.avatar as zalo_oa_avatar, 'zalo' as source";
                 $joins = "LEFT JOIN zalo_subscribers zs ON zs.zalo_user_id = SUBSTRING(c.visitor_id, 6)
                          LEFT JOIN zalo_oa_configs zc ON zs.oa_id = zc.oa_id
-                         LEFT JOIN subscribers s ON s.zalo_user_id = zs.zalo_user_id
+                         LEFT JOIN subscribers s ON (s.id = zs.subscriber_id OR (zs.zalo_user_id IS NOT NULL AND zs.zalo_user_id != '' AND s.zalo_user_id = zs.zalo_user_id))
+                         LEFT JOIN contacts ct ON ct.id = COALESCE(c.contact_id, zs.contact_id, s.contact_id) AND ct.deleted_at IS NULL
+                         LEFT JOIN users u ON u.id = COALESCE(ct.owner_id, s.owner_id)
                          LEFT JOIN web_visitors v ON c.visitor_id = v.id";
 
             } elseif ($source === 'meta') {
-                // Meta: Only join meta tables
+                // Meta: Join meta_subscribers, subscribers, contacts, users
                 $selectFields = "$baseFields,
-                    COALESCE(s.first_name, ms.first_name) as first_name,
+                    COALESCE(NULLIF(s.first_name, ''), NULLIF(ms.first_name, ''), NULLIF(ms.name, ''), ct.name) as first_name,
                     COALESCE(s.last_name, ms.last_name) as last_name,
-                    COALESCE(s.avatar, ms.profile_pic) as avatar,
-                    COALESCE(s.phone, ms.phone) as phone,
-                    COALESCE(s.email, ms.email) as email,
-                    s.lead_score, NULL as ip_address, NULL as subscriber_id,
+                    COALESCE(NULLIF(ms.name, ''), NULLIF(TRIM(CONCAT_WS(' ', ms.first_name, ms.last_name)), ''), NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), ''), ct.name, 'Facebook User') as visitor_name,
+                    COALESCE(ms.profile_pic, ms.avatar_url, s.avatar) as avatar,
+                    COALESCE(ms.profile_pic, ms.avatar_url, s.avatar) as visitor_avatar,
+                    COALESCE(NULLIF(ms.phone, ''), NULLIF(s.phone_number, ''), NULLIF(s.phone, ''), ct.phone) as phone,
+                    COALESCE(NULLIF(ms.phone, ''), NULLIF(s.phone_number, ''), NULLIF(s.phone, ''), ct.phone) as visitor_phone,
+                    COALESCE(NULLIF(ms.email, ''), NULLIF(s.email, ''), ct.email) as email,
+                    COALESCE(NULLIF(ms.email, ''), NULLIF(s.email, ''), ct.email) as visitor_email,
+                    COALESCE(s.lead_score, ms.lead_score) as lead_score,
+                    NULL as ip_address,
+                    COALESCE(ms.subscriber_id, s.id) as subscriber_id,
+                    COALESCE(c.contact_id, ms.contact_id, s.contact_id) as contact_id,
+                    COALESCE(ct.owner_id, s.owner_id) as owner_id,
+                    COALESCE(u.full_name, s.salesperson) as salesperson,
+                    ms.id as channel_record_id,
+                    NULL as zalo_user_id,
+                    ms.psid as psid,
                     mc.page_name, mc.avatar_url as page_avatar, 'meta' as source";
                 $joins = "LEFT JOIN meta_subscribers ms ON ms.psid = SUBSTRING(c.visitor_id, 6)
                          LEFT JOIN meta_app_configs mc ON ms.page_id = mc.page_id
-                         LEFT JOIN subscribers s ON s.meta_psid = ms.psid
+                         LEFT JOIN subscribers s ON (s.id = ms.subscriber_id OR (ms.psid IS NOT NULL AND ms.psid != '' AND s.meta_psid = ms.psid))
+                         LEFT JOIN contacts ct ON ct.id = COALESCE(c.contact_id, ms.contact_id, s.contact_id) AND ct.deleted_at IS NULL
+                         LEFT JOIN users u ON u.id = COALESCE(ct.owner_id, s.owner_id)
                          LEFT JOIN web_visitors v ON c.visitor_id = v.id";
 
             } else {
-                // 'all': Optimized to reduce JOIN complexity
-                // OPTIMIZATION: Use simpler JOIN conditions and let MySQL optimizer handle it better
+                // 'all': Join web_visitors, meta_subscribers, zalo_subscribers, subscribers, contacts, users
                 $selectFields = "$baseFields,
-                    COALESCE(s.first_name, ms.first_name, zs.display_name) as first_name,
+                    COALESCE(NULLIF(s.first_name, ''), NULLIF(ms.first_name, ''), NULLIF(ms.name, ''), NULLIF(zs.display_name, ''), ct.name) as first_name,
                     COALESCE(s.last_name, ms.last_name) as last_name,
-                    COALESCE(s.avatar, ms.profile_pic, zs.avatar) as avatar,
-                    COALESCE(s.phone, v.phone, ms.phone) as phone,
-                    COALESCE(s.email, v.email, ms.email) as email,
-                    s.lead_score, v.ip_address, v.subscriber_id,
+                    COALESCE(NULLIF(zs.display_name, ''), NULLIF(ms.name, ''), NULLIF(TRIM(CONCAT_WS(' ', ms.first_name, ms.last_name)), ''), NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), ''), ct.name, 'Visitor') as visitor_name,
+                    COALESCE(s.avatar, ms.profile_pic, ms.avatar_url, zs.avatar) as avatar,
+                    COALESCE(s.avatar, ms.profile_pic, ms.avatar_url, zs.avatar) as visitor_avatar,
+                    COALESCE(NULLIF(s.phone_number, ''), NULLIF(s.phone, ''), NULLIF(v.phone, ''), NULLIF(zs.phone_number, ''), NULLIF(ms.phone, ''), ct.phone) as phone,
+                    COALESCE(NULLIF(s.phone_number, ''), NULLIF(s.phone, ''), NULLIF(v.phone, ''), NULLIF(zs.phone_number, ''), NULLIF(ms.phone, ''), ct.phone) as visitor_phone,
+                    COALESCE(NULLIF(s.email, ''), NULLIF(v.email, ''), NULLIF(zs.manual_email, ''), NULLIF(ms.email, ''), ct.email) as email,
+                    COALESCE(NULLIF(s.email, ''), NULLIF(v.email, ''), NULLIF(zs.manual_email, ''), NULLIF(ms.email, ''), ct.email) as visitor_email,
+                    COALESCE(s.lead_score, zs.lead_score, ms.lead_score) as lead_score,
+                    v.ip_address,
+                    COALESCE(v.subscriber_id, zs.subscriber_id, ms.subscriber_id, s.id) as subscriber_id,
+                    COALESCE(c.contact_id, v.contact_id, zs.contact_id, ms.contact_id, s.contact_id) as contact_id,
+                    COALESCE(ct.owner_id, s.owner_id) as owner_id,
+                    COALESCE(u.full_name, s.salesperson) as salesperson,
+                    COALESCE(zs.id, ms.id, v.id) as channel_record_id,
+                    zs.zalo_user_id as zalo_user_id,
+                    ms.psid as psid,
                     mc.page_name, mc.avatar_url as page_avatar,
                     zc.name as zalo_oa_name, zc.avatar as zalo_oa_avatar,
                     CASE 
@@ -623,13 +723,20 @@ try {
                         ELSE 'web'
                     END as source";
 
-                // OPTIMIZATION: Simplified JOINs - let MySQL use indexes better
                 $joins = "LEFT JOIN web_visitors v ON c.visitor_id = v.id
-                         LEFT JOIN subscribers s ON v.subscriber_id = s.id AND v.subscriber_id != ''
-                         LEFT JOIN meta_subscribers ms ON ms.psid = SUBSTRING(c.visitor_id, 6)
+                         LEFT JOIN meta_subscribers ms ON c.visitor_id LIKE 'meta_%' AND ms.psid = SUBSTRING(c.visitor_id, 6)
                          LEFT JOIN meta_app_configs mc ON ms.page_id = mc.page_id
-                         LEFT JOIN zalo_subscribers zs ON zs.zalo_user_id = SUBSTRING(c.visitor_id, 6)
-                         LEFT JOIN zalo_oa_configs zc ON zs.oa_id = zc.oa_id";
+                         LEFT JOIN zalo_subscribers zs ON c.visitor_id LIKE 'zalo_%' AND zs.zalo_user_id = SUBSTRING(c.visitor_id, 6)
+                         LEFT JOIN zalo_oa_configs zc ON zs.oa_id = zc.oa_id
+                         LEFT JOIN subscribers s ON (
+                             (v.subscriber_id IS NOT NULL AND v.subscriber_id != '' AND s.id = v.subscriber_id)
+                             OR (zs.subscriber_id IS NOT NULL AND zs.subscriber_id != '' AND s.id = zs.subscriber_id)
+                             OR (ms.subscriber_id IS NOT NULL AND ms.subscriber_id != '' AND s.id = ms.subscriber_id)
+                             OR (zs.zalo_user_id IS NOT NULL AND zs.zalo_user_id != '' AND s.zalo_user_id = zs.zalo_user_id)
+                             OR (ms.psid IS NOT NULL AND ms.psid != '' AND s.meta_psid = ms.psid)
+                         )
+                         LEFT JOIN contacts ct ON ct.id = COALESCE(c.contact_id, v.contact_id, zs.contact_id, ms.contact_id, s.contact_id) AND ct.deleted_at IS NULL
+                         LEFT JOIN users u ON u.id = COALESCE(ct.owner_id, s.owner_id)";
             }
 
             // SUPER-OPTIMIZATION: Removed deprecated SQL_CALC_FOUND_ROWS
@@ -975,6 +1082,15 @@ try {
             $msgTable = $isOrg ? 'ai_org_messages' : 'domation_ai_messages';
             $convTable = $isOrg ? 'ai_org_conversations' : 'domation_ai_conversations';
 
+            if (!$isOrg && (strpos($convId, 'zalo_') === 0 || strpos($convId, 'meta_') === 0)) {
+                $stmtChkId = $pdo->prepare("SELECT id FROM domation_ai_conversations WHERE id = ? OR visitor_id = ? ORDER BY last_message_at DESC LIMIT 1");
+                $stmtChkId->execute([$convId, $convId]);
+                $resolvedConvId = $stmtChkId->fetchColumn();
+                if ($resolvedConvId) {
+                    $convId = $resolvedConvId;
+                }
+            }
+
             // OPTIMIZED: Fetch bot_name once via single lightweight query (avoids JOIN on every message)
             $botName = null;
             if (!$isOrg) {
@@ -1028,6 +1144,7 @@ try {
         }
 
         if ($action === 'get_conversation' && !empty($_GET['id'])) {
+            ensureOmnichannelChatbotCols($pdo);
             $idFull = $_GET['id'];
             $isOrg = strpos($idFull, 'org_') === 0;
             $id = $isOrg ? substr($idFull, 4) : (strpos($idFull, 'cust_') === 0 ? substr($idFull, 5) : $idFull);
@@ -1037,7 +1154,7 @@ try {
                 $stmt = $pdo->prepare("SELECT c.*, 'org' as origin,
                     COALESCE(c.title, 'AI Consultant Conversation') as first_name,
                     NULL as last_name, NULL as avatar, NULL as ip_address,
-                    NULL as subscriber_id, NULL as lead_score, NULL as phone, 
+                    NULL as subscriber_id, NULL as contact_id, NULL as lead_score, NULL as phone, 
                     COALESCE(NULLIF(c.user_email, ''), u.email) as email,
                     'org' as source
                     FROM ai_org_conversations c 
@@ -1047,9 +1164,9 @@ try {
                 $conv = $stmt->fetch(PDO::FETCH_ASSOC);
             } else {
                 // Web/Zalo/Meta conversation – detect type from visitor_id prefix
-                // First get basic conv to know visitor_id
-                $stmtBasic = $pdo->prepare("SELECT visitor_id FROM domation_ai_conversations WHERE id = ?");
-                $stmtBasic->execute([$id]);
+                // First get basic conv to know visitor_id (also match visitor_id if zalo_/meta_ passed directly)
+                $stmtBasic = $pdo->prepare("SELECT id, visitor_id FROM domation_ai_conversations WHERE id = ? OR visitor_id = ? ORDER BY last_message_at DESC LIMIT 1");
+                $stmtBasic->execute([$id, $id]);
                 $basicRow = $stmtBasic->fetch(PDO::FETCH_ASSOC);
 
                 if (!$basicRow) {
@@ -1057,7 +1174,7 @@ try {
                     $stmt = $pdo->prepare("SELECT c.*, 'org' as origin,
                         COALESCE(c.title, 'AI Consultant Conversation') as first_name,
                         NULL as last_name, NULL as avatar, NULL as ip_address,
-                        NULL as subscriber_id, NULL as lead_score, NULL as phone, NULL as email,
+                        NULL as subscriber_id, NULL as contact_id, NULL as lead_score, NULL as phone, NULL as email,
                         'org' as source
                         FROM ai_org_conversations c WHERE c.id = ?");
                     $stmt->execute([$id]);
@@ -1071,46 +1188,96 @@ try {
                     exit;
                 }
 
+                $id = $basicRow['id'];
                 $visitorId = $basicRow['visitor_id'];
                 $isZalo = strpos($visitorId, 'zalo_') === 0;
                 $isMeta = strpos($visitorId, 'meta_') === 0;
 
                 if ($isZalo) {
                     $sql = "SELECT c.id, c.visitor_id, c.property_id, c.last_message, c.last_message_at, c.status,
-                        COALESCE(s.first_name, zs.display_name) as first_name,
-                        s.last_name, COALESCE(s.avatar, zs.avatar) as avatar,
-                        s.phone, s.email, s.lead_score, NULL as ip_address, NULL as subscriber_id,
+                        COALESCE(NULLIF(s.first_name, ''), NULLIF(zs.display_name, ''), ct.name) as first_name,
+                        s.last_name,
+                        COALESCE(NULLIF(zs.display_name, ''), NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), ''), ct.name, 'Zalo User') as visitor_name,
+                        COALESCE(zs.avatar, s.avatar) as avatar,
+                        COALESCE(zs.avatar, s.avatar) as visitor_avatar,
+                        COALESCE(NULLIF(zs.phone_number, ''), NULLIF(s.phone_number, ''), NULLIF(s.phone, ''), ct.phone) as phone,
+                        COALESCE(NULLIF(zs.phone_number, ''), NULLIF(s.phone_number, ''), NULLIF(s.phone, ''), ct.phone) as visitor_phone,
+                        COALESCE(NULLIF(zs.manual_email, ''), NULLIF(s.email, ''), ct.email) as email,
+                        COALESCE(NULLIF(zs.manual_email, ''), NULLIF(s.email, ''), ct.email) as visitor_email,
+                        COALESCE(s.lead_score, zs.lead_score) as lead_score,
+                        NULL as ip_address,
+                        COALESCE(zs.subscriber_id, s.id) as subscriber_id,
+                        COALESCE(c.contact_id, zs.contact_id, s.contact_id) as contact_id,
+                        COALESCE(ct.owner_id, s.owner_id) as owner_id,
+                        COALESCE(u.full_name, s.salesperson) as salesperson,
+                        zs.id as channel_record_id,
+                        zs.zalo_user_id as zalo_user_id,
                         zc.name as zalo_oa_name, zc.avatar as zalo_oa_avatar, 'zalo' as source,
                         'customer' as origin
                         FROM domation_ai_conversations c
                         LEFT JOIN zalo_subscribers zs ON zs.zalo_user_id = REPLACE(c.visitor_id, 'zalo_', '')
                         LEFT JOIN zalo_oa_configs zc ON zs.oa_id = zc.oa_id
-                        LEFT JOIN subscribers s ON s.zalo_user_id = zs.zalo_user_id
-                        WHERE c.id = ?";
+                        LEFT JOIN subscribers s ON (s.id = zs.subscriber_id OR (zs.zalo_user_id IS NOT NULL AND zs.zalo_user_id != '' AND s.zalo_user_id = zs.zalo_user_id))
+                        LEFT JOIN contacts ct ON ct.id = COALESCE(c.contact_id, zs.contact_id, s.contact_id) AND ct.deleted_at IS NULL
+                        LEFT JOIN users u ON u.id = COALESCE(ct.owner_id, s.owner_id)
+                        WHERE c.id = ?
+                        LIMIT 1";
                 } elseif ($isMeta) {
                     $sql = "SELECT c.id, c.visitor_id, c.property_id, c.last_message, c.last_message_at, c.status,
-                        COALESCE(s.first_name, ms.first_name) as first_name,
+                        COALESCE(NULLIF(s.first_name, ''), NULLIF(ms.first_name, ''), NULLIF(ms.name, ''), ct.name) as first_name,
                         COALESCE(s.last_name, ms.last_name) as last_name,
-                        COALESCE(s.avatar, ms.profile_pic) as avatar,
-                        COALESCE(s.phone, ms.phone) as phone,
-                        COALESCE(s.email, ms.email) as email,
-                        s.lead_score, NULL as ip_address, NULL as subscriber_id,
+                        COALESCE(NULLIF(ms.name, ''), NULLIF(TRIM(CONCAT_WS(' ', ms.first_name, ms.last_name)), ''), NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), ''), ct.name, 'Facebook User') as visitor_name,
+                        COALESCE(ms.profile_pic, ms.avatar_url, s.avatar) as avatar,
+                        COALESCE(ms.profile_pic, ms.avatar_url, s.avatar) as visitor_avatar,
+                        COALESCE(NULLIF(ms.phone, ''), NULLIF(s.phone_number, ''), NULLIF(s.phone, ''), ct.phone) as phone,
+                        COALESCE(NULLIF(ms.phone, ''), NULLIF(s.phone_number, ''), NULLIF(s.phone, ''), ct.phone) as visitor_phone,
+                        COALESCE(NULLIF(ms.email, ''), NULLIF(s.email, ''), ct.email) as email,
+                        COALESCE(NULLIF(ms.email, ''), NULLIF(s.email, ''), ct.email) as visitor_email,
+                        COALESCE(s.lead_score, ms.lead_score) as lead_score,
+                        NULL as ip_address,
+                        COALESCE(ms.subscriber_id, s.id) as subscriber_id,
+                        COALESCE(c.contact_id, ms.contact_id, s.contact_id) as contact_id,
+                        COALESCE(ct.owner_id, s.owner_id) as owner_id,
+                        COALESCE(u.full_name, s.salesperson) as salesperson,
+                        ms.id as channel_record_id,
+                        ms.psid as psid,
                         mc.page_name, mc.avatar_url as page_avatar, 'meta' as source,
                         'customer' as origin
                         FROM domation_ai_conversations c
                         LEFT JOIN meta_subscribers ms ON ms.psid = REPLACE(c.visitor_id, 'meta_', '')
                         LEFT JOIN meta_app_configs mc ON ms.page_id = mc.page_id
-                        LEFT JOIN subscribers s ON s.meta_psid = ms.psid
-                        WHERE c.id = ?";
+                        LEFT JOIN subscribers s ON (s.id = ms.subscriber_id OR (ms.psid IS NOT NULL AND ms.psid != '' AND s.meta_psid = ms.psid))
+                        LEFT JOIN contacts ct ON ct.id = COALESCE(c.contact_id, ms.contact_id, s.contact_id) AND ct.deleted_at IS NULL
+                        LEFT JOIN users u ON u.id = COALESCE(ct.owner_id, s.owner_id)
+                        WHERE c.id = ?
+                        LIMIT 1";
                 } else {
                     $sql = "SELECT c.id, c.visitor_id, c.property_id, c.last_message, c.last_message_at, c.status,
-                        s.first_name, s.last_name, s.avatar, s.phone, s.email, s.lead_score,
-                        v.ip_address, v.subscriber_id, 'web' as source,
+                        COALESCE(NULLIF(s.first_name, ''), ct.name) as first_name,
+                        s.last_name,
+                        COALESCE(NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), ''), ct.name, 'Web Visitor') as visitor_name,
+                        s.avatar,
+                        s.avatar as visitor_avatar,
+                        COALESCE(NULLIF(s.phone_number, ''), NULLIF(s.phone, ''), NULLIF(v.phone, ''), ct.phone) as phone,
+                        COALESCE(NULLIF(s.phone_number, ''), NULLIF(s.phone, ''), NULLIF(v.phone, ''), ct.phone) as visitor_phone,
+                        COALESCE(NULLIF(s.email, ''), NULLIF(v.email, ''), ct.email) as email,
+                        COALESCE(NULLIF(s.email, ''), NULLIF(v.email, ''), ct.email) as visitor_email,
+                        s.lead_score,
+                        v.ip_address,
+                        COALESCE(s.id, v.subscriber_id) as subscriber_id,
+                        COALESCE(c.contact_id, v.contact_id, s.contact_id) as contact_id,
+                        COALESCE(ct.owner_id, s.owner_id) as owner_id,
+                        COALESCE(u.full_name, s.salesperson) as salesperson,
+                        v.id as channel_record_id,
+                        'web' as source,
                         'customer' as origin
                         FROM domation_ai_conversations c
                         LEFT JOIN web_visitors v ON c.visitor_id = v.id
                         LEFT JOIN subscribers s ON v.subscriber_id = s.id
-                        WHERE c.id = ?";
+                        LEFT JOIN contacts ct ON ct.id = COALESCE(c.contact_id, v.contact_id, s.contact_id) AND ct.deleted_at IS NULL
+                        LEFT JOIN users u ON u.id = COALESCE(ct.owner_id, s.owner_id)
+                        WHERE c.id = ?
+                        LIMIT 1";
                 }
 
                 $stmt = $pdo->prepare($sql);
@@ -2007,11 +2174,63 @@ CHÚ Ý:
         }
 
         if ($action === 'send_human_reply') {
-            $convId = $input['conversation_id'];
-            $message = $input['message'];
-            if (!$convId || !$message) {
+            ensureOmnichannelChatbotCols($pdo);
+            $convIdRaw = trim((string)($input['conversation_id'] ?? ''));
+            $message = $input['message'] ?? '';
+            if (!$convIdRaw || !$message) {
                 echo json_encode(['success' => false, 'message' => 'Missing conversation_id or message']);
                 exit;
+            }
+
+            $convId = strpos($convIdRaw, 'cust_') === 0 ? substr($convIdRaw, 5) : $convIdRaw;
+
+            $stmtCheckConv = $pdo->prepare("SELECT * FROM domation_ai_conversations WHERE id = ? LIMIT 1");
+            $stmtCheckConv->execute([$convId]);
+            $convRow = $stmtCheckConv->fetch(PDO::FETCH_ASSOC);
+
+            if (!$convRow && (strpos($convId, 'zalo_') === 0 || strpos($convId, 'meta_') === 0)) {
+                $stmtByVis = $pdo->prepare("SELECT * FROM domation_ai_conversations WHERE visitor_id = ? ORDER BY last_message_at DESC LIMIT 1");
+                $stmtByVis->execute([$convId]);
+                $convRow = $stmtByVis->fetch(PDO::FETCH_ASSOC);
+
+                if ($convRow) {
+                    $convId = $convRow['id'];
+                } else {
+                    $resolvedPropId = $input['property_id'] ?? null;
+                    if ($resolvedPropId) {
+                        $resolvedPropId = resolvePropertyId($pdo, $resolvedPropId);
+                    }
+                    if (!$resolvedPropId) {
+                        $resolvedPropId = $pdo->query("SELECT id FROM ai_chatbots WHERE is_enabled = 1 LIMIT 1")->fetchColumn() ?: null;
+                    }
+                    if (!$resolvedPropId) {
+                        $resolvedPropId = $pdo->query("SELECT id FROM web_properties LIMIT 1")->fetchColumn() ?: 'default';
+                    }
+
+                    $resolvedContactId = null;
+                    if (strpos($convId, 'zalo_') === 0) {
+                        $zUidTmp = substr($convId, 5);
+                        $stmtZsContact = $pdo->prepare("SELECT COALESCE(zs.contact_id, s.contact_id) FROM zalo_subscribers zs LEFT JOIN subscribers s ON (s.id = zs.subscriber_id OR s.zalo_user_id = zs.zalo_user_id) WHERE zs.zalo_user_id = ? LIMIT 1");
+                        $stmtZsContact->execute([$zUidTmp]);
+                        $resolvedContactId = $stmtZsContact->fetchColumn() ?: null;
+                    } elseif (strpos($convId, 'meta_') === 0) {
+                        $mPsidTmp = substr($convId, 5);
+                        $stmtMsContact = $pdo->prepare("SELECT COALESCE(ms.contact_id, s.contact_id) FROM meta_subscribers ms LEFT JOIN subscribers s ON (s.id = ms.subscriber_id OR s.meta_psid = ms.psid) WHERE ms.psid = ? LIMIT 1");
+                        $stmtMsContact->execute([$mPsidTmp]);
+                        $resolvedContactId = $stmtMsContact->fetchColumn() ?: null;
+                    }
+
+                    $newConvId = 'c_' . uniqid();
+                    $pdo->prepare("INSERT INTO domation_ai_conversations (id, contact_id, visitor_id, property_id, status, last_message, last_message_at, created_at, updated_at) VALUES (?, ?, ?, ?, 'human', ?, NOW(), NOW(), NOW())")
+                        ->execute([$newConvId, $resolvedContactId, $convId, $resolvedPropId, $message]);
+                    $convRow = [
+                        'id' => $newConvId,
+                        'visitor_id' => $convId,
+                        'property_id' => $resolvedPropId,
+                        'contact_id' => $resolvedContactId,
+                    ];
+                    $convId = $newConvId;
+                }
             }
 
             $pdo->prepare("INSERT INTO domation_ai_messages (conversation_id, sender, message) VALUES (?, 'human', ?)")->execute([$convId, $message]);
@@ -2020,9 +2239,12 @@ CHÚ Ý:
             updateConversationStats($pdo, $convId, $message);
 
             // [NEW] Handle Zalo Channel Reply
-            $stmtConv = $pdo->prepare("SELECT visitor_id FROM domation_ai_conversations WHERE id = ? LIMIT 1");
-            $stmtConv->execute([$convId]);
-            $visitorId = $stmtConv->fetchColumn();
+            $visitorId = $convRow['visitor_id'] ?? null;
+            if (!$visitorId) {
+                $stmtConv = $pdo->prepare("SELECT visitor_id FROM domation_ai_conversations WHERE id = ? LIMIT 1");
+                $stmtConv->execute([$convId]);
+                $visitorId = $stmtConv->fetchColumn();
+            }
 
             $zaloStatus = ['success' => true]; // Default for web chat
 
@@ -2033,6 +2255,15 @@ CHÚ Ý:
                 $stmtOA = $pdo->prepare("SELECT oa_id FROM zalo_subscribers WHERE zalo_user_id = ? LIMIT 1");
                 $stmtOA->execute([$zaloUserId]);
                 $oaConfigId = $stmtOA->fetchColumn();
+
+                if ($oaConfigId) {
+                    $stmtResolveOa = $pdo->prepare("SELECT id FROM zalo_oa_configs WHERE (id = ? OR oa_id = ?) LIMIT 1");
+                    $stmtResolveOa->execute([$oaConfigId, $oaConfigId]);
+                    $resolvedOaCfgId = $stmtResolveOa->fetchColumn();
+                    if ($resolvedOaCfgId) {
+                        $oaConfigId = $resolvedOaCfgId;
+                    }
+                }
 
                 // Robustness: Fallback if oa_id is missing but we have OAs
                 if (!$oaConfigId) {
@@ -2062,11 +2293,7 @@ CHÚ Ý:
             if ($visitorId && strpos($visitorId, 'meta_') === 0) {
                 $psid = str_replace('meta_', '', $visitorId);
 
-                // 1. Get Page ID from Property ID (Chatbot ID)
-                $stmtPage = $pdo->prepare("SELECT c.page_id FROM meta_app_configs c INNER JOIN meta_automation_scenarios s ON s.meta_config_id = c.id WHERE s.ai_chatbot_id = ? LIMIT 1");
-                $stmtPage->execute([$input['property_id'] ?? $context['property_id'] ?? null]);
-                // Wait, conversation has property_id. Let's fetch it from conversation if input is missing
-                $propertyId = $input['property_id'] ?? null;
+                $propertyId = $input['property_id'] ?? ($convRow['property_id'] ?? null);
                 if (!$propertyId) {
                     $stmtProp = $pdo->prepare("SELECT property_id FROM domation_ai_conversations WHERE id = ?");
                     $stmtProp->execute([$convId]);
@@ -2075,12 +2302,49 @@ CHÚ Ý:
 
                 $pageId = null;
                 if ($propertyId) {
-                    $stmtPage->execute([$propertyId]);
-                    $pageId = $stmtPage->fetchColumn();
+                    try {
+                        $stmtPage = $pdo->prepare("SELECT c.page_id FROM meta_app_configs c INNER JOIN meta_automation_scenarios s ON (s.page_id = c.page_id OR s.id = c.id) WHERE s.page_id IS NOT NULL LIMIT 1");
+                        $stmtPage->execute();
+                        $pageId = $stmtPage->fetchColumn() ?: null;
+                    } catch (\Throwable $eMetaScen) {
+                    }
+                    if (!$pageId) {
+                        try {
+                            $stmtPageLegacy = $pdo->prepare("SELECT c.page_id FROM meta_app_configs c INNER JOIN meta_automation_scenarios s ON s.meta_config_id = c.id WHERE s.ai_chatbot_id = ? LIMIT 1");
+                            $stmtPageLegacy->execute([$propertyId]);
+                            $pageId = $stmtPageLegacy->fetchColumn() ?: null;
+                        } catch (\Throwable $eMetaLegacy) {
+                        }
+                    }
                 }
 
-                // If Page ID not found via chatbot_id, maybe we can try finding it via subscriber? 
-                // But for now assuming proper config.
+                // Fallback 1: Look up page_id from meta_subscribers for this psid
+                if (!$pageId) {
+                    try {
+                        $stmtSubPage = $pdo->prepare("SELECT page_id FROM meta_subscribers WHERE psid = ? AND page_id IS NOT NULL AND page_id != '' ORDER BY updated_at DESC LIMIT 1");
+                        $stmtSubPage->execute([$psid]);
+                        $pageId = $stmtSubPage->fetchColumn() ?: null;
+                    } catch (\Throwable $eSubPage) {
+                    }
+                }
+
+                // Fallback 2: Look up page_id from meta_conversations for this psid
+                if (!$pageId) {
+                    try {
+                        $stmtConvPage = $pdo->prepare("SELECT page_id FROM meta_conversations WHERE psid = ? AND page_id IS NOT NULL AND page_id != '' ORDER BY updated_at DESC LIMIT 1");
+                        $stmtConvPage->execute([$psid]);
+                        $pageId = $stmtConvPage->fetchColumn() ?: null;
+                    } catch (\Throwable $eConvPage) {
+                    }
+                }
+
+                // Fallback 3: Look up active page_id from meta_app_configs
+                if (!$pageId) {
+                    try {
+                        $pageId = $pdo->query("SELECT page_id FROM meta_app_configs WHERE status = 'active' LIMIT 1")->fetchColumn() ?: null;
+                    } catch (\Throwable $eCfgPage) {
+                    }
+                }
 
                 if ($pageId) {
                     try {
@@ -2192,23 +2456,87 @@ CHÚ Ý:
             echo json_encode([
                 'success' => $zaloStatus['success'],
                 'message' => $zaloStatus['message'] ?? 'Reply sent',
+                'conversation_id' => $convId,
                 'zalo_status' => $zaloStatus
             ]);
             exit;
         }
 
-        if ($action === 'update_status' && !empty($input['conversation_id']) && !empty($input['status'])) {
-            $convIdFull = $input['conversation_id'];
+        if (($action === 'update_status' || $action === 'toggle_conversation_status') && !empty($input['conversation_id'])) {
+            ensureOmnichannelChatbotCols($pdo);
+            $convIdFull = trim((string)$input['conversation_id']);
             $isOrg = strpos($convIdFull, 'org_') === 0;
             $convId = $isOrg ? substr($convIdFull, 4) : (strpos($convIdFull, 'cust_') === 0 ? substr($convIdFull, 5) : $convIdFull);
             $table = $isOrg ? 'ai_org_conversations' : 'domation_ai_conversations';
 
-            $pdo->prepare("UPDATE $table SET status = ?, updated_at = NOW() WHERE id = ?")->execute([$input['status'], $convId]);
-            echo json_encode(['success' => true]);
+            $newStatus = $input['status'] ?? null;
+            $visitorIdForPause = null;
+
+            if (!$isOrg) {
+                $stmtChk = $pdo->prepare("SELECT id, visitor_id, status FROM domation_ai_conversations WHERE id = ? LIMIT 1");
+                $stmtChk->execute([$convId]);
+                $convRow = $stmtChk->fetch(PDO::FETCH_ASSOC);
+
+                if (!$convRow && (strpos($convId, 'zalo_') === 0 || strpos($convId, 'meta_') === 0)) {
+                    $stmtByVis = $pdo->prepare("SELECT id, visitor_id, status FROM domation_ai_conversations WHERE visitor_id = ? ORDER BY last_message_at DESC LIMIT 1");
+                    $stmtByVis->execute([$convId]);
+                    $convRow = $stmtByVis->fetch(PDO::FETCH_ASSOC);
+
+                    if ($convRow) {
+                        $convId = $convRow['id'];
+                    } else {
+                        $resolvedPropId = $input['property_id'] ?? null;
+                        if ($resolvedPropId) {
+                            $resolvedPropId = resolvePropertyId($pdo, $resolvedPropId);
+                        }
+                        if (!$resolvedPropId) {
+                            $resolvedPropId = $pdo->query("SELECT id FROM ai_chatbots WHERE is_enabled = 1 LIMIT 1")->fetchColumn() ?: 'default';
+                        }
+                        $targetInitStatus = $newStatus ?: 'human';
+                        $newConvId = 'c_' . uniqid();
+                        $pdo->prepare("INSERT INTO domation_ai_conversations (id, visitor_id, property_id, status, last_message, last_message_at, created_at, updated_at) VALUES (?, ?, ?, ?, '', NOW(), NOW(), NOW())")
+                            ->execute([$newConvId, $convId, $resolvedPropId, $targetInitStatus]);
+                        $convRow = ['id' => $newConvId, 'visitor_id' => $convId, 'status' => $targetInitStatus];
+                        $convId = $newConvId;
+                    }
+                }
+
+                if ($convRow) {
+                    $visitorIdForPause = $convRow['visitor_id'] ?? null;
+                    if (!$newStatus) {
+                        $newStatus = (($convRow['status'] ?? 'ai') === 'ai') ? 'human' : 'ai';
+                    }
+                }
+            }
+
+            if (!$newStatus) {
+                $newStatus = 'human';
+            }
+
+            $pdo->prepare("UPDATE $table SET status = ?, updated_at = NOW() WHERE id = ?")->execute([$newStatus, $convId]);
+
+            if ($visitorIdForPause && strpos($visitorIdForPause, 'zalo_') === 0) {
+                $zUid = substr($visitorIdForPause, 5);
+                if ($newStatus === 'human') {
+                    $pdo->prepare("UPDATE zalo_subscribers SET ai_paused_until = DATE_ADD(NOW(), INTERVAL 30 MINUTE) WHERE zalo_user_id = ?")->execute([$zUid]);
+                } elseif ($newStatus === 'ai') {
+                    $pdo->prepare("UPDATE zalo_subscribers SET ai_paused_until = NULL WHERE zalo_user_id = ?")->execute([$zUid]);
+                }
+            } elseif ($visitorIdForPause && strpos($visitorIdForPause, 'meta_') === 0) {
+                $mPsid = substr($visitorIdForPause, 5);
+                if ($newStatus === 'human') {
+                    $pdo->prepare("UPDATE meta_subscribers SET ai_paused_until = DATE_ADD(NOW(), INTERVAL 30 MINUTE) WHERE psid = ?")->execute([$mPsid]);
+                } elseif ($newStatus === 'ai') {
+                    $pdo->prepare("UPDATE meta_subscribers SET ai_paused_until = NULL WHERE psid = ?")->execute([$mPsid]);
+                }
+            }
+
+            echo json_encode(['success' => true, 'status' => $newStatus, 'conversation_id' => $convId]);
             exit;
         }
 
         if ($action === 'update_visitor_info') {
+            ensureOmnichannelChatbotCols($pdo);
             $convIdFull = $input['conversation_id'];
             $firstName = $input['first_name'] ?? null;
             $email = $input['email'] ?? null;
@@ -2260,6 +2588,13 @@ CHÚ Ý:
                 }
 
                 // 2. Update/Create Subscriber
+                $emailNorm = $email
+                    ? (class_exists('DomationContactMatcher') ? DomationContactMatcher::normalizeEmail($email) : strtolower(trim($email)))
+                    : null;
+                $phoneNorm9 = $phone
+                    ? (class_exists('DomationContactMatcher') ? DomationContactMatcher::normalizePhone9($phone) : null)
+                    : null;
+
                 if ($subId) {
                     $sUpdates = [];
                     $sParams = [];
@@ -2270,10 +2605,16 @@ CHÚ Ý:
                     if ($email) {
                         $sUpdates[] = "email = ?";
                         $sParams[] = $email;
+                        $sUpdates[] = "email_norm = ?";
+                        $sParams[] = $emailNorm;
                     }
                     if ($phone) {
                         $sUpdates[] = "phone_number = ?";
                         $sParams[] = $phone;
+                        if ($phoneNorm9) {
+                            $sUpdates[] = "phone_norm9 = ?";
+                            $sParams[] = $phoneNorm9;
+                        }
                     }
 
                     if (!empty($sUpdates)) {
@@ -2282,23 +2623,33 @@ CHÚ Ý:
                         $pdo->prepare($sSql)->execute($sParams);
                     }
                 } else {
-                    // Create new subscriber
-                    // Simple creation logic
+                    // Create new subscriber with workspace_id resolved from property
                     $newSubId = bin2hex(random_bytes(16));
-                    $pdo->prepare("INSERT INTO subscribers (id, property_id, first_name, email, phone_number, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())")
-                        ->execute([$newSubId, $propertyId, $firstName ?? 'Visitor', $email, $phone]);
+                    $wsIdForSub = 1;
+                    if (!empty($propertyId)) {
+                        $stmtPropWs = $pdo->prepare("SELECT workspace_id FROM web_properties WHERE id = ? LIMIT 1");
+                        $stmtPropWs->execute([$propertyId]);
+                        $wsIdForSub = (int) ($stmtPropWs->fetchColumn() ?: 1);
+                    }
+                    $insertEmail = $email ?: ($phoneNorm9 ? ('phone_' . $phoneNorm9 . '@phone.local') : ('visitor_' . substr($newSubId, 0, 12) . '@phone.local'));
+                    $pdo->prepare("INSERT INTO subscribers (id, workspace_id, property_id, first_name, email, email_norm, phone_norm9, phone_number, status, joined_at, last_activity_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'lead', NOW(), NOW(), NOW(), NOW())")
+                        ->execute([$newSubId, $wsIdForSub, $propertyId, $firstName ?? 'Visitor', $insertEmail, $emailNorm, $phoneNorm9, $phone]);
 
                     // Link to visitor
                     $pdo->prepare("UPDATE web_visitors SET subscriber_id = ? WHERE id = ?")->execute([$newSubId, $visitorId]);
                 }
 
-                // 3. Force cache invalidation if needed (not implemented yet but good to note)
-
-                // [NEW] Trigger flow for AI Lead Capture
+                // 3. Sync with MYERP CRM contact if email/phone provided and trigger AI Lead Capture flow
                 if (!empty($email) || !empty($phone)) {
                     try {
-                        require_once __DIR__ . '/trigger_helper.php';
                         $targetSubId = $subId ?: $newSubId;
+                        if (file_exists(__DIR__ . '/../utils/DomationContactMatcher.php')) {
+                            require_once __DIR__ . '/../utils/DomationContactMatcher.php';
+                            if (function_exists('domationSyncSubscriberMatchOnly')) {
+                                domationSyncSubscriberMatchOnly($pdo, $targetSubId);
+                            }
+                        }
+                        require_once __DIR__ . '/trigger_helper.php';
                         triggerFlows($pdo, $targetSubId, 'ai_capture', $propertyId);
                     } catch (Exception $e) {
                         error_log("Failed to trigger flow for AI Capture: " . $e->getMessage());
@@ -2369,7 +2720,8 @@ CHÚ Ý:
 
         // 2. CONSOLIDATED LOOKUP: Visitor + Active Conversation + Duplicate Check (N+1 Optimization)
         $stmtBase = $pdo->prepare("
-            SELECT v.email, v.phone, v.subscriber_id, 
+            SELECT v.email, v.phone, v.subscriber_id,
+                   COALESCE(v.contact_id, (SELECT s.contact_id FROM subscribers s WHERE s.id = v.subscriber_id LIMIT 1)) as contact_id,
                    c.id as conv_id, c.status as conv_status, c.metadata,
                    (SELECT message FROM domation_ai_messages WHERE conversation_id = c.id AND sender = 'visitor' ORDER BY created_at DESC LIMIT 1) as last_msg
             FROM web_visitors v
@@ -2710,12 +3062,13 @@ CHÚ Ý:
         }
 
         // ─── SCENARIO CHECK (Priority 1 — runs BEFORE fast reply and AI) ──────────
+        $resolvedContactId = !empty($baseData['contact_id']) ? (int)$baseData['contact_id'] : null;
         $scenarioMatch = checkScenario($pdo, $propertyId, $visitorUuid, $userMsg, $convId);
         if ($scenarioMatch) {
             if (!$convId) {
                 enforceChatLimits($pdo, $visitorUuid);
                 $convId = bin2hex(random_bytes(16));
-                $pdo->prepare("INSERT INTO domation_ai_conversations (id, visitor_id, property_id, status) VALUES (?, ?, ?, 'ai')")->execute([$convId, $visitorUuid, $propertyId]);
+                $pdo->prepare("INSERT INTO domation_ai_conversations (id, visitor_id, contact_id, property_id, status) VALUES (?, ?, ?, ?, 'ai')")->execute([$convId, $visitorUuid, $resolvedContactId, $propertyId]);
             }
 
             // Set state tracking if scenario flow begins
@@ -2792,7 +3145,7 @@ CHÚ Ý:
                 // EDGE 3 FIX: Enforce limits for fast replies too
                 enforceChatLimits($pdo, $visitorUuid);
                 $convId = bin2hex(random_bytes(16));
-                $pdo->prepare("INSERT INTO domation_ai_conversations (id, visitor_id, property_id, status) VALUES (?, ?, ?, 'ai')")->execute([$convId, $visitorUuid, $propertyId]);
+                $pdo->prepare("INSERT INTO domation_ai_conversations (id, visitor_id, contact_id, property_id, status) VALUES (?, ?, ?, ?, 'ai')")->execute([$convId, $visitorUuid, $resolvedContactId, $propertyId]);
             }
             if (strpos($visitorUuid, 'meta_') !== 0 && strpos($visitorUuid, 'zalo_') !== 0) {
                 $pdo->prepare("INSERT INTO domation_ai_messages (conversation_id, sender, message) VALUES (?, 'visitor', ?)")->execute([$convId, $userMsg]);
@@ -2814,8 +3167,8 @@ CHÚ Ý:
         if (!$convId && !$isTest) {
             enforceChatLimits($pdo, $visitorUuid);
             $convId = bin2hex(random_bytes(16));
-            $pdo->prepare("INSERT INTO domation_ai_conversations (id, visitor_id, property_id, status) VALUES (?, ?, ?, 'ai')")
-                ->execute([$convId, $visitorUuid, $propertyId]);
+            $pdo->prepare("INSERT INTO domation_ai_conversations (id, visitor_id, contact_id, property_id, status) VALUES (?, ?, ?, ?, 'ai')")
+                ->execute([$convId, $visitorUuid, $resolvedContactId, $propertyId]);
             header('X-Conversation-Id: ' . $convId); // Set for streaming start
         }
 

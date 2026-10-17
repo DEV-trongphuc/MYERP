@@ -87,7 +87,7 @@ const renderContent = (content: string, role: 'user' | 'assistant', onActionClic
                         rel="noopener noreferrer"
                         className="block group mt-2 mb-2 no-underline"
                     >
-                        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all group-hover:border-orange-400 group-hover:shadow-lg">
+                        <div className="overflow-hidden rounded-[14px] border border-slate-200 bg-white shadow-sm transition-all group-hover:border-orange-400 group-hover:shadow-lg">
                             <div className="relative aspect-video w-full overflow-hidden bg-slate-100">
                                 <img
                                     src={thumb}
@@ -103,9 +103,9 @@ const renderContent = (content: string, role: 'user' | 'assistant', onActionClic
                             <div className="flex items-center justify-between p-3 bg-slate-50">
                                 <div className="flex flex-col">
                                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">XEM VIDEO TRÊN YOUTUBE</span>
-                                    <span className="text-xs font-bold text-slate-700 truncate group-hover:text-orange-600 transition-colors">Bấm để phát ngay</span>
+                                    <span className="text-xs font-bold text-slate-700 truncate group-hover:text-[var(--color-primary)] transition-colors">Bấm để phát ngay</span>
                                 </div>
-                                <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-orange-500 transition-colors" />
+                                <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-[var(--color-primary)] transition-colors" />
                             </div>
                         </div>
                     </a>
@@ -117,7 +117,7 @@ const renderContent = (content: string, role: 'user' | 'assistant', onActionClic
                             href={url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="block overflow-hidden rounded-2xl border border-slate-100 shadow-sm transition-all hover:scale-[1.01] hover:shadow-xl hover:shadow-orange-500/5 group/img"
+                            className="block overflow-hidden rounded-[14px] border border-slate-100 shadow-sm transition-all hover:scale-[1.01] hover:shadow-xl hover:shadow-[var(--color-primary)]/5 group/img"
                         >
                             <img
                                 src={url}
@@ -143,7 +143,7 @@ const renderContent = (content: string, role: 'user' | 'assistant', onActionClic
                         rel="noopener noreferrer"
                         className="block group mt-2 mb-2 no-underline"
                     >
-                        <div className="flex items-center gap-3 p-3 bg-slate-50 border-2 border-slate-200 rounded-xl transition-all group-hover:border-[#2563eb] group-hover:bg-white group-hover:shadow-lg group-hover:shadow-orange-500/10">
+                        <div className="flex items-center gap-3 p-3 bg-slate-50 border-2 border-slate-200 rounded-xl transition-all group-hover:border-[#2563eb] group-hover:bg-white group-hover:shadow-lg group-hover:shadow-[var(--color-primary)]/10">
                             <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${ext === 'pdf' ? 'bg-rose-100 text-rose-500' :
                                 ext.includes('doc') ? 'bg-blue-100 text-blue-500' :
                                     ext.includes('xls') ? 'bg-emerald-100 text-emerald-500' :
@@ -172,7 +172,7 @@ const renderContent = (content: string, role: 'user' | 'assistant', onActionClic
                         rel={url.startsWith('http') ? "noopener noreferrer" : undefined}
                         className={isCitation
                             ? "mf-citation"
-                            : `font-medium transition-all duration-200 decoration-1 underline-offset-4 hover:underline ${role === 'user' ? 'text-blue-200 hover:text-white' : 'text-orange-600 hover:text-orange-700'}`
+                            : `font-medium transition-all duration-200 decoration-1 underline-offset-4 hover:underline ${role === 'user' ? 'text-blue-200 hover:text-white' : 'text-[var(--color-primary)] hover:text-[#9A1523]'}`
                         }
                     >
                         {label || url}
@@ -268,7 +268,7 @@ const renderContent = (content: string, role: 'user' | 'assistant', onActionClic
                     <button
                         key={`action-${i}`}
                         onClick={() => onActionClick(action)}
-                        className="px-4 py-2 bg-slate-50 hover:bg-orange-50 text-slate-700 hover:text-orange-600 border border-slate-200 hover:border-orange-200 rounded-xl text-[13px] font-bold transition-all active:scale-[0.98] shadow-sm flex items-center gap-2 mf-ignore-tracking"
+                        className="px-4 py-2 bg-slate-50 hover:bg-orange-50 text-slate-700 hover:text-[#9A1523] border border-slate-200 hover:border-orange-200 rounded-xl text-[13px] font-bold transition-all active:scale-[0.98] shadow-sm flex items-center gap-2 mf-ignore-tracking"
                     >
                         <Sparkles className="w-3.5 h-3.5 text-orange-400 mf-ignore-tracking" />
                         {action}
@@ -611,7 +611,7 @@ const AIChatWidget: React.FC<AIChatWidgetProps> = ({
         return (
             <button
                 onClick={() => setIsOpen(true)}
-                className={`fixed ${positionClass} w-16 h-16 bg-gradient-to-br from-[#2563eb] to-[#e08900] text-white rounded-2xl shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-[200] group mf-ignore-tracking`}
+                className={`fixed ${positionClass} w-16 h-16 bg-gradient-to-br from-[#2563eb] to-[#e08900] text-white rounded-[14px] shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-[200] group mf-ignore-tracking`}
                 style={config?.brand_color ? { background: `linear-gradient(135deg, ${config.brand_color}, ${config.brand_color}dd)` } : {}}
             >
                 <div className="absolute -top-1 -right-1 w-5 h-5 bg-emerald-500 border-4 border-white rounded-full animate-bounce mf-ignore-tracking"></div>
@@ -679,7 +679,7 @@ const AIChatWidget: React.FC<AIChatWidgetProps> = ({
 
                 <div className="flex items-center gap-4 relative z-10">
                     <div className="relative">
-                        <div className="w-12 h-12 bg-white/15 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-xl border border-white/20 overflow-hidden transition-transform hover:scale-105">
+                        <div className="w-12 h-12 bg-white/15 backdrop-blur-md rounded-[14px] flex items-center justify-center shadow-xl border border-white/20 overflow-hidden transition-transform hover:scale-105">
                             {config?.bot_avatar ? (
                                 <img src={config.bot_avatar} className="w-full h-full object-cover" alt="avatar" />
                             ) : (
@@ -719,7 +719,7 @@ const AIChatWidget: React.FC<AIChatWidgetProps> = ({
                 {messages.map((msg) => (
                     <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} message-animate`}>
                         <div className={`flex gap-3.5 max-w-[88%] min-w-0 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm transition-transform hover:scale-110 ${msg.role === 'user' ? 'bg-slate-200 text-slate-600' : 'bg-white text-orange-500 border border-slate-100'}`}>
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm transition-transform hover:scale-110 ${msg.role === 'user' ? 'bg-slate-200 text-slate-600' : 'bg-white text-[var(--color-primary)] border border-slate-100'}`}>
                                 {msg.role === 'user' ? <User className="w-5 h-5" /> : <Bot className="w-5 h-5" />}
                             </div>
                             <div className={`flex flex-col gap-1.5 min-w-0 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
@@ -733,7 +733,7 @@ const AIChatWidget: React.FC<AIChatWidgetProps> = ({
                                 </div>
 
                                 {msg.role === 'assistant' && msg.content.includes('[SHOW_LEAD_FORM]') && (
-                                    <div className="mt-2 w-full p-5 bg-white border border-orange-100/50 rounded-2xl shadow-xl shadow-orange-500/5 border-l-[6px] border-l-orange-400 animate-in zoom-in-95 duration-500">
+                                    <div className="mt-2 w-full p-5 bg-white border border-orange-100/50 rounded-[14px] shadow-xl shadow-[var(--color-primary)]/5 border-l-[6px] border-l-orange-400 animate-in zoom-in-95 duration-500">
                                         <h4 className="text-[13px] font-bold text-slate-800 mb-4 flex items-center gap-2.5">
                                             <Sparkles className="w-4 h-4 text-orange-400" />
                                             Thông tin hỗ trợ tư vấn
@@ -743,13 +743,13 @@ const AIChatWidget: React.FC<AIChatWidgetProps> = ({
                                                 type="email"
                                                 id={`email-${msg.id}`}
                                                 placeholder="Email của mình..."
-                                                className="w-full px-4 py-3 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all bg-slate-50/50"
+                                                className="w-full px-4 py-3 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-[var(--color-primary)]/10 focus:border-[var(--color-primary)] transition-all bg-slate-50/50"
                                             />
                                             <input
                                                 type="tel"
                                                 id={`phone-${msg.id}`}
                                                 placeholder="Số điện thoại..."
-                                                className="w-full px-4 py-3 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all bg-slate-50/50 mf-ignore-tracking"
+                                                className="w-full px-4 py-3 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-[var(--color-primary)]/10 focus:border-[var(--color-primary)] transition-all bg-slate-50/50 mf-ignore-tracking"
                                             />
                                             <button
                                                 onClick={() => {
@@ -766,7 +766,7 @@ const AIChatWidget: React.FC<AIChatWidgetProps> = ({
                                                     const formContainer = (document.getElementById(`email-${msg.id}`)?.closest('.animate-in'));
                                                     if (formContainer) formContainer.innerHTML = '<div class="py-2 text-[13px] text-emerald-600 font-bold flex items-center gap-2 mf-ignore-tracking"><div class="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center mf-ignore-tracking"><svg class="w-4 h-4 mf-ignore-tracking" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></div> đã gửi thông tin thành công!</div>';
                                                 }}
-                                                className="w-full py-3.5 bg-orange-500 hover:bg-orange-600 active:scale-[0.97] text-white text-[13px] font-bold rounded-xl transition-all shadow-lg shadow-orange-500/25 flex items-center justify-center gap-2.5 mf-ignore-tracking"
+                                                className="w-full py-3.5 bg-[var(--color-primary)] hover:bg-[#9A1523] active:scale-[0.97] text-white text-[13px] font-bold rounded-xl transition-all shadow-lg shadow-[var(--color-primary)]/25 flex items-center justify-center gap-2.5 mf-ignore-tracking"
                                             >
                                                 Gửi thông tin tư vấn
                                                 <ArrowRight className="w-4 h-4 mf-ignore-tracking" />
@@ -812,7 +812,7 @@ const AIChatWidget: React.FC<AIChatWidgetProps> = ({
                                 setQuickActions([]);
                                 handleSendMessage(qa);
                             }}
-                            className="px-4 py-2 bg-slate-50 hover:bg-orange-50 border border-slate-100 hover:border-orange-200 hover:text-orange-600 rounded-full text-[12px] font-bold text-slate-600 transition-all flex items-center gap-2 shadow-sm active:scale-95 message-animate mf-ignore-tracking"
+                            className="px-4 py-2 bg-slate-50 hover:bg-orange-50 border border-slate-100 hover:border-orange-200 hover:text-[#9A1523] rounded-full text-[12px] font-bold text-slate-600 transition-all flex items-center gap-2 shadow-sm active:scale-95 message-animate mf-ignore-tracking"
                             style={{ animationDelay: `${idx * 0.1}s` }}
                         >
                             <Sparkles className="w-3.5 h-3.5 text-orange-400 mf-ignore-tracking" /> {qa}
@@ -835,12 +835,12 @@ const AIChatWidget: React.FC<AIChatWidgetProps> = ({
                         }}
                         disabled={cooldown > 0}
                         placeholder={cooldown > 0 ? `Vui lòng đợi ${cooldown}s...` : "Nhập câu hỏi của mình..."}
-                        className="w-full pl-6 pr-16 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-[14px] focus:bg-white focus:ring-4 focus:ring-orange-500/5 focus:border-orange-400 outline-none transition-all placeholder:text-slate-400 disabled:opacity-70 disabled:cursor-not-allowed mf-ignore-tracking"
+                        className="w-full pl-6 pr-16 py-4 bg-slate-50 border border-slate-100 rounded-[14px] text-[14px] focus:bg-white focus:ring-4 focus:ring-[var(--color-primary)]/5 focus:border-[var(--color-primary)] outline-none transition-all placeholder:text-slate-400 disabled:opacity-70 disabled:cursor-not-allowed mf-ignore-tracking"
                     />
                     <button
                         onClick={() => handleSendMessage()}
                         disabled={!input.trim() || cooldown > 0}
-                        className="absolute right-2 w-11 h-11 bg-orange-500 text-white rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/20 hover:scale-[1.03] active:scale-95 disabled:opacity-50 disabled:scale-100 transition-all mf-ignore-tracking"
+                        className="absolute right-2 w-11 h-11 bg-[var(--color-primary)] text-white rounded-xl flex items-center justify-center shadow-lg shadow-[var(--color-primary)]/20 hover:scale-[1.03] active:scale-95 disabled:opacity-50 disabled:scale-100 transition-all mf-ignore-tracking"
                         style={config?.brand_color ? { background: config.brand_color } : {}}
                     >
                         {cooldown > 0 ? (

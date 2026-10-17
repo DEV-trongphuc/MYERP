@@ -14,16 +14,14 @@ const MetaMessenger: React.FC = () => {
     const [showPolicyModal, setShowPolicyModal] = useState(false);
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500 pb-20 mx-auto ">
+        <div className="space-y-6 animate-in fade-in duration-300 pb-10 mx-auto">
             <PageHero
-                title={<>Meta <span className="text-slate-500 dark:text-slate-400">Messenger</span></>}
-                subtitle="Quản lý tin nhắn, Chatbot và Tự động hóa cho Facebook Fanpages."
-                statusText="Meta Cloud API Active"
-                showStatus={true}
+                title="Meta Messenger"
+                subtitle="Quản lý tin nhắn, Chatbot và Tự động hóa chăm sóc khách hàng cho Facebook Fanpages."
                 actions={[
-                    { label: 'CẤU HÌNH META', icon: Settings, onClick: () => setActiveTab('config'), primary: false },
-                    { label: '', title: 'Quy tắc 24h', icon: HelpCircle, onClick: () => setShowPolicyModal(true), primary: true },
-                    { label: '', title: 'Meta Platform', icon: Zap, onClick: () => window.open('https://developers.facebook.com/docs/messenger-platform', '_blank'), primary: true }
+                    { label: 'Cấu hình Fanpage', icon: Settings, onClick: () => setActiveTab('config'), primary: false },
+                    { label: 'Quy tắc 24h', icon: HelpCircle, onClick: () => setShowPolicyModal(true), primary: false },
+                    { label: 'Meta Platform', icon: Zap, onClick: () => window.open('https://developers.facebook.com/docs/messenger-platform', '_blank'), primary: true }
                 ]}
             />
 
@@ -32,15 +30,15 @@ const MetaMessenger: React.FC = () => {
                 onClose={() => setShowPolicyModal(false)}
             />
 
-            <div className="bg-white rounded-3xl lg:rounded-[32px] border border-slate-200 shadow-sm overflow-hidden min-h-[600px]">
-                <div className="px-4 lg:px-6 py-4 border-b border-slate-50 bg-slate-50/30">
+            <div className="bg-[var(--color-surface)] rounded-[18px] border border-[var(--color-border)] shadow-xs overflow-hidden min-h-[500px]">
+                <div className="px-4 py-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] flex items-center justify-between">
                     <Tabs
-                        variant="segmented"
+                        variant="pill"
                         activeId={activeTab}
                         onChange={setActiveTab as any}
                         items={[
                             { id: 'customers', label: 'Khách hàng', icon: Users },
-                            { id: 'automation', label: 'Kịch bản', icon: Zap },
+                            { id: 'automation', label: 'Kịch bản Chatbot', icon: Zap },
                             { id: 'report', label: 'Báo cáo', icon: BarChart3 }
                         ]}
                     />

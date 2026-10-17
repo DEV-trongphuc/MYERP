@@ -335,20 +335,31 @@ const Campaigns: React.FC = () => {
 
     useKeyboardShortcuts({ 'n': () => openWizard(undefined) }, [openWizard]);
 
-    // Deep-link via navigation state (open a campaign report / open wizard)
+    // Deep-link via navigation state or query params (open a campaign report / open wizard with preselected list or contacts)
     useEffect(() => {
         const navState = (location as any).state;
+        const params = new URLSearchParams(location.search);
+        const queryListId = params.get('list_id') || navState?.listId;
+        const crmContactsParam = params.get('crm_contacts');
+        const preselectedContacts = navState?.preselectedCrmContacts;
+
         if (navState?.openCampaignId && campaigns.length > 0) {
             const targetCamp = campaigns.find(c => c.id === navState.openCampaignId);
             if (targetCamp) {
                 openDetail(targetCamp);
                 window.history.replaceState({}, document.title);
             }
-        } else if (navState?.openWizard) {
-            openWizard(undefined);
-            window.history.replaceState({}, document.title);
+        } else if (navState?.openWizard || queryListId || crmContactsParam || (Array.isArray(preselectedContacts) && preselectedContacts.length > 0)) {
+            const individualIds = Array.isArray(preselectedContacts) && preselectedContacts.length > 0
+                ? preselectedContacts.map((c: any) => String(c.domation_subscriber_id || c.subscriber_id || c.id)).filter(Boolean)
+                : (crmContactsParam ? crmContactsParam.split(',').map(s => s.trim()).filter(Boolean) : []);
+            const initialCamp = (queryListId || individualIds.length > 0)
+                ? ({ target: { listIds: queryListId ? [String(queryListId)] : [], segmentIds: [], tagIds: [], individualIds } } as any)
+                : undefined;
+            openWizard(initialCamp);
+            window.history.replaceState({}, document.title, location.pathname);
         }
-    }, [location.state, campaigns, openDetail, openWizard]);
+    }, [location.state, location.search, campaigns, openDetail, openWizard, location.pathname]);
 
     const filteredCampaigns = useMemo(
         () => campaigns.filter(c => matchesFilters(c, activeTab, activeType)),
@@ -636,24 +647,24 @@ const Campaigns: React.FC = () => {
                 title="Chiến dịch Marketing"
                 subtitle="Gửi Email & Zalo ZNS, theo dõi tỷ lệ mở, click và hiệu quả từng chiến dịch."
                 actions={[
-                    { label: 'Mẹo tăng trưởng', icon: Lightbulb, onClick: () => setIsTipsModalOpen(true) },
                     { label: 'Chiến dịch mới', icon: Plus, onClick: handleCreateClick, primary: true },
                 ]}
             >
-                <button
-                    type="button"
+                <div
                     onClick={() => setIsQuotaModalOpen(true)}
-                    className="btn outline font-semibold text-sm"
-                    title="Xem hạn mức gửi AWS SES"
+                    className="inline-flex items-center gap-1.5 h-9 px-3 rounded-[var(--radius-md)] text-xs font-semibold bg-[var(--color-surface)] border border-[var(--color-border)] shadow-[var(--shadow-xs)] hover:bg-[var(--color-bg)] transition-colors cursor-pointer"
+                    title="Nhấn để xem chi tiết hạn mức gửi AWS SES"
                 >
-                    <Zap className="w-4 h-4 shrink-0" />
-                    <span>Hạn mức gửi</span>
-                    {awsQuickInfo && (
-                        <span className={`ml-1 px-1.5 py-0.5 rounded-[var(--radius-sm)] text-[11px] font-semibold ${quotaTone}`}>
+                    <Zap className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <span className="text-[var(--color-text)]">Hạn mức gửi:</span>
+                    {awsQuickInfo ? (
+                        <span className={`px-1.5 py-0.5 rounded-[var(--radius-sm)] text-[11px] font-bold ${quotaTone}`}>
                             còn {awsQuickInfo.remaining.toLocaleString('vi-VN')}
                         </span>
+                    ) : (
+                        <span className="inline-block w-14 h-4 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[6px]" />
                     )}
-                </button>
+                </div>
             </PageHero>
 
             {/* Stat row — 4 cards on one line (desktop) */}
@@ -665,7 +676,12 @@ const Campaigns: React.FC = () => {
                         icon={<PieChart />}
                         color="#6366f1"
                         loading={loading}
-                        breakdown={<><span>Đang chạy: {stats.running.toLocaleString('vi-VN')}</span><span>Bản nháp: {stats.draft.toLocaleString('vi-VN')}</span></>}
+                        breakdown={
+                            <>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Đang chạy: {stats.running.toLocaleString('vi-VN')}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-400" />Bản nháp: {stats.draft.toLocaleString('vi-VN')}</span>
+                            </>
+                        }
                     />
                     <StatCard
                         title="Tổng đã gửi"
@@ -673,7 +689,12 @@ const Campaigns: React.FC = () => {
                         icon={<Send />}
                         color="#3b82f6"
                         loading={loading}
-                        breakdown={<><span>Email: {stats.emailSent.toLocaleString('vi-VN')}</span><span>Zalo: {stats.zaloSent.toLocaleString('vi-VN')}</span></>}
+                        breakdown={
+                            <>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />Email: {stats.emailSent.toLocaleString('vi-VN')}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-cyan-500" />Zalo: {stats.zaloSent.toLocaleString('vi-VN')}</span>
+                            </>
+                        }
                     />
                     <StatCard
                         title="Tỷ lệ mở"
@@ -681,7 +702,12 @@ const Campaigns: React.FC = () => {
                         icon={<MailOpen />}
                         color="#10b981"
                         loading={loading}
-                        breakdown={<><span>Lượt mở: {stats.totalOpened.toLocaleString('vi-VN')}</span><span>Chưa mở: {Math.max(0, stats.totalSent - stats.totalOpened).toLocaleString('vi-VN')}</span></>}
+                        breakdown={
+                            <>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Lượt mở: {stats.totalOpened.toLocaleString('vi-VN')}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-400" />Chưa mở: {Math.max(0, stats.totalSent - stats.totalOpened).toLocaleString('vi-VN')}</span>
+                            </>
+                        }
                     />
                     <StatCard
                         title="Lượt click"
@@ -689,7 +715,9 @@ const Campaigns: React.FC = () => {
                         icon={<MousePointerClick />}
                         color="#f59e0b"
                         loading={loading}
-                        breakdown={<span>CTR: {stats.ctr}%</span>}
+                        breakdown={
+                            <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" />CTR: {stats.ctr}%</span>
+                        }
                     />
                 </div>
                 {statsArePageScoped && !loading && (
@@ -772,7 +800,15 @@ const Campaigns: React.FC = () => {
 
             <Modal isOpen={isQuotaModalOpen} onClose={() => setIsQuotaModalOpen(false)} title="Hạn mức gửi email (Quota)" size="sm" isDarkTheme={isDark}>
                 {isQuotaModalOpen && (
-                    <Suspense fallback={<div className="py-10 text-center text-sm text-[var(--color-text-muted)]">Đang tải...</div>}>
+                    <Suspense
+                        fallback={
+                            <div className="space-y-3 py-2">
+                                <div className="h-20 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
+                                <div className="h-12 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
+                                <div className="h-12 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
+                            </div>
+                        }
+                    >
                         <SesQuotaWidget mode="sidebar" />
                     </Suspense>
                 )}

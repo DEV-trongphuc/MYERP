@@ -162,7 +162,7 @@ const MemoizedEmptyState = React.memo(({
             id: 'standard',
             title: 'Trò chuyện Chuẩn',
             desc: 'Hội thoại thông minh, đa năng và nhanh chóng.',
-            icon: <Sparkles className="w-5 h-5 text-brand" />,
+            icon: <Sparkles className="w-5 h-5 text-[var(--color-primary)]" />,
             active: !isCodeMode && !isImageGenMode && !isResearchMode,
             onClick: () => {
                 setIsCodeMode(false);
@@ -175,7 +175,7 @@ const MemoizedEmptyState = React.memo(({
             id: 'research',
             title: 'Chế độ Nghiên cứu',
             desc: 'Truy cập Internet Thời gian thực để cập nhật tin tức mới nhất.',
-            icon: <Globe className="w-5 h-5 text-brand" />,
+            icon: <Globe className="w-5 h-5 text-[var(--color-primary)]" />,
             active: isResearchMode,
             onClick: () => {
                 setIsResearchMode(true);
@@ -188,7 +188,7 @@ const MemoizedEmptyState = React.memo(({
             id: 'code',
             title: 'Chế độ Code',
             desc: 'Tự động trích xuất và lưu mã nguồn vào Workspace của bạn.',
-            icon: <FileCode className="w-5 h-5 text-brand" />,
+            icon: <FileCode className="w-5 h-5 text-[var(--color-primary)]" />,
             active: isCodeMode,
             onClick: () => {
                 setIsCodeMode(true);
@@ -201,7 +201,7 @@ const MemoizedEmptyState = React.memo(({
             id: 'image',
             title: 'Chế độ Hình ảnh',
             desc: 'Tạo ảnh nghệ thuật và quản lý thư vận hành ảnh AI.',
-            icon: <ImageIcon className="w-5 h-5 text-brand" />,
+            icon: <ImageIcon className="w-5 h-5 text-[var(--color-primary)]" />,
             active: isImageGenMode,
             onClick: () => {
                 setIsImageGenMode(true);
@@ -215,9 +215,9 @@ const MemoizedEmptyState = React.memo(({
 
     return (
         <div className="max-w-4xl mx-auto px-4 py-12 flex flex-col items-center animate-in fade-in duration-700">
-            <div className="w-20 h-20 rounded-[28px] bg-gradient-to-br from-brand to-brand-accent flex items-center justify-center text-white shadow-2xl shadow-brand/20 mb-8 animate-in zoom-in duration-700">
+            <div className="w-20 h-20 rounded-[18px] bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary)]-accent flex items-center justify-center text-white shadow-2xl shadow-[var(--color-primary)]/20 mb-8 animate-in zoom-in duration-700">
                 {activeBot?.settings?.bot_avatar ? (
-                    <img src={activeBot.settings.bot_avatar} className="w-full h-full object-cover rounded-[28px]" alt="Avatar" />
+                    <img src={activeBot.settings.bot_avatar} className="w-full h-full object-cover rounded-[18px]" alt="Avatar" />
                 ) : (
                     <Bot className="w-10 h-10" />
                 )}
@@ -235,22 +235,22 @@ const MemoizedEmptyState = React.memo(({
                     <button
                         key={mode.id}
                         onClick={mode.onClick}
-                        className={`group p-5 rounded-3xl border-2 transition-all duration-300 text-left flex gap-4 items-start ${mode.active && mode.id !== 'standard'
+                        className={`group p-5 rounded-[18px] border-2 transition-all duration-300 text-left flex gap-4 items-start ${mode.active && mode.id !== 'standard'
                             ? (isDarkTheme ? 'bg-slate-800 border-slate-600 shadow-xl scale-[1.02]' : 'bg-white border-slate-200 shadow-xl scale-[1.02]')
                             : (isDarkTheme ? 'bg-slate-800/50 border-slate-700 hover:border-slate-600 hover:bg-slate-800 hover:shadow-lg' : 'bg-slate-50/50 border-slate-100 hover:border-slate-200 hover:bg-white hover:shadow-lg')
                             }`}
                     >
-                        <div className={`p-3 rounded-2xl shrink-0 transition-transform group-hover:scale-110 duration-300 ${mode.active && mode.id !== 'standard' ? 'bg-brand/10' : (isDarkTheme ? 'bg-slate-700 shadow-sm border border-slate-600' : 'bg-white shadow-sm border border-slate-100')
+                        <div className={`p-3 rounded-[14px] shrink-0 transition-transform group-hover:scale-110 duration-300 ${mode.active && mode.id !== 'standard' ? 'bg-[var(--color-primary)]/10' : (isDarkTheme ? 'bg-slate-700 shadow-sm border border-slate-600' : 'bg-white shadow-sm border border-slate-100')
                             }`}>
                             {mode.icon}
                         </div>
                         <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
-                                <h4 className={`font-bold text-sm ${mode.active && mode.id !== 'standard' ? 'text-brand' : (isDarkTheme ? 'text-slate-200' : 'text-slate-800')}`}>
+                                <h4 className={`font-bold text-sm ${mode.active && mode.id !== 'standard' ? 'text-[var(--color-primary)]' : (isDarkTheme ? 'text-slate-200' : 'text-slate-800')}`}>
                                     {mode.title}
                                 </h4>
                                 {mode.active && mode.id !== 'standard' && (
-                                    <div className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse" />
+                                    <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-primary)] animate-pulse" />
                                 )}
                             </div>
                             <p className={`text-xs leading-relaxed font-medium ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -459,7 +459,7 @@ const MessageList = React.memo(({
                                 data-index={virtualRow.index}
                                 data-message-id={msg.id}
                                 ref={rowVirtualizer.measureElement}
-                                className={`group flex gap-4 mb-6 absolute left-4 right-4 md:left-8 md:right-8 transition-all duration-500 ${isUser ? 'flex-row-reverse items-start' : 'items-start'} ${isHighlighted ? 'ring-2 ring-brand/20 rounded-3xl' : ''}`}
+                                className={`group flex gap-4 mb-6 absolute left-4 right-4 md:left-8 md:right-8 transition-all duration-500 ${isUser ? 'flex-row-reverse items-start' : 'items-start'} ${isHighlighted ? 'ring-2 ring-[var(--color-primary)]/20 rounded-[18px]' : ''}`}
                                 style={{
                                     transform: `translateY(${virtualRow.start}px)`,
                                 }}
@@ -471,7 +471,7 @@ const MessageList = React.memo(({
                                     </div>
 
                                     <div className={`
-                                        relative px-4 py-3 md:px-6 md:py-4 rounded-3xl shadow-sm transition-all duration-300 group/msg
+                                        relative px-4 py-3 md:px-6 md:py-4 rounded-[18px] shadow-sm transition-all duration-300 group/msg
                                         ${isUser
                                             ? (isDarkTheme ? 'bg-[#1E2532] border border-slate-700/50 text-slate-100 rounded-tr-lg' : 'bg-white border border-slate-100 text-slate-800 rounded-tr-lg')
                                             : (isDarkTheme ? 'bg-[#161B24] border border-slate-800/80 text-slate-200 rounded-tl-lg' : 'bg-slate-50/80 border border-slate-100/50 text-slate-800 rounded-tl-lg')
@@ -485,7 +485,7 @@ const MessageList = React.memo(({
                                                         {msg.attachments.filter((a: any) => a.type.startsWith('image/')).slice(0, 4).map((file: any, i: number, arr: any[]) => (
                                                             <div
                                                                 key={i}
-                                                                className="absolute inset-0 transition-all duration-500 origin-bottom-right shadow-2xl rounded-[24px] border-4 border-white overflow-hidden bg-slate-50 group-hover/fan:scale-110 group-hover/fan:-translate-x-2 group-hover/fan:-translate-y-2 z-0 hover:z-10"
+                                                                className="absolute inset-0 transition-all duration-500 origin-bottom-right shadow-2xl rounded-[18px] border-4 border-white overflow-hidden bg-slate-50 group-hover/fan:scale-110 group-hover/fan:-translate-x-2 group-hover/fan:-translate-y-2 z-0 hover:z-10"
                                                                 style={{
                                                                     zIndex: 10 - i,
                                                                     transform: `rotate(${(i - (arr.length - 1) / 2) * 15}deg) translateX(${i * 20}px) translateY(${i * -5}px)`,
@@ -496,7 +496,7 @@ const MessageList = React.memo(({
                                                             </div>
                                                         ))}
                                                         {msg.attachments.filter((a: any) => a.type.startsWith('image/')).length > 4 && (
-                                                            <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-brand text-white rounded-full flex items-center justify-center text-[10px] font-black z-20 shadow-lg border-2 border-white">
+                                                            <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-[var(--color-primary)] text-white rounded-full flex items-center justify-center text-[10px] font-black z-20 shadow-lg border-2 border-white">
                                                                 +{msg.attachments.filter((a: any) => a.type.startsWith('image/')).length - 4}
                                                             </div>
                                                         )}
@@ -505,7 +505,7 @@ const MessageList = React.memo(({
                                                     <div className={`flex flex-wrap gap-2 ${isUser ? 'justify-end' : ''}`}>
                                                         {msg.attachments.filter((a: any) => a.type.startsWith('image/')).map((file: any, i: number) => (
                                                             <div key={i} className="group/att relative cursor-pointer" onClick={() => onPreviewImage(file.previewUrl || file.base64)}>
-                                                                <div className="relative overflow-hidden rounded-2xl border border-slate-200 shadow-md transition-all hover:border-brand hover:scale-110 hover:z-50 duration-300 w-full bg-slate-50 max-w-[300px]">
+                                                                <div className="relative overflow-hidden rounded-[14px] border border-slate-200 shadow-md transition-all hover:border-[var(--color-primary)] hover:scale-110 hover:z-50 duration-300 w-full bg-slate-50 max-w-[300px]">
                                                                     <img src={file.previewUrl || file.base64} alt={file.name} className="w-full h-auto object-contain" />
                                                                     {msg.role === 'assistant' && (
                                                                         <button
@@ -513,7 +513,7 @@ const MessageList = React.memo(({
                                                                                 e.stopPropagation();
                                                                                 onMakeGlobal(file);
                                                                             }}
-                                                                            className="absolute bottom-2 right-2 p-1.5 bg-white/90 backdrop-blur rounded-lg text-slate-500 hover:text-brand hover:bg-white shadow-sm opacity-0 group-hover/att:opacity-100 transition-all transform translate-y-2 group-hover/att:translate-y-0"
+                                                                            className="absolute bottom-2 right-2 p-1.5 bg-white/90 backdrop-blur rounded-lg text-slate-500 hover:text-[var(--color-primary)] hover:bg-white shadow-sm opacity-0 group-hover/att:opacity-100 transition-all transform translate-y-2 group-hover/att:translate-y-0"
                                                                             title="Make Global"
                                                                         >
                                                                             <Globe className="w-4 h-4" />
@@ -534,7 +534,7 @@ const MessageList = React.memo(({
                                                             setIsDocWorkspaceOpen(true);
                                                         }}>
                                                             {file.type.startsWith('video/') ? (
-                                                                <div className="relative overflow-hidden rounded-2xl border border-slate-200 shadow-md transition-all hover:border-brand hover:scale-110 hover:z-50 duration-300 bg-slate-50">
+                                                                <div className="relative overflow-hidden rounded-[14px] border border-slate-200 shadow-md transition-all hover:border-[var(--color-primary)] hover:scale-110 hover:z-50 duration-300 bg-slate-50">
                                                                     <video src={file.previewUrl || file.base64} controls className="max-w-[280px] max-h-[280px] md:max-w-[400px] md:max-h-[400px]" onClick={(e: any) => e.stopPropagation()} />
                                                                     {msg.role === 'assistant' && (
                                                                         <button
@@ -542,7 +542,7 @@ const MessageList = React.memo(({
                                                                                 e.stopPropagation();
                                                                                 onMakeGlobal(file);
                                                                             }}
-                                                                            className="absolute top-2 right-2 p-1.5 bg-white/90 backdrop-blur rounded-lg text-slate-500 hover:text-brand hover:bg-white shadow-sm opacity-0 group-hover/att:opacity-100 transition-all"
+                                                                            className="absolute top-2 right-2 p-1.5 bg-white/90 backdrop-blur rounded-lg text-slate-500 hover:text-[var(--color-primary)] hover:bg-white shadow-sm opacity-0 group-hover/att:opacity-100 transition-all"
                                                                             title="Make Global"
                                                                         >
                                                                             <Globe className="w-4 h-4" />
@@ -550,17 +550,17 @@ const MessageList = React.memo(({
                                                                     )}
                                                                 </div>
                                                             ) : (
-                                                                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-[11px] font-bold hover:bg-brand hover:bg-opacity-5 hover:border-brand-accent hover:text-brand transition-all shadow-sm hover:shadow-md pr-8 relative">
-                                                                    <FileText className="w-4 h-4 text-brand" />
+                                                                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-[11px] font-bold hover:bg-[var(--color-primary)] hover:bg-opacity-5 hover:border-[var(--color-primary)]-accent hover:text-[var(--color-primary)] transition-all shadow-sm hover:shadow-md pr-8 relative">
+                                                                    <FileText className="w-4 h-4 text-[var(--color-primary)]" />
                                                                     <span className="truncate max-w-[150px] text-slate-700">{file.name}</span>
-                                                                    <span className="text-[9px] text-slate-400 font-normal ml-1 border rounded px-1 group-hover/att:border-brand-accent">View</span>
+                                                                    <span className="text-[9px] text-slate-400 font-normal ml-1 border rounded px-1 group-hover/att:border-[var(--color-primary)]-accent">View</span>
                                                                     {msg.role === 'assistant' && (
                                                                         <button
                                                                             onClick={(e) => {
                                                                                 e.stopPropagation();
                                                                                 onMakeGlobal(file);
                                                                             }}
-                                                                            className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-brand transition-colors"
+                                                                            className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-[var(--color-primary)] transition-colors"
                                                                             title="Make Global"
                                                                         >
                                                                             <Globe className="w-3.5 h-3.5" />
@@ -588,11 +588,11 @@ const MessageList = React.memo(({
                                                 <div className="flex flex-col gap-2 mt-4 ml-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
                                                     <div className="flex items-center gap-3">
                                                         <div className="relative">
-                                                            <div className="w-8 h-8 rounded-xl bg-brand/10 flex items-center justify-center relative overflow-hidden group">
-                                                                <Brain className="w-5 h-5 text-brand animate-pulse relative z-10" />
-                                                                <div className="absolute inset-0 bg-brand/5 animate-pulse" />
+                                                            <div className="w-8 h-8 rounded-xl bg-[var(--color-primary)]/10 flex items-center justify-center relative overflow-hidden group">
+                                                                <Brain className="w-5 h-5 text-[var(--color-primary)] animate-pulse relative z-10" />
+                                                                <div className="absolute inset-0 bg-[var(--color-primary)]/5 animate-pulse" />
                                                             </div>
-                                                            <div className="absolute -inset-1 bg-brand/20 blur-md rounded-full animate-pulse -z-10" />
+                                                            <div className="absolute -inset-1 bg-[var(--color-primary)]/20 blur-md rounded-full animate-pulse -z-10" />
                                                         </div>
                                                         <div className="flex flex-col">
                                                             <span className={`text-[13px] font-bold ${isDarkTheme ? 'text-slate-200' : 'text-slate-700'}`}>
@@ -603,7 +603,7 @@ const MessageList = React.memo(({
                                                                     <Loader2 className="w-2 h-2 animate-spin" />
                                                                     {/* Est. {isExpertMode ? '~5-10s' : '~2-3s'} */}
                                                                 </span>
-                                                                <span className={`text-[11px] font-medium uppercase tracking-wider ${isExpertMode ? 'text-amber-600' : 'text-brand'}`}>
+                                                                <span className={`text-[11px] font-medium uppercase tracking-wider ${isExpertMode ? 'text-[var(--color-primary)]' : 'text-[var(--color-primary)]'}`}>
                                                                     {isExpertMode ? 'Expert Mode' : 'Auto Mode'}
                                                                 </span>
                                                             </div>
@@ -612,23 +612,23 @@ const MessageList = React.memo(({
                                                 </div>
                                             )}
                                             {isImageGenMode && loadingChat && virtualRow.index === messages.length - 1 && msg.role === 'assistant' && (
-                                                <div className="mt-4 p-6 rounded-3xl bg-slate-50/50 border border-slate-200/50 relative overflow-hidden group/gen">
+                                                <div className="mt-4 p-6 rounded-[18px] bg-slate-50/50 border border-slate-200/50 relative overflow-hidden group/gen">
                                                     <div className="flex flex-col items-center gap-4 relative z-10">
                                                         <div className="relative">
-                                                            <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-brand flex items-center justify-center shadow-brand animate-pulse">
+                                                            <div className="w-20 h-20 rounded-[14px] bg-gradient-to-tr from-[var(--color-primary)] flex items-center justify-center shadow-[var(--color-primary)] animate-pulse">
                                                                 <ImageIcon className="w-10 h-10 text-white animate-bounce" />
                                                             </div>
-                                                            <div className="absolute -inset-4 bg-brand bg-opacity-20 rounded-full blur-2xl animate-pulse -z-10" />
+                                                            <div className="absolute -inset-4 bg-[var(--color-primary)] bg-opacity-20 rounded-full blur-2xl animate-pulse -z-10" />
                                                         </div>
                                                         <div className="flex flex-col items-center gap-1.5">
                                                             <span className="text-[13px] font-black text-slate-800 uppercase tracking-widest">AI Image Studio</span>
-                                                            <span className="text-[11px] font-bold text-brand flex items-center gap-2">
-                                                                <span className="w-1.5 h-1.5 rounded-full bg-brand animate-ping" />
+                                                            <span className="text-[11px] font-bold text-[var(--color-primary)] flex items-center gap-2">
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-primary)] animate-ping" />
                                                                 Đang tạo hình ảnh...
                                                             </span>
                                                         </div>
                                                         <div className="w-48 h-1.5 bg-slate-200 rounded-full overflow-hidden mt-2">
-                                                            <div className="h-full bg-gradient-to-r from-brand animate-[progress_3s_ease-in-out_infinite]" />
+                                                            <div className="h-full bg-gradient-to-r from-[var(--color-primary)] animate-[progress_3s_ease-in-out_infinite]" />
                                                         </div>
                                                     </div>
                                                 </div>
@@ -639,7 +639,7 @@ const MessageList = React.memo(({
                                     {
                                         msg.role === 'user' && (
                                             <div className="mt-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
-                                                <button onClick={() => reuseMessage(msg.content, msg.attachments)} className="p-1.5 bg-white hover:bg-slate-50 text-slate-400 hover:text-brand rounded-lg transition-all border border-slate-100 shadow-sm flex items-center justify-center">
+                                                <button onClick={() => reuseMessage(msg.content, msg.attachments)} className="p-1.5 bg-white hover:bg-slate-50 text-slate-400 hover:text-[var(--color-primary)] rounded-lg transition-all border border-slate-100 shadow-sm flex items-center justify-center">
                                                     <Undo className="w-4 h-4" />
                                                 </button>
                                             </div>
@@ -652,8 +652,8 @@ const MessageList = React.memo(({
                                                 {msg.quickActions && msg.quickActions.length > 0 && (
                                                     <div className="flex flex-wrap gap-2 mb-3">
                                                         {msg.quickActions.map((action: string, ai: number) => (
-                                                            <button key={ai} onClick={() => { setInput(action); setTimeout(() => document.getElementById('send-button')?.click(), 100); }} className="group/btn text-left px-3 py-1.5 md:px-4 md:py-2.5 bg-white hover:bg-brand hover:bg-opacity-5 border border-slate-200 hover:border-brand-accent rounded-xl text-[11px] md:text-[13px] font-medium text-slate-600 hover:text-brand transition-all shadow-sm hover:shadow-md flex items-center gap-2 md:gap-2.5">
-                                                                <Sparkles className="shrink-0 w-3 h-3 md:w-3.5 md:h-3.5 text-brand opacity-60 group-hover/btn:opacity-100 group-hover/btn:rotate-12 transition-all" />
+                                                            <button key={ai} onClick={() => { setInput(action); setTimeout(() => document.getElementById('send-button')?.click(), 100); }} className="group/btn text-left px-3 py-1.5 md:px-4 md:py-2.5 bg-white hover:bg-[var(--color-primary)] hover:bg-opacity-5 border border-slate-200 hover:border-[var(--color-primary)]-accent rounded-xl text-[11px] md:text-[13px] font-medium text-slate-600 hover:text-[var(--color-primary)] transition-all shadow-sm hover:shadow-md flex items-center gap-2 md:gap-2.5">
+                                                                <Sparkles className="shrink-0 w-3 h-3 md:w-3.5 md:h-3.5 text-[var(--color-primary)] opacity-60 group-hover/btn:opacity-100 group-hover/btn:rotate-12 transition-all" />
                                                                 <span className="line-clamp-2 md:line-clamp-1">{action}</span>
                                                             </button>
                                                         ))}

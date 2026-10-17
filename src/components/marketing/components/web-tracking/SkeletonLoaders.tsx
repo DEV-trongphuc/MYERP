@@ -18,7 +18,7 @@ export const Sk = ({ w, h, r = 8, className = '' }: { w?: number | string; h?: n
 );
 
 export const StatCardSkeleton: React.FC = () => (
-    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm h-28 space-y-3">
+    <div className="bg-white p-5 rounded-[14px] border border-slate-100 shadow-sm h-28 space-y-3">
         <Sk w={80} h={12} r={6} />
         <Sk w="60%" h={24} r={8} />
         <Sk w={50} h={10} r={4} />
@@ -26,7 +26,7 @@ export const StatCardSkeleton: React.FC = () => (
 );
 
 export const ChartSkeleton: React.FC = () => (
-    <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+    <div className="bg-white p-6 rounded-[14px] border border-slate-100 shadow-sm">
         <Sk w={160} h={18} r={8} className="mb-6" />
         <Sk h={280} r={12} />
     </div>
@@ -47,7 +47,7 @@ export const ListSkeleton: React.FC<{ items?: number }> = ({ items = 5 }) => (
 );
 
 export const CardSkeleton: React.FC = () => (
-    <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+    <div className="bg-white p-6 rounded-[14px] border border-slate-100 shadow-sm space-y-4">
         <Sk w={160} h={16} r={8} />
         <div className="space-y-3">
             {[...Array(4)].map((_, i) => (
@@ -62,7 +62,7 @@ export const CardSkeleton: React.FC = () => (
 
 // Website card skeleton — matches the actual card layout
 export const WebsiteCardSkeleton: React.FC = () => (
-    <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex flex-col justify-between gap-6 min-h-[180px]">
+    <div className="bg-white p-6 rounded-[18px] border border-slate-100 shadow-sm flex flex-col justify-between gap-6 min-h-[180px]">
         <div className="flex items-center gap-4">
             <Sk w={48} h={48} r={16} />
             <div className="space-y-2 flex-1">

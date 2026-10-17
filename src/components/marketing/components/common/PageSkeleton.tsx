@@ -106,22 +106,24 @@ export const TableSkeleton: React.FC<{ rows?: number; columns?: string[] }> = ({
 export const CardGridSkeleton: React.FC<{ cols?: number; rows?: number; height?: number }> = ({
     cols = 4,
     rows = 2,
-    height = 130,
+    height = 160,
 }) => {
     injectKeyframe();
     const count = cols * rows;
     return (
-        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${Math.min(cols, 3)} xl:grid-cols-${cols} gap-6`}>
+        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-${Math.min(cols, 3)} xl:grid-cols-${cols} gap-4`}>
             {Array.from({ length: count }).map((_, i) => (
-                <div key={i} className="bg-white rounded-[28px] border border-slate-100 shadow-sm p-5 space-y-4">
-                    <div className="flex items-center gap-3">
-                        <S className="w-10 h-10 rounded-xl shrink-0" />
-                        <div className="flex-1 space-y-2">
-                            <S className="h-3.5 rounded-full" style={{ width: '65%' }} />
-                            <S className="h-3 rounded-full" style={{ width: '40%' }} />
+                <div key={i} className="bg-[var(--color-surface)] rounded-[14px] border border-[var(--color-border)] shadow-xs overflow-hidden flex flex-col">
+                    {/* Basic rectangular thumbnail preview */}
+                    <S className="w-full rounded-none" style={{ height }} />
+                    <div className="p-3.5 space-y-2.5">
+                        <S className="h-3.5 rounded-[6px]" style={{ width: '70%' }} />
+                        <S className="h-3 rounded-[4px]" style={{ width: '45%' }} />
+                        <div className="pt-2 flex items-center justify-between border-t border-[var(--color-border-light)]">
+                            <S className="h-3 rounded-[4px]" style={{ width: '30%' }} />
+                            <S className="h-6 w-16 rounded-[8px]" />
                         </div>
                     </div>
-                    <S className="h-3 rounded-full" style={{ width: '80%', height }} />
                 </div>
             ))}
         </div>

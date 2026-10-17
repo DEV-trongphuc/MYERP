@@ -25,7 +25,7 @@ interface TechStatsTabProps {
     isZns?: boolean;
 }
 
-const COLORS = ['#3b82f6', '#10b981', '#d97706', '#06b6d4', '#6366f1']; // Blue, Green, Amber, Cyan, Indigo
+const COLORS = ['#3b82f6', '#10b981', '#BD1D2D', '#06b6d4', '#6366f1']; // Blue, Green, Amber, Cyan, Indigo
 
 const TechStatsTab: React.FC<TechStatsTabProps> = ({ type = 'campaign', id, stepId, isZns = false }) => {
     const { can } = useAuth();
@@ -72,8 +72,8 @@ const TechStatsTab: React.FC<TechStatsTabProps> = ({ type = 'campaign', id, step
 
     if (!canView) {
         return (
-            <div className="flex flex-col items-center justify-center py-32 text-slate-400 bg-slate-50/50 rounded-[32px] border-2 border-dashed border-slate-100 italic">
-                <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm mb-4">
+            <div className="flex flex-col items-center justify-center py-32 text-slate-400 bg-slate-50/50 rounded-[18px] border-2 border-dashed border-slate-100 italic">
+                <div className="w-16 h-16 bg-white rounded-[14px] flex items-center justify-center shadow-sm mb-4">
                     <Lock className="w-8 h-8 text-rose-300" />
                 </div>
                 <p className="text-sm font-bold uppercase tracking-widest text-slate-500">Truy cập bị hạn chế</p>
@@ -84,8 +84,8 @@ const TechStatsTab: React.FC<TechStatsTabProps> = ({ type = 'campaign', id, step
 
     if (!stats || (!stats.device?.length && !stats.location?.length)) {
         return (
-            <div className="flex flex-col items-center justify-center py-32 text-slate-400 bg-slate-50/50 rounded-[32px] border-2 border-dashed border-slate-100 italic">
-                <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm mb-4">
+            <div className="flex flex-col items-center justify-center py-32 text-slate-400 bg-slate-50/50 rounded-[18px] border-2 border-dashed border-slate-100 italic">
+                <div className="w-16 h-16 bg-white rounded-[14px] flex items-center justify-center shadow-sm mb-4">
                     <Smartphone className="w-8 h-8 opacity-20" />
                 </div>
                 <p className="text-sm font-bold uppercase tracking-widest opacity-50">Chưa có dữ liệu phân tích</p>
@@ -101,7 +101,7 @@ const TechStatsTab: React.FC<TechStatsTabProps> = ({ type = 'campaign', id, step
     return (
         <TabTransition className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Device Breakdown */}
-            <Card title="Phân tích Thiết bị" icon={Smartphone} className="border-slate-100 shadow-xl shadow-slate-200/50 rounded-[32px] overflow-hidden">
+            <Card title="Phân tích Thiết bị" icon={Smartphone} className="border-slate-100 shadow-xl shadow-slate-200/50 rounded-[18px] overflow-hidden">
                 <div className="min-h-[280px] relative pt-2">
                     {deviceData.length > 0 ? (
                         <ResponsiveContainer width="100%" height={280}>
@@ -142,7 +142,7 @@ const TechStatsTab: React.FC<TechStatsTabProps> = ({ type = 'campaign', id, step
             </Card>
 
             {/* OS Breakdown */}
-            <Card title="Hệ điều hành phổ biến" icon={Laptop} className="border-slate-100 shadow-xl shadow-slate-200/50 rounded-[32px]">
+            <Card title="Hệ điều hành phổ biến" icon={Laptop} className="border-slate-100 shadow-xl shadow-slate-200/50 rounded-[18px]">
                 <div className="min-h-[280px] pt-2">
                     {osData.length > 0 ? (
                         <ResponsiveContainer width="100%" height={280}>
@@ -172,7 +172,7 @@ const TechStatsTab: React.FC<TechStatsTabProps> = ({ type = 'campaign', id, step
             </Card>
 
             {/* Location Map (List) */}
-            <Card title="Vị trí địa lý hàng đầu" icon={MapPin} className="border-slate-100 shadow-xl shadow-slate-200/50 rounded-[32px] md:col-span-2">
+            <Card title="Vị trí địa lý hàng đầu" icon={MapPin} className="border-slate-100 shadow-xl shadow-slate-200/50 rounded-[18px] md:col-span-2">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {locationData.length > 0 ? locationData.map((loc: TechStatItem, idx: number) => {
                         const iconColor = COLORS[idx % COLORS.length];
@@ -195,7 +195,7 @@ const TechStatsTab: React.FC<TechStatsTabProps> = ({ type = 'campaign', id, step
                             </div>
                         );
                     }) : (
-                        <div className="col-span-4 py-16 text-center bg-slate-50/50 rounded-3xl border border-dashed border-slate-200">
+                        <div className="col-span-4 py-16 text-center bg-slate-50/50 rounded-[18px] border border-dashed border-slate-200">
                             <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Không tìm thấy dữ liệu vị trí</p>
                         </div>
                     )}

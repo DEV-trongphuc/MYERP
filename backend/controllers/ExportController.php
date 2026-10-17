@@ -3251,11 +3251,11 @@ class ExportController {
         }
         if ($search !== '') {
             $like = "%{$search}%";
-            $where[] = '(po.order_number LIKE ? OR s.name LIKE ? OR po.notes LIKE ? OR u.full_name LIKE ?)';
+            $where[] = '(po.po_number LIKE ? OR s.name LIKE ? OR po.notes LIKE ? OR u.full_name LIKE ?)';
             array_push($params, $like, $like, $like, $like);
         }
 
-        $sql = "SELECT po.id, po.order_number, po.order_date, po.expected_delivery_date,
+        $sql = "SELECT po.id, po.po_number AS order_number, po.order_date, NULL AS expected_delivery_date,
                        po.total, po.status, po.status_level_1, po.status_level_2, po.status_level_3,
                        po.payment_status, po.notes,
                        COALESCE(s.name, '') as supplier_name,
@@ -3403,11 +3403,11 @@ class ExportController {
         }
         if ($search !== '') {
             $like = "%{$search}%";
-            $where[] = '(so.order_number LIKE ? OR c.full_name LIKE ? OR c.phone LIKE ? OR comp.name LIKE ? OR so.notes LIKE ?)';
+            $where[] = '(so.so_number LIKE ? OR c.full_name LIKE ? OR c.phone LIKE ? OR comp.name LIKE ? OR so.notes LIKE ?)';
             array_push($params, $like, $like, $like, $like, $like);
         }
 
-        $sql = "SELECT so.id, so.order_number, so.order_date, so.total, so.status, so.payment_status, so.notes,
+        $sql = "SELECT so.id, so.so_number AS order_number, so.order_date, so.total, so.status, so.payment_status, so.notes,
                        COALESCE(c.full_name, '') as customer_name,
                        COALESCE(c.phone, '') as customer_phone,
                        COALESCE(comp.name, '') as company_name,
@@ -3526,7 +3526,7 @@ class ExportController {
             array_push($params, $like, $like, $like, $like);
         }
 
-        $sql = "SELECT i.id, i.invoice_number, i.issue_date, i.due_date, i.total, i.currency, i.status, i.notes,
+        $sql = "SELECT i.id, i.invoice_number, i.issue_date, i.due_date, i.total, 'VND' AS currency, i.status, i.notes,
                        COALESCE(ct.full_name, '') as contact_name,
                        COALESCE(c.name, '') as company_name,
                        COALESCE(u.full_name, '') as creator_name
@@ -3718,21 +3718,21 @@ class ExportController {
         $search        = trim((string)($_GET['search'] ?? $_GET['search_query'] ?? ''));
 
         if ($statusParam !== '' && $statusParam !== 'all') {
-            $where[] = 's.status = ?';
+            $where[] = 's.cooperation_status = ?';
             $params[] = $statusParam;
         }
         if ($categoryParam !== '' && $categoryParam !== 'all') {
-            $where[] = 's.category LIKE ?';
+            $where[] = 's.focused_type LIKE ?';
             $params[] = '%' . $categoryParam . '%';
         }
         if ($search !== '') {
             $like = "%{$search}%";
-            $where[] = '(s.name LIKE ? OR s.code LIKE ? OR s.phone LIKE ? OR s.email LIKE ? OR s.tax_code LIKE ?)';
-            array_push($params, $like, $like, $like, $like, $like);
+            $where[] = '(s.name LIKE ? OR s.contact_name LIKE ? OR s.phone LIKE ? OR s.email LIKE ?)';
+            array_push($params, $like, $like, $like, $like);
         }
 
-        $sql = "SELECT s.id, s.code, s.name, s.contact_person, s.phone, s.email, s.tax_code,
-                       s.category, s.bank_name, s.bank_account, s.bank_holder, s.status
+        $sql = "SELECT s.id, CONCAT('NCC-', LPAD(s.id, 4, '0')) AS code, s.name, s.contact_name AS contact_person, s.phone, s.email, s.tax_code,
+                       s.focused_type AS category, s.bank_account AS bank_name, s.bank_account, '' AS bank_holder, s.cooperation_status AS status
                 FROM suppliers s
                 WHERE " . implode(' AND ', $where) . "
                 ORDER BY s.name ASC";

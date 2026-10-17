@@ -29,9 +29,8 @@ const RichText: React.FC<RichTextProps> = ({ html, onChange, placeholder, classN
     const instanceId = useRef(`rte-${Math.random().toString(36).slice(2, 8)}`).current;
 
     useEffect(() => {
-        if (elementRef.current) {
+        if (elementRef.current && document.activeElement !== elementRef.current) {
             const sanitized = sanitizeHtmlLineHeight(html);
-            console.log("RichText Canvas html update:", { html, sanitized, current: elementRef.current.innerHTML });
             if (elementRef.current.innerHTML !== sanitized) {
                 elementRef.current.innerHTML = sanitized;
             }

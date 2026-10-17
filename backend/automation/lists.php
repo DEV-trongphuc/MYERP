@@ -93,20 +93,33 @@ switch ($method) {
                 return;
             }
 
+            $creatorCols = "l.id, l.name, l.source, l.type, l.subscriber_count as count, l.phone_count, l.created_by, l.updated_by, DATE_FORMAT(l.created_at, '%d/%m/%Y') as created, u_creator.id AS creator_id, u_creator.full_name AS creator_name, u_creator.email AS creator_email, u_creator.avatar_url AS creator_avatar, u_creator.role AS creator_role";
+
             if (!isset($_GET['page']) && !isset($_GET['limit']) && !isset($_GET['search'])) {
                 // Single-item lookup: ?id=xxx (no pagination params)
                 if ($path) {
-                    $stmt = $pdo->prepare("SELECT l.id, l.name, l.source, l.type, l.subscriber_count as count, l.phone_count, DATE_FORMAT(l.created_at, '%d/%m/%Y') as created FROM lists l WHERE l.id = ? AND l.workspace_id = ?");
+                    $stmt = $pdo->prepare("SELECT {$creatorCols} FROM lists l LEFT JOIN users u_creator ON u_creator.id = l.created_by WHERE l.id = ? AND l.workspace_id = ?");
                     $stmt->execute([$path, $workspace_id]);
-                    $item = $stmt->fetch();
+                    $item = $stmt->fetch(PDO::FETCH_ASSOC);
+                    if ($item) {
+                        $item['creator'] = function_exists('domationFormatCreator') ? domationFormatCreator($item) : null;
+                    }
                     jsonResponse(true, $item ?: null);
                     return;
                 }
-                $sql = "SELECT l.id, l.name, l.source, l.type, l.subscriber_count as count, l.phone_count, DATE_FORMAT(l.created_at, '%d/%m/%Y') as created
-                        FROM lists l WHERE l.workspace_id = ? ORDER BY l.created_at DESC";
+                $sql = "SELECT {$creatorCols}
+                        FROM lists l
+                        LEFT JOIN users u_creator ON u_creator.id = l.created_by
+                        WHERE l.workspace_id = ?
+                        ORDER BY l.created_at DESC";
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute([$workspace_id]);
-                jsonResponse(true, $stmt->fetchAll());
+                $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($rows as &$r) {
+                    $r['creator'] = function_exists('domationFormatCreator') ? domationFormatCreator($r) : null;
+                }
+                unset($r);
+                jsonResponse(true, $rows);
                 return;
             }
 
@@ -128,11 +141,16 @@ switch ($method) {
             $stmtCount->execute($params);
             $total = (int) $stmtCount->fetchColumn();
 
-            $sql = "SELECT l.id, l.name, l.source, l.type, l.subscriber_count as count, l.phone_count, DATE_FORMAT(l.created_at, '%d/%m/%Y') as created
-                    FROM lists l" . $whereSql . " ORDER BY l.created_at DESC LIMIT $limit OFFSET $offset";
+            $sql = "SELECT {$creatorCols}
+                    FROM lists l
+                    LEFT JOIN users u_creator ON u_creator.id = l.created_by" . $whereSql . " ORDER BY l.created_at DESC LIMIT $limit OFFSET $offset";
             $stmt = $pdo->prepare($sql);
             $stmt->execute($params);
-            $lists = $stmt->fetchAll();
+            $lists = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($lists as &$r) {
+                $r['creator'] = function_exists('domationFormatCreator') ? domationFormatCreator($r) : null;
+            }
+            unset($r);
 
             jsonResponse(true, [
                 'data' => $lists,
@@ -465,10 +483,11 @@ switch ($method) {
                     // Create new list
                     $newListName = $data['new_list_name'] ?? 'Merged List';
                     $newListId = uniqid();
+                    $currentUserId = get_current_user_id();
 
                     // Create new list (static type)
-                    $insertListSql = "INSERT INTO lists (workspace_id, id, name, source, type, subscriber_count, created_at) VALUES (?, ?, ?, 'Merged', 'static', ?, NOW())";
-                    $pdo->prepare($insertListSql)->execute([$workspace_id, $newListId, $newListName, $totalMembers]);
+                    $insertListSql = "INSERT INTO lists (workspace_id, id, name, source, type, subscriber_count, created_by, updated_by, created_at) VALUES (?, ?, ?, 'Merged', 'static', ?, ?, ?, NOW())";
+                    $pdo->prepare($insertListSql)->execute([$workspace_id, $newListId, $newListName, $totalMembers, $currentUserId, $currentUserId]);
 
                     // Bulk Insert all subscribers into new list
                     if (!empty($subscriberIds)) {
@@ -521,26 +540,170 @@ switch ($method) {
             return;
         }
 
-        // Default POST - Create new list
+        // Route: populate_by_filter / create_with_filter OR Default POST with optional criteria/auto_populate
+        if (isset($_GET['route']) && in_array($_GET['route'], ['populate_by_filter', 'create_with_filter'], true)) {
+            try {
+                $data = json_decode(file_get_contents("php://input"), true) ?: [];
+                $listId = $data['list_id'] ?? ($data['id'] ?? $path);
+                $listName = trim((string)($data['name'] ?? ($data['list_name'] ?? '')));
+                $source = $data['source'] ?? 'Bộ lọc nâng cao';
+                $currentUserId = get_current_user_id();
+
+                require_once 'segment_helper.php';
+                ensureAllCrmContactsSyncedForFilter($pdo, (int)$workspace_id);
+
+                if (!$listId) {
+                    if ($listName === '') {
+                        jsonResponse(false, null, 'Tên danh sách là bắt buộc');
+                        return;
+                    }
+                    $stmtCheck = $pdo->prepare("SELECT id FROM lists WHERE workspace_id = ? AND name = ? LIMIT 1");
+                    $stmtCheck->execute([$workspace_id, $listName]);
+                    $existing = $stmtCheck->fetch(PDO::FETCH_ASSOC);
+                    if ($existing) {
+                        $listId = $existing['id'];
+                    } else {
+                        $listId = uniqid();
+                        $pdo->prepare("INSERT INTO lists (workspace_id, id, name, source, type, subscriber_count, created_by, updated_by, created_at) VALUES (?, ?, ?, ?, 'static', 0, ?, ?, NOW())")
+                            ->execute([$workspace_id, $listId, $listName, $source, $currentUserId, $currentUserId]);
+                    }
+                }
+
+                $criteriaRaw = $data['criteria'] ?? '[]';
+                $criteriaJson = is_string($criteriaRaw) ? $criteriaRaw : json_encode($criteriaRaw);
+                $res = buildSegmentWhereClause($criteriaJson, $workspace_id);
+
+                $onlyWithEmail = !empty($data['only_with_email']);
+                $extraEmailSql = $onlyWithEmail
+                    ? " AND s.email IS NOT NULL AND TRIM(s.email) != '' AND s.email NOT LIKE '%@no-email.domation' AND s.email NOT LIKE '%@zalo.me' AND s.email NOT LIKE '%@zalo-oa.vn' AND s.email NOT LIKE '%@meta.local' AND s.email NOT LIKE '%@facebook.com'"
+                    : "";
+
+                $insSql = "
+                    INSERT IGNORE INTO subscriber_lists (workspace_id, subscriber_id, list_id)
+                    SELECT ?, s.id, ?
+                    FROM subscribers s
+                    WHERE s.workspace_id = ?
+                      AND s.status IN ('active', 'lead', 'customer')
+                      $extraEmailSql
+                      AND " . $res['sql'];
+                $insParams = array_merge([$workspace_id, $listId, $workspace_id], $res['params']);
+                $stmtIns = $pdo->prepare($insSql);
+                $stmtIns->execute($insParams);
+                $addedCount = $stmtIns->rowCount();
+
+                // Recalculate list counts
+                $stmtCnt = $pdo->prepare("
+                    SELECT
+                        COUNT(sl.subscriber_id) AS total_cnt,
+                        COUNT(CASE WHEN (s.phone_number IS NOT NULL AND s.phone_number != '') OR (s.phone IS NOT NULL AND s.phone != '') THEN 1 END) AS phone_cnt
+                    FROM subscriber_lists sl
+                    INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = sl.workspace_id
+                    WHERE sl.list_id = ? AND sl.workspace_id = ?
+                ");
+                $stmtCnt->execute([$listId, $workspace_id]);
+                [$totalCnt, $phoneCnt] = $stmtCnt->fetch(PDO::FETCH_NUM) ?: [0, 0];
+
+                $pdo->prepare("UPDATE lists SET subscriber_count = ?, phone_count = ?, updated_by = ? WHERE id = ? AND workspace_id = ?")
+                    ->execute([(int)$totalCnt, (int)$phoneCnt, $currentUserId, $listId, $workspace_id]);
+
+                jsonResponse(true, [
+                    'id' => $listId,
+                    'list_id' => $listId,
+                    'name' => $listName,
+                    'source' => $source,
+                    'type' => 'static',
+                    'count' => (int)$totalCnt,
+                    'phone_count' => (int)$phoneCnt,
+                    'populated_count' => (int)$addedCount,
+                    'added_count' => (int)$addedCount,
+                    'created_by' => $currentUserId,
+                    'updated_by' => $currentUserId,
+                    'creator' => get_current_user_info()
+                ], "Đã thêm $addedCount liên hệ vào danh sách.");
+                return;
+            } catch (Throwable $e) {
+                error_log("Lists populate_by_filter Error: " . $e->getMessage());
+                jsonResponse(false, null, 'Lỗi lọc danh sách: ' . $e->getMessage());
+                return;
+            }
+        }
+
+        // Default POST - Create new list (with optional criteria / auto_populate)
         try {
-            $data = json_decode(file_get_contents("php://input"), true);
+            $data = json_decode(file_get_contents("php://input"), true) ?: [];
             $id = $data['id'] ?? uniqid();
-            
+            $listName = trim((string)($data['name'] ?? ''));
+            $source = $data['source'] ?? 'Manual';
+
             // [FIX] Check if list with same name already exists in this workspace
-            $stmtCheck = $pdo->prepare("SELECT id FROM lists WHERE workspace_id = ? AND name = ?");
-            $stmtCheck->execute([$workspace_id, $data['name']]);
-            $existing = $stmtCheck->fetch();
-            
+            $stmtCheck = $pdo->prepare("SELECT id, subscriber_count, phone_count FROM lists WHERE workspace_id = ? AND name = ?");
+            $stmtCheck->execute([$workspace_id, $listName]);
+            $existing = $stmtCheck->fetch(PDO::FETCH_ASSOC);
+
+            $currentUserId = get_current_user_id();
             if ($existing) {
-                // Return existing list info instead of erroring
-                $data['id'] = $existing['id'];
+                $id = $existing['id'];
+                $data['id'] = $id;
+            } else {
+                $stmt = $pdo->prepare("INSERT INTO lists (workspace_id, id, name, source, type, subscriber_count, created_by, updated_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+                $stmt->execute([$workspace_id, $id, $listName, $source, $data['type'] ?? 'static', $data['count'] ?? 0, $currentUserId, $currentUserId]);
+                $data['id'] = $id;
+            }
+
+            $populatedCount = 0;
+            if (!empty($data['criteria']) || !empty($data['auto_populate'])) {
+                require_once 'segment_helper.php';
+                ensureAllCrmContactsSyncedForFilter($pdo, (int)$workspace_id);
+                $criteriaRaw = $data['criteria'] ?? '[]';
+                $criteriaJson = is_string($criteriaRaw) ? $criteriaRaw : json_encode($criteriaRaw);
+                $res = buildSegmentWhereClause($criteriaJson, $workspace_id);
+
+                $onlyWithEmail = !empty($data['only_with_email']);
+                $extraEmailSql = $onlyWithEmail
+                    ? " AND s.email IS NOT NULL AND TRIM(s.email) != '' AND s.email NOT LIKE '%@no-email.domation' AND s.email NOT LIKE '%@zalo.me' AND s.email NOT LIKE '%@zalo-oa.vn' AND s.email NOT LIKE '%@meta.local' AND s.email NOT LIKE '%@facebook.com'"
+                    : "";
+
+                $insSql = "
+                    INSERT IGNORE INTO subscriber_lists (workspace_id, subscriber_id, list_id)
+                    SELECT ?, s.id, ?
+                    FROM subscribers s
+                    WHERE s.workspace_id = ?
+                      AND s.status IN ('active', 'lead', 'customer')
+                      $extraEmailSql
+                      AND " . $res['sql'];
+                $insParams = array_merge([$workspace_id, $id, $workspace_id], $res['params']);
+                $stmtIns = $pdo->prepare($insSql);
+                $stmtIns->execute($insParams);
+                $populatedCount = $stmtIns->rowCount();
+
+                $stmtCnt = $pdo->prepare("
+                    SELECT
+                        COUNT(sl.subscriber_id) AS total_cnt,
+                        COUNT(CASE WHEN (s.phone_number IS NOT NULL AND s.phone_number != '') OR (s.phone IS NOT NULL AND s.phone != '') THEN 1 END) AS phone_cnt
+                    FROM subscriber_lists sl
+                    INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = sl.workspace_id
+                    WHERE sl.list_id = ? AND sl.workspace_id = ?
+                ");
+                $stmtCnt->execute([$id, $workspace_id]);
+                [$totalCnt, $phoneCnt] = $stmtCnt->fetch(PDO::FETCH_NUM) ?: [0, 0];
+
+                $pdo->prepare("UPDATE lists SET subscriber_count = ?, phone_count = ?, updated_by = ? WHERE id = ? AND workspace_id = ?")
+                    ->execute([(int)$totalCnt, (int)$phoneCnt, $currentUserId, $id, $workspace_id]);
+
+                $data['count'] = (int)$totalCnt;
+                $data['phone_count'] = (int)$phoneCnt;
+                $data['populated_count'] = (int)$populatedCount;
+                $data['added_count'] = (int)$populatedCount;
+            } elseif ($existing) {
+                $data['count'] = (int)($existing['subscriber_count'] ?? 0);
+                $data['phone_count'] = (int)($existing['phone_count'] ?? 0);
                 jsonResponse(true, $data, "Sử dụng danh sách hiện có.");
                 return;
             }
 
-            $stmt = $pdo->prepare("INSERT INTO lists (workspace_id, id, name, source, type, subscriber_count, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())");
-            $stmt->execute([$workspace_id, $id, $data['name'], $data['source'], $data['type'] ?? 'static', $data['count'] ?? 0]);
-            $data['id'] = $id;
+            $data['created_by'] = $currentUserId;
+            $data['updated_by'] = $currentUserId;
+            $data['creator'] = get_current_user_info();
             jsonResponse(true, $data);
         } catch (Exception $e) {
             jsonResponse(false, null, 'Lỗi chèn dữ liệu: ' . $e->getMessage());
@@ -551,9 +714,48 @@ switch ($method) {
         try {
             if (!$path)
                 jsonResponse(false, null, 'ID required');
-            $data = json_decode(file_get_contents("php://input"), true);
-            $stmt = $pdo->prepare("UPDATE lists SET name = ?, source = ?, subscriber_count = ? WHERE id = ? AND workspace_id = ?");
-            $stmt->execute([$data['name'], $data['source'] ?? 'Manual', $data['count'], $path, $workspace_id]);
+            $data = json_decode(file_get_contents("php://input"), true) ?: [];
+            $currentUserId = get_current_user_id();
+            $stmt = $pdo->prepare("UPDATE lists SET name = ?, source = ?, subscriber_count = COALESCE(?, subscriber_count), updated_by = ? WHERE id = ? AND workspace_id = ?");
+            $stmt->execute([$data['name'] ?? '', $data['source'] ?? 'Manual', $data['count'] ?? null, $currentUserId, $path, $workspace_id]);
+
+            if (!empty($data['criteria']) || !empty($data['auto_populate'])) {
+                require_once 'segment_helper.php';
+                ensureAllCrmContactsSyncedForFilter($pdo, (int)$workspace_id);
+                $criteriaRaw = $data['criteria'] ?? '[]';
+                $criteriaJson = is_string($criteriaRaw) ? $criteriaRaw : json_encode($criteriaRaw);
+                $res = buildSegmentWhereClause($criteriaJson, $workspace_id);
+
+                $stmtIns = $pdo->prepare("
+                    INSERT IGNORE INTO subscriber_lists (workspace_id, subscriber_id, list_id)
+                    SELECT ?, s.id, ?
+                    FROM subscribers s
+                    WHERE s.workspace_id = ?
+                      AND s.status IN ('active', 'lead', 'customer')
+                      AND " . $res['sql']
+                );
+                $stmtIns->execute(array_merge([$workspace_id, $path, $workspace_id], $res['params']));
+                $addedCount = $stmtIns->rowCount();
+
+                $stmtCnt = $pdo->prepare("
+                    SELECT
+                        COUNT(sl.subscriber_id) AS total_cnt,
+                        COUNT(CASE WHEN (s.phone_number IS NOT NULL AND s.phone_number != '') OR (s.phone IS NOT NULL AND s.phone != '') THEN 1 END) AS phone_cnt
+                    FROM subscriber_lists sl
+                    INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = sl.workspace_id
+                    WHERE sl.list_id = ? AND sl.workspace_id = ?
+                ");
+                $stmtCnt->execute([$path, $workspace_id]);
+                [$totalCnt, $phoneCnt] = $stmtCnt->fetch(PDO::FETCH_NUM) ?: [0, 0];
+
+                $pdo->prepare("UPDATE lists SET subscriber_count = ?, phone_count = ?, updated_by = ? WHERE id = ? AND workspace_id = ?")
+                    ->execute([(int)$totalCnt, (int)$phoneCnt, $currentUserId, $path, $workspace_id]);
+
+                $data['count'] = (int)$totalCnt;
+                $data['phone_count'] = (int)$phoneCnt;
+                $data['populated_count'] = (int)$addedCount;
+            }
+
             jsonResponse(true, $data);
         } catch (Throwable $e) {
             error_log("Lists PUT Error: " . $e->getMessage());

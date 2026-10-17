@@ -1,9 +1,15 @@
-
 export interface WebProperty {
     id: string;
     name: string;
     domain: string;
     created_at?: string;
+    ai_enabled?: boolean;
+    docs_count?: number;
+    queries_count?: number;
+    stats?: {
+        docs_count?: number;
+        queries_count?: number;
+    };
 }
 
 export interface WebStats {
@@ -31,6 +37,11 @@ export interface Visitor {
     id: string;
     zalo_user_id?: string;
     subscriber_id?: string;
+    contact_id?: number | null;
+    lead_score?: number;
+    owner_id?: number | null;
+    salesperson?: string | null;
+    tags?: string[] | string;
     first_visit_at: string;
     last_visit_at: string;
     visit_count: number;

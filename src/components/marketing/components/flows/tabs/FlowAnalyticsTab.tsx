@@ -158,8 +158,8 @@ const FlowAnalyticsTab: React.FC<{
         if (type === 'trigger') {
             const tType = config.type || 'segment';
             switch (tType) {
-                case 'segment': return (config.targetSubtype === 'list' || config.targetSubtype === 'sync') ? { icon: ListPlus, gradient: 'from-emerald-500 to-teal-600', text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10', label: 'List Trigger' } : { icon: Layers, gradient: 'from-orange-500 to-[#ca7900]', inlineGradient: 'linear-gradient(135deg, #f97316 0%, #ca7900 100%)', text: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-500/10', label: 'Segment Trigger' };
-                case 'form': return { icon: FileInput, gradient: 'from-[#f59e0b] to-[#d97706]', inlineGradient: 'linear-gradient(135deg, #fbbf24 0%, #f97316 100%)', text: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-50 dark:bg-yellow-500/10', label: 'Form Trigger' };
+                case 'segment': return (config.targetSubtype === 'list' || config.targetSubtype === 'sync') ? { icon: ListPlus, gradient: 'from-emerald-500 to-teal-600', text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10', label: 'List Trigger' } : { icon: Layers, gradient: 'from-orange-500 to-[#BD1D2D]', inlineGradient: 'linear-gradient(135deg, #f97316 0%, #BD1D2D 100%)', text: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-500/10', label: 'Segment Trigger' };
+                case 'form': return { icon: FileInput, gradient: 'from-[#BD1D2D] to-[#991522]', inlineGradient: 'linear-gradient(135deg, #BD1D2D 0%, #f97316 100%)', text: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-50 dark:bg-yellow-500/10', label: 'Form Trigger' };
                 case 'purchase': return { icon: ShoppingCart, gradient: 'from-pink-500 to-rose-600', text: 'text-pink-600 dark:text-pink-400', bg: 'bg-pink-50 dark:bg-pink-500/10', label: 'Purchase Trigger' };
                 case 'custom_event': return { icon: Zap, gradient: 'from-blue-500 to-indigo-600', text: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10', label: 'Custom Event' };
                 case 'tag': return { icon: Tag, gradient: 'from-emerald-500 to-teal-600', text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10', label: 'Tag Trigger' };
@@ -1068,7 +1068,7 @@ const FlowAnalyticsTab: React.FC<{
         return (
             <div
                 onClick={onClick}
-                className={`stat-card bg-white dark:bg-slate-900 p-5 md:p-6 rounded-[24px] border border-slate-100/70 dark:border-slate-800/80 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex flex-col justify-between hover:shadow-[0_12px_36px_rgba(0,0,0,0.035)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden min-h-[145px] group ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
+                className={`hover-lift bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-5 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex flex-col justify-between hover:border-[var(--color-primary-light)] transition-all duration-300 relative overflow-hidden min-h-[145px] group ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
             >
                 {decorSvg && (
                     <div className="decor-svg" style={{ color: hexColor }}>
@@ -1125,24 +1125,21 @@ const FlowAnalyticsTab: React.FC<{
     return (
         <div ref={containerRef} className="p-3 md:p-6 lg:px-8 lg:pb-8 lg:pt-4 space-y-4 md:space-y-8 max-w-[1400px] mx-auto animate-in fade-in duration-500 relative pb-20">
 
-            {/* Premium Header Dashboard */}
-            <div className="bg-gradient-to-br from-slate-950 via-[#0f172a] to-slate-900 rounded-2xl md:rounded-[24px] p-6 md:p-10 text-white shadow-xl relative overflow-hidden group border border-slate-800/80">
-                <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600 opacity-[0.1] rounded-full blur-[120px] -mr-48 -mt-48 transition-all duration-700 group-hover:opacity-[0.15]"></div>
-                <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-emerald-500 opacity-[0.05] rounded-full blur-[100px] -ml-32 -mb-32"></div>
-
-                <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-10 items-center">
+            {/* Clean SaaS ERP Performance Header Banner */}
+            <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-5 md:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
                     {/* Left: Main Performance */}
-                    <div className="lg:col-span-5 lg:border-r border-white/10 lg:pr-10">
-                        <div className="flex items-center justify-between mb-6 md:mb-8">
-                            <div className="flex items-center gap-3 md:gap-4">
-                                <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
-                                    <Activity className="w-5 h-5 md:w-6 md:h-6 text-white" />
+                    <div className="lg:col-span-5 lg:border-r border-[var(--color-border-light)] lg:pr-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-[14px] bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 border border-blue-100 dark:border-blue-800/40">
+                                    <Activity className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <h3 className="text-lg md:text-2xl font-bold tracking-tight">Hiệu suất vận hành</h3>
-                                    <div className="flex items-center gap-2 mt-0.5 md:mt-1">
-                                        <span className={`w-1.5 h-1.5 rounded-full ${currentFlow.status === 'active' ? 'bg-emerald-400 animate-pulse' : 'bg-slate-50 dark:bg-slate-950'}`} title={currentFlow.status === 'active' ? 'Active' : 'Paused'}></span>
-                                        <span className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono">
+                                    <h3 className="text-base md:text-lg font-bold text-[var(--color-text)]">Hiệu suất vận hành</h3>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                        <span className={`w-1.5 h-1.5 rounded-full ${currentFlow.status === 'active' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} title={currentFlow.status === 'active' ? 'Active' : 'Paused'}></span>
+                                        <span className="text-[10px] font-mono font-semibold text-[var(--color-text-muted)]">
                                             ID: {currentFlow.id}
                                         </span>
                                     </div>
@@ -1150,100 +1147,98 @@ const FlowAnalyticsTab: React.FC<{
                             </div>
                             <button
                                 onClick={() => setIsSimulateModalOpen(true)}
-                                className="px-3 md:px-5 py-2 md:py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg md:rounded-xl text-[9px] md:text-[11px] font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 md:gap-2"
+                                className="h-8 px-3 rounded-[10px] border border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[var(--color-surface)] text-xs font-semibold text-[var(--color-text)] flex items-center gap-1.5 transition-colors shadow-xs"
                             >
-                                <Beaker className="w-3.5 h-3.5 md:w-4 h-4 text-blue-400" />
-                                <span className="hidden xs:inline">FLOW TEST</span>
-                                <span className="xs:hidden">TEST</span>
+                                <Beaker className="w-3.5 h-3.5 text-blue-500" />
+                                <span>FLOW TEST</span>
                             </button>
                         </div>
 
-                        <div className="space-y-4 md:space-y-6">
+                        <div className="space-y-3">
                             <div className="flex justify-between items-end">
                                 <div>
-                                    <p className="text-[9px] md:text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-widest mb-1">Tỷ lệ hoàn tất</p>
+                                    <p className="text-[10px] font-bold uppercase text-[var(--color-text-muted)] tracking-wider mb-0.5">Tỷ lệ hoàn tất</p>
                                     <div className="flex items-baseline gap-2">
-                                        <span className="text-2xl md:text-4xl font-black text-white tracking-tighter">{completionRate}%</span>
-                                        <span className="text-[10px] md:text-xs text-slate-400 font-medium">({stats.completed}/{stats.enrolled})</span>
+                                        <span className="text-2xl font-black text-[var(--color-text)]">{completionRate}%</span>
+                                        <span className="text-xs text-[var(--color-text-muted)] font-medium">({stats.completed}/{stats.enrolled})</span>
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-[9px] md:text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-widest mb-1">Tỷ lệ mở TB</p>
-                                    <span className="text-xl md:text-2xl font-black text-emerald-400 tracking-tighter">{realOpenRate}%</span>
+                                    <p className="text-[10px] font-bold uppercase text-[var(--color-text-muted)] tracking-wider mb-0.5">Tỷ lệ mở TB</p>
+                                    <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">{realOpenRate}%</span>
                                 </div>
                             </div>
 
-                            <div className="h-1.5 md:h-2 bg-white/10 rounded-full overflow-hidden">
+                            <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                                 <div
-                                    className="h-full bg-gradient-to-r from-blue-500 to-emerald-400 transition-all duration-1000"
+                                    className="h-full bg-emerald-500 rounded-full transition-all duration-1000"
                                     style={{ width: `${completionRate}%` }}
                                 ></div>
                             </div>
                         </div>
-
                     </div>
 
                     {/* Middle: Key Figures & Link */}
-                    <div className="lg:col-span-7 flex flex-col gap-6">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8">
-                            <div className="bg-white/5 p-3 rounded-xl border border-white/5 lg:bg-transparent lg:p-0 lg:border-0">
-                                <p className="text-[8px] md:text-[9px] font-bold uppercase text-slate-400 tracking-widest mb-1.5 md:mb-2 text-center lg:text-left">đã gửi</p>
-                                <div className="flex items-center justify-center lg:justify-start gap-2">
-                                    <div className="p-1 px-1.5 bg-white/5 rounded-lg border border-white/5 hidden md:block">
-                                        <Mail className="w-3 h-3 text-blue-400" />
+                    <div className="lg:col-span-7 flex flex-col gap-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div className="p-3 rounded-[14px] bg-[var(--color-bg)] border border-[var(--color-border-light)] text-center sm:text-left">
+                                <p className="text-[10px] font-bold uppercase text-[var(--color-text-muted)] tracking-wider mb-1">Đã gửi</p>
+                                <div className="flex items-center justify-center sm:justify-start gap-2">
+                                    <div className="w-7 h-7 rounded-[8px] bg-blue-50 dark:bg-blue-950/40 text-blue-600 flex items-center justify-center shrink-0">
+                                        <Mail className="w-3.5 h-3.5" />
                                     </div>
-                                    <span className="text-base md:text-lg font-bold">{(stats.totalSent || 0).toLocaleString()}</span>
+                                    <span className="text-base font-bold text-[var(--color-text)] tabular-nums">{(stats.totalSent || 0).toLocaleString()}</span>
                                 </div>
                             </div>
-                            <div className="bg-white/5 p-3 rounded-xl border border-white/5 lg:bg-transparent lg:p-0 lg:border-0">
-                                <p className="text-[8px] md:text-[9px] font-bold uppercase text-slate-400 tracking-widest mb-1.5 md:mb-2 text-center lg:text-left">Đã mở</p>
-                                <div className="flex items-center justify-center lg:justify-start gap-2">
-                                    <div className="p-1 px-1.5 bg-white/5 rounded-lg border border-white/5 hidden md:block">
-                                        <MailOpen className="w-3 h-3 text-emerald-400" />
+                            <div className="p-3 rounded-[14px] bg-[var(--color-bg)] border border-[var(--color-border-light)] text-center sm:text-left">
+                                <p className="text-[10px] font-bold uppercase text-[var(--color-text-muted)] tracking-wider mb-1">Đã mở</p>
+                                <div className="flex items-center justify-center sm:justify-start gap-2">
+                                    <div className="w-7 h-7 rounded-[8px] bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center shrink-0">
+                                        <MailOpen className="w-3.5 h-3.5" />
                                     </div>
-                                    <span className="text-base md:text-lg font-bold">{(stats.totalOpened || 0).toLocaleString()}</span>
+                                    <span className="text-base font-bold text-[var(--color-text)] tabular-nums">{(stats.totalOpened || 0).toLocaleString()}</span>
                                 </div>
                             </div>
-                            <div className="bg-white/5 p-3 rounded-xl border border-white/5 lg:bg-transparent lg:p-0 lg:border-0">
-                                <p className="text-[8px] md:text-[9px] font-bold uppercase text-slate-400 tracking-widest mb-1.5 md:mb-2 text-center lg:text-left">Gửi lỗi</p>
-                                <div className="flex items-center justify-center lg:justify-start gap-2">
-                                    <div className="p-1 px-1.5 bg-white/5 rounded-lg border border-white/5 hidden md:block">
-                                        <AlertOctagon className={`w-3 h-3 ${(stats.totalFailed || 0) > 0 ? 'text-rose-400' : 'text-slate-300'}`} />
+                            <div className="p-3 rounded-[14px] bg-[var(--color-bg)] border border-[var(--color-border-light)] text-center sm:text-left">
+                                <p className="text-[10px] font-bold uppercase text-[var(--color-text-muted)] tracking-wider mb-1">Gửi lỗi</p>
+                                <div className="flex items-center justify-center sm:justify-start gap-2">
+                                    <div className="w-7 h-7 rounded-[8px] bg-rose-50 dark:bg-rose-950/40 text-rose-600 flex items-center justify-center shrink-0">
+                                        <AlertOctagon className="w-3.5 h-3.5" />
                                     </div>
-                                    <span className={`text-base md:text-lg font-bold ${(stats.totalFailed || 0) > 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+                                    <span className={`text-base font-bold tabular-nums ${(stats.totalFailed || 0) > 0 ? 'text-rose-600' : 'text-[var(--color-text)]'}`}>
                                         {(stats.totalFailed || 0).toLocaleString()}
                                     </span>
                                 </div>
                             </div>
-                            <div className="bg-white/5 p-3 rounded-xl border border-white/5 lg:bg-transparent lg:p-0 lg:border-0">
-                                <p className="text-[8px] md:text-[9px] font-bold uppercase text-slate-400 tracking-widest mb-1.5 md:mb-2 text-center lg:text-left">Hủy đăng ký</p>
-
-                                <div className="flex items-center justify-center lg:justify-start gap-2">
-                                    <div className="p-1 px-1.5 bg-white/5 rounded-lg border border-white/5 hidden md:block">
-                                        <UserMinus className={`w-3 h-3 ${(stats.totalUnsubscribed || 0) > 0 ? 'text-orange-400' : 'text-slate-300'}`} />
+                            <div className="p-3 rounded-[14px] bg-[var(--color-bg)] border border-[var(--color-border-light)] text-center sm:text-left">
+                                <p className="text-[10px] font-bold uppercase text-[var(--color-text-muted)] tracking-wider mb-1">Hủy đăng ký</p>
+                                <div className="flex items-center justify-center sm:justify-start gap-2">
+                                    <div className="w-7 h-7 rounded-[8px] bg-orange-50 dark:bg-orange-950/40 text-orange-600 flex items-center justify-center shrink-0">
+                                        <UserMinus className="w-3.5 h-3.5" />
                                     </div>
-                                    <span className={`text-base md:text-lg font-bold ${(stats.totalUnsubscribed || 0) > 0 ? 'text-orange-400' : 'text-slate-400'}`}>
+                                    <span className={`text-base font-bold tabular-nums ${(stats.totalUnsubscribed || 0) > 0 ? 'text-orange-600' : 'text-[var(--color-text)]'}`}>
                                         {(stats.totalUnsubscribed || 0).toLocaleString()}
                                     </span>
                                 </div>
                             </div>
                         </div>
 
-                        {/* NEW: Campaign Link - REPOSITIONED & UNIFIED */}
+                        {/* Campaign Link */}
                         {triggerStep?.config?.type === 'campaign' && triggerStep.config.targetId && (
-                            <div className="flex items-center gap-4 p-3 md:p-4 bg-white/[0.03] border border-white/5 rounded-xl animate-in fade-in slide-in-from-bottom-4 duration-700">
-                                <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center border border-blue-500/20">
-                                    <Send className="w-5 h-5 text-blue-300" />
+                            <div className="flex items-center gap-3 p-3 bg-[var(--color-bg)] border border-[var(--color-border-light)] rounded-[14px]">
+                                <div className="w-9 h-9 bg-rose-50 dark:bg-rose-950/40 text-rose-600 rounded-[10px] flex items-center justify-center shrink-0">
+                                    <Send className="w-4 h-4" />
                                 </div>
-                                <div className="flex-1">
-                                    <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest">Chiến dịch gốc</p>
-                                    <p className="text-[10px] md:text-xs font-bold text-slate-200">Truy cập Báo cáo chi tiết</p>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-wider">Chiến dịch gốc</p>
+                                    <p className="text-xs font-bold text-[var(--color-text)] truncate">Truy cập Báo cáo chi tiết</p>
                                 </div>
                                 <button
                                     onClick={() => navigate('/marketing/campaigns', { state: { openCampaignId: triggerStep.config.targetId } })}
-                                    className="px-3 md:px-4 py-2 bg-white text-slate-950 hover:bg-slate-100 rounded-lg text-[10px] md:text-[11px] font-bold uppercase tracking-tight transition-all flex items-center gap-1.5 md:gap-2"
+                                    className="h-8 px-3 bg-[var(--color-surface)] border border-[var(--color-border)] hover:bg-[var(--color-bg)] rounded-[10px] text-xs font-semibold text-[var(--color-text)] transition-all flex items-center gap-1.5 shadow-xs"
                                 >
-                                    <span className="hidden xs:inline">Báo cáo</span><span className="xs:hidden">Xem</span> <ExternalLink className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                                    <span>Báo cáo</span>
+                                    <ExternalLink className="w-3.5 h-3.5" />
                                 </button>
                             </div>
                         )}

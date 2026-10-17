@@ -1,4 +1,4 @@
-﻿
+
 import React from 'react';
 import {
     X, Lightbulb, Zap, Users, ShieldCheck,
@@ -15,7 +15,7 @@ interface AudienceTipsModalProps {
 import Button from '../common/Button';
 
 const TipCard = ({ icon: Icon, title, description, colorClass, highlight }: any) => (
-    <div className="group bg-white hover:bg-slate-50/50 p-5 rounded-[24px] border border-slate-100 hover:border-slate-200 transition-all duration-300 hover:shadow-sm relative overflow-hidden">
+    <div className="group bg-white hover:bg-slate-50/50 p-5 rounded-[18px] border border-slate-100 hover:border-slate-200 transition-all duration-300 hover:shadow-sm relative overflow-hidden">
         {/* Subtle hover background highlight */}
         <div className={`absolute inset-0 opacity-0 group-hover:opacity-[0.03] transition-opacity duration-500 ${colorClass}`} />
 
@@ -23,7 +23,7 @@ const TipCard = ({ icon: Icon, title, description, colorClass, highlight }: any)
             <div className="relative shrink-0">
                 {/* Glow effect - refined blur */}
                 <div className={`absolute inset-0 blur-sm opacity-20 group-hover:opacity-30 transition-opacity duration-300 rounded-full ${colorClass}`} />
-                <div className={`relative w-12 h-12 rounded-[18px] flex items-center justify-center shadow-sm transition-transform group-hover:scale-105 ${colorClass} text-white`}>
+                <div className={`relative w-12 h-12 rounded-[14px] flex items-center justify-center shadow-sm transition-transform group-hover:scale-105 ${colorClass} text-white`}>
                     <Icon className="w-5.5 h-5.5 md:w-6 md:h-6" strokeWidth={2.5} />
                 </div>
             </div>
@@ -57,21 +57,21 @@ const AudienceTipsModal: React.FC<AudienceTipsModalProps> = ({ isOpen, onClose }
         >
             <div className="relative bg-white">
                 {/* Top Gradient Bar - Thinner and more subtle */}
-                <div className="sticky top-0 left-0 w-full h-1.5 bg-gradient-to-r from-amber-400 via-orange-500 to-rose-500 z-10" />
+                <div className="sticky top-0 left-0 w-full h-1.5 bg-[var(--color-primary)] z-10" />
 
                 <div className="p-8 lg:p-12">
                     <div className="flex items-center justify-between mb-8 lg:mb-10">
                         <div className="flex items-center gap-6">
                             <div className="relative">
-                                <div className="absolute inset-0 bg-amber-400 blur-lg opacity-10 animate-pulse" />
-                                <div className="relative w-16 h-16 rounded-[24px] bg-gradient-to-br from-amber-400 to-amber-600 text-white flex items-center justify-center shadow-lg shadow-amber-600/10 group transition-transform hover:rotate-3 border border-amber-300/20">
+                                <div className="absolute inset-0 bg-[var(--color-primary)] blur-lg opacity-10 animate-pulse" />
+                                <div className="relative w-16 h-16 rounded-[18px] bg-[var(--color-primary)] text-white flex items-center justify-center shadow-lg shadow-[var(--color-primary)]/10 group transition-transform hover:rotate-3 border border-[var(--color-primary)]/20">
                                     <Lightbulb className="w-8 h-8 fill-white/20" strokeWidth={2.5} />
                                 </div>
                             </div>
                             <div>
                                 <h1 className="text-3xl font-black text-slate-900 tracking-tighter leading-none uppercase">Mẹo tăng trưởng</h1>
                                 <div className="flex items-center gap-2 mt-2">
-                                    <span className="h-3.5 w-0.5 bg-amber-400 rotate-12"></span>
+                                    <span className="h-3.5 w-0.5 bg-[var(--color-primary)] rotate-12"></span>
                                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">
                                         Tối ưu hóa dữ liệu & Marketing
                                     </p>

@@ -1028,190 +1028,142 @@ class HRMController {
         $statusInput = $b['status'];
         $approverNote = $b['reason'] ?? 'Không có ghi chú thêm';
 
-        $stmtL = $this->db->prepare("SELECT l.*, u.full_name FROM hrm_leave_requests l JOIN users u ON l.user_id = u.id WHERE l.id = ?");
-        $stmtL->execute([$id]);
-        $leaveRow = $stmtL->fetch(PDO::FETCH_ASSOC);
-
-        if (!$leaveRow) {
-            respond(404, null, 'Yêu cầu nghỉ phép không tồn tại', false);
+        $ownTx = !$this->db->inTransaction();
+        if ($ownTx) {
+            $this->db->beginTransaction();
         }
 
-        $isApprover1 = ((int)$auth['user_id'] === (int)$leaveRow['approver_id']);
-        $isApprover2 = ((int)$auth['user_id'] === (int)$leaveRow['approver_id_2']);
-        $isSuperAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
-        $isPrivileged = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr', 'leader', 'team_lead', 'teamlead', 'marketing_lead'], true);
+        try {
+            $stmtLock = $this->db->prepare("SELECT * FROM hrm_leave_requests WHERE id = ? FOR UPDATE");
+            $stmtLock->execute([$id]);
+            $lockedLeave = $stmtLock->fetch(PDO::FETCH_ASSOC);
 
-        $isCreator = ((int)$auth['user_id'] === (int)$leaveRow['user_id']);
-        if ($isCreator && !$isApprover1 && !$isApprover2 && !$isPrivileged) {
-            respond(403, null, 'Người tạo đơn không được tự phê duyệt đề xuất của chính mình', false);
-        }
+            $stmtL = $this->db->prepare("SELECT l.*, u.full_name FROM hrm_leave_requests l JOIN users u ON l.user_id = u.id WHERE l.id = ? FOR UPDATE");
+            $stmtL->execute([$id]);
+            $leaveRow = $stmtL->fetch(PDO::FETCH_ASSOC);
 
-        if (!$isApprover1 && !$isApprover2 && !$isPrivileged) {
-            respond(403, null, 'Bạn không có quyền phê duyệt yêu cầu này', false);
-        }
+            if (!$lockedLeave || !$leaveRow) {
+                if ($ownTx && $this->db->inTransaction()) $this->db->rollBack();
+                respond(404, null, 'Yêu cầu nghỉ phép không tồn tại', false);
+            }
 
-        if ($isApprover2 && !$isApprover1 && !$isSuperAdmin) {
-            if ($leaveRow['status_level_1'] === 'pending') {
-                respond(403, null, 'Cần có phê duyệt Cấp 1 trước khi Cấp 2 phê duyệt', false);
-            }
-        }
+            $isApprover1 = ((int)$auth['user_id'] === (int)$leaveRow['approver_id']);
+            $isApprover2 = ((int)$auth['user_id'] === (int)$leaveRow['approver_id_2']);
+            $isSuperAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
+            $isPrivileged = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr', 'leader', 'team_lead', 'teamlead', 'marketing_lead'], true);
 
-        $nextStatus = 'pending';
-        $updateFields = [];
-        $params = [];
+            $isCreator = ((int)$auth['user_id'] === (int)$leaveRow['user_id']);
+            if ($isCreator && !$isApprover1 && !$isApprover2 && !$isPrivileged) {
+                if ($ownTx && $this->db->inTransaction()) $this->db->rollBack();
+                respond(403, null, 'Người tạo đơn không được tự phê duyệt đề xuất của chính mình', false);
+            }
 
-        if ($statusInput === 'rejected') {
-            $nextStatus = 'rejected';
-            if ($isApprover1) {
-                $updateFields[] = "status_level_1 = 'rejected'";
-                $updateFields[] = "approved_by = ?";
-                $params[] = $auth['user_id'];
+            if (!$isApprover1 && !$isApprover2 && !$isPrivileged) {
+                if ($ownTx && $this->db->inTransaction()) $this->db->rollBack();
+                respond(403, null, 'Bạn không có quyền phê duyệt yêu cầu này', false);
             }
-            if ($isApprover2) {
-                $updateFields[] = "status_level_2 = 'rejected'";
-                $updateFields[] = "approved_by_2 = ?";
-                $params[] = $auth['user_id'];
+
+            if ($isApprover2 && !$isApprover1 && !$isSuperAdmin) {
+                if ($leaveRow['status_level_1'] === 'pending') {
+                    if ($ownTx && $this->db->inTransaction()) $this->db->rollBack();
+                    respond(403, null, 'Cần có phê duyệt Cấp 1 trước khi Cấp 2 phê duyệt', false);
+                }
             }
-            if (!$isApprover1 && !$isApprover2) {
-                $updateFields[] = "status_level_1 = 'rejected'";
-                $updateFields[] = "status_level_2 = 'rejected'";
-                $updateFields[] = "approved_by = ?";
-                $params[] = $auth['user_id'];
-            }
-            
-            if (!empty($approverNote) && $approverNote !== 'Không có ghi chú thêm') {
-                $reasonAppend = "\n[Từ chối: " . $approverNote . "]";
-                try {
-                    $stmtReason = $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?) WHERE id = ?");
-                    $stmtReason->execute([$reasonAppend, $id]);
-                } catch (\Throwable $e) {}
-            }
-        } else {
-            if ($isApprover1) {
-                $updateFields[] = "status_level_1 = 'approved'";
-                $updateFields[] = "approved_by = ?";
-                $params[] = $auth['user_id'];
+
+            $nextStatus = 'pending';
+            $updateFields = [];
+            $params = [];
+
+            if ($statusInput === 'rejected') {
+                $nextStatus = 'rejected';
+                if ($isApprover1) {
+                    $updateFields[] = "status_level_1 = 'rejected'";
+                    $updateFields[] = "approved_by = ?";
+                    $params[] = $auth['user_id'];
+                }
+                if ($isApprover2) {
+                    $updateFields[] = "status_level_2 = 'rejected'";
+                    $updateFields[] = "approved_by_2 = ?";
+                    $params[] = $auth['user_id'];
+                }
+                if (!$isApprover1 && !$isApprover2) {
+                    $updateFields[] = "status_level_1 = 'rejected'";
+                    $updateFields[] = "status_level_2 = 'rejected'";
+                    $updateFields[] = "approved_by = ?";
+                    $params[] = $auth['user_id'];
+                }
                 
-                if (!empty($leaveRow['approver_id_2'])) {
-                    $nextStatus = 'pending';
-                } else {
+                if (!empty($approverNote) && $approverNote !== 'Không có ghi chú thêm') {
+                    $reasonAppend = "\n[Từ chối: " . $approverNote . "]";
+                    try {
+                        $stmtReason = $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?) WHERE id = ?");
+                        $stmtReason->execute([$reasonAppend, $id]);
+                    } catch (\Throwable $e) {}
+                }
+            } else {
+                if ($isApprover1) {
+                    $updateFields[] = "status_level_1 = 'approved'";
+                    $updateFields[] = "approved_by = ?";
+                    $params[] = $auth['user_id'];
+                    
+                    if (!empty($leaveRow['approver_id_2'])) {
+                        $nextStatus = 'pending';
+                    } else {
+                        $nextStatus = 'approved';
+                    }
+                }
+                if ($isApprover2) {
+                    $updateFields[] = "status_level_2 = 'approved'";
+                    $updateFields[] = "approved_by_2 = ?";
+                    $params[] = $auth['user_id'];
+                    $nextStatus = 'approved';
+                }
+                if (!$isApprover1 && !$isApprover2) {
+                    $updateFields[] = "status_level_1 = 'approved'";
+                    $updateFields[] = "status_level_2 = 'approved'";
+                    $updateFields[] = "approved_by = ?";
+                    $params[] = $auth['user_id'];
                     $nextStatus = 'approved';
                 }
             }
-            if ($isApprover2) {
-                $updateFields[] = "status_level_2 = 'approved'";
-                $updateFields[] = "approved_by_2 = ?";
-                $params[] = $auth['user_id'];
-                $nextStatus = 'approved';
-            }
-            if (!$isApprover1 && !$isApprover2) {
-                $updateFields[] = "status_level_1 = 'approved'";
-                $updateFields[] = "status_level_2 = 'approved'";
-                $updateFields[] = "approved_by = ?";
-                $params[] = $auth['user_id'];
-                $nextStatus = 'approved';
-            }
-        }
 
-        $updateFields[] = "status = ?";
-        $params[] = $nextStatus;
-        $params[] = $id;
+            $updateFields[] = "status = ?";
+            $params[] = $nextStatus;
+            $params[] = $id;
 
-        $updateSql = "UPDATE hrm_leave_requests SET " . implode(", ", $updateFields) . " WHERE id = ?";
-        $stmtUpdate = $this->db->prepare($updateSql);
-        $stmtUpdate->execute($params);
+            $updateSql = "UPDATE hrm_leave_requests SET " . implode(", ", $updateFields) . " WHERE id = ?";
+            $stmtUpdate = $this->db->prepare($updateSql);
+            $stmtUpdate->execute($params);
 
-        // Deduct leave balance upon final approval
-        if ($nextStatus === 'approved') {
-            $days = (float)$leaveRow['total_days'];
-            $type = $leaveRow['leave_type'];
-            $userId = (int)$leaveRow['user_id'];
-            
-            // Khi đơn OT lấy nghỉ bù được duyệt hoàn tất -> tự động cộng vào quỹ nghỉ bù của nhân sự theo hệ số
-            if ($type === 'overtime') {
-                if (($leaveRow['ot_type'] ?? '') === 'compensatory' && ($leaveRow['status'] ?? '') !== 'approved') {
-                    $otRate = (float)($leaveRow['ot_rate'] ?? 1.0);
-                    if ($otRate <= 0) $otRate = 1.0;
-                    $compDays = round((float)$leaveRow['total_days'] * $otRate, 2);
-                    if ($compDays > 0) {
-                        $updCompStmt = $this->db->prepare("
-                            INSERT INTO hrm_profiles (user_id, joined_date, compensatory_leave_total)
-                            VALUES (?, CURDATE(), ?)
-                            ON DUPLICATE KEY UPDATE compensatory_leave_total = compensatory_leave_total + VALUES(compensatory_leave_total)
-                        ");
-                        $updCompStmt->execute([$userId, $compDays]);
+            // Deduct leave balance upon final approval (only when transitioning from non-approved to approved)
+            if ($nextStatus === 'approved' && ($leaveRow['status'] ?? '') !== 'approved') {
+                $days = (float)$leaveRow['total_days'];
+                $type = $leaveRow['leave_type'];
+                $userId = (int)$leaveRow['user_id'];
+                
+                // Khi đơn OT lấy nghỉ bù được duyệt hoàn tất -> tự động cộng vào quỹ nghỉ bù của nhân sự theo hệ số
+                if ($type === 'overtime') {
+                    if (($leaveRow['ot_type'] ?? '') === 'compensatory' && ($leaveRow['status'] ?? '') !== 'approved') {
+                        $otRate = (float)($leaveRow['ot_rate'] ?? 1.0);
+                        if ($otRate <= 0) $otRate = 1.0;
+                        $compDays = round((float)$leaveRow['total_days'] * $otRate, 2);
+                        if ($compDays > 0) {
+                            $updCompStmt = $this->db->prepare("
+                                INSERT INTO hrm_profiles (user_id, joined_date, compensatory_leave_total)
+                                VALUES (?, CURDATE(), ?)
+                                ON DUPLICATE KEY UPDATE compensatory_leave_total = compensatory_leave_total + VALUES(compensatory_leave_total)
+                            ");
+                            $updCompStmt->execute([$userId, $compDays]);
 
-                        $compLog = " [Đã tự động cộng +{$compDays} ngày vào quỹ nghỉ bù (Hệ số {$otRate}x)]";
-                        $updReason = $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?) WHERE id = ?");
-                        $updReason->execute([$compLog, (int)$leaveRow['id']]);
+                            $compLog = " [Đã tự động cộng +{$compDays} ngày vào quỹ nghỉ bù (Hệ số {$otRate}x)]";
+                            $updReason = $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?) WHERE id = ?");
+                            $updReason->execute([$compLog, (int)$leaveRow['id']]);
+                        }
                     }
                 }
-            }
 
-            if ($type === 'annual' || $type === 'compensatory') {
-                $profStmt = $this->db->prepare("SELECT annual_leave_total, annual_leave_used, compensatory_leave_total, compensatory_leave_used FROM hrm_profiles WHERE user_id = ? LIMIT 1");
-                $profStmt->execute([$userId]);
-                $profile = $profStmt->fetch(PDO::FETCH_ASSOC);
-                
-                if (!$profile) {
-                    try {
-                        $this->db->prepare("
-                            INSERT INTO hrm_profiles (user_id, joined_date, annual_leave_total, annual_leave_used, compensatory_leave_total, compensatory_leave_used)
-                            VALUES (?, CURDATE(), 12.0, 0.0, 0.0, 0.0)
-                            ON DUPLICATE KEY UPDATE annual_leave_total = COALESCE(annual_leave_total, 12.0)
-                        ")->execute([$userId]);
-                    } catch (\Throwable $eProf) {}
-                    $profile = [
-                        'annual_leave_total' => 12.0,
-                        'annual_leave_used' => 0.0,
-                        'compensatory_leave_total' => 0.0,
-                        'compensatory_leave_used' => 0.0
-                    ];
-                }
-
-                $remComp = max(0.0, (float)$profile['compensatory_leave_total'] - (float)$profile['compensatory_leave_used']);
-                $remAnnual = max(0.0, (float)$profile['annual_leave_total'] - (float)$profile['annual_leave_used']);
-                
-                $deductComp = min($days, $remComp);
-                $deductAnnual = min(max(0.0, $days - $deductComp), $remAnnual);
-                $deductUnpaid = max(0.0, $days - ($deductComp + $deductAnnual));
-                
-                if ($deductComp > 0) {
-                    $updStmt = $this->db->prepare("UPDATE hrm_profiles SET compensatory_leave_used = compensatory_leave_used + ? WHERE user_id = ?");
-                    $updStmt->execute([$deductComp, $userId]);
-                }
-                if ($deductAnnual > 0) {
-                    $updStmt = $this->db->prepare("UPDATE hrm_profiles SET annual_leave_used = annual_leave_used + ? WHERE user_id = ?");
-                    $updStmt->execute([$deductAnnual, $userId]);
-                }
-                
-                $parts = [];
-                if ($deductComp > 0) $parts[] = "-{$deductComp} ngày phép bù";
-                if ($deductAnnual > 0) $parts[] = "-{$deductAnnual} ngày phép năm";
-                if ($deductUnpaid > 0) $parts[] = "-{$deductUnpaid} ngày không lương";
-                
-                $deductionLog = " [Khấu trừ thực tế: " . implode(', ', $parts) . "]";
-                $updReason = $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?), unpaid_days = ? WHERE id = ?");
-                $updReason->execute([$deductionLog, $deductUnpaid, (int)$leaveRow['id']]);
-            } elseif ($type === 'special_paid') {
-                // Phân bổ nghỉ chế độ Hiếu/Hỉ theo Điều 115 BLLĐ 2019
-                $reasonText = mb_strtolower($leaveRow['reason'] ?? '');
-                $statutoryLimit = 3.0; // Mặc định 3 ngày (kết hôn, tứ thân phụ mẫu / vợ / chồng / con mất)
-                if (strpos($reasonText, 'con kết hôn') !== false || strpos($reasonText, 'con cưới') !== false) {
-                    $statutoryLimit = 1.0;
-                } elseif (strpos($reasonText, 'ông bà') !== false || strpos($reasonText, 'anh chị em') !== false || strpos($reasonText, 'anh ruột') !== false || strpos($reasonText, 'chị ruột') !== false || strpos($reasonText, 'em ruột') !== false) {
-                    $statutoryLimit = 1.0;
-                }
-
-                $statutoryPaidDays = min($days, $statutoryLimit);
-                $overQuotaDays = max(0.0, $days - $statutoryPaidDays);
-
-                $deductComp = 0.0;
-                $deductAnnual = 0.0;
-                $deductUnpaid = 0.0;
-
-                if ($overQuotaDays > 0) {
-                    $profStmt = $this->db->prepare("SELECT annual_leave_total, annual_leave_used, compensatory_leave_total, compensatory_leave_used FROM hrm_profiles WHERE user_id = ? LIMIT 1");
+                if (($type === 'annual' || $type === 'compensatory') && ($leaveRow['status'] ?? '') !== 'approved') {
+                    $profStmt = $this->db->prepare("SELECT annual_leave_total, annual_leave_used, compensatory_leave_total, compensatory_leave_used FROM hrm_profiles WHERE user_id = ? LIMIT 1 FOR UPDATE");
                     $profStmt->execute([$userId]);
                     $profile = $profStmt->fetch(PDO::FETCH_ASSOC);
                     
@@ -1234,10 +1186,9 @@ class HRMController {
                     $remComp = max(0.0, (float)$profile['compensatory_leave_total'] - (float)$profile['compensatory_leave_used']);
                     $remAnnual = max(0.0, (float)$profile['annual_leave_total'] - (float)$profile['annual_leave_used']);
                     
-                    $deductComp = min($overQuotaDays, $remComp);
-                    $remOverAfterComp = $overQuotaDays - $deductComp;
-                    $deductAnnual = min($remOverAfterComp, $remAnnual);
-                    $deductUnpaid = max(0.0, $remOverAfterComp - $deductAnnual);
+                    $deductComp = min($days, $remComp);
+                    $deductAnnual = min(max(0.0, $days - $deductComp), $remAnnual);
+                    $deductUnpaid = max(0.0, $days - ($deductComp + $deductAnnual));
                     
                     if ($deductComp > 0) {
                         $updStmt = $this->db->prepare("UPDATE hrm_profiles SET compensatory_leave_used = compensatory_leave_used + ? WHERE user_id = ?");
@@ -1247,44 +1198,117 @@ class HRMController {
                         $updStmt = $this->db->prepare("UPDATE hrm_profiles SET annual_leave_used = annual_leave_used + ? WHERE user_id = ?");
                         $updStmt->execute([$deductAnnual, $userId]);
                     }
+                    
+                    $parts = [];
+                    if ($deductComp > 0) $parts[] = "-{$deductComp} ngày phép bù";
+                    if ($deductAnnual > 0) $parts[] = "-{$deductAnnual} ngày phép năm";
+                    if ($deductUnpaid > 0) $parts[] = "-{$deductUnpaid} ngày không lương";
+                    
+                    $deductionLog = " [Khấu trừ thực tế: " . implode(', ', $parts) . "]";
+                    $updReason = $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?), unpaid_days = ? WHERE id = ?");
+                    $updReason->execute([$deductionLog, $deductUnpaid, (int)$leaveRow['id']]);
+                } elseif ($type === 'special_paid') {
+                    // Phân bổ nghỉ chế độ Hiếu/Hỉ theo Điều 115 BLLĐ 2019
+                    $reasonText = mb_strtolower($leaveRow['reason'] ?? '');
+                    $statutoryLimit = 3.0; // Mặc định 3 ngày (kết hôn, tứ thân phụ mẫu / vợ / chồng / con mất)
+                    if (strpos($reasonText, 'con kết hôn') !== false || strpos($reasonText, 'con cưới') !== false) {
+                        $statutoryLimit = 1.0;
+                    } elseif (strpos($reasonText, 'ông bà') !== false || strpos($reasonText, 'anh chị em') !== false || strpos($reasonText, 'anh ruột') !== false || strpos($reasonText, 'chị ruột') !== false || strpos($reasonText, 'em ruột') !== false) {
+                        $statutoryLimit = 1.0;
+                    }
+
+                    $statutoryPaidDays = min($days, $statutoryLimit);
+                    $overQuotaDays = max(0.0, $days - $statutoryPaidDays);
+
+                    $deductComp = 0.0;
+                    $deductAnnual = 0.0;
+                    $deductUnpaid = 0.0;
+
+                    if ($overQuotaDays > 0) {
+                        $profStmt = $this->db->prepare("SELECT annual_leave_total, annual_leave_used, compensatory_leave_total, compensatory_leave_used FROM hrm_profiles WHERE user_id = ? LIMIT 1 FOR UPDATE");
+                        $profStmt->execute([$userId]);
+                        $profile = $profStmt->fetch(PDO::FETCH_ASSOC);
+                        
+                        if (!$profile) {
+                            try {
+                                $this->db->prepare("
+                                    INSERT INTO hrm_profiles (user_id, joined_date, annual_leave_total, annual_leave_used, compensatory_leave_total, compensatory_leave_used)
+                                    VALUES (?, CURDATE(), 12.0, 0.0, 0.0, 0.0)
+                                    ON DUPLICATE KEY UPDATE annual_leave_total = COALESCE(annual_leave_total, 12.0)
+                                ")->execute([$userId]);
+                            } catch (\Throwable $eProf) {}
+                            $profile = [
+                                'annual_leave_total' => 12.0,
+                                'annual_leave_used' => 0.0,
+                                'compensatory_leave_total' => 0.0,
+                                'compensatory_leave_used' => 0.0
+                            ];
+                        }
+
+                        $remComp = max(0.0, (float)$profile['compensatory_leave_total'] - (float)$profile['compensatory_leave_used']);
+                        $remAnnual = max(0.0, (float)$profile['annual_leave_total'] - (float)$profile['annual_leave_used']);
+                        
+                        $deductComp = min($overQuotaDays, $remComp);
+                        $remOverAfterComp = $overQuotaDays - $deductComp;
+                        $deductAnnual = min($remOverAfterComp, $remAnnual);
+                        $deductUnpaid = max(0.0, $remOverAfterComp - $deductAnnual);
+                        
+                        if ($deductComp > 0) {
+                            $updStmt = $this->db->prepare("UPDATE hrm_profiles SET compensatory_leave_used = compensatory_leave_used + ? WHERE user_id = ?");
+                            $updStmt->execute([$deductComp, $userId]);
+                        }
+                        if ($deductAnnual > 0) {
+                            $updStmt = $this->db->prepare("UPDATE hrm_profiles SET annual_leave_used = annual_leave_used + ? WHERE user_id = ?");
+                            $updStmt->execute([$deductAnnual, $userId]);
+                        }
+                    }
+
+                    $parts = [];
+                    $parts[] = "{$statutoryPaidDays} ngày chế độ luật (100% lương)";
+                    if ($deductComp > 0) $parts[] = "-{$deductComp} ngày phép bù";
+                    if ($deductAnnual > 0) $parts[] = "-{$deductAnnual} ngày phép năm";
+                    if ($deductUnpaid > 0) $parts[] = "-{$deductUnpaid} ngày không lương";
+                    
+                    $deductionLog = " [Phân bổ ngày nghỉ: " . implode(', ', $parts) . "]";
+                    $updReason = $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?), unpaid_days = ? WHERE id = ?");
+                    $updReason->execute([$deductionLog, $deductUnpaid, (int)$leaveRow['id']]);
+                } elseif ($type === 'unpaid') {
+                    $updReason = $this->db->prepare("UPDATE hrm_leave_requests SET unpaid_days = ? WHERE id = ?");
+                    $updReason->execute([$days, (int)$leaveRow['id']]);
+                } elseif ($type === 'remote_work') {
+                    $salaryRate = isset($leaveRow['salary_rate']) ? (float)$leaveRow['salary_rate'] : 50.0;
+                    if ($salaryRate < 0.0) $salaryRate = 0.0;
+                    if ($salaryRate > 100.0) $salaryRate = 100.0;
+                    $unpaidDays = round($days * (1.0 - ($salaryRate / 100.0)), 2);
+                    $paidDays = round($days - $unpaidDays, 2);
+                    $wfhLog = " [Đã duyệt WFH: Hưởng {$salaryRate}% lương ~ {$paidDays} công]";
+                    $updReason = $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?), unpaid_days = ?, salary_rate = ? WHERE id = ?");
+                    $updReason->execute([$wfhLog, $unpaidDays, $salaryRate, (int)$leaveRow['id']]);
                 }
 
-                $parts = [];
-                $parts[] = "{$statutoryPaidDays} ngày chế độ luật (100% lương)";
-                if ($deductComp > 0) $parts[] = "-{$deductComp} ngày phép bù";
-                if ($deductAnnual > 0) $parts[] = "-{$deductAnnual} ngày phép năm";
-                if ($deductUnpaid > 0) $parts[] = "-{$deductUnpaid} ngày không lương";
-                
-                $deductionLog = " [Phân bổ ngày nghỉ: " . implode(', ', $parts) . "]";
-                $updReason = $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?), unpaid_days = ? WHERE id = ?");
-                $updReason->execute([$deductionLog, $deductUnpaid, (int)$leaveRow['id']]);
-            } elseif ($type === 'unpaid') {
-                $updReason = $this->db->prepare("UPDATE hrm_leave_requests SET unpaid_days = ? WHERE id = ?");
-                $updReason->execute([$days, (int)$leaveRow['id']]);
-            } elseif ($type === 'remote_work') {
-                $salaryRate = isset($leaveRow['salary_rate']) ? (float)$leaveRow['salary_rate'] : 50.0;
-                if ($salaryRate < 0.0) $salaryRate = 0.0;
-                if ($salaryRate > 100.0) $salaryRate = 100.0;
-                $unpaidDays = round($days * (1.0 - ($salaryRate / 100.0)), 2);
-                $paidDays = round($days - $unpaidDays, 2);
-                $wfhLog = " [Đã duyệt WFH: Hưởng {$salaryRate}% lương ~ {$paidDays} công]";
-                $updReason = $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?), unpaid_days = ?, salary_rate = ? WHERE id = ?");
-                $updReason->execute([$wfhLog, $unpaidDays, $salaryRate, (int)$leaveRow['id']]);
+                // Sync to consultant_leaves so the lead assignment / check-in rotation excludes this user when on leave
+                if (in_array($type, ['annual', 'sick', 'compensatory', 'unpaid', 'special_paid', 'maternity', 'paternity', 'marriage', 'funeral'])) {
+                    try {
+                        $cLeaveStmt = $this->db->prepare("INSERT IGNORE INTO consultant_leaves (consultant_id, start_date, end_date) VALUES (?, ?, ?)");
+                        $startDateOnly = explode('T', explode(' ', $leaveRow['start_date'])[0])[0];
+                        $endDateOnly = explode('T', explode(' ', $leaveRow['end_date'])[0])[0];
+                        $cLeaveStmt->execute([$userId, $startDateOnly, $endDateOnly]);
+
+                        // Sync leave dates to users table for live lead check
+                        $upUserStmt = $this->db->prepare("UPDATE users SET leave_start = ?, leave_end = ? WHERE id = ?");
+                        $upUserStmt->execute([$startDateOnly, $endDateOnly, $userId]);
+                    } catch (\Throwable $e) {}
+                }
             }
 
-            // Sync to consultant_leaves so the lead assignment / check-in rotation excludes this user when on leave
-            if (in_array($type, ['annual', 'sick', 'compensatory', 'unpaid', 'special_paid', 'maternity', 'paternity', 'marriage', 'funeral'])) {
-                try {
-                    $cLeaveStmt = $this->db->prepare("INSERT IGNORE INTO consultant_leaves (consultant_id, start_date, end_date) VALUES (?, ?, ?)");
-                    $startDateOnly = explode('T', explode(' ', $leaveRow['start_date'])[0])[0];
-                    $endDateOnly = explode('T', explode(' ', $leaveRow['end_date'])[0])[0];
-                    $cLeaveStmt->execute([$userId, $startDateOnly, $endDateOnly]);
-
-                    // Sync leave dates to users table for live lead check
-                    $upUserStmt = $this->db->prepare("UPDATE users SET leave_start = ?, leave_end = ? WHERE id = ?");
-                    $upUserStmt->execute([$startDateOnly, $endDateOnly, $userId]);
-                } catch (\Throwable $e) {}
+            if ($ownTx && $this->db->inTransaction()) {
+                $this->db->commit();
             }
+        } catch (\Throwable $e) {
+            if ($ownTx && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
         }
 
         // Fetch remaining leave balance for notifications
@@ -2027,7 +2051,8 @@ class HRMController {
                 SELECT m.expected_amount, d.contact_id, d.created_by
                 FROM deposit_milestones m
                 JOIN deposits d ON m.deposit_id = d.id
-                WHERE d.tenant_id = ? AND m.status = 'approved' AND m.approval_date >= ? AND m.approval_date <= ?
+                LEFT JOIN users u_dep ON d.created_by = u_dep.id
+                WHERE (u_dep.tenant_id = ? OR d.created_by IS NULL) AND m.status = 'approved' AND m.approval_date >= ? AND m.approval_date <= ?
             ");
             $milestonesStmt->execute([$auth['tenant_id'], $monthStartTs, $monthEndTs]);
             $milestonesList = $milestonesStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2052,7 +2077,7 @@ class HRMController {
             // Batch pre-fetch: Existing payslips for the month (Anti N+1 bottleneck)
             $oldPayslipsMap = [];
             if (!$isSpecialPeriod) {
-                $oldStmt = $this->db->prepare("SELECT user_id, lateness_compensatory_deducted, lateness_annual_deducted FROM monthly_payslips WHERE month_year = ? AND tenant_id = ?");
+                $oldStmt = $this->db->prepare("SELECT mp.* FROM monthly_payslips mp JOIN users u ON mp.user_id = u.id WHERE mp.month_year = ? AND u.tenant_id = ?");
                 $oldStmt->execute([$monthYear, $auth['tenant_id']]);
                 while ($row = $oldStmt->fetch(PDO::FETCH_ASSOC)) {
                     $oldPayslipsMap[(int)$row['user_id']] = $row;
@@ -2067,16 +2092,17 @@ class HRMController {
             $overtimeByUserMap = [];
             if (!$isSpecialPeriod) {
                 $lvBatchStmt = $this->db->prepare("
-                    SELECT user_id, SUM(
+                    SELECT lr.user_id, SUM(
                         CASE 
-                            WHEN leave_type = 'remote_work' THEN total_days * (COALESCE(salary_rate, 50.0) / 100.0)
-                            ELSE (total_days - unpaid_days)
+                            WHEN lr.leave_type = 'remote_work' THEN lr.total_days * (COALESCE(lr.salary_rate, 50.0) / 100.0)
+                            ELSE (lr.total_days - lr.unpaid_days)
                         END
                     ) as paid_days
-                    FROM hrm_leave_requests
-                    WHERE tenant_id = ? AND status = 'approved' AND leave_type IN ('annual', 'sick', 'compensatory', 'remote_work', 'special_paid', 'maternity', 'paternity', 'marriage', 'funeral', 'business_trip')
-                      AND start_date >= ? AND start_date <= ?
-                    GROUP BY user_id
+                    FROM hrm_leave_requests lr
+                    JOIN users u ON lr.user_id = u.id
+                    WHERE u.tenant_id = ? AND lr.status = 'approved' AND lr.leave_type IN ('annual', 'sick', 'compensatory', 'remote_work', 'special_paid', 'maternity', 'paternity', 'marriage', 'funeral', 'business_trip')
+                      AND lr.start_date >= ? AND lr.start_date <= ?
+                    GROUP BY lr.user_id
                 ");
                 $lvBatchStmt->execute([$auth['tenant_id'], $monthStartTs, $monthEndTs]);
                 $paidLeavesMap = $lvBatchStmt->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
@@ -2142,10 +2168,11 @@ class HRMController {
             $advancesMap = [];
             if (!$isSpecialPeriod) {
                 $advBatchStmt = $this->db->prepare("
-                    SELECT user_id, SUM(amount) as adv_amt
-                    FROM hrm_salary_advances
-                    WHERE tenant_id = ? AND status = 'approved' AND deducted_payslip_id IS NULL
-                    GROUP BY user_id
+                    SELECT sa.user_id, SUM(sa.amount) as total_adv
+                    FROM hrm_salary_advances sa
+                    JOIN users u ON sa.user_id = u.id
+                    WHERE u.tenant_id = ? AND sa.status = 'approved' AND sa.deducted_payslip_id IS NULL
+                    GROUP BY sa.user_id
                 ");
                 $advBatchStmt->execute([$auth['tenant_id']]);
                 $advancesMap = $advBatchStmt->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
@@ -5245,26 +5272,26 @@ class HRMController {
             
             foreach ($payslips as $ps) {
                 $stmt->execute([
-                    (float)($ps['work_days_required'] ?? 26),
-                    $ps['work_days_actual'],
-                    $ps['lateness_minutes'],
-                    $ps['lateness_penalty'],
-                    $ps['lateness_compensatory_deducted'] ?? 0.00,
-                    $ps['lateness_annual_deducted'] ?? 0.00,
-                    $ps['salary_basic_calculated'],
-                    $ps['allowance_total'],
-                    $ps['kpi_bonus'],
-                    $ps['insurance_bhxh'],
-                    $ps['insurance_bhyt'] ?? 0.00,
-                    $ps['insurance_bhtn'] ?? 0.00,
-                    $ps['tax_pit'],
-                    $ps['advance_deduction'],
-                    $ps['net_salary'],
-                    $ps['overtime_days'],
-                    $ps['overtime_salary'],
-                    $ps['diligence_bonus'],
+                    max(0.0, (float)($ps['work_days_required'] ?? 26)),
+                    max(0.0, (float)($ps['work_days_actual'] ?? 0)),
+                    max(0, (int)($ps['lateness_minutes'] ?? 0)),
+                    max(0.0, (float)($ps['lateness_penalty'] ?? 0)),
+                    max(0.0, (float)($ps['lateness_compensatory_deducted'] ?? 0.00)),
+                    max(0.0, (float)($ps['lateness_annual_deducted'] ?? 0.00)),
+                    max(0.0, (float)($ps['salary_basic_calculated'] ?? 0)),
+                    max(0.0, (float)($ps['allowance_total'] ?? 0)),
+                    max(0.0, (float)($ps['kpi_bonus'] ?? 0)),
+                    max(0.0, (float)($ps['insurance_bhxh'] ?? 0)),
+                    max(0.0, (float)($ps['insurance_bhyt'] ?? 0.00)),
+                    max(0.0, (float)($ps['insurance_bhtn'] ?? 0.00)),
+                    max(0.0, (float)($ps['tax_pit'] ?? 0)),
+                    max(0.0, (float)($ps['advance_deduction'] ?? 0)),
+                    max(0.0, (float)($ps['net_salary'] ?? 0)),
+                    max(0.0, (float)($ps['overtime_days'] ?? 0)),
+                    max(0.0, (float)($ps['overtime_salary'] ?? 0)),
+                    max(0.0, (float)($ps['diligence_bonus'] ?? 0)),
                     $ps['note'] ?? null,
-                    $ps['id'],
+                    (int)($ps['id'] ?? 0),
                     $auth['tenant_id']
                 ]);
             }

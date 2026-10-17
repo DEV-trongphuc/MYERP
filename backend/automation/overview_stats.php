@@ -105,9 +105,9 @@ if (isset($_GET['route']) && $_GET['route'] === 'email_sent_chart') {
             'data'    => $data,
             'summary' => ['total' => $total, 'peak' => $peak],
             'years'   => array_values(array_unique($years)),
-        ]);
-    } catch (Exception $e) {
-        echo json_encode(['success' => false, 'message' => 'Lỗi hệ thống, vui lòng thử lại.']);
+        ], JSON_UNESCAPED_UNICODE);
+    } catch (\Throwable $e) {
+        echo json_encode(['success' => false, 'message' => 'Lỗi hệ thống, vui lòng thử lại.'], JSON_UNESCAPED_UNICODE);
     }
     exit;
 }
@@ -135,16 +135,29 @@ if (!$forceRefresh && function_exists('apcu_fetch')) {
 }
 
 try {
-    // 1. Web Analytics (web_page_views) — scoped by JOINing web_properties
+    // 1. Web Traffic Analytics — leverages idx_wv_prop_last_visit on web_visitors (property_id, last_visit_at)
     $stmtWeb = $pdo->prepare("
-        SELECT DATE(pv.loaded_at) as date, COUNT(*) as count 
-        FROM web_page_views pv
-        JOIN web_properties wp ON pv.property_id = wp.id
-        WHERE wp.workspace_id = ? AND pv.loaded_at BETWEEN ? AND ? 
-        GROUP BY DATE(pv.loaded_at)
+        SELECT DATE(v.last_visit_at) as date, COUNT(*) as count 
+        FROM web_visitors v
+        JOIN web_properties wp ON v.property_id = wp.id
+        WHERE wp.workspace_id = ? AND v.last_visit_at BETWEEN ? AND ? 
+        GROUP BY DATE(v.last_visit_at)
     ");
     $stmtWeb->execute([$workspace_id, $startDate, $endDate]);
     $rawWebStats = $stmtWeb->fetchAll(PDO::FETCH_KEY_PAIR);
+
+    // Fallback to web_page_views if web_visitors has no records for the range
+    if (empty($rawWebStats)) {
+        $stmtWpv = $pdo->prepare("
+            SELECT DATE(pv.loaded_at) as date, COUNT(*) as count 
+            FROM web_page_views pv
+            JOIN web_properties wp ON pv.property_id = wp.id
+            WHERE wp.workspace_id = ? AND pv.loaded_at BETWEEN ? AND ? 
+            GROUP BY DATE(pv.loaded_at)
+        ");
+        $stmtWpv->execute([$workspace_id, $startDate, $endDate]);
+        $rawWebStats = $stmtWpv->fetchAll(PDO::FETCH_KEY_PAIR);
+    }
 
     // 2. AI Messages — scoped by JOINing domation_ai_conversations -> web_properties
     $stmtAi = $pdo->prepare("
@@ -160,17 +173,29 @@ try {
     $stmtAi->execute([$workspace_id, $startDate, $endDate]);
     $rawAiStats = $stmtAi->fetchAll(PDO::FETCH_KEY_PAIR);
 
-    // 3. New Leads (subscribers) — scoped by workspace_id
+    // 3. New Leads (subscribers) — leverages idx_sub_ws_status_created (workspace_id, status, created_at)
     $stmtLead = $pdo->prepare("
-        SELECT DATE(joined_at) as date, COUNT(*) as count 
+        SELECT DATE(created_at) as date, COUNT(*) as count 
         FROM subscribers 
-        WHERE workspace_id = ? AND joined_at BETWEEN ? AND ? 
-        GROUP BY DATE(joined_at)
+        WHERE workspace_id = ? AND created_at BETWEEN ? AND ? 
+        GROUP BY DATE(created_at)
     ");
     $stmtLead->execute([$workspace_id, $startDate, $endDate]);
     $rawLeadStats = $stmtLead->fetchAll(PDO::FETCH_KEY_PAIR);
 
-    // Prepare Date Range Series
+    // Fallback if legacy rows only have joined_at populated
+    if (empty($rawLeadStats)) {
+        $stmtLeadJoined = $pdo->prepare("
+            SELECT DATE(joined_at) as date, COUNT(*) as count 
+            FROM subscribers 
+            WHERE workspace_id = ? AND joined_at BETWEEN ? AND ? 
+            GROUP BY DATE(joined_at)
+        ");
+        $stmtLeadJoined->execute([$workspace_id, $startDate, $endDate]);
+        $rawLeadStats = $stmtLeadJoined->fetchAll(PDO::FETCH_KEY_PAIR);
+    }
+
+    // Prepare Date Range Series with { date, value, label, web, ai, leads }
     $chartData = [];
     $totalWeb = 0;
     $totalAi = 0;
@@ -178,28 +203,32 @@ try {
 
     for ($i = $days - 1; $i >= 0; $i--) {
         $d = date('Y-m-d', strtotime("-$i days"));
-        $w = $rawWebStats[$d] ?? 0;
-        $a = $rawAiStats[$d] ?? 0;
-        $l = $rawLeadStats[$d] ?? 0;
+        $w = (int)($rawWebStats[$d] ?? 0);
+        $a = (int)($rawAiStats[$d] ?? 0);
+        $l = (int)($rawLeadStats[$d] ?? 0);
 
         $totalWeb += $w;
         $totalAi += $a;
         $totalLeads += $l;
 
+        $dateLabel = date('d/m', strtotime($d));
         $chartData[] = [
-            'date' => date('d/m', strtotime($d)),
-            'web' => $w,
-            'ai' => $a,
-            'leads' => $l
+            'date'      => $dateLabel,
+            'label'     => $dateLabel,
+            'full_date' => $d,
+            'value'     => $w + $a + $l,
+            'web'       => $w,
+            'ai'        => $a,
+            'leads'     => $l,
         ];
     }
 
-    // 4. Top Campaigns — scoped by workspace_id
+    // 4. Top Campaigns — scoped by workspace_id, leverages idx_camp_ws_status_created (workspace_id, status, created_at)
     $stmtCamp = $pdo->prepare("
-        SELECT name, type, status, count_opened as stat_total_opened, count_sent as stat_total_sent, count_clicked as stat_total_clicked, config, sender_name, sender_email 
+        SELECT id, name, type, status, count_opened as stat_total_opened, count_sent as stat_total_sent, count_clicked as stat_total_clicked, config, sender_name, sender_email, created_at, sent_at 
         FROM campaigns 
         WHERE workspace_id = ? AND status IN ('sent', 'sending', 'scheduled') 
-        ORDER BY sent_at DESC, created_at DESC 
+        ORDER BY created_at DESC 
         LIMIT 5
     ");
     $stmtCamp->execute([$workspace_id]);
@@ -210,19 +239,27 @@ try {
         } else {
             $row['config'] = null;
         }
+        $row['stat_total_opened'] = (int)($row['stat_total_opened'] ?? 0);
+        $row['stat_total_sent'] = (int)($row['stat_total_sent'] ?? 0);
+        $row['stat_total_clicked'] = (int)($row['stat_total_clicked'] ?? 0);
         $topCampaigns[] = $row;
     }
 
-    // 5. Top Flows — scoped by workspace_id
+    // 5. Top Flows — scoped by workspace_id, leverages idx_flows_ws_status_upd (workspace_id, status, updated_at)
     $stmtFlow = $pdo->prepare("
-        SELECT name, trigger_type, stat_enrolled, stat_completed 
+        SELECT id, name, trigger_type, stat_enrolled, stat_completed, updated_at 
         FROM flows 
         WHERE workspace_id = ? AND status = 'active' 
-        ORDER BY stat_enrolled DESC 
+        ORDER BY stat_enrolled DESC, updated_at DESC 
         LIMIT 5
     ");
     $stmtFlow->execute([$workspace_id]);
-    $topFlows = $stmtFlow->fetchAll(PDO::FETCH_ASSOC);
+    $topFlows = [];
+    while ($row = $stmtFlow->fetch(PDO::FETCH_ASSOC)) {
+        $row['stat_enrolled'] = (int)($row['stat_enrolled'] ?? 0);
+        $row['stat_completed'] = (int)($row['stat_completed'] ?? 0);
+        $topFlows[] = $row;
+    }
 
     // --- ADVANCED: Calculate "Percentage Growth" vs Previous Period ---
     $prevStart = date('Y-m-d 00:00:00', strtotime("-" . ($days * 2) . " days"));
@@ -230,12 +267,22 @@ try {
 
     $stmtWebPrev = $pdo->prepare("
         SELECT COUNT(*) 
-        FROM web_page_views pv
-        JOIN web_properties wp ON pv.property_id = wp.id
-        WHERE wp.workspace_id = ? AND pv.loaded_at BETWEEN ? AND ?
+        FROM web_visitors v
+        JOIN web_properties wp ON v.property_id = wp.id
+        WHERE wp.workspace_id = ? AND v.last_visit_at BETWEEN ? AND ?
     ");
     $stmtWebPrev->execute([$workspace_id, $prevStart, $prevEnd]);
-    $prevWeb = $stmtWebPrev->fetchColumn();
+    $prevWeb = (int)$stmtWebPrev->fetchColumn();
+    if ($prevWeb === 0) {
+        $stmtWpvPrev = $pdo->prepare("
+            SELECT COUNT(*) 
+            FROM web_page_views pv
+            JOIN web_properties wp ON pv.property_id = wp.id
+            WHERE wp.workspace_id = ? AND pv.loaded_at BETWEEN ? AND ?
+        ");
+        $stmtWpvPrev->execute([$workspace_id, $prevStart, $prevEnd]);
+        $prevWeb = (int)$stmtWpvPrev->fetchColumn();
+    }
 
     $stmtAiPrev = $pdo->prepare("
         SELECT COUNT(*) 
@@ -247,11 +294,16 @@ try {
         AND m.created_at BETWEEN ? AND ?
     ");
     $stmtAiPrev->execute([$workspace_id, $prevStart, $prevEnd]);
-    $prevAi = $stmtAiPrev->fetchColumn();
+    $prevAi = (int)$stmtAiPrev->fetchColumn();
 
-    $stmtLeadPrev = $pdo->prepare("SELECT COUNT(*) FROM subscribers WHERE workspace_id = ? AND joined_at BETWEEN ? AND ?");
+    $stmtLeadPrev = $pdo->prepare("SELECT COUNT(*) FROM subscribers WHERE workspace_id = ? AND created_at BETWEEN ? AND ?");
     $stmtLeadPrev->execute([$workspace_id, $prevStart, $prevEnd]);
-    $prevLead = $stmtLeadPrev->fetchColumn();
+    $prevLead = (int)$stmtLeadPrev->fetchColumn();
+    if ($prevLead === 0) {
+        $stmtLeadPrevJoined = $pdo->prepare("SELECT COUNT(*) FROM subscribers WHERE workspace_id = ? AND joined_at BETWEEN ? AND ?");
+        $stmtLeadPrevJoined->execute([$workspace_id, $prevStart, $prevEnd]);
+        $prevLead = (int)$stmtLeadPrevJoined->fetchColumn();
+    }
 
     $calcGrowth = function($current, $prev) {
         if ($prev == 0) return $current > 0 ? 100 : 0;
@@ -262,20 +314,21 @@ try {
     $growthAi = $calcGrowth($totalAi, $prevAi);
     $growthLeads = $calcGrowth($totalLeads, $prevLead);
 
+    http_response_code(200);
     $responseJson = json_encode([
         'success' => true,
         'summary' => [
-            'total_web' => $totalWeb,
-            'growth_web' => $growthWeb,
-            'total_ai' => $totalAi,
-            'growth_ai' => $growthAi,
-            'total_leads' => $totalLeads,
-            'growth_leads' => $growthLeads,
+            'total_web'    => (int)$totalWeb,
+            'growth_web'   => (float)$growthWeb,
+            'total_ai'     => (int)$totalAi,
+            'growth_ai'    => (float)$growthAi,
+            'total_leads'  => (int)$totalLeads,
+            'growth_leads' => (float)$growthLeads,
         ],
-        'chart_data' => $chartData,
+        'chart_data'    => $chartData,
         'top_campaigns' => $topCampaigns,
-        'top_flows' => $topFlows
-    ]);
+        'top_flows'     => $topFlows
+    ], JSON_UNESCAPED_UNICODE);
 
     // [PERF] Store in APCu for 5 minutes
     if (function_exists('apcu_store')) {
@@ -284,7 +337,22 @@ try {
 
     echo $responseJson;
 
-} catch (Exception $e) {
-    echo json_encode(['success' => false, 'message' => 'Lỗi hệ thống, vui lòng thử lại.']);
+} catch (\Throwable $e) {
+    http_response_code(200);
+    echo json_encode([
+        'success'       => false,
+        'message'       => 'Lỗi hệ thống, vui lòng thử lại.',
+        'summary'       => [
+            'total_web'    => 0,
+            'growth_web'   => 0,
+            'total_ai'     => 0,
+            'growth_ai'    => 0,
+            'total_leads'  => 0,
+            'growth_leads' => 0,
+        ],
+        'chart_data'    => [],
+        'top_campaigns' => [],
+        'top_flows'     => []
+    ], JSON_UNESCAPED_UNICODE);
 }
 

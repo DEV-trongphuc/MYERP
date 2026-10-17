@@ -16,7 +16,7 @@ import { api } from '../../components/marketing/services/storageAdapter';
 import {
     MktPage, MktPanel, MktSectionTitle, MktStatGrid, MktSegmented, MktEmpty, usePageActive, useAbortable, isAbortError
 } from '../../components/marketing/components/dashboard/MktLayout';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
 
 interface Module {
     id: string;
@@ -58,11 +58,36 @@ const PERIODS = ['7', '14', '30', '90'] as const;
 type Period = typeof PERIODS[number];
 type Series = 'web' | 'ai' | 'leads';
 
-interface CampaignRow { name: string; type?: string; status?: string; stat_total_sent?: number | string; stat_total_opened?: number | string; stat_total_clicked?: number | string }
-interface FlowRow { name: string; trigger_type?: string | null; stat_enrolled?: number | string; stat_completed?: number | string }
+interface CampaignRow {
+    id?: number | string;
+    name: string;
+    type?: string;
+    status?: string;
+    stat_total_sent?: number | string;
+    stat_total_opened?: number | string;
+    stat_total_clicked?: number | string;
+    sent_at?: string;
+    created_at?: string;
+}
+
+interface FlowRow {
+    name: string;
+    trigger_type?: string | null;
+    stat_enrolled?: number | string;
+    stat_completed?: number | string;
+}
+
 interface OverviewStats {
     success: boolean;
-    summary?: { total_web?: number; growth_web?: number; total_ai?: number; growth_ai?: number; total_leads?: number; growth_leads?: number };
+    summary?: {
+        total_web?: number;
+        growth_web?: number;
+        total_ai?: number;
+        growth_ai?: number;
+        total_leads?: number;
+        growth_leads?: number;
+        growth_sent?: number;
+    };
     chart_data?: { date: string; web: number; ai: number; leads: number }[];
     top_campaigns?: CampaignRow[];
     top_flows?: FlowRow[];
@@ -75,6 +100,23 @@ const num = (v: unknown) => {
 const fmt = (v: unknown) => num(v).toLocaleString('vi-VN');
 const pct = (part: unknown, total: unknown) => (num(total) > 0 ? Math.round((num(part) / num(total)) * 100) : 0);
 
+const getFlowTriggerConfig = (triggerType?: string | null) => {
+    const raw = (triggerType || '').toLowerCase();
+    if (raw.includes('form')) {
+        return { label: 'Form', color: '#10b981', bg: 'rgba(16, 185, 129, 0.12)' };
+    }
+    if (raw.includes('segment')) {
+        return { label: 'Segment', color: '#6366f1', bg: 'rgba(99, 102, 241, 0.12)' };
+    }
+    if (raw.includes('tag')) {
+        return { label: 'Tag', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.12)' };
+    }
+    if (raw.includes('webhook') || raw.includes('api')) {
+        return { label: 'Webhook', color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.12)' };
+    }
+    return { label: triggerType || 'Thủ công', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.12)' };
+};
+
 const readRecents = (): string[] => {
     try {
         const parsed = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
@@ -83,21 +125,6 @@ const readRecents = (): string[] => {
     } catch {
         return [];
     }
-};
-
-const ChartTooltip = ({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number; color?: string }[]; label?: string }) => {
-    if (!active || !payload?.length) return null;
-    return (
-        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-md)] shadow-[var(--shadow-md)] px-3 py-2 text-xs">
-            <div className="font-semibold text-[var(--color-text)] mb-1">{label}</div>
-            {payload.map((p) => (
-                <div key={p.name} className="flex items-center justify-between gap-4 text-[var(--color-text-light)]">
-                    <span>{p.name}</span>
-                    <span className="font-bold text-[var(--color-text)]">{fmt(p.value)}</span>
-                </div>
-            ))}
-        </div>
-    );
 };
 
 const Dashboard: React.FC = () => {
@@ -116,27 +143,31 @@ const Dashboard: React.FC = () => {
     const [statsLoading, setStatsLoading] = useState(true);
     const [statsError, setStatsError] = useState<string | null>(null);
     const [statsData, setStatsData] = useState<OverviewStats | null>(null);
-    const inFlightRef = useRef<string | null>(null);
+    const inFlightPeriodRef = useRef<string | null>(null);
 
     const fetchDashboardStats = useCallback(async (days: string, bust = false) => {
-        if (!bust && inFlightRef.current === days) return;
-        inFlightRef.current = days;
-        const signal = nextSignal();
+        if (!bust && inFlightPeriodRef.current === days) return;
+        inFlightPeriodRef.current = days;
+        const signalKey = bust ? `${days}_${Date.now()}` : days;
+        const signal = nextSignal(signalKey);
         setStatsLoading(true);
         setStatsError(null);
         try {
             const res = await api.get<OverviewStats>(`overview_stats?days=${days}${bust ? '&bust=1' : ''}`, {}, { signal });
             const payload = res as unknown as OverviewStats;
-            if (payload?.success) setStatsData(payload);
-            else setStatsError('Không tải được số liệu tổng quan.');
+            if (payload?.success) {
+                setStatsData(payload);
+            } else {
+                setStatsError('Không tải được số liệu tổng quan.');
+            }
         } catch (err) {
             if (isAbortError(err)) return;
             console.error('[DashboardStats] Failed to fetch stats', err);
             setStatsError('Không tải được số liệu tổng quan.');
         } finally {
-            inFlightRef.current = null;
+            inFlightPeriodRef.current = null;
+            setStatsLoading(false);
         }
-        if (!signal.aborted) setStatsLoading(false);
     }, [nextSignal]);
 
     useEffect(() => {
@@ -169,10 +200,20 @@ const Dashboard: React.FC = () => {
     const firstLoad = statsLoading && !statsData;
 
     const seriesMeta: Record<Series, { key: Series; name: string }> = {
-        web: { key: 'web', name: 'Lượt xem website' },
+        web: { key: 'web', name: 'Website' },
         ai: { key: 'ai', name: 'Phản hồi AI' },
         leads: { key: 'leads', name: 'Liên hệ mới' },
     };
+
+    const transformedChartData = useMemo(() => {
+        return chartData.map((item) => ({
+            date: item.date,
+            value: num(item[series]),
+            web: num(item.web),
+            ai: num(item.ai),
+            leads: num(item.leads),
+        }));
+    }, [chartData, series]);
 
     return (
         <MktPage className="pb-10">
@@ -202,11 +243,11 @@ const Dashboard: React.FC = () => {
             </PageHero>
 
             {dbNeedsMigration && (
-                <div className="flex flex-wrap items-center gap-3 px-4 py-3 rounded-[var(--radius-lg)] border border-amber-300 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/30">
-                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                <div className="flex flex-wrap items-center gap-3 px-4 py-3 rounded-[var(--radius-lg)] border border-amber-300 bg-amber-50 dark:bg-[var(--color-primary)]/10 dark:border-[var(--color-primary)]/30">
+                    <AlertTriangle className="w-5 h-5 text-[var(--color-primary)] shrink-0" />
                     <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-amber-800 dark:text-amber-400">Cơ sở dữ liệu Marketing cần cập nhật cấu trúc</p>
-                        <p className="text-xs text-amber-700 dark:text-amber-500">Một số bảng/cột mới chưa được tạo. Vui lòng chạy cập nhật để đảm bảo số liệu chính xác.</p>
+                        <p className="text-xs text-[#9A1523] dark:text-[var(--color-primary)]">Một số bảng/cột mới chưa được tạo. Vui lòng chạy cập nhật để đảm bảo số liệu chính xác.</p>
                     </div>
                     <a
                         href="/mail_api/run_migrations.php"
@@ -272,6 +313,8 @@ const Dashboard: React.FC = () => {
                         loading={firstLoad}
                         title="Tin đã gửi"
                         value={fmt(totalSentRecent)}
+                        growth={summary.growth_sent ?? 0}
+                        comparisonLabel={comparisonLabel}
                         breakdown={<span>{campaigns.length} chiến dịch gần nhất</span>}
                         icon={<Send />}
                         color="#f59e0b"
@@ -283,20 +326,34 @@ const Dashboard: React.FC = () => {
             {statsData && (
                 <>
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                        {/* Daily trend chart */}
+                        {/* Daily trend chart matching Dashboard's Hiệu suất xử lý Data theo ngày */}
                         <MktPanel className="lg:col-span-2 flex flex-col">
-                            <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-[var(--color-border)]">
-                                <MktSectionTitle icon={BarChart3} title="Xu hướng theo ngày" />
-                                <div className="ml-auto">
-                                    <MktSegmented<Series>
-                                        value={series}
-                                        onChange={setSeries}
-                                        options={[
-                                            { id: 'web', label: 'Website' },
-                                            { id: 'ai', label: 'AI' },
-                                            { id: 'leads', label: 'Liên hệ' },
-                                        ]}
-                                    />
+                            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-[var(--color-border)]">
+                                <div>
+                                    <h3 className="text-[1.125rem] font-bold text-[var(--color-text)] flex items-center gap-2">
+                                        <BarChart3 className="w-5 h-5 text-[var(--color-primary)]" />
+                                        Hiệu suất xử lý Data theo ngày
+                                    </h3>
+                                    <p className="text-[0.8125rem] text-[var(--color-text-light)] mt-0.5">
+                                        Biểu đồ thể hiện lưu lượng {seriesMeta[series].name.toLowerCase()} trong {period} ngày gần nhất.
+                                    </p>
+                                </div>
+                                <div className="flex bg-[var(--color-bg)] p-1 rounded-[var(--radius-md)] border border-[var(--color-border-light)] shrink-0">
+                                    {(['web', 'ai', 'leads'] as Series[]).map((s) => (
+                                        <button
+                                            key={s}
+                                            type="button"
+                                            onClick={() => setSeries(s)}
+                                            className="px-3 py-1.5 rounded-[var(--radius-sm)] text-[0.8125rem] font-semibold border-0 cursor-pointer transition-all duration-200"
+                                            style={{
+                                                background: series === s ? 'var(--color-surface)' : 'transparent',
+                                                color: series === s ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                                                boxShadow: series === s ? '0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                                            }}
+                                        >
+                                            {seriesMeta[s].name}
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
                             <div className="px-2 pt-4 pb-2 h-[300px]">
@@ -304,121 +361,243 @@ const Dashboard: React.FC = () => {
                                     <MktEmpty icon={BarChart3} title="Chưa có dữ liệu trong khoảng thời gian này" />
                                 ) : pageActive ? (
                                     <ResponsiveContainer width="100%" height={280} minWidth={0}>
-                                        <AreaChart data={chartData} margin={{ top: 8, right: 16, left: -12, bottom: 0 }}>
-                                            <defs>
-                                                <linearGradient id="mktDashArea" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.25} />
-                                                    <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0} />
-                                                </linearGradient>
-                                            </defs>
+                                        <BarChart data={transformedChartData} margin={{ top: 12, right: 16, left: -10, bottom: 0 }}>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border-light)" />
-                                            <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} dy={6} />
-                                            <YAxis axisLine={false} tickLine={false} allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
-                                            <Tooltip content={<ChartTooltip />} />
-                                            <Area
-                                                type="monotone"
-                                                dataKey={seriesMeta[series].key}
-                                                name={seriesMeta[series].name}
-                                                stroke="var(--color-primary)"
-                                                strokeWidth={2}
-                                                fill="url(#mktDashArea)"
-                                                isAnimationActive={false}
+                                            <XAxis
+                                                dataKey="date"
+                                                axisLine={false}
+                                                tickLine={false}
+                                                tick={{ fontSize: 11, fill: 'var(--color-text-light)' }}
+                                                dy={6}
                                             />
-                                        </AreaChart>
+                                            <YAxis
+                                                axisLine={false}
+                                                tickLine={false}
+                                                allowDecimals={false}
+                                                tick={{ fontSize: 11, fill: 'var(--color-text-light)' }}
+                                                width={36}
+                                            />
+                                            <Tooltip content={({ active, payload, label }) => {
+                                                if (active && payload && payload.length) {
+                                                    return (
+                                                        <div style={{
+                                                            background: 'var(--color-surface)',
+                                                            padding: '10px 14px',
+                                                            borderRadius: '8px',
+                                                            boxShadow: '0 10px 25px rgba(0,0,0,0.1), 0 3px 10px rgba(0,0,0,0.06)',
+                                                            border: '1px solid var(--color-border)',
+                                                            minWidth: 140
+                                                        }}>
+                                                            <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: 4 }}>
+                                                                {label}
+                                                            </div>
+                                                            <div style={{ fontSize: '0.8125rem', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                                                <span style={{ color: 'var(--color-text-muted)' }}>{seriesMeta[series].name}:</span>
+                                                                <span style={{ fontWeight: 800 }}>{fmt(payload[0].value)}</span>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                }
+                                                return null;
+                                            }} />
+                                            <Bar dataKey="value" fill="var(--color-primary)" radius={[4, 4, 0, 0]} maxBarSize={36}>
+                                                <LabelList
+                                                    dataKey="value"
+                                                    position="top"
+                                                    style={{ fill: 'var(--color-text)', fontSize: 10, fontWeight: 700 }}
+                                                    offset={6}
+                                                    formatter={(v: any) => Number(v) > 0 ? v : ''}
+                                                />
+                                            </Bar>
+                                        </BarChart>
                                     </ResponsiveContainer>
                                 ) : null}
                             </div>
                         </MktPanel>
 
-                        {/* Active flows */}
+                        {/* Active flows matching Dashboard's Top Tư vấn viên / Tỷ lệ vòng */}
                         <MktPanel className="flex flex-col">
                             <div className="px-4 py-3 border-b border-[var(--color-border)]">
                                 <MktSectionTitle
                                     icon={GitBranch}
                                     title="Automation đang chạy"
-                                    action={<button type="button" onClick={() => navigate('/marketing/flows')} className="text-xs font-semibold text-[var(--color-primary)] hover:underline">Xem tất cả</button>}
+                                    action={
+                                        <button
+                                            type="button"
+                                            onClick={() => navigate('/marketing/flows')}
+                                            className="text-xs font-semibold text-[var(--color-primary)] hover:underline"
+                                        >
+                                            Xem tất cả
+                                        </button>
+                                    }
                                 />
                             </div>
                             {flows.length === 0 ? (
-                                <MktEmpty icon={GitBranch} title="Chưa có kịch bản đang chạy" actionLabel="Tạo Automation" onAction={() => navigate('/marketing/flows')} />
+                                <MktEmpty
+                                    icon={GitBranch}
+                                    title="Chưa có kịch bản đang chạy"
+                                    actionLabel="Tạo Automation"
+                                    onAction={() => navigate('/marketing/flows')}
+                                />
                             ) : (
-                                <ul className="divide-y divide-[var(--color-border-light)]">
+                                <div className="custom-scrollbar p-2 flex flex-col gap-1 overflow-y-auto max-h-[300px]">
                                     {flows.map((flow, idx) => {
                                         const rate = pct(flow.stat_completed, flow.stat_enrolled);
+                                        const cfg = getFlowTriggerConfig(flow.trigger_type);
                                         return (
-                                            <li key={`${flow.name}-${idx}`}>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => navigate('/marketing/flows')}
-                                                    className="w-full text-left px-4 py-3 hover:bg-[var(--color-bg)] transition-colors"
-                                                >
-                                                    <div className="flex items-center justify-between gap-3">
-                                                        <span className="text-sm font-semibold text-[var(--color-text)] truncate">{flow.name}</span>
-                                                        <span className="text-xs font-bold text-[var(--color-primary)] shrink-0">{rate}%</span>
+                                            <div
+                                                key={`${flow.name}-${idx}`}
+                                                className="hover-lift p-2.5 rounded-[var(--radius-md)] hover:bg-[var(--color-bg)] transition-colors cursor-pointer"
+                                                onClick={() => navigate('/marketing/flows')}
+                                            >
+                                                <div className="flex flex-col gap-1.5">
+                                                    <div className="flex items-center justify-between gap-2 min-w-0">
+                                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                            <span
+                                                                className="text-[10px] font-bold px-1.5 py-0.5 rounded-[var(--radius-sm)] shrink-0 uppercase tracking-wider"
+                                                                style={{ backgroundColor: cfg.bg, color: cfg.color }}
+                                                            >
+                                                                {cfg.label}
+                                                            </span>
+                                                            <span className="text-sm font-semibold text-[var(--color-text)] truncate" title={flow.name}>
+                                                                {flow.name}
+                                                            </span>
+                                                        </div>
+                                                        <span className="text-xs font-extrabold shrink-0" style={{ color: cfg.color }}>
+                                                            {rate}%
+                                                        </span>
                                                     </div>
-                                                    <div className="flex items-center justify-between gap-3 mt-1 text-xs text-[var(--color-text-muted)]">
-                                                        <span className="truncate">{flow.trigger_type || 'Kích hoạt thủ công'}</span>
-                                                        <span className="shrink-0">{fmt(flow.stat_enrolled)} tham gia</span>
+                                                    <div className="flex items-center justify-between gap-2 text-xs text-[var(--color-text-muted)]">
+                                                        <span className="truncate">{flow.trigger_type || 'Kích hoạt tự động'}</span>
+                                                        <span className="shrink-0">{fmt(flow.stat_completed)}/{fmt(flow.stat_enrolled)} đã xong</span>
                                                     </div>
-                                                    <div className="h-1 mt-2 rounded-full bg-[var(--color-border-light)] overflow-hidden">
-                                                        <div className="h-full bg-[var(--color-primary)] rounded-full" style={{ width: `${Math.min(rate, 100)}%` }} />
+                                                    <div className="h-1.5 w-full bg-[var(--color-bg)] dark:bg-white/5 rounded-full overflow-hidden mt-0.5">
+                                                        <div
+                                                            className="h-full rounded-full transition-all duration-300"
+                                                            style={{
+                                                                width: `${Math.min(Math.max(rate, 0), 100)}%`,
+                                                                backgroundColor: cfg.color
+                                                            }}
+                                                        />
                                                     </div>
-                                                </button>
-                                            </li>
+                                                </div>
+                                            </div>
                                         );
                                     })}
-                                </ul>
+                                </div>
                             )}
                         </MktPanel>
                     </div>
 
-                    {/* Recent campaigns table */}
+                    {/* Recent campaigns matching Dashboard's Lịch sử giao Data gần đây */}
                     <MktPanel>
-                        <div className="px-4 py-3 border-b border-[var(--color-border)]">
+                        <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center justify-between">
                             <MktSectionTitle
                                 icon={Mail}
                                 title="Chiến dịch gần đây"
-                                action={<button type="button" onClick={() => navigate('/marketing/campaigns')} className="text-xs font-semibold text-[var(--color-primary)] hover:underline">Xem tất cả</button>}
                             />
+                            <button
+                                type="button"
+                                onClick={() => navigate('/marketing/campaigns')}
+                                className="text-xs font-bold text-[var(--color-primary)] hover:underline cursor-pointer"
+                            >
+                                Xem tất cả
+                            </button>
                         </div>
                         {campaigns.length === 0 ? (
-                            <MktEmpty icon={Mail} title="Chưa có chiến dịch đã gửi" description="Các chiến dịch đã gửi, đang gửi hoặc đã lên lịch sẽ hiển thị tại đây." actionLabel="Tạo chiến dịch" onAction={() => navigate('/marketing/campaigns')} />
+                            <MktEmpty
+                                icon={Mail}
+                                title="Chưa có chiến dịch đã gửi"
+                                description="Các chiến dịch đã gửi, đang gửi hoặc đã lên lịch sẽ hiển thị tại đây."
+                                actionLabel="Tạo chiến dịch"
+                                onAction={() => navigate('/marketing/campaigns')}
+                            />
                         ) : (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
-                                    <thead className="bg-[var(--color-bg)] text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
-                                        <tr>
-                                            <th className="px-4 py-3 text-left">Chiến dịch</th>
-                                            <th className="px-4 py-3 text-left">Kênh</th>
-                                            <th className="px-4 py-3 text-right">Đã gửi</th>
-                                            <th className="px-4 py-3 text-right">Tỷ lệ mở</th>
-                                            <th className="px-4 py-3 text-right">Tỷ lệ click</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {campaigns.map((c, idx) => {
-                                            const isZalo = c.type === 'zalo' || c.type === 'zalo_zns';
-                                            return (
-                                                <tr
-                                                    key={`${c.name}-${idx}`}
-                                                    onClick={() => navigate('/marketing/campaigns')}
-                                                    className="border-b border-[var(--color-border-light)] last:border-b-0 hover:bg-[var(--color-bg)] cursor-pointer"
+                            <div className="p-2 flex flex-col gap-1 max-h-[360px] overflow-y-auto custom-scrollbar">
+                                {campaigns.map((c, idx) => {
+                                    const isZalo = c.type === 'zalo' || c.type === 'zalo_zns';
+                                    const dateStr = c.sent_at || c.created_at;
+                                    const formattedDate = dateStr
+                                        ? new Date(dateStr.replace(' ', 'T')).toLocaleString('vi-VN', {
+                                            day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+                                        })
+                                        : '';
+
+                                    let statusBadge = {
+                                        text: 'Đã gửi',
+                                        bg: 'rgba(16, 185, 129, 0.12)',
+                                        color: '#10b981',
+                                    };
+                                    const s = (c.status || '').toLowerCase();
+                                    if (s === 'sending' || s === 'in_progress') {
+                                        statusBadge = { text: 'Đang gửi', bg: 'rgba(59, 130, 246, 0.12)', color: '#3b82f6' };
+                                    } else if (s === 'scheduled' || s === 'pending') {
+                                        statusBadge = { text: 'Chờ gửi', bg: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b' };
+                                    } else if (s === 'draft') {
+                                        statusBadge = { text: 'Bản nháp', bg: 'rgba(107, 114, 128, 0.12)', color: '#6b7280' };
+                                    }
+
+                                    const openRate = pct(c.stat_total_opened, c.stat_total_sent);
+                                    const clickRate = pct(c.stat_total_clicked, c.stat_total_sent);
+
+                                    return (
+                                        <div
+                                            key={`${c.name}-${idx}`}
+                                            onClick={() => navigate('/marketing/campaigns')}
+                                            className="hover-lift p-3 flex items-center gap-3 rounded-[var(--radius-lg)] cursor-pointer transition-colors border-b border-[var(--color-border-light)] last:border-b-0 hover:bg-[var(--color-bg)]"
+                                        >
+                                            {/* Circular channel badge */}
+                                            <div
+                                                className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
+                                                style={{
+                                                    backgroundColor: isZalo ? 'rgba(0, 104, 255, 0.12)' : 'rgba(225, 29, 72, 0.12)',
+                                                    color: isZalo ? '#0068ff' : '#e11d48',
+                                                }}
+                                            >
+                                                {isZalo ? <MessageSquare className="w-5 h-5" /> : <Mail className="w-5 h-5" />}
+                                            </div>
+
+                                            {/* Title & Info */}
+                                            <div className="flex-1 min-w-0">
+                                                <div className="font-bold text-sm text-[var(--color-text)] truncate" title={c.name}>
+                                                    {c.name}
+                                                </div>
+                                                <div className="text-xs text-[var(--color-text-muted)] mt-0.5 flex items-center gap-2 truncate">
+                                                    <span className="font-medium text-[var(--color-text-light)]">{isZalo ? 'Zalo ZNS' : 'Email'}</span>
+                                                    <span>•</span>
+                                                    <span>{fmt(c.stat_total_sent)} đã gửi</span>
+                                                    {num(c.stat_total_sent) > 0 && (
+                                                        <>
+                                                            <span>•</span>
+                                                            <span>Mở {openRate}%</span>
+                                                            <span>•</span>
+                                                            <span>Click {clickRate}%</span>
+                                                        </>
+                                                    )}
+                                                    {formattedDate && (
+                                                        <>
+                                                            <span>•</span>
+                                                            <span>{formattedDate}</span>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Right: status pill badge */}
+                                            <div className="text-right shrink-0">
+                                                <span
+                                                    className="px-2.5 py-1 rounded-[var(--radius-sm)] text-xs font-bold inline-block"
+                                                    style={{
+                                                        backgroundColor: statusBadge.bg,
+                                                        color: statusBadge.color,
+                                                    }}
                                                 >
-                                                    <td className="px-4 py-3 font-semibold text-[var(--color-text)] max-w-[360px] truncate">{c.name}</td>
-                                                    <td className="px-4 py-3 text-[var(--color-text-light)]">
-                                                        <span className="inline-flex items-center gap-1.5">
-                                                            {isZalo ? <MessageSquare className="w-3.5 h-3.5" /> : <Mail className="w-3.5 h-3.5" />}
-                                                            {isZalo ? 'Zalo ZNS' : 'Email'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right font-semibold text-[var(--color-text)]">{fmt(c.stat_total_sent)}</td>
-                                                    <td className="px-4 py-3 text-right text-[var(--color-text)]">{pct(c.stat_total_opened, c.stat_total_sent)}%</td>
-                                                    <td className="px-4 py-3 text-right text-[var(--color-text)]">{pct(c.stat_total_clicked, c.stat_total_sent)}%</td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
+                                                    {statusBadge.text}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
                     </MktPanel>

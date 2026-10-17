@@ -13,11 +13,11 @@ interface DropIndicatorProps {
 
 export const CanvasDropIndicator: React.FC<DropIndicatorProps> = ({ dropPosition }) => (
     <>
-        {dropPosition === 'top' && <div className="absolute top-0 left-0 right-0 h-1 bg-[#8b5cf6] z-[60] pointer-events-none shadow-[0_0_10px_rgba(139,92,246,0.6)] animate-pulse" />}
-        {dropPosition === 'bottom' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#8b5cf6] z-[60] pointer-events-none shadow-[0_0_10px_rgba(139,92,246,0.6)] animate-pulse" />}
-        {dropPosition === 'left' && <div className="absolute top-0 left-0 bottom-0 w-1 bg-[#8b5cf6] z-[60] pointer-events-none shadow-[0_0_10px_rgba(139,92,246,0.6)] animate-pulse" />}
-        {dropPosition === 'right' && <div className="absolute top-0 right-0 bottom-0 w-1 bg-[#8b5cf6] z-[60] pointer-events-none shadow-[0_0_10px_rgba(139,92,246,0.6)] animate-pulse" />}
-        {dropPosition === 'inside' && <div className="absolute inset-0 bg-[#8b5cf6]/10 z-[55] border-2 border-[#8b5cf6] border-dashed pointer-events-none shadow-[inset_0_0_15px_rgba(139,92,246,0.2)]" />}
+        {dropPosition === 'top' && <div className="absolute top-0 left-0 right-0 h-1 bg-[#BD1D2D] z-[60] pointer-events-none shadow-[0_0_10px_rgba(189,29,45,0.45)] animate-pulse" />}
+        {dropPosition === 'bottom' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#BD1D2D] z-[60] pointer-events-none shadow-[0_0_10px_rgba(189,29,45,0.45)] animate-pulse" />}
+        {dropPosition === 'left' && <div className="absolute top-0 left-0 bottom-0 w-1 bg-[#BD1D2D] z-[60] pointer-events-none shadow-[0_0_10px_rgba(189,29,45,0.45)] animate-pulse" />}
+        {dropPosition === 'right' && <div className="absolute top-0 right-0 bottom-0 w-1 bg-[#BD1D2D] z-[60] pointer-events-none shadow-[0_0_10px_rgba(189,29,45,0.45)] animate-pulse" />}
+        {dropPosition === 'inside' && <div className="absolute inset-0 bg-[#BD1D2D]/10 z-[55] border-2 border-[#BD1D2D] border-dashed pointer-events-none shadow-[inset_0_0_15px_rgba(189,29,45,0.2)]" />}
     </>
 );
 
@@ -92,6 +92,10 @@ export const CanvasHandleOverlay: React.FC<HandleOverlayProps> = ({
             case 'review': return IconMap.Star as LucideIcon;
             case 'countdown': return IconMap.Clock as LucideIcon;
             case 'order_list': return IconMap.ShoppingBag as LucideIcon;
+            case 'check_list': return IconMap.CheckCircle as LucideIcon;
+            case 'voucher': return IconMap.Ticket as LucideIcon;
+            case 'otp': return IconMap.KeyRound as LucideIcon;
+            case 'survey_card': return IconMap.ClipboardList as LucideIcon;
             default: return IconMap.Layers as LucideIcon;
         }
     };
@@ -99,12 +103,12 @@ export const CanvasHandleOverlay: React.FC<HandleOverlayProps> = ({
 
     return (
         <>
-            {/* Anchor div inside td to measure position */}
-            <div ref={anchorRef} className="pointer-events-none" style={{ position: 'absolute', inset: 0 }}>
-                {/* Border outline — stays inside td (doesn't need portal) */}
+            {/* Anchor div inside container to measure position */}
+            <div ref={anchorRef} className="pointer-events-none overflow-hidden" style={{ position: 'absolute', inset: 0, borderRadius: 'inherit' }}>
+                {/* Border outline — stays strictly inside container (doesn't need portal) */}
                 {isSelected && (
                     <div 
-                        className={`absolute inset-0 border-2 ${color.replace('ring-', 'border-')} pointer-events-none z-50`} 
+                        className={`absolute inset-0 border-2 ${color.startsWith('ring-') ? color.replace('ring-', 'border-') : (color.startsWith('border-') ? color : 'border-[#BD1D2D]/80')} pointer-events-none z-50 rounded-[inherit]`} 
                         style={{ borderRadius: block.style?.borderRadius ? sanitizeRadius(block.style.borderRadius) : undefined }}
                     />
                 )}
@@ -136,20 +140,20 @@ export const CanvasHandleOverlay: React.FC<HandleOverlayProps> = ({
                             <IconMap.GripVertical as LucideIcon className="w-3.5 h-3.5" />
                         </div>
                         <div className="flex bg-white border border-slate-200 shadow-md">
-                            <button onClick={(e) => { e.stopPropagation(); onMoveOrder(block.id, 'up'); }} className="p-1 text-blue-600 hover:bg-blue-50 border-r border-slate-100" title="Move Up">
+                            <button onClick={(e) => { e.stopPropagation(); onMoveOrder(block.id, 'up'); }} className="p-1 text-[#BD1D2D] hover:bg-[#BD1D2D]/10 border-r border-slate-100" title="Move Up">
                                 <IconMap.ArrowUp as LucideIcon className="w-3.5 h-3.5" />
                             </button>
-                            <button onClick={(e) => { e.stopPropagation(); onMoveOrder(block.id, 'down'); }} className="p-1 text-blue-600 hover:bg-blue-50" title="Move Down">
+                            <button onClick={(e) => { e.stopPropagation(); onMoveOrder(block.id, 'down'); }} className="p-1 text-[#BD1D2D] hover:bg-[#BD1D2D]/10" title="Move Down">
                                 <IconMap.ArrowDown as LucideIcon className="w-3.5 h-3.5" />
                             </button>
                         </div>
                         {block.type === 'column' && (
-                            <button onClick={(e) => { e.stopPropagation(); onSwapColumns(block.id); }} className="bg-white border border-slate-200 p-1 text-blue-500 hover:bg-blue-50 shadow-md" title="Swap Columns">
+                            <button onClick={(e) => { e.stopPropagation(); onSwapColumns(block.id); }} className="bg-white border border-slate-200 p-1 text-[#BD1D2D] hover:bg-[#BD1D2D]/10 shadow-md" title="Swap Columns">
                                 <IconMap.ArrowRightLeft as LucideIcon className="w-3.5 h-3.5" />
                             </button>
                         )}
                         {(block.type === 'section' || block.type === 'row') && onSaveSection && (
-                            <button onClick={(e) => { e.stopPropagation(); onSaveSection(block); }} className="bg-white border border-slate-200 p-1 text-blue-600 hover:bg-blue-50 shadow-md" title="Save Block">
+                            <button onClick={(e) => { e.stopPropagation(); onSaveSection(block); }} className="bg-white border border-slate-200 p-1 text-[#BD1D2D] hover:bg-[#BD1D2D]/10 shadow-md" title="Save Block">
                                 <IconMap.Save as LucideIcon className="w-3.5 h-3.5" />
                             </button>
                         )}

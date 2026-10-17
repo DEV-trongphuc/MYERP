@@ -192,9 +192,9 @@ const FlowHeader: React.FC<FlowHeaderProps> = ({
           </div>
         </div>
 
-        {/* Desktop Absolute Tabs Container - Increased z-index */}
+        {/* Desktop Absolute Tabs Container */}
         <div className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
-          <div className="bg-slate-50 dark:bg-slate-950 p-1.5 rounded-2xl flex gap-1.5 border border-slate-200 dark:border-slate-800 shadow-inner ring-4 ring-black/[0.02]">
+          <div className="h-9 rounded-[12px] bg-slate-100 dark:bg-slate-800 p-0.5 flex items-center gap-1 border border-slate-200/80 dark:border-slate-700/60 shadow-xs">
             {[
               { id: 'builder', label: 'Thiết kế', icon: Layout },
               { id: 'analytics', label: 'Báo cáo', icon: BarChart3 },
@@ -202,10 +202,14 @@ const FlowHeader: React.FC<FlowHeaderProps> = ({
             ].map(tab => (
               <button
                 key={tab.id}
-                onClick={() => onTabChange(tab.id as any)}
-                className={`flex items-center gap-2.5 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] transition-all duration-500 relative group ${activeTab === tab.id ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-md ring-1 ring-slate-200/50 dark:ring-white/10' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 hover:bg-white/50 dark:hover:bg-slate-900/50'}`}
+                onClick={() => onTabChange?.(tab.id as any)}
+                className={`h-8 flex items-center gap-2 px-4 rounded-[10px] text-xs font-semibold transition-all duration-200 ${
+                  activeTab === tab.id
+                    ? 'bg-white dark:bg-slate-900 text-[var(--color-text)] shadow-xs'
+                    : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+                }`}
               >
-                <tab.icon className={`w-4 h-4 transition-transform duration-500 ${activeTab === tab.id ? 'scale-110' : 'group-hover:scale-110'}`} />
+                <tab.icon className="w-3.5 h-3.5" />
                 {tab.label}
               </button>
             ))}
@@ -218,56 +222,72 @@ const FlowHeader: React.FC<FlowHeaderProps> = ({
               <button
                 onClick={handleAiReviewClick}
                 disabled={isAiReviewing || isConfirmingAi}
-                className="w-10 sm:w-auto h-10 px-0 sm:px-4 lg:px-6 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] flex justify-center items-center gap-2 transition-all border border-purple-500/30 bg-gradient-to-br from-purple-600 to-indigo-700 text-white shadow-[0_8px_20px_-6px_rgba(124,58,237,0.5)] hover:shadow-[0_12px_25px_-4px_rgba(124,58,237,0.6)] hover:-translate-y-0.5 active:scale-95 shrink-0 group relative overflow-hidden"
+                className="h-9 px-3.5 rounded-[12px] bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 font-semibold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
+                title="AI phân tích và đánh giá luồng"
               >
-                <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                {isAiReviewing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-purple-200 group-hover:rotate-12 transition-transform" />} 
-                <span className="hidden sm:inline relative z-10">AI REVIEW</span>
+                {isAiReviewing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />} 
+                <span className="hidden sm:inline">AI REVIEW</span>
               </button>
               <button
                 onClick={onToggleStatus}
-                className={`w-10 sm:w-auto h-10 px-0 sm:px-4 lg:px-6 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] flex justify-center items-center gap-2 transition-all border shadow-sm hover:-translate-y-0.5 active:scale-95 shrink-0 ${flow.status === 'active'
-                  ? 'bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100 shadow-rose-200/30'
-                  : (hasCriticalErrors ? 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-300 cursor-not-allowed opacity-50' : 'bg-white dark:bg-slate-950 border-emerald-500/30 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-500 shadow-emerald-500/10')
-                  }`}
+                className={`h-9 px-3.5 rounded-[12px] font-semibold text-xs flex items-center justify-center gap-1.5 transition-all border shadow-xs active:scale-95 ${flow.status === 'active'
+                  ? 'bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/50'
+                  : (hasCriticalErrors
+                    ? 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-400 cursor-not-allowed opacity-50'
+                    : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/50')
+                }`}
               >
                 {flow.status === 'active' ? (
-                  <><Pause className="w-4 h-4 fill-current" /> <span className="hidden sm:inline">DỪNG</span></>
+                  <><Pause className="w-3.5 h-3.5 fill-current" /> <span className="hidden sm:inline">DỪNG</span></>
                 ) : (
-                  hasCriticalErrors ? <><Lock className="w-4 h-4" /> <span className="hidden sm:inline">LOCKED</span></> : <><Play className="w-4 h-4 fill-current" /> <span className="hidden sm:inline">KÍCH HOẠT</span></>
+                  hasCriticalErrors ? <><Lock className="w-3.5 h-3.5" /> <span className="hidden sm:inline">LOCKED</span></> : <><Play className="w-3.5 h-3.5 fill-current" /> <span className="hidden sm:inline">KÍCH HOẠT</span></>
                 )}
               </button>
             </div>
           )}
 
-          <div className="h-6 lg:h-8 w-px bg-slate-200 mx-0.5 lg:mx-1 hidden md:block"></div>
+          <div className="h-6 lg:h-8 w-px bg-slate-200 dark:bg-slate-700 mx-0.5 lg:mx-1 hidden md:block"></div>
 
           {activeTab === 'builder' && (
             <div className="flex items-center gap-1.5">
-              {/* Desktop: show 3 icon buttons individually */}
-              <button
-                onClick={onToggleReportMode}
-                className={`hidden sm:flex p-2 lg:p-2.5 rounded-xl transition-all items-center gap-2 border active:scale-95 ${isReportMode ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'border-transparent text-slate-400 hover:text-slate-900 dark:text-slate-100 hover:bg-slate-50 dark:bg-slate-950'}`}
-                title={isReportMode ? "Tắt Báo cáo nhanh" : "Xem Báo cáo nhanh"}
-              >
-                <BarChart3 className="w-4 h-4 lg:w-5 h-5" />
-              </button>
+              {/* Desktop: clean segmented group */}
+              <div className="hidden sm:flex items-center h-9 p-0.5 rounded-[12px] bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/60 gap-0.5">
+                <button
+                  onClick={onToggleReportMode}
+                  className={`h-8 w-8 rounded-[10px] flex items-center justify-center transition-all ${
+                    isReportMode
+                      ? 'bg-white dark:bg-slate-900 text-indigo-600 shadow-xs'
+                      : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+                  }`}
+                  title={isReportMode ? "Tắt Báo cáo nhanh" : "Xem Báo cáo nhanh"}
+                >
+                  <BarChart3 className="w-4 h-4" />
+                </button>
 
-              <button
-                onClick={onToggleViewMode}
-                className={`hidden sm:flex p-2 lg:p-2.5 rounded-xl transition-all items-center gap-2 border active:scale-95 ${isViewMode ? 'bg-orange-50 text-[#ca7900] border-orange-200' : 'border-transparent text-slate-400 hover:text-slate-900 dark:text-slate-100 hover:bg-slate-50 dark:bg-slate-950'}`}
-                title={isViewMode ? "Thoát chế độ xem" : "Xem trước"}
-              >
-                {isViewMode ? <EyeOff className="w-4 h-4 lg:w-5 h-5" /> : <Eye className="w-4 h-4 lg:w-5 h-5" />}
-              </button>
+                <button
+                  onClick={onToggleViewMode}
+                  className={`h-8 w-8 rounded-[10px] flex items-center justify-center transition-all ${
+                    isViewMode
+                      ? 'bg-white dark:bg-slate-900 text-amber-600 shadow-xs'
+                      : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+                  }`}
+                  title={isViewMode ? "Thoát chế độ xem" : "Xem trước"}
+                >
+                  {isViewMode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
 
-              <button
-                onClick={onToggleSidebar}
-                className={`hidden sm:flex p-2 lg:p-2.5 rounded-xl transition-all items-center gap-2 border active:scale-95 ${isSidebarOpen ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'border-transparent text-slate-400 hover:text-slate-900 dark:text-slate-100 hover:bg-slate-50 dark:bg-slate-950'}`}
-                title={isSidebarOpen ? "Ẩn thanh bên" : "Hiện thanh bên"}
-              >
-                <Layout className="w-4 h-4 lg:w-5 h-5" />
-              </button>
+                <button
+                  onClick={onToggleSidebar}
+                  className={`h-8 w-8 rounded-[10px] flex items-center justify-center transition-all ${
+                    isSidebarOpen
+                      ? 'bg-white dark:bg-slate-900 text-emerald-600 shadow-xs'
+                      : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+                  }`}
+                  title={isSidebarOpen ? "Ẩn thanh bên" : "Hiện thanh bên"}
+                >
+                  <Layout className="w-4 h-4" />
+                </button>
+              </div>
 
               {/* Mobile: collapse all 3 into a single ⋯ More dropdown */}
               <div className="relative sm:hidden" ref={moreMenuRef}>
@@ -314,41 +334,44 @@ const FlowHeader: React.FC<FlowHeaderProps> = ({
           )}
 
           {activeTab === 'analytics' && (
-            <Button
-              size="sm"
-              icon={RefreshCw}
+            <button
               onClick={onSync}
               disabled={isSyncing}
-              variant="secondary"
-              className={`border-slate-200 dark:border-slate-700/60 !rounded-xl transition-all ${isSyncing ? 'animate-pulse' : ''}`}
+              className={`h-9 px-3.5 rounded-[12px] border border-slate-200 dark:border-slate-700 bg-[var(--color-surface)] text-[var(--color-text)] hover:bg-[var(--color-bg)] text-xs font-semibold transition-all inline-flex items-center gap-1.5 ${isSyncing ? 'animate-pulse' : ''}`}
             >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
               {isSyncing ? 'Đang làm mới...' : 'Làm mới'}
-            </Button>
+            </button>
           )}
 
           {isArchived ? (
-            <Button icon={RefreshCw} onClick={onRestore} variant="primary" className="h-9 lg:h-10 rounded-full px-2 sm:px-4 lg:px-6 text-[9px] lg:text-[10px] uppercase font-black tracking-widest min-w-0"><span className="hidden sm:inline">Khôi phục</span></Button>
-          ) : (
-            <Button
-              variant="custom"
-              icon={Save}
-              onClick={onSave}
-              disabled={isViewMode}
-              isLoading={isSaving}
-              className={`h-9 lg:h-10 rounded-full px-2 sm:px-4 lg:px-6 text-[9px] lg:text-[10px] uppercase font-black tracking-widest transition-all min-w-0 flex items-center justify-center gap-2 ${isViewMode || isSaving
-                ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed shadow-none border-none'
-                : 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white shadow-md active:scale-95 border-none'
-                }`}
+            <button
+              onClick={onRestore}
+              className="bg-emerald-600 text-white hover:bg-emerald-700 h-9 px-4 rounded-[12px] font-semibold text-xs shadow-xs flex items-center gap-1.5 transition-colors"
             >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Khôi phục</span>
+            </button>
+          ) : (
+            <button
+              onClick={onSave}
+              disabled={isViewMode || isSaving}
+              className={`h-9 px-4 rounded-[12px] font-semibold text-xs shadow-xs flex items-center justify-center gap-1.5 transition-all ${
+                isViewMode || isSaving
+                  ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed shadow-none'
+                  : 'bg-[var(--color-primary)] text-white hover:brightness-95 active:scale-95'
+              }`}
+            >
+              {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
               <span className="hidden sm:inline">Lưu</span>
-            </Button>
+            </button>
           )}
         </div>
       </div >
 
       {/* Mobile Row: Navigation Tabs */}
-      <div className="flex lg:hidden w-full overflow-x-auto border-t border-slate-50 py-2 px-2 gap-2 justify-center bg-white dark:bg-slate-900">
-        <div className="flex gap-1 p-1 bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
+      <div className="flex lg:hidden w-full overflow-x-auto border-t border-slate-100 dark:border-slate-800 py-2 px-2 justify-center bg-white dark:bg-slate-900">
+        <div className="h-9 rounded-[12px] bg-slate-100 dark:bg-slate-800 p-0.5 flex gap-1 border border-slate-200/80 dark:border-slate-700/60">
           {[
             { id: 'builder', label: 'Thiết kế', icon: Layout },
             { id: 'analytics', label: 'Báo cáo', icon: BarChart3 },
@@ -356,11 +379,15 @@ const FlowHeader: React.FC<FlowHeaderProps> = ({
           ].map(tab => (
             <button
               key={tab.id}
-              onClick={() => onTabChange(tab.id as any)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${activeTab === tab.id ? 'bg-slate-900 text-white shadow-md' : 'text-slate-400'}`}
+              onClick={() => onTabChange?.(tab.id as any)}
+              className={`h-8 flex items-center gap-1.5 px-3 rounded-[10px] text-xs font-semibold transition-all ${
+                activeTab === tab.id
+                  ? 'bg-white dark:bg-slate-900 text-[var(--color-text)] shadow-xs'
+                  : 'text-[var(--color-text-muted)]'
+              }`}
             >
               <tab.icon className="w-3.5 h-3.5" />
-              <span>{tab.label}</span>
+              {tab.label}
             </button>
           ))}
         </div>

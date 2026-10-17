@@ -547,6 +547,13 @@ try {
                 $subscriberLastName = null;
                 $subscriberAvatar = null;
 
+                $emailNorm = $email
+                    ? (class_exists('DomationContactMatcher') ? DomationContactMatcher::normalizeEmail($email) : strtolower(trim($email)))
+                    : null;
+                $phoneNorm9 = $phone
+                    ? (class_exists('DomationContactMatcher') ? DomationContactMatcher::normalizePhone9($phone) : null)
+                    : null;
+
                 // [FIX] Extract Name from Payload
                 $payloadFirstName = $data['firstName'] ?? ($data['first_name'] ?? null);
                 $payloadLastName = $data['lastName'] ?? ($data['last_name'] ?? null);
@@ -563,8 +570,8 @@ try {
 
                 // 1. Check subscribers table (Email/Zalo marketing)
                 if ($email) {
-                    $stmt = $pdo->prepare("SELECT id, first_name, last_name, avatar FROM subscribers WHERE email = ? AND workspace_id = ? LIMIT 1");
-                    $stmt->execute([$email, $propWorkspaceId]);
+                    $stmt = $pdo->prepare("SELECT id, first_name, last_name, avatar FROM subscribers WHERE (email = ? OR email_norm = ?) AND workspace_id = ? LIMIT 1");
+                    $stmt->execute([$email, $emailNorm ?? $email, $propWorkspaceId]);
                     $subscriber = $stmt->fetch(PDO::FETCH_ASSOC);
                     if ($subscriber) {
                         $emailSubscriberId = $subscriber['id'];
@@ -579,8 +586,9 @@ try {
                     if (substr($normPhone, 0, 2) === '84' && strlen($normPhone) > 9) {
                         $normPhone = '0' . substr($normPhone, 2);
                     }
-                    $stmt = $pdo->prepare("SELECT id, first_name, last_name, avatar FROM subscribers WHERE (phone_number = ? OR phone_number = ? OR REPLACE(REPLACE(REPLACE(phone_number, ' ', ''), '.', ''), '-', '') = ?) AND workspace_id = ? LIMIT 1");
-                    $stmt->execute([$phone, $normPhone, $normPhone, $propWorkspaceId]);
+                    $p9 = $phoneNorm9 ?: (strlen($normPhone) >= 9 ? substr($normPhone, -9) : $normPhone);
+                    $stmt = $pdo->prepare("SELECT id, first_name, last_name, avatar FROM subscribers WHERE (phone_norm9 = ? OR phone_number = ? OR phone_number = ? OR REPLACE(REPLACE(REPLACE(phone_number, ' ', ''), '.', ''), '-', '') = ?) AND workspace_id = ? LIMIT 1");
+                    $stmt->execute([$p9, $phone, $normPhone, $normPhone, $propWorkspaceId]);
                     $subscriber = $stmt->fetch(PDO::FETCH_ASSOC);
                     if ($subscriber) {
                         $emailSubscriberId = $subscriber['id'];
@@ -615,15 +623,14 @@ try {
 
                 if ($emailSubscriberId) {
                     // Update web_visitor mapping synchronously
-                    $pdo->prepare("UPDATE web_visitors SET subscriber_id = ?, email = ?, phone = ?, zalo_user_id = COALESCE(zalo_user_id, ?) WHERE id = ? AND property_id = ?")
+                    $pdo->prepare("UPDATE web_visitors SET subscriber_id = ?, email = COALESCE(NULLIF(?, ''), email), phone = COALESCE(NULLIF(?, ''), phone), zalo_user_id = COALESCE(zalo_user_id, ?) WHERE id = ? AND property_id = ?")
                         ->execute([$emailSubscriberId, $email, $phone, $zaloSubscriberId, $visitorUuid, $propertyId]);
 
                     // SYNC METADATA TO SUBSCRIBER (New Req)
-                    // [FIX] NULLIF wraps each column so empty strings ("") are treated as NULL.
-                    // Without NULLIF: COALESCE("", "Hanoi") → "" (empty beats new value).
-                    // COALESCE only skips NULL, not empty string — very common PHP/MySQL gotcha.
-                    // With NULLIF: COALESCE(NULLIF("",""), "Hanoi") → "Hanoi" ✅
                     $updateSql = "UPDATE subscribers SET 
+                        email_norm = COALESCE(?, email_norm),
+                        phone_norm9 = COALESCE(?, phone_norm9),
+                        phone_number = COALESCE(NULLIF(phone_number, ''), ?),
                         last_os = COALESCE(NULLIF(last_os, ''), ?), 
                         last_browser = COALESCE(NULLIF(last_browser, ''), ?), 
                         last_device = COALESCE(NULLIF(last_device, ''), ?), 
@@ -635,7 +642,7 @@ try {
                         address = COALESCE(NULLIF(address, ''), ?),
                         zalo_user_id = COALESCE(NULLIF(zalo_user_id, ''), ?)";
 
-                    $updateParams = [$os, $browser, $deviceType, $city, $country, $ip, $city, $country, $data['address'] ?? null, $zaloSubscriberId];
+                    $updateParams = [$emailNorm, $phoneNorm9, $phone, $os, $browser, $deviceType, $city, $country, $ip, $city, $country, $data['address'] ?? null, $zaloSubscriberId];
 
                     if ($payloadFirstName || $payloadLastName) {
                         $fn = trim($payloadFirstName ?? '');
@@ -671,13 +678,11 @@ try {
                 } else {
                     // AUTO-CREATE LOGIC (Keep sync for ID consistency)
                     $priority = (int) ($data['priority'] ?? 0);
-                    // [FIX] PHP 8.1: preg_match() throws Deprecated warning if $email is null
-                    // (e.g. identify event submitted with phone only, no email field).
-                    // Null floods error logs with millions of warnings at scale.
                     $isSystemEmail = preg_match('/^(info|support|contact|admin|sales|billing|webmaster|help|no-reply|noreply)@/i', $email ?? '');
 
-                    if (($priority >= 1 && $email) || ($email && !$isSystemEmail)) {
+                    if (($priority >= 1 && ($email || $phoneNorm9)) || ($email && !$isSystemEmail)) {
                         $newSid = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x', mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000, mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff));
+                        $insertEmail = $email ?: ('phone_' . $phoneNorm9 . '@phone.local');
 
                         // Merge firstName + lastName intelligently to avoid duplication
                         $fn = trim($payloadFirstName ?? '');
@@ -702,11 +707,8 @@ try {
                         
                         $finalLastName = ''; // Always empty on auto-create from tracking
 
-                        // [FIX P35-T1] Added workspace_id to INSERT — previously missing,
-                        // causing auto-captured subscribers to have workspace_id=NULL
-                        // and be invisible in all CRM workspace-scoped queries.
-                        $pdo->prepare("INSERT INTO subscribers (id, workspace_id, property_id, email, phone_number, first_name, last_name, status, source, last_os, last_browser, last_device, last_city, last_country, city, country, address, last_ip, zalo_user_id) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 'website_tracking', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-                            ->execute([$newSid, $propWorkspaceId, $propertyId, $email, $phone, $finalFirstName, $finalLastName, $os, $browser, $deviceType, $city, $country, $city, $country, $data['address'] ?? null, $ip, $zaloSubscriberId]);
+                        $pdo->prepare("INSERT INTO subscribers (id, workspace_id, property_id, email, email_norm, phone_norm9, phone_number, first_name, last_name, status, source, last_os, last_browser, last_device, last_city, last_country, city, country, address, last_ip, zalo_user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 'website_tracking', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                            ->execute([$newSid, $propWorkspaceId, $propertyId, $insertEmail, $emailNorm, $phoneNorm9, $phone, $finalFirstName, $finalLastName, $os, $browser, $deviceType, $city, $country, $city, $country, $data['address'] ?? null, $ip, $zaloSubscriberId]);
 
                         $pdo->prepare("UPDATE web_visitors SET subscriber_id = ?, email = ?, phone = ?, address = ?, zalo_user_id = COALESCE(zalo_user_id, ?) WHERE id = ? AND property_id = ?")
                             ->execute([$newSid, $email, $phone, $data['address'] ?? null, $zaloSubscriberId, $visitorUuid, $propertyId]);

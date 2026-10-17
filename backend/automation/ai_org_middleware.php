@@ -10,6 +10,170 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 /**
+ * Ensure ai_org_users table has all required columns for AI Space & MYERP sync
+ */
+function ensureAiOrgUsersSchema(PDO $pdo)
+{
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM ai_org_users")->fetchAll(PDO::FETCH_COLUMN);
+        if (empty($cols)) {
+            return;
+        }
+        $alterParts = [];
+        if (!in_array('user_id', $cols, true)) {
+            $alterParts[] = "ADD COLUMN user_id VARCHAR(100) DEFAULT NULL";
+        }
+        if (!in_array('erp_user_id', $cols, true)) {
+            $alterParts[] = "ADD COLUMN erp_user_id INT DEFAULT NULL";
+        }
+        if (!in_array('full_name', $cols, true)) {
+            $alterParts[] = "ADD COLUMN full_name VARCHAR(255) DEFAULT NULL";
+        }
+        if (!in_array('gender', $cols, true)) {
+            $alterParts[] = "ADD COLUMN gender VARCHAR(20) DEFAULT NULL";
+        }
+        if (!in_array('status_reason', $cols, true)) {
+            $alterParts[] = "ADD COLUMN status_reason TEXT DEFAULT NULL";
+        }
+        if (!in_array('status_expiry', $cols, true)) {
+            $alterParts[] = "ADD COLUMN status_expiry DATETIME DEFAULT NULL";
+        }
+        if (!in_array('permissions', $cols, true)) {
+            $alterParts[] = "ADD COLUMN permissions TEXT DEFAULT NULL";
+        }
+        if (!in_array('admin_id', $cols, true)) {
+            $alterParts[] = "ADD COLUMN admin_id VARCHAR(100) DEFAULT NULL";
+        }
+        if (!in_array('last_login', $cols, true)) {
+            $alterParts[] = "ADD COLUMN last_login DATETIME DEFAULT NULL";
+        }
+        if (!in_array('avatar', $cols, true)) {
+            $alterParts[] = "ADD COLUMN avatar TEXT DEFAULT NULL";
+        }
+        if (!empty($alterParts)) {
+            $pdo->exec("ALTER TABLE ai_org_users " . implode(", ", $alterParts));
+        }
+        if (in_array('name', $cols, true)) {
+            $pdo->exec("UPDATE ai_org_users SET full_name = name WHERE (full_name IS NULL OR full_name = '') AND name IS NOT NULL AND name != ''");
+        }
+    } catch (Exception $e) {
+        error_log("ensureAiOrgUsersSchema warning: " . $e->getMessage());
+    }
+}
+
+/**
+ * Map MYERP user role to AI Org role
+ */
+function mapErpRoleToAiOrgRole($erpRole)
+{
+    $r = strtolower(trim((string)$erpRole));
+    if (in_array($r, ['super_admin', 'admin', 'ceo', 'director', 'owner'], true)) {
+        return 'admin';
+    }
+    if (in_array($r, ['manager', 'leader', 'head', 'assistant', 'supervisor'], true)) {
+        return 'assistant';
+    }
+    return 'user';
+}
+
+/**
+ * Sync or resolve a single MYERP user into ai_org_users
+ */
+function resolveOrProvisionErpUserInAiOrg(PDO $pdo, $erpUserId = null, $erpEmail = null)
+{
+    ensureAiOrgUsersSchema($pdo);
+    try {
+        $erpUser = null;
+        if (!empty($erpUserId) && is_numeric($erpUserId)) {
+            $stmtErp = $pdo->prepare("SELECT id, full_name, email, phone, avatar_url, role, job_title, department, is_active FROM users WHERE id = ? LIMIT 1");
+            $stmtErp->execute([(int)$erpUserId]);
+            $erpUser = $stmtErp->fetch(PDO::FETCH_ASSOC);
+        }
+        if (!$erpUser && !empty($erpEmail)) {
+            $stmtErp = $pdo->prepare("SELECT id, full_name, email, phone, avatar_url, role, job_title, department, is_active FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1");
+            $stmtErp->execute([trim((string)$erpEmail)]);
+            $erpUser = $stmtErp->fetch(PDO::FETCH_ASSOC);
+        }
+        if (!$erpUser) {
+            return null;
+        }
+
+        $stmtFind = $pdo->prepare("
+            SELECT id, user_id, erp_user_id, email, full_name, role, status, status_reason,
+                   status_expiry, permissions, admin_id, avatar, last_login, created_at, updated_at
+            FROM ai_org_users
+            WHERE erp_user_id = ? OR user_id = ? OR LOWER(email) = LOWER(?)
+            LIMIT 1
+        ");
+        $stmtFind->execute([(int)$erpUser['id'], (string)$erpUser['id'], (string)$erpUser['email']]);
+        $orgUser = $stmtFind->fetch(PDO::FETCH_ASSOC);
+
+        $mappedRole = mapErpRoleToAiOrgRole($erpUser['role'] ?? 'user');
+        $defaultPerms = $mappedRole === 'admin'
+            ? ['*']
+            : ($mappedRole === 'assistant'
+                ? ['modes' => ['chat', 'training', 'analytics'], 'access' => 'full']
+                : ['modes' => ['chat'], 'access' => 'limited']);
+
+        if ($orgUser) {
+            $newRole = ($mappedRole === 'admin') ? 'admin' : ($orgUser['role'] ?: $mappedRole);
+            $pdo->prepare("
+                UPDATE ai_org_users
+                SET erp_user_id = ?,
+                    user_id = COALESCE(NULLIF(user_id, ''), ?),
+                    full_name = COALESCE(NULLIF(full_name, ''), ?),
+                    avatar = COALESCE(NULLIF(avatar, ''), ?),
+                    role = ?,
+                    last_login = NOW()
+                WHERE id = ?
+            ")->execute([
+                (int)$erpUser['id'],
+                (string)$erpUser['id'],
+                $erpUser['full_name'] ?: $erpUser['email'],
+                $erpUser['avatar_url'] ?? null,
+                $newRole,
+                $orgUser['id']
+            ]);
+            $orgUser['erp_user_id'] = (int)$erpUser['id'];
+            $orgUser['full_name'] = $orgUser['full_name'] ?: ($erpUser['full_name'] ?: $erpUser['email']);
+            $orgUser['role'] = $newRole;
+            return $orgUser;
+        }
+
+        $stmtIns = $pdo->prepare("
+            INSERT INTO ai_org_users (user_id, erp_user_id, email, full_name, role, status, permissions, avatar, last_login)
+            VALUES (?, ?, ?, ?, ?, 'active', ?, ?, NOW())
+        ");
+        $stmtIns->execute([
+            (string)$erpUser['id'],
+            (int)$erpUser['id'],
+            $erpUser['email'],
+            $erpUser['full_name'] ?: $erpUser['email'],
+            $mappedRole,
+            json_encode($defaultPerms),
+            $erpUser['avatar_url'] ?? null
+        ]);
+        $newId = $pdo->lastInsertId();
+
+        $stmtNew = $pdo->prepare("
+            SELECT id, user_id, erp_user_id, email, full_name, role, status, status_reason,
+                   status_expiry, permissions, admin_id, avatar, last_login, created_at, updated_at
+            FROM ai_org_users WHERE id = ? LIMIT 1
+        ");
+        $stmtNew->execute([$newId]);
+        return $stmtNew->fetch(PDO::FETCH_ASSOC) ?: null;
+    } catch (Exception $e) {
+        error_log("resolveOrProvisionErpUserInAiOrg warning: " . $e->getMessage());
+        return null;
+    }
+}
+
+/**
  * Verify that the user is authenticated for AI Space
  * Returns user data if authenticated, otherwise sends 401 and exits
  */
@@ -20,6 +184,8 @@ function requireAISpaceAuth()
         throw new Exception("Database connection not initialized.");
     }
 
+    ensureAiOrgUsersSchema($pdo);
+
     $allHeaders = function_exists('getallheaders') ? getallheaders() : [];
     $normalizedHeaders = array_change_key_case($allHeaders, CASE_LOWER);
 
@@ -28,15 +194,19 @@ function requireAISpaceAuth()
     $validBypassToken = defined('ADMIN_BYPASS_TOKEN') ? ADMIN_BYPASS_TOKEN : null;
     
     if (($validBypassToken && $adminToken === $validBypassToken) || is_super_admin()) {
+        $erpId = $GLOBALS['domation_auth']['user_id'] ?? $_SESSION['user_id'] ?? null;
+        $erpEmail = $GLOBALS['domation_auth']['email'] ?? $_SESSION['email'] ?? null;
+        $provisioned = ($erpId || $erpEmail) ? resolveOrProvisionErpUserInAiOrg($pdo, $erpId, $erpEmail) : null;
         if (session_status() === PHP_SESSION_ACTIVE) {
-            $_SESSION['org_user_id'] = 'admin-001';
+            $_SESSION['org_user_id'] = $provisioned['id'] ?? 'admin-001';
             $_SESSION['org_user_role'] = 'admin';
         }
         $GLOBALS['current_admin_id'] = 'admin-001';
         return [
-            'id' => 'admin-001',
-            'email' => $_SESSION['email'] ?? 'admin@autoflow.vn',
-            'full_name' => $_SESSION['full_name'] ?? $_SESSION['username'] ?? 'Super Admin',
+            'id' => $provisioned['id'] ?? 'admin-001',
+            'erp_user_id' => $provisioned['erp_user_id'] ?? $erpId,
+            'email' => $provisioned['email'] ?? $_SESSION['email'] ?? 'admin@autoflow.vn',
+            'full_name' => $provisioned['full_name'] ?? $_SESSION['full_name'] ?? $_SESSION['username'] ?? 'Super Admin',
             'role' => 'admin',
             'status' => 'active',
             'permissions' => ['*']
@@ -94,9 +264,42 @@ function requireAISpaceAuth()
 
                 return $tokenUser;
             }
-            // Token invalid/expired — fall through to session fallback
+            // Token invalid/expired or is a MYERP JWT token — fall through to MYERP / session fallback
         } catch (Exception $e) {
             error_log("Bearer token check error in requireAISpaceAuth: " . $e->getMessage());
+        }
+    }
+
+    // ── PRIORITY 1.5: MYERP Authenticated Session / JWT ($GLOBALS['domation_auth']) ──
+    $domAuth = $GLOBALS['domation_auth'] ?? null;
+    if (!empty($domAuth['user_id']) || !empty($_SESSION['user_id'])) {
+        $erpUserId = $domAuth['user_id'] ?? $_SESSION['user_id'] ?? null;
+        $erpEmail = $domAuth['email'] ?? $_SESSION['email'] ?? null;
+        $provisionedUser = resolveOrProvisionErpUserInAiOrg($pdo, $erpUserId, $erpEmail);
+        if ($provisionedUser) {
+            if (($provisionedUser['status'] ?? 'active') === 'banned') {
+                http_response_code(403);
+                header('Content-Type: application/json');
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'ACCOUNT_BANNED',
+                    'message' => 'Your account has been banned due to policy violations.',
+                    'app' => 'ai_space',
+                ]);
+                exit;
+            }
+            unset($provisionedUser['password_hash']);
+            $provisionedUser['permissions'] = json_decode($provisionedUser['permissions'] ?? '[]', true);
+            if (empty($provisionedUser['permissions']) && $provisionedUser['role'] === 'admin') {
+                $provisionedUser['permissions'] = ['*'];
+            }
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                $_SESSION['org_user_id'] = $provisionedUser['id'];
+                $_SESSION['org_user_email'] = $provisionedUser['email'];
+                $_SESSION['org_user_role'] = $provisionedUser['role'];
+            }
+            $GLOBALS['current_admin_id'] = $provisionedUser['id'];
+            return $provisionedUser;
         }
     }
 
@@ -201,11 +404,15 @@ function requireAISpaceAuth()
     try {
         // [FIX P28-S2] Exclude password_hash at query level — prevents accidental exposure
         // if a future code path forgets to unset() it before returning.
-        $stmt = $pdo->prepare("SELECT id, user_id, email, full_name, role, status, status_reason,
+        $stmt = $pdo->prepare("SELECT id, user_id, erp_user_id, email, full_name, role, status, status_reason,
             status_expiry, permissions, admin_id, last_login, created_at, updated_at
-            FROM ai_org_users WHERE id = ? OR user_id = ? LIMIT 1");
-        $stmt->execute([$orgUserId, $orgUserId]);
+            FROM ai_org_users WHERE id = ? OR user_id = ? OR erp_user_id = ? LIMIT 1");
+        $stmt->execute([$orgUserId, $orgUserId, is_numeric($orgUserId) ? (int)$orgUserId : -1]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$user) {
+            $user = resolveOrProvisionErpUserInAiOrg($pdo, $orgUserId, $_SESSION['email'] ?? null);
+        }
 
         if (!$user) {
             // IF it's the main admin (admin-001) but not in ai_org_users table,
@@ -254,7 +461,7 @@ function requireAISpaceAuth()
 
         // Return user data (without password)
         unset($user['password_hash']);
-        $user['permissions'] = json_decode($user['permissions'] ?? '[]', true);
+        $user['permissions'] = is_string($user['permissions'] ?? null) ? json_decode($user['permissions'], true) : ($user['permissions'] ?? []);
 
         // CRITICAL: admin-001 is always super admin regardless of DB role
         if ($orgUserId === 'admin-001' || is_super_admin()) {

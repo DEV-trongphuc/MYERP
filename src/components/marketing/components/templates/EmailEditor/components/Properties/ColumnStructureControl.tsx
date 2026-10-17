@@ -98,7 +98,7 @@ const ColumnStructureControl: React.FC<ColumnStructureControlProps> = ({ childre
             <div className="flex justify-between items-center">
                 <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest">Cấu trúc cột (12 ô)</label>
                 <div className="flex gap-1">
-                    <span className="text-[9px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100 uppercase">
+                    <span className="text-[9px] font-bold text-[#BD1D2D] bg-[#BD1D2D]/10 px-2 py-0.5 rounded-full border border-[#BD1D2D]/30 uppercase">
                         {children.length} Cột
                     </span>
                 </div>
@@ -138,7 +138,7 @@ const ColumnStructureControl: React.FC<ColumnStructureControlProps> = ({ childre
                                     onClick={(e) => { e.stopPropagation(); handleToggleSplit(i + 1); }}
                                     className={`absolute -right-1.5 top-0 bottom-0 w-2 z-10 cursor-col-resize flex items-center justify-center group/line`}
                                 >
-                                    <div className={`w-0.5 h-3/4 rounded-full transition-all ${splitLines.includes(i + 1) ? 'bg-amber-500 scale-y-110 shadow-[0_0_8px_rgba(104,61,242,0.5)]' : 'bg-slate-300 group-hover/line:bg-amber-300 group-hover/line:h-full opacity-0 group-hover/line:opacity-100'}`} />
+                                    <div className={`w-0.5 h-3/4 rounded-full transition-all ${splitLines.includes(i + 1) ? 'bg-[#BD1D2D] scale-y-110 shadow-[0_0_8px_rgba(189,29,45,0.45)]' : 'bg-slate-300 group-hover/line:bg-[#BD1D2D]/60 group-hover/line:h-full opacity-0 group-hover/line:opacity-100'}`} />
                                     {/* Tooltip or Label on Hover */}
                                     <div className="absolute -top-6 bg-slate-800 text-white text-[8px] px-1.5 py-0.5 rounded opacity-0 group-hover/line:opacity-100 pointer-events-none transition-opacity font-bold whitespace-nowrap z-50 shadow-xl">
                                         {splitLines.includes(i + 1) ? 'Gộp cột' : 'Chia tại đây'}
@@ -168,9 +168,9 @@ const ColumnStructureControl: React.FC<ColumnStructureControlProps> = ({ childre
                         <button
                             key={p.label}
                             onClick={() => applySpans(p.spans)}
-                            className={`flex items-center gap-2 p-2 rounded-xl border transition-all ${isActive ? 'bg-amber-50 border-amber-200 text-amber-700 shadow-sm shadow-amber-100' : 'bg-white border-slate-100 text-slate-500 hover:border-slate-200 hover:bg-slate-50'}`}
+                            className={`flex items-center gap-2 p-2 rounded-xl border transition-all ${isActive ? 'bg-[#BD1D2D]/10 border-[#BD1D2D]/30 text-[#BD1D2D] shadow-sm shadow-[#BD1D2D]/10' : 'bg-white border-slate-100 text-slate-500 hover:border-slate-200 hover:bg-slate-50'}`}
                         >
-                            <div className={`p-1 rounded-md ${isActive ? 'bg-amber-100 text-amber-600' : 'bg-slate-50 text-slate-400'}`}>
+                            <div className={`p-1 rounded-md ${isActive ? 'bg-[#BD1D2D]/15 text-[#BD1D2D]' : 'bg-slate-50 text-slate-400'}`}>
                                 {Icon && <Icon className="w-3 h-3" />}
                             </div>
                             <span className="text-[10px] font-bold">{p.label}</span>

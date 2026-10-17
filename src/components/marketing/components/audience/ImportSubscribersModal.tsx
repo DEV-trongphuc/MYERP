@@ -358,13 +358,13 @@ const ImportSubscribersModal: React.FC<ImportSubscribersModalProps> = ({
                     <div className="flex bg-slate-100 p-1 rounded-xl w-full">
                         <button
                             onClick={() => setInputMethod('paste')}
-                            className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 ${inputMethod === 'paste' ? 'bg-white text-[#ca7900] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                            className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 ${inputMethod === 'paste' ? 'bg-white text-[var(--color-primary)] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                         >
                             <FileText className="w-4 h-4" /> Copy & Paste
                         </button>
                         <button
                             onClick={() => setInputMethod('file')}
-                            className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 ${inputMethod === 'file' ? 'bg-white text-[#ca7900] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                            className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 ${inputMethod === 'file' ? 'bg-white text-[var(--color-primary)] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                         >
                             <FileSpreadsheet className="w-4 h-4" /> Upload CSV/Excel
                         </button>
@@ -390,7 +390,7 @@ const ImportSubscribersModal: React.FC<ImportSubscribersModalProps> = ({
                         <div>
                             <label className="text-xs font-black text-slate-500 uppercase tracking-widest mb-2 block">Dán dữ liệu vào đây</label>
                             <textarea
-                                className="w-full h-64 p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-mono text-xs focus:bg-white focus:border-[#2563eb] focus:ring-4 focus:ring-orange-50/10 outline-none transition-all resize-none placeholder:text-slate-400"
+                                className="w-full h-64 p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-mono text-xs focus:bg-white focus:border-[var(--color-primary)] focus:ring-4 focus:ring-[var(--color-primary)]/10 outline-none transition-all resize-none placeholder:text-slate-400"
                                 placeholder={`Email, First Name, Last Name, Tags, Joined Date\nalice@example.com, Alice, Doe, "VIP, New", 2023-10-25\nbob@gmail.com, , Smith, Lead, 2023-11-01\n...`}
                                 value={rawData}
                                 onChange={(e) => setRawData(e.target.value)}
@@ -399,7 +399,7 @@ const ImportSubscribersModal: React.FC<ImportSubscribersModalProps> = ({
                         </div>
                     ) : (
                         <div
-                            className="border-2 border-dashed border-slate-300 rounded-[32px] h-64 flex flex-col items-center justify-center bg-slate-50 hover:bg-white hover:border-[#2563eb] transition-all cursor-pointer group"
+                            className="border-2 border-dashed border-slate-300 rounded-[18px] h-64 flex flex-col items-center justify-center bg-slate-50 hover:bg-white hover:border-[var(--color-primary)] transition-all cursor-pointer group"
                             onClick={() => fileInputRef.current?.click()}
                         >
                             <input
@@ -410,7 +410,7 @@ const ImportSubscribersModal: React.FC<ImportSubscribersModalProps> = ({
                                 onChange={handleFileUpload}
                             />
                             <div className="p-4 bg-white rounded-full shadow-sm mb-4 group-hover:scale-110 transition-transform">
-                                <Upload className="w-8 h-8 text-[#2563eb]" />
+                                <Upload className="w-8 h-8 text-[var(--color-primary)]" />
                             </div>
                             {fileName ? (
                                 <div className="text-center">
@@ -469,7 +469,7 @@ const ImportSubscribersModal: React.FC<ImportSubscribersModalProps> = ({
                         </div>
                     )}
 
-                    <div className="bg-white border-2 border-slate-100 rounded-[24px] p-5 space-y-4">
+                    <div className="bg-white border-2 border-slate-100 rounded-[18px] p-5 space-y-4">
                         <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                             <Database className="w-4 h-4 text-[#2563eb]" />
                             Chọn nơi lưu trữ
@@ -518,7 +518,7 @@ const ImportSubscribersModal: React.FC<ImportSubscribersModalProps> = ({
                             <div className="pt-2 border-t border-slate-50">
                                 <label className="flex items-start gap-3 p-4 bg-orange-50/50 rounded-2xl border border-orange-100 cursor-pointer group hover:bg-orange-50 transition-all">
                                     <div className="pt-0.5">
-                                        <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all ${createVirtualEmail ? 'bg-orange-500 border-orange-500 text-white' : 'border-orange-200 bg-white group-hover:border-orange-300'}`}>
+                                        <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all ${createVirtualEmail ? 'bg-[var(--color-primary)] border-[var(--color-primary)] text-white' : 'border-orange-200 bg-white group-hover:border-orange-300'}`}>
                                             {createVirtualEmail && <Check className="w-3.5 h-3.5" />}
                                         </div>
                                         <input

@@ -54,7 +54,7 @@ const SpacingControl: React.FC<SpacingControlProps> = ({ label, values, onChange
     };
 
     return (
-        <div className="space-y-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 transition-all">
+        <div className="space-y-4 p-4 bg-slate-50 rounded-[14px] border border-slate-100 transition-all">
             <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2">
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{label}</label>

@@ -51,8 +51,8 @@ const SpaceBackground = React.memo(({ theme = 'deep-space', opacity = 1 }: { the
 
 
             {/* Subtle Nebulas (Slower Pulse) */}
-            <div className="absolute -top-[20%] -right-[10%] w-[800px] h-[800px] bg-brand bg-opacity-[0.03] rounded-full blur-[150px] animate-pulse-slow" />
-            <div className="absolute -bottom-[20%] -left-[10%] w-[600px] h-[600px] bg-brand bg-opacity-[0.03] rounded-full blur-[120px] animate-pulse-slow delay-1000" />
+            <div className="absolute -top-[20%] -right-[10%] w-[800px] h-[800px] bg-[var(--color-primary)] bg-opacity-[0.03] rounded-full blur-[150px] animate-pulse-slow" />
+            <div className="absolute -bottom-[20%] -left-[10%] w-[600px] h-[600px] bg-[var(--color-primary)] bg-opacity-[0.03] rounded-full blur-[120px] animate-pulse-slow delay-1000" />
 
             <style>{`
                 @keyframes twinkle-move {

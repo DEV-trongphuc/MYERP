@@ -45,7 +45,7 @@ const MisaIcon = ({ className }: { className?: string }) => (
 );
 
 const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disabled, locked }) => {
-    const [triggerType, setTriggerType] = useState<'segment' | 'tag' | 'form' | 'survey' | 'date' | 'campaign' | 'purchase' | 'custom_event' | 'voucher' | 'voucher_redeem' | 'inbound_message' | 'zalo_follow' | 'unsubscribe' | 'ai_capture'>(config.type || 'segment');
+    const [triggerType, setTriggerType] = useState<'segment' | 'tag' | 'form' | 'survey' | 'date' | 'campaign' | 'purchase' | 'custom_event' | 'erp_event' | 'voucher' | 'voucher_redeem' | 'inbound_message' | 'zalo_follow' | 'unsubscribe' | 'ai_capture'>(config.type || 'segment');
     const [targetSubtype, setTargetSubtype] = useState<'list' | 'segment' | 'sync'>(config.targetSubtype || 'list');
     const [lists, setLists] = useState<any[]>([]);
     const [segments, setSegments] = useState<Segment[]>([]);
@@ -139,8 +139,19 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
         loadInitialData();
     }, []);
 
+    const erpEventPresets = [
+        { id: 'erp_deposit_approved', label: 'Duyệt Đặt cọc / Đóng Học phí', desc: 'Khi Kế toán duyệt phiếu thu / đợt thanh toán' },
+        { id: 'erp_deal_won', label: 'Chốt thành công Cơ hội (Deal Won)', desc: 'Khi Sale chuyển Deal sang giai đoạn Won' },
+        { id: 'erp_student_enrolled', label: 'Ghi danh Học viên vào Lớp học', desc: 'Khi Học viên được xếp lớp đào tạo MYERP' },
+        { id: 'erp_tuition_overdue', label: 'Quá hạn đóng Học phí đợt tiếp', desc: 'Khi Học viên có đợt đóng học phí quá hạn' },
+        { id: 'erp_certificate_issued', label: 'Cấp Chứng chỉ Tốt nghiệp', desc: 'Khi Học viên hoàn thành khóa & nhận chứng chỉ' },
+        { id: 'erp_ticket_created', label: 'Khách tạo Ticket Hỗ trợ / Khiếu nại', desc: 'Khi phát sinh Ticket CSKH trên MYERP' },
+        { id: 'erp_ticket_resolved', label: 'Hoàn tất xử lý Ticket (Resolved)', desc: 'Khi Ticket hỗ trợ được đóng / giải quyết xong' }
+    ];
+
     const triggerOptions = [
         { id: 'segment', label: 'Danh sách & Phân khúc', icon: Layers, color: 'orange', desc: 'Bộ lọc thông minh' },
+        { id: 'erp_event', label: 'Sự kiện MYERP & Học vụ', icon: CheckCircle2, color: 'indigo', desc: 'Đặt cọc, Lớp học, SLA' },
         { id: 'form', label: 'Gửi Biểu mẫu', icon: FileInput, color: 'yellow', desc: 'Từ Landing Page' },
         { id: 'survey', label: 'Làm Khảo sát', icon: ClipboardList, color: 'emerald', desc: 'Hoàn thành Survey' },
         { id: 'purchase', label: 'Khách hàng Mua', icon: ShoppingCart, color: 'pink', desc: 'Sự kiện API' },
@@ -178,6 +189,9 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
             case 'purchase':
                 const purch = purchases.find(p => p.id === targetId);
                 return purch ? `Mua hàng: ${purch.name}` : 'Khi khách Mua hàng';
+            case 'erp_event':
+                const erpPreset = erpEventPresets.find(e => e.id === targetId);
+                return erpPreset ? `MYERP: ${erpPreset.label}` : 'Khi có sự kiện MYERP';
             case 'custom_event':
                 const ce = customEvents.find(c => c.id === targetId);
                 return ce ? `Sự kiện: ${ce.name}` : 'Khi có sự kiện tùy chọn';
@@ -232,6 +246,12 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
         onChange({ ...config, type, targetId: '', targetSubtype: type === 'segment' ? 'list' : undefined }, newLabel);
     };
 
+    useEffect(() => {
+        if (triggerType === 'zalo_follow' && config.targetId) {
+            onChange({ ...config, type: 'zalo_follow', targetId: '' }, getLabelForType('zalo_follow', ''));
+        }
+    }, [triggerType]);
+
     const handleTargetChange = (id: string, subtype?: string) => {
         if (disabled) return;
         const finalSubtype = subtype || targetSubtype;
@@ -241,26 +261,30 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
     const getOptionClasses = (color: string, isSelected: boolean) => {
         const colors: any = {
-            orange: isSelected ? 'border-orange-500 bg-orange-50 ring-orange-50' : 'hover:border-orange-200',
-            amber: isSelected ? 'border-amber-600 bg-amber-50 ring-amber-50' : 'hover:border-amber-200',
+            orange: isSelected ? 'border-[var(--color-primary)] bg-red-50 ring-red-50' : 'hover:border-red-200',
+            amber: isSelected ? 'border-[var(--color-primary)] bg-red-50 ring-red-50' : 'hover:border-red-200',
             yellow: isSelected ? 'border-yellow-500 bg-yellow-50 ring-yellow-50' : 'hover:border-yellow-200',
             pink: isSelected ? 'border-pink-500 bg-pink-50 ring-pink-50' : 'hover:border-pink-200',
             emerald: isSelected ? 'border-emerald-500 bg-emerald-50 ring-emerald-50' : 'hover:border-emerald-200',
             blue: isSelected ? 'border-blue-500 bg-blue-50 ring-blue-50' : 'hover:border-blue-200',
+            cyan: isSelected ? 'border-cyan-500 bg-cyan-50 ring-cyan-50' : 'hover:border-cyan-200',
             violet: isSelected ? 'border-blue-500 bg-blue-50 ring-blue-50' : 'hover:border-blue-200',
             indigo: isSelected ? 'border-indigo-500 bg-indigo-50 ring-indigo-50' : 'hover:border-indigo-200',
+            rose: isSelected ? 'border-rose-500 bg-rose-50 ring-rose-50' : 'hover:border-rose-200',
+            red: isSelected ? 'border-red-500 bg-red-50 ring-red-50' : 'hover:border-red-200',
         };
         return colors[color] || '';
     };
 
     const getIconClasses = (color: string, isSelected: boolean) => {
         const colors: any = {
-            orange: isSelected ? 'bg-orange-500 text-white' : 'bg-orange-50 text-orange-500',
-            amber: isSelected ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-600',
+            orange: isSelected ? 'bg-[var(--color-primary)] text-white' : 'bg-red-50 text-[var(--color-primary)]',
+            amber: isSelected ? 'bg-[var(--color-primary)] text-white' : 'bg-red-50 text-[var(--color-primary)]',
             yellow: isSelected ? 'bg-yellow-500 text-white' : 'bg-yellow-50 text-yellow-600',
             pink: isSelected ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-500',
             emerald: isSelected ? 'bg-emerald-500 text-white' : 'bg-emerald-50 text-emerald-500',
             blue: isSelected ? 'bg-blue-500 text-white' : 'bg-blue-50 text-blue-500',
+            cyan: isSelected ? 'bg-cyan-500 text-white' : 'bg-cyan-50 text-cyan-600',
             violet: isSelected ? 'bg-blue-500 text-white' : 'bg-blue-50 text-blue-500',
             indigo: isSelected ? 'bg-indigo-500 text-white' : 'bg-indigo-50 text-indigo-500',
             rose: isSelected ? 'bg-rose-500 text-white' : 'bg-rose-50 text-rose-500',
@@ -273,14 +297,14 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
         <button
             onClick={onClick}
             disabled={disabled}
-            className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all duration-300 group relative overflow-hidden
+            className={`w-full flex items-center justify-between p-4 rounded-[14px] border-2 transition-all duration-300 group relative overflow-hidden
         ${isSelected
                     ? 'border-emerald-500 bg-emerald-50 shadow-md ring-4 ring-emerald-500/5'
                     : 'border-transparent bg-slate-50 hover:bg-white hover:border-slate-200 hover:shadow-sm'}
         ${disabled ? 'opacity-50 cursor-not-allowed grayscale' : 'cursor-pointer'}`}
         >
             <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-xl transition-all duration-500 ${isSelected ? 'bg-emerald-500 text-white shadow-lg' : 'bg-white text-slate-400 group-hover:text-slate-600 shadow-sm'}`}>
+                <div className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-[var(--radius-md)] transition-all duration-500 ${isSelected ? 'bg-emerald-500 text-white shadow-lg' : 'bg-white text-slate-400 group-hover:text-slate-600 shadow-sm'}`}>
                     <Icon className="w-5 h-5" />
                 </div>
                 <div className="text-left overflow-hidden">
@@ -299,8 +323,8 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
     return (
         <div className="space-y-6 animate-in fade-in duration-500 pb-32">
             {locked && (
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-[22px] flex items-center gap-4 shadow-sm animate-in zoom-in-95 mb-4">
-                    <div className="p-2.5 bg-white rounded-xl text-amber-600 shadow-sm"><Lock className="w-4.5 h-4.5" /></div>
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-[14px] flex items-center gap-4 shadow-sm animate-in zoom-in-95 mb-4">
+                    <div className="p-2.5 bg-white rounded-[var(--radius-md)] text-amber-600 shadow-sm"><Lock className="w-4.5 h-4.5" /></div>
                     <div>
                         <p className="text-[11px] font-bold text-amber-800 uppercase tracking-tight">Trigger đã bị khóa</p>
                         <p className="text-[10px] font-medium text-amber-700 leading-tight">Quy trình đã có khách tham gia, không thể thay đổi điểm bắt đầu.</p>
@@ -319,12 +343,12 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                 key={opt.id}
                                 disabled={disabled || locked}
                                 onClick={() => handleTypeChange(opt.id)}
-                                className={`flex items-center gap-4 p-4 rounded-[24px] border-2 transition-all duration-500 relative group overflow-hidden
+                                className={`flex items-center gap-4 p-4 rounded-[14px] border-2 transition-all duration-500 relative group overflow-hidden
                         ${getOptionClasses(opt.color, isSelected)} 
                         ${isSelected ? 'shadow-md ring-4 ring-offset-0 ring-opacity-10' : 'bg-white border-slate-100 hover:border-slate-300 hover:shadow-sm'}
                         ${disabled || locked ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
                             >
-                                <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 transition-all duration-500 ${getIconClasses(opt.color, isSelected)} ${isSelected ? 'shadow-lg scale-110' : 'group-hover:bg-white group-hover:shadow-sm'}`}>
+                                <div className={`w-11 h-11 rounded-[var(--radius-md)] flex items-center justify-center shrink-0 transition-all duration-500 ${getIconClasses(opt.color, isSelected)} ${isSelected ? 'shadow-lg scale-110' : 'group-hover:bg-white group-hover:shadow-sm'}`}>
                                     <opt.icon className={`transition-transform duration-500 ${isSelected ? 'w-5 h-5' : 'w-5 h-5 group-hover:scale-110'}`} />
                                 </div>
                                 <div className="text-left overflow-hidden relative z-10">
@@ -440,7 +464,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                             }
 
                             {triggerType === 'segment' && config.targetId && (
-                                <div className="p-5 bg-white border border-slate-200 rounded-[24px] space-y-4 shadow-sm mt-4 animate-in slide-in-from-bottom-2">
+                                <div className="p-5 bg-white border border-slate-200 rounded-[14px] space-y-4 shadow-sm mt-4 animate-in slide-in-from-bottom-2">
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <h4 className="text-sm font-bold text-slate-800">Cơ chế gửi & Enrollment</h4>
@@ -530,6 +554,21 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                 ))
                             }
 
+                            {/* CASE: ERP EVENT (MYERP CRM / ACADEMIC / TUITION / TICKET) */}
+                            {triggerType === 'erp_event' && erpEventPresets
+                                .filter(ev => ev.label.toLowerCase().includes(searchTerm.toLowerCase()) || ev.desc.toLowerCase().includes(searchTerm.toLowerCase()))
+                                .map(ev => (
+                                    <ConfigItem
+                                        key={ev.id}
+                                        label={ev.label}
+                                        desc={ev.desc}
+                                        icon={CheckCircle2}
+                                        isSelected={config.targetId === ev.id}
+                                        onClick={() => handleTargetChange(ev.id)}
+                                    />
+                                ))
+                            }
+
                             {/* CASE: CUSTOM EVENT */}
                             {triggerType === 'custom_event' && customEvents
                                 .filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -608,7 +647,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                             {/* CASE: INBOUND MESSAGE KEYWORD */}
                             {triggerType === 'inbound_message' && (
                                 <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-300 p-1">
-                                    <div className="p-5 bg-white border border-slate-200 rounded-[24px] space-y-4 shadow-sm">
+                                    <div className="p-5 bg-white border border-slate-200 rounded-[14px] space-y-4 shadow-sm">
                                         <div className="flex items-center gap-3">
                                             <div className="p-2 bg-blue-50 rounded-lg text-blue-500"><MessageSquare className="w-4 h-4" /></div>
                                             <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Từ khóa kích hoạt (Tùy chọn)</span>
@@ -624,7 +663,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                             <p className="text-[10px] text-slate-400 font-medium">Nhập từ khóa khách đã gửi. Để trống nếu muốn kích hoạt cho MỌI tin nhắn.</p>
                                         </div>
                                     </div>
-                                    <div className="p-4 bg-blue-50/30 rounded-2xl border border-blue-100 flex items-start gap-3">
+                                    <div className="p-4 bg-blue-50/30 rounded-[14px] border border-blue-100 flex items-start gap-3">
                                         <AlertCircle className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
                                         <p className="text-[11px] text-blue-600 font-medium leading-relaxed">
                                             Hệ thống sẽ kiểm tra tin nhắn của khách trên Meta (Messenger) và Zalo OA.
@@ -669,8 +708,8 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                             {/* CASE: AI CAPTURE */}
                             {triggerType === 'ai_capture' && (
                                 <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-300 p-1">
-                                    <div className="p-8 text-center space-y-4 bg-white border border-slate-200 rounded-[24px] shadow-sm">
-                                        <div className="w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mx-auto mb-2 border-2 border-rose-100/50">
+                                    <div className="p-8 text-center space-y-4 bg-white border border-slate-200 rounded-[14px] shadow-sm">
+                                        <div className="w-16 h-16 bg-rose-50 rounded-[14px] flex items-center justify-center mx-auto mb-2 border-2 border-rose-100/50">
                                             <Bot className="w-8 h-8 text-rose-500" />
                                         </div>
                                         <h3 className="text-sm font-bold text-slate-800">Kích hoạt khi AI lấy được Lead</h3>
@@ -723,7 +762,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                     />
 
                                     {config.dateField === 'lastActivity' && (
-                                        <div className="p-5 bg-white border border-slate-200 rounded-[24px] space-y-4 animate-in slide-in-from-top-2 shadow-sm mb-4">
+                                        <div className="p-5 bg-white border border-slate-200 rounded-[14px] space-y-4 animate-in slide-in-from-top-2 shadow-sm mb-4">
                                             <div className="flex items-center gap-3">
                                                 <div className="p-2 bg-slate-100 rounded-lg text-slate-500"><History className="w-4 h-4" /></div>
                                                 <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Thời gian không tương tác</span>
@@ -794,7 +833,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                     />
 
                                     {config.dateField === 'specificDate' && (
-                                        <div className="p-5 bg-white border border-slate-200 rounded-[24px] space-y-4 animate-in slide-in-from-top-2 shadow-sm mb-4">
+                                        <div className="p-5 bg-white border border-slate-200 rounded-[14px] space-y-4 animate-in slide-in-from-top-2 shadow-sm mb-4">
                                             <div className="flex items-center gap-3">
                                                 <div className="p-2 bg-blue-50 rounded-lg text-blue-500"><Calendar className="w-4 h-4" /></div>
                                                 <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Chọn ngày diễn ra sự kiện</span>
@@ -831,7 +870,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                     />
 
                                     {config.dateField === 'custom_field_date' && (
-                                        <div className="p-5 bg-white border border-blue-200 rounded-[24px] space-y-4 animate-in slide-in-from-top-2 shadow-sm mb-4">
+                                        <div className="p-5 bg-white border border-blue-200 rounded-[14px] space-y-4 animate-in slide-in-from-top-2 shadow-sm mb-4">
                                             {/* Field Key */}
                                             <div className="space-y-2">
                                                 <div className="flex items-center gap-2">
@@ -914,228 +953,181 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                                 </p>
                                             </div>
 
-                                            {/* Target List */}
-                                            <div className="space-y-2">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="p-1.5 bg-rose-50 rounded-lg text-rose-500"><Target className="w-3.5 h-3.5" /></div>
-                                                    <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Danh sách theo dõi</span>
-                                                </div>
-                                                <div className="flex bg-slate-100 p-0.5 rounded-lg w-full">
-                                                    <button onClick={() => onChange({ ...config, targetLists: 'all', targetListIds: [] })} className={`flex-1 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${!config.targetLists || config.targetLists === 'all' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400'}`}>Tất cả</button>
-                                                    <button onClick={() => onChange({ ...config, targetLists: 'specific', targetListIds: [] })} className={`flex-1 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${config.targetLists === 'specific' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400'}`}>Danh sách cụ thể</button>
-                                                </div>
-                                                {config.targetLists === 'specific' && (
-                                                    <div className="space-y-2">
-                                                        <div className="relative">
-                                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300" />
-                                                            <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Tìm danh sách..." className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-semibold outline-none focus:border-slate-400 transition-all" />
-                                                        </div>
-                                                        <div className="space-y-1 border border-slate-100 rounded-xl p-1 bg-slate-50/50 max-h-40 overflow-y-auto custom-scrollbar">
-                                                            {lists.filter(l => isManualList(l) && l.name.toLowerCase().includes(searchTerm.toLowerCase())).map(item => {
-                                                                const isChecked = (config.targetListIds || []).includes(item.id);
-                                                                return (
-                                                                    <div key={item.id}
-                                                                        onClick={() => {
-                                                                            const cur = config.targetListIds || [];
-                                                                            const next = isChecked ? cur.filter((id: string) => id !== item.id) : [...cur, item.id];
-                                                                            onChange({ ...config, targetListIds: next });
-                                                                        }}
-                                                                        className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${isChecked ? 'bg-white shadow-sm ring-1 ring-blue-400/30' : 'hover:bg-white/50'}`}
-                                                                    >
-                                                                        <div className="flex items-center gap-2">
-                                                                            <List className="w-3 h-3 text-blue-500 shrink-0" />
-                                                                            <div>
-                                                                                <p className="text-xs font-semibold text-slate-700">{item.name}</p>
-                                                                                <p className="text-[9px] text-slate-400">{item.count || 0} liên hệ</p>
-                                                                            </div>
-                                                                        </div>
-                                                                        <div className={`w-4 h-4 rounded border flex items-center justify-center ${isChecked ? 'bg-blue-500 border-blue-500 text-white' : 'border-slate-300 bg-white'}`}>
-                                                                            {isChecked && <Check className="w-3 h-3" />}
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                                <div className="p-3 bg-blue-50/50 rounded-xl flex items-start gap-2.5 border border-blue-100">
-                                                    <Info className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />
-                                                    <p className="text-[10px] text-blue-700 font-medium leading-relaxed">
-                                                        Cron job hàng ngày quét subscriber có field <b>{config.customFieldKey || 'ngày'}</b> khớp điều kiện và tự động enroll vào flow.
-                                                    </p>
-                                                </div>
+                                            <div className="p-3 bg-blue-50/50 rounded-[var(--radius-md)] flex items-start gap-2.5 border border-blue-100">
+                                                <Info className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />
+                                                <p className="text-[10px] text-blue-700 font-medium leading-relaxed">
+                                                    Cron job hàng ngày quét subscriber có field <b>{config.customFieldKey || 'ngày'}</b> khớp điều kiện và tự động enroll vào flow.
+                                                </p>
                                             </div>
                                         </div>
                                     )}
 
                                     {(config.dateField === 'dateOfBirth' || config.dateField === 'anniversaryDate' || config.dateField === 'joinedAt' || config.dateField === 'specificDate') && (
-                                        <>
-                                            {/* Offset selection */}
-                                            <div className="p-5 bg-white border border-slate-200 rounded-[24px] space-y-4 animate-in slide-in-from-top-2 shadow-sm mb-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="p-2 bg-pink-50 rounded-lg text-pink-500"><Clock className="w-4 h-4" /></div>
-                                                    <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Thời điểm kích hoạt</span>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-3">
-                                                    <Select
-                                                        label="Kiểu khớp"
-                                                        options={[
-                                                            { value: 'on', label: 'Đúng ngày' },
-                                                            { value: 'before', label: 'Trước X ngày' },
-                                                            { value: 'after', label: 'Sau X ngày' }
-                                                        ]}
-                                                        value={config.offsetType || 'on'}
-                                                        onChange={(val) => {
-                                                            const newCfg = { ...config, offsetType: val };
+                                        <div className="p-5 bg-white border border-slate-200 rounded-[14px] space-y-4 animate-in slide-in-from-top-2 shadow-sm mb-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 bg-pink-50 rounded-[var(--radius-md)] text-pink-500"><Clock className="w-4 h-4" /></div>
+                                                <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Thời điểm kích hoạt</span>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <Select
+                                                    label="Kiểu khớp"
+                                                    options={[
+                                                        { value: 'on', label: 'Đúng ngày' },
+                                                        { value: 'before', label: 'Trước X ngày' },
+                                                        { value: 'after', label: 'Sau X ngày' }
+                                                    ]}
+                                                    value={config.offsetType || 'on'}
+                                                    onChange={(val) => {
+                                                        const newCfg = { ...config, offsetType: val };
+                                                        onChange(newCfg, getLabelForType('date', '', undefined, config.dateField));
+                                                    }}
+                                                />
+                                                {config.offsetType !== 'on' && (
+                                                    <Input
+                                                        label="Số ngày (X)"
+                                                        type="number"
+                                                        value={config.offsetValue || 1}
+                                                        onChange={(e) => {
+                                                            const newCfg = { ...config, offsetValue: parseInt(e.target.value) || 0 };
                                                             onChange(newCfg, getLabelForType('date', '', undefined, config.dateField));
                                                         }}
                                                     />
-                                                    {config.offsetType !== 'on' && (
-                                                        <Input
-                                                            label="Số ngày (X)"
-                                                            type="number"
-                                                            value={config.offsetValue || 1}
-                                                            onChange={(e) => {
-                                                                const newCfg = { ...config, offsetValue: parseInt(e.target.value) || 0 };
-                                                                onChange(newCfg, getLabelForType('date', '', undefined, config.dateField));
-                                                            }}
-                                                        />
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            {/* Target Audience selection */}
-                                            <div className="p-5 bg-white border border-slate-200 rounded-[24px] space-y-4 animate-in slide-in-from-top-2 shadow-sm">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="p-2 bg-rose-50 rounded-lg text-rose-500"><Target className="w-4 h-4" /></div>
-                                                        <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Đối tượng áp dụng</span>
-                                                    </div>
-                                                </div>
-
-                                                <div className="flex bg-slate-100 p-0.5 rounded-lg w-full">
-                                                    <button
-                                                        onClick={() => onChange({ ...config, targetLists: 'all', targetListIds: [], targetSegmentIds: [] })}
-                                                        className={`flex-1 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${!config.targetLists || config.targetLists === 'all' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
-                                                    >
-                                                        Tất cả
-                                                    </button>
-                                                    <button
-                                                        onClick={() => onChange({ ...config, targetLists: 'specific', targetListIds: [] })}
-                                                        className={`flex-1 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${config.targetLists === 'specific' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
-                                                    >
-                                                        Danh sách cụ thể
-                                                    </button>
-                                                </div>
-
-                                                {config.targetLists === 'specific' && (
-                                                    <div className="mt-4 space-y-4">
-                                                        <div className="p-3 bg-amber-50 rounded-xl flex items-start gap-2.5 border border-amber-200/50">
-                                                            <Info className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                                                            <p className="text-[10px] text-amber-700 font-bold leading-relaxed">
-                                                                Chỉ kích hoạt theo ngày đối với những người có trong danh sách được chọn dưới đây.
-                                                                <span className="block font-medium text-slate-500 mt-0.5 italic">Nếu họ không thuộc danh sách này, flow sẽ không tự động bắt đầu.</span>
-                                                            </p>
-                                                        </div>
-                                                        <div className="flex bg-slate-100/50 p-0.5 rounded-lg w-full mb-2">
-                                                            <button
-                                                                onClick={() => setBirthdayTab('list')}
-                                                                className={`flex-1 py-1 rounded-md text-[9px] font-bold uppercase transition-all ${birthdayTab === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-                                                            >
-                                                                Danh sách
-                                                            </button>
-                                                            <button
-                                                                onClick={() => setBirthdayTab('sync')}
-                                                                className={`flex-1 py-1 rounded-md text-[9px] font-bold uppercase transition-all ${birthdayTab === 'sync' ? 'bg-white shadow-sm text-green-600' : 'text-slate-400 hover:text-slate-600'}`}
-                                                            >
-                                                                Nguồn Sync
-                                                            </button>
-                                                            <button
-                                                                onClick={() => setBirthdayTab('segment')}
-                                                                className={`flex-1 py-1 rounded-md text-[9px] font-bold uppercase transition-all ${birthdayTab === 'segment' ? 'bg-white shadow-sm text-orange-600' : 'text-slate-400 hover:text-slate-600'}`}
-                                                            >
-                                                                Phân khúc
-                                                            </button>
-                                                        </div>
-                                                        <div className="relative group mb-2">
-                                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300 group-focus-within:text-slate-500 transition-colors" />
-                                                            <input
-                                                                value={searchTerm}
-                                                                onChange={e => setSearchTerm(e.target.value)}
-                                                                placeholder="Tìm danh sách..."
-                                                                className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-[11px] font-semibold outline-none focus:border-slate-400 transition-all"
-                                                            />
-                                                        </div>
-
-                                                        <div className="space-y-1 custom-scrollbar border border-slate-100 rounded-xl p-1 bg-slate-50/50 max-h-48 overflow-y-auto">
-                                                            {(birthdayTab === 'list' ? lists.filter(l => isManualList(l) && l.name.toLowerCase().includes(searchTerm.toLowerCase())) :
-                                                                birthdayTab === 'sync' ? lists.filter(l => isSyncList(l) && l.name.toLowerCase().includes(searchTerm.toLowerCase())) :
-                                                                    segments.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))).map(item => {
-                                                                        const isChecked = birthdayTab === 'segment'
-                                                                            ? (config.targetSegmentIds || []).includes(item.id)
-                                                                            : (config.targetListIds || []).includes(item.id);
-                                                                        return (
-                                                                            <div key={item.id}
-                                                                                onClick={() => {
-                                                                                    if (birthdayTab === 'segment') {
-                                                                                        const currentSegIds = config.targetSegmentIds || [];
-                                                                                        const newSegIds = isChecked
-                                                                                            ? currentSegIds.filter((id: string) => id !== item.id)
-                                                                                            : [...currentSegIds, item.id];
-                                                                                        onChange({ ...config, targetSegmentIds: newSegIds });
-                                                                                    } else {
-                                                                                        const currentListIds = config.targetListIds || [];
-                                                                                        const newListIds = isChecked
-                                                                                            ? currentListIds.filter((id: string) => id !== item.id)
-                                                                                            : [...currentListIds, item.id];
-                                                                                        onChange({ ...config, targetListIds: newListIds });
-                                                                                    }
-                                                                                }}
-                                                                                className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${isChecked ? 'bg-white shadow-sm ring-1 ring-emerald-500/20' : 'hover:bg-white/50'}`}
-                                                                            >
-                                                                                <div className="flex items-center gap-2 overflow-hidden">
-                                                                                    <div className="w-5 h-5 flex items-center justify-center rounded">
-                                                                                        {birthdayTab === 'sync' ? (
-                                                                                            item.source === 'MISA CRM' ? <MisaIcon className="w-3 h-3" /> : <GoogleSheetsIcon className="w-3 h-3" />
-                                                                                        ) : birthdayTab === 'segment' ? (
-                                                                                            <Layers className="w-3 h-3 text-orange-500" />
-                                                                                        ) : (
-                                                                                            <List className="w-3 h-3 text-blue-500" />
-                                                                                        )}
-                                                                                    </div>
-                                                                                    <div className="overflow-hidden">
-                                                                                        <p className={`text-xs font-semibold truncate ${isChecked ? 'text-slate-800' : 'text-slate-600'}`}>{item.name}</p>
-                                                                                        <p className="text-[9px] text-slate-400 font-medium">
-                                                                                            {item.count || 0} liên hệ
-                                                                                        </p>
-                                                                                    </div>
-                                                                                </div>
-                                                                                <div className={`w-4 h-4 rounded border flex items-center justify-center ${isChecked ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 bg-white'}`}>
-                                                                                    {isChecked && <Check className="w-3 h-3" />}
-                                                                                </div>
-                                                                            </div>
-                                                                        );
-                                                                    })}
-                                                        </div>
-
-                                                        {/* Total Estimate Footer */}
-                                                        <div className="mt-3 px-1 flex items-center justify-between border-t border-slate-100 pt-2">
-                                                            <span className="text-[10px] font-semibold text-slate-500">Ước tính (Unique):</span>
-                                                            <div className="flex items-center gap-1.5">
-                                                                <Users className="w-3 h-3 text-emerald-600" />
-                                                                <span className="text-[10px] font-bold text-slate-700">
-                                                                    {isCalculating ? (
-                                                                        <Loader2 className="w-3 h-3 animate-spin inline-block" />
-                                                                    ) : (
-                                                                        `~${estimatedCount !== null ? estimatedCount : 0} liên hệ`
-                                                                    )}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
                                                 )}
                                             </div>
-                                        </>
+                                        </div>
+                                    )}
+
+                                    {(config.dateField === 'dateOfBirth' || config.dateField === 'anniversaryDate' || config.dateField === 'joinedAt' || config.dateField === 'specificDate' || config.dateField === 'lastActivity' || config.dateField === 'custom_field_date') && (
+                                        <div className="p-5 bg-white border border-slate-200 rounded-[14px] space-y-4 animate-in slide-in-from-top-2 shadow-sm">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="p-2 bg-rose-50 rounded-[var(--radius-md)] text-rose-500"><Target className="w-4 h-4" /></div>
+                                                    <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Đối tượng áp dụng</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex bg-slate-100 p-0.5 rounded-[var(--radius-md)] w-full">
+                                                <button
+                                                    onClick={() => onChange({ ...config, targetLists: 'all', targetListIds: [], targetSegmentIds: [] })}
+                                                    className={`flex-1 py-1.5 rounded-[var(--radius-md)] text-[10px] font-bold uppercase transition-all ${!config.targetLists || config.targetLists === 'all' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
+                                                >
+                                                    Tất cả
+                                                </button>
+                                                <button
+                                                    onClick={() => onChange({ ...config, targetLists: 'specific', targetListIds: [] })}
+                                                    className={`flex-1 py-1.5 rounded-[var(--radius-md)] text-[10px] font-bold uppercase transition-all ${config.targetLists === 'specific' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
+                                                >
+                                                    Danh sách cụ thể
+                                                </button>
+                                            </div>
+
+                                            {config.targetLists === 'specific' && (
+                                                <div className="mt-4 space-y-4">
+                                                    <div className="p-3 bg-amber-50 rounded-[var(--radius-md)] flex items-start gap-2.5 border border-amber-200/50">
+                                                        <Info className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                                                        <p className="text-[10px] text-amber-700 font-bold leading-relaxed">
+                                                            Chỉ kích hoạt đối với những người có trong danh sách/phân khúc được chọn dưới đây.
+                                                            <span className="block font-medium text-slate-500 mt-0.5 italic">Nếu họ không thuộc danh sách này, flow sẽ không tự động bắt đầu.</span>
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex bg-slate-100/50 p-0.5 rounded-[var(--radius-md)] w-full mb-2">
+                                                        <button
+                                                            onClick={() => setBirthdayTab('list')}
+                                                            className={`flex-1 py-1 rounded-[var(--radius-md)] text-[9px] font-bold uppercase transition-all ${birthdayTab === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                                        >
+                                                            Danh sách
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setBirthdayTab('sync')}
+                                                            className={`flex-1 py-1 rounded-[var(--radius-md)] text-[9px] font-bold uppercase transition-all ${birthdayTab === 'sync' ? 'bg-white shadow-sm text-green-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                                        >
+                                                            Nguồn Sync
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setBirthdayTab('segment')}
+                                                            className={`flex-1 py-1 rounded-[var(--radius-md)] text-[9px] font-bold uppercase transition-all ${birthdayTab === 'segment' ? 'bg-white shadow-sm text-[var(--color-primary)]' : 'text-slate-400 hover:text-slate-600'}`}
+                                                        >
+                                                            Phân khúc
+                                                        </button>
+                                                    </div>
+                                                    <div className="relative group mb-2">
+                                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300 group-focus-within:text-slate-500 transition-colors" />
+                                                        <input
+                                                            value={searchTerm}
+                                                            onChange={e => setSearchTerm(e.target.value)}
+                                                            placeholder="Tìm danh sách..."
+                                                            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-[var(--radius-md)] text-[11px] font-semibold outline-none focus:border-slate-400 transition-all"
+                                                        />
+                                                    </div>
+
+                                                    <div className="space-y-1 custom-scrollbar border border-slate-100 rounded-[14px] p-1 bg-slate-50/50 max-h-48 overflow-y-auto">
+                                                        {(birthdayTab === 'list' ? lists.filter(l => isManualList(l) && l.name.toLowerCase().includes(searchTerm.toLowerCase())) :
+                                                            birthdayTab === 'sync' ? lists.filter(l => isSyncList(l) && l.name.toLowerCase().includes(searchTerm.toLowerCase())) :
+                                                                segments.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))).map(item => {
+                                                                    const isChecked = birthdayTab === 'segment'
+                                                                        ? (config.targetSegmentIds || []).includes(item.id)
+                                                                        : (config.targetListIds || []).includes(item.id);
+                                                                    return (
+                                                                        <div key={item.id}
+                                                                            onClick={() => {
+                                                                                if (birthdayTab === 'segment') {
+                                                                                    const currentSegIds = config.targetSegmentIds || [];
+                                                                                    const newSegIds = isChecked
+                                                                                        ? currentSegIds.filter((id: string) => id !== item.id)
+                                                                                        : [...currentSegIds, item.id];
+                                                                                    onChange({ ...config, targetSegmentIds: newSegIds });
+                                                                                } else {
+                                                                                    const currentListIds = config.targetListIds || [];
+                                                                                    const newListIds = isChecked
+                                                                                        ? currentListIds.filter((id: string) => id !== item.id)
+                                                                                        : [...currentListIds, item.id];
+                                                                                    onChange({ ...config, targetListIds: newListIds });
+                                                                                }
+                                                                            }}
+                                                                            className={`flex items-center justify-between p-2 rounded-[var(--radius-md)] cursor-pointer transition-colors ${isChecked ? 'bg-white shadow-sm ring-1 ring-emerald-500/20' : 'hover:bg-white/50'}`}
+                                                                        >
+                                                                            <div className="flex items-center gap-2 overflow-hidden">
+                                                                                <div className="w-5 h-5 flex items-center justify-center rounded">
+                                                                                    {birthdayTab === 'sync' ? (
+                                                                                        item.source === 'MISA CRM' ? <MisaIcon className="w-3 h-3" /> : <GoogleSheetsIcon className="w-3 h-3" />
+                                                                                    ) : birthdayTab === 'segment' ? (
+                                                                                        <Layers className="w-3 h-3 text-[var(--color-primary)]" />
+                                                                                    ) : (
+                                                                                        <List className="w-3 h-3 text-blue-500" />
+                                                                                    )}
+                                                                                </div>
+                                                                                <div className="overflow-hidden">
+                                                                                    <p className={`text-xs font-semibold truncate ${isChecked ? 'text-slate-800' : 'text-slate-600'}`}>{item.name}</p>
+                                                                                    <p className="text-[9px] text-slate-400 font-medium">
+                                                                                        {item.count || 0} liên hệ
+                                                                                    </p>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className={`w-4 h-4 rounded border flex items-center justify-center ${isChecked ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 bg-white'}`}>
+                                                                                {isChecked && <Check className="w-3 h-3" />}
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                    </div>
+
+                                                    {/* Total Estimate Footer */}
+                                                    <div className="mt-3 px-1 flex items-center justify-between border-t border-slate-100 pt-2">
+                                                        <span className="text-[10px] font-semibold text-slate-500">Ước tính (Unique):</span>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <Users className="w-3 h-3 text-emerald-600" />
+                                                            <span className="text-[10px] font-bold text-slate-700">
+                                                                {isCalculating ? (
+                                                                    <Loader2 className="w-3 h-3 animate-spin inline-block" />
+                                                                ) : (
+                                                                    `~${estimatedCount !== null ? estimatedCount : 0} liên hệ`
+                                                                )}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
                             )}

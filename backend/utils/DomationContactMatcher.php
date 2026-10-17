@@ -243,44 +243,102 @@ class DomationContactMatcher
                 }
             }
 
-            // Propagate to zalo_subscribers (by subscriber_id or zalo_user_id)
+            // Propagate to zalo_subscribers (by subscriber_id, zalo_user_id, or phone)
             try {
+                $db->prepare("UPDATE zalo_subscribers SET contact_id = ? WHERE subscriber_id = ?")
+                   ->execute([$contactId, $subscriberId]);
                 $zaloUid = trim((string)($sub['zalo_user_id'] ?? ''));
                 if ($zaloUid !== '') {
-                    $db->prepare("UPDATE zalo_subscribers SET contact_id = ? WHERE (subscriber_id = ? OR zalo_user_id = ?) AND (contact_id IS NULL OR contact_id = 0)")
-                       ->execute([$contactId, $subscriberId, $zaloUid]);
-                } else {
-                    $db->prepare("UPDATE zalo_subscribers SET contact_id = ? WHERE subscriber_id = ? AND (contact_id IS NULL OR contact_id = 0)")
-                       ->execute([$contactId, $subscriberId]);
+                    $db->prepare("
+                        UPDATE zalo_subscribers
+                        SET subscriber_id = COALESCE(NULLIF(subscriber_id, ''), ?),
+                            contact_id = ?
+                        WHERE (subscriber_id = ? OR zalo_user_id = ?)
+                    ")->execute([$subscriberId, $contactId, $subscriberId, $zaloUid]);
+                }
+                if ($phone9 !== '') {
+                    $db->prepare("
+                        UPDATE zalo_subscribers
+                        SET subscriber_id = COALESCE(NULLIF(subscriber_id, ''), ?),
+                            contact_id = ?
+                        WHERE (contact_id IS NULL OR contact_id = 0)
+                          AND phone_number IS NOT NULL
+                          AND RIGHT(REGEXP_REPLACE(phone_number, '[^0-9]', ''), 9) = ?
+                    ")->execute([$subscriberId, $contactId, $phone9]);
                 }
             } catch (\Throwable $eZalo) {
             }
 
-            // Propagate to meta_subscribers & meta_conversations (by psid / email / phone)
+            // Propagate to meta_subscribers & meta_conversations (by subscriber_id / psid / email / phone)
             try {
+                if (!self::tableHasColumn($db, 'meta_subscribers', 'subscriber_id')) {
+                    try {
+                        $db->exec("ALTER TABLE `meta_subscribers` ADD COLUMN `subscriber_id` CHAR(36) NULL DEFAULT NULL");
+                    } catch (\Throwable $eAlterMs) {
+                    }
+                }
+                $db->prepare("UPDATE meta_subscribers SET contact_id = ? WHERE subscriber_id = ?")
+                   ->execute([$contactId, $subscriberId]);
+
                 $metaPsid = trim((string)($sub['meta_psid'] ?? ''));
                 if ($metaPsid !== '') {
-                    $db->prepare("UPDATE meta_subscribers SET contact_id = ? WHERE psid = ? AND (contact_id IS NULL OR contact_id = 0)")
-                       ->execute([$contactId, $metaPsid]);
+                    $db->prepare("
+                        UPDATE meta_subscribers
+                        SET subscriber_id = COALESCE(NULLIF(subscriber_id, ''), ?),
+                            contact_id = ?
+                        WHERE psid = ?
+                    ")->execute([$subscriberId, $contactId, $metaPsid]);
                     $db->prepare("UPDATE meta_conversations SET contact_id = ? WHERE psid = ? AND (contact_id IS NULL OR contact_id = 0)")
                        ->execute([$contactId, $metaPsid]);
                 }
                 if ($emailNorm !== '') {
-                    $db->prepare("UPDATE meta_subscribers SET contact_id = ? WHERE LOWER(TRIM(email)) = ? AND (contact_id IS NULL OR contact_id = 0)")
-                       ->execute([$contactId, $emailNorm]);
+                    $db->prepare("
+                        UPDATE meta_subscribers
+                        SET subscriber_id = COALESCE(NULLIF(subscriber_id, ''), ?),
+                            contact_id = ?
+                        WHERE LOWER(TRIM(email)) = ? AND (contact_id IS NULL OR contact_id = 0)
+                    ")->execute([$subscriberId, $contactId, $emailNorm]);
+                }
+                if ($phone9 !== '') {
+                    $db->prepare("
+                        UPDATE meta_subscribers
+                        SET subscriber_id = COALESCE(NULLIF(subscriber_id, ''), ?),
+                            contact_id = ?
+                        WHERE (contact_id IS NULL OR contact_id = 0)
+                          AND phone IS NOT NULL
+                          AND RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 9) = ?
+                    ")->execute([$subscriberId, $contactId, $phone9]);
                 }
             } catch (\Throwable $eMeta) {
             }
 
-            // Propagate to domation_ai_conversations via web_visitors
+            // Propagate to domation_ai_conversations via web_visitors, zalo_subscribers, and meta_subscribers
             try {
                 $db->prepare("
                     UPDATE domation_ai_conversations dac
-                    JOIN web_visitors wv ON wv.visitor_id = dac.visitor_id
+                    JOIN web_visitors wv ON wv.id = dac.visitor_id
                     SET dac.contact_id = ?, dac.updated_at = dac.updated_at
                     WHERE wv.subscriber_id = ? AND (dac.contact_id IS NULL OR dac.contact_id = 0)
                 ")->execute([$contactId, $subscriberId]);
-            } catch (\Throwable $eAi) {
+            } catch (\Throwable $eAiWeb) {
+            }
+            try {
+                $db->prepare("
+                    UPDATE domation_ai_conversations dac
+                    JOIN zalo_subscribers zs ON dac.visitor_id = CONCAT('zalo_', zs.zalo_user_id)
+                    SET dac.contact_id = ?, dac.updated_at = dac.updated_at
+                    WHERE (zs.subscriber_id = ? OR zs.contact_id = ?) AND (dac.contact_id IS NULL OR dac.contact_id = 0)
+                ")->execute([$contactId, $subscriberId, $contactId]);
+            } catch (\Throwable $eAiZalo) {
+            }
+            try {
+                $db->prepare("
+                    UPDATE domation_ai_conversations dac
+                    JOIN meta_subscribers ms ON dac.visitor_id = CONCAT('meta_', ms.psid)
+                    SET dac.contact_id = ?, dac.updated_at = dac.updated_at
+                    WHERE (ms.subscriber_id = ? OR ms.contact_id = ?) AND (dac.contact_id IS NULL OR dac.contact_id = 0)
+                ")->execute([$contactId, $subscriberId, $contactId]);
+            } catch (\Throwable $eAiMeta) {
             }
 
             self::refreshContactOmnichannelStats($db, $contactId);
@@ -1025,9 +1083,11 @@ class DomationContactMatcher
             try {
                 $db->exec("
                     UPDATE zalo_subscribers zs
-                    JOIN subscribers s ON zs.subscriber_id = s.id
-                    SET zs.contact_id = s.contact_id, zs.updated_at = zs.updated_at
-                    WHERE s.contact_id IS NOT NULL AND zs.contact_id IS NULL
+                    JOIN subscribers s ON (zs.subscriber_id = s.id OR (s.zalo_user_id IS NOT NULL AND s.zalo_user_id != '' AND zs.zalo_user_id = s.zalo_user_id))
+                    SET zs.subscriber_id = COALESCE(NULLIF(zs.subscriber_id, ''), s.id),
+                        zs.contact_id = COALESCE(zs.contact_id, s.contact_id),
+                        zs.updated_at = zs.updated_at
+                    WHERE s.contact_id IS NOT NULL AND (zs.contact_id IS NULL OR zs.contact_id = 0)
                 ");
                 $db->exec("
                     UPDATE zalo_subscribers zs
@@ -1040,6 +1100,19 @@ class DomationContactMatcher
 
             // Propagate & match meta_subscribers and meta_conversations
             try {
+                if (!self::tableHasColumn($db, 'meta_subscribers', 'subscriber_id')) {
+                    try {
+                        $db->exec("ALTER TABLE `meta_subscribers` ADD COLUMN `subscriber_id` CHAR(36) NULL DEFAULT NULL");
+                    } catch (\Throwable $eAlterMs) {
+                    }
+                }
+                $db->exec("
+                    UPDATE meta_subscribers ms
+                    JOIN subscribers s ON (ms.subscriber_id = s.id OR (s.meta_psid IS NOT NULL AND s.meta_psid != '' AND ms.psid = s.meta_psid))
+                    SET ms.subscriber_id = COALESCE(NULLIF(ms.subscriber_id, ''), s.id),
+                        ms.contact_id = COALESCE(ms.contact_id, s.contact_id)
+                    WHERE s.contact_id IS NOT NULL AND (ms.contact_id IS NULL OR ms.contact_id = 0)
+                ");
                 $db->exec("
                     UPDATE meta_subscribers ms
                     JOIN tmp_myerp_email_map em ON LOWER(TRIM(ms.email)) = em.email_norm
@@ -1061,15 +1134,33 @@ class DomationContactMatcher
             } catch (\Throwable $eMetaMatch) {
             }
 
-            // Propagate to domation_ai_conversations via web_visitors
+            // Propagate to domation_ai_conversations via web_visitors, zalo_subscribers, and meta_subscribers
             try {
                 $db->exec("
                     UPDATE domation_ai_conversations dac
-                    JOIN web_visitors wv ON wv.visitor_id = dac.visitor_id
+                    JOIN web_visitors wv ON wv.id = dac.visitor_id
                     SET dac.contact_id = wv.contact_id, dac.updated_at = dac.updated_at
-                    WHERE wv.contact_id IS NOT NULL AND dac.contact_id IS NULL
+                    WHERE wv.contact_id IS NOT NULL AND (dac.contact_id IS NULL OR dac.contact_id = 0)
                 ");
-            } catch (\Throwable $eAiMatch) {
+            } catch (\Throwable $eAiMatchWeb) {
+            }
+            try {
+                $db->exec("
+                    UPDATE domation_ai_conversations dac
+                    JOIN zalo_subscribers zs ON dac.visitor_id = CONCAT('zalo_', zs.zalo_user_id)
+                    SET dac.contact_id = zs.contact_id, dac.updated_at = dac.updated_at
+                    WHERE zs.contact_id IS NOT NULL AND (dac.contact_id IS NULL OR dac.contact_id = 0)
+                ");
+            } catch (\Throwable $eAiMatchZalo) {
+            }
+            try {
+                $db->exec("
+                    UPDATE domation_ai_conversations dac
+                    JOIN meta_subscribers ms ON dac.visitor_id = CONCAT('meta_', ms.psid)
+                    SET dac.contact_id = ms.contact_id, dac.updated_at = dac.updated_at
+                    WHERE ms.contact_id IS NOT NULL AND (dac.contact_id IS NULL OR dac.contact_id = 0)
+                ");
+            } catch (\Throwable $eAiMatchMeta) {
             }
 
             // 5. Bulk-update denormalized omnichannel columns on MYERP.contacts (preserving updated_at)
@@ -1266,6 +1357,813 @@ class DomationContactMatcher
 
         return $summary;
     }
+
+    /**
+     * Parse raw tags value (JSON string, comma-separated string, or array) into normalized unique tag names.
+     *
+     * @param mixed $rawTags
+     * @return string[]
+     */
+    public static function parseTagNames($rawTags): array
+    {
+        if ($rawTags === null || $rawTags === '') {
+            return [];
+        }
+        $arr = [];
+        if (is_array($rawTags)) {
+            $arr = $rawTags;
+        } elseif (is_string($rawTags)) {
+            $trimmed = trim($rawTags);
+            if ($trimmed === '' || $trimmed === '[]' || $trimmed === 'null') {
+                return [];
+            }
+            $decoded = json_decode($trimmed, true);
+            if (is_array($decoded)) {
+                $arr = $decoded;
+            } else {
+                $arr = explode(',', $trimmed);
+            }
+        }
+        $clean = [];
+        $seen  = [];
+        foreach ($arr as $item) {
+            if (is_array($item) && isset($item['name'])) {
+                $item = $item['name'];
+            }
+            if (!is_scalar($item)) {
+                continue;
+            }
+            $name = trim((string)$item);
+            if ($name === '') {
+                continue;
+            }
+            $key = function_exists('mb_strtolower') ? mb_strtolower($name, 'UTF-8') : strtolower($name);
+            if (!isset($seen[$key])) {
+                $seen[$key] = true;
+                $clean[]    = $name;
+            }
+        }
+        return $clean;
+    }
+
+    /**
+     * Ensure a CRM tag exists in `domation_tags` and return its `domation_tags.id`.
+     */
+    public static function syncCrmTagToDomation(PDO $db, string $name, ?string $color = '#6366f1', int $workspaceId = 1, ?int $userId = null): ?string
+    {
+        $name = trim($name);
+        if ($name === '') {
+            return null;
+        }
+        $workspaceId = max(1, $workspaceId);
+        $color       = ($color !== null && trim($color) !== '') ? trim($color) : '#6366f1';
+
+        try {
+            $stmt = $db->prepare("SELECT id FROM domation_tags WHERE workspace_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1");
+            $stmt->execute([$workspaceId, $name]);
+            $existingId = $stmt->fetchColumn();
+            if ($existingId !== false && $existingId !== '') {
+                $db->prepare("UPDATE domation_tags SET color = COALESCE(NULLIF(?, ''), color), updated_by = COALESCE(?, updated_by) WHERE id = ? AND workspace_id = ?")
+                   ->execute([$color, $userId, (string)$existingId, $workspaceId]);
+                return (string)$existingId;
+            }
+
+            $newId = 'tag_' . bin2hex(random_bytes(8));
+            $stmtIns = $db->prepare("
+                INSERT INTO domation_tags (id, workspace_id, name, color, status, description, created_by, updated_by, created_at)
+                VALUES (?, ?, ?, ?, 'active', 'Đồng bộ từ MYERP CRM', ?, ?, NOW())
+            ");
+            $stmtIns->execute([$newId, $workspaceId, $name, $color, $userId, $userId]);
+            return $newId;
+        } catch (\Throwable $e) {
+            // Fallback if created_by/updated_by columns are not yet present
+            try {
+                $newId = 'tag_' . bin2hex(random_bytes(8));
+                $db->prepare("INSERT IGNORE INTO domation_tags (id, workspace_id, name, color, status, created_at) VALUES (?, ?, ?, ?, 'active', NOW())")
+                   ->execute([$newId, $workspaceId, $name, $color]);
+                return $newId;
+            } catch (\Throwable $e2) {
+                return null;
+            }
+        }
+    }
+
+    /**
+     * Rename/update a CRM tag inside `domation_tags` and update affected `subscribers.tags` JSON.
+     */
+    public static function renameCrmTagInDomation(PDO $db, string $oldName, string $newName, ?string $color = null, int $workspaceId = 1, ?int $userId = null): void
+    {
+        $oldName     = trim($oldName);
+        $newName     = trim($newName);
+        $workspaceId = max(1, $workspaceId);
+        if ($newName === '') {
+            return;
+        }
+        try {
+            $stmt = $db->prepare("SELECT id, name FROM domation_tags WHERE workspace_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1");
+            $stmt->execute([$workspaceId, $oldName !== '' ? $oldName : $newName]);
+            $tagRow = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$tagRow) {
+                self::syncCrmTagToDomation($db, $newName, $color, $workspaceId, $userId);
+                return;
+            }
+
+            $tagId = (string)$tagRow['id'];
+            $db->prepare("
+                UPDATE domation_tags
+                SET name = ?,
+                    color = COALESCE(NULLIF(?, ''), color),
+                    updated_by = COALESCE(?, updated_by)
+                WHERE id = ? AND workspace_id = ?
+            ")->execute([$newName, $color ?? '', $userId, $tagId, $workspaceId]);
+
+            if ($oldName !== '' && strcasecmp($oldName, $newName) !== 0) {
+                $stmtAff = $db->prepare("SELECT subscriber_id FROM subscriber_tags WHERE tag_id = ? AND workspace_id = ?");
+                $stmtAff->execute([$tagId, $workspaceId]);
+                $subIds = $stmtAff->fetchAll(PDO::FETCH_COLUMN) ?: [];
+                foreach (array_chunk($subIds, 500) as $chunk) {
+                    $ph = implode(',', array_fill(0, count($chunk), '?'));
+                    $db->prepare("
+                        UPDATE subscribers
+                        SET tags = JSON_SET(tags, JSON_UNQUOTE(JSON_SEARCH(tags, 'one', ?)), ?),
+                            updated_at = updated_at
+                        WHERE id IN ($ph) AND workspace_id = ? AND JSON_CONTAINS(tags, JSON_QUOTE(?))
+                    ")->execute(array_merge([$oldName, $newName], $chunk, [$workspaceId, $oldName]));
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log("[DomationContactMatcher::renameCrmTagInDomation] " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Delete a CRM tag from `domation_tags` and `subscriber_tags`.
+     */
+    public static function deleteCrmTagInDomation(PDO $db, string $name, int $workspaceId = 1): void
+    {
+        $name        = trim($name);
+        $workspaceId = max(1, $workspaceId);
+        if ($name === '') {
+            return;
+        }
+        try {
+            $stmt = $db->prepare("SELECT id, name FROM domation_tags WHERE workspace_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1");
+            $stmt->execute([$workspaceId, $name]);
+            $tagRow = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$tagRow) {
+                return;
+            }
+            $tagId       = (string)$tagRow['id'];
+            $exactTagName = (string)$tagRow['name'];
+
+            $stmtAff = $db->prepare("SELECT subscriber_id FROM subscriber_tags WHERE tag_id = ? AND workspace_id = ?");
+            $stmtAff->execute([$tagId, $workspaceId]);
+            $subIds = $stmtAff->fetchAll(PDO::FETCH_COLUMN) ?: [];
+
+            $db->prepare("DELETE FROM subscriber_tags WHERE tag_id = ? AND workspace_id = ?")->execute([$tagId, $workspaceId]);
+            $db->prepare("DELETE FROM domation_tags WHERE id = ? AND workspace_id = ?")->execute([$tagId, $workspaceId]);
+
+            foreach (array_chunk($subIds, 500) as $chunk) {
+                $ph = implode(',', array_fill(0, count($chunk), '?'));
+                $db->prepare("
+                    UPDATE subscribers
+                    SET tags = JSON_REMOVE(tags, JSON_UNQUOTE(JSON_SEARCH(tags, 'one', ?))),
+                        updated_at = updated_at
+                    WHERE id IN ($ph) AND workspace_id = ? AND JSON_CONTAINS(tags, JSON_QUOTE(?))
+                ")->execute(array_merge([$exactTagName], $chunk, [$workspaceId, $exactTagName]));
+            }
+        } catch (\Throwable $e) {
+            error_log("[DomationContactMatcher::deleteCrmTagInDomation] " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Ensure a Marketing tag (`domation_tags`) exists in CRM `tags` table.
+     */
+    public static function syncDomationTagToCrm(PDO $db, string $name, ?string $color = '#6366f1', int $tenantId = 1): ?int
+    {
+        $name     = trim($name);
+        $tenantId = max(1, $tenantId);
+        $color    = ($color !== null && trim($color) !== '') ? trim($color) : '#6366f1';
+        if ($name === '') {
+            return null;
+        }
+        try {
+            $stmt = $db->prepare("SELECT id FROM tags WHERE tenant_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1");
+            $stmt->execute([$tenantId, $name]);
+            $existingId = (int)($stmt->fetchColumn() ?: 0);
+            if ($existingId > 0) {
+                return $existingId;
+            }
+            $stmtIns = $db->prepare("INSERT INTO tags (tenant_id, name, color, entity_type) VALUES (?, ?, ?, 'all')");
+            $stmtIns->execute([$tenantId, $name, $color]);
+            return (int)$db->lastInsertId();
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Rename a Marketing tag inside CRM `tags` and linked `contacts.tags` JSON.
+     */
+    public static function renameDomationTagInCrm(PDO $db, string $oldName, string $newName, ?string $color = null, int $tenantId = 1): void
+    {
+        $oldName  = trim($oldName);
+        $newName  = trim($newName);
+        $tenantId = max(1, $tenantId);
+        if ($newName === '') {
+            return;
+        }
+        try {
+            $stmt = $db->prepare("SELECT id FROM tags WHERE tenant_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1");
+            $stmt->execute([$tenantId, $oldName !== '' ? $oldName : $newName]);
+            $crmTagId = (int)($stmt->fetchColumn() ?: 0);
+            if ($crmTagId > 0) {
+                $db->prepare("UPDATE tags SET name = ?, color = COALESCE(NULLIF(?, ''), color) WHERE id = ? AND tenant_id = ?")
+                   ->execute([$newName, $color ?? '', $crmTagId, $tenantId]);
+            } else {
+                self::syncDomationTagToCrm($db, $newName, $color, $tenantId);
+            }
+
+            if ($oldName !== '' && strcasecmp($oldName, $newName) !== 0) {
+                $db->prepare("
+                    UPDATE contacts
+                    SET tags = JSON_SET(tags, JSON_UNQUOTE(JSON_SEARCH(tags, 'one', ?)), ?),
+                        updated_at = updated_at
+                    WHERE tenant_id = ? AND deleted_at IS NULL AND tags IS NOT NULL AND JSON_CONTAINS(tags, JSON_QUOTE(?))
+                ")->execute([$oldName, $newName, $tenantId, $oldName]);
+            }
+        } catch (\Throwable $e) {
+            error_log("[DomationContactMatcher::renameDomationTagInCrm] " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Delete a Marketing tag from CRM `tags` and remove from `contacts.tags` JSON.
+     */
+    public static function deleteDomationTagInCrm(PDO $db, string $name, int $tenantId = 1): void
+    {
+        $name     = trim($name);
+        $tenantId = max(1, $tenantId);
+        if ($name === '') {
+            return;
+        }
+        try {
+            $db->prepare("DELETE FROM tags WHERE tenant_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))")
+               ->execute([$tenantId, $name]);
+            $db->prepare("
+                UPDATE contacts
+                SET tags = JSON_REMOVE(tags, JSON_UNQUOTE(JSON_SEARCH(tags, 'one', ?))),
+                    updated_at = updated_at
+                WHERE tenant_id = ? AND deleted_at IS NULL AND tags IS NOT NULL AND JSON_CONTAINS(tags, JSON_QUOTE(?))
+            ")->execute([$name, $tenantId, $name]);
+        } catch (\Throwable $e) {
+            error_log("[DomationContactMatcher::deleteDomationTagInCrm] " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Sync a contact's tags array (`contacts.tags`) into `domation_tags` + `subscriber_tags`
+     * and update `subscribers.tags` JSON.
+     */
+    public static function syncContactTagsToSubscriber(PDO $db, int $contactId, string $subscriberId, $rawTags, int $workspaceId = 1): void
+    {
+        $subscriberId = trim($subscriberId);
+        if ($subscriberId === '') {
+            return;
+        }
+        $workspaceId = max(1, $workspaceId);
+        try {
+            $tagNames = self::parseTagNames($rawTags);
+
+            // Fetch existing tags on this subscriber
+            $stmtCur = $db->prepare("
+                SELECT st.tag_id, dt.name
+                FROM subscriber_tags st
+                INNER JOIN domation_tags dt ON dt.id = st.tag_id
+                WHERE st.subscriber_id = ? AND st.workspace_id = ?
+            ");
+            $stmtCur->execute([$subscriberId, $workspaceId]);
+            $curRows = $stmtCur->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+            $curByLower = [];
+            foreach ($curRows as $cr) {
+                $tName = trim((string)($cr['name'] ?? ''));
+                if ($tName !== '') {
+                    $k = function_exists('mb_strtolower') ? mb_strtolower($tName, 'UTF-8') : strtolower($tName);
+                    $curByLower[$k] = (string)$cr['tag_id'];
+                }
+            }
+
+            $desiredLower = [];
+            $finalTagNames = [];
+            foreach ($tagNames as $tName) {
+                $k = function_exists('mb_strtolower') ? mb_strtolower($tName, 'UTF-8') : strtolower($tName);
+                $desiredLower[$k] = $tName;
+                $finalTagNames[]  = $tName;
+
+                // Ensure tag exists in both CRM `tags` and `domation_tags`
+                self::syncDomationTagToCrm($db, $tName, null, $workspaceId);
+                $tagId = $curByLower[$k] ?? self::syncCrmTagToDomation($db, $tName, null, $workspaceId);
+                if ($tagId !== null && $tagId !== '') {
+                    $db->prepare("INSERT IGNORE INTO subscriber_tags (workspace_id, subscriber_id, tag_id) VALUES (?, ?, ?)")
+                       ->execute([$workspaceId, $subscriberId, $tagId]);
+                }
+            }
+
+            // Remove tags that were removed on the CRM contact
+            foreach ($curByLower as $k => $oldTagId) {
+                if (!isset($desiredLower[$k])) {
+                    $db->prepare("DELETE FROM subscriber_tags WHERE workspace_id = ? AND subscriber_id = ? AND tag_id = ?")
+                       ->execute([$workspaceId, $subscriberId, $oldTagId]);
+                }
+            }
+
+            // Keep subscribers.tags JSON in sync
+            $tagsJson = json_encode(array_values($finalTagNames), JSON_UNESCAPED_UNICODE);
+            $db->prepare("UPDATE subscribers SET tags = ?, updated_at = updated_at WHERE id = ?")
+               ->execute([$tagsJson, $subscriberId]);
+        } catch (\Throwable $e) {
+            error_log("[DomationContactMatcher::syncContactTagsToSubscriber] " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Sync a subscriber's relational `subscriber_tags` back to `contacts.tags` JSON and CRM `tags` catalog.
+     */
+    public static function syncSubscriberTagsToContact(PDO $db, string $subscriberId, int $contactId, int $workspaceId = 1): void
+    {
+        $subscriberId = trim($subscriberId);
+        if ($subscriberId === '' || $contactId <= 0) {
+            return;
+        }
+        $workspaceId = max(1, $workspaceId);
+        try {
+            $stmt = $db->prepare("
+                SELECT DISTINCT dt.name, dt.color
+                FROM subscriber_tags st
+                INNER JOIN domation_tags dt ON dt.id = st.tag_id
+                WHERE st.subscriber_id = ? AND dt.name IS NOT NULL AND TRIM(dt.name) != ''
+                ORDER BY dt.name ASC
+            ");
+            $stmt->execute([$subscriberId]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+            $tagNames = [];
+            foreach ($rows as $r) {
+                $tName = trim((string)($r['name'] ?? ''));
+                if ($tName !== '') {
+                    $tagNames[] = $tName;
+                    self::syncDomationTagToCrm($db, $tName, $r['color'] ?? null, $workspaceId);
+                }
+            }
+
+            $tagsJson = json_encode(array_values(array_unique($tagNames)), JSON_UNESCAPED_UNICODE);
+            $db->prepare("UPDATE contacts SET tags = ?, updated_at = updated_at WHERE id = ? AND deleted_at IS NULL")
+               ->execute([$tagsJson, $contactId]);
+            $db->prepare("UPDATE subscribers SET tags = ?, updated_at = updated_at WHERE id = ?")
+               ->execute([$tagsJson, $subscriberId]);
+        } catch (\Throwable $e) {
+            error_log("[DomationContactMatcher::syncSubscriberTagsToContact] " . $e->getMessage());
+        }
+    }
+
+    /**
+     * TWO-WAY SYNC (CRM -> Marketing):
+     * Whenever a CRM contact is created, updated, moved across pipeline stages, or assigned to a new owner,
+     * synchronize all profile, pipeline, owner, and tag fields to `subscribers` + `subscriber_tags`.
+     * If no matching subscriber exists yet and the contact has an email or phone, create a linked subscriber.
+     *
+     * @return string|null The linked `subscribers.id`
+     */
+    public static function syncContactToSubscriber(PDO $db, int $contactId, int $workspaceId = 1): ?string
+    {
+        if ($contactId <= 0) {
+            return null;
+        }
+
+        try {
+            $stmtC = $db->prepare("
+                SELECT c.*,
+                       u.full_name AS owner_full_name,
+                       ps.system_slug AS stage_system_slug,
+                       comp.name AS joined_company_name
+                FROM contacts c
+                LEFT JOIN users u ON u.id = c.owner_id
+                LEFT JOIN pipeline_stages ps ON ps.id = c.stage_id
+                LEFT JOIN companies comp ON comp.id = c.company_id
+                WHERE c.id = ? AND c.deleted_at IS NULL
+                LIMIT 1
+            ");
+            $stmtC->execute([$contactId]);
+            $contact = $stmtC->fetch(PDO::FETCH_ASSOC);
+            if (!$contact) {
+                return null;
+            }
+
+            $workspaceId = max(1, (int)($contact['tenant_id'] ?? $workspaceId));
+            $fullName    = trim((string)($contact['full_name'] ?? ''));
+            $firstName   = '';
+            $lastName    = '';
+            if ($fullName !== '') {
+                $parts     = preg_split('/\s+/u', $fullName, 2);
+                $firstName = trim((string)($parts[0] ?? ''));
+                $lastName  = trim((string)($parts[1] ?? ''));
+            }
+
+            $rawEmail  = trim((string)($contact['email'] ?? ''));
+            $emailNorm = self::normalizeEmail($rawEmail);
+
+            $rawPhone = trim((string)($contact['phone'] ?? ''));
+            if ($rawPhone === '') {
+                $rawPhone = trim((string)($contact['mobile'] ?? ($contact['phone2'] ?? ($contact['zalo_phone'] ?? ''))));
+            }
+            $phone9 = self::normalizePhone9($rawPhone);
+
+            $allPhones9 = array_values(array_unique(array_filter([
+                self::normalizePhone9($contact['phone'] ?? null),
+                self::normalizePhone9($contact['mobile'] ?? null),
+                self::normalizePhone9($contact['phone2'] ?? null),
+                self::normalizePhone9($contact['zalo_phone'] ?? null),
+            ])));
+
+            // 1. Find existing subscriber by contact_id, domation_subscriber_id, phone_norm9, or email_norm
+            $subId = null;
+            $stmtByContact = $db->prepare("SELECT id FROM subscribers WHERE contact_id = ? ORDER BY updated_at DESC, joined_at DESC LIMIT 1");
+            $stmtByContact->execute([$contactId]);
+            $foundSubId = $stmtByContact->fetchColumn();
+            if ($foundSubId !== false && $foundSubId !== '') {
+                $subId = (string)$foundSubId;
+            }
+
+            if ($subId === null && !empty($contact['domation_subscriber_id'])) {
+                $stmtByDomId = $db->prepare("SELECT id FROM subscribers WHERE id = ? LIMIT 1");
+                $stmtByDomId->execute([(string)$contact['domation_subscriber_id']]);
+                $foundDomId = $stmtByDomId->fetchColumn();
+                if ($foundDomId !== false && $foundDomId !== '') {
+                    $subId = (string)$foundDomId;
+                }
+            }
+
+            if ($subId === null && ($emailNorm !== '' || !empty($allPhones9))) {
+                $conds  = [];
+                $params = [];
+                if ($emailNorm !== '') {
+                    $conds[]  = "(email_norm = ? OR LOWER(TRIM(email)) = ?)";
+                    $params[] = $emailNorm;
+                    $params[] = $emailNorm;
+                }
+                foreach ($allPhones9 as $p9) {
+                    $conds[]  = "(phone_norm9 = ? OR phone_number LIKE ? OR phone LIKE ?)";
+                    $params[] = $p9;
+                    $params[] = '%' . $p9;
+                    $params[] = '%' . $p9;
+                }
+                $stmtFind = $db->prepare("
+                    SELECT id
+                    FROM subscribers
+                    WHERE (" . implode(' OR ', $conds) . ")
+                    ORDER BY (workspace_id = ?) DESC, updated_at DESC, joined_at DESC
+                    LIMIT 1
+                ");
+                $stmtFind->execute(array_merge($params, [$workspaceId]));
+                $matchedId = $stmtFind->fetchColumn();
+                if ($matchedId !== false && $matchedId !== '') {
+                    $subId = (string)$matchedId;
+                }
+            }
+
+            // Prepare CRM field values
+            $jobTitle       = trim((string)($contact['job_title'] ?? ''));
+            $dob            = !empty($contact['birthday']) ? $contact['birthday'] : (!empty($contact['dob']) ? $contact['dob'] : null);
+            $gender         = trim((string)($contact['gender'] ?? ''));
+            $city           = trim((string)($contact['city'] ?? ''));
+            $district       = trim((string)($contact['district'] ?? ''));
+            $ward           = trim((string)($contact['ward'] ?? ''));
+            $address        = trim((string)($contact['address'] ?? ''));
+            $companyName    = trim((string)($contact['company'] ?? ''));
+            if ($companyName === '') {
+                $companyName = trim((string)($contact['joined_company_name'] ?? ''));
+            }
+            $source         = trim((string)($contact['source'] ?? ''));
+            $program        = trim((string)($contact['program'] ?? ''));
+            $stageId        = !empty($contact['stage_id']) ? (int)$contact['stage_id'] : null;
+            $pipelineStatus = !empty($contact['stage_system_slug'])
+                ? (string)$contact['stage_system_slug']
+                : (!empty($contact['pipeline_status']) ? (string)$contact['pipeline_status'] : null);
+            $leadStatus     = !empty($contact['lead_status']) ? (string)$contact['lead_status'] : null;
+            $ownerId        = !empty($contact['owner_id']) ? (int)$contact['owner_id'] : null;
+            $salesperson    = !empty($contact['owner_full_name']) ? (string)$contact['owner_full_name'] : null;
+            $actorUserId    = function_exists('get_current_user_id')
+                ? get_current_user_id()
+                : (!empty($GLOBALS['domation_auth']['user_id']) ? (int)$GLOBALS['domation_auth']['user_id'] : $ownerId);
+
+            if ($subId !== null) {
+                // Update existing subscriber with CRM profile + pipeline + owner fields
+                $stmtUpd = $db->prepare("
+                    UPDATE subscribers SET
+                        contact_id      = ?,
+                        first_name      = CASE WHEN ? != '' THEN ? ELSE first_name END,
+                        last_name       = CASE WHEN ? != '' THEN ? ELSE last_name END,
+                        email           = CASE WHEN ? != '' THEN ? ELSE email END,
+                        email_norm      = COALESCE(NULLIF(?, ''), email_norm),
+                        phone_number    = COALESCE(NULLIF(?, ''), phone_number),
+                        phone           = COALESCE(NULLIF(?, ''), phone),
+                        phone_norm9     = COALESCE(NULLIF(?, ''), phone_norm9),
+                        job_title       = COALESCE(NULLIF(?, ''), job_title),
+                        date_of_birth   = COALESCE(?, date_of_birth),
+                        gender          = COALESCE(NULLIF(?, ''), gender),
+                        city            = COALESCE(NULLIF(?, ''), city),
+                        district        = COALESCE(NULLIF(?, ''), district),
+                        ward            = COALESCE(NULLIF(?, ''), ward),
+                        address         = COALESCE(NULLIF(?, ''), address),
+                        company_name    = COALESCE(NULLIF(?, ''), company_name),
+                        source          = COALESCE(NULLIF(?, ''), source),
+                        program         = COALESCE(NULLIF(?, ''), program),
+                        stage_id        = ?,
+                        pipeline_status = COALESCE(NULLIF(?, ''), pipeline_status),
+                        lead_status     = COALESCE(NULLIF(?, ''), lead_status),
+                        owner_id        = ?,
+                        salesperson     = COALESCE(NULLIF(?, ''), salesperson),
+                        updated_by      = COALESCE(?, updated_by),
+                        updated_at      = NOW()
+                    WHERE id = ?
+                ");
+                $stmtUpd->execute([
+                    $contactId,
+                    $fullName, $firstName,
+                    $fullName, $lastName,
+                    $rawEmail, $rawEmail,
+                    $emailNorm,
+                    $rawPhone,
+                    substr($rawPhone, 0, 20),
+                    $phone9,
+                    $jobTitle,
+                    $dob,
+                    $gender,
+                    $city,
+                    $district,
+                    $ward,
+                    $address,
+                    $companyName,
+                    $source,
+                    $program,
+                    $stageId,
+                    $pipelineStatus ?? '',
+                    $leadStatus ?? '',
+                    $ownerId,
+                    $salesperson ?? '',
+                    $actorUserId,
+                    $subId,
+                ]);
+            } elseif ($rawEmail !== '' || $rawPhone !== '') {
+                // Create a new linked subscriber in Marketing
+                $subId       = 'sub_' . bin2hex(random_bytes(8));
+                $insertEmail = $rawEmail !== ''
+                    ? $rawEmail
+                    : (($phone9 !== '' ? $phone9 : ('contact_' . $contactId)) . '@no-email.domation');
+
+                $stmtIns = $db->prepare("
+                    INSERT INTO subscribers (
+                        id, workspace_id, contact_id,
+                        email, email_norm, phone_number, phone, phone_norm9,
+                        first_name, last_name, gender, status, source,
+                        salesperson, owner_id, job_title, company_name,
+                        city, district, ward, address, date_of_birth,
+                        program, stage_id, pipeline_status, lead_status,
+                        tags, created_by, updated_by, joined_at, created_at, updated_at
+                    ) VALUES (
+                        ?, ?, ?,
+                        ?, ?, ?, ?, ?,
+                        ?, ?, ?, 'active', ?,
+                        ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?,
+                        '[]', ?, ?, NOW(), NOW(), NOW()
+                    )
+                    ON DUPLICATE KEY UPDATE
+                        contact_id      = COALESCE(VALUES(contact_id), contact_id),
+                        email_norm      = COALESCE(VALUES(email_norm), email_norm),
+                        phone_number    = COALESCE(VALUES(phone_number), phone_number),
+                        phone           = COALESCE(VALUES(phone), phone),
+                        phone_norm9     = COALESCE(VALUES(phone_norm9), phone_norm9),
+                        first_name      = COALESCE(VALUES(first_name), first_name),
+                        last_name       = COALESCE(VALUES(last_name), last_name),
+                        gender          = COALESCE(VALUES(gender), gender),
+                        salesperson     = COALESCE(VALUES(salesperson), salesperson),
+                        owner_id        = COALESCE(VALUES(owner_id), owner_id),
+                        job_title       = COALESCE(VALUES(job_title), job_title),
+                        company_name    = COALESCE(VALUES(company_name), company_name),
+                        city            = COALESCE(VALUES(city), city),
+                        district        = COALESCE(VALUES(district), district),
+                        ward            = COALESCE(VALUES(ward), ward),
+                        address         = COALESCE(VALUES(address), address),
+                        date_of_birth   = COALESCE(VALUES(date_of_birth), date_of_birth),
+                        program         = COALESCE(VALUES(program), program),
+                        stage_id        = COALESCE(VALUES(stage_id), stage_id),
+                        pipeline_status = COALESCE(VALUES(pipeline_status), pipeline_status),
+                        lead_status     = COALESCE(VALUES(lead_status), lead_status),
+                        updated_by      = COALESCE(VALUES(updated_by), updated_by),
+                        updated_at      = NOW()
+                ");
+                $stmtIns->execute([
+                    $subId, $workspaceId, $contactId,
+                    $insertEmail, $emailNorm !== '' ? $emailNorm : null,
+                    $rawPhone !== '' ? $rawPhone : null,
+                    $rawPhone !== '' ? substr($rawPhone, 0, 20) : null,
+                    $phone9 !== '' ? $phone9 : null,
+                    $firstName !== '' ? $firstName : null,
+                    $lastName !== '' ? $lastName : null,
+                    $gender !== '' ? $gender : null,
+                    $source !== '' ? $source : 'CRM',
+                    $salesperson,
+                    $ownerId,
+                    $jobTitle !== '' ? $jobTitle : null,
+                    $companyName !== '' ? $companyName : null,
+                    $city !== '' ? $city : null,
+                    $district !== '' ? $district : null,
+                    $ward !== '' ? $ward : null,
+                    $address !== '' ? $address : null,
+                    $dob,
+                    $program !== '' ? $program : null,
+                    $stageId,
+                    $pipelineStatus,
+                    $leadStatus,
+                    $actorUserId,
+                    $actorUserId,
+                ]);
+            }
+
+            if ($subId !== null) {
+                if (array_key_exists('tags', $contact)) {
+                    self::syncContactTagsToSubscriber($db, $contactId, $subId, $contact['tags'], $workspaceId);
+                }
+                self::syncSubscriberMatchOnly($db, $subId);
+            }
+
+            return $subId;
+        } catch (\Throwable $e) {
+            error_log("[DomationContactMatcher::syncContactToSubscriber] " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Fast batch identity & CRM profile reconciliation for imported subscribers against MYERP.contacts.
+     * Links `subscribers.contact_id = contacts.id`, enriches subscriber CRM metadata (`stage_id`,
+     * `pipeline_status`, `lead_status`, `program`, `owner_id`, `salesperson`), and backfills
+     * `contacts.domation_subscriber_id` without violating "3 KHÔNG".
+     */
+    public static function batchMatchSubscribersWithContacts(PDO $db, array $subscriberIds, int $workspaceId = 1): int
+    {
+        $subscriberIds = array_values(array_unique(array_filter(array_map('strval', $subscriberIds), fn($v) => trim($v) !== '')));
+        if (empty($subscriberIds)) {
+            return 0;
+        }
+
+        $matchedCount = 0;
+        try {
+            foreach (array_chunk($subscriberIds, 500) as $chunk) {
+                $ph = implode(',', array_fill(0, count($chunk), '?'));
+
+                // 1. Match by normalized email
+                $stmtEmail = $db->prepare("
+                    UPDATE subscribers s
+                    INNER JOIN contacts c ON c.tenant_id = ? AND c.deleted_at IS NULL
+                        AND c.email IS NOT NULL AND c.email != ''
+                        AND LOWER(TRIM(c.email)) = COALESCE(NULLIF(s.email_norm, ''), LOWER(TRIM(s.email)))
+                    LEFT JOIN users u ON u.id = c.owner_id
+                    SET s.contact_id = c.id,
+                        s.stage_id = COALESCE(c.stage_id, s.stage_id),
+                        s.pipeline_status = COALESCE(NULLIF(c.pipeline_status, ''), s.pipeline_status),
+                        s.lead_status = COALESCE(NULLIF(c.lead_status, ''), s.lead_status),
+                        s.program = COALESCE(NULLIF(c.program, ''), s.program),
+                        s.owner_id = COALESCE(c.owner_id, s.owner_id),
+                        s.salesperson = COALESCE(NULLIF(u.full_name, ''), s.salesperson)
+                    WHERE s.workspace_id = ?
+                      AND s.id IN ($ph)
+                      AND (s.contact_id IS NULL OR s.contact_id = 0)
+                      AND s.email NOT LIKE '%@no-email.domation'
+                ");
+                $stmtEmail->execute(array_merge([$workspaceId, $workspaceId], $chunk));
+                $matchedCount += $stmtEmail->rowCount();
+
+                // 2. Match by 9-digit normalized phone
+                $stmtPhone = $db->prepare("
+                    UPDATE subscribers s
+                    INNER JOIN contacts c ON c.tenant_id = ? AND c.deleted_at IS NULL
+                        AND (
+                            (c.phone IS NOT NULL AND LENGTH(TRIM(c.phone)) >= 9 AND RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(c.phone, ' ', ''), '.', ''), '-', ''), '+', ''), 9) = s.phone_norm9)
+                            OR (c.mobile IS NOT NULL AND LENGTH(TRIM(c.mobile)) >= 9 AND RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(c.mobile, ' ', ''), '.', ''), '-', ''), '+', ''), 9) = s.phone_norm9)
+                        )
+                    LEFT JOIN users u ON u.id = c.owner_id
+                    SET s.contact_id = c.id,
+                        s.stage_id = COALESCE(c.stage_id, s.stage_id),
+                        s.pipeline_status = COALESCE(NULLIF(c.pipeline_status, ''), s.pipeline_status),
+                        s.lead_status = COALESCE(NULLIF(c.lead_status, ''), s.lead_status),
+                        s.program = COALESCE(NULLIF(c.program, ''), s.program),
+                        s.owner_id = COALESCE(c.owner_id, s.owner_id),
+                        s.salesperson = COALESCE(NULLIF(u.full_name, ''), s.salesperson)
+                    WHERE s.workspace_id = ?
+                      AND s.id IN ($ph)
+                      AND (s.contact_id IS NULL OR s.contact_id = 0)
+                      AND s.phone_norm9 IS NOT NULL AND s.phone_norm9 != ''
+                ");
+                $stmtPhone->execute(array_merge([$workspaceId, $workspaceId], $chunk));
+                $matchedCount += $stmtPhone->rowCount();
+
+                // 3. Backfill contacts.domation_subscriber_id safely (preserving contacts.updated_at)
+                $stmtBackfill = $db->prepare("
+                    UPDATE contacts c
+                    INNER JOIN subscribers s ON s.contact_id = c.id AND s.workspace_id = ?
+                    SET c.domation_subscriber_id = s.id,
+                        c.updated_at = c.updated_at
+                    WHERE c.tenant_id = ?
+                      AND c.deleted_at IS NULL
+                      AND s.id IN ($ph)
+                      AND (c.domation_subscriber_id IS NULL OR c.domation_subscriber_id = '')
+                ");
+                $stmtBackfill->execute(array_merge([$workspaceId, $workspaceId], $chunk));
+            }
+        } catch (\Throwable $e) {
+            error_log("[DomationContactMatcher::batchMatchSubscribersWithContacts] " . $e->getMessage());
+        }
+
+        return $matchedCount;
+    }
+
+    /**
+     * TWO-WAY SYNC (Marketing -> CRM Profile & Tags Only):
+     * When a subscriber with a linked `contact_id` is updated in Marketing (`subscribers.php`),
+     * safely sync non-empty profile fields (`job_title`, `date_of_birth` -> `birthday`, `city`,
+     * `district`, `ward`, `address`, `gender`, `company_name` -> `company`) and `subscriber_tags`
+     * back to `contacts`, NEVER overwriting `owner_id`, `stage_id`, or `pipeline_status`.
+     */
+    public static function syncSubscriberToContactProfile(PDO $db, string $subscriberId): void
+    {
+        $subscriberId = trim($subscriberId);
+        if ($subscriberId === '') {
+            return;
+        }
+
+        try {
+            $stmtSub = $db->prepare("SELECT * FROM subscribers WHERE id = ? LIMIT 1");
+            $stmtSub->execute([$subscriberId]);
+            $sub = $stmtSub->fetch(PDO::FETCH_ASSOC);
+            if (!$sub) {
+                return;
+            }
+
+            $contactId = !empty($sub['contact_id']) ? (int)$sub['contact_id'] : 0;
+            if ($contactId <= 0) {
+                $matched = self::syncSubscriberMatchOnly($db, $subscriberId);
+                $contactId = $matched ?? 0;
+            }
+            if ($contactId <= 0) {
+                return;
+            }
+
+            $workspaceId = max(1, (int)($sub['workspace_id'] ?? 1));
+            $jobTitle    = trim((string)($sub['job_title'] ?? ''));
+            $dob         = !empty($sub['date_of_birth']) ? $sub['date_of_birth'] : null;
+            $gender      = trim((string)($sub['gender'] ?? ''));
+            $city        = trim((string)($sub['city'] ?? ''));
+            $district    = trim((string)($sub['district'] ?? ''));
+            $ward        = trim((string)($sub['ward'] ?? ''));
+            $address     = trim((string)($sub['address'] ?? ''));
+            $companyName = trim((string)($sub['company_name'] ?? ''));
+
+            // Safe profile-only update on contacts (NEVER modifies owner_id, stage_id, pipeline_status, or updated_at)
+            $stmtUpdC = $db->prepare("
+                UPDATE contacts SET
+                    job_title = COALESCE(NULLIF(?, ''), job_title),
+                    birthday  = COALESCE(?, birthday),
+                    gender    = COALESCE(NULLIF(?, ''), gender),
+                    city      = COALESCE(NULLIF(?, ''), city),
+                    district  = COALESCE(NULLIF(?, ''), district),
+                    ward      = COALESCE(NULLIF(?, ''), ward),
+                    address   = COALESCE(NULLIF(?, ''), address),
+                    company   = COALESCE(NULLIF(?, ''), company),
+                    updated_at = updated_at
+                WHERE id = ? AND deleted_at IS NULL
+            ");
+            $stmtUpdC->execute([
+                $jobTitle,
+                $dob,
+                $gender,
+                $city,
+                $district,
+                $ward,
+                $address,
+                $companyName,
+                $contactId,
+            ]);
+
+            self::syncSubscriberTagsToContact($db, $subscriberId, $contactId, $workspaceId);
+        } catch (\Throwable $e) {
+            error_log("[DomationContactMatcher::syncSubscriberToContactProfile] " . $e->getMessage());
+        }
+    }
 }
 
 if (!function_exists('domationSyncSubscriberMatchOnly')) {
@@ -1285,3 +2183,4 @@ if (!function_exists('domationSyncSubscriberMatchOnly')) {
         }
     }
 }
+

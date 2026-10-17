@@ -92,26 +92,26 @@ const createDivider = (styleOverrides: EmailBlockStyle = {}) =>
 
 
 
-// 5. SaaS Welcome (Premium)
+// 5. SaaS / Academy Welcome (Premium)
 const buildSaaSWelcome = (): Template => {
     const blocks: EmailBlock[] = [
         createSection([
             createRow([
                 createColumn([
                     createImage('https://images.unsplash.com/photo-1611162617474-5b21e879e113?q=80&w=600&auto=format&fit=crop', 'Logo', { width: '120px', textAlign: 'center', marginBottom: '20px' }),
-                    createBlock('text', '<h1 style="text-align: center; font-size: 28px; color: #1e293b; margin-bottom: 10px;">Chào mừng bạn đến với MailFlow Pro!</h1><p style="text-align: center; color: #64748b; font-size: 16px;">Hãy cùng bắt đầu hành trình tối ưu hóa trải nghiệm khách hàng của bạn.</p>', { textAlign: 'center' })
+                    createBlock('text', '<h1 style="text-align: center; font-size: 28px; color: #1e293b; margin-bottom: 10px;">Chào mừng {{fullName}} đến với Viện Quốc Tế IDEAS!</h1><p style="text-align: center; color: #64748b; font-size: 16px;">Cảm ơn Anh/Chị đã quan tâm đến chương trình <strong>{{program}}</strong>. Chuyên viên tư vấn <strong>{{consultantName}}</strong> ({{consultantPhone}}) sẽ đồng hành cùng Anh/Chị.</p>', { textAlign: 'center' })
                 ])
             ], { backgroundColor: 'transparent' })
         ], { paddingTop: '40px', paddingBottom: '40px', backgroundColor: '#f9fafb' }),
         createSection([
             createRow([
                 createColumn([
-                    createBlock('text', '<h3 style="text-align: center; margin-bottom: 20px;">3 Bước để bắt đầu</h3>', { textAlign: 'center' }),
+                    createBlock('text', '<h3 style="text-align: center; margin-bottom: 20px;">3 Bước lộ trình nhập học</h3>', { textAlign: 'center' }),
                     createBlock('timeline', '', { textAlign: 'left', paddingLeft: '40px', paddingRight: '40px' }, [], {
                         items: [
-                            { id: createId(), date: 'Bước 1', title: 'Kết nối tài khoản', description: 'Liên kết các kênh mạng xã hội và email của bạn.' },
-                            { id: createId(), date: 'Bước 2', title: 'Thiết lập kịch bản', description: 'Tạo quy trình trả lời tự động thông minh.' },
-                            { id: createId(), date: 'Bước 3', title: 'Kích hoạt chiến dịch', description: 'Bắt đầu gửi email và thu về kết quả.' }
+                            { id: createId(), date: 'Bước 1', title: 'Tư vấn chuyên sâu 1-1', description: 'Đánh giá hồ sơ năng lực và định hướng lộ trình học phù hợp.' },
+                            { id: createId(), date: 'Bước 2', title: 'Xét duyệt học bổng & Hồ sơ', description: 'Hoàn thiện thủ tục đăng ký và nhận ưu đãi học phí.' },
+                            { id: createId(), date: 'Bước 3', title: 'Kích hoạt tài khoản học tập', description: 'Bắt đầu chương trình quốc tế cùng đội ngũ giảng viên và cố vấn.' }
                         ]
                     })
                 ], { width: '100%', paddingTop: '30px', paddingBottom: '30px' })
@@ -121,22 +121,29 @@ const buildSaaSWelcome = (): Template => {
             createRow([
                 createColumn([
                     createBlock('check_list', '', { textAlign: 'left', checkIconColor: '#2563eb', color: '#1e293b' }, [], {
-                        checkListTitle: 'Lợi ích khi sử dụng MailFlow Pro',
+                        checkListTitle: 'Đặc quyền học viên tại Viện Quốc Tế IDEAS',
                         items: [
-                            { id: createId(), title: 'Tự động hóa 24/7', description: 'Không bỏ lỡ bất kỳ khách hàng nào.' },
-                            { id: createId(), title: 'Báo cáo chi tiết', description: 'Phân tích dữ liệu theo thời gian thực.' },
-                            { id: createId(), title: 'Tiết kiệm 80% thời gian', description: 'Tập trung vào việc chốt đơn hàng.' }
+                            { id: createId(), title: 'Bằng cấp quốc tế kiểm định', description: 'Được công nhận toàn cầu từ các trường đại học đối tác Thụy Sĩ, Anh, Pháp.' },
+                            { id: createId(), title: 'Lịch học linh hoạt 100% Online / Blended', description: 'Thiết kế tối ưu cho nhà quản lý và nhân sự cấp cao bận rộn.' },
+                            { id: createId(), title: 'Đồng hành học thuật 1-1', description: 'Đội ngũ trợ giảng và cố vấn hỗ trợ xuyên suốt khóa học.' }
                         ]
                     }),
-                    createButton('Khám phá ngay', '#', { contentBackgroundColor: '#2563eb', color: '#ffffff', borderRadius: '30px', marginTop: '30px', fontWeight: 'bold' })
+                    createButton('Khám phá chương trình ngay', 'https://ideas.edu.vn', { contentBackgroundColor: '#2563eb', color: '#ffffff', borderRadius: '30px', marginTop: '30px', fontWeight: 'bold' })
                 ])
             ], { backgroundColor: 'transparent' })
-        ], { paddingTop: '40px', paddingBottom: '40px', backgroundColor: '#f9fafb' })
+        ], { paddingTop: '40px', paddingBottom: '40px', backgroundColor: '#f9fafb' }),
+        createSection([
+            createRow([
+                createColumn([
+                    createBlock('text', '<p style="color: #94a3b8; font-size: 11px; margin: 0;">© {{current_year}} Viện Quốc Tế IDEAS. Bảo lưu mọi quyền.<br><a href="{{unsubscribe_url}}" style="color: #64748b; text-decoration: underline;">Hủy đăng ký nhận bản tin</a></p>', { textAlign: 'center' })
+                ])
+            ], { paddingTop: '20px', paddingBottom: '20px' })
+        ], { backgroundColor: '#f8fafc' })
     ];
 
     return {
         id: 'sys_saas_welcome',
-        name: 'Chào mừng (SaaS Premium)',
+        name: 'Chào mừng Học viên / Khách hàng (IDEAS Welcome)',
         thumbnail: 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=600&q=80',
         category: 'welcome',
         lastModified: new Date().toISOString(),
@@ -151,7 +158,7 @@ const buildProductLaunch = (): Template => {
         createSection([
             createRow([
                 createColumn([
-                    createBlock('text', '<span style="color: #2563eb; font-weight: bold; letter-spacing: 2px; text-transform: uppercase;">New Arrival</span><h1 style="color: #ffffff; font-size: 42px; margin: 10px 0;">Product X: The Future</h1>', { textAlign: 'center' }),
+                    createBlock('text', '<span style="color: #2563eb; font-weight: bold; letter-spacing: 2px; text-transform: uppercase;">CHƯƠNG TRÌNH MỚI</span><h1 style="color: #ffffff; font-size: 38px; margin: 10px 0;">{{program}}: Lãnh Đạo Kỷ Nguyên Số</h1><p style="color: #cbd5e1; font-size: 15px;">Dành riêng cho {{fullName}} — Cơ hội nhận học bổng ưu đãi đặc biệt trong tháng này.</p>', { textAlign: 'center' }),
                     createImage('https://images.unsplash.com/photo-1523275335684-37898b6baf30?q=80&w=800&auto=format&fit=crop', 'Product Hero', { width: '100%', marginTop: '30px', borderRadius: '24px' })
                 ])
             ], { backgroundColor: '#000000', paddingTop: '60px', paddingBottom: '60px' })
@@ -160,11 +167,11 @@ const buildProductLaunch = (): Template => {
             createRow([
                 createColumn([
                     createBlock('check_list', '', { textAlign: 'left', checkIcon: 'Zap', checkIconColor: '#2563eb' }, [], {
-                        checkListTitle: 'Tính năng cốt lõi',
+                        checkListTitle: 'Điểm nổi bật của chương trình',
                         items: [
-                            { id: createId(), title: 'Thiết kế tối giản', description: 'Phù hợp với mọi không gian hiện đại.' },
-                            { id: createId(), title: 'Hiệu năng mạnh mẽ', description: 'Xử lý mọi tác vụ chỉ trong nháy mắt.' },
-                            { id: createId(), title: 'Pin 48 giờ', description: 'Sử dụng thoải mái không lo sạc.' }
+                            { id: createId(), title: 'Giáo trình chuẩn quốc tế', description: 'Cập nhật thực tiễn quản trị và chiến lược kinh doanh hiện đại.' },
+                            { id: createId(), title: 'Ứng dụng AI & Chuyển đổi số', description: 'Tích hợp công cụ phân tích và lãnh đạo trong kỷ nguyên AI.' },
+                            { id: createId(), title: 'Mạng lưới C-Level & Alumni', description: 'Kết nối hơn 2.000 học viên là CEO, Giám đốc và Quản lý cấp cao.' }
                         ]
                     })
                 ])
@@ -173,22 +180,29 @@ const buildProductLaunch = (): Template => {
         createSection([
             createRow([
                 createColumn([
-                    createBlock('text', '<h2 style="text-align: center; margin-bottom: 30px;">Lộ trình phát triển</h2>', { textAlign: 'center' }),
+                    createBlock('text', '<h2 style="text-align: center; margin-bottom: 30px;">Lộ trình triển khai khóa học</h2>', { textAlign: 'center' }),
                     createBlock('timeline', '', { textAlign: 'left', timelineDotColor: '#000000' }, [], {
                         items: [
-                            { id: createId(), date: 'Tháng 1', title: 'Nghiên cứu thị trường', description: 'Lắng nghe phản hồi từ 1000 người dùng đầu tiên.' },
-                            { id: createId(), date: 'Tháng 3', title: 'Phiên bản Beta', description: 'Thử nghiệm giới hạn cho các đối tác chiến lược.' },
-                            { id: createId(), date: 'Tháng 6', title: 'Ra mắt toàn cầu', description: 'Chính thức có mặt tại hơn 50 quốc gia.' }
+                            { id: createId(), date: 'Giai đoạn 1', title: 'Nền tảng Quản trị Chiến lược', description: 'Xây dựng tư duy hệ thống và năng lực ra quyết định.' },
+                            { id: createId(), date: 'Giai đoạn 2', title: 'Chuyên đề Chuyên sâu', description: 'Thực hành giải quyết Case Study thực tế tại doanh nghiệp.' },
+                            { id: createId(), date: 'Giai đoạn 3', title: 'Luận văn & Tốt nghiệp Quốc tế', description: 'Bảo vệ đề án cuối khóa và nhận bằng từ trường đại học đối tác.' }
                         ]
                     })
                 ])
             ], { paddingTop: '40px', paddingBottom: '40px', backgroundColor: '#f8fafc' })
-        ], { backgroundColor: '#f8fafc' })
+        ], { backgroundColor: '#f8fafc' }),
+        createSection([
+            createRow([
+                createColumn([
+                    createBlock('text', '<p style="color: #94a3b8; font-size: 11px; margin: 0;">© {{current_year}} Viện Quốc Tế IDEAS. Bảo lưu mọi quyền.<br><a href="{{unsubscribe_url}}" style="color: #64748b; text-decoration: underline;">Hủy đăng ký nhận bản tin</a></p>', { textAlign: 'center' })
+                ])
+            ], { paddingTop: '20px', paddingBottom: '20px' })
+        ], { backgroundColor: '#ffffff' })
     ];
 
     return {
         id: 'sys_prod_launch',
-        name: 'Ra mắt sản phẩm (Luxury)',
+        name: 'Giới thiệu Chương trình / Sản phẩm (Luxury)',
         thumbnail: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
         category: 'promotional',
         lastModified: new Date().toISOString(),
@@ -203,8 +217,8 @@ const buildEventInvite = (): Template => {
         createSection([
             createRow([
                 createColumn([
-                    createBlock('text', '<h1 style="color: #ffffff; font-size: 36px; line-height: 1.2;">TECH SUMMIT 2024</h1><p style="color: #c084fc; font-size: 18px; font-weight: bold; margin-top: 10px;">The Next Generation of AI</p>', { textAlign: 'center' }),
-                    createButton('Đăng ký ngay', '#', { contentBackgroundColor: '#ffffff', color: '#581c87', borderRadius: '12px', marginTop: '30px', fontWeight: 'bold' })
+                    createBlock('text', '<h1 style="color: #ffffff; font-size: 36px; line-height: 1.2;">EXECUTIVE SUMMIT {{current_year}}</h1><p style="color: #c084fc; font-size: 18px; font-weight: bold; margin-top: 10px;">Kính mời {{fullName}} tham dự Hội thảo Lãnh đạo & AI</p>', { textAlign: 'center' }),
+                    createButton('Xác nhận tham dự ngay', 'https://ideas.edu.vn', { contentBackgroundColor: '#ffffff', color: '#581c87', borderRadius: '12px', marginTop: '30px', fontWeight: 'bold' })
                 ])
             ], { backgroundColor: 'transparent', paddingTop: '80px', paddingBottom: '80px' })
         ], { paddingTop: '0px', paddingBottom: '0px', backgroundColor: '#581c87' }),
@@ -214,19 +228,26 @@ const buildEventInvite = (): Template => {
                     createImage('https://images.unsplash.com/photo-1540575861501-7ad0582371f3?q=80&w=800&auto=format&fit=crop', 'Event Detail', { width: '100%', borderRadius: '20px', marginBottom: '30px' }),
                     createBlock('timeline', '', { textAlign: 'left', timelineDotColor: '#581c87' }, [], {
                         items: [
-                            { id: createId(), date: '08:00', title: 'Check-in & Coffee', description: 'Đón khách và giao lưu tự do.' },
-                            { id: createId(), date: '09:00', title: 'Khai mạc', description: 'Chia sẻ tầm nhìn AI từ CEO.' },
-                            { id: createId(), date: '11:00', title: 'Workshop 1', description: 'Ứng dụng AI vào quy trình Marketing.' }
+                            { id: createId(), date: '08:30', title: 'Đón khách & Networking', description: 'Check-in và giao lưu cùng các diễn giả quốc tế.' },
+                            { id: createId(), date: '09:00', title: 'Phiên tham luận chính', description: 'Chiến lược quản trị doanh nghiệp trong kỷ nguyên AI.' },
+                            { id: createId(), date: '10:30', title: 'Tư vấn Học bổng {{program}}', description: 'Gặp gỡ trực tiếp ban giám khảo và chuyên viên {{consultantName}}.' }
                         ]
                     })
                 ])
             ], { paddingTop: '40px', paddingBottom: '40px', backgroundColor: '#ffffff' })
-        ], { backgroundColor: '#ffffff' })
+        ], { backgroundColor: '#ffffff' }),
+        createSection([
+            createRow([
+                createColumn([
+                    createBlock('text', '<p style="color: #94a3b8; font-size: 11px; margin: 0;">© {{current_year}} Viện Quốc Tế IDEAS. Bảo lưu mọi quyền.<br><a href="{{unsubscribe_url}}" style="color: #64748b; text-decoration: underline;">Hủy đăng ký nhận bản tin</a></p>', { textAlign: 'center' })
+                ])
+            ], { paddingTop: '20px', paddingBottom: '20px' })
+        ], { backgroundColor: '#f9fafb' })
     ];
 
     return {
         id: 'sys_event_summit',
-        name: 'Thư mời sự kiện (Tech Summit)',
+        name: 'Thư mời Sự kiện & Hội thảo (Executive Summit)',
         thumbnail: 'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?auto=format&fit=crop&w=600&q=80',
         category: 'event',
         lastModified: new Date().toISOString(),
@@ -242,14 +263,14 @@ const buildPortfolioReview = (): Template => {
             createRow([
                 createColumn([
                     createImage('https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=800&auto=format&fit=crop', 'Portfolio', { width: '100%', borderRadius: '20px' }),
-                    createBlock('text', '<h2 style="margin-top: 30px;">Hợp tác cùng Agency X</h2><p style="color: #64748b;">Khám phá cách chúng tôi đã giúp doanh nghiệp tăng trưởng 200% doanh thu chỉ trong 6 tháng.</p>', { textAlign: 'center' })
+                    createBlock('text', '<h2 style="margin-top: 30px;">Dấu ấn Học viên & Đối tác tại IDEAS</h2><p style="color: #64748b;">Kính gửi {{fullName}}, cùng khám phá hành trình bứt phá sự nghiệp của cộng đồng học viên chương trình {{program}}.</p>', { textAlign: 'center' })
                 ])
             ], { paddingTop: '40px', paddingBottom: '40px' })
         ], { backgroundColor: '#ffffff' }),
         createSection([
             createRow([
                 createColumn([
-                    createBlock('review', '"Đội ngũ chuyên nghiệp, sáng tạo và luôn bám sát mục tiêu. Tôi thực sự ấn tượng với kết quả đạt được."', { textAlign: 'center', color: '#1e293b', fontStyle: 'italic', fontSize: '18px' }, [], { rating: 5 })
+                    createBlock('review', '"Chương trình thực tiễn, đội ngũ cố vấn tận tâm và luôn bám sát mục tiêu nghề nghiệp. Tôi thực sự ấn tượng với giá trị nhận được."', { textAlign: 'center', color: '#1e293b', fontStyle: 'italic', fontSize: '18px' }, [], { rating: 5 })
                 ])
             ], { paddingTop: '30px', paddingBottom: '30px', backgroundColor: '#f1f5f9' })
         ], { backgroundColor: '#f1f5f9' }),
@@ -257,21 +278,28 @@ const buildPortfolioReview = (): Template => {
             createRow([
                 createColumn([
                     createBlock('check_list', '', { textAlign: 'left', checkIcon: 'Sparkles', checkIconColor: '#10b981' }, [], {
-                        checkListTitle: 'Kết quả đạt được',
+                        checkListTitle: 'Những con số biết nói',
                         items: [
-                            { id: createId(), title: '+200% Doanh thu', description: 'Tối ưu hóa các chiến dịch quảng cáo.' },
-                            { id: createId(), title: '50k Lead mới', description: 'Xây dựng phễu thu hút khách hàng tiềm năng.' },
-                            { id: createId(), title: '95% Khách hàng hài lòng', description: 'Dịch vụ chăm sóc khách hàng tự động.' }
+                            { id: createId(), title: '2.000+ Học viên & Cựu học viên', description: 'Đang nắm giữ vị trí quản lý và lãnh đạo tại các tập đoàn lớn.' },
+                            { id: createId(), title: 'Kiểm định Quốc tế uy tín', description: 'Các chương trình đạt chuẩn ASIC, IACBE, EDUQUA, ACBSP.' },
+                            { id: createId(), title: '98% Học viên hài lòng', description: 'Hệ thống hỗ trợ học thuật chuyên nghiệp xuyên suốt.' }
                         ]
                     })
                 ])
             ], { paddingTop: '40px', paddingBottom: '40px' })
-        ], { backgroundColor: '#ffffff' })
+        ], { backgroundColor: '#ffffff' }),
+        createSection([
+            createRow([
+                createColumn([
+                    createBlock('text', '<p style="color: #94a3b8; font-size: 11px; margin: 0;">© {{current_year}} Viện Quốc Tế IDEAS. Bảo lưu mọi quyền.<br><a href="{{unsubscribe_url}}" style="color: #64748b; text-decoration: underline;">Hủy đăng ký nhận bản tin</a></p>', { textAlign: 'center' })
+                ])
+            ], { paddingTop: '20px', paddingBottom: '20px' })
+        ], { backgroundColor: '#f8fafc' })
     ];
 
     return {
         id: 'sys_portfolio',
-        name: 'Đánh giá & Kết quả (Portfolio)',
+        name: 'Đánh giá & Thành tựu Học viên (Portfolio)',
         thumbnail: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=600&q=80',
         category: 'promotional',
         lastModified: new Date().toISOString(),
@@ -286,27 +314,27 @@ const buildNewsletterDigest = (): Template => {
         createSection([
             createRow([
                 createColumn([
-                    createBlock('text', '<span style="color: #db2777; font-weight: bold; font-size: 12px; letter-spacing: 2px;">WEEKLY DIGEST</span><h1 style="color: #831843; font-size: 32px; margin: 10px 0;">Bản tin Công nghệ tuần này</h1><p style="color: #be185d;">Tổng hợp những thông tin đáng chú ý nhất trong 7 ngày qua.</p>', { textAlign: 'center' })
+                    createBlock('text', '<span style="color: #db2777; font-weight: bold; font-size: 12px; letter-spacing: 2px;">WEEKLY DIGEST</span><h1 style="color: #831843; font-size: 32px; margin: 10px 0;">Bản tin Quản trị & Học thuật tuần này</h1><p style="color: #be185d;">Kính gửi {{fullName}}, tổng hợp những thông tin và góc nhìn quản trị đáng chú ý nhất trong 7 ngày qua.</p>', { textAlign: 'center' })
                 ])
             ], { paddingTop: '40px', paddingBottom: '40px' })
         ], { backgroundColor: '#fdf2f8' }),
         createSection([
             createRow([
                 createColumn([createImage('https://images.unsplash.com/photo-1677442136019-21780ecad995?q=80&w=400&auto=format&fit=crop', 'News 1', { width: '100%', borderRadius: '12px' })], { width: '40%' }),
-                createColumn([createBlock('text', '<h4 style="margin: 0 0 10px 0; color: #1e293b;">AI đang thay đổi cách chúng ta làm việc</h4><p style="font-size: 13px; color: #64748b; margin: 0;">Khám phá 10 công cụ AI giúp tăng hiệu suất lao động ngay lập tức.</p><a href="#" style="color: #db2777; font-size: 12px; font-weight: bold; text-decoration: none; display: block; margin-top: 10px;">Đọc thêm →</a>', { textAlign: 'left' })], { width: '60%', paddingLeft: '20px' })
+                createColumn([createBlock('text', '<h4 style="margin: 0 0 10px 0; color: #1e293b;">AI đang thay đổi cách các CEO ra quyết định</h4><p style="font-size: 13px; color: #64748b; margin: 0;">Khám phá cách ứng dụng dữ liệu và AI vào quản trị chiến lược hiện đại.</p><a href="https://ideas.edu.vn" style="color: #db2777; font-size: 12px; font-weight: bold; text-decoration: none; display: block; margin-top: 10px;">Đọc thêm →</a>', { textAlign: 'left' })], { width: '60%', paddingLeft: '20px' })
             ], { paddingTop: '20px', paddingBottom: '20px', borderStyle: 'solid', borderBottomWidth: '1px', borderColor: '#f1f5f9' }),
             createRow([
                 createColumn([createImage('https://images.unsplash.com/photo-1485827404703-89b55fcc595e?q=80&w=400&auto=format&fit=crop', 'News 2', { width: '100%', borderRadius: '12px' })], { width: '40%' }),
-                createColumn([createBlock('text', '<h4 style="margin: 0 0 10px 0; color: #1e293b;">Tương lai của Robot dân dụng</h4><p style="font-size: 13px; color: #64748b; margin: 0;">Liệu Robot có trở thành người bạn đồng hành trong mỗi gia đình?</p><a href="#" style="color: #db2777; font-size: 12px; font-weight: bold; text-decoration: none; display: block; margin-top: 10px;">Đọc thêm →</a>', { textAlign: 'left' })], { width: '60%', paddingLeft: '20px' })
+                createColumn([createBlock('text', '<h4 style="margin: 0 0 10px 0; color: #1e293b;">Xu hướng phát triển lãnh đạo bền vững ESG</h4><p style="font-size: 13px; color: #64748b; margin: 0;">Những tiêu chuẩn mới dành cho nhà quản lý cấp cao trên toàn cầu.</p><a href="https://ideas.edu.vn" style="color: #db2777; font-size: 12px; font-weight: bold; text-decoration: none; display: block; margin-top: 10px;">Đọc thêm →</a>', { textAlign: 'left' })], { width: '60%', paddingLeft: '20px' })
             ], { paddingTop: '20px', paddingBottom: '20px' })
         ], { backgroundColor: '#ffffff', paddingLeft: '20px', paddingRight: '20px' }),
         createSection([
             createRow([
                 createColumn([
                     createBlock('social', '', { textAlign: 'center', iconMode: 'light', iconSize: '24' }, [], {
-                        socialLinks: [{ id: createId(), network: 'facebook', url: '#' }, { id: createId(), network: 'twitter', url: '#' }, { id: createId(), network: 'instagram', url: '#' }]
+                        socialLinks: [{ id: createId(), network: 'facebook', url: 'https://ideas.edu.vn' }, { id: createId(), network: 'twitter', url: 'https://ideas.edu.vn' }, { id: createId(), network: 'instagram', url: 'https://ideas.edu.vn' }]
                     }),
-                    createBlock('text', '<p style="color: #94a3b8; font-size: 11px; margin-top: 20px;">Bạn nhận được email này vì đã đăng ký bản tin của chúng tôi.<br>© 2024 Tech News Inc. <a href="#" style="color: #2563eb;">Hủy đăng ký</a></p>', { textAlign: 'center' })
+                    createBlock('text', '<p style="color: #94a3b8; font-size: 11px; margin-top: 20px;">Bạn nhận được email này vì đã đăng ký nhận thông tin từ Viện Quốc Tế IDEAS.<br>© {{current_year}} Viện Quốc Tế IDEAS. <a href="{{unsubscribe_url}}" style="color: #2563eb;">Hủy đăng ký</a></p>', { textAlign: 'center' })
                 ])
             ], { paddingTop: '40px', paddingBottom: '40px' })
         ], { backgroundColor: '#1e293b' })
@@ -314,7 +342,7 @@ const buildNewsletterDigest = (): Template => {
 
     return {
         id: 'sys_newsletter_digest',
-        name: 'Bản tin tuần (Digest)',
+        name: 'Bản tin tuần (Weekly Digest)',
         thumbnail: 'https://images.unsplash.com/photo-1504711331083-9c895941bf81?auto=format&fit=crop&w=600&q=80',
         category: 'newsletter',
         lastModified: new Date().toISOString(),
@@ -323,4 +351,10 @@ const buildNewsletterDigest = (): Template => {
     };
 };
 
-export const SYSTEM_TEMPLATES: Template[] = [];
+export const SYSTEM_TEMPLATES: Template[] = [
+    buildSaaSWelcome(),
+    buildProductLaunch(),
+    buildEventInvite(),
+    buildPortfolioReview(),
+    buildNewsletterDigest(),
+];

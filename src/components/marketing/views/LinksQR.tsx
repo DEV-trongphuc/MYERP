@@ -624,15 +624,15 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
             )}
 
             {view === 'report' && selectedLink && (
-                <div className="bg-white rounded-[32px] p-8 border border-slate-200 min-h-[800px]">
-                    <div className="flex items-start justify-between mb-10">
+                <div className="bg-[var(--color-surface)] rounded-[18px] p-6 lg:p-8 border border-[var(--color-border)] min-h-[700px] shadow-[var(--shadow-xs)]">
+                    <div className="flex items-start justify-between mb-8">
                         <div className="flex items-center gap-4">
                             <div>
                                 <button 
                                     onClick={() => setView('list')}
-                                    className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 hover:text-amber-600 uppercase tracking-widest transition-colors mb-3 group"
+                                    className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 hover:text-[var(--color-primary)] uppercase tracking-widest transition-colors mb-3 group"
                                 >
-                                    <div className="w-6 h-6 rounded-full bg-slate-100 group-hover:bg-amber-100 flex items-center justify-center transition-colors">
+                                    <div className="w-6 h-6 rounded-full bg-slate-100 group-hover:bg-[var(--color-primary-light)] flex items-center justify-center transition-colors">
                                         <ArrowRight className="w-3 h-3 rotate-180" />
                                     </div>
                                     QUAY LẠI
@@ -646,15 +646,15 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                             onChange={e => setEditNameValue(e.target.value)} 
                                             onBlur={handleSaveName}
                                             onKeyDown={e => e.key === 'Enter' && handleSaveName()}
-                                            className="text-2xl font-black text-slate-800 uppercase tracking-tight bg-slate-50 border border-amber-400 focus:ring-2 focus:ring-amber-200 rounded-xl px-3 py-1 outline-none w-full min-w-[250px]"
+                                            className="text-xl font-black text-slate-800 uppercase tracking-tight bg-slate-50 border border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/20 rounded-xl px-3 py-1 outline-none w-full min-w-[250px]"
                                             autoFocus
                                         />
                                     ) : (
                                         <>
-                                            <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tight">{selectedLink.name || selectedLink.slug}</h2>
+                                            <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">{selectedLink.name || selectedLink.slug}</h2>
                                             <button 
                                                 onClick={() => { setIsEditingName(true); setEditNameValue(selectedLink.name || selectedLink.slug); }} 
-                                                className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors border border-transparent hover:border-amber-200 shadow-sm hover:shadow"
+                                                className="p-1.5 text-slate-400 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-light)] rounded-lg transition-colors border border-transparent hover:border-[var(--color-primary)]/20 shadow-sm"
                                                 title="Sửa tên chiến dịch"
                                             >
                                                 <Edit3 className="w-4 h-4" />
@@ -664,7 +664,7 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                 </div>
 
                                 <div className="flex items-center gap-3 mt-2 flex-wrap">
-                                    <span className="px-3 py-1 bg-amber-50 text-amber-600 text-[10px] font-black rounded-full border border-amber-200/60 uppercase">/go/{selectedLink.slug}</span>
+                                    <span className="px-3 py-1 bg-[var(--color-primary-light)] text-[var(--color-primary)] text-[10px] font-black rounded-full border border-[var(--color-primary)]/20 uppercase">/go/{selectedLink.slug}</span>
                                     <div className="w-1 h-1 bg-slate-300 rounded-full" />
                                     <span className="text-[11px] text-slate-400 font-mono italic opacity-70">Domain Link Mapping</span>
                                     
@@ -688,11 +688,11 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                 href={selectedLink.target_url} 
                                 target="_blank" 
                                 rel="noopener noreferrer"
-                                className="px-4 py-1.5 bg-amber-50/50 hover:bg-amber-50 border border-amber-200/60 rounded-full flex items-center gap-2 max-w-sm cursor-pointer transition-colors group"
+                                className="px-4 py-1.5 bg-[var(--color-primary-light)] border border-[var(--color-primary)]/20 rounded-full flex items-center gap-2 max-w-sm cursor-pointer transition-colors group"
                                 title="Mở link"
                             >
-                                <Globe className="w-3.5 h-3.5 text-amber-600 transition-transform group-hover:rotate-12" />
-                                <span className="text-[11px] font-bold text-amber-900 truncate">{selectedLink.target_url}</span>
+                                <Globe className="w-3.5 h-3.5 text-[var(--color-primary)] transition-transform group-hover:rotate-12" />
+                                <span className="text-[11px] font-bold text-[var(--color-primary)] truncate">{selectedLink.target_url}</span>
                             </a>
                             {selectedLink.created_at && (
                                 <span className="text-[10px] font-bold text-slate-400 mt-1">
@@ -712,7 +712,7 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                         setPinLength(existingPin.length === 6 ? 6 : 4);
                                         setIsSettingsOpen(true);
                                     }}
-                                    className="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-[10px] font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
+                                    className="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-[10px] font-bold rounded-[var(--radius-md)] transition-colors flex items-center gap-1.5 shadow-sm"
                                 >
                                     <Target className="w-3.5 h-3.5" /> NÂNG CAO & BẢO MẬT
                                 </button>
@@ -721,33 +721,33 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                     </div>
 
                     {/* QR Section - Moved to TOP */}
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12 items-stretch">
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-10 items-stretch">
                         {/* Designer Tools */}
                         <div className="lg:col-span-5 flex flex-col">
-                            <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 flex-1 flex flex-col justify-center">
-                                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Tùy chỉnh QR</h3>
-                                <p className="text-[11px] text-slate-500 mt-1 font-medium italic">Thiết kế mã QR Campaign trở nên chuyên nghiệp và khác biệt.</p>
+                            <div className="bg-slate-50 p-6 rounded-[18px] border border-slate-200 flex-1 flex flex-col justify-center">
+                                <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Tùy chỉnh QR</h3>
+                                <p className="text-xs text-slate-500 mt-1 font-medium">Thiết kế mã QR Campaign trở nên chuyên nghiệp và khác biệt.</p>
                                 
-                                <div className="mt-8 space-y-4">
+                                <div className="mt-6 space-y-4">
                                     <button 
                                         onClick={() => setIsDesignerOpen(true)}
-                                        className="w-full flex items-center justify-between p-5 bg-white border-2 border-slate-100 rounded-3xl hover:border-amber-400 hover:shadow-xl hover:shadow-amber-100 transition-all group"
+                                        className="w-full flex items-center justify-between p-4 bg-white border border-slate-200 rounded-[14px] hover:border-[var(--color-primary)] hover:shadow-md transition-all group"
                                     >
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-12 h-12 rounded-[18px] bg-gradient-to-br from-amber-400 to-amber-600 text-white flex items-center justify-center shadow-lg shadow-amber-200/50 group-hover:scale-110 transition-transform">
+                                        <div className="flex items-center gap-3.5">
+                                            <div className="w-11 h-11 rounded-[12px] bg-[var(--color-primary)] text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
                                                 <Edit3 className="w-5 h-5" />
                                             </div>
                                             <div className="text-left">
-                                                <span className="block text-[15px] font-black text-slate-800 leading-tight">Chỉnh sửa Design</span>
-                                                <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest mt-0.5">Professional Designer</span>
+                                                <span className="block text-sm font-black text-slate-800 leading-tight">Chỉnh sửa Design</span>
+                                                <span className="text-[10px] font-black text-[var(--color-primary)] uppercase tracking-widest mt-0.5">Professional Designer</span>
                                             </div>
                                         </div>
-                                        <div className="w-8 h-8 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center group-hover:bg-amber-500 group-hover:border-amber-500 group-hover:text-white transition-all text-slate-400">
+                                        <div className="w-8 h-8 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center group-hover:bg-[var(--color-primary)] group-hover:border-[var(--color-primary)] group-hover:text-white transition-all text-slate-400">
                                             <ArrowRight className="w-4 h-4" />
                                         </div>
                                     </button>
 
-                                    <div className="p-4 bg-amber-50/50 rounded-2xl border border-amber-100">
+                                    <div className="p-4 bg-amber-50/50 rounded-[14px] border border-amber-100">
                                         <div className="flex gap-3">
                                             <Lightbulb className="w-5 h-5 text-amber-600 shrink-0" />
                                             <p className="text-[11px] text-amber-700/80 font-bold leading-relaxed">
@@ -761,10 +761,10 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
 
                         {/* Preview Window plain design */}
                         <div 
-                            className="lg:col-span-7 flex flex-col items-center justify-center p-8 bg-slate-50/40 rounded-[32px] border border-slate-100 relative overflow-hidden h-full min-h-[400px]"
+                            className="lg:col-span-7 flex flex-col items-center justify-center p-8 bg-slate-50/40 rounded-[18px] border border-slate-200 relative overflow-hidden h-full min-h-[380px]"
                             style={{ backgroundImage: `radial-gradient(circle at 1px 1px, #cbd5e1 1px, transparent 0)`, backgroundSize: `24px 24px` }}
                         >
-                            <div className="bg-white p-12 rounded-[40px] shadow-xl shadow-slate-200/40 flex flex-col items-center border border-slate-100/80 z-10">
+                            <div className="bg-white p-8 rounded-[18px] shadow-md flex flex-col items-center border border-slate-100 z-10">
                                 {(() => {
                                     const cfg = JSON.parse(selectedLink.qr_config_json || '{}');
                                     const hasFrame = cfg.frameId && cfg.frameId !== 'none';
@@ -775,13 +775,13 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                             className="transition-all duration-500"
                                             style={{
                                                 border: hasFrame ? `10px solid ${cfg.frameColor || '#4f46e5'}` : 'none',
-                                                borderRadius: '28px',
+                                                borderRadius: '18px',
                                                 padding: hasFrame ? '20px 16px 40px' : '0',
                                                 background: hasFrame ? (cfg.frameColor || '#4f46e5') : 'transparent',
                                                 position: 'relative'
                                             }}
                                         >
-                                            <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100">
+                                            <div className="bg-white p-3 rounded-[14px] shadow-sm border border-slate-100">
                                                 <QRPreview 
                                                     configJson={selectedLink.qr_config_json}
                                                     value={qrValue}
@@ -1077,7 +1077,7 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                             </div>
                             {/* Toggle switch */}
                             <div
-                                className={`w-12 h-6 rounded-full flex items-center p-1 cursor-pointer transition-colors ${pinEnabled ? 'bg-amber-500 justify-end' : 'bg-slate-300 justify-start'}`}
+                                className={`w-12 h-6 rounded-full flex items-center p-1 cursor-pointer transition-colors ${pinEnabled ? 'bg-[var(--color-primary)] justify-end' : 'bg-slate-300 justify-start'}`}
                                 onClick={() => {
                                     const next = !pinEnabled;
                                     setPinEnabled(next);
@@ -1104,8 +1104,8 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                             }}
                                             className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all ${
                                                 pinLength === len
-                                                    ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-                                                    : 'bg-white text-amber-700 border-amber-200 hover:border-amber-400'
+                                                    ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)] shadow-sm'
+                                                    : 'bg-white text-slate-700 border-slate-200 hover:border-[var(--color-primary)]'
                                             }`}
                                         >
                                             {len} chữ số
@@ -1139,7 +1139,7 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                                     document.getElementById(`pin-box-${idx - 1}`)?.focus();
                                                 }
                                             }}
-                                            className="w-12 h-14 text-center text-2xl font-black text-amber-900 bg-white border-2 border-amber-300 rounded-xl outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all shadow-sm"
+                                            className="w-12 h-14 text-center text-2xl font-black text-slate-800 bg-white border-2 border-slate-200 rounded-xl outline-none focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/20 transition-all shadow-sm"
                                         />
                                     ))}
                                 </div>

@@ -147,6 +147,9 @@ const PublicSurvey: React.FC = () => {
         if (ans.type === 'short_text' || ans.type === 'long_text' || ans.type === 'email' || ans.type === 'phone' || ans.type === 'number' || ans.type === 'date') {
             return !ans.answer_text?.trim();
         }
+        if (ans.type === 'file_upload') {
+            return !ans.answer_text?.trim() && (!ans.answer_json || (typeof ans.answer_json === 'object' && Object.keys(ans.answer_json).length === 0));
+        }
         if (['single_choice', 'dropdown', 'yes_no'].includes(ans.type)) {
             return !ans.answer_text;
         }
@@ -179,8 +182,8 @@ const PublicSurvey: React.FC = () => {
     const currentBlocks = pages[currentPage] ?? [];
     const rawTheme: any = survey?.theme ?? {};
     const theme = {
-        primaryColor: rawTheme.primaryColor || '#f59e0b',
-        backgroundColor: rawTheme.backgroundColor || '#0f172a',
+        primaryColor: rawTheme.primaryColor || '#BD1D2D',
+        backgroundColor: rawTheme.backgroundColor || '#f8fafc',
         cardBackground: rawTheme.cardBackground || '#ffffff',
         textColor: rawTheme.textColor || '#1e293b',
         fontFamily: rawTheme.fontFamily || "'Inter', sans-serif",
@@ -189,8 +192,7 @@ const PublicSurvey: React.FC = () => {
         coverHeight: (rawTheme as any).coverHeight || 'md',
     };
 
-    // Support old surveys that formally defaulted to #f8fafc but visually rendered as #0f172a
-    const pageBgColor = theme.backgroundColor === '#f8fafc' ? '#0f172a' : theme.backgroundColor;
+    const pageBgColor = theme.backgroundColor || '#f8fafc';
 
     const setAnswer = (blockId: string, questionId: string, type: string, val: Partial<SurveyAnswer>) => {
         setAnswers(prev => ({
@@ -452,13 +454,22 @@ const PublicSurvey: React.FC = () => {
 
     // ─── Loading ────────────────────────────────────────────────────────────
     if (isLoading) return (
-        <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ background: pageBgColor, fontFamily: theme.fontFamily }}>
-            {/* Ambient glow */}
-            <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-amber-600/10 blur-[120px] rounded-full -mr-64 -mt-64 pointer-events-none" />
-            <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-amber-800/8 blur-[100px] rounded-full -ml-48 -mb-48 pointer-events-none" />
-            <div className="flex flex-col items-center gap-3 relative z-10">
-                <div className="w-10 h-10 border-4 border-t-transparent rounded-full animate-spin" style={{ borderColor: theme.primaryColor ?? '#f59e0b', borderTopColor: 'transparent' }} />
-                <p className="text-sm font-medium text-slate-400">Đang tải khảo sát...</p>
+        <div className="min-h-screen py-10 px-4 relative overflow-hidden" style={{ background: pageBgColor, fontFamily: theme.fontFamily }}>
+            <div className="relative z-10 max-w-2xl mx-auto bg-white dark:bg-[#111827] rounded-[20px] shadow-2xl overflow-hidden">
+                <div className="h-32 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06]" />
+                <div className="p-6 sm:p-8 space-y-5">
+                    <div className="space-y-2">
+                        <div className="h-6 w-2/3 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                        <div className="h-4 w-1/2 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[10px]" />
+                    </div>
+                    {[1, 2, 3].map(i => (
+                        <div key={i} className="p-5 rounded-[16px] border border-slate-100 dark:border-white/[0.06] space-y-3">
+                            <div className="h-4 w-48 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[8px]" />
+                            <div className="h-10 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                        </div>
+                    ))}
+                    <div className="h-12 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px] mt-4" />
+                </div>
             </div>
         </div>
     );
@@ -475,9 +486,9 @@ const PublicSurvey: React.FC = () => {
         const m = msgs[error] ?? { icon: '❌', title: 'Có lỗi xảy ra', desc: error };
         return (
             <div className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden" style={{ background: pageBgColor, fontFamily: theme.fontFamily }}>
-                <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-amber-600/10 blur-[120px] rounded-full -mr-64 -mt-64 pointer-events-none" />
-                <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-amber-800/8 blur-[100px] rounded-full -ml-48 -mb-48 pointer-events-none" />
-                <div className="relative z-10 text-center max-w-sm bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-10 shadow-2xl">
+                <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-rose-600/10 blur-[120px] rounded-full -mr-64 -mt-64 pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-rose-800/8 blur-[100px] rounded-full -ml-48 -mb-48 pointer-events-none" />
+                <div className="relative z-10 text-center max-w-sm bg-white/5 backdrop-blur-xl border border-white/10 rounded-[18px] p-10 shadow-2xl">
                     <div className="text-5xl mb-4">{m.icon}</div>
                     <h1 className="text-xl font-bold text-white mb-2">{m.title}</h1>
                     <p className="text-sm text-slate-400">{m.desc}</p>
@@ -491,20 +502,20 @@ const PublicSurvey: React.FC = () => {
         const ty = thankYouData ?? survey?.thankYouPage;
         return (
             <div className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden" style={{ background: pageBgColor, fontFamily: theme.fontFamily }}>
-                <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-amber-600/10 blur-[120px] rounded-full -mr-64 -mt-64 pointer-events-none" />
-                <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-amber-800/8 blur-[100px] rounded-full -ml-48 -mb-48 pointer-events-none" />
+                <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-rose-600/10 blur-[120px] rounded-full -mr-64 -mt-64 pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-rose-800/8 blur-[100px] rounded-full -ml-48 -mb-48 pointer-events-none" />
                 <CanvasConfetti particleCount={150} />
                 
                 <motion.div 
                     initial={{ opacity: 0, scale: 0.9, y: 20 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     transition={{ duration: 0.5, type: 'spring', bounce: 0.4 }}
-                    className="relative z-10 text-center max-w-md bg-white rounded-3xl shadow-2xl p-10"
+                    className="relative z-10 text-center max-w-md bg-white rounded-[18px] shadow-2xl p-10"
                 >
                     {ty?.imageUrl && (
                         <motion.img 
                             initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.2, type: 'spring' }}
-                            src={ty.imageUrl} alt="" className="w-32 h-32 object-contain mx-auto mb-4 rounded-2xl" 
+                            src={ty.imageUrl} alt="" className="w-32 h-32 object-contain mx-auto mb-4 rounded-[14px]" 
                         />
                     )}
                     <motion.div 
@@ -519,7 +530,7 @@ const PublicSurvey: React.FC = () => {
                     {quizResult && (
                         <motion.div 
                             initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }}
-                            className="mt-6 mb-2 bg-slate-50 border border-slate-200 rounded-2xl p-6 relative overflow-hidden"
+                            className="mt-6 mb-2 bg-slate-50 border border-slate-200 rounded-[14px] p-6 relative overflow-hidden"
                         >
                             <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-2">Điểm của bạn</h3>
                             <div className="flex items-end justify-center gap-1.5 text-slate-800 relative z-10">
@@ -538,22 +549,22 @@ const PublicSurvey: React.FC = () => {
                     {voucherCode && (
                         <motion.div 
                             initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}
-                            className="mt-6 mb-2 bg-gradient-to-tr from-amber-50 to-white border border-amber-200 rounded-2xl p-6 relative overflow-hidden"
+                            className="mt-6 mb-2 bg-gradient-to-tr from-rose-50 to-white border border-rose-200 rounded-[14px] p-6 relative overflow-hidden"
                         >
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/20 blur-3xl rounded-full" />
-                            <h3 className="text-[11px] font-black text-amber-600 uppercase tracking-widest mb-3 flex items-center justify-center gap-1.5 relative z-10">
-                                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-rose-400/20 blur-3xl rounded-full" />
+                            <h3 className="text-[11px] font-black text-[var(--color-primary)] uppercase tracking-widest mb-3 flex items-center justify-center gap-1.5 relative z-10">
+                                <span className="w-2 h-2 rounded-full bg-[var(--color-primary)] animate-pulse" />
                                 Phần quà của bạn
                             </h3>
                             <div 
-                                className="bg-white border-2 border-dashed border-amber-300 rounded-xl py-3 px-4 shadow-sm relative group cursor-pointer overflow-hidden transition-all hover:shadow-md" 
+                                className="bg-white border-2 border-dashed border-rose-300 rounded-[var(--radius-md)] py-3 px-4 shadow-sm relative group cursor-pointer overflow-hidden transition-all hover:shadow-md" 
                                 onClick={() => { navigator.clipboard.writeText(voucherCode); toast.success('Đã sao chép mã!'); }}
                             >
-                                <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-amber-100/50 to-transparent group-hover:animate-shimmer" />
-                                <p className="text-2xl font-mono font-black text-amber-600 tracking-wider break-all drop-shadow-sm relative z-10">{voucherCode}</p>
-                                <div className="absolute inset-0 bg-amber-500 text-white font-bold text-xs flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-300 z-20">Bấm để sao chép</div>
+                                <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-rose-100/50 to-transparent group-hover:animate-shimmer" />
+                                <p className="text-2xl font-mono font-black text-[var(--color-primary)] tracking-wider break-all drop-shadow-sm relative z-10">{voucherCode}</p>
+                                <div className="absolute inset-0 bg-[var(--color-primary)] text-white font-bold text-xs flex items-center justify-center rounded-[var(--radius-md)] opacity-0 group-hover:opacity-100 transition-all duration-300 z-20">Bấm để sao chép</div>
                             </div>
-                            <p className="text-[10px] text-amber-700/60 mt-2 font-medium relative z-10">Chụp màn hình hoặc lưu mã này lại để sử dụng nhé!</p>
+                            <p className="text-[10px] text-rose-700/60 mt-2 font-medium relative z-10">Chụp màn hình hoặc lưu mã này lại để sử dụng nhé!</p>
                         </motion.div>
                     )}
 
@@ -562,8 +573,8 @@ const PublicSurvey: React.FC = () => {
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
                             href={nextUrl || ty?.ctaUrl} target={nextUrl ? '_self' : '_blank'} rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 mt-6 px-6 py-3 rounded-2xl font-bold text-white shadow-lg transition-all"
-                            style={{ background: theme.primaryColor }}
+                            className="inline-flex items-center gap-2 mt-6 px-6 py-3 rounded-[14px] font-bold text-white shadow-lg transition-all"
+                            style={{ background: (ty as any)?.ctaColor || (survey as any)?.thank_you?.ctaColor || (survey as any)?.thankYouPage?.ctaColor || theme.primaryColor }}
                         >
                             {nextUrl ? 'Bấm để Tiếp tục' : ty?.ctaText} <ExternalLink className="w-4 h-4" />
                         </motion.a>
@@ -574,8 +585,8 @@ const PublicSurvey: React.FC = () => {
                         className="mt-8 flex items-center justify-center gap-3"
                     >
                         <div className="relative w-8 h-8 shrink-0">
-                            <div className="absolute inset-0 bg-[#fbbf24] blur-lg opacity-30 rounded-full"></div>
-                            <div className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-full border border-white/80 shadow-md" style={{ boxShadow: '0 4px 6px -1px rgba(245, 158, 11, 0.25), 0 2px 4px -2px rgba(245, 158, 11, 0.2)' }}>
+                            <div className="absolute inset-0 bg-rose-500 blur-lg opacity-20 rounded-full"></div>
+                            <div className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-full border border-white/80 shadow-md">
                                 <img src="/imgs/ICON.png" className="w-full h-full object-contain" alt="Logo" />
                             </div>
                         </div>
@@ -596,19 +607,19 @@ const PublicSurvey: React.FC = () => {
     return (
         <div className="min-h-screen py-10 px-4 relative overflow-hidden" style={{ background: pageBgColor, fontFamily: theme.fontFamily }}>
             {/* Ambient glow orbs */}
-            <div className="fixed top-0 right-0 w-[600px] h-[600px] bg-amber-600/8 blur-[140px] rounded-full -mr-72 -mt-72 pointer-events-none" />
-            <div className="fixed bottom-0 left-0 w-[500px] h-[500px] bg-amber-900/10 blur-[120px] rounded-full -ml-56 -mb-56 pointer-events-none" />
-            <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(120,60,0,0.12),transparent_70%)] pointer-events-none" />
+            <div className="fixed top-0 right-0 w-[600px] h-[600px] bg-rose-600/8 blur-[140px] rounded-full -mr-72 -mt-72 pointer-events-none" />
+            <div className="fixed bottom-0 left-0 w-[500px] h-[500px] bg-rose-900/10 blur-[120px] rounded-full -ml-56 -mb-56 pointer-events-none" />
+            <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(189,29,45,0.12),transparent_70%)] pointer-events-none" />
 
             {/* Progress bar — floats ABOVE the white card on dark bg */}
             {survey.settings?.showProgressBar !== false && totalPages > 1 && (
                 <div className="relative z-10 max-w-2xl mx-auto mb-4">
                     <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
                         <span className="font-semibold tracking-wide">Trang {currentPage + 1} / {totalPages}</span>
-                        <span className="font-bold" style={{ color: theme.primaryColor ?? '#f59e0b' }}>{Math.round(progress)}%</span>
+                        <span className="font-bold" style={{ color: theme.primaryColor ?? '#BD1D2D' }}>{Math.round(progress)}%</span>
                     </div>
                     <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]" style={{ width: `${progress}%`, background: theme.primaryColor ?? '#f59e0b' }} />
+                        <div className="h-full rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(189,29,45,0.6)]" style={{ width: `${progress}%`, background: theme.primaryColor ?? '#BD1D2D' }} />
                     </div>
                 </div>
             )}
@@ -616,7 +627,7 @@ const PublicSurvey: React.FC = () => {
             {/* Quiz Timer */}
             {timeLeft !== null && (
                 <div className="relative z-20 max-w-2xl mx-auto mb-4 flex justify-end">
-                    <div className="bg-white/10 backdrop-blur border border-white/20 rounded-xl px-4 py-2 flex items-center gap-2 text-white shadow-lg">
+                    <div className="bg-white/10 backdrop-blur border border-white/20 rounded-[var(--radius-md)] px-4 py-2 flex items-center gap-2 text-white shadow-lg">
                         <div className={`w-2.5 h-2.5 rounded-full ${timeLeft < 60 ? 'bg-red-500 animate-pulse border border-red-300' : 'bg-green-400'}`}></div>
                         <span className="text-sm font-black tracking-widest font-mono">{formatTime(timeLeft)}</span>
                     </div>
@@ -624,7 +635,7 @@ const PublicSurvey: React.FC = () => {
             )}
 
             {/* White content card */}
-            <div className="relative z-10 max-w-2xl mx-auto bg-white rounded-3xl shadow-[0_32px_80px_rgba(0,0,0,0.45)] overflow-hidden">
+            <div className="relative z-10 max-w-2xl mx-auto bg-white rounded-[18px] shadow-[0_32px_80px_rgba(0,0,0,0.45)] overflow-hidden">
 
                 {/* Survey header */}
                 {currentPage === 0 && (
@@ -652,7 +663,7 @@ const PublicSurvey: React.FC = () => {
                     {currentPage < totalPages - 1 ? (
                         <button
                             onClick={handleNext}
-                            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-white transition-all shadow-lg text-base hover:brightness-105 active:scale-[0.98]"
+                            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-[14px] font-bold text-white transition-all shadow-lg text-base hover:brightness-105 active:scale-[0.98]"
                             style={{ background: theme.primaryColor }}
                         >
                             Tiếp theo <ChevronRight className="w-4 h-4" />
@@ -661,12 +672,10 @@ const PublicSurvey: React.FC = () => {
                         <button
                             onClick={() => handleSubmit(undefined)}
                             disabled={isSubmitting}
-                            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-white transition-all shadow-lg text-base hover:brightness-105 active:scale-[0.98] disabled:opacity-70"
+                            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-[14px] font-bold text-white transition-all shadow-lg text-base hover:brightness-105 active:scale-[0.98] disabled:opacity-70"
                             style={{ background: theme.primaryColor }}
                         >
-                            {isSubmitting ? (
-                                <div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                            ) : <Send className="w-4 h-4" />}
+                            <Send className="w-4 h-4" />
                             {isSubmitting ? 'Đang gửi...' : 'Nộp'}
                         </button>
                     )}
@@ -674,7 +683,7 @@ const PublicSurvey: React.FC = () => {
                     {pageHistory.length > 0 && (
                         <button
                             onClick={handleBack}
-                            className="w-full flex items-center justify-center gap-2 px-5 py-2.5 rounded-2xl border-2 border-slate-200 text-slate-500 font-semibold hover:border-slate-300 hover:bg-slate-50 transition-all text-sm"
+                            className="w-full flex items-center justify-center gap-2 px-5 py-2.5 rounded-[14px] border-2 border-slate-200 text-slate-500 font-semibold hover:border-slate-300 hover:bg-slate-50 transition-all text-sm"
                         >
                             <ChevronLeft className="w-4 h-4" /> Trang trước
                         </button>
@@ -684,8 +693,8 @@ const PublicSurvey: React.FC = () => {
                 {/* Footer */}
                 <div className="flex items-center justify-center gap-3 mt-8 pb-8">
                     <div className="relative w-7 h-7 shrink-0">
-                        <div className="absolute inset-0 bg-[#fbbf24] blur-lg opacity-30 rounded-full"></div>
-                        <div className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-full border border-white/80 shadow-md" style={{ boxShadow: '0 4px 6px -1px rgba(245, 158, 11, 0.25), 0 2px 4px -2px rgba(245, 158, 11, 0.2)' }}>
+                        <div className="absolute inset-0 bg-rose-500 blur-lg opacity-20 rounded-full"></div>
+                        <div className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-full border border-white/80 shadow-md">
                             <img src="/imgs/ICON.png" className="w-full h-full object-contain" alt="Logo" />
                         </div>
                     </div>
@@ -704,7 +713,7 @@ const SurveyCoverPublic: React.FC<{ survey: Survey }> = ({ survey }) => {
     const theme = (survey.theme ?? {}) as any;
     const coverStyle = theme.coverStyle ?? 'minimal';
     const coverHeight = theme.coverHeight ?? 'md';
-    const primaryColor = theme.primaryColor || '#ea9310';
+    const primaryColor = theme.primaryColor || '#BD1D2D';
     const heightMap: Record<string, string> = { sm: '80px', md: '120px', lg: '200px' };
 
     const getBg = () => {
@@ -766,8 +775,8 @@ const SurveyCoverPublic: React.FC<{ survey: Survey }> = ({ survey }) => {
             )}
             <div className="relative px-8 py-8 flex flex-col justify-end h-full" style={{ minHeight: heightMap[coverHeight] }}>
                 {timeLeft && theme.coverCountdownPos === 'top_right' && (
-                    <div className="absolute top-4 right-4 bg-black/40 backdrop-blur-md rounded-xl p-2 border border-white/20 flex items-center gap-2.5 z-20 shadow-xl">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse ring-2 ring-amber-400/50" />
+                    <div className="absolute top-4 right-4 bg-black/40 backdrop-blur-md rounded-[var(--radius-md)] p-2 border border-white/20 flex items-center gap-2.5 z-20 shadow-xl">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse ring-2 ring-rose-400/50" />
                         <div className="flex gap-1.5">
                             {[timeLeft.h, timeLeft.m, timeLeft.s].map((v, i) => (
                                 <div key={i} className="bg-white/10 border border-white/10 rounded flex items-center justify-center p-1 font-mono">
@@ -781,7 +790,7 @@ const SurveyCoverPublic: React.FC<{ survey: Survey }> = ({ survey }) => {
 
                 <div className="w-full relative z-10">
                     {theme.coverBadge && (
-                        <span className="inline-block px-3 py-1 mb-4 rounded-full text-[10px] font-black tracking-widest text-white shadow-none uppercase border border-white/20 relative" style={{ background: 'linear-gradient(90deg, #f59e0b, #ea580c)' }}>
+                        <span className="inline-block px-3 py-1 mb-4 rounded-full text-[10px] font-black tracking-widest text-white shadow-none uppercase border border-white/20 relative" style={{ background: 'var(--color-primary)' }}>
                             {theme.coverBadge}
                         </span>
                     )}
@@ -821,14 +830,14 @@ const SurveyCoverPublic: React.FC<{ survey: Survey }> = ({ survey }) => {
                     )}
 
                     {timeLeft && theme.coverCountdownPos !== 'top_right' && (
-                        <div className="mt-8 bg-black/20 backdrop-blur-md rounded-2xl p-4 w-fit border border-white/10">
-                            <p className="text-[10px] uppercase tracking-widest text-amber-300 font-bold mb-3 flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                        <div className="mt-8 bg-black/20 backdrop-blur-md rounded-[14px] p-4 w-fit border border-white/10">
+                            <p className="text-[10px] uppercase tracking-widest text-rose-300 font-bold mb-3 flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-rose-400 animate-pulse" />
                                 Ưu đãi kết thúc sau
                             </p>
                             <div className="flex gap-2">
                                 {[timeLeft.d, timeLeft.h, timeLeft.m, timeLeft.s].map((v, i) => (
-                                    <div key={i} className="bg-white/10 border border-white/20 rounded-xl w-12 h-12 flex flex-col items-center justify-center shadow-inner relative overflow-hidden">
+                                    <div key={i} className="bg-white/10 border border-white/20 rounded-[var(--radius-md)] w-12 h-12 flex flex-col items-center justify-center shadow-inner relative overflow-hidden">
                                         <div className="absolute inset-x-0 top-1/2 h-px bg-black/10" />
                                         <span className="text-lg font-black text-white z-10">{v}</span>
                                         <span className="text-[7px] uppercase font-bold text-white/70 mt-0.5 z-10">{['Ng', 'Giờ', 'Ph', 'Gi'][i]}</span>
@@ -884,7 +893,7 @@ const BlockRenderer: React.FC<{
     if (block.type === 'image_block') {
         return block.imageUrl ? (
             <div style={{ textAlign: block.imageAlign ?? 'center' }}>
-                <img src={block.imageUrl} alt={block.imageAlt} style={{ width: block.imageWidth ?? '100%' }} className="rounded-2xl object-cover max-h-64 inline-block" />
+                <img src={block.imageUrl} alt={block.imageAlt} style={{ width: block.imageWidth ?? '100%' }} className="rounded-[14px] object-cover max-h-64 inline-block" />
             </div>
         ) : null;
     }
@@ -895,7 +904,7 @@ const BlockRenderer: React.FC<{
         return (
             <div style={{ textAlign: block.buttonAlign ?? 'center' }}>
                 <a href={block.buttonUrl || '#'} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all"
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-[var(--radius-md)] font-bold transition-all"
                     style={style === 'filled' ? { background: color, color: '#fff', boxShadow: shadow } : style === 'outline' ? { border: `2px solid ${color}`, color, boxShadow: shadow } : { color, textDecoration: 'underline', textShadow: shadow }}
                 >
                     {block.buttonText || 'Nhấn vào đây'} <ExternalLink className="w-4 h-4" />
@@ -918,7 +927,7 @@ const BlockRenderer: React.FC<{
     }
     if (block.type === 'banner_block') {
         return (
-            <div className="w-full rounded-2xl overflow-hidden relative flex items-end"
+            <div className="w-full rounded-[14px] overflow-hidden relative flex items-end"
                 style={{ height: block.bannerHeight ?? 160, backgroundImage: block.bannerImageUrl ? `url(${block.bannerImageUrl})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center', background: block.bannerImageUrl ? undefined : `linear-gradient(135deg, ${accent}cc, ${accent}44)` }}
             >
                 <div className="absolute inset-0" style={{ background: block.bannerOverlay ?? 'rgba(0,0,0,0.35)' }} />
@@ -971,15 +980,43 @@ const BlockRenderer: React.FC<{
             {/* Date */}
             {block.type === 'date' && (
                 <input
-                    type="date"
+                    type={(block as any).dateMode === 'datetime' ? 'datetime-local' : 'date'}
                     value={answer?.answer_text ?? ''}
                     onChange={e => onAnswer({ answer_text: e.target.value })}
                     className="w-full px-4 py-2.5 rounded-xl border-2 border-slate-200 focus:outline-none text-sm"
                 />
             )}
 
+            {/* Yes / No */}
+            {block.type === 'yes_no' && (
+                <div className="flex gap-3">
+                    {(block.options && block.options.length > 0
+                        ? block.options
+                        : [{ id: 'yes', label: 'Có', value: 'yes' }, { id: 'no', label: 'Không', value: 'no' }]
+                    ).map((opt, i) => {
+                        const optVal = opt.value || opt.label;
+                        const isSelected = answer?.answer_text === optVal;
+                        return (
+                            <button
+                                key={opt.id || i}
+                                type="button"
+                                onClick={() => onAnswer({ answer_text: optVal })}
+                                className="flex-1 py-2.5 px-4 rounded-xl border-2 text-center text-sm font-semibold transition-all"
+                                style={{
+                                    borderColor: isSelected ? accent : '#e2e8f0',
+                                    background: isSelected ? accent + '12' : '#f8fafc',
+                                    color: isSelected ? accent : textColor,
+                                }}
+                            >
+                                {opt.label}
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+
             {/* Single choice */}
-            {(block.type === 'single_choice' || block.type === 'yes_no') && (
+            {block.type === 'single_choice' && (
                 <div className="flex flex-col gap-2">
                     {(block.options ?? []).map(opt => {
                         const isSelected = answer?.answer_text === opt.value;
@@ -1134,26 +1171,38 @@ const BlockRenderer: React.FC<{
             )}
 
             {/* Likert */}
-            {block.type === 'likert' && (
-                <div className={`flex gap-2 flex-wrap ${justifyClass}`}>
-                    {(block.likertLabels ?? ['1', '2', '3', '4', '5']).map((label, i) => {
-                        const isSelected = answer?.answer_num === i + 1;
-                        return (
-                            <button key={i} onClick={() => onAnswer({ answer_num: i + 1 })}
-                                className="flex flex-col items-center gap-1 flex-1 min-w-[50px] py-2 px-1 rounded-xl border-2 transition-all"
-                                style={{
-                                    borderColor: isSelected ? accent : '#e2e8f0',
-                                    background: isSelected ? accent + '15' : undefined,
-                                    filter: isSelected ? 'none' : 'grayscale(30%)',
-                                }}
-                            >
-                                <span className="text-base font-black" style={{ color: isSelected ? accent : '#64748b' }}>{i + 1}</span>
-                                <span className="text-[9px] text-slate-400 text-center leading-tight">{label}</span>
-                            </button>
-                        );
-                    })}
-                </div>
-            )}
+            {block.type === 'likert' && (() => {
+                const likertItems: Array<{ value: number; label: string }> =
+                    Array.isArray((block as any).likertPoints) && (block as any).likertPoints.length > 0
+                        ? (block as any).likertPoints.map((pt: any, i: number) => ({
+                              value: pt.value !== undefined && pt.value !== '' ? Number(pt.value) : i + 1,
+                              label: pt.label ?? String(i + 1),
+                          }))
+                        : (block.likertLabels ?? ['1', '2', '3', '4', '5']).map((label, i) => ({
+                              value: i + 1,
+                              label,
+                          }));
+                return (
+                    <div className={`flex gap-2 flex-wrap ${justifyClass}`}>
+                        {likertItems.map((pt, i) => {
+                            const isSelected = answer?.answer_num === pt.value;
+                            return (
+                                <button key={i} type="button" onClick={() => onAnswer({ answer_num: pt.value })}
+                                    className="flex flex-col items-center gap-1 flex-1 min-w-[50px] py-2 px-1 rounded-xl border-2 transition-all"
+                                    style={{
+                                        borderColor: isSelected ? accent : '#e2e8f0',
+                                        background: isSelected ? accent + '15' : undefined,
+                                        filter: isSelected ? 'none' : 'grayscale(30%)',
+                                    }}
+                                >
+                                    <span className="text-base font-black" style={{ color: isSelected ? accent : '#64748b' }}>{pt.value}</span>
+                                    <span className="text-[9px] text-slate-400 text-center leading-tight">{pt.label}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                );
+            })()}
 
             {/* Emoji rating */}
             {block.type === 'emoji_rating' && (
@@ -1273,19 +1322,81 @@ const BlockRenderer: React.FC<{
                 </div>
             )}
 
-            {/* File Upload (Mock) */}
-            {block.type === 'file_upload' && (
-                <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 flex flex-col items-center justify-center text-center bg-slate-50 transition-colors hover:bg-slate-100">
-                    <svg className="w-8 h-8 text-slate-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                    <p className="text-sm font-semibold text-slate-600 mb-1">Click tải lên hoặc kéo thả tệp vào đây</p>
-                    <p className="text-xs text-slate-400 mb-4">Các định dạng hỗ trợ: {(block.acceptedTypes ?? []).join(', ') || 'Tất cả'}. Tối đa {block.maxFileSizeMB ?? 5}MB</p>
-                    <input type="file" className="hidden" id={`file_${block.id}`} onChange={() => { }} />
-                    <label htmlFor={`file_${block.id}`} className="px-5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm font-bold hover:bg-slate-50 cursor-pointer transition-colors shadow-sm text-slate-700">
-                        Chọn tệp
-                    </label>
-                    <p className="mt-4 text-[10px] text-amber-600 bg-amber-50 px-2 py-1 rounded-md border border-amber-200 font-medium">Chức năng upload đang bảo trì, tạm thời bỏ qua.</p>
-                </div>
-            )}
+            {/* File Upload */}
+            {block.type === 'file_upload' && (() => {
+                const maxMB = block.maxFileSizeMB ?? 5;
+                const acceptAttr = (block.acceptedTypes ?? []).length > 0 ? (block.acceptedTypes ?? []).join(',') : undefined;
+                const selectedFileName = answer?.answer_text || (answer?.answer_json as any)?.name || '';
+                const handleFileSelect = (file: File | undefined | null) => {
+                    if (!file) return;
+                    if (file.size > maxMB * 1024 * 1024) {
+                        toast.error(`Kích thước tệp vượt quá giới hạn ${maxMB}MB`);
+                        return;
+                    }
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        onAnswer({
+                            answer_text: file.name,
+                            answer_json: {
+                                name: file.name,
+                                size: file.size,
+                                type: file.type,
+                                dataUrl: typeof reader.result === 'string' ? reader.result : '',
+                            },
+                        });
+                    };
+                    reader.onerror = () => {
+                        onAnswer({
+                            answer_text: file.name,
+                            answer_json: { name: file.name, size: file.size, type: file.type },
+                        });
+                    };
+                    reader.readAsDataURL(file);
+                };
+
+                return (
+                    <div
+                        onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+                        onDrop={e => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleFileSelect(e.dataTransfer.files?.[0]);
+                        }}
+                        className="border-2 border-dashed border-slate-200 rounded-xl p-6 flex flex-col items-center justify-center text-center bg-slate-50 transition-colors hover:bg-slate-100"
+                        style={{ borderColor: selectedFileName ? accent : undefined }}
+                    >
+                        <svg className="w-8 h-8 text-slate-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                        <p className="text-sm font-semibold text-slate-600 mb-1">Click tải lên hoặc kéo thả tệp vào đây</p>
+                        <p className="text-xs text-slate-400 mb-4">Các định dạng hỗ trợ: {(block.acceptedTypes ?? []).join(', ') || 'Tất cả'}. Tối đa {maxMB}MB</p>
+                        <input
+                            type="file"
+                            className="hidden"
+                            id={`file_${block.id}`}
+                            accept={acceptAttr}
+                            onChange={e => handleFileSelect(e.target.files?.[0])}
+                        />
+                        <div className="flex items-center gap-2">
+                            <label htmlFor={`file_${block.id}`} className="px-5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm font-bold hover:bg-slate-50 cursor-pointer transition-colors shadow-sm text-slate-700">
+                                {selectedFileName ? 'Đổi tệp khác' : 'Chọn tệp'}
+                            </label>
+                            {selectedFileName && (
+                                <button
+                                    type="button"
+                                    onClick={() => onAnswer({ answer_text: '', answer_json: undefined })}
+                                    className="px-3 py-2.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors"
+                                >
+                                    Xoá
+                                </button>
+                            )}
+                        </div>
+                        {selectedFileName && (
+                            <p className="mt-3 text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
+                                Đã chọn: {selectedFileName}
+                            </p>
+                        )}
+                    </div>
+                );
+            })()}
             {hasError && (
                 <p className="text-xs text-red-500 mt-2 font-medium">{errorMsg}</p>
             )}

@@ -887,6 +887,7 @@ switch ($resource) {
         if ($resourceId === 'student-counts' && $method === 'GET') $ctrl->getStudentCounts($auth);
         elseif ($resourceId === 'programs' && $method === 'GET') $ctrl->getPrograms($auth);
         elseif ($resourceId === 'bulk-delete' && $method === 'POST') $ctrl->bulkDelete($auth);
+        elseif ($resourceId === 'static-list' && $method === 'POST') $ctrl->createOrPopulateStaticList($auth);
         elseif ($resourceId === 'pipeline-phones' && $method === 'GET') $ctrl->getPipelinePhones($auth);
         elseif ($resourceId === 'silent-avatar-sync' && $method === 'POST') $ctrl->silentAvatarSync($auth);
         elseif ($resourceId === 'match-domation-sync' && $method === 'POST') { require_once __DIR__ . '/controllers/DomationOmnichannelController.php'; (new DomationOmnichannelController($db))->triggerSilentMatchSync($auth); }
@@ -1629,8 +1630,9 @@ switch ($resource) {
         }
         break;
 
-    // PROJECTS (Module 6)
+    // PROJECTS / CLASSES (Module 6)
     case 'projects':
+    case 'classes':
         $auth = requireAuth();
         $ctrl = new ProjectController($db);
         if ($resourceId && $subResource === 'roster' && $method === 'GET') $ctrl->getRoster($auth, (int)$resourceId);

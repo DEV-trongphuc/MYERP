@@ -56,12 +56,38 @@ class TagController {
         ]);
         
         $id = $this->db->lastInsertId();
+
+        try {
+            if (!class_exists('DomationContactMatcher') && file_exists(__DIR__ . '/../utils/DomationContactMatcher.php')) {
+                require_once __DIR__ . '/../utils/DomationContactMatcher.php';
+            }
+            if (class_exists('DomationContactMatcher')) {
+                DomationContactMatcher::syncCrmTagToDomation(
+                    $this->db,
+                    (string)$data['name'],
+                    (string)($data['color'] ?? '#6366f1'),
+                    (int)($auth['tenant_id'] ?? 1),
+                    isset($auth['user_id']) ? (int)$auth['user_id'] : null
+                );
+            }
+        } catch (\Throwable $eSyncTag) {
+        }
+
         respond(201, ['id' => $id], 'Đã tạo tag mới');
     }
 
     public function update($auth, $id) {
         if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director'], true)) respond(403, null, 'Chỉ admin mới có quyền quản lý tags', false);
         $data = getBody();
+
+        $oldName = '';
+        try {
+            $stmtOld = $this->db->prepare("SELECT name FROM tags WHERE id = ? AND tenant_id = ? LIMIT 1");
+            $stmtOld->execute([$id, $auth['tenant_id']]);
+            $oldName = (string)($stmtOld->fetchColumn() ?: '');
+        } catch (\Throwable $eOld) {
+        }
+
         $stmt = $this->db->prepare("
             UPDATE tags 
             SET name = ?, color = ?, entity_type = ?
@@ -74,13 +100,57 @@ class TagController {
             $id,
             $auth['tenant_id']
         ]);
+
+        try {
+            if (!class_exists('DomationContactMatcher') && file_exists(__DIR__ . '/../utils/DomationContactMatcher.php')) {
+                require_once __DIR__ . '/../utils/DomationContactMatcher.php';
+            }
+            if (class_exists('DomationContactMatcher')) {
+                DomationContactMatcher::renameCrmTagInDomation(
+                    $this->db,
+                    $oldName,
+                    (string)($data['name'] ?? ''),
+                    isset($data['color']) ? (string)$data['color'] : null,
+                    (int)($auth['tenant_id'] ?? 1),
+                    isset($auth['user_id']) ? (int)$auth['user_id'] : null
+                );
+            }
+        } catch (\Throwable $eSyncTag) {
+        }
+
         respond(200, null, 'Đã cập nhật tag');
     }
 
     public function destroy($auth, $id) {
         if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director'], true)) respond(403, null, 'Chỉ admin mới có quyền quản lý tags', false);
+
+        $oldName = '';
+        try {
+            $stmtOld = $this->db->prepare("SELECT name FROM tags WHERE id = ? AND tenant_id = ? LIMIT 1");
+            $stmtOld->execute([$id, $auth['tenant_id']]);
+            $oldName = (string)($stmtOld->fetchColumn() ?: '');
+        } catch (\Throwable $eOld) {
+        }
+
         $stmt = $this->db->prepare("DELETE FROM tags WHERE id = ? AND tenant_id = ?");
         $stmt->execute([$id, $auth['tenant_id']]);
+
+        if ($oldName !== '') {
+            try {
+                if (!class_exists('DomationContactMatcher') && file_exists(__DIR__ . '/../utils/DomationContactMatcher.php')) {
+                    require_once __DIR__ . '/../utils/DomationContactMatcher.php';
+                }
+                if (class_exists('DomationContactMatcher')) {
+                    DomationContactMatcher::deleteCrmTagInDomation(
+                        $this->db,
+                        $oldName,
+                        (int)($auth['tenant_id'] ?? 1)
+                    );
+                }
+            } catch (\Throwable $eSyncTag) {
+            }
+        }
+
         respond(200, null, 'Đã xóa tag');
     }
 

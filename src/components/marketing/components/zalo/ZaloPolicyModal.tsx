@@ -12,13 +12,13 @@ const ZaloPolicyModal: React.FC<ZaloPolicyModalProps> = ({ isOpen, onClose }) =>
         <Modal isOpen={isOpen} onClose={onClose} title="Quy định & Chính sách Zalo Official Account">
             <div className="space-y-6">
                 {/* Introduction */}
-                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 italic text-slate-600 text-sm">
+                <div className="bg-slate-50 rounded-[14px] p-4 border border-slate-100 italic text-slate-600 text-sm">
                     Đây là loại tin nhắn Zalo Customer Service (CS) - công cụ tư vấn Khách hàng chủ động thông qua Zalo ID, giúp tối ưu hóa chuyển đổi mà không tốn chi phí tin nhắn ZNS.
                 </div>
 
                 <div className="space-y-4">
                     {/* Zalo CS Section */}
-                    <div className="p-5 rounded-2xl border-2 border-slate-50 bg-white shadow-sm hover:border-blue-100 transition-all">
+                    <div className="p-5 rounded-[14px] border-2 border-slate-50 bg-white shadow-sm hover:border-blue-100 transition-all">
                         <div className="flex items-center gap-2 mb-3">
                             <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
                                 <Zap className="w-5 h-5" />
@@ -42,7 +42,7 @@ const ZaloPolicyModal: React.FC<ZaloPolicyModalProps> = ({ isOpen, onClose }) =>
                     </div>
 
                     {/* Zalo ZNS Section */}
-                    <div className="p-5 rounded-2xl border-2 border-slate-50 bg-white shadow-sm hover:border-emerald-100 transition-all">
+                    <div className="p-5 rounded-[14px] border-2 border-slate-50 bg-white shadow-sm hover:border-emerald-100 transition-all">
                         <div className="flex items-center gap-2 mb-3">
                             <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
                                 <CreditCard className="w-5 h-5" />
@@ -67,9 +67,9 @@ const ZaloPolicyModal: React.FC<ZaloPolicyModalProps> = ({ isOpen, onClose }) =>
                 </div>
 
                 {/* Important Rules */}
-                <div className="bg-amber-50 rounded-2xl p-5 border border-amber-100 flex gap-4">
+                <div className="bg-amber-50 rounded-[14px] p-5 border border-amber-100 flex gap-4">
                     <div className="shrink-0 p-2 bg-white rounded-xl shadow-sm h-fit">
-                        <AlertOctagon className="w-5 h-5 text-amber-600" />
+                        <AlertOctagon className="w-5 h-5 text-[var(--color-primary)]" />
                     </div>
                     <div>
                         <h5 className="text-sm font-black text-amber-900 mb-1 tracking-tight">Cập nhật Quy định 2026</h5>
@@ -80,7 +80,7 @@ const ZaloPolicyModal: React.FC<ZaloPolicyModalProps> = ({ isOpen, onClose }) =>
                 </div>
 
                 {/* Recommendations */}
-                <div className="bg-rose-50 rounded-2xl p-5 border border-rose-100">
+                <div className="bg-rose-50 rounded-[14px] p-5 border border-rose-100">
                     <h5 className="text-sm font-black text-rose-900 mb-3 flex items-center gap-2 uppercase tracking-wider">
                         Khuyến nghị tránh SPAM
                     </h5>
@@ -99,7 +99,7 @@ const ZaloPolicyModal: React.FC<ZaloPolicyModalProps> = ({ isOpen, onClose }) =>
                 <div className="flex justify-center pt-4">
                     <button
                         onClick={onClose}
-                        className="px-8 py-3 bg-slate-800 hover:bg-black text-white rounded-2xl text-sm font-black transition-all shadow-lg shadow-slate-200 active:scale-95"
+                        className="px-8 py-3 bg-slate-800 hover:bg-black text-white rounded-[14px] text-sm font-black transition-all shadow-lg shadow-slate-200 active:scale-95"
                     >
                         Tôi đã hiểu quy định
                     </button>

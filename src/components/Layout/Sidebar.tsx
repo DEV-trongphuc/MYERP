@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { AppIcon } from '../common/AppIcons';
-import { LayoutDashboard, Users, GitBranch, Settings, ChevronLeft, Webhook, Link2, Database, ShieldCheck, Ticket, Plus, Scale, Filter, Cpu, Building2, TrendingUp, FileText, Calendar, Package, Receipt, CreditCard, BarChart2, Truck, File, Boxes, Layers, Clock, Home, CheckSquare, LifeBuoy, User, Clipboard, Globe, GraduationCap } from 'lucide-react';
+import { LayoutDashboard, Users, GitBranch, Settings, ChevronLeft, Webhook, Link2, Database, ShieldCheck, Ticket, Plus, Scale, Filter, Cpu, Building2, TrendingUp, FileText, Calendar, Package, Receipt, CreditCard, BarChart2, Truck, File, Boxes, Layers, Clock, Home, CheckSquare, LifeBuoy, User, Clipboard, Globe, GraduationCap, Bot, Brain } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useEffect, useState, useRef, Fragment } from 'react';
@@ -71,14 +71,17 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
   {
     title: 'MARKETING & AUTOMATION',
     items: [
-      { name: 'Tổng quan Marketing', href: '/marketing', icon: BarChart2, iconKey: 'marketing_dashboard', end: true },
-      { name: 'Kịch bản Automation', href: '/marketing/flows', icon: GitBranch, iconKey: 'automation_flows' },
-      { name: 'Chiến dịch Email', href: '/marketing/campaigns', icon: Layers, iconKey: 'email_campaigns' },
-      { name: 'Mẫu Email & ZNS', href: '/marketing/templates', icon: FileText, iconKey: 'email_templates' },
-      { name: 'Tệp Khách hàng', href: '/marketing/audience', icon: Users, iconKey: 'audience_segments' },
-      { name: 'Khảo sát & Bài test', href: '/marketing/surveys', icon: Clipboard, iconKey: 'surveys_quiz' },
+      { name: 'Marketing', href: '/marketing', icon: BarChart2, iconKey: 'marketing_dashboard', end: true },
+      { name: 'Automation', href: '/marketing/flows', icon: GitBranch, iconKey: 'automation_flows' },
+      { name: 'Chiến dịch', href: '/marketing/campaigns', icon: Layers, iconKey: 'email_campaigns' },
+      { name: 'Mẫu thiết kế', href: '/marketing/templates', icon: FileText, iconKey: 'email_templates' },
+      { name: 'Tệp liên hệ', href: '/marketing/audience', icon: Users, iconKey: 'audience_segments' },
+      { name: 'Khảo sát', href: '/marketing/surveys', icon: Clipboard, iconKey: 'surveys_quiz' },
       { name: 'Voucher & QR', href: '/marketing/vouchers', icon: Ticket, iconKey: 'vouchers_qr' },
-      { name: 'Web Tracking & Pixel', href: '/marketing/web-tracking', icon: Globe, iconKey: 'web_tracking' }
+      { name: 'Social Bot', href: '/marketing/social-bot', icon: Bot, iconKey: 'social_bot' },
+      { name: 'Đào tạo AI', href: '/marketing/ai-training', icon: Brain, iconKey: 'ai_training' },
+      { name: 'Web Tracking', href: '/marketing/web-tracking', icon: Globe, iconKey: 'web_tracking' },
+      { name: 'API & Webhook', href: '/marketing/api-triggers', icon: Webhook, iconKey: 'api_triggers' }
     ]
   },
   {

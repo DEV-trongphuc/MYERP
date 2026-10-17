@@ -147,7 +147,7 @@ const EmailValidationPanel: React.FC<EmailValidationPanelProps> = ({
             <div className="flex-1 overflow-y-auto custom-scrollbar">
                 {totalDisplayed === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-                        <div className="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center mb-4 shadow-sm">
+                        <div className="w-16 h-16 rounded-[14px] bg-emerald-50 flex items-center justify-center mb-4 shadow-sm">
                             <CheckCircle2 className="w-8 h-8 text-emerald-500" />
                         </div>
                         <p className="text-sm font-bold text-slate-700 mb-1">Email đã sẵn sàng! 🎉</p>

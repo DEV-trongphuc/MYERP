@@ -54,7 +54,7 @@ const ExitConditions: React.FC<ExitConditionsProps> = ({ conditions, bounceBehav
             key={opt.id}
             onClick={() => !opt.disabled && !disabled && toggle(opt.id)}
             className={`
-              relative p-5 rounded-[24px] border-2 transition-all duration-300 group
+              relative p-5 rounded-2xl border-2 transition-all duration-300 group
               ${isChecked ? 'bg-white border-emerald-500 shadow-md' : 'bg-slate-50 border-transparent hover:bg-white hover:border-slate-200'}
               ${(opt.disabled || disabled) ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}
             `}

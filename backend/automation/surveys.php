@@ -22,8 +22,13 @@ try {
         case 'list': {
             $stmt = $pdo->prepare("
                 SELECT s.*,
-                    (SELECT COUNT(*) FROM survey_responses r WHERE r.survey_id = s.id) AS response_count
+                    (SELECT COUNT(*) FROM survey_responses r WHERE r.survey_id = s.id) AS response_count,
+                    u_creator.id AS creator_id, u_creator.full_name AS creator_name, u_creator.email AS creator_email,
+                    u_creator.phone AS creator_phone, u_creator.avatar_url AS creator_avatar,
+                    u_creator.job_title AS creator_job_title, u_creator.department AS creator_department,
+                    u_creator.role AS creator_role
                 FROM surveys s
+                LEFT JOIN users u_creator ON u_creator.id = s.created_by
                 WHERE (s.workspace_id = ? OR (? = 1 AND s.workspace_id IS NULL))
                 ORDER BY s.updated_at DESC
             ");
@@ -31,6 +36,7 @@ try {
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
             foreach ($rows as &$row) {
                 $row['settings_json'] = json_decode($row['settings_json'] ?? '{}', true);
+                $row['creator'] = domationFormatCreator($row);
             }
             echo json_encode(['success' => true, 'data' => $rows]);
             break;
@@ -38,7 +44,16 @@ try {
 
         // ─── GET SINGLE ──────────────────────────────────────────────────────
         case 'get': {
-            $stmt = $pdo->prepare("SELECT * FROM surveys WHERE id = ? AND (workspace_id = ? OR (? = 1 AND workspace_id IS NULL))");
+            $stmt = $pdo->prepare("
+                SELECT s.*,
+                    u_creator.id AS creator_id, u_creator.full_name AS creator_name, u_creator.email AS creator_email,
+                    u_creator.phone AS creator_phone, u_creator.avatar_url AS creator_avatar,
+                    u_creator.job_title AS creator_job_title, u_creator.department AS creator_department,
+                    u_creator.role AS creator_role
+                FROM surveys s
+                LEFT JOIN users u_creator ON u_creator.id = s.created_by
+                WHERE s.id = ? AND (s.workspace_id = ? OR (? = 1 AND s.workspace_id IS NULL))
+            ");
             $stmt->execute([$id, $workspace_id, $workspace_id]);
             $survey = $stmt->fetch(PDO::FETCH_ASSOC);
             if (!$survey) { http_response_code(404); echo json_encode(['success' => false, 'error' => 'Not found']); exit; }
@@ -46,7 +61,32 @@ try {
             $survey['settings_json'] = json_decode($survey['settings_json'] ?? '{}');
             $survey['thank_you_page']= json_decode($survey['thank_you_page'] ?? '{}');
             $survey['cover_style']   = json_decode($survey['cover_style'] ?? '{}');
+            $survey['creator']       = domationFormatCreator($survey);
             echo json_encode(['success' => true, 'data' => $survey]);
+            break;
+        }
+
+        // ─── QR CODE GENERATOR ───────────────────────────────────────────────
+        case 'qr': {
+            $stmt = $pdo->prepare("SELECT id, name, slug FROM surveys WHERE id = ? AND (workspace_id = ? OR (? = 1 AND workspace_id IS NULL))");
+            $stmt->execute([$id, $workspace_id, $workspace_id]);
+            $survey = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$survey) {
+                http_response_code(404);
+                echo json_encode(['success' => false, 'error' => 'Not found']);
+                exit;
+            }
+            $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            $host = $_SERVER['HTTP_HOST'] ?? 'crm.ideas.edu.vn';
+            $surveyUrl = $protocol . '://' . $host . '/s/' . ($survey['slug'] ?? $survey['id']);
+            $qrImageUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=12&data=' . urlencode($surveyUrl);
+            echo json_encode([
+                'success' => true,
+                'data' => [
+                    'url' => $surveyUrl,
+                    'qr_image_url' => $qrImageUrl
+                ]
+            ]);
             break;
         }
 
@@ -90,14 +130,15 @@ try {
                 ], JSON_UNESCAPED_UNICODE);
             }
 
+            $currentUserId = get_current_user_id();
             $stmt = $pdo->prepare("
-                INSERT INTO surveys (id, workspace_id, name, slug, status, blocks_json, settings_json, thank_you_page, cover_style)
-                VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, '{}')
+                INSERT INTO surveys (id, workspace_id, name, slug, status, blocks_json, settings_json, thank_you_page, cover_style, created_by, updated_by)
+                VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, '{}', ?, ?)
             ");
             $defaultSettings  = json_encode(['showProgressBar'=>true,'progressBarStyle'=>'bar','allowPartialSubmit'=>false,'trackIp'=>true,'trackLocation'=>false]);
             $defaultThankYou  = json_encode(['title'=>'Cảm ơn bạn! 🎉','message'=>'Phản hồi của bạn đã được ghi nhận.','showSocialShare'=>false]);
-            $stmt->execute([$newId, $workspace_id, $name, $slug, $blocks_json, $defaultSettings, $defaultThankYou]);
-            echo json_encode(['success' => true, 'data' => ['id' => $newId, 'slug' => $slug]]);
+            $stmt->execute([$newId, $workspace_id, $name, $slug, $blocks_json, $defaultSettings, $defaultThankYou, $currentUserId, $currentUserId]);
+            echo json_encode(['success' => true, 'data' => ['id' => $newId, 'slug' => $slug, 'created_by' => $currentUserId, 'creator' => get_current_user_info()]]);
             break;
         }
 
@@ -137,6 +178,8 @@ try {
                 $params[] = $val;
             }
             if (empty($sets)) { echo json_encode(['success' => true, 'message' => 'Nothing to update']); break; }
+            $sets[] = "`updated_by` = ?";
+            $params[] = get_current_user_id();
             $params[] = $id;
             $params[] = $workspace_id;
             $pdo->prepare("UPDATE surveys SET " . implode(', ', $sets) . " WHERE id = ? AND workspace_id = ?")->execute($params);
@@ -167,14 +210,14 @@ try {
 
         // ─── PUBLISH ─────────────────────────────────────────────────────────
         case 'publish': {
-            $pdo->prepare("UPDATE surveys SET status = 'active' WHERE id = ? AND workspace_id = ?")->execute([$id, $workspace_id]);
+            $pdo->prepare("UPDATE surveys SET status = 'active', updated_by = ? WHERE id = ? AND workspace_id = ?")->execute([get_current_user_id(), $id, $workspace_id]);
             echo json_encode(['success' => true, 'message' => 'Survey published']);
             break;
         }
 
         // ─── PAUSE ───────────────────────────────────────────────────────────
         case 'pause': {
-            $pdo->prepare("UPDATE surveys SET status = 'paused' WHERE id = ? AND workspace_id = ?")->execute([$id, $workspace_id]);
+            $pdo->prepare("UPDATE surveys SET status = 'paused', updated_by = ? WHERE id = ? AND workspace_id = ?")->execute([get_current_user_id(), $id, $workspace_id]);
             echo json_encode(['success' => true]);
             break;
         }

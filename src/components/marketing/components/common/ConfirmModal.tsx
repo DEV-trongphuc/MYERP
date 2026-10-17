@@ -70,25 +70,25 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
             icon: AlertCircle,
             iconBg: 'var(--color-danger-light)',
             iconColor: 'var(--color-danger)',
-            buttonClass: 'btn danger'
+            buttonClass: 'h-9 px-4 rounded-[var(--radius-md)] text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed'
         },
         warning: {
             icon: AlertTriangle,
             iconBg: 'var(--color-warning-light)',
             iconColor: 'var(--color-warning)',
-            buttonClass: 'btn primary'
+            buttonClass: 'h-9 px-4 rounded-[var(--radius-md)] text-xs font-semibold bg-[var(--color-primary)] hover:opacity-95 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed'
         },
         info: {
             icon: Info,
             iconBg: 'var(--color-info-light)',
             iconColor: 'var(--color-info)',
-            buttonClass: 'btn primary'
+            buttonClass: 'h-9 px-4 rounded-[var(--radius-md)] text-xs font-semibold bg-[var(--color-primary)] hover:opacity-95 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed'
         },
         success: {
             icon: CheckCircle2,
             iconBg: 'var(--color-success-light)',
             iconColor: 'var(--color-success)',
-            buttonClass: 'btn success'
+            buttonClass: 'h-9 px-4 rounded-[var(--radius-md)] text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed'
         }
     };
 
@@ -111,7 +111,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
                             type="button"
                             onClick={dangerAction}
                             disabled={activeLoading}
-                            className="btn danger mr-auto font-semibold text-sm"
+                            className="h-9 px-4 rounded-[var(--radius-md)] text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white transition-all mr-auto disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {dangerText}
                         </button>
@@ -120,7 +120,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
                         type="button"
                         onClick={onClose}
                         disabled={activeLoading}
-                        className="btn outline font-semibold text-sm"
+                        className="h-9 px-4 rounded-[var(--radius-md)] text-xs font-semibold border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {cancelText}
                     </button>
@@ -128,7 +128,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
                         type="button"
                         onClick={handleConfirm}
                         disabled={isConfirmDisabled}
-                        className={`${styles.buttonClass} font-semibold text-sm inline-flex items-center gap-1.5`}
+                        className={`${styles.buttonClass} inline-flex items-center gap-1.5`}
                     >
                         {activeLoading ? (
                             <>
@@ -161,7 +161,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
                 </div>
 
                 {requireConfirmText && (
-                    <div className="mt-2 w-full text-left p-4 rounded-[var(--radius-lg)] bg-[var(--color-bg)] border border-[var(--color-border)] space-y-2.5">
+                    <div className="mt-2 w-full text-left p-4 rounded-[14px] bg-[var(--color-bg)] border border-[var(--color-border)] space-y-2.5">
                         <label className="text-xs font-semibold text-[var(--color-text-light)] block">
                             Nhập <span className="text-[var(--color-text)] font-bold select-all px-1.5 py-0.5 bg-[var(--color-surface)] border border-[var(--color-border)] rounded">"{requireConfirmText}"</span> để xác nhận tiếp tục:
                         </label>
@@ -170,7 +170,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
                             value={confirmInput}
                             onChange={(e) => setConfirmInput(e.target.value)}
                             placeholder={confirmPlaceholder || 'Nhập mã xác nhận...'}
-                            className="form-input w-full"
+                            className="h-9 px-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-medium text-[var(--color-text)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/10 outline-none w-full"
                             autoFocus
                         />
                     </div>

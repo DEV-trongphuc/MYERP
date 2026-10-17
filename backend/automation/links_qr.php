@@ -38,13 +38,18 @@ if ($method === 'GET') {
                 SELECT
                     sl.*,
                     COALESCE(lc.clicks, 0) AS stat_clicks,
-                    COALESCE(lc.unique_clicks, 0) AS stat_unique_clicks
+                    COALESCE(lc.unique_clicks, 0) AS stat_unique_clicks,
+                    u_creator.id AS creator_id, u_creator.full_name AS creator_name, u_creator.email AS creator_email,
+                    u_creator.phone AS creator_phone, u_creator.avatar_url AS creator_avatar,
+                    u_creator.job_title AS creator_job_title, u_creator.department AS creator_department,
+                    u_creator.role AS creator_role
                 FROM short_links sl
                 LEFT JOIN (
                     SELECT short_link_id, COUNT(*) AS clicks, COUNT(DISTINCT ip_hash) AS unique_clicks
                     FROM link_clicks
                     GROUP BY short_link_id
                 ) lc ON lc.short_link_id = sl.id
+                LEFT JOIN users u_creator ON u_creator.id = sl.created_by
                 WHERE {$wsClause}
                 ORDER BY sl.created_at DESC
             ");
@@ -56,6 +61,7 @@ if ($method === 'GET') {
                     'clicks' => (int)($link['stat_clicks'] ?? 0),
                     'unique' => (int)($link['stat_unique_clicks'] ?? 0)
                 ];
+                $link['creator'] = domationFormatCreator($link);
                 unset($link['stat_clicks'], $link['stat_unique_clicks']);
             }
             unset($link);
@@ -115,11 +121,12 @@ if ($method === 'POST') {
         $status = $input['status'] ?? 'active';
         $accessPin = !empty($input['access_pin']) ? $input['access_pin'] : null;
         $qrConfig = json_encode(['color' => '#000000', 'bg' => '#ffffff', 'logo' => null]);
+        $currentUserId = get_current_user_id();
 
         try {
-            $stmt = $pdo->prepare("INSERT INTO short_links (id, workspace_id, name, slug, target_url, is_survey_checkin, survey_id, status, access_pin, qr_config_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$id, $workspaceId, $name, $slug, $targetUrl, $isSurvey, $surveyId, $status, $accessPin, $qrConfig]);
-            jsonResponse(true, ['id' => $id, 'slug' => $slug]);
+            $stmt = $pdo->prepare("INSERT INTO short_links (id, workspace_id, name, slug, target_url, is_survey_checkin, survey_id, status, access_pin, qr_config_json, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$id, $workspaceId, $name, $slug, $targetUrl, $isSurvey, $surveyId, $status, $accessPin, $qrConfig, $currentUserId, $currentUserId]);
+            jsonResponse(true, ['id' => $id, 'slug' => $slug, 'created_by' => $currentUserId, 'creator' => get_current_user_info()]);
         } catch (\Throwable $e) {
             if (strpos($e->getMessage(), 'Duplicate entry') !== false) {
                 jsonResponse(false, null, 'Slug (tên miền phụ) đã tồn tại. Vui lòng chọn từ khác.');
@@ -147,6 +154,8 @@ if ($method === 'PUT' || ($method === 'POST' && $action === 'update')) {
     if (isset($input['qr_config_json'])) { $updates[] = "qr_config_json = ?"; $params[] = $input['qr_config_json']; }
 
     if (count($updates) > 0) {
+        $updates[] = "updated_by = ?";
+        $params[] = get_current_user_id();
         $sql = "UPDATE short_links SET " . implode(', ', $updates) . " WHERE id = ? AND workspace_id = ?";
         $params[] = $id;
         $params[] = $workspaceId;

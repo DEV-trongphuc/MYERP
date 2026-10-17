@@ -46,7 +46,7 @@ const WorkspaceDocItem = React.memo(({
             return { Icon: FileCode, color: 'text-blue-600', bg: 'bg-blue-50' };
         // Images
         if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(ext))
-            return { Icon: FileImage, color: 'text-amber-600', bg: 'bg-amber-50' };
+            return { Icon: FileImage, color: 'text-[var(--color-primary)]', bg: 'bg-amber-50' };
         // Videos
         if (['mp4', 'mov', 'avi', 'mkv'].includes(ext))
             return { Icon: FileVideo, color: 'text-red-600', bg: 'bg-red-50' };
@@ -67,7 +67,7 @@ const WorkspaceDocItem = React.memo(({
         let label = 'Global';
 
         if (src === 'global_training') {
-            classes = 'bg-amber-600/80 text-white border-amber-300/30';
+            classes = 'bg-[var(--color-primary)]/80 text-white border-amber-300/30';
             label = 'Knowledge';
         } else if (src.includes('user') || src === 'file_upload') {
             classes = 'bg-blue-600/70 text-white border-blue-400/20';
@@ -91,7 +91,7 @@ const WorkspaceDocItem = React.memo(({
         <div
             onContextMenu={onContextMenu}
             onClick={onClick}
-            className={`p-4 rounded-2xl border transition-all cursor-pointer group flex flex-col gap-3 relative overflow-hidden ${isDarkTheme ? 'bg-[#161B24] border-slate-800 hover:border-brand/40 shadow-xl shadow-black/20' : 'bg-white border-slate-100 hover:border-brand hover:border-opacity-20 hover:shadow-lg'}`}
+            className={`p-4 rounded-[14px] border transition-all cursor-pointer group flex flex-col gap-3 relative overflow-hidden ${isDarkTheme ? 'bg-[#161B24] border-slate-800 hover:border-[var(--color-primary)]/40 shadow-xl shadow-black/20' : 'bg-white border-slate-100 hover:border-[var(--color-primary)] hover:border-opacity-20 hover:shadow-lg'}`}
         >
             {/* Actions overlay */}
             <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100 z-10">
@@ -148,7 +148,7 @@ const WorkspaceDocItem = React.memo(({
                         e.stopPropagation();
                         onToggleContext(doc);
                     }}
-                    className={`absolute bottom-3 right-3 p-2 rounded-xl border shadow-sm transition-all font-bold z-10 ${isInContext ? 'bg-brand text-white border-brand shadow-brand' : (isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-400 hover:text-brand' : 'bg-white border-slate-200 text-slate-400 hover:text-brand hover:border-brand/40')}`}
+                    className={`absolute bottom-3 right-3 p-2 rounded-xl border shadow-sm transition-all font-bold z-10 ${isInContext ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)] shadow-[var(--color-primary)]' : (isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-400 hover:text-[var(--color-primary)]' : 'bg-white border-slate-200 text-slate-400 hover:text-[var(--color-primary)] hover:border-[var(--color-primary)]/40')}`}
                     title={isInContext ? "Gỡ khỏi Context" : "Ghim làm Context để hỏi AI"}
                 >
                     <Pin className={`w-3.5 h-3.5 ${isInContext ? 'fill-current' : ''}`} />

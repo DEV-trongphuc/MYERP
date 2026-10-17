@@ -11,6 +11,20 @@ $method = $_SERVER['REQUEST_METHOD'];
 $path = isset($_GET['id']) ? $_GET['id'] : null;
 $route = $_GET['route'] ?? ''; // New route parameter
 
+domationEnsureSchemaOnce('campaigns_attribution_v1', function () use ($pdo) {
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM campaigns")->fetchAll(PDO::FETCH_COLUMN);
+        if (is_array($cols)) {
+            if (!in_array('created_by', $cols, true)) {
+                @$pdo->exec("ALTER TABLE campaigns ADD COLUMN created_by INT NULL");
+            }
+            if (!in_array('updated_by', $cols, true)) {
+                @$pdo->exec("ALTER TABLE campaigns ADD COLUMN updated_by INT NULL");
+            }
+        }
+    } catch (Throwable $e) {}
+});
+
 /**
  * [SECURITY HARDENING] Centralized Campaign Ownership Verification
  */
@@ -51,6 +65,15 @@ function formatCampaign($row)
     $row['scheduledAt'] = $row['scheduled_at'] ?? null;
     $row['createdAt'] = $row['created_at'] ?? null;
     $row['updatedAt'] = $row['updated_at'] ?? null;
+    $row['created_by'] = isset($row['created_by']) && $row['created_by'] !== null ? (int)$row['created_by'] : null;
+    $row['updated_by'] = isset($row['updated_by']) && $row['updated_by'] !== null ? (int)$row['updated_by'] : null;
+    $row['creator'] = !empty($row['creator_id']) ? [
+        'id' => (int)$row['creator_id'],
+        'name' => $row['creator_name'] ?? '',
+        'email' => $row['creator_email'] ?? '',
+        'avatar_url' => $row['creator_avatar'] ?? null,
+        'role' => $row['creator_role'] ?? null,
+    ] : null;
     $row['attachments'] = json_decode($row['attachments'] ?? '[]', true);
     $row['totalTargetAudience'] = (int) ($row['total_target_audience'] ?? 0);
     $rawType = $row['type'] ?? 'email';
@@ -80,7 +103,12 @@ function formatCampaign($row)
         $row['sent_at'],
         $row['scheduled_at'],
         $row['total_target_audience'],
-        $row['reminder_count']
+        $row['reminder_count'],
+        $row['creator_id'],
+        $row['creator_name'],
+        $row['creator_email'],
+        $row['creator_avatar'],
+        $row['creator_role']
     );
 
     return $row;
@@ -1059,7 +1087,7 @@ if ($method === 'POST' && $route === 'send_test') {
 
         // Fetch Campaign First to Determine Type
         // [FIX P39-CAM] Explicit columns — avoids loading subscriber_data/large blobs into memory
-        $stmtCamp = $pdo->prepare("SELECT id, type, subject, template_id, content_body, attachments, config FROM campaigns WHERE id = ? LIMIT 1");
+        $stmtCamp = $pdo->prepare("SELECT id, name, type, subject, template_id, custom_html, content_body, attachments, config FROM campaigns WHERE id = ? LIMIT 1");
         $stmtCamp->execute([$campaignId]);
         $campaign = $stmtCamp->fetch();
 
@@ -1087,11 +1115,8 @@ if ($method === 'POST' && $route === 'send_test') {
 
             // Prepare Template Data (Mock Data for Test)
             $templateData = [];
-            // We could try to use mapped params with dummy data, or just empty if template allows
-// Better: Use the mapped keys and fill with "Test Data"
             $mappedParams = $config['mapped_params'] ?? [];
             foreach ($mappedParams as $key => $field) {
-                // If the user mapped "full_name", send "User Name Test"
                 if (strpos($field, 'name') !== false) {
                     $templateData[$key] = 'User Name Test';
                 } elseif (strpos($field, 'phone') !== false) {
@@ -1101,20 +1126,11 @@ if ($method === 'POST' && $route === 'send_test') {
                 }
             }
 
-            // If manual params (inputMode='manual' in frontend stored in mapped_params effectively as literals),
-// the above loop might need adjustment if logic differs, but currently mapped_params stores keys.
-// Actually, if inputMode is 'manual', the value in config IS the value.
-// But usually ZNS expects key => value.
-// Let's assume for test we just use what's in mapped_params if it's not {{...}}
-// If it is {{...}}, we replace.
-
             $finalTemplateData = [];
             foreach ($mappedParams as $key => $val) {
                 if (strpos($val, '{{') === 0 && strpos($val, '}}') === strlen($val) - 2) {
-                    // It's a variable
                     $finalTemplateData[$key] = "Test " . trim($val, '{}');
                 } else {
-                    // Literal
                     $finalTemplateData[$key] = $val;
                 }
             }
@@ -1130,25 +1146,41 @@ if ($method === 'POST' && $route === 'send_test') {
             }
 
         } else {
-            // --- EMAIL TEST LOGIC ---
-            if (empty($data['email'])) {
-                jsonResponse(false, null, 'Email is required for Email test.');
+            // --- EMAIL TEST LOGIC (MULTI-RECIPIENT UNLIMITED) ---
+            $rawEmails = $data['emails'] ?? ($data['email'] ?? '');
+            $emailTokens = [];
+            if (is_array($rawEmails)) {
+                foreach ($rawEmails as $item) {
+                    if (is_string($item)) {
+                        foreach (preg_split('/[,;\n\r\s]+/', $item) as $part) {
+                            $emailTokens[] = trim($part);
+                        }
+                    }
+                }
+            } elseif (is_string($rawEmails)) {
+                foreach (preg_split('/[,;\n\r\s]+/', $rawEmails) as $part) {
+                    $emailTokens[] = trim($part);
+                }
             }
-            $targetEmail = $data['email'];
 
-            // [FIX] Removed scheduledAt validation from Send Test.
-            // Test emails must be sent IMMEDIATELY regardless of the campaign's scheduled date.
-            // Checking if scheduledAt > now+5min here was copy-pasted from the campaign
-            // scheduling logic and prevented admins from testing future-scheduled campaigns.
+            $validMap = [];
+            foreach ($emailTokens as $tok) {
+                $clean = strtolower(trim($tok));
+                if ($clean !== '' && filter_var($clean, FILTER_VALIDATE_EMAIL)) {
+                    $validMap[$clean] = $clean;
+                }
+            }
+            $recipientList = array_values($validMap);
+
+            if (empty($recipientList)) {
+                jsonResponse(false, null, 'Vui lòng nhập ít nhất 1 địa chỉ email hợp lệ để gửi test.');
+            }
+
             require_once 'Mailer.php';
-            $subscriber = [
-                'first_name' => 'Nhà quảng cáo',
-                'last_name' => '',
-                'email' =>
-                    $targetEmail
-            ];
             $subject = '';
             $htmlContent = '';
+            $attachmentsRaw = '[]';
+            $reminder = null;
 
             if ($reminderId) {
                 // [FIX P39-CAM] Explicit columns for reminder lookup
@@ -1173,55 +1205,131 @@ if ($method === 'POST' && $route === 'send_test') {
                 }
             }
 
-            if (empty($htmlContent))
+            if (empty($htmlContent)) {
                 jsonResponse(false, null, 'Content not found.');
+            }
 
-            $allAttachments = json_decode($attachmentsRaw ?? '[]', true);
-            $filteredAttachments = Mailer::filterAttachments($allAttachments, $targetEmail);
+            $allAttachments = json_decode($attachmentsRaw ?? '[]', true) ?: [];
+            $campConfig = json_decode($campaign['config'] ?? '{}', true) ?: [];
 
-            // If it is a test email and no matched attachments were found, but there are match_email attachments,
-            // let's include the first match_email attachment as a sample preview for the admin to inspect.
-            if (empty($filteredAttachments) && !empty($allAttachments)) {
-                $matchEmailAtts = array_filter($allAttachments, fn($a) => ($a['logic'] ?? 'all') === 'match_email');
-                if (!empty($matchEmailAtts)) {
-                    $sample = reset($matchEmailAtts);
-                    $filteredAttachments[] = $sample;
+            $mailer = new Mailer($pdo, API_BASE_URL, 'marketing@ideas.edu.vn', $workspace_id);
+
+            $requestedSenderEmail = strtolower(trim((string)(
+                $data['sender_email']
+                ?? ($data['from_email']
+                ?? ($data['senderEmail']
+                ?? ($campConfig['sender_email']
+                ?? ($campConfig['senderEmail']
+                ?? ($campaign['sender_email'] ?? ($campaign['from_email'] ?? ''))))))
+            )));
+            $requestedSenderName = trim((string)(
+                $data['sender_name']
+                ?? ($data['from_name']
+                ?? ($data['senderName']
+                ?? ($campConfig['sender_name']
+                ?? ($campConfig['senderName']
+                ?? ($campaign['sender_name'] ?? ($campaign['from_name'] ?? ''))))))
+            ));
+
+            if ($requestedSenderEmail !== '' && filter_var($requestedSenderEmail, FILTER_VALIDATE_EMAIL)) {
+                $mailer->setDynamicSender($requestedSenderEmail);
+            } else {
+                $mailer->setDynamicSender($mailer->getDefaultSenderEmail());
+            }
+            if ($requestedSenderName !== '') {
+                $mailer->setDynamicSenderName($requestedSenderName);
+            }
+
+            $testLabel = ($reminderId && $reminder) ? "Test Reminder: " . $reminder['subject'] : "Test Campaign: " . ($campaign['name'] ?? '');
+
+            $stmtSub = $pdo->prepare("SELECT * FROM subscribers WHERE LOWER(email) = LOWER(?) AND workspace_id = ? LIMIT 1");
+            $sentEmails = [];
+            $lastError = '';
+
+            foreach ($recipientList as $targetEmail) {
+                $stmtSub->execute([$targetEmail, $workspace_id]);
+                $subscriber = $stmtSub->fetch(PDO::FETCH_ASSOC);
+
+                if (!$subscriber) {
+                    $empRow = null;
+                    try {
+                        $stmtEmp = $pdo->prepare("SELECT id, full_name, email, phone, job_title FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1");
+                        $stmtEmp->execute([$targetEmail]);
+                        $empRow = $stmtEmp->fetch(PDO::FETCH_ASSOC);
+                    } catch (\Throwable $ignore) {
+                        $empRow = null;
+                    }
+
+                    $fullName = !empty($empRow['full_name']) ? trim((string)$empRow['full_name']) : '';
+                    $firstName = 'Nhà quảng cáo';
+                    $lastName = '';
+                    if ($fullName !== '') {
+                        $parts = preg_split('/\s+/u', $fullName);
+                        if (count($parts) > 1) {
+                            $firstName = array_pop($parts);
+                            $lastName = implode(' ', $parts);
+                        } else {
+                            $firstName = $fullName;
+                        }
+                    }
+
+                    $subscriber = [
+                        'id' => !empty($empRow['id']) ? 'emp_' . $empRow['id'] : 'test_sub',
+                        'full_name' => $fullName !== '' ? $fullName : 'Nhà quảng cáo',
+                        'first_name' => $firstName,
+                        'last_name' => $lastName,
+                        'email' => $targetEmail,
+                        'phone_number' => $empRow['phone'] ?? '',
+                        'job_title' => $empRow['job_title'] ?? ''
+                    ];
+                }
+
+                $filteredAttachments = Mailer::filterAttachments($allAttachments, $targetEmail);
+                if (empty($filteredAttachments) && !empty($allAttachments)) {
+                    $matchEmailAtts = array_filter($allAttachments, fn($a) => ($a['logic'] ?? 'all') === 'match_email');
+                    if (!empty($matchEmailAtts)) {
+                        $sample = reset($matchEmailAtts);
+                        $filteredAttachments[] = $sample;
+                    }
+                }
+
+                $context = [
+                    'unsubscribe_url' => API_BASE_URL . "/webhook.php?type=unsubscribe&sid=" . ($subscriber['id'] ?? '') . "&cid=" . $campaignId,
+                    'campaign_name' => $campaign['name'] ?? '',
+                    'variable_fallbacks' => $campConfig['variable_fallbacks'] ?? [],
+                    'config' => $campConfig
+                ];
+
+                $finalSubject = replaceMergeTags($subject, $subscriber, $context, $pdo);
+                $finalHtml = replaceMergeTags($htmlContent, $subscriber, $context, $pdo);
+
+                $res = $mailer->send(
+                    $targetEmail,
+                    $finalSubject,
+                    $finalHtml,
+                    null,
+                    null,
+                    null,
+                    null,
+                    $filteredAttachments,
+                    null,
+                    null,
+                    $testLabel
+                );
+
+                if ($res === true) {
+                    $sentEmails[] = $targetEmail;
+                } else {
+                    $lastError = is_string($res) ? $res : 'Unknown error';
                 }
             }
 
-            $campConfig = json_decode($campaign['config'] ?? '{}', true) ?: [];
-            $context = [
-                'unsubscribe_url' => API_BASE_URL . "/webhook.php?type=unsubscribe&sid=" . ($subscriber['id'] ?? '') . "&cid=" . $campaignId,
-                'campaign_name' => $campaign['name'] ?? '',
-                'variable_fallbacks' => $campConfig['variable_fallbacks'] ?? [],
-                'config' => $campConfig
-            ];
-            $finalSubject = replaceMergeTags($subject, $subscriber, $context);
-            $finalHtml = replaceMergeTags($htmlContent, $subscriber, $context);
-            $stmtSettings = $pdo->prepare("SELECT `value` FROM mkt_system_settings WHERE `key` = 'smtp_user' AND workspace_id IN (0, ?) ORDER BY workspace_id DESC LIMIT 1");
-            $stmtSettings->execute([$workspace_id]);
-            $defaultSender = $stmtSettings->fetchColumn() ?: "marketing@ka-en.com.vn";
-            $mailer = new Mailer($pdo, API_BASE_URL, $defaultSender, $workspace_id);
-            $testLabel = $reminderId ? "Test Reminder: " . $reminder['subject'] : "Test Campaign: " . $campaign['name'];
-            $res = $mailer->send(
-                $targetEmail,
-                $finalSubject,
-                $finalHtml,
-                null,
-                null,
-                null,
-                null,
-                $filteredAttachments,
-                null,
-                null,
-                $testLabel
-            );
-
-            if ($res === true) {
-                logSystemActivity($pdo, 'campaigns', 'send_test', $campaignId, "Campaign $campaignId", ['target' => $targetEmail]);
-                jsonResponse(true, null, 'Test email sent successfully.');
-            } else
-                jsonResponse(false, null, 'Failed to send test email: ' . (is_string($res) ? $res : 'Unknown error'));
+            if (count($sentEmails) > 0) {
+                logSystemActivity($pdo, 'campaigns', 'send_test', $campaignId, "Campaign $campaignId", ['targets' => $sentEmails]);
+                jsonResponse(true, ['sent_count' => count($sentEmails), 'sent_emails' => $sentEmails], 'Đã gửi email test thành công đến ' . count($sentEmails) . ' người nhận!');
+            } else {
+                jsonResponse(false, null, 'Failed to send test email: ' . ($lastError ?: 'Unknown error'));
+            }
         }
     } catch (Exception $e) {
         jsonResponse(false, null, 'Lỗi hệ thống: ' . $e->getMessage() . ' in ' . basename($e->getFile()) . ':' . $e->getLine());
@@ -1445,11 +1553,16 @@ switch ($method) {
 
                 // [FIX P42-C1] SELECT * loaded full content_body (can be MBs of HTML) for every campaign GET.
                 // Explicit columns only — content_body is fetched indirectly via resolveEmailContent() for sends anyway.
-                $stmt = $pdo->prepare("SELECT id, workspace_id, name, subject, sender_email, status, sent_at, scheduled_at,
-                    template_id, content_body, target_config, count_sent, count_opened, count_unique_opened,
-                    count_clicked, count_unique_clicked, count_bounced, count_spam, count_unsubscribed, tracking_enabled,
-                    created_at, updated_at, type, config, total_target_audience, attachments,
-                    is_deleted FROM campaigns WHERE id = ? AND workspace_id = ?");
+                $stmt = $pdo->prepare("SELECT c.id, c.workspace_id, c.name, c.subject, c.sender_email, c.status, c.sent_at, c.scheduled_at,
+                    c.template_id, c.content_body, c.target_config, c.count_sent, c.count_opened, c.count_unique_opened,
+                    c.count_clicked, c.count_unique_clicked, c.count_bounced, c.count_spam, c.count_unsubscribed, c.tracking_enabled,
+                    c.created_at, c.updated_at, c.created_by, c.updated_by, c.type, c.config, c.total_target_audience, c.attachments,
+                    c.is_deleted,
+                    u_creator.id AS creator_id, u_creator.full_name AS creator_name, u_creator.email AS creator_email,
+                    u_creator.avatar_url AS creator_avatar, u_creator.role AS creator_role
+                    FROM campaigns c
+                    LEFT JOIN users u_creator ON u_creator.id = c.created_by
+                    WHERE c.id = ? AND c.workspace_id = ?");
                 $stmt->execute([$path, $workspace_id]);
                 $camp = $stmt->fetch();
                 if ($camp) {
@@ -1654,10 +1767,13 @@ switch ($method) {
     c.template_id, c.target_config,
     c.count_sent, c.count_opened, c.count_unique_opened, c.count_clicked, c.count_unique_clicked,
     c.count_bounced, c.count_spam, c.count_unsubscribed, c.tracking_enabled,
-    c.created_at, c.updated_at, c.type, c.config, c.total_target_audience,
+    c.created_at, c.updated_at, c.created_by, c.updated_by, c.type, c.config, c.total_target_audience,
+    MAX(u_creator.id) AS creator_id, MAX(u_creator.full_name) AS creator_name, MAX(u_creator.email) AS creator_email,
+    MAX(u_creator.avatar_url) AS creator_avatar, MAX(u_creator.role) AS creator_role,
     COUNT(cr.id) as reminder_count
     FROM campaigns c
-    LEFT JOIN campaign_reminders cr ON cr.campaign_id = c.id" .
+    LEFT JOIN campaign_reminders cr ON cr.campaign_id = c.id
+    LEFT JOIN users u_creator ON u_creator.id = c.created_by" .
                     $whereSql . " GROUP BY c.id ORDER BY c.created_at DESC LIMIT $limit OFFSET $offset";
 
                 $stmt = $pdo->prepare($sql);
@@ -1789,9 +1905,10 @@ switch ($method) {
 
             $data = json_decode(file_get_contents("php://input"), true);
             $id = $data['id'] ?? uniqid();
+            $currentUserId = !empty($GLOBALS['current_admin_id']) ? (int)$GLOBALS['current_admin_id'] : null;
             $sql = "INSERT INTO campaigns (workspace_id, id, name, subject, sender_email, status, template_id, content_body, target_config,
-    tracking_enabled, scheduled_at, attachments, type, config, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-    ?, NOW())";
+    tracking_enabled, scheduled_at, attachments, type, config, created_by, updated_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+    ?, ?, ?, NOW())";
             $stmt = $pdo->prepare($sql);
             
             $isAdmin = is_super_admin();
@@ -1818,7 +1935,9 @@ switch ($method) {
                 $attachmentsJson,
                 $data['type'] ??
                 'email',
-                $configJson
+                $configJson,
+                $currentUserId,
+                $currentUserId
             ]);
             logSystemActivity($pdo, 'campaigns', 'create', $id, $data['name'], ['type' => $data['type'] ?? 'email', 'status' => $data['status']]);
 
@@ -1840,6 +1959,8 @@ switch ($method) {
                 }
             }
             $data['id'] = $id;
+            $data['created_by'] = $currentUserId;
+            $data['updated_by'] = $currentUserId;
             if (strtolower($data['status'] ?? '') === 'sending') {
                 dispatchCampaignWorker($pdo, $id);
             }
@@ -1920,9 +2041,10 @@ switch ($method) {
                 $scheduledAt = $existing['scheduled_at'];
 
             $configJson = json_encode($data['config'] ?? []);
+            $currentUserId = !empty($GLOBALS['current_admin_id']) ? (int)$GLOBALS['current_admin_id'] : null;
 
             $sql = "UPDATE campaigns SET name=?, subject=?, sender_email=?, status=?, template_id=?, content_body=?,
-    target_config=?, tracking_enabled=?, scheduled_at=?, sent_at=?, attachments=?, type=?, config=?, updated_at=NOW() WHERE id=? AND workspace_id=?";
+    target_config=?, tracking_enabled=?, scheduled_at=?, sent_at=?, attachments=?, type=?, config=?, updated_by=?, updated_at=NOW() WHERE id=? AND workspace_id=?";
             $stmt = $pdo->prepare($sql);
             $stmt->execute([
                 $data['name'],
@@ -1938,6 +2060,7 @@ switch ($method) {
                 $attachmentsJson,
                 $data['type'] ?? 'email',
                 $configJson,
+                $currentUserId,
                 $path,
                 $workspace_id
             ]);

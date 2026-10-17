@@ -1,11 +1,12 @@
 import * as React from 'react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import { getMktPortalRoot } from '../../utils/portalRoot';
 import { api } from '../../services/storageAdapter';
 import { Search, Filter, MessageSquare, Clock, ArrowRight, User, Bot, Send, Trash2, MoreVertical, Layout, Globe, MousePointer2, FormInput, Activity, Zap, ShieldAlert, RotateCw, UserCheck, MessageCircle, Globe as Facebook, FileText, Maximize2, ChevronLeft, ChevronRight, Copy, ExternalLink, Sparkles, ShieldCheck, Phone, Mail, StickyNote, X, Layers, ChevronDown, Download, Share2, Info, Play, Eye, Check } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import Modal from '../common/Modal'; // Adjust import path as needed
 import ConfirmModal from '../common/ConfirmModal';
-import CustomerProfileModal from '../audience/CustomerProfileModal'; // Adjust import path
 import { MetaCustomerProfileModal } from '../meta/MetaCustomerProfileModal';
 import { ZaloUserProfileModal } from '../zalo/ZaloUserProfileModal';
 
@@ -1033,7 +1034,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
         // Anonymous or Org
         return (
             <div className="w-full h-full bg-white border border-slate-200 text-slate-400 flex items-center justify-center">
-                {source === 'org' ? <Bot className="w-3.5 h-3.5 text-brand" /> : <User className="w-3.5 h-3.5" />}
+                {source === 'org' ? <Bot className="w-3.5 h-3.5 text-[var(--color-primary)]" /> : <User className="w-3.5 h-3.5" />}
             </div>
         );
     };
@@ -1225,7 +1226,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
 
         // 1. Check if it's a platform-specific user UNLINKED to main CRM
         if (selectedConv.visitor_id.startsWith('meta_')) {
-            const metaId = (selectedConv as any).id; // The internal MD5 ID
+            const metaId = selectedConv.visitor_id.replace('meta_', '');
             setProfileSubscriberId(metaId);
             setShowMetaModal(true);
             return;
@@ -1239,29 +1240,20 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
         }
 
         // 2. Try to fetch subscriber by ID if linked
-        let sub = null;
-        if (selectedConv.lead_score && (selectedConv as any).subscriber_id) {
+        let sub: any = null;
+        if ((selectedConv as any).subscriber_id) {
             const res = await api.get(`subscribers/${(selectedConv as any).subscriber_id}`);
             if (res.success) sub = res.data;
         }
 
-        // For now, if we have subscriber info attached to conversation, use it
-        if (!sub && (selectedConv.first_name || selectedConv.email)) {
-            await fetchCrmMetadata();
-            if ((selectedConv as any).subscriber_id) {
-                const res = await api.get(`subscribers/${(selectedConv as any).subscriber_id}`);
-                if (res.success) setCrmSubscriber(res.data);
-                else setCrmSubscriber(null);
-            } else {
-                setCrmSubscriber(null);
-                toast("Chưa liên kết CRM");
-                return;
-            }
-            setShowCrmModal(true);
-        } else if (sub) {
-            await fetchCrmMetadata();
-            setCrmSubscriber(sub);
-            setShowCrmModal(true);
+        const target = sub || selectedConv;
+        const contactId = (selectedConv as any).contact_id || sub?.contact_id || sub?.myerp_contact_id;
+        if (contactId) {
+            window.dispatchEvent(new CustomEvent('open-customer-drawer', { detail: { id: Number(contactId), initialTab: 'journey360' } }));
+        } else {
+            const phone = sub?.phone || (selectedConv as any).phone;
+            const email = sub?.email || selectedConv.email;
+            window.dispatchEvent(new CustomEvent('open-customer-drawer', { detail: { phone, email, contact: target, initialTab: 'journey360' } }));
         }
     };
 
@@ -1369,7 +1361,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                 if (isMarkdownImage || imgExtMatch) {
                     parts.push(
                         <div key={match.index} className="mt-2 mb-2">
-                            <a href={url} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-2xl border border-slate-100 shadow-sm transition-all hover:scale-[1.02]">
+                            <a href={url} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-[14px] border border-slate-100 shadow-sm transition-all hover:scale-[1.02]">
                                 <img src={url} alt={label || "Image"} className="w-full max-h-[300px] object-cover" />
                             </a>
                         </div>
@@ -1543,7 +1535,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                     const lang = currentCode.lang;
 
                     blocks.push(
-                        <div key={`code-${idx}`} className="my-6 rounded-2xl overflow-hidden bg-[#1e1e2e] shadow-2xl border border-white/5 group/code scale-[1.01] transition-transform">
+                        <div key={`code-${idx}`} className="my-6 rounded-[14px] overflow-hidden bg-[#1e1e2e] shadow-2xl border border-white/5 group/code scale-[1.01] transition-transform">
                             {/* Header with dots and icons */}
                             <div className="px-5 py-3 bg-[#181825] border-b border-white/5 flex justify-between items-center">
                                 <div className="flex items-center gap-4">
@@ -1717,7 +1709,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
         <>
             {messages.map((m, idx) => (
                 <div key={m.id || idx} className={`flex ${m.sender === 'visitor' ? 'justify-start' : 'justify-end'}`}>
-                    <div className={`max-w-[85%] lg:max-w-[75%] p-3.5 rounded-2xl text-xs font-medium leading-relaxed shadow-sm ${m.sender === 'visitor'
+                    <div className={`max-w-[85%] lg:max-w-[75%] p-3.5 rounded-[14px] text-xs font-medium leading-relaxed shadow-sm ${m.sender === 'visitor'
                         ? (isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-200 rounded-tl-none shadow-slate-950/20' : 'bg-white border-slate-100 text-slate-700 rounded-tl-none')
                         : m.sender === 'ai'
                             ? (isDarkTheme ? 'bg-slate-900 border-slate-800 text-slate-200 rounded-tr-none shadow-slate-950/20' : 'bg-slate-50 border border-slate-200 text-slate-800 rounded-tr-none')
@@ -1748,9 +1740,9 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
 
     // identification Filter logic continues...
     return (
-        <div className={`flex flex-col lg:flex-row gap-4 lg:gap-6 h-[calc(100vh-140px)] lg:h-[800px] p-2 lg:p-4 rounded-[32px] border shadow-inner overflow-hidden ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50/30 border-slate-100'}`}>
+        <div className={`flex flex-col lg:flex-row gap-3 h-[calc(100vh-140px)] lg:h-[800px] p-2.5 rounded-[18px] border shadow-xs overflow-hidden ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50/50 border-[var(--color-border)]'}`}>
             {/* Left: Conversations List */}
-            <div className={`w-full lg:w-80 flex flex-col gap-4 rounded-[28px] border shadow-sm overflow-hidden flex-shrink-0 ${mobileView === 'list' ? 'flex' : 'hidden lg:flex'} ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
+            <div className={`w-full lg:w-80 flex flex-col rounded-[14px] border shadow-xs overflow-hidden flex-shrink-0 ${mobileView === 'list' ? 'flex' : 'hidden lg:flex'} ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-white border-[var(--color-border)]'}`}>
                 {/* Search & Tabs */}
                 <div className={`p-5 border-b z-10 space-y-4 ${isDarkTheme ? 'border-slate-800 bg-slate-900' : 'border-slate-100 bg-white'}`}>
                     <div className="relative">
@@ -1816,7 +1808,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                     <div className="px-5 relative">
                         <div
                             onClick={() => setIsPageDropdownOpen(!isPageDropdownOpen)}
-                            className={`w-full flex items-center justify-between px-3 py-2.5 border rounded-2xl cursor-pointer transition-all group ${isDarkTheme ? 'bg-slate-800 border-slate-700 hover:bg-slate-700/50' : 'bg-slate-50 border-slate-100 hover:bg-slate-100/50'}`}
+                            className={`w-full flex items-center justify-between px-3 py-2.5 border rounded-[14px] cursor-pointer transition-all group ${isDarkTheme ? 'bg-slate-800 border-slate-700 hover:bg-slate-700/50' : 'bg-slate-50 border-slate-100 hover:bg-slate-100/50'}`}
                         >
                             <div className="flex items-center gap-2 overflow-hidden">
                                 {(() => {
@@ -1867,7 +1859,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                         {isPageDropdownVisible && (
                             <>
                                 <div className="fixed inset-0 z-40" onClick={() => setIsPageDropdownOpen(false)}></div>
-                                <div className={`absolute left-5 right-5 top-full mt-2 border rounded-2xl shadow-2xl z-50 overflow-hidden transform transition-all duration-200 ${animatePageDropdownIn ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 -translate-y-2'} ${isDarkTheme ? 'bg-slate-900 border-slate-800 shadow-slate-950/50' : 'bg-white border-slate-100 shadow-slate-200/50'}`}>
+                                <div className={`absolute left-5 right-5 top-full mt-2 border rounded-[14px] shadow-2xl z-50 overflow-hidden transform transition-all duration-200 ${animatePageDropdownIn ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 -translate-y-2'} ${isDarkTheme ? 'bg-slate-900 border-slate-800 shadow-slate-950/50' : 'bg-white border-slate-100 shadow-slate-200/50'}`}>
                                     <div className="max-h-60 overflow-y-auto custom-scrollbar">
                                         {/* Option: All */}
                                         <div
@@ -1981,7 +1973,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                             >
                                                 <div className="flex items-center gap-2">
                                                     <div className={`w-5 h-5 rounded-full flex items-center justify-center border text-slate-400 group-hover:shadow-sm transition-all ${isDarkTheme ? 'bg-slate-800 border-slate-700 group-hover:bg-slate-700' : 'bg-slate-100 border-slate-200 group-hover:bg-white'}`}>
-                                                        {source === 'org' ? <Bot className="w-3 h-3 text-brand" /> : <User className="w-3 h-3" />}
+                                                        {source === 'org' ? <Bot className="w-3 h-3 text-[var(--color-primary)]" /> : <User className="w-3 h-3" />}
                                                     </div>
                                                     <span className={`text-[10px] font-black uppercase tracking-wider truncate max-w-[180px] ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>
                                                         {userId === 'unknown' ? (source === 'org' ? 'AI Consultant' : 'Khách hàng') : userId}
@@ -2029,7 +2021,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                         <div
                                             key={c.id}
                                             onClick={() => setSelectedConv(c)}
-                                            className={`p-2.5 rounded-2xl cursor-pointer border transition-all hover:shadow-md ${selectedConv?.id === c.id
+                                            className={`p-2.5 rounded-[14px] cursor-pointer border transition-all hover:shadow-md ${selectedConv?.id === c.id
                                                 ? (isDarkTheme ? 'bg-slate-800 border-slate-700 shadow-sm' : 'bg-slate-100 border-slate-300 shadow-sm')
                                                 : (isDarkTheme ? 'bg-slate-900 border-transparent hover:border-slate-800' : 'bg-white border-transparent hover:border-slate-100')
                                                 }`}
@@ -2090,7 +2082,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
 
             {/* Chat Area */}
             <div
-                className={`flex-1 flex flex-col border rounded-[28px] shadow-sm overflow-hidden relative ${mobileView === 'chat' ? 'flex' : 'hidden lg:flex'} ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}
+                className={`flex-1 flex flex-col border rounded-[14px] shadow-xs overflow-hidden relative ${mobileView === 'chat' ? 'flex' : 'hidden lg:flex'} ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-white border-[var(--color-border)]'}`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
@@ -2098,9 +2090,9 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                 {/* Drag and Drop Overlay */}
                 {isDragging && (
                     <div
-                        className="absolute inset-0 z-50 bg-blue-500/10 backdrop-blur-sm border-2 border-blue-500 border-dashed m-4 rounded-3xl flex flex-col items-center justify-center animate-in fade-in duration-200 pointer-events-none"
+                        className="absolute inset-0 z-50 bg-blue-500/10 backdrop-blur-sm border-2 border-blue-500 border-dashed m-4 rounded-[18px] flex flex-col items-center justify-center animate-in fade-in duration-200 pointer-events-none"
                     >
-                        <div className="w-16 h-16 bg-blue-500 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-blue-500/20 mb-4 animate-bounce">
+                        <div className="w-16 h-16 bg-blue-500 rounded-[14px] flex items-center justify-center text-white shadow-xl shadow-blue-500/20 mb-4 animate-bounce">
                             <Download className="w-8 h-8" />
                         </div>
                         <h3 className="text-xl font-black text-blue-600 uppercase tracking-tight">Thả tệp đã gửi</h3>
@@ -2109,9 +2101,9 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                 )}
 
                 {/* File Preview Modal */}
-                {previewUrl && (
-                    <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setPreviewUrl(null)}>
-                        <div className="bg-white rounded-[32px] overflow-hidden w-full max-w-4xl max-h-[90vh] flex flex-col relative shadow-2xl" onClick={e => e.stopPropagation()}>
+                {previewUrl && createPortal(
+                    <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-[1px] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setPreviewUrl(null)}>
+                        <div className="bg-white rounded-[18px] overflow-hidden w-full max-w-4xl max-h-[90vh] flex flex-col relative shadow-2xl" onClick={e => e.stopPropagation()}>
                             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center">
@@ -2140,7 +2132,8 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                 )}
                             </div>
                         </div>
-                    </div>
+                    </div>,
+                    getMktPortalRoot()
                 )}
 
                 {selectedConv ? (
@@ -2163,6 +2156,21 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                         <h3 className={`text-[11px] lg:text-sm font-black uppercase tracking-tight truncate max-w-[120px] lg:max-w-none ${isDarkTheme ? 'text-white' : 'text-slate-800'}`}>
                                             {getDisplayName(selectedConv)}
                                         </h3>
+                                        {(selectedConv as any).contact_id && (
+                                            <span
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const id = Number((selectedConv as any).contact_id);
+                                                    if (id && !Number.isNaN(id)) {
+                                                        window.dispatchEvent(new CustomEvent('open-customer-drawer', { detail: { id, initialTab: 'journey360' } }));
+                                                    }
+                                                }}
+                                                className="text-[11px] font-mono text-[var(--color-text-muted)] bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded px-1.5 py-0.5 cursor-pointer"
+                                                title="Mở Hồ sơ CRM 360"
+                                            >
+                                                CRM #{(selectedConv as any).contact_id}
+                                            </span>
+                                        )}
                                         {selectedConv.is_blocked ? (
                                             <div className="px-1.5 py-0.5 bg-rose-100 text-rose-600 text-[8px] font-black uppercase rounded border border-rose-200 flex items-center gap-1">
                                                 <ShieldAlert className="w-2.5 h-2.5" />
@@ -2338,7 +2346,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
 
             {/* Journey / Right Sidebar */}
             <div
-                className={`flex-col border-l rounded-r-[28px] overflow-hidden ${mobileView === 'journey' ? 'flex w-full absolute inset-0 z-20 bg-white' : 'hidden lg:flex'} ${isDarkTheme ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50/50 border-slate-200'}`}
+                className={`flex-col border rounded-[14px] shadow-xs overflow-hidden ${mobileView === 'journey' ? 'flex w-full absolute inset-0 z-20 bg-white' : 'hidden lg:flex'} ${isDarkTheme ? 'bg-slate-800/50 border-slate-700' : 'bg-white border-[var(--color-border)]'}`}
                 style={mobileView !== 'journey' ? { width: rightSidebarWidth } : {}}
             >
                 {source === 'org' && (
@@ -2565,23 +2573,6 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
             </div>
 
             {/* Modals */}
-            {
-                showCrmModal && crmSubscriber && (
-                    <CustomerProfileModal
-                        subscriber={crmSubscriber}
-                        onClose={() => setShowCrmModal(false)}
-                        onUpdate={(updated) => handleUpdateSubscriber(updated.id, updated)}
-                        onDelete={handleDeleteSubscriber}
-                        allLists={allLists}
-                        allSegments={allSegments}
-                        allFlows={allFlows}
-                        allTags={allTags}
-                        checkMatch={(sub, criteria) => checkSegmentMatch(criteria)}
-                        onAddToList={async (subId, listId) => { }} // Implement if needed
-                        onRemoveFromList={async (subId, listId) => { }} // Implement if needed
-                    />
-                )
-            }
 
             {/* Export Modal */}
             <Modal
@@ -2591,7 +2582,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                 size="md"
             >
                 <div className="space-y-6">
-                    <div className={`p-4 rounded-2xl border flex items-start gap-4 ${isDarkTheme ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                    <div className={`p-4 rounded-[14px] border flex items-start gap-4 ${isDarkTheme ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm shrink-0 border ${isDarkTheme ? 'bg-slate-900 text-slate-400 border-slate-700' : 'bg-white text-slate-400 border-slate-100'}`}>
                             <FileText className="w-5 h-5" />
                         </div>
@@ -2625,7 +2616,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                     <div className="grid grid-cols-2 gap-4">
                         <button
                             onClick={() => setExportRange('current')}
-                            className={`p-4 rounded-2xl border-2 transition-all text-left group ${exportRange === 'current' ? (isDarkTheme ? 'border-slate-600 bg-slate-800' : 'border-slate-800 bg-slate-50') : (isDarkTheme ? 'border-slate-800 hover:border-slate-700 bg-slate-900' : 'border-slate-100 hover:border-slate-200 bg-slate-50/50')}`}
+                            className={`p-4 rounded-[14px] border-2 transition-all text-left group ${exportRange === 'current' ? (isDarkTheme ? 'border-slate-600 bg-slate-800' : 'border-slate-800 bg-slate-50') : (isDarkTheme ? 'border-slate-800 hover:border-slate-700 bg-slate-900' : 'border-slate-100 hover:border-slate-200 bg-slate-50/50')}`}
                         >
                             <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-3 transition-colors ${exportRange === 'current' ? 'bg-slate-800 text-white shadow-lg shadow-slate-800/20' : (isDarkTheme ? 'bg-slate-800 text-slate-400 border border-slate-700' : 'bg-white text-slate-400 border border-slate-200')}`}>
                                 <Zap className="w-4 h-4" />
@@ -2636,7 +2627,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
 
                         <button
                             onClick={() => setExportRange('custom')}
-                            className={`p-4 rounded-2xl border-2 transition-all text-left group ${exportRange === 'custom' ? (isDarkTheme ? 'border-slate-600 bg-slate-800' : 'border-slate-800 bg-slate-50') : (isDarkTheme ? 'border-slate-800 hover:border-slate-700 bg-slate-900' : 'border-slate-100 hover:border-slate-200 bg-slate-50/50')}`}
+                            className={`p-4 rounded-[14px] border-2 transition-all text-left group ${exportRange === 'custom' ? (isDarkTheme ? 'border-slate-600 bg-slate-800' : 'border-slate-800 bg-slate-50') : (isDarkTheme ? 'border-slate-800 hover:border-slate-700 bg-slate-900' : 'border-slate-100 hover:border-slate-200 bg-slate-50/50')}`}
                         >
                             <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-3 transition-colors ${exportRange === 'custom' ? 'bg-slate-800 text-white shadow-lg shadow-slate-800/20' : (isDarkTheme ? 'bg-slate-800 text-slate-400 border border-slate-700' : 'bg-white text-slate-400 border border-slate-200')}`}>
                                 <Clock className="w-4 h-4" />
@@ -2647,7 +2638,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                     </div>
 
                     {exportRange === 'custom' && (
-                        <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 animate-in slide-in-from-top-2 duration-300">
+                        <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-[14px] border border-slate-100 animate-in slide-in-from-top-2 duration-300">
                             <div className="space-y-1.5">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Ngày bắt đầu</label>
                                 <input
@@ -2718,7 +2709,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                 size="md"
             >
                 <div className="space-y-6">
-                    <div className={`p-6 rounded-[24px] border ${isDarkTheme ? 'bg-rose-950/20 border-rose-900/50' : 'bg-rose-50 border-rose-100'}`}>
+                    <div className={`p-6 rounded-[18px] border ${isDarkTheme ? 'bg-rose-950/20 border-rose-900/50' : 'bg-rose-50 border-rose-100'}`}>
                         <p className={`text-sm font-medium leading-relaxed ${isDarkTheme ? 'text-rose-200' : 'text-rose-800'}`}>
                             Bạn đang thực hiện chặn địa chỉ IP <span className="font-black underline">{ipToBlock?.ip}</span> của <span className="font-black">{ipToBlock?.visitorName}</span>.
                         </p>
@@ -2730,7 +2721,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                     <div className="space-y-2">
                         <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest ml-1">Lý do chặn (không bắt buộc)</label>
                         <textarea
-                            className={`w-full border rounded-2xl p-4 text-sm focus:outline-none focus:ring-2 transition-all min-h-[100px] ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-white focus:ring-rose-500/20 focus:border-rose-400' : 'bg-slate-50 border-slate-200 focus:ring-rose-500/20 focus:border-rose-400 text-slate-800'}`}
+                            className={`w-full border rounded-[14px] p-4 text-sm focus:outline-none focus:ring-2 transition-all min-h-[100px] ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-white focus:ring-rose-500/20 focus:border-rose-400' : 'bg-slate-50 border-slate-200 focus:ring-rose-500/20 focus:border-rose-400 text-slate-800'}`}
                             placeholder="Ví dụ: Spam click, Attack detection..."
                             value={blockReason}
                             onChange={(e) => setBlockReason(e.target.value)}
@@ -2740,14 +2731,14 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                     <div className="flex items-center gap-3 pt-2">
                         <button
                             onClick={() => setShowBlockIPModal(false)}
-                            className="flex-1 h-12 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition-all"
+                            className="flex-1 h-12 bg-slate-100 text-slate-600 font-bold rounded-[14px] hover:bg-slate-200 transition-all"
                         >
                             Hủy bỏ
                         </button>
                         <button
                             onClick={handleBlockIP}
                             disabled={isBlocking}
-                            className="flex-1 h-12 bg-rose-500 text-white font-bold rounded-2xl hover:bg-rose-600 transition-all shadow-lg shadow-rose-500/30 flex items-center justify-center gap-2"
+                            className="flex-1 h-12 bg-rose-500 text-white font-bold rounded-[14px] hover:bg-rose-600 transition-all shadow-lg shadow-rose-500/30 flex items-center justify-center gap-2"
                         >
                             {isBlocking ? <RotateCw className="w-4 h-4 animate-spin" /> : <ShieldAlert className="w-4 h-4" />}
                             {isBlocking ? 'Đang xử lý...' : 'Xác nhận chặn'}
@@ -2771,7 +2762,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                 size="md"
             >
                 <div className="space-y-6">
-                    <div className={`p-6 rounded-[24px] border ${isDarkTheme ? 'bg-emerald-950/20 border-emerald-900/50' : 'bg-emerald-50 border-emerald-100/50'}`}>
+                    <div className={`p-6 rounded-[18px] border ${isDarkTheme ? 'bg-emerald-950/20 border-emerald-900/50' : 'bg-emerald-50 border-emerald-100/50'}`}>
                         <p className={`text-sm font-medium leading-relaxed ${isDarkTheme ? 'text-emerald-200' : 'text-emerald-800'}`}>
                             Bạn có chắc chắn muốn bỏ chặn địa chỉ IP <span className="font-bold underline">{selectedConv?.ip_address}</span>?
                         </p>
@@ -2783,13 +2774,13 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                     <div className="flex items-center gap-3">
                         <button
                             onClick={() => setShowUnblockIPModal(false)}
-                            className="flex-1 h-12 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition-all"
+                            className="flex-1 h-12 bg-slate-100 text-slate-600 font-bold rounded-[14px] hover:bg-slate-200 transition-all"
                         >
                             Hủy bỏ
                         </button>
                         <button
                             onClick={handleUnblockIP}
-                            className="flex-1 h-12 bg-emerald-500 text-white font-bold rounded-2xl hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2"
+                            className="flex-1 h-12 bg-emerald-500 text-white font-bold rounded-[14px] hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2"
                         >
                             <ShieldCheck className="w-4 h-4" />
                             Xác nhận bỏ chặn
@@ -2817,7 +2808,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                 size="md"
             >
                 <div className="space-y-6">
-                    <div className="p-6 bg-red-50 rounded-[28px] border border-red-100/50">
+                    <div className="p-6 bg-red-50 rounded-[18px] border border-red-100/50">
                         <p className="text-sm font-medium text-red-800 leading-relaxed">
                             Bạn có chắc chắn muốn xóa bản ghi phân tích này không?
                         </p>
@@ -2833,7 +2824,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                             value={deleteConfirmText}
                             onChange={(e) => setDeleteConfirmText(e.target.value)}
                             placeholder="Gõ DELETE vào đây..."
-                            className="w-full px-5 py-3.5 bg-white border-2 border-slate-100 rounded-[20px] text-sm font-bold focus:border-red-500 focus:ring-4 focus:ring-red-500/10 outline-none transition-all placeholder:text-slate-300"
+                            className="w-full px-5 py-3.5 bg-white border-2 border-slate-100 rounded-[14px] text-sm font-bold focus:border-red-500 focus:ring-4 focus:ring-red-500/10 outline-none transition-all placeholder:text-slate-300"
                         />
                     </div>
 
@@ -2844,14 +2835,14 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                 setIndexToDelete(null);
                                 setDeleteConfirmText('');
                             }}
-                            className="flex-1 h-12 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition-all font-mono tracking-wider"
+                            className="flex-1 h-12 bg-slate-100 text-slate-600 font-bold rounded-[14px] hover:bg-slate-200 transition-all font-mono tracking-wider"
                         >
                             Hủy bỏ
                         </button>
                         <button
                             onClick={confirmDelete}
                             disabled={deleteConfirmText !== 'DELETE'}
-                            className={`flex-1 h-12 font-bold rounded-2xl transition-all shadow-lg flex items-center justify-center gap-2 ${deleteConfirmText === 'DELETE' ? 'bg-red-500 text-white hover:bg-red-600 shadow-red-500/30' : 'bg-slate-100 text-slate-300 cursor-not-allowed shadow-none'}`}
+                            className={`flex-1 h-12 font-bold rounded-[14px] transition-all shadow-lg flex items-center justify-center gap-2 ${deleteConfirmText === 'DELETE' ? 'bg-red-500 text-white hover:bg-red-600 shadow-red-500/30' : 'bg-slate-100 text-slate-300 cursor-not-allowed shadow-none'}`}
                         >
                             <Trash2 className="w-4 h-4" />
                             Xác nhận xóa
@@ -2866,7 +2857,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                 onClose={() => setShowAnalysisConfirm(false)}
                 title={
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-amber-100 text-amber-600 rounded-xl">
+                        <div className="p-2 bg-amber-100 text-[var(--color-primary)] rounded-xl">
                             <Zap className="w-6 h-6" />
                         </div>
                         <span className="text-xl font-black text-slate-800 tracking-tight">Xác nhận thông số phân tích</span>
@@ -2875,7 +2866,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                 size="md"
             >
                 <div className="space-y-6">
-                    <div className="p-6 bg-slate-50 rounded-[28px] border border-slate-200/50 space-y-4">
+                    <div className="p-6 bg-slate-50 rounded-[18px] border border-slate-200/50 space-y-4">
                         <p className="text-sm font-medium text-slate-600 leading-relaxed border-b border-slate-200 pb-3">
                             Vui lòng kiểm tra lại cấu hình phân tích trước khi bắt đầu. AI sẽ quét toàn bộ hội thoại dựa trên các tiêu chí này:
                         </p>
@@ -2888,7 +2879,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                         {anSource === 'web' ? <Globe className="w-3.5 h-3.5 text-blue-500" /> :
                                             anSource === 'zalo' ? <MessageSquare className="w-3.5 h-3.5 text-blue-600" /> :
                                                 anSource === 'meta' ? <Facebook className="w-3.5 h-3.5 text-indigo-600" /> :
-                                                    <Sparkles className="w-3.5 h-3.5 text-amber-600" />}
+                                                    <Sparkles className="w-3.5 h-3.5 text-[var(--color-primary)]" />}
                                     </div>
                                     <span className="text-sm font-bold text-slate-800 uppercase">
                                         {anSource === 'web' ? 'Website' : anSource === 'zalo' ? 'Zalo OA' : anSource === 'meta' ? 'Meta' : anSource === 'org' ? 'Consultant' : 'Đa kênh'}
@@ -2929,7 +2920,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                     <div className="flex items-center gap-3">
                         <button
                             onClick={() => setShowAnalysisConfirm(false)}
-                            className="flex-1 h-12 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition-all font-mono tracking-wider"
+                            className="flex-1 h-12 bg-slate-100 text-slate-600 font-bold rounded-[14px] hover:bg-slate-200 transition-all font-mono tracking-wider"
                         >
                             Hủy bỏ
                         </button>
@@ -2938,7 +2929,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                 setShowAnalysisConfirm(false);
                                 triggerAnalysis();
                             }}
-                            className="flex-1 h-12 bg-slate-800 text-white font-bold rounded-2xl hover:bg-slate-900 transition-all shadow-lg shadow-slate-200 flex items-center justify-center gap-2"
+                            className="flex-1 h-12 bg-slate-800 text-white font-bold rounded-[14px] hover:bg-slate-900 transition-all shadow-lg shadow-slate-200 flex items-center justify-center gap-2"
                         >
                             <Zap className="w-4 h-4" />
                             Tiến hành phân tích
@@ -2973,7 +2964,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                     navigator.clipboard.writeText(publicUrl);
                                     toast.success('Đã sao chép link Báo cáo!');
                                 }}
-                                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl text-xs font-black transition-all shadow-lg shadow-slate-200 flex items-center gap-2 group/btn active:scale-95"
+                                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-[14px] text-xs font-black transition-all shadow-lg shadow-slate-200 flex items-center gap-2 group/btn active:scale-95"
                             >
                                 <Share2 className="w-4 h-4 group-hover/btn:rotate-12 transition-transform" /> Chia sẻ link hiện tại
                             </button>
@@ -2981,14 +2972,14 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                 onClick={() => {
                                     window.open(api.baseUrl + `/ai_chatbot.php?action=export_word&property_id=${propertyId}&index=${currentAnalysisIndex}`, '_blank');
                                 }}
-                                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black transition-all shadow-lg shadow-indigo-100 flex items-center gap-2 group/btn active:scale-95"
+                                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-[14px] text-xs font-black transition-all shadow-lg shadow-indigo-100 flex items-center gap-2 group/btn active:scale-95"
                             >
                                 <Download className="w-4 h-4 group-hover/btn:translate-y-0.5 transition-transform" /> Xuất file Word (.doc)
                             </button>
                             {!publicMode && (
                                 <button
                                     onClick={() => setAnalysisView('config')}
-                                    className="px-8 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black transition-all active:scale-95 shadow-xl shadow-slate-200"
+                                    className="px-8 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-[14px] text-xs font-black transition-all active:scale-95 shadow-xl shadow-slate-200"
                                 >
                                     Đóng
                                 </button>
@@ -3002,8 +2993,8 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                         <div className="p-8">
                             <div className="max-w-2xl mx-auto space-y-8">
                                 <div className="text-center space-y-3">
-                                    <div className={`relative inline-flex items-center justify-center w-16 h-16 rounded-[22px] mb-2 shadow-xl transition-all group ${isGroup ? 'bg-brand shadow-brand/20' : 'bg-gradient-to-br from-amber-400 to-amber-600 shadow-amber-200/50'}`}>
-                                        <div className={`absolute inset-0 opacity-30 blur-xl group-hover:opacity-50 transition-opacity ${isGroup ? 'bg-brand' : 'bg-gradient-to-br from-amber-400 to-amber-600'}`}></div>
+                                    <div className={`relative inline-flex items-center justify-center w-16 h-16 rounded-[14px] mb-2 shadow-xl transition-all group ${isGroup ? 'bg-[var(--color-primary)] shadow-[var(--color-primary)]/20' : 'bg-gradient-to-br from-[#BD1D2D] to-[#9A1523] shadow-amber-200/50'}`}>
+                                        <div className={`absolute inset-0 opacity-30 blur-xl group-hover:opacity-50 transition-opacity ${isGroup ? 'bg-[var(--color-primary)]' : 'bg-gradient-to-br from-[#BD1D2D] to-[#9A1523]'}`}></div>
                                         <Bot className="w-8 h-8 text-white relative z-10 drop-shadow-sm" />
                                     </div>
                                     <h3 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-slate-900 to-slate-600 uppercase tracking-tight">Thấu hiểu Khách hàng</h3>
@@ -3017,7 +3008,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                         <button
                                             onClick={() => setShowAnalysisConfirm(true)}
                                             disabled={isAnalyzing}
-                                            className={`relative w-full py-5 rounded-[24px] text-base font-black uppercase tracking-wider transition-all shadow-xl overflow-hidden group ${isAnalyzing
+                                            className={`relative w-full py-5 rounded-[18px] text-base font-black uppercase tracking-wider transition-all shadow-xl overflow-hidden group ${isAnalyzing
                                                 ? 'bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 bg-[length:200%_100%] animate-gradient-x cursor-not-allowed'
                                                 : 'bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 shadow-slate-300 hover:shadow-slate-400 hover:-translate-y-1 active:translate-y-0'
                                                 }`}
@@ -3088,7 +3079,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                         </button>
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-6 bg-slate-50/50 p-6 rounded-[32px] border border-slate-100 relative">
+                                    <div className="grid grid-cols-2 gap-6 bg-slate-50/50 p-6 rounded-[18px] border border-slate-100 relative">
                                         {/* Custom Source Dropdown */}
                                         <div className="space-y-2 relative">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1 flex items-center gap-2">
@@ -3102,7 +3093,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                                     setIsAnSourceOpen(!isAnSourceOpen);
                                                     setIsAnDateOpen(false);
                                                 }}
-                                                className="w-full h-12 flex items-center justify-between px-4 bg-white border border-slate-200 rounded-2xl cursor-pointer hover:border-slate-300 transition-all group shadow-sm"
+                                                className="w-full h-12 flex items-center justify-between px-4 bg-white border border-slate-200 rounded-[14px] cursor-pointer hover:border-slate-300 transition-all group shadow-sm"
                                             >
                                                 <span className="text-xs font-bold text-slate-700">
                                                     {anSource === 'all' ? 'Tất cả kênh kết nối' :
@@ -3116,7 +3107,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                             {isAnSourceOpen && (
                                                 <>
                                                     <div className="fixed inset-0 z-[60]" onClick={() => setIsAnSourceOpen(false)}></div>
-                                                    <div className="absolute left-0 right-0 bottom-full mb-2 bg-white border border-slate-100 rounded-2xl shadow-2xl z-[70] overflow-hidden py-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                                                    <div className="absolute left-0 right-0 bottom-full mb-2 bg-white border border-slate-100 rounded-[14px] shadow-2xl z-[70] overflow-hidden py-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
                                                         {[
                                                             ...(!isGroup ? [
                                                                 { id: 'web', label: 'Website Tracking' },
@@ -3144,7 +3135,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                         {/* Custom Date Dropdown */}
                                         <div className="space-y-2 relative">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1 flex items-center gap-2">
-                                                <div className="w-5 h-5 bg-gradient-to-br from-amber-400 to-orange-500 rounded-lg flex items-center justify-center shadow-sm shadow-amber-200">
+                                                <div className="w-5 h-5 bg-gradient-to-br from-[#BD1D2D] to-[#9A1523] rounded-lg flex items-center justify-center shadow-sm shadow-amber-200">
                                                     <Clock className="w-3 h-3 text-white" />
                                                 </div>
                                                 Khoảng Thời gian
@@ -3154,7 +3145,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                                     setIsAnDateOpen(!isAnDateOpen);
                                                     setIsAnSourceOpen(false);
                                                 }}
-                                                className="w-full h-12 flex items-center justify-between px-4 bg-white border border-slate-200 rounded-2xl cursor-pointer hover:border-slate-300 transition-all group shadow-sm"
+                                                className="w-full h-12 flex items-center justify-between px-4 bg-white border border-slate-200 rounded-[14px] cursor-pointer hover:border-slate-300 transition-all group shadow-sm"
                                             >
                                                 <span className="text-xs font-bold text-slate-700">
                                                     {anDatePreset === 'all' ? 'Toàn bộ lịch sử' :
@@ -3170,7 +3161,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                             {isAnDateOpen && (
                                                 <>
                                                     <div className="fixed inset-0 z-[60]" onClick={() => setIsAnDateOpen(false)}></div>
-                                                    <div className="absolute left-0 right-0 bottom-full mb-2 bg-white border border-slate-100 rounded-2xl shadow-2xl z-[70] overflow-hidden py-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                                                    <div className="absolute left-0 right-0 bottom-full mb-2 bg-white border border-slate-100 rounded-[14px] shadow-2xl z-[70] overflow-hidden py-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
                                                         {[
                                                             { id: 'all', label: 'Toàn bộ lịch sử' },
                                                             { id: 'today', label: 'Hôm nay' },
@@ -3186,7 +3177,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                                                     handleDatePreset(opt.id);
                                                                     setIsAnDateOpen(false);
                                                                 }}
-                                                                className={`px-4 py-2.5 text-xs font-bold cursor-pointer transition-colors ${anDatePreset === opt.id ? 'bg-amber-50 text-amber-600' : 'text-slate-600 hover:bg-slate-50'}`}
+                                                                className={`px-4 py-2.5 text-xs font-bold cursor-pointer transition-colors ${anDatePreset === opt.id ? 'bg-amber-50 text-[var(--color-primary)]' : 'text-slate-600 hover:bg-slate-50'}`}
                                                             >
                                                                 {opt.label}
                                                             </div>
@@ -3225,7 +3216,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                             <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest pl-1 mt-2">Báo cáo gần đây</p>
                                         )}
                                         {analysisHistory.length === 0 && (
-                                            <div className="py-8 px-6 bg-slate-50 rounded-2xl border border-slate-200 text-center">
+                                            <div className="py-8 px-6 bg-slate-50 rounded-[14px] border border-slate-200 text-center">
                                                 <Clock className="w-8 h-8 text-slate-300 mx-auto mb-3" />
                                                 <p className="text-xs font-bold text-slate-400 mb-1">Chưa có Báo cáo nào</p>
                                                 <p className="text-[10px] text-slate-400">Nhấn "Phân tích ngay" để tạo Báo cáo đầu tiên</p>
@@ -3248,11 +3239,11 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                                         setCurrentAnalysisIndex(idx);
                                                         setAnalysisView('report');
                                                     }}
-                                                    className="w-full py-4 px-5 bg-white border border-slate-200 text-slate-600 rounded-2xl text-[11px] font-bold hover:bg-slate-50 hover:border-amber-200 hover:shadow-md transition-all cursor-pointer flex items-center justify-between gap-2 shadow-sm relative overflow-hidden group/item"
+                                                    className="w-full py-4 px-5 bg-white border border-slate-200 text-slate-600 rounded-[14px] text-[11px] font-bold hover:bg-slate-50 hover:border-amber-200 hover:shadow-md transition-all cursor-pointer flex items-center justify-between gap-2 shadow-sm relative overflow-hidden group/item"
                                                 >
                                                     <div className="absolute left-0 top-0 bottom-0 w-1 bg-amber-400 opacity-0 group-hover/item:opacity-100 transition-opacity"></div>
                                                     <div className="flex items-center gap-3">
-                                                        <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover/item:bg-amber-50 group-hover/item:text-amber-600 transition-colors">
+                                                        <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover/item:bg-amber-50 group-hover/item:text-[var(--color-primary)] transition-colors">
                                                             <Clock className="w-4 h-4" />
                                                         </div>
                                                         <div className="flex flex-col gap-0.5">
@@ -3271,7 +3262,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                                                 <span className="text-[10px] text-slate-400 font-medium">
                                                                     Tài liệu {item.generated_at ? new Date(item.generated_at).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : `Bản ghi #${idx + 1}`}
                                                                 </span>
-                                                                <span className="text-[9px] text-amber-600 font-bold opacity-0 group-hover/item:opacity-100 transition-opacity ml-1">Click để xem lại</span>
+                                                                <span className="text-[9px] text-[var(--color-primary)] font-bold opacity-0 group-hover/item:opacity-100 transition-opacity ml-1">Click để xem lại</span>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -3283,7 +3274,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                                                 navigator.clipboard.writeText(publicUrl);
                                                                 toast.success('Đã sao chép link Báo cáo này!');
                                                             }}
-                                                            className="p-2 hover:bg-amber-100 text-amber-600 rounded-xl transition-all active:scale-90"
+                                                            className="p-2 hover:bg-amber-100 text-[var(--color-primary)] rounded-xl transition-all active:scale-90"
                                                             title="Chia sẻ Báo cáo này"
                                                         >
                                                             <Share2 className="w-4 h-4" />
@@ -3315,7 +3306,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                 <div className="space-y-1">
                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Chiến dịch phân tích</p>
                                     <div className="flex items-center gap-2">
-                                        <div className="px-2 py-1 bg-gradient-to-r from-amber-600 to-orange-500 rounded text-[10px] font-black text-white uppercase italic shadow-sm shadow-orange-100 flex items-center gap-1.5">
+                                        <div className="px-2 py-1 bg-gradient-to-r from-[#BD1D2D] to-[#9A1523] rounded text-[10px] font-black text-white uppercase italic shadow-sm shadow-orange-100 flex items-center gap-1.5">
                                             <Zap className="w-3 h-3 fill-current" /> Dữ liệu chất lượng cao
                                         </div>
                                         <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded">
@@ -3350,7 +3341,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                 <div className="mb-12">
                                     <div className="flex items-center justify-between mb-6">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200">
+                                            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-[14px] flex items-center justify-center shadow-lg shadow-blue-200">
                                                 <Activity className="w-6 h-6 text-white" />
                                             </div>
                                             <div>
@@ -3364,13 +3355,13 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                                 <span className="text-xs font-bold text-slate-600">Hoạt động thường</span>
                                             </div>
                                             <div className="flex items-center gap-2">
-                                                <div className="w-4 h-4 rounded bg-gradient-to-t from-amber-600 to-orange-400" />
+                                                <div className="w-4 h-4 rounded bg-gradient-to-t from-[#BD1D2D] to-[#9A1523]" />
                                                 <span className="text-xs font-bold text-slate-600">Giờ cao điểm</span>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <div className="bg-gradient-to-br from-slate-50 to-white h-96 rounded-[32px] border-2 border-slate-100 shadow-xl overflow-hidden relative">
+                                    <div className="bg-gradient-to-br from-slate-50 to-white h-96 rounded-[18px] border-2 border-slate-100 shadow-xl overflow-hidden relative">
                                         {/* Grid Background */}
                                         <div className="absolute inset-0 px-12 py-12 pointer-events-none z-0 flex flex-col justify-between">
                                             {[4, 3, 2, 1, 0].map(i => (
@@ -3407,7 +3398,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                                             {/* Bar */}
                                                             <div
                                                                 className={`w-full rounded-t-md mx-[1px] transition-all duration-500 ease-out cursor-pointer relative overflow-hidden ${isPeak
-                                                                    ? 'bg-gradient-to-t from-amber-600 to-orange-400 shadow-[0_0_10px_rgba(251,146,60,0.3)] z-10 scale-x-110'
+                                                                    ? 'bg-gradient-to-t from-[#BD1D2D] to-[#9A1523] shadow-[0_0_10px_rgba(251,146,60,0.3)] z-10 scale-x-110'
                                                                     : isHighActivity
                                                                         ? 'bg-gradient-to-t from-blue-500 to-cyan-400 hover:from-blue-400 hover:to-cyan-300'
                                                                         : 'bg-gradient-to-t from-slate-200 to-slate-100 hover:from-slate-300 hover:to-slate-200'
@@ -3421,7 +3412,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
 
                                                         {/* Hour label - Absolute Bottom but outside padding */}
                                                         <span className={`absolute -bottom-8 left-1/2 -translate-x-1/2 text-[9px] font-bold font-mono transition-colors ${isPeak
-                                                            ? 'text-amber-600 font-black scale-110'
+                                                            ? 'text-[var(--color-primary)] font-black scale-110'
                                                             : count > 0
                                                                 ? 'text-slate-500'
                                                                 : 'text-slate-300'
@@ -3456,7 +3447,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                         </div>
                                     </div>
 
-                                    <div className="bg-white rounded-[24px] border border-slate-200 shadow-sm overflow-hidden">
+                                    <div className="bg-white rounded-[18px] border border-slate-200 shadow-sm overflow-hidden">
                                         <div className="overflow-x-auto">
                                             <table className="w-full">
                                                 <thead>
@@ -3497,7 +3488,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                 </div>
                             )}
 
-                            <div className="prose prose-slate prose-sm max-w-none prose-headings:text-slate-800 prose-headings:font-black prose-p:text-slate-600 prose-p:leading-relaxed prose-strong:text-slate-900 prose-li:text-slate-600 bg-slate-50/10 p-4 lg:p-8 rounded-[32px] border border-slate-100 shadow-inner overflow-x-auto">
+                            <div className="prose prose-slate prose-sm max-w-none prose-headings:text-slate-800 prose-headings:font-black prose-p:text-slate-600 prose-p:leading-relaxed prose-strong:text-slate-900 prose-li:text-slate-600 bg-slate-50/10 p-4 lg:p-8 rounded-[18px] border border-slate-100 shadow-inner overflow-x-auto">
                                 {renderContent(analysisReport, 'ai')}
                             </div>
 
@@ -3570,7 +3561,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                     </div>
                                 </div>
 
-                                <div className="bg-white rounded-[24px] border border-slate-200 shadow-sm overflow-hidden">
+                                <div className="bg-white rounded-[18px] border border-slate-200 shadow-sm overflow-hidden">
                                     <div className="overflow-x-auto">
                                         <table className="w-full table-fixed">
                                             <thead>
@@ -3632,7 +3623,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                                                                 <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
                                                                                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Khách hàng</span>
                                                                             </div>
-                                                                            <div className="bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 p-4 rounded-[24px] rounded-tl-none text-[11px] text-slate-600 leading-relaxed italic w-full shadow-sm max-h-[250px] overflow-y-auto custom-scrollbar relative group/msg">
+                                                                            <div className="bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 p-4 rounded-[18px] rounded-tl-none text-[11px] text-slate-600 leading-relaxed italic w-full shadow-sm max-h-[250px] overflow-y-auto custom-scrollbar relative group/msg">
                                                                                 {renderContent(row.user, 'visitor')}
                                                                                 {row.user.length > 300 && <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-slate-50/90 to-transparent pointer-events-none opacity-0 group-hover/msg:opacity-100 transition-opacity" />}
                                                                             </div>
@@ -3644,7 +3635,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                                                                 <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
                                                                                 <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Tài liệu AI</span>
                                                                             </div>
-                                                                            <div className="bg-gradient-to-br from-emerald-50/60 to-teal-50/40 backdrop-blur-sm border border-emerald-100/80 p-5 rounded-[24px] rounded-tl-none text-[11px] text-slate-800 leading-relaxed w-full shadow-md relative group/msg-ai">
+                                                                            <div className="bg-gradient-to-br from-emerald-50/60 to-teal-50/40 backdrop-blur-sm border border-emerald-100/80 p-5 rounded-[18px] rounded-tl-none text-[11px] text-slate-800 leading-relaxed w-full shadow-md relative group/msg-ai">
                                                                                 <div className="max-h-[350px] overflow-y-auto custom-scrollbar pr-2">
                                                                                     <div className="prose prose-slate prose-xs max-w-none prose-p:leading-relaxed prose-pre:bg-[#1e1e2e] prose-pre:border-slate-800">
                                                                                         {renderContent(row.ai, 'ai')}
@@ -3808,7 +3799,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                 size="md"
             >
                 <div className="space-y-6">
-                    <div className="p-5 bg-slate-50 rounded-[28px] border border-slate-200/50 space-y-4">
+                    <div className="p-5 bg-slate-50 rounded-[18px] border border-slate-200/50 space-y-4">
                         <div className="flex items-center gap-3 pb-3 border-b border-slate-200/50">
                             <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
                                 <Info className="w-4 h-4 text-emerald-600" />
@@ -3870,7 +3861,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                     <div className="flex items-center gap-3">
                         <button
                             onClick={() => setShowExportModal(false)}
-                            className="flex-1 h-12 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition-all text-sm uppercase tracking-wider"
+                            className="flex-1 h-12 bg-slate-100 text-slate-600 font-bold rounded-[14px] hover:bg-slate-200 transition-all text-sm uppercase tracking-wider"
                         >
                             Hủy bỏ
                         </button>
@@ -3888,7 +3879,7 @@ const UnifiedChat: React.FC<UnifiedChatProps> = ({
                                 setShowExportModal(false);
                                 toast.success('Đang khởi tạo tệp CSV...');
                             }}
-                            className="flex-1 h-12 bg-emerald-500 text-white font-bold rounded-2xl hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
+                            className="flex-1 h-12 bg-emerald-500 text-white font-bold rounded-[14px] hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
                         >
                             <Download className="w-4 h-4" />
                             Xuất CSV

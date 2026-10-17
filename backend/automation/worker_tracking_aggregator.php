@@ -567,6 +567,7 @@ function syncStatsBuffer($pdo)
     // -----------------------------------------------------------------------
     // [OPTIMIZATION] Statement cache to prevent N+1 parsing
     static $stmtStatsCache = [];
+    $updatedSubscriberIds = [];
 
     foreach ($grouped as $agg) {
         $table = $agg['table'];
@@ -586,19 +587,22 @@ function syncStatsBuffer($pdo)
         try {
             $cacheKey = "{$table}_{$col}";
             if (!isset($stmtStatsCache[$cacheKey])) {
-                if ($table === 'zalo_subscribers') {
-                    $stmtStatsCache[$cacheKey] = $pdo->prepare("UPDATE $table SET $col = $col + ? WHERE id = ?");
-                } else {
-                    $stmtStatsCache[$cacheKey] = $pdo->prepare("UPDATE $table SET $col = $col + ? WHERE id = ? AND workspace_id = ?");
-                }
+                $stmtStatsCache[$cacheKey] = $pdo->prepare("UPDATE $table SET $col = COALESCE($col, 0) + ? WHERE id = ?");
             }
-            if ($table === 'zalo_subscribers') {
-                $stmtStatsCache[$cacheKey]->execute([$val, $id]);
-            } else {
-                $stmtStatsCache[$cacheKey]->execute([$val, $id, $agg['workspace_id']]);
+            $stmtStatsCache[$cacheKey]->execute([$val, $id]);
+            if ($table === 'subscribers' && !empty($id)) {
+                $updatedSubscriberIds[(string)$id] = true;
             }
         } catch (Exception $e) {
             error_log("Stats sync failed for $table.$col on $id: " . $e->getMessage());
+        }
+    }
+
+    if (!empty($updatedSubscriberIds) && function_exists('domationSyncSubscriberMatchOnly')) {
+        foreach (array_keys($updatedSubscriberIds) as $subIdToSync) {
+            try {
+                domationSyncSubscriberMatchOnly($pdo, (string)$subIdToSync);
+            } catch (\Throwable $eSync) {}
         }
     }
 

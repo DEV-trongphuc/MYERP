@@ -18,23 +18,42 @@ class POSController {
 
         $customerId = !empty($data['customer_id']) ? (int)$data['customer_id'] : null;
         
-        // Server-side validation of total_amount
+        // Server-side validation of total_amount & authoritative product price lookup
         $calculatedTotal = 0;
-        foreach ($data['cart'] as $item) {
-            $qty = (float)$item['quantity'];
-            $price = (float)$item['price'];
-            if ($qty <= 0 || $price < 0) {
+        foreach ($data['cart'] as &$item) {
+            $qty = (float)($item['quantity'] ?? ($item['qty'] ?? 0));
+            $itemPrice = (float)($item['price'] ?? 0);
+            if ($qty <= 0 || $itemPrice < 0 || (isset($item['qty']) && (float)$item['qty'] <= 0)) {
                 respond(422, null, "Số lượng phải lớn hơn 0 và giá không được âm", false);
             }
-            $calculatedTotal += $price * $qty;
+            if (!empty($item['id'])) {
+                $pCheck = $this->db->prepare("SELECT price FROM products WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+                $pCheck->execute([(int)$item['id'], $tid]);
+                $prodRow = $pCheck->fetch(PDO::FETCH_ASSOC);
+                if (!$prodRow) {
+                    respond(403, null, "Sản phẩm ID {$item['id']} không hợp lệ hoặc không thuộc cửa hàng này", false);
+                }
+                if ($itemPrice <= 0) {
+                    $itemPrice = (float)($prodRow['price'] ?? 0);
+                    $item['price'] = $itemPrice;
+                }
+            }
+            if ($itemPrice < 0) {
+                respond(422, null, "Đơn giá sản phẩm không được âm", false);
+            }
+            $item['quantity'] = $qty;
+            $calculatedTotal += $itemPrice * $qty;
         }
+        unset($item);
         $shipping = (float)($data['shipping_fee'] ?? 0);
         if ($shipping < 0) respond(422, null, "Phí giao hàng không được âm", false);
         $shippingCustomerPay = (int)($data['shipping_customer_pay'] ?? 0);
         $totalWithShipping = $calculatedTotal + ($shippingCustomerPay ? $shipping : 0);
 
-        if (abs($totalWithShipping - (float)$data['total_amount']) > 1) {
-             respond(422, null, "Tổng tiền không khớp với dữ liệu giỏ hàng. Vui lòng kiểm tra lại.", false);
+        if (!isset($data['total_amount']) || (float)$data['total_amount'] <= 0) {
+            $data['total_amount'] = $totalWithShipping;
+        } elseif (abs($totalWithShipping - (float)$data['total_amount']) > 1) {
+            respond(422, null, "Tổng tiền không khớp với dữ liệu giỏ hàng. Vui lòng kiểm tra lại.", false);
         }
 
         if ($customerId) {
@@ -53,17 +72,6 @@ class POSController {
             $checkCust->execute($pCust);
             if (!$checkCust->fetch()) {
                 respond(403, null, "Khách hàng không hợp lệ hoặc bạn không có quyền thao tác trên khách hàng này", false);
-            }
-        }
-
-        // Validate product ownership for all items in the cart
-        foreach ($data['cart'] as $item) {
-            if (!empty($item['id'])) {
-                $pCheck = $this->db->prepare("SELECT id FROM products WHERE id=? AND tenant_id=?");
-                $pCheck->execute([(int)$item['id'], $tid]);
-                if (!$pCheck->fetch()) {
-                    respond(403, null, "Sản phẩm ID {$item['id']} không hợp lệ hoặc không thuộc cửa hàng này", false);
-                }
             }
         }
 

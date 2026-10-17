@@ -65,11 +65,17 @@ switch ($method) {
             $totalStmt->execute($params);
             $total = (int) $totalStmt->fetchColumn();
 
-            // 2. Get Data with Counts
-            $sql = "SELECT t.id, t.name, t.description, t.status, 
+            // 2. Get Data with Counts & Creator Attribution
+            $sql = "SELECT t.id, t.name, t.color, t.description, t.status, t.created_at, t.created_by, t.updated_by,
+                           u_creator.id AS creator_id,
+                           u_creator.full_name AS creator_name,
+                           u_creator.email AS creator_email,
+                           u_creator.avatar_url AS creator_avatar,
+                           u_creator.role AS creator_role,
                            COUNT(st.subscriber_id) as subscriber_count
                     FROM domation_tags t
                     LEFT JOIN subscriber_tags st ON t.id = st.tag_id AND st.workspace_id = t.workspace_id
+                    LEFT JOIN users u_creator ON u_creator.id = t.created_by
                     WHERE $whereSql
                     GROUP BY t.id
                     ORDER BY t.name ASC
@@ -77,7 +83,11 @@ switch ($method) {
             
             $stmt = $pdo->prepare($sql);
             $stmt->execute($params);
-            $tags = $stmt->fetchAll();
+            $tags = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($tags as &$tRow) {
+                $tRow['creator'] = function_exists('domationFormatCreator') ? domationFormatCreator($tRow) : null;
+            }
+            unset($tRow);
 
             jsonResponse(true, [
                 'data' => $tags,
@@ -98,6 +108,7 @@ switch ($method) {
             $data = json_decode(file_get_contents("php://input"), true);
             $name = strtoupper(preg_replace('/\s+/', '_', trim($data['name'] ?? '')));
             $description = trim($data['description'] ?? '');
+            $color = trim((string)($data['color'] ?? '#6366f1')) ?: '#6366f1';
             if (!$name)
                 jsonResponse(false, null, 'Tên nhãn không được để trống');
 
@@ -106,10 +117,36 @@ switch ($method) {
             if ($stmt->fetch())
                 jsonResponse(false, null, 'Nhãn này đã tồn tại');
 
+            $actorUserId = function_exists('get_current_user_id') ? get_current_user_id() : null;
             $id = bin2hex(random_bytes(8)); // [FIX] uniqid() is time-based; race condition in high-concurrency → use CSPRNG instead
-            $stmt = $pdo->prepare("INSERT INTO domation_tags (workspace_id, id, name, description, status) VALUES (?, ?, ?, ?, 'active')");
-            $stmt->execute([$workspace_id, $id, $name, $description]);
-            jsonResponse(true, ['id' => $id, 'name' => $name, 'description' => $description, 'status' => 'active', 'subscriber_count' => 0]);
+            $stmt = $pdo->prepare("INSERT INTO domation_tags (workspace_id, id, name, color, description, status, created_by, updated_by, created_at) VALUES (?, ?, ?, ?, ?, 'active', ?, ?, NOW())");
+            $stmt->execute([$workspace_id, $id, $name, $color, $description, $actorUserId, $actorUserId]);
+
+            try {
+                if (class_exists('DomationContactMatcher') && method_exists('DomationContactMatcher', 'syncDomationTagToCrm')) {
+                    DomationContactMatcher::syncDomationTagToCrm($pdo, $name, $color, (int)$workspace_id);
+                }
+            } catch (\Throwable $eSyncCrm) {
+            }
+
+            $userInfo = function_exists('get_current_user_info') ? get_current_user_info() : [];
+            jsonResponse(true, [
+                'id' => $id,
+                'name' => $name,
+                'color' => $color,
+                'description' => $description,
+                'status' => 'active',
+                'subscriber_count' => 0,
+                'created_by' => $actorUserId,
+                'updated_by' => $actorUserId,
+                'creator' => function_exists('domationFormatCreator') ? domationFormatCreator([
+                    'creator_id' => $userInfo['id'] ?? $actorUserId,
+                    'creator_name' => $userInfo['full_name'] ?? '',
+                    'creator_email' => $userInfo['email'] ?? '',
+                    'creator_avatar' => $userInfo['avatar_url'] ?? null,
+                    'creator_role' => $userInfo['role'] ?? '',
+                ]) : null,
+            ]);
         } catch (Exception $e) {
             jsonResponse(false, null, 'Lỗi hệ thống, vui lòng thử lại.');
         }
@@ -120,6 +157,7 @@ switch ($method) {
             jsonResponse(false, null, 'ID required');
         $data = json_decode(file_get_contents("php://input"), true);
         $route = $_GET['route'] ?? '';
+        $actorUserId = function_exists('get_current_user_id') ? get_current_user_id() : null;
 
         // [TOGGLE STATUS] PUT ?route=toggle_status — Must come BEFORE rename logic
         if ($route === 'toggle_status') {
@@ -128,7 +166,7 @@ switch ($method) {
             $curStatus = $stmtCur->fetchColumn();
             if ($curStatus === false) jsonResponse(false, null, 'Không tìm thấy nhãn');
             $newStatus = $curStatus === 'active' ? 'inactive' : 'active';
-            $pdo->prepare("UPDATE domation_tags SET status = ? WHERE id = ? AND workspace_id = ?")->execute([$newStatus, $path, $workspace_id]);
+            $pdo->prepare("UPDATE domation_tags SET status = ?, updated_by = ? WHERE id = ? AND workspace_id = ?")->execute([$newStatus, $actorUserId, $path, $workspace_id]);
             jsonResponse(true, ['id' => $path, 'status' => $newStatus], 'Đã ' . ($newStatus === 'active' ? 'kích hoạt' : 'vô hiệu hoá') . ' nhãn');
         }
 
@@ -141,9 +179,6 @@ switch ($method) {
         }
 
         // [FIX 2] Duplicate name check against OTHER tag IDs BEFORE transaction.
-        // Without this, renaming Tag B to the same name as Tag A would either:
-        //   a) Throw a DB UNIQUE constraint error inside the transaction (ugly rollback), OR
-        //   b) Create ["VIP", "VIP"] duplicates in subscriber JSON arrays (data corruption).
         $stmtDup = $pdo->prepare("SELECT id FROM domation_tags WHERE name = ? AND id != ? AND workspace_id = ?");
         $stmtDup->execute([$newName, $path, $workspace_id]);
         if ($stmtDup->fetch()) {
@@ -161,14 +196,11 @@ switch ($method) {
                 throw new Exception("Không tìm thấy nhãn hoặc không có quyền");
 
             // 2. Cập nhật bảng tags
-            $stmtUp = $pdo->prepare("UPDATE domation_tags SET name = ?, description = ? WHERE id = ? AND workspace_id = ?");
-            $stmtUp->execute([$newName, $newDesc, $path, $workspace_id]);
+            $stmtUp = $pdo->prepare("UPDATE domation_tags SET name = ?, description = ?, updated_by = ? WHERE id = ? AND workspace_id = ?");
+            $stmtUp->execute([$newName, $newDesc, $actorUserId, $path, $workspace_id]);
 
             // 3. Nếu đổi tên -> Cập nhật TOÀN BỘ subscriber VÀ Flows
             if ($oldName !== $newName) {
-                // 3a. Cập nhật subscribers.tags JSON (legacy sync for backward compat)
-                // [FIX] Instead of WHERE JSON_CONTAINS (full-table scan + lock on 10M rows),
-                // use subscriber_tags (indexed) to get the affected IDs, then chunk-UPDATE.
                 $stmtAffected = $pdo->prepare(
                     "SELECT st.subscriber_id FROM subscriber_tags st WHERE st.tag_id = ? AND st.workspace_id = ?"
                 );
@@ -177,7 +209,6 @@ switch ($method) {
 
                 foreach (array_chunk($affectedSubIds, 1000) as $chunk) {
                     $ph = implode(',', array_fill(0, count($chunk), '?'));
-                    // Update the legacy JSON tags column for subscribers in this chunk only
                     $pdo->prepare(
                         "UPDATE subscribers
                          SET tags = JSON_SET(tags, JSON_UNQUOTE(JSON_SEARCH(tags, 'one', ?)), ?)
@@ -195,7 +226,6 @@ switch ($method) {
                     $steps = json_decode($flow['steps'], true);
                     $modified = false;
 
-                    // Recursive walk — exact match only (===), never partial replace
                     array_walk_recursive($steps, function (&$value) use ($oldName, $newName, &$modified) {
                         if ($value === $oldName) {
                             $value = $newName;
@@ -204,9 +234,6 @@ switch ($method) {
                     });
 
                     if ($modified) {
-                        // [FIX 3] JSON_UNESCAPED_UNICODE: prevents Vietnamese/emoji chars
-                        // being stored as escaped sequences (e.g. "chào" → "ch\u00e0o")
-                        // which bloats DB storage and breaks raw JSON queries.
                         $pdo->prepare("UPDATE flows SET steps = ? WHERE id = ? AND workspace_id = ?")
                             ->execute([json_encode($steps, JSON_UNESCAPED_UNICODE), $flow['id'], $workspace_id]);
                     }
@@ -214,10 +241,17 @@ switch ($method) {
             }
 
             $pdo->commit();
+
+            try {
+                if (class_exists('DomationContactMatcher') && method_exists('DomationContactMatcher', 'renameDomationTagInCrm')) {
+                    DomationContactMatcher::renameDomationTagInCrm($pdo, (string)$oldName, (string)$newName, null, (int)$workspace_id);
+                }
+            } catch (\Throwable $eSyncCrm) {
+            }
+
             jsonResponse(true, ['id' => $path, 'name' => $newName], 'Đã cập nhật nhãn và đồng bộ toàn hệ thống');
         } catch (Exception $e) {
             $pdo->rollBack();
-            // [FIX BUG-TAGS-3] Pass actual error message through (e.g. "Tag not found").
             jsonResponse(false, null, $e->getMessage());
         }
         break;
@@ -234,7 +268,6 @@ switch ($method) {
             $stmtN->execute([$path, $workspace_id]);
             $tagName = $stmtN->fetchColumn();
 
-            // [FIX] Verify ownership before proceeding to wipe child tables
             if (!$tagName) {
                 throw new Exception("Không tìm thấy nhãn hoặc không có quyền");
             }
@@ -267,19 +300,9 @@ switch ($method) {
             // 3. Xóa bản ghi tag
             $pdo->prepare("DELETE FROM domation_tags WHERE id = ? AND workspace_id = ?")->execute([$path, $workspace_id]);
 
-            // [FIX BUG-TAGS-1] Commit BEFORE chunk legacy-JSON cleanup.
-            // Previously ALL chunk UPDATEs ran inside this transaction, holding row-level locks
-            // for every affected subscriber row for the entire duration (potentially 100+ chunks
-            // for large tag sets). This blocks concurrent reads/writes for minutes.
-            // The subscriber_tags DELETE above already atomically breaks the relational link.
-            // Legacy JSON sync is best-effort for backward compat — run outside transaction
-            // so locks are released between chunks.
             $pdo->commit();
 
             // 2. Legacy subscribers.tags JSON sync (outside transaction, best-effort)
-            // [FIX] Use subscriber_tags (indexed) to get affected IDs first, then chunk.
-            // Old: WHERE JSON_CONTAINS on 10M rows = full table scan + long lock.
-            // New: index lookup via subscriber_tags → chunk UPDATE to release locks between batches.
             foreach (array_chunk($affectedSubIds, 1000) as $chunk) {
                 $ph = implode(',', array_fill(0, count($chunk), '?'));
                 $pdo->prepare(
@@ -289,12 +312,16 @@ switch ($method) {
                 )->execute(array_merge([$tagName], $chunk, [$workspace_id, $tagName]));
             }
 
+            try {
+                if (class_exists('DomationContactMatcher') && method_exists('DomationContactMatcher', 'deleteDomationTagInCrm')) {
+                    DomationContactMatcher::deleteDomationTagInCrm($pdo, (string)$tagName, (int)$workspace_id);
+                }
+            } catch (\Throwable $eSyncCrm) {
+            }
+
             jsonResponse(true, ['id' => $path], 'Đã xóa nhãn hoàn toàn');
         } catch (Exception $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
-            // [FIX BUG-TAGS-2] Pass through the actual error message so admins can see
-            // WHY the deletion failed (e.g. "used in active flow 'X'").
-            // Previously a generic 'Lỗi hệ thống' was returned, hiding critical context.
             jsonResponse(false, null, $e->getMessage());
         }
         break;

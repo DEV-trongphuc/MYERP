@@ -1452,10 +1452,10 @@ const AITrainingManager: React.FC<AITrainingManagerProps> = ({ onClose, category
                     --brand-surface: ${isDarkTheme ? 'hsl(var(--brand-h), var(--brand-s), 10%)' : 'hsl(var(--brand-h), var(--brand-s), 98.5%)'};
                     --brand-shadow: hsla(var(--brand-h), var(--brand-s), var(--brand-l), 0.12);
                 }
-                .bg-brand { background-color: var(--brand-primary) !important; }
-                .text-brand { color: var(--brand-primary) !important; }
-                .from-brand { --tw-gradient-from: var(--brand-primary) !important; --tw-gradient-to: var(--brand-primary-dark) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
-                .to-brand-dark { --tw-gradient-to: var(--brand-primary-dark) !important; }
+                .bg-[var(--color-primary)] { background-color: var(--brand-primary) !important; }
+                .text-[var(--color-primary)] { color: var(--brand-primary) !important; }
+                .from-[var(--color-primary)] { --tw-gradient-from: var(--brand-primary) !important; --tw-gradient-to: var(--brand-primary-dark) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+                .to-[#9A1523] { --tw-gradient-to: var(--brand-primary-dark) !important; }
                 .ai-space-root, .ai-space-root * { font-family: 'Roboto', sans-serif !important; }
             `}} />
             {/* Content */}
@@ -1467,12 +1467,12 @@ const AITrainingManager: React.FC<AITrainingManagerProps> = ({ onClose, category
                                 <div className="flex items-center gap-6">
                                     <button
                                         onClick={() => setActiveTab('inbox')}
-                                        className={`w-12 h-12 rounded-[20px] flex items-center justify-center transition-all shadow-sm hover:shadow-md group ${isDarkTheme ? 'bg-slate-800 border border-slate-700 hover:bg-slate-750' : 'bg-white border border-slate-100 hover:bg-slate-50'}`}
+                                        className={`w-12 h-12 rounded-[14px] flex items-center justify-center transition-all shadow-sm hover:shadow-md group ${isDarkTheme ? 'bg-slate-800 border border-slate-700 hover:bg-slate-750' : 'bg-white border border-slate-100 hover:bg-slate-50'}`}
                                     >
                                         <ArrowLeft className={`w-6 h-6 transition-colors ${isDarkTheme ? 'text-slate-500 group-hover:text-slate-200' : 'text-slate-400 group-hover:text-slate-900'}`} />
                                     </button>
                                     <div className="flex items-center gap-4">
-                                        <div className={`w-14 h-14 rounded-[22px] bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center text-white shadow-xl shadow-brand/20 transition-all duration-500`}>
+                                        <div className={`w-14 h-14 rounded-[14px] bg-gradient-to-br from-[var(--color-primary)] to-[#9A1523] flex items-center justify-center text-white shadow-xl shadow-[var(--color-primary)]/20 transition-all duration-500`}>
                                             <Activity className="w-7 h-7" />
                                         </div>
                                         <div>

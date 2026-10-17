@@ -780,121 +780,96 @@ const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
                             </div>
                         </div>
 
-                        {/* Status Stats - Reorganized Layout */}
-                        <div className="flex items-start justify-between gap-4 mt-4 pt-4 border-t border-slate-100">
-                            {/* Left: Status filters */}
-                            <div className="flex items-center gap-3 flex-wrap flex-1 pb-2">
-                                {['all', 'active', 'lead', 'customer', 'unsubscribed', 'bounced', 'complained'].map(status => {
-                                    // Calculate total from stats excluding has_phone (it's a filter, not a status)
-                                    const totalFromStats = Object.entries(stats)
-                                        .filter(([key]) => key !== 'has_phone' && key !== 'total')
-                                        .reduce((sum, [, value]) => sum + (Number(value) || 0), 0);
-                                    const count = status === 'all' ? (totalFromStats || totalCount) : (stats[status] || 0);
+                        {/* Interactive 4 KPI Quick-Filter Cards (TẤT CẢ, ACTIVE, UNSUB, CÓ SĐT) */}
+                        {(() => {
+                            const totalFromStats = Object.entries(stats)
+                                .filter(([key]) => key !== 'has_phone' && key !== 'total')
+                                .reduce((sum, [, value]) => sum + (Number(value) || 0), 0);
+                            const allCount = totalFromStats || Number(stats.total) || totalCount || 0;
+                            const activeCount = Number(stats.active ?? stats.Subscribed ?? 0);
+                            const unsubCount = Number(stats.unsubscribed ?? stats.Unsubscribed ?? 0);
+                            const phoneCount = Number(stats.has_phone ?? 0);
 
-                                    if (count === 0 && !['all', 'active'].includes(status)) return null;
+                            const kpiCards = [
+                                {
+                                    key: 'all',
+                                    label: 'TẤT CẢ',
+                                    count: allCount,
+                                    dotColor: 'bg-amber-500',
+                                    activeClass: 'bg-amber-50 border-amber-400 text-amber-700 ring-2 ring-amber-400/20 shadow-sm',
+                                    textClass: 'text-amber-700'
+                                },
+                                {
+                                    key: 'active',
+                                    label: 'ACTIVE',
+                                    count: activeCount,
+                                    dotColor: 'bg-emerald-500',
+                                    activeClass: 'bg-emerald-50 border-emerald-400 text-emerald-700 ring-2 ring-emerald-400/20 shadow-sm',
+                                    textClass: 'text-emerald-700'
+                                },
+                                {
+                                    key: 'unsubscribed',
+                                    label: 'UNSUB',
+                                    count: unsubCount,
+                                    dotColor: 'bg-slate-400',
+                                    activeClass: 'bg-slate-100 border-slate-400 text-slate-800 ring-2 ring-slate-400/20 shadow-sm',
+                                    textClass: 'text-slate-700'
+                                },
+                                {
+                                    key: 'has_phone',
+                                    label: 'CÓ SĐT',
+                                    count: phoneCount,
+                                    isPhone: true,
+                                    dotColor: 'bg-emerald-500',
+                                    activeClass: 'bg-emerald-50 border-emerald-500 text-emerald-700 ring-2 ring-emerald-500/20 shadow-sm',
+                                    textClass: 'text-emerald-700'
+                                }
+                            ];
 
-                                    let colorClass = "text-slate-600";
-                                    let dotColor = "bg-slate-400";
-                                    let activeBorder = "border-slate-200";
-                                    let activeBg = "bg-slate-50";
-                                    let label = status;
-
-                                    switch (status) {
-                                        case 'all':
-                                            colorClass = "text-amber-700";
-                                            dotColor = "bg-amber-600";
-                                            activeBorder = "border-amber-400";
-                                            activeBg = "bg-amber-50";
-                                            label = "Tất cả";
-                                            break;
-                                        case 'active':
-                                            colorClass = "text-emerald-700";
-                                            dotColor = "bg-emerald-500";
-                                            activeBorder = "border-emerald-400";
-                                            activeBg = "bg-emerald-50";
-                                            label = "Active";
-                                            break;
-                                        case 'lead':
-                                            colorClass = "text-blue-700";
-                                            dotColor = "bg-blue-500";
-                                            activeBorder = "border-blue-400";
-                                            activeBg = "bg-blue-50";
-                                            label = "Lead";
-                                            break;
-                                        case 'customer':
-                                            colorClass = "text-indigo-700";
-                                            dotColor = "bg-indigo-500";
-                                            activeBorder = "border-indigo-400";
-                                            activeBg = "bg-indigo-50";
-                                            label = "Customer";
-                                            break;
-                                        case 'unsubscribed':
-                                            label = "Unsub";
-                                            break;
-                                        case 'bounced':
-                                            colorClass = "text-rose-700";
-                                            dotColor = "bg-rose-500";
-                                            activeBorder = "border-rose-400";
-                                            activeBg = "bg-rose-50";
-                                            label = "Bounced";
-                                            break;
-                                        case 'complained':
-                                            colorClass = "text-red-800";
-                                            dotColor = "bg-red-500";
-                                            activeBorder = "border-red-400";
-                                            activeBg = "bg-red-50";
-                                            label = "Spam";
-                                            break;
-                                    }
-
-                                    const isActive = activeStatusFilter === status;
-
-                                    return (
-                                        <button
-                                            key={status}
-                                            onClick={() => onStatusFilter(status)}
-                                            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all duration-200 whitespace-nowrap ${isActive
-                                                ? `${activeBg} ${activeBorder} shadow-sm z-10`
-                                                : 'bg-white border-transparent hover:bg-slate-50 hover:border-slate-100'
+                            return (
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate-200/80">
+                                    {kpiCards.map(card => {
+                                        const isActive =
+                                            activeStatusFilter === card.key ||
+                                            (card.key === 'active' && activeStatusFilter === 'Subscribed') ||
+                                            (card.key === 'unsubscribed' && activeStatusFilter === 'Unsubscribed');
+                                        return (
+                                            <button
+                                                key={card.key}
+                                                type="button"
+                                                onClick={() => onStatusFilter(isActive && card.key !== 'all' ? 'all' : card.key)}
+                                                className={`flex items-center justify-between px-3.5 py-2.5 rounded-2xl border transition-all duration-200 cursor-pointer text-left ${
+                                                    isActive
+                                                        ? card.activeClass
+                                                        : 'bg-white border-slate-200/80 hover:bg-slate-50 hover:border-slate-300'
                                                 }`}
-                                        >
-                                            <div className={`w-2 h-2 rounded-full ${dotColor} ${isActive ? 'animate-pulse' : ''}`} />
-                                            <div className="flex flex-col items-start leading-tight">
-                                                <span className={`text-[9px] font-bold uppercase tracking-wider ${isActive ? 'text-slate-800' : 'text-slate-400'}`}>
-                                                    {label}
-                                                </span>
-                                                <span className={`text-sm font-bold ${isActive ? colorClass : 'text-slate-500'}`}>
-                                                    {(count || 0).toLocaleString()}
-                                                </span>
-                                            </div>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-
-                            {/* Right: Phone count - separate section */}
-                            {stats.has_phone > 0 && (
-                                <div className="flex-shrink-0">
-                                    <button
-                                        onClick={() => onStatusFilter('has_phone')}
-                                        className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all duration-200 whitespace-nowrap ${activeStatusFilter === 'has_phone'
-                                            ? 'bg-emerald-50 border-emerald-400 shadow-sm z-10'
-                                            : 'bg-white border-transparent hover:bg-slate-50 hover:border-slate-100'
-                                            }`}
-                                    >
-                                        <Phone className={`w-3.5 h-3.5 ${activeStatusFilter === 'has_phone' ? 'text-emerald-600' : 'text-emerald-500'}`} />
-                                        <div className="flex flex-col items-start leading-tight">
-                                            <span className={`text-[9px] font-bold uppercase tracking-wider ${activeStatusFilter === 'has_phone' ? 'text-slate-800' : 'text-slate-400'}`}>
-                                                Có SĐT
-                                            </span>
-                                            <span className={`text-sm font-bold ${activeStatusFilter === 'has_phone' ? 'text-emerald-700' : 'text-slate-500'}`}>
-                                                {(stats.has_phone || 0).toLocaleString()}
-                                            </span>
-                                        </div>
-                                    </button>
+                                            >
+                                                <div className="flex items-center gap-2.5">
+                                                    {card.isPhone ? (
+                                                        <Phone className={`w-4 h-4 ${isActive ? 'text-emerald-600' : 'text-emerald-500'}`} />
+                                                    ) : (
+                                                        <div className={`w-2.5 h-2.5 rounded-full ${card.dotColor} ${isActive ? 'animate-pulse' : ''}`} />
+                                                    )}
+                                                    <div className="flex flex-col items-start leading-tight">
+                                                        <span className={`text-[10px] font-black uppercase tracking-wider ${isActive ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                            {card.label}
+                                                        </span>
+                                                        <span className={`text-base font-black tabular-nums mt-0.5 ${isActive ? card.textClass : 'text-slate-700'}`}>
+                                                            {card.count.toLocaleString('vi-VN')}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                {isActive && (
+                                                    <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded-md bg-white/80 text-slate-700 border border-slate-200">
+                                                        Đang lọc
+                                                    </span>
+                                                )}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
-                            )}
-                        </div>
+                            );
+                        })()}
                     </div>
 
                     {/* Toolbar */}
@@ -987,7 +962,7 @@ const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
                                         </td>
                                     </tr>
                                 )}
-                                {loading && members.length === 0 ? (
+                                {loading ? (
                                     [...Array(6)].map((_, i) => (
                                         <tr key={i}>
                                             <td className="px-4 py-3 pl-6">
@@ -1009,7 +984,7 @@ const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
                                 ) : members.length === 0 ? (
                                     <tr>
                                         <td colSpan={4} className="py-10 text-center text-slate-400 text-xs font-medium italic">
-                                            {loading ? 'Đang tải dữ liệu...' : 'Không tìm thấy thành viên phù hợp.'}
+                                            Không tìm thấy thành viên phù hợp.
                                         </td>
                                     </tr>
                                 ) : members.map(member => (

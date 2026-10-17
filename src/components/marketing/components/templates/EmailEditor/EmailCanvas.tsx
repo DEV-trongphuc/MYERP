@@ -103,6 +103,7 @@ const EmailCanvas: React.FC<EmailCanvasProps> = ({
 
     const handleDragEnd = (e: React.DragEvent) => {
         e.preventDefault();
+        (window as any).__mktDraggingToolboxType = '';
         setDragOverId(null);
         setDropPosition(null);
         setDraggingBlockId(null);
@@ -110,7 +111,8 @@ const EmailCanvas: React.FC<EmailCanvasProps> = ({
 
     const handleDrop = (e: React.DragEvent, targetId: string) => {
         e.preventDefault(); e.stopPropagation();
-        const type = e.dataTransfer.getData('type');
+        const type = e.dataTransfer.getData('type') || (window as any).__mktDraggingToolboxType || '';
+        (window as any).__mktDraggingToolboxType = '';
         const layout = e.dataTransfer.getData('layout');
         const movingId = e.dataTransfer.getData('movingId');
         const payload = e.dataTransfer.getData('payload');
@@ -192,8 +194,9 @@ const EmailCanvas: React.FC<EmailCanvasProps> = ({
 
         setDragOverId(id);
 
-        // Check if dragging a preset (which are usually sections)
-        const draggingType = e.dataTransfer.getData('type');
+        // Check if dragging a preset or existing block (since e.dataTransfer.getData('type') is empty in dragover)
+        const draggingBlock = draggingBlockId ? findBlock(draggingBlockId, blocks) : null;
+        const draggingType = draggingBlock ? draggingBlock.type : (e.dataTransfer.getData('type') || (window as any).__mktDraggingToolboxType || '');
         const smartPresetsConfig = ['double_card', 'review_card', 'download_badges', 'feature_card', 'header_gradient', 'article_list', 'ecommerce_product', 'steps_flow', 'steps_flow_number'];
         const isPreset = smartPresetsConfig.includes(draggingType);
 
@@ -403,7 +406,7 @@ const EmailCanvas: React.FC<EmailCanvasProps> = ({
     if (mode === 'code') {
         const isMobile = viewMode === 'mobile';
         return (
-            <div className="flex-1 flex overflow-hidden bg-slate-900 border border-slate-800 rounded-2xl m-4 shadow-2xl">
+            <div className="flex-1 flex overflow-hidden bg-slate-900 border border-slate-800 rounded-[14px] m-4 shadow-2xl">
                 {/* Left: Code Editor */}
                 <div className="flex-1 flex flex-col min-w-[300px] border-r border-slate-800">
                     <div className="flex justify-between items-center px-6 py-4 bg-slate-950 border-b border-slate-800 shrink-0">
@@ -439,7 +442,7 @@ const EmailCanvas: React.FC<EmailCanvasProps> = ({
                         }}
                     >
                         <div 
-                            className={`transition-all duration-500 flex flex-col overflow-hidden relative mx-auto ${isMobile ? 'w-[375px] h-[600px] rounded-[40px] border-[12px] border-slate-800 shadow-2xl bg-white' : 'w-full h-full max-w-[600px] border border-slate-200 rounded-2xl bg-white'}`}
+                            className={`transition-all duration-500 flex flex-col overflow-hidden relative mx-auto ${isMobile ? 'w-[375px] h-[600px] rounded-[18px] border-[12px] border-slate-800 shadow-2xl bg-white' : 'w-full h-full max-w-[600px] border border-slate-200 rounded-[14px] bg-white'}`}
                         >
                             {isMobile && <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-6 bg-slate-800 rounded-b-xl z-50 pointer-events-none"></div>}
                             <iframe
@@ -461,7 +464,7 @@ const EmailCanvas: React.FC<EmailCanvasProps> = ({
         <EditorContextProvider value={{ usedColors, onUpdateBlock: handleUpdateBlock }}>
             <div
                 ref={canvasContainerRef}
-                className="flex-1 h-full overflow-y-auto custom-scrollbar relative flex flex-col"
+                className="email-canvas-isolated email-canvas-scope flex-1 h-full overflow-y-auto custom-scrollbar relative flex flex-col"
                 style={{
                     backgroundColor: bodyStyle.backgroundColor || '#f8fafc',
                     backgroundImage: bodyStyle.backgroundImage || 'radial-gradient(#cbd5e1 1px, transparent 1px)',
@@ -476,7 +479,7 @@ const EmailCanvas: React.FC<EmailCanvasProps> = ({
             >
                 <div className={`transition-all duration-500 ease-out mx-auto flex flex-col ${isMobile ? 'py-10 h-full' : 'p-8 pb-24'} ${!isMobile ? 'w-full' : ''}`}>
                     <div
-                        className={`transition-all duration-300 flex flex-col overflow-hidden relative mx-auto ${isMobile ? 'w-[375px] h-[720px] rounded-[40px] border-[12px] border-slate-800 shadow-2xl' : 'min-h-[500px] border border-slate-100 rounded-2xl'}`}
+                        className={`email-canvas-isolated email-canvas-scope transition-all duration-300 flex flex-col overflow-hidden relative mx-auto ${isMobile ? 'w-[375px] h-[720px] rounded-[18px] border-[12px] border-slate-800 shadow-2xl' : 'min-h-[500px] border border-slate-100 rounded-[14px]'}`}
                         style={{
                             backgroundColor: bodyStyle.contentBackgroundColor || '#ffffff',
                             fontFamily: bodyStyle.fontFamily,
@@ -489,8 +492,8 @@ const EmailCanvas: React.FC<EmailCanvasProps> = ({
                         {isMobile && <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-6 bg-slate-800 rounded-b-xl z-50 pointer-events-none"></div>}
 
                         {/* Mobile: scrollable inner content; Desktop: scrollable flex block */}
-                        <div className={isMobile ? 'flex-1 overflow-y-auto overflow-x-hidden pt-6' : 'relative flex-1 flex flex-col overflow-y-auto custom-scrollbar'}>
-                            <div className="relative flex-1 flex flex-col min-h-full">
+                        <div className={isMobile ? 'flex-1 overflow-y-auto overflow-x-hidden pt-6' : 'relative flex-1 flex flex-col overflow-y-auto overflow-x-hidden custom-scrollbar'}>
+                            <div className="email-canvas-scope relative flex-1 flex flex-col min-h-full">
                                 {blocks.length === 0 ? (
                                     <div
                                         className="flex-1 flex flex-col items-center justify-center text-slate-400 p-12 text-center"
@@ -502,9 +505,9 @@ const EmailCanvas: React.FC<EmailCanvasProps> = ({
                                         <div className="relative mb-8">
                                             <div className="absolute -inset-10 bg-slate-50 rounded-full animate-pulse opacity-60"></div>
                                             <div className="absolute -inset-6 bg-slate-100/50 rounded-full animate-pulse delay-75"></div>
-                                            <div className="relative bg-white p-8 rounded-[32px] shadow-2xl shadow-amber-600/10 border border-slate-200 flex items-center justify-center transform hover:scale-105 transition-transform duration-500">
+                                            <div className="relative bg-white p-8 rounded-[18px] shadow-2xl shadow-red-600/10 border border-slate-200 flex items-center justify-center transform hover:scale-105 transition-transform duration-500">
                                                 <Layout className="w-16 h-16 text-[var(--color-primary)]" />
-                                                <div className="absolute -bottom-2 -right-2 bg-[var(--color-primary)] text-white p-2.5 rounded-2xl shadow-xl ring-4 ring-white">
+                                                <div className="absolute -bottom-2 -right-2 bg-[var(--color-primary)] text-white p-2.5 rounded-[14px] shadow-xl ring-4 ring-white">
                                                     <Plus className="w-5 h-5 font-black" />
                                                 </div>
                                             </div>
@@ -515,10 +518,10 @@ const EmailCanvas: React.FC<EmailCanvasProps> = ({
                                             Bắt đầu bằng cách kéo các thành phần nội dung từ <span className="text-[var(--color-primary)] font-bold underline decoration-dotted underline-offset-4">thanh công cụ bên trái</span> và thả vào vùng trung tâm này.
                                         </p>
 
-                                        <div className="group relative flex items-center gap-4 py-4 px-8 bg-white rounded-2xl border-2 border-dashed border-slate-200 shadow-sm transition-all hover:border-amber-400 hover:shadow-md cursor-default overflow-hidden">
+                                        <div className="group relative flex items-center gap-4 py-4 px-8 bg-white rounded-[14px] border-2 border-dashed border-slate-200 shadow-sm transition-all hover:border-[var(--color-primary)] hover:shadow-md cursor-default overflow-hidden">
                                             <div className="absolute inset-0 bg-slate-50/30 -translate-x-full group-hover:translate-x-0 transition-transform duration-500"></div>
                                             <ArrowLeft className="w-5 h-5 text-[var(--color-primary)] relative z-10 animate-pulse" />
-                                            <span className="text-[11px] font-black uppercase tracking-widest text-amber-700 relative z-10">Kéo Item thả vào đây →</span>
+                                            <span className="text-[11px] font-black uppercase tracking-widest text-[var(--color-primary)] relative z-10">Kéo Item thả vào đây →</span>
                                         </div>
                                     </div>
                                 ) : (

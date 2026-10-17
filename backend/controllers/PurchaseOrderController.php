@@ -44,7 +44,8 @@ class PurchaseOrderController {
         if ($specificId > 0) {
             $where[] = "po.id = ?";
             $params[] = $specificId;
-        } elseif (!$isAdminOrDirectorOrAccountant) {
+        }
+        if (!$isAdminOrDirectorOrAccountant) {
             if ($isManager) {
                 $placeholders = implode(',', array_fill(0, count($userIds), '?'));
                 $where[] = "(po.created_by IN ($placeholders) OR po.approver_id = ? OR po.approver_id_2 = ? OR po.approver_id_3 = ?)";
@@ -370,6 +371,29 @@ class PurchaseOrderController {
         $stmt->execute([$id, $auth['tenant_id']]);
         $po = $stmt->fetch();
         if (!$po) respond(404, null, 'Không tìm thấy đơn hàng', false);
+
+        $role = $auth['role'] ?? '';
+        $uid = (int)($auth['user_id'] ?? 0);
+        $isAdminOrDirectorOrAccountant = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'accountant'], true);
+        if (!$isAdminOrDirectorOrAccountant) {
+            $userIds = [$uid];
+            if ($role === 'manager') {
+                $stmtTeam = $this->db->prepare("SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
+                $stmtTeam->execute([$uid]);
+                $teamMemberIds = $stmtTeam->fetchAll(PDO::FETCH_COLUMN) ?: [];
+                $userIds = array_merge($userIds, array_map('intval', $teamMemberIds));
+            }
+            $relIds = !empty($po['related_user_ids']) ? array_map('intval', explode(',', (string)$po['related_user_ids'])) : [];
+            $canView = in_array((int)($po['created_by'] ?? 0), $userIds, true)
+                || in_array((int)($po['requester_id'] ?? 0), $userIds, true)
+                || (int)($po['approver_id'] ?? 0) === $uid
+                || (int)($po['approver_id_2'] ?? 0) === $uid
+                || (int)($po['approver_id_3'] ?? 0) === $uid
+                || in_array($uid, $relIds, true);
+            if (!$canView || (($po['status'] ?? '') === 'draft' && (int)($po['created_by'] ?? 0) !== $uid)) {
+                respond(403, null, 'Bạn không có quyền xem đơn nhập hàng này', false);
+            }
+        }
 
         $itemStmt = $this->db->prepare("SELECT * FROM purchase_order_items WHERE po_id = ?");
         $itemStmt->execute([$id]);
@@ -860,6 +884,13 @@ class PurchaseOrderController {
         // Nếu đơn hàng đã hoàn tất nhập kho (received) hoặc đã bị hủy (cancelled), cấm đổi trạng thái
         if (in_array($currentStatus, ['received', 'cancelled'], true) && isset($b['status']) && $b['status'] !== $currentStatus) {
             respond(422, null, 'Không thể thay đổi trạng thái của đơn hàng đã nhập kho hoặc đã hủy bỏ', false);
+        }
+
+        if (array_key_exists('paid_amount', $b)) {
+            if ((float)$b['paid_amount'] < 0) {
+                respond(422, null, 'Số tiền đã thanh toán không được âm', false);
+            }
+            $b['paid_amount'] = max(0, (float)$b['paid_amount']);
         }
 
         $fields = ['status', 'payment_status', 'paid_amount', 'notes'];

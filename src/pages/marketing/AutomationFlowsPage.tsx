@@ -88,12 +88,12 @@ const getReachableSteps = (steps: FlowStep[]): FlowStep[] => {
             if (s.pathAStepId) queue.push(s.pathAStepId);
             if (s.pathBStepId) queue.push(s.pathBStepId);
         } else if (s.type === 'advanced_condition') {
-            if (s.config?.branches) s.config.branches.forEach((b: any) => { if (b.stepId) queue.push(b.stepId); });
+            if (s.config?.branches) s.config.branches.forEach((b: any) => { const targetId = b.nextStepId || b.stepId; if (targetId) queue.push(targetId); });
             if (s.config?.defaultStepId) queue.push(s.config.defaultStepId);
         } else if (s.type === 'link_flow' || s.type === 'remove_action') {
             // These steps terminate the current flow path or jump to another flow
         } else {
-            // All other steps (trigger, action, wait, tag, list_action, zalo_zns) use nextStepId
+            // All other steps (trigger, action, wait, tag, list_action, zalo_zns, crm_action) use nextStepId
             if (s.nextStepId) queue.push(s.nextStepId);
         }
     }
@@ -162,7 +162,7 @@ const autoFixConditionTargets = (steps: FlowStep[]): FlowStep[] => {
             if (step.pathAStepId) traverse(step.pathAStepId, currentLastActionId);
             if (step.pathBStepId) traverse(step.pathBStepId, currentLastActionId);
         } else if (step.type === 'advanced_condition') {
-            step.config?.branches?.forEach((b: any) => { if (b.stepId) traverse(b.stepId, currentLastActionId); });
+            step.config?.branches?.forEach((b: any) => { const targetId = b.nextStepId || b.stepId; if (targetId) traverse(targetId, currentLastActionId); });
             if (step.config?.defaultStepId) traverse(step.config.defaultStepId, currentLastActionId);
         } else {
             if (step.nextStepId) traverse(step.nextStepId, currentLastActionId);
@@ -1535,8 +1535,16 @@ const Flows: React.FC = () => {
             if (stepType === 'advanced_condition') {
                 return {
                     branches: [
-                        { id: crypto.randomUUID(), label: 'Nhánh 1', conditions: [{ field: 'os', operator: 'equals', value: '' }] }
+                        { id: crypto.randomUUID(), label: 'Nhánh 1', conditions: [{ field: 'stage_id', operator: 'equals', value: '1' }] }
                     ]
+                };
+            }
+            if (stepType === 'crm_action') {
+                return {
+                    actionType: 'update_stage',
+                    stage_id: '1',
+                    lead_status: 'active',
+                    temperature: 'warm'
                 };
             }
             return {};
@@ -1559,8 +1567,8 @@ const Flows: React.FC = () => {
                 const branches = [...(updatedParent.config.branches || [])];
                 const branchIndex = branches.findIndex((b: any) => b.id === branch);
                 if (branchIndex !== -1) {
-                    const oldNextId = branches[branchIndex].stepId;
-                    branches[branchIndex] = { ...branches[branchIndex], stepId: newStepId };
+                    const oldNextId = branches[branchIndex].nextStepId || branches[branchIndex].stepId;
+                    branches[branchIndex] = { ...branches[branchIndex], stepId: newStepId, nextStepId: newStepId };
                     updatedParent.config = { ...updatedParent.config, branches };
 
                     // [FIX] Correctly bridge the old child to the new step's primary output
@@ -1619,8 +1627,8 @@ const Flows: React.FC = () => {
                 const branches = [...(updatedParent.config.branches || [])];
                 const branchIndex = branches.findIndex((b: any) => b.id === branch);
                 if (branchIndex !== -1) {
-                    const oldNextId = branches[branchIndex].stepId;
-                    branches[branchIndex] = { ...branches[branchIndex], stepId: newStepId };
+                    const oldNextId = branches[branchIndex].nextStepId || branches[branchIndex].stepId;
+                    branches[branchIndex] = { ...branches[branchIndex], stepId: newStepId, nextStepId: newStepId };
                     updatedParent.config = { ...updatedParent.config, branches };
                     if (oldNextId) newStep.nextStepId = oldNextId;
                 }
@@ -1647,9 +1655,9 @@ const Flows: React.FC = () => {
         if (!stepToDelete) return;
 
         // Smart Delete Logic: Find the child of the deleted step to bridge the gap
-        // Only bridge for simple steps (Action, Wait, Tag, Link, List) that have a single output
+        // Only bridge for simple steps (Action, Wait, Tag, Link, List, CRM Action) that have a single output
         let bridgeId: string | undefined = undefined;
-        if (['action', 'wait', 'update_tag', 'trigger', 'list_action', 'zalo_zns', 'link_flow'].includes(stepToDelete.type)) {
+        if (['action', 'wait', 'update_tag', 'trigger', 'list_action', 'zalo_zns', 'link_flow', 'crm_action'].includes(stepToDelete.type)) {
             bridgeId = stepToDelete.nextStepId;
         }
         // For conditions/split tests, bridging is ambiguous, so we break the link (bridgeId = undefined)
@@ -1666,7 +1674,7 @@ const Flows: React.FC = () => {
                 if (newS.config.defaultStepId === stepId) newS.config = { ...newS.config, defaultStepId: bridgeId };
                 if (newS.config.branches) {
                     const branches = newS.config.branches.map((b: any) => {
-                        if (b.stepId === stepId) return { ...b, stepId: bridgeId };
+                        if (b.stepId === stepId || b.nextStepId === stepId) return { ...b, stepId: bridgeId, nextStepId: bridgeId };
                         return b;
                     });
                     newS.config = { ...newS.config, branches };
@@ -1835,7 +1843,8 @@ const Flows: React.FC = () => {
                 if (step.config?.defaultStepId) children.push(step.config.defaultStepId);
                 if (step.config?.branches) {
                     step.config.branches.forEach(b => {
-                        if (b.stepId) children.push(b.stepId);
+                        const targetId = b.nextStepId || b.stepId;
+                        if (targetId) children.push(targetId);
                     });
                 }
             }
@@ -1939,10 +1948,7 @@ const Flows: React.FC = () => {
                     <PageHero
                         title="Kịch bản Automation"
                         subtitle="Quản lý vòng đời khách hàng tự động — nuôi dưỡng & chuyển đổi thông minh đa kênh."
-                        showStatus
-                        statusText="Orchestrator Online"
                         actions={[
-                            { label: 'Mẹo Automation', icon: Lightbulb, onClick: () => setIsTipsModalOpen(true) },
                             {
                                 label: 'Tạo kịch bản',
                                 icon: Plus,
@@ -2309,13 +2315,13 @@ const Flows: React.FC = () => {
                                         title: 'Tạm dừng Kịch bản',
                                         message: (
                                             <div className="space-y-4 text-left">
-                                                <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/50 rounded-2xl flex gap-3">
+                                                <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/50 rounded-[14px] flex gap-3">
                                                     <PauseCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
                                                     <p className="text-sm font-medium text-amber-900 dark:text-amber-200 leading-relaxed">
                                                         {specificWarning}
                                                     </p>
                                                 </div>
-                                                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50 rounded-2xl flex gap-3">
+                                                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50 rounded-[14px] flex gap-3">
                                                     <Users className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
                                                     <p className="text-sm font-medium text-blue-900 dark:text-blue-200 leading-relaxed">
                                                         {activeWarning}
@@ -2380,8 +2386,8 @@ const Flows: React.FC = () => {
 
                                             {/* ── Helper: connector arrow ── */}
                                             {/* TRIGGER NODE */}
-                                            <div className="w-[300px] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700/60 shadow-sm p-4 flex items-center gap-3">
-                                                <div className="flow-sk w-10 h-10 rounded-xl flex-shrink-0" style={{ background: 'linear-gradient(135deg,#f97316,#ca6f00)' }} />
+                                            <div className="w-[300px] bg-white dark:bg-slate-900 rounded-[16px] border border-slate-200 dark:border-slate-700/60 shadow-sm p-4 flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-[12px] flex-shrink-0 animate-pulse bg-slate-200/70 dark:bg-white/[0.06]" />
                                                 <div className="flex-1 space-y-1.5">
                                                     <div className="flow-sk h-3 w-20 rounded" />
                                                     <div className="flow-sk h-4 w-36 rounded" />
@@ -2397,8 +2403,8 @@ const Flows: React.FC = () => {
                                             </div>
 
                                             {/* WAIT NODE */}
-                                            <div className="w-[300px] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700/60 shadow-sm p-4 flex items-center gap-3">
-                                                <div className="flow-sk w-10 h-10 rounded-xl flex-shrink-0" style={{ background: 'linear-gradient(135deg,#fbbf24,#f59e0b)' }} />
+                                            <div className="w-[300px] bg-white dark:bg-slate-900 rounded-[16px] border border-slate-200 dark:border-slate-700/60 shadow-sm p-4 flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-[12px] flex-shrink-0 animate-pulse bg-slate-200/70 dark:bg-white/[0.06]" />
                                                 <div className="flex-1 space-y-1.5">
                                                     <div className="flow-sk h-3 w-16 rounded" />
                                                     <div className="flow-sk h-4 w-28 rounded" />
@@ -2414,8 +2420,8 @@ const Flows: React.FC = () => {
                                             </div>
 
                                             {/* EMAIL NODE */}
-                                            <div className="w-[300px] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700/60 shadow-sm p-4 flex items-center gap-3">
-                                                <div className="flow-sk w-10 h-10 rounded-xl flex-shrink-0" style={{ background: 'linear-gradient(135deg,#3b82f6,#4f46e5)' }} />
+                                            <div className="w-[300px] bg-white dark:bg-slate-900 rounded-[16px] border border-slate-200 dark:border-slate-700/60 shadow-sm p-4 flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-[12px] flex-shrink-0 animate-pulse bg-slate-200/70 dark:bg-white/[0.06]" />
                                                 <div className="flex-1 space-y-1.5">
                                                     <div className="flow-sk h-3 w-14 rounded" />
                                                     <div className="flow-sk h-4 w-40 rounded" />
@@ -2431,8 +2437,8 @@ const Flows: React.FC = () => {
                                             </div>
 
                                             {/* CONDITION NODE */}
-                                            <div className="w-[300px] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700/60 shadow-sm p-4 flex items-center gap-3">
-                                                <div className="flow-sk w-10 h-10 rounded-xl flex-shrink-0" style={{ background: 'linear-gradient(135deg,#8b5cf6,#7c3aed)' }} />
+                                            <div className="w-[300px] bg-white dark:bg-slate-900 rounded-[16px] border border-slate-200 dark:border-slate-700/60 shadow-sm p-4 flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-[12px] flex-shrink-0 animate-pulse bg-slate-200/70 dark:bg-white/[0.06]" />
                                                 <div className="flex-1 space-y-1.5">
                                                     <div className="flow-sk h-3 w-24 rounded" />
                                                     <div className="flow-sk h-4 w-32 rounded" />
@@ -2749,39 +2755,14 @@ const Flows: React.FC = () => {
                         };
 
                         // 2. Create the intended new step
-                        const getLabel = (t: string) => {
-                            switch (t) {
-                                case 'action': return 'Gửi Email';
-                                case 'wait': return 'Chờ đợi';
-                                case 'condition': return 'Kiểm tra';
-                                case 'split_test': return 'A/B Test';
-                                case 'link_flow': return 'Chuyển Flow';
-                                case 'remove_action': return 'Dọn dẹp';
-                                case 'update_tag': return 'Gắn nhãn';
-                                case 'list_action': return 'Cập nhật List';
-                                default: return 'Bước mới';
-                            }
-                        };
-                        const getIcon = (t: string): any => {
-                            switch (t) {
-                                case 'action': return 'mail';
-                                case 'wait': return 'clock';
-                                case 'condition': return 'git-merge';
-                                case 'split_test': return 'beaker';
-                                case 'link_flow': return 'link';
-                                case 'remove_action': return 'user-minus';
-                                case 'update_tag': return 'tag';
-                                case 'list_action': return 'list';
-                                default: return 'zap';
-                            }
-                        };
-
                         const newStep: FlowStep = {
                             id: newStepId,
                             type: continuationModal.pendingStepType,
-                            label: getLabel(continuationModal.pendingStepType),
-                            iconName: getIcon(continuationModal.pendingStepType),
-                            config: continuationModal.pendingStepType === 'wait' ? { duration: 1, unit: 'hours' } : {}
+                            label: getStepLabel(continuationModal.pendingStepType),
+                            iconName: getStepIcon(continuationModal.pendingStepType),
+                            config: continuationModal.pendingStepType === 'wait'
+                                ? { duration: 1, unit: 'hours' }
+                                : (continuationModal.pendingStepType === 'crm_action' ? { actionType: 'update_stage', stage_id: '1', lead_status: 'active', temperature: 'warm' } : {})
                         };
 
                         // 3. Update structure locally
@@ -2793,7 +2774,7 @@ const Flows: React.FC = () => {
                                     const branches = [...(parentStep.config.branches || [])];
                                     const branchIndex = branches.findIndex((b: any) => b.id === branch);
                                     if (branchIndex !== -1) {
-                                        branches[branchIndex] = { ...branches[branchIndex], stepId: waitStepId };
+                                        branches[branchIndex] = { ...branches[branchIndex], nextStepId: waitStepId, stepId: waitStepId };
                                         parentStep.config = { ...parentStep.config, branches };
                                     }
                                 } else {
@@ -2841,7 +2822,9 @@ const Flows: React.FC = () => {
                             type: continuationModal.pendingStepType,
                             label: getStepLabel(continuationModal.pendingStepType),
                             iconName: getStepIcon(continuationModal.pendingStepType),
-                            config: continuationModal.pendingStepType === 'wait' ? { duration: 1, unit: 'hours' } : {}
+                            config: continuationModal.pendingStepType === 'wait'
+                                ? { duration: 1, unit: 'hours' }
+                                : (continuationModal.pendingStepType === 'crm_action' ? { actionType: 'update_stage', stage_id: '1', lead_status: 'active', temperature: 'warm' } : {})
                         };
 
                         const steps = [...(selectedFlow.steps || []), waitStep, newStep];
@@ -2852,7 +2835,7 @@ const Flows: React.FC = () => {
                                     const branches = [...(parentStep.config.branches || [])];
                                     const branchIndex = branches.findIndex((b: any) => b.id === branch);
                                     if (branchIndex !== -1) {
-                                        branches[branchIndex] = { ...branches[branchIndex], stepId: waitStepId };
+                                        branches[branchIndex] = { ...branches[branchIndex], nextStepId: waitStepId, stepId: waitStepId };
                                         parentStep.config = { ...parentStep.config, branches };
                                     }
                                 } else {

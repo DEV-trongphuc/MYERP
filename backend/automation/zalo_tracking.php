@@ -71,7 +71,7 @@ if ($subId && $url) {
             // 2. Update Subscriber Stats
             $pdo->prepare("
                 UPDATE subscribers 
-                SET stats_clicked = stats_clicked + 1, 
+                SET stats_clicked = COALESCE(stats_clicked, 0) + 1, 
                     last_click_at = NOW(), 
                     last_activity_at = NOW() 
                 WHERE id = ?
@@ -82,8 +82,12 @@ if ($subId && $url) {
 
             // 3. Mark Flow Interaction — ZNS clicks
             if ($flowId) {
-                $pdo->prepare("UPDATE flows SET stat_total_zalo_clicked = stat_total_zalo_clicked + 1 WHERE id = ?")->execute([$flowId]);
+                $pdo->prepare("UPDATE flows SET stat_total_zalo_clicked = COALESCE(stat_total_zalo_clicked, 0) + 1 WHERE id = ?")->execute([$flowId]);
             }
+        }
+
+        if (function_exists('domationSyncSubscriberMatchOnly')) {
+            domationSyncSubscriberMatchOnly($pdo, (string)$subId);
         }
 
         // [FIX P14-C1] Dispatch a priority queue job so Condition steps waiting for a

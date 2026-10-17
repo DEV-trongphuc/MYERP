@@ -141,6 +141,18 @@ if (!function_exists('domationEnsureSchemaOnce')) {
     }
 }
 
+domationEnsureSchemaOnce('migration_326_marketing_erp_deep_integration', function () use ($pdo) {
+    $migFile = __DIR__ . '/../migrations/326_marketing_erp_deep_integration.php';
+    if (is_file($migFile)) {
+        ob_start();
+        try {
+            include_once $migFile;
+        } catch (\Throwable $e) {
+        }
+        @ob_end_clean();
+    }
+});
+
 $GLOBAL_HELD_LOCKS = [];
 
 if (!function_exists('db_get_lock')) {
@@ -419,360 +431,28 @@ if (!function_exists('getGlobalLeadScoreConfig')) {
     }
 }
 
-// ─── DOMATION CONTACT MATCHER FALLBACK & SAFE HELPER ("3 KHÔNG" MANDATE) ─────
-if (!class_exists('DomationContactMatcher')) {
-    class DomationContactMatcher {
-        public static function normalizePhone9(?string $phone): string {
-            if (!$phone) return '';
-            $digits = preg_replace('/[^0-9]/', '', $phone);
-            if ($digits === '') return '';
-            if (strpos($digits, '84') === 0 && strlen($digits) >= 11) {
-                $digits = substr($digits, 2);
-            }
-            if (strpos($digits, '0') === 0 && strlen($digits) >= 10) {
-                $digits = substr($digits, 1);
-            }
-            if (strlen($digits) > 9) {
-                $digits = substr($digits, -9);
-            }
-            return strlen($digits) >= 8 ? $digits : '';
-        }
-
-        public static function syncSubscriberMatchOnly(PDO $pdo, $subscriberId): array {
-            if (empty($subscriberId)) {
-                return ['matched' => false, 'contact_id' => null];
-            }
-            try {
-                $stmtSub = $pdo->prepare("SELECT * FROM subscribers WHERE id = ? LIMIT 1");
-                $stmtSub->execute([$subscriberId]);
-                $sub = $stmtSub->fetch(PDO::FETCH_ASSOC);
-                if (!$sub) {
-                    return ['matched' => false, 'contact_id' => null];
-                }
-
-                $email = strtolower(trim((string)($sub['email'] ?? '')));
-                if ($email !== '' && strpos($email, '@no-email.domation') !== false) {
-                    $email = '';
-                }
-                $phoneRaw = trim((string)($sub['phone'] ?? ''));
-                $phone9 = self::normalizePhone9($phoneRaw);
-
-                $contactId = !empty($sub['myerp_contact_id']) ? (int)$sub['myerp_contact_id'] : 0;
-                if ($contactId > 0) {
-                    $chk = $pdo->prepare("SELECT id FROM contacts WHERE id = ? AND deleted_at IS NULL LIMIT 1");
-                    $chk->execute([$contactId]);
-                    if (!$chk->fetchColumn()) {
-                        $contactId = 0;
-                    }
-                }
-
-                if ($contactId <= 0 && ($email !== '' || $phone9 !== '')) {
-                    $conds = [];
-                    $params = [];
-                    if ($email !== '') {
-                        $conds[] = "LOWER(TRIM(c.email)) = ?";
-                        $params[] = $email;
-                    }
-                    if ($phone9 !== '') {
-                        $conds[] = "(RIGHT(REGEXP_REPLACE(COALESCE(c.phone,''), '[^0-9]', ''), 9) = ? OR RIGHT(REGEXP_REPLACE(COALESCE(c.mobile,''), '[^0-9]', ''), 9) = ?)";
-                        $params[] = $phone9;
-                        $params[] = $phone9;
-                    }
-                    $sqlFind = "SELECT c.id FROM contacts c WHERE c.deleted_at IS NULL AND (" . implode(' OR ', $conds) . ") ORDER BY c.id DESC LIMIT 1";
-                    try {
-                        $stmtFind = $pdo->prepare($sqlFind);
-                        $stmtFind->execute($params);
-                        $contactId = (int)($stmtFind->fetchColumn() ?: 0);
-                    } catch (\Throwable $eRegex) {
-                        // Fallback if MySQL REGEXP_REPLACE not supported
-                        $condsFb = [];
-                        $paramsFb = [];
-                        if ($email !== '') {
-                            $condsFb[] = "LOWER(TRIM(c.email)) = ?";
-                            $paramsFb[] = $email;
-                        }
-                        if ($phone9 !== '') {
-                            $condsFb[] = "(c.phone LIKE ? OR c.mobile LIKE ?)";
-                            $paramsFb[] = '%' . $phone9;
-                            $paramsFb[] = '%' . $phone9;
-                        }
-                        $stmtFind = $pdo->prepare("SELECT c.id FROM contacts c WHERE c.deleted_at IS NULL AND (" . implode(' OR ', $condsFb) . ") ORDER BY c.id DESC LIMIT 1");
-                        $stmtFind->execute($paramsFb);
-                        $contactId = (int)($stmtFind->fetchColumn() ?: 0);
-                    }
-                }
-
-                // STRICT "3 KHÔNG": NEVER INSERT INTO contacts, NEVER change owner_id/stage/status, NEVER notify!
-                if ($contactId <= 0) {
-                    return ['matched' => false, 'contact_id' => null];
-                }
-
-                // Link subscriber and child tables to $contactId
-                try {
-                    $pdo->prepare("UPDATE subscribers SET myerp_contact_id = ? WHERE id = ?")->execute([$contactId, $subscriberId]);
-                } catch (\Throwable $e) {}
-
-                $childTablesBySub = [
-                    'web_visitors' => 'subscriber_id',
-                    'web_sessions' => 'subscriber_id',
-                    'web_page_views' => 'subscriber_id',
-                    'web_form_submissions' => 'subscriber_id',
-                    'survey_responses' => 'subscriber_id',
-                    'voucher_codes' => 'assigned_to_subscriber_id',
-                    'voucher_claims' => 'subscriber_id',
-                    'domation_ai_conversations' => 'subscriber_id',
-                    'meta_conversations' => 'subscriber_id',
-                    'zalo_followers' => 'subscriber_id',
-                ];
-                foreach ($childTablesBySub as $tbl => $col) {
-                    try {
-                        $pdo->prepare("UPDATE `$tbl` SET myerp_contact_id = ? WHERE `$col` = ? AND (myerp_contact_id IS NULL OR myerp_contact_id = 0)")
-                            ->execute([$contactId, $subscriberId]);
-                    } catch (\Throwable $e) {}
-                }
-
-                self::refreshContactStats($pdo, $contactId);
-                return ['matched' => true, 'contact_id' => $contactId];
-            } catch (\Throwable $e) {
-                error_log("[DomationContactMatcher::syncSubscriberMatchOnly] " . $e->getMessage());
-                return ['matched' => false, 'contact_id' => null];
-            }
-        }
-
-        public static function syncContactMatchOnly(PDO $pdo, int $contactId): array {
-            if ($contactId <= 0) return ['matched' => false, 'subscriber_id' => null];
-            try {
-                $stmtC = $pdo->prepare("SELECT id, email, phone, mobile, domation_subscriber_id FROM contacts WHERE id = ? AND deleted_at IS NULL LIMIT 1");
-                $stmtC->execute([$contactId]);
-                $contact = $stmtC->fetch(PDO::FETCH_ASSOC);
-                if (!$contact) return ['matched' => false, 'subscriber_id' => null];
-
-                $email = strtolower(trim((string)($contact['email'] ?? '')));
-                $phone9 = self::normalizePhone9($contact['phone'] ?? '') ?: self::normalizePhone9($contact['mobile'] ?? '');
-
-                $subId = (int)($contact['domation_subscriber_id'] ?? 0);
-                if ($email !== '' || $phone9 !== '') {
-                    $conds = ["myerp_contact_id = ?"];
-                    $params = [$contactId];
-                    if ($email !== '') {
-                        $conds[] = "LOWER(TRIM(email)) = ?";
-                        $params[] = $email;
-                    }
-                    if ($phone9 !== '') {
-                        $conds[] = "phone LIKE ?";
-                        $params[] = '%' . $phone9;
-                    }
-                    $stmtS = $pdo->prepare("SELECT id FROM subscribers WHERE " . implode(' OR ', $conds) . " ORDER BY updated_at DESC, id DESC LIMIT 1");
-                    $stmtS->execute($params);
-                    $foundSubId = (int)($stmtS->fetchColumn() ?: 0);
-                    if ($foundSubId > 0) {
-                        $subId = $foundSubId;
-                        $pdo->prepare("UPDATE subscribers SET myerp_contact_id = ? WHERE id = ?")->execute([$contactId, $subId]);
-                    }
-
-                    // Also match conversations/responses by email or phone9
-                    if ($email !== '') {
-                        foreach (['survey_responses' => 'respondent_email', 'voucher_claims' => 'email', 'domation_ai_conversations' => 'visitor_email'] as $t => $c) {
-                            try {
-                                $pdo->prepare("UPDATE `$t` SET myerp_contact_id = ? WHERE LOWER(TRIM(`$c`)) = ? AND (myerp_contact_id IS NULL OR myerp_contact_id = 0)")
-                                    ->execute([$contactId, $email]);
-                            } catch (\Throwable $e) {}
-                        }
-                    }
-                    if ($phone9 !== '') {
-                        foreach (['voucher_claims' => 'phone', 'domation_ai_conversations' => 'visitor_phone', 'meta_conversations' => 'extracted_phone', 'zalo_followers' => 'phone'] as $t => $c) {
-                            try {
-                                $pdo->prepare("UPDATE `$t` SET myerp_contact_id = ? WHERE `$c` LIKE ? AND (myerp_contact_id IS NULL OR myerp_contact_id = 0)")
-                                    ->execute([$contactId, '%' . $phone9]);
-                            } catch (\Throwable $e) {}
-                        }
-                    }
-                }
-
-                if ($subId > 0) {
-                    self::syncSubscriberMatchOnly($pdo, $subId);
-                } else {
-                    self::refreshContactStats($pdo, $contactId);
-                }
-                return ['matched' => $subId > 0, 'subscriber_id' => $subId ?: null];
-            } catch (\Throwable $e) {
-                return ['matched' => false, 'subscriber_id' => null];
-            }
-        }
-
-        public static function refreshContactStats(PDO $pdo, int $contactId): void {
-            if ($contactId <= 0) return;
-            try {
-                $stmtSub = $pdo->prepare("SELECT * FROM subscribers WHERE myerp_contact_id = ? ORDER BY updated_at DESC, id DESC LIMIT 1");
-                $stmtSub->execute([$contactId]);
-                $sub = $stmtSub->fetch(PDO::FETCH_ASSOC);
-                $subId = $sub ? (int)$sub['id'] : null;
-
-                $activeFlowsCount = 0;
-                $completedFlowsCount = 0;
-                $activeFlowNames = null;
-                if ($subId) {
-                    $stmtF = $pdo->prepare("
-                        SELECT sfs.status, f.name
-                        FROM subscriber_flow_states sfs
-                        LEFT JOIN flows f ON f.id = sfs.flow_id
-                        WHERE sfs.subscriber_id = ?
-                    ");
-                    $stmtF->execute([$subId]);
-                    $fRows = $stmtF->fetchAll(PDO::FETCH_ASSOC) ?: [];
-                    $names = [];
-                    foreach ($fRows as $fr) {
-                        $st = strtolower((string)($fr['status'] ?? ''));
-                        if (in_array($st, ['active', 'waiting', 'paused', 'processing'], true)) {
-                            $activeFlowsCount++;
-                            if (!empty($fr['name'])) $names[] = $fr['name'];
-                        } elseif (in_array($st, ['completed', 'finished'], true)) {
-                            $completedFlowsCount++;
-                        }
-                    }
-                    if (!empty($names)) {
-                        $activeFlowNames = implode(', ', array_unique($names));
-                    }
-                }
-
-                // Web sessions & pageviews
-                $webSessions = 0;
-                $webPageviews = 0;
-                $lastWebVisitAt = $sub['last_visit_at'] ?? null;
-                try {
-                    $stmtWS = $pdo->prepare("SELECT COUNT(*), COALESCE(SUM(page_count),0), MAX(started_at) FROM web_sessions WHERE myerp_contact_id = ?" . ($subId ? " OR subscriber_id = " . (int)$subId : ""));
-                    $stmtWS->execute([$contactId]);
-                    $wsRow = $stmtWS->fetch(PDO::FETCH_NUM);
-                    if ($wsRow) {
-                        $webSessions = max((int)($sub['visit_count'] ?? 0), (int)$wsRow[0]);
-                        $webPageviews = max((int)($sub['total_pageviews'] ?? 0), (int)$wsRow[1]);
-                        if (!empty($wsRow[2]) && (!$lastWebVisitAt || $wsRow[2] > $lastWebVisitAt)) {
-                            $lastWebVisitAt = $wsRow[2];
-                        }
-                    }
-                } catch (\Throwable $e) {}
-
-                // Surveys
-                $surveyCount = 0;
-                try {
-                    $stmtSR = $pdo->prepare("SELECT COUNT(*) FROM survey_responses WHERE myerp_contact_id = ?" . ($subId ? " OR subscriber_id = " . (int)$subId : ""));
-                    $stmtSR->execute([$contactId]);
-                    $surveyCount = (int)$stmtSR->fetchColumn();
-                } catch (\Throwable $e) {}
-
-                // Vouchers
-                $voucherCount = 0;
-                $activeVoucherCode = null;
-                try {
-                    $stmtVC = $pdo->prepare("SELECT code, status FROM voucher_codes WHERE myerp_contact_id = ?" . ($subId ? " OR assigned_to_subscriber_id = " . (int)$subId : "") . " ORDER BY assigned_at DESC, id DESC");
-                    $stmtVC->execute([$contactId]);
-                    $vcRows = $stmtVC->fetchAll(PDO::FETCH_ASSOC) ?: [];
-                    $voucherCount = count($vcRows);
-                    foreach ($vcRows as $vcr) {
-                        if (($vcr['status'] ?? '') === 'assigned' && !$activeVoucherCode) {
-                            $activeVoucherCode = $vcr['code'];
-                        }
-                    }
-                } catch (\Throwable $e) {}
-
-                // Zalo & Meta IDs
-                $zaloUserId = null;
-                $metaPsid = null;
-                try {
-                    $stmtZ = $pdo->prepare("SELECT user_id FROM zalo_followers WHERE myerp_contact_id = ?" . ($subId ? " OR subscriber_id = " . (int)$subId : "") . " LIMIT 1");
-                    $stmtZ->execute([$contactId]);
-                    $zaloUserId = $stmtZ->fetchColumn() ?: null;
-                } catch (\Throwable $e) {}
-                try {
-                    $stmtM = $pdo->prepare("SELECT psid FROM meta_conversations WHERE myerp_contact_id = ?" . ($subId ? " OR subscriber_id = " . (int)$subId : "") . " LIMIT 1");
-                    $stmtM->execute([$contactId]);
-                    $metaPsid = $stmtM->fetchColumn() ?: null;
-                } catch (\Throwable $e) {}
-
-                $pdo->prepare("
-                    UPDATE contacts SET
-                        domation_subscriber_id = ?,
-                        domation_engagement_score = ?,
-                        domation_temperature = ?,
-                        domation_marketing_status = ?,
-                        domation_email_sent = ?,
-                        domation_email_opened = ?,
-                        domation_email_clicked = ?,
-                        domation_last_email_open_at = ?,
-                        domation_last_email_click_at = ?,
-                        domation_web_sessions = ?,
-                        domation_web_pageviews = ?,
-                        domation_last_web_visit_at = ?,
-                        domation_active_flows_count = ?,
-                        domation_active_flow_names = ?,
-                        domation_completed_flows_count = ?,
-                        domation_survey_completed_count = ?,
-                        domation_voucher_count = ?,
-                        domation_active_voucher_code = ?,
-                        domation_zalo_user_id = COALESCE(?, domation_zalo_user_id),
-                        domation_meta_psid = COALESCE(?, domation_meta_psid),
-                        domation_last_synced_at = NOW()
-                    WHERE id = ?
-                ")->execute([
-                    $subId,
-                    (int)($sub['engagement_score'] ?? 0),
-                    $sub['temperature'] ?? 'Cold',
-                    $sub['status'] ?? 'active',
-                    (int)($sub['stats_sent'] ?? 0),
-                    (int)($sub['stats_opened'] ?? 0),
-                    (int)($sub['stats_clicked'] ?? 0),
-                    $sub['last_open_at'] ?? null,
-                    $sub['last_click_at'] ?? null,
-                    $webSessions,
-                    $webPageviews,
-                    $lastWebVisitAt,
-                    $activeFlowsCount,
-                    $activeFlowNames,
-                    $completedFlowsCount,
-                    $surveyCount,
-                    $voucherCount,
-                    $activeVoucherCode,
-                    $zaloUserId,
-                    $metaPsid,
-                    $contactId
-                ]);
-            } catch (\Throwable $e) {
-                // Silent ignore if columns are still migrating
-            }
-        }
-
-        public static function runBulkMatchAndRefresh(PDO $pdo): array {
-            $matchedCount = 0;
-            try {
-                $stmt = $pdo->query("SELECT id FROM subscribers ORDER BY id DESC LIMIT 5000");
-                $subIds = $stmt ? $stmt->fetchAll(PDO::FETCH_COLUMN) : [];
-                foreach ($subIds as $sid) {
-                    $res = self::syncSubscriberMatchOnly($pdo, (int)$sid);
-                    if (!empty($res['matched'])) {
-                        $matchedCount++;
-                    }
-                }
-            } catch (\Throwable $e) {
-            }
-            return ['matched_subscribers' => $matchedCount];
-        }
-    }
+// ─── DOMATION CONTACT MATCHER & SAFE HELPER ("3 KHÔNG" MANDATE) ──────────────
+if (!class_exists('DomationContactMatcher') && file_exists(__DIR__ . '/../utils/DomationContactMatcher.php')) {
+    require_once __DIR__ . '/../utils/DomationContactMatcher.php';
 }
 
 if (!function_exists('domationSyncSubscriberMatchOnly')) {
-    function domationSyncSubscriberMatchOnly(PDO $pdo, $subscriberId): void {
-        if (empty($subscriberId)) return;
+    function domationSyncSubscriberMatchOnly(PDO $pdo, $subscriberId): ?int {
+        if (empty($subscriberId)) return null;
         try {
             if (class_exists('DomationContactMatcher')) {
                 if (method_exists('DomationContactMatcher', 'syncSubscriberMatchOnly')) {
-                    DomationContactMatcher::syncSubscriberMatchOnly($pdo, (int)$subscriberId);
+                    $res = DomationContactMatcher::syncSubscriberMatchOnly($pdo, (string)$subscriberId);
+                    return is_int($res) ? $res : null;
                 } elseif (method_exists('DomationContactMatcher', 'matchSubscriber')) {
-                    DomationContactMatcher::matchSubscriber($pdo, (int)$subscriberId);
+                    $res = DomationContactMatcher::matchSubscriber($pdo, (string)$subscriberId);
+                    return is_int($res) ? $res : null;
                 }
             }
         } catch (\Throwable $e) {
             error_log("[domationSyncSubscriberMatchOnly] " . $e->getMessage());
         }
+        return null;
     }
 }
 
@@ -790,6 +470,9 @@ if (!function_exists('domationResolveAuth')) {
         // Check if routed from backend/index.php with $GLOBALS['auth']
         if (!empty($GLOBALS['auth']) && is_array($GLOBALS['auth']) && !empty($GLOBALS['auth']['user_id'])) {
             $GLOBALS['domation_auth'] = $GLOBALS['auth'];
+            if (empty($GLOBALS['domation_auth']['workspace_id'])) {
+                $GLOBALS['domation_auth']['workspace_id'] = (int)($GLOBALS['auth']['tenant_id'] ?? 1);
+            }
             return $GLOBALS['domation_auth'];
         }
 
@@ -818,9 +501,15 @@ if (!function_exists('domationResolveAuth')) {
         }
 
         try {
-            $stmt = $pdo->prepare("SELECT id, tenant_id, role, full_name, email, permissions_json, is_active FROM users WHERE id = ? AND is_active = 1 LIMIT 1");
-            $stmt->execute([$userId]);
-            $dbUser = $stmt->fetch(PDO::FETCH_ASSOC);
+            try {
+                $stmt = $pdo->prepare("SELECT id, tenant_id, role, full_name, email, phone, avatar_url, job_title, department, team_id, permissions_json, is_active FROM users WHERE id = ? AND is_active = 1 LIMIT 1");
+                $stmt->execute([$userId]);
+                $dbUser = $stmt->fetch(PDO::FETCH_ASSOC);
+            } catch (\Throwable $eCols) {
+                $stmt = $pdo->prepare("SELECT id, tenant_id, role, full_name, email, permissions_json, is_active FROM users WHERE id = ? AND is_active = 1 LIMIT 1");
+                $stmt->execute([$userId]);
+                $dbUser = $stmt->fetch(PDO::FETCH_ASSOC);
+            }
             if (!$dbUser) {
                 return null;
             }
@@ -833,6 +522,12 @@ if (!function_exists('domationResolveAuth')) {
                 'role'        => $role,
                 'full_name'   => $dbUser['full_name'] ?? '',
                 'email'       => $dbUser['email'] ?? '',
+                'phone'       => $dbUser['phone'] ?? '',
+                'avatar_url'  => $dbUser['avatar_url'] ?? null,
+                'job_title'   => $dbUser['job_title'] ?? '',
+                'department'  => $dbUser['department'] ?? '',
+                'team_id'     => !empty($dbUser['team_id']) ? (int)$dbUser['team_id'] : null,
+                'branch_id'   => !empty($dbUser['branch_id']) ? (int)$dbUser['branch_id'] : null,
                 'permissions' => !empty($dbUser['permissions_json']) ? json_decode($dbUser['permissions_json'], true) : null,
             ];
             $GLOBALS['domation_auth'] = $authData;
@@ -840,6 +535,46 @@ if (!function_exists('domationResolveAuth')) {
         } catch (\Throwable $e) {
             return null;
         }
+    }
+}
+
+if (!function_exists('get_current_user_id')) {
+    function get_current_user_id(): ?int {
+        if (!empty($GLOBALS['current_admin_id'])) {
+            return (int)$GLOBALS['current_admin_id'];
+        }
+        if (!empty($GLOBALS['domation_auth']['user_id'])) {
+            return (int)$GLOBALS['domation_auth']['user_id'];
+        }
+        if (!empty($_SESSION['user_id'])) {
+            return (int)$_SESSION['user_id'];
+        }
+        return null;
+    }
+}
+
+if (!function_exists('get_current_user_info')) {
+    function get_current_user_info(): array {
+        return is_array($GLOBALS['domation_auth'] ?? null) ? $GLOBALS['domation_auth'] : [];
+    }
+}
+
+if (!function_exists('domationFormatCreator')) {
+    function domationFormatCreator(?array $row): ?array {
+        if (!$row) {
+            return null;
+        }
+        $creatorId = (int)($row['creator_id'] ?? $row['created_by'] ?? 0);
+        if ($creatorId <= 0) {
+            return null;
+        }
+        return [
+            'id'         => $creatorId,
+            'name'       => $row['creator_name'] ?? '',
+            'email'      => $row['creator_email'] ?? '',
+            'avatar_url' => $row['creator_avatar'] ?? null,
+            'role'       => $row['creator_role'] ?? '',
+        ];
     }
 }
 
@@ -916,7 +651,17 @@ if ($_domationAuth) {
     $_SESSION['status'] = 'approved';
     $_SESSION['current_workspace_id'] = (int)$_domationAuth['tenant_id'];
     $_SESSION['workspace_id'] = (int)$_domationAuth['tenant_id'];
-    $_SESSION['is_admin'] = in_array($_domationAuth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'marketing'], true);
+    $_deptOrTitle = strtolower(trim(($_domationAuth['department'] ?? '') . ' ' . ($_domationAuth['job_title'] ?? '')));
+    $_isMktStaff = in_array($_domationAuth['role'], ['marketing', 'mkt', 'digital_marketing', 'content', 'ads'], true)
+        || (int)($_domationAuth['team_id'] ?? 0) === 3
+        || strpos($_deptOrTitle, 'marketing') !== false
+        || strpos($_deptOrTitle, 'mkt') !== false;
+    if ($_isMktStaff && !in_array($_domationAuth['role'], ['admin', 'superadmin', 'super_admin', 'director'], true)) {
+        $_domationAuth['role'] = 'marketing';
+        $GLOBALS['domation_auth']['role'] = 'marketing';
+        $_SESSION['role'] = 'marketing';
+    }
+    $_SESSION['is_admin'] = in_array($_domationAuth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'marketing', 'mkt', 'digital_marketing', 'manager'], true) || $_isMktStaff;
 } else {
     $current_admin_id = null;
     $GLOBALS['current_admin_id'] = null;
@@ -932,7 +677,7 @@ if (!domationIsPublicOrInternalEndpoint()) {
     if (!$_domationAuth) {
         jsonResponse(false, null, 'Unauthorized: Token không hợp lệ hoặc đã hết hạn.', [], 401);
     }
-    $allowedRoles = ['admin', 'superadmin', 'super_admin', 'director', 'marketing', 'manager', 'leader', 'sale_admin', 'saleadmin', 'sale', 'sales'];
+    $allowedRoles = ['admin', 'superadmin', 'super_admin', 'director', 'marketing', 'mkt', 'digital_marketing', 'content', 'ads', 'manager', 'leader', 'team_leader', 'sale_admin', 'saleadmin', 'sale', 'sales'];
     if (!in_array($_domationAuth['role'], $allowedRoles, true)) {
         jsonResponse(false, null, 'Forbidden: Bạn không có quyền truy cập phân hệ Marketing Automation.', [], 403);
     }

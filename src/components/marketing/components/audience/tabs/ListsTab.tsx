@@ -38,22 +38,22 @@ const ListRow = React.memo(({ list, isSelected, onView, onToggleSelect, onEdit, 
             </td>
             <td className={TD_CLASS}>
                 <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-[var(--radius-md)] flex items-center justify-center shrink-0 border transition-all ${list.source === 'Google Sheets'
-                        ? 'bg-emerald-50 border-emerald-200'
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border transition-all ${list.source === 'Google Sheets'
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-600'
                         : list.source === 'MISA CRM'
-                            ? 'bg-sky-50 border-sky-200'
-                            : 'bg-[var(--color-primary-light)] text-[var(--color-primary)] border-[var(--color-border)]'
+                            ? 'bg-sky-50 border-sky-200 text-sky-600'
+                            : 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 dark:bg-emerald-500/15 dark:text-emerald-400'
                         }`}>
                         {list.source === 'Google Sheets' ? (
                             <img src="https://mailmeteor.com/logos/assets/PNG/Google_Sheets_Logo_512px.png" className="w-4 h-4 object-contain" alt="GS" />
                         ) : list.source === 'MISA CRM' ? (
                             <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRlIpztniIEN5ZYvLlwwqBvhzdodvu2NfPSbg&s" className="w-4 h-4 object-contain rounded" alt="MISA" />
                         ) : (
-                            <List className="w-4 h-4" />
+                            <List className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                         )}
                     </div>
                     <div className="min-w-0">
-                        <p className="text-[13px] font-semibold text-[var(--color-text)] group-hover/row:text-[var(--color-primary)] transition-colors truncate">{list.name}</p>
+                        <p className="text-[13px] font-semibold text-[var(--color-text)] group-hover/row:text-emerald-600 transition-colors truncate">{list.name}</p>
                         <p className="text-xs text-[var(--color-text-muted)]">
                             {list.type === 'sync' ? 'Danh sách đồng bộ' : 'Danh sách tĩnh'}
                         </p>

@@ -18,8 +18,8 @@ const BorderStyleLine: React.FC<{ style: string; color?: string; selected?: bool
             <div className="flex items-center justify-center w-full h-full">
                 <div className="w-6 h-6 flex items-center justify-center">
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                        <line x1="3" y1="3" x2="17" y2="17" stroke={selected ? '#d97706' : '#cbd5e1'} strokeWidth="1.5" strokeLinecap="round" />
-                        <line x1="17" y1="3" x2="3" y2="17" stroke={selected ? '#d97706' : '#cbd5e1'} strokeWidth="1.5" strokeLinecap="round" />
+                        <line x1="3" y1="3" x2="17" y2="17" stroke={selected ? '#BD1D2D' : '#cbd5e1'} strokeWidth="1.5" strokeLinecap="round" />
+                        <line x1="17" y1="3" x2="3" y2="17" stroke={selected ? '#BD1D2D' : '#cbd5e1'} strokeWidth="1.5" strokeLinecap="round" />
                     </svg>
                 </div>
             </div>
@@ -28,7 +28,7 @@ const BorderStyleLine: React.FC<{ style: string; color?: string; selected?: bool
     return (
         <div className="flex items-center justify-center w-full h-full px-2">
             <div className="w-full" style={{
-                borderBottom: `2px ${style} ${selected ? '#d97706' : color}`,
+                borderBottom: `2px ${style} ${selected ? '#BD1D2D' : color}`,
             }} />
         </div>
     );
@@ -111,7 +111,7 @@ const BorderStyleDropdown: React.FC<{
                             >
                                 {/* Line preview */}
                                 <div className="flex-1 flex items-center h-5">
-                                    {renderPreview(v, isSelected ? '#d97706' : '#94a3b8', 2)}
+                                    {renderPreview(v, isSelected ? '#BD1D2D' : '#94a3b8', 2)}
                                 </div>
                                 {/* Checkmark if selected */}
                                 {isSelected && (
@@ -156,7 +156,7 @@ const BorderControl: React.FC<BorderControlProps> = ({ values, onChange, blocks,
     ];
 
     return (
-        <div className="space-y-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 transition-all">
+        <div className="space-y-4 p-4 bg-slate-50 rounded-[14px] border border-slate-100 transition-all">
             {/* Header */}
             <div className="flex justify-between items-center">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Đường viền</label>
@@ -196,7 +196,7 @@ const BorderControl: React.FC<BorderControlProps> = ({ values, onChange, blocks,
                                 type="number"
                                 value={getNum(values.borderTopWidth)}
                                 onChange={(e) => handleMainWidthChange(e.target.value)}
-                                className="w-full text-right text-[11px] font-black text-slate-700 bg-slate-50 border border-slate-200 rounded-lg py-1.5 pr-6 pl-1 outline-none focus:border-amber-600"
+                                className="w-full text-right text-[11px] font-black text-slate-700 bg-slate-50 border border-slate-200 rounded-lg py-1.5 pr-6 pl-1 outline-none focus:border-[var(--color-primary)]"
                             />
                             <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400">px</span>
                         </div>
@@ -231,7 +231,7 @@ const BorderControl: React.FC<BorderControlProps> = ({ values, onChange, blocks,
                                     </div>
                                     <input
                                         type="number"
-                                        className="w-full pl-8 pr-6 py-2 text-right text-[11px] font-black rounded-xl border border-slate-200 outline-none focus:border-amber-600 transition-all bg-white text-slate-700 shadow-sm group-hover:border-slate-300"
+                                        className="w-full pl-8 pr-6 py-2 text-right text-[11px] font-black rounded-xl border border-slate-200 outline-none focus:border-[var(--color-primary)] transition-all bg-white text-slate-700 shadow-sm group-hover:border-slate-300"
                                         value={getNum(values[k] as string)}
                                         onChange={(e) => handleSubChange(k, e.target.value)}
                                         placeholder="0"

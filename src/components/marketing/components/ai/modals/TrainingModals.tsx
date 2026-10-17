@@ -68,7 +68,7 @@ export const ManualAddModal = React.memo(({ isOpen, onClose, onAdd, loading, gro
                             onChange={e => setNewDoc({ ...newDoc, content: e.target.value })}
                             rows={20}
                             placeholder="Dán hoặc soạn nội dung để AI ghi nhớ..."
-                            className={`w-full p-4 border-2 rounded-2xl text-xs font-bold outline-none transition-all resize-none shadow-sm ${isDarkTheme
+                            className={`w-full p-4 border-2 rounded-[14px] text-xs font-bold outline-none transition-all resize-none shadow-sm ${isDarkTheme
                                 ? `bg-slate-900 text-slate-200 focus:bg-slate-950 ${(newDoc.content || '').length > 15000 ? 'border-rose-400 focus:border-rose-500' : 'border-slate-800 focus:border-emerald-500/50'}`
                                 : `bg-slate-50 text-slate-700 focus:bg-white ${(newDoc.content || '').length > 15000 ? 'border-rose-400 focus:border-rose-500' : 'border-slate-200 focus:border-emerald-500'}`
                                 }`}
@@ -81,7 +81,7 @@ export const ManualAddModal = React.memo(({ isOpen, onClose, onAdd, loading, gro
                         )}
                     </div>
                 </div>
-                <div className={`p-4 border rounded-2xl flex gap-3 ${isDarkTheme ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-emerald-50 border-emerald-100'}`}>
+                <div className={`p-4 border rounded-[14px] flex gap-3 ${isDarkTheme ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-emerald-50 border-emerald-100'}`}>
                     <Sparkles className="w-5 h-5 text-emerald-500 shrink-0" />
                     <p className={`text-[10px] font-medium leading-relaxed ${isDarkTheme ? 'text-emerald-300' : 'text-emerald-700'}`}>Hệ thống sẽ tự động tách đoạn và tạo Vector Embedding để AI có thể tìm thấy dữ liệu này khi khách hỏi.</p>
                 </div>
@@ -133,7 +133,7 @@ export const EditDocModal = React.memo(({ isOpen, onClose, onUpdate, loading, ed
                     </label>
                     <div className="relative">
                         {editingDoc.content === null ? (
-                            <div className={`w-full h-[340px] rounded-2xl border-2 flex flex-col items-center justify-center gap-3 ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                            <div className={`w-full h-[340px] rounded-[14px] border-2 flex flex-col items-center justify-center gap-3 ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
                                 <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
                                 <span className={`text-[11px] font-bold ${isDarkTheme ? 'text-slate-500' : 'text-slate-400'}`}>Đang tải nội dung...</span>
                             </div>
@@ -143,10 +143,10 @@ export const EditDocModal = React.memo(({ isOpen, onClose, onUpdate, loading, ed
                                     value={editingDoc.content || ''}
                                     onChange={e => setEditingDoc({ ...editingDoc, content: e.target.value })}
                                     rows={20}
-                                    className={`w-full p-4 border-2 rounded-2xl text-xs font-bold outline-none transition-all resize-none shadow-inner ${isDarkTheme ? 'bg-slate-900 border-slate-800 text-slate-200 focus:bg-slate-950 focus:border-emerald-500/50' : 'bg-slate-50 border-slate-200 text-slate-700 focus:bg-white focus:border-emerald-500'}`}
+                                    className={`w-full p-4 border-2 rounded-[14px] text-xs font-bold outline-none transition-all resize-none shadow-inner ${isDarkTheme ? 'bg-slate-900 border-slate-800 text-slate-200 focus:bg-slate-950 focus:border-emerald-500/50' : 'bg-slate-50 border-slate-200 text-slate-700 focus:bg-white focus:border-emerald-500'}`}
                                 />
                                 {editingDoc.source_type === 'upload' && (
-                                    <p className={`text-[9px] font-bold mt-1 ml-1 ${isDarkTheme ? 'text-amber-400/70' : 'text-amber-600/70'}`}>
+                                    <p className={`text-[9px] font-bold mt-1 ml-1 ${isDarkTheme ? 'text-amber-400/70' : 'text-[var(--color-primary)]/70'}`}>
                                         ⚠ Lần train lại sẽ ghi đè nội dung này bằng dữ liệu từ file gốc.
                                     </p>
                                 )}
@@ -156,7 +156,7 @@ export const EditDocModal = React.memo(({ isOpen, onClose, onUpdate, loading, ed
                 </div>
             </div>
 
-            <div className={`flex items-center justify-between p-4 rounded-2xl border ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-100'}`}>
+            <div className={`flex items-center justify-between p-4 rounded-[14px] border ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-100'}`}>
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Loại dữ liệu: <span className={isDarkTheme ? 'text-slate-300' : 'text-slate-700'}>{editingDoc.source_type}</span></div>
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Cập nhật: <span className={isDarkTheme ? 'text-slate-300' : 'text-slate-700'}>{new Date(editingDoc.updated_at || editingDoc.created_at).toLocaleString()}</span></div>
             </div>

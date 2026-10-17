@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useState, useMemo, useEffect } from 'react';
-import { User, Users, X, Smartphone, Tablet, Monitor, Terminal, MapPin, Globe, ChevronDown, RefreshCw, ChevronLeft, ChevronRight, Repeat, Clock, ShieldAlert, Check, List, BarChart3, ShieldCheck, Trash2, Bot, MessageSquare, Activity } from 'lucide-react';
+import { User, Users, X, Smartphone, Tablet, Monitor, Terminal, MapPin, Globe, ChevronDown, RefreshCw, ChevronLeft, ChevronRight, Repeat, Clock, ShieldAlert, Check, List, BarChart3, ShieldCheck, Trash2, Bot, MessageSquare, Activity, ExternalLink, UserCheck, Phone, Mail } from 'lucide-react';
 import { Visitor, VisitorStats, WebProperty } from './types';
 import LiveTrafficModal from './LiveTrafficModal';
 import RetentionTabContent from './overview/RetentionTabContent';
@@ -21,6 +21,20 @@ const openCrmContact360 = (e: React.MouseEvent, contactId: unknown) => {
     const id = Number(contactId);
     if (!id || Number.isNaN(id)) return;
     window.dispatchEvent(new CustomEvent('open-customer-drawer', { detail: { id, initialTab: 'journey360' } }));
+};
+
+const parseVisitorTags = (rawTags: any): string[] => {
+    if (!rawTags) return [];
+    if (Array.isArray(rawTags)) return rawTags.map(String).filter(Boolean);
+    if (typeof rawTags === 'string') {
+        try {
+            const parsed = JSON.parse(rawTags);
+            if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+        } catch {
+            return rawTags.split(',').map(s => s.trim()).filter(Boolean);
+        }
+    }
+    return [];
 };
 
 interface VisitorsTabProps {
@@ -48,6 +62,7 @@ interface VisitorsTabProps {
     property: WebProperty;
     fetchVisitors: () => void;
     onJumpToChat?: (conversationId: string) => void;
+    loading?: boolean;
 }
 
 const VisitorsTab: React.FC<VisitorsTabProps> = ({
@@ -55,7 +70,7 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
     visitorEvents, visitorStats, renderEventIcon, formatDuration,
     safeFormatDate, getUserInitials, visitorType, setVisitorType, deviceFilter, pagination,
     onPageChange, searchTerm, setSearchTerm, returningFilter,
-    setReturningFilter, propertyId, liveCount, property, fetchVisitors
+    setReturningFilter, propertyId, liveCount, property, fetchVisitors, loading = false
 }) => {
     const [mainTab, setMainTab] = useState<'list' | 'loyalty' | 'blocked'>('list');
     const [reportPeriod, setReportPeriod] = useState('7d');
@@ -143,7 +158,7 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                 <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993.0001.5511-.4482.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993 0 .5511-.4482.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.0745 13.8532 7.5 12 7.5c-1.8532 0-3.5902.5745-5.1367 1.4501L4.841 5.4467a.416.416 0 00-.5676-.1521.416.416 0 00-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3432-4.1021-2.6889-7.5743-6.1185-9.4396" />
             </svg>
         );
-        if (n.includes('linux')) return <Terminal className="w-4 h-4 text-amber-600" />;
+        if (n.includes('linux')) return <Terminal className="w-4 h-4 text-[var(--color-primary)]" />;
 
         // Browser Icons
         if (n.includes('chrome')) return (
@@ -167,7 +182,7 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
             </svg>
         );
         if (n.includes('firefox')) return (
-            <svg className="w-4 h-4 text-orange-500" viewBox="0 0 24 24" fill="currentColor">
+            <svg className="w-4 h-4 text-[var(--color-primary)]" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M21.9 11.5c.2-3.8-2.3-7.4-6-8.9.5 2.1-.2 4.4-1.8 5.8 2.6 2.7 1.5 7.1-2.2 8.5-3.1 1.2-6.5-.2-8-3-2-3.7 1.4-7.9 4.6-8.8-.5 1.3-1.3 3-.7 3.9.9 1.5 3.9 1.7 5.3-.6 1.3-2.3-.4-4.8-2.3-5.4.4-1.2.4-2.6-.3-3.7-2.7.2-4.9.4-6.1.8 1.6-1.5 4.3-1.4 6-1.2-4.2.2-7.8 2.8-9.2 6.7-2 5.6 1.1 11.8 6.7 13.8 5.6 2 11.8-1.1 13.8-6.7.2-.4.4-.8.5-1.2z" />
             </svg>
         );
@@ -273,13 +288,13 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
             <LiveTrafficModal isOpen={liveModalOpen} onClose={() => setLiveModalOpen(false)} propertyId={propertyId} />
 
             {/* Standardized 1-Row Toolbar */}
-            <div className="flex flex-wrap items-center gap-2 px-4 py-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] shadow-[var(--shadow-xs)]">
+            <div className="flex flex-wrap items-center gap-2 px-4 py-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[20px] shadow-[var(--shadow-xs)]">
                 {tabsHeader}
                 <div className="ml-auto flex flex-wrap items-center gap-2">
                     <button
                         type="button"
                         onClick={() => setLiveModalOpen(true)}
-                        className="inline-flex items-center gap-2 h-9 px-3 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white text-[13px] font-semibold hover:opacity-90 transition-opacity cursor-pointer"
+                        className="inline-flex items-center gap-2 h-[38px] px-3 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white text-[13px] font-semibold hover:opacity-90 transition-opacity cursor-pointer"
                     >
                         <span className="relative flex h-2 w-2">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
@@ -301,7 +316,7 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                         <button
                             type="button"
                             onClick={() => setOpenDropdown(openDropdown === 'returning' ? null : 'returning')}
-                            className={`h-9 inline-flex items-center gap-2 px-3 rounded-[var(--radius-md)] text-[13px] font-semibold border transition-colors ${openDropdown === 'returning' ? 'bg-[var(--color-bg)] border-[var(--color-primary)] text-[var(--color-text)]' : 'bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-bg)]'}`}
+                            className={`h-[38px] inline-flex items-center gap-2 px-3 rounded-[var(--radius-md)] text-[13px] font-semibold border transition-colors ${openDropdown === 'returning' ? 'bg-[var(--color-bg)] border-[var(--color-primary)] text-[var(--color-text)]' : 'bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-bg)]'}`}
                         >
                             <Users className="w-4 h-4 text-[var(--color-text-muted)]" />
                             <span>{returningOptions.find(o => o.id === returningFilter)?.label}</span>
@@ -311,7 +326,7 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                         {openDropdown === 'returning' && (
                             <>
                                 <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)} />
-                                <div className="absolute top-full mt-1.5 right-0 w-56 bg-[var(--color-surface)] rounded-[var(--radius-lg)] border border-[var(--color-border)] shadow-[var(--shadow-lg)] z-20 py-1.5 overflow-hidden">
+                                <div className="absolute top-full mt-1.5 right-0 w-56 bg-[var(--color-surface)] rounded-[var(--radius-md)] border border-[var(--color-border)] shadow-[var(--shadow-lg)] z-20 py-1.5 overflow-hidden">
                                     {returningOptions.map(opt => (
                                         <button
                                             key={opt.id}
@@ -332,19 +347,19 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                         value={searchTerm}
                         onChange={setSearchTerm}
                         placeholder="Tìm kiếm visitor (Tên, Email, IP)..."
-                        className="w-64"
+                        className="w-64 h-[38px] rounded-[var(--radius-md)]"
                     />
                 </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                 {/* Visitor Table */}
-                <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden flex flex-col h-[800px]">
-                    <div className="p-4 border-b border-slate-100 flex-shrink-0 flex items-center justify-between bg-white">
-                        <h3 className="text-base font-bold text-slate-800">Danh sách ({(pagination?.total || filteredVisitors.length).toLocaleString()})</h3>
+                <div className="lg:col-span-2 bg-[var(--color-surface)] rounded-[20px] border border-[var(--color-border)] shadow-xs overflow-hidden flex flex-col h-[800px]">
+                    <div className="p-4 border-b border-[var(--color-border)] flex-shrink-0 flex items-center justify-between bg-[var(--color-surface)]">
+                        <h3 className="text-base font-bold text-[var(--color-text)]">Danh sách ({(pagination?.total || filteredVisitors.length).toLocaleString()})</h3>
                         <button
                             onClick={() => fetchVisitors()}
-                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all group"
+                            className="p-1.5 text-slate-400 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-light)] rounded-lg transition-all group"
                             title="Tải lại danh sách"
                         >
                             <RefreshCw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
@@ -360,7 +375,30 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                                 </tr>
                             </thead>
                             <tbody>
-                                {groupedVisitors.length > 0 ? (
+                                {loading ? (
+                                    Array.from({ length: 6 }).map((_, idx) => (
+                                        <tr key={`skeleton-${idx}`} className="border-b border-slate-100">
+                                            <td className="px-3 py-3">
+                                                <div className="flex items-center gap-2.5">
+                                                    <div className="w-8 h-8 rounded-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] shrink-0" />
+                                                    <div className="space-y-1.5 flex-1 min-w-0">
+                                                        <div className="h-3.5 w-28 rounded-[6px] animate-pulse bg-slate-200/70 dark:bg-white/[0.06]" />
+                                                        <div className="h-2.5 w-36 rounded-[6px] animate-pulse bg-slate-200/70 dark:bg-white/[0.06]" />
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-2 py-3 text-center">
+                                                <div className="w-7 h-7 rounded-lg animate-pulse bg-slate-200/70 dark:bg-white/[0.06] mx-auto" />
+                                            </td>
+                                            <td className="px-2 py-3">
+                                                <div className="flex flex-col items-end gap-1.5">
+                                                    <div className="h-3 w-16 rounded-[6px] animate-pulse bg-slate-200/70 dark:bg-white/[0.06]" />
+                                                    <div className="h-2.5 w-12 rounded-[6px] animate-pulse bg-slate-200/70 dark:bg-white/[0.06]" />
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : groupedVisitors.length > 0 ? (
                                     groupedVisitors.map((group) => {
                                         const { parent: visitor, children } = group;
                                         const identity = visitor.email || visitor.phone || visitor.id;
@@ -374,12 +412,12 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                                                         fetchVisitorJourney(visitor);
                                                         if (hasChildren) toggleIdentity(null, identity);
                                                     }}
-                                                    className={`border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors ${(visitor as any).is_blocked ? 'bg-rose-50' : (selectedVisitor?.id === visitor.id ? 'bg-slate-100/80 shadow-[inset_4px_0_0_0_#2563eb]' : '')}`}
+                                                    className={`border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors ${(visitor as any).is_blocked ? 'bg-rose-50' : (selectedVisitor?.id === visitor.id ? 'bg-slate-100/80 shadow-[inset_4px_0_0_0_var(--color-primary)]' : '')}`}
                                                 >
                                                     <td className="px-3 py-2.5">
                                                         <div className="flex items-center gap-2">
                                                             <div className="relative flex-shrink-0">
-                                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center border border-white shadow-sm overflow-hidden ${visitor.device_type === 'bot' ? 'bg-white' : (visitor.subscriber_id || visitor.zalo_user_id || visitor.email || visitor.phone) ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center border border-white shadow-sm overflow-hidden ${visitor.device_type === 'bot' ? 'bg-white' : (visitor.subscriber_id || visitor.zalo_user_id || visitor.email || visitor.phone) ? 'bg-[var(--color-primary)] text-white' : 'bg-slate-100 text-slate-400'}`}>
                                                                     {visitor.device_type === 'bot' ? (
                                                                         (() => {
                                                                             const b = (visitor.browser || '').toLowerCase();
@@ -405,7 +443,7 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                                                                     )}
                                                                 </div>
                                                                 {((visitor as any).is_blocked || visitor.subscriber_id || visitor.zalo_user_id || visitor.email || visitor.phone || visitor.device_type === 'bot') && (
-                                                                    <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 ${(visitor as any).is_blocked ? 'bg-rose-600' : (visitor.device_type === 'bot' ? 'bg-amber-600' : 'bg-emerald-500')} rounded-full flex items-center justify-center border-2 border-white`} title={(visitor as any).is_blocked ? 'Blocked' : (visitor.device_type === 'bot' ? 'Verified Bot' : 'Identified Customer')}>
+                                                                    <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 ${(visitor as any).is_blocked ? 'bg-rose-600' : (visitor.device_type === 'bot' ? 'bg-[var(--color-primary)]' : 'bg-emerald-500')} rounded-full flex items-center justify-center border-2 border-white`} title={(visitor as any).is_blocked ? 'Blocked' : (visitor.device_type === 'bot' ? 'Verified Bot' : 'Identified Customer')}>
                                                                         {(visitor as any).is_blocked ? <ShieldAlert className="w-1.5 h-1.5 text-white" /> : (
                                                                             <svg className="w-1.5 h-1.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="5">
                                                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -416,7 +454,7 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                                                             </div>
                                                             <div className="min-w-0 flex-1">
                                                                 <div className="flex items-center gap-1.5">
-                                                                    <p className="text-sm font-bold text-slate-700 truncate max-w-[120px]">
+                                                                    <p className="text-sm font-bold text-slate-700 truncate max-w-[140px]">
                                                                         {(visitor as any).is_blocked ? <span className="text-rose-600 font-extrabold">Blocked User</span> : (visitor.device_type === 'bot' ? (visitor.browser || 'Bot') : (visitor.first_name && visitor.first_name !== 'Visitor' ? visitor.first_name : (visitor.email || (visitor.phone ? 'Phone Visitor' : 'Anonymous'))))}
                                                                     </p>
                                                                     {visitor.device_type === 'bot' && (
@@ -437,9 +475,58 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                                                                         <span className="text-[9px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-lg font-bold uppercase tracking-wider shrink-0">Quay lại</span>
                                                                     )}
                                                                 </div>
-                                                                <p className="text-[10px] text-slate-500 truncate font-medium">
-                                                                    {visitor.device_type === 'bot' ? ((visitor.browser || '').toLowerCase().includes('mailflow') ? 'Bot cào của mailflow này Automated Verified Crawler' : 'Automated Verified Crawler') : (visitor.email || visitor.phone || visitor.ip_address || `ID: ${visitor.id.substring(0, 8)}`)}
-                                                                </p>
+                                                                <div className="flex flex-wrap items-center gap-1 mt-1">
+                                                                    {visitor.contact_id && (
+                                                                        <span
+                                                                            onClick={(e) => openCrmContact360(e, visitor.contact_id)}
+                                                                            className="text-[11px] font-mono text-[var(--color-text-muted)] bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded px-1.5 py-0.5 cursor-pointer"
+                                                                            title="Mở Hồ sơ CRM 360"
+                                                                        >
+                                                                            CRM #{visitor.contact_id}
+                                                                        </span>
+                                                                    )}
+                                                                    <span className="text-[11px] font-mono text-[var(--color-text-muted)] bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
+                                                                        Web ID: {visitor.id.substring(0, 8)}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[10px] text-slate-500 font-medium">
+                                                                    {visitor.device_type === 'bot' ? (
+                                                                        <span>{(visitor.browser || '').toLowerCase().includes('mailflow') ? 'Bot cào của mailflow này Automated Verified Crawler' : 'Automated Verified Crawler'}</span>
+                                                                    ) : (
+                                                                        <>
+                                                                            {(visitor.phone_number || visitor.phone) && (
+                                                                                <span className="inline-flex items-center gap-0.5 text-slate-600 font-semibold">
+                                                                                    <Phone className="w-2.5 h-2.5" />
+                                                                                    {visitor.phone_number || visitor.phone}
+                                                                                </span>
+                                                                            )}
+                                                                            {visitor.email && (
+                                                                                <span className="inline-flex items-center gap-0.5 truncate max-w-[140px]">
+                                                                                    <Mail className="w-2.5 h-2.5" />
+                                                                                    {visitor.email}
+                                                                                </span>
+                                                                            )}
+                                                                            {!visitor.phone_number && !visitor.phone && !visitor.email && visitor.ip_address && (
+                                                                                <span>IP: {visitor.ip_address}</span>
+                                                                            )}
+                                                                        </>
+                                                                    )}
+                                                                    {visitor.salesperson && (
+                                                                        <span className="inline-flex items-center gap-0.5 text-emerald-700 font-semibold">
+                                                                            <UserCheck className="w-2.5 h-2.5" />
+                                                                            {visitor.salesperson}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                {parseVisitorTags(visitor.tags).length > 0 && (
+                                                                    <div className="flex flex-wrap gap-1 mt-1">
+                                                                        {parseVisitorTags(visitor.tags).slice(0, 2).map((t, idx) => (
+                                                                            <span key={idx} className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-200 text-[9px] font-semibold">
+                                                                                {t}
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     </td>
@@ -457,8 +544,31 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                                                         <div className="flex flex-col items-end gap-1">
                                                             <div className="text-[10px] font-bold text-slate-700 leading-tight">{safeFormatDate(visitor.last_visit_at).split(' ')[0]}</div>
                                                             <div className="text-[9px] font-medium text-slate-400 leading-tight">{safeFormatDate(visitor.last_visit_at).split(' ')[1]}</div>
-                                                            <div className="text-[9px] font-medium text-slate-400 leading-tight">{safeFormatDate(visitor.last_visit_at).split(' ')[1]}</div>
-
+                                                            <div className="flex items-center gap-1 mt-1">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        fetchVisitorJourney(visitor);
+                                                                    }}
+                                                                    className="px-1.5 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-50 text-[10px] font-semibold text-slate-700 inline-flex items-center gap-0.5"
+                                                                    title="Xem Hồ sơ & Lịch sử Chat"
+                                                                >
+                                                                    <MessageSquare className="w-2.5 h-2.5 text-[var(--color-primary)]" />
+                                                                    <span>Hồ sơ</span>
+                                                                </button>
+                                                                {visitor.contact_id && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => openCrmContact360(e, visitor.contact_id)}
+                                                                        className="px-1.5 py-0.5 rounded border border-slate-200 bg-slate-100 hover:bg-slate-200 text-[10px] font-semibold text-slate-700 inline-flex items-center gap-0.5"
+                                                                        title="Hồ sơ CRM 360"
+                                                                    >
+                                                                        <ExternalLink className="w-2.5 h-2.5" />
+                                                                        <span>CRM</span>
+                                                                    </button>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -535,14 +645,14 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                 </div>
 
                 {/* Journey Details */}
-                <div className="lg:col-span-3 bg-white rounded-3xl border border-slate-100 shadow-sm p-6 h-[800px] flex flex-col">
+                <div className="lg:col-span-3 bg-[var(--color-surface)] rounded-[20px] border border-[var(--color-border)] shadow-xs p-6 h-[800px] flex flex-col">
                     {selectedVisitor ? (
                         <>
                             <div className="flex-shrink-0 mb-6">
                                 <div className="flex items-start justify-between mb-6">
                                     <div className="flex items-center gap-4">
                                         <div className="relative">
-                                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg border-2 border-white ${selectedVisitor.device_type === 'bot' ? 'bg-white' : (selectedVisitor.subscriber_id || selectedVisitor.zalo_user_id || selectedVisitor.email || selectedVisitor.phone) ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                            <div className={`w-14 h-14 rounded-[14px] flex items-center justify-center shadow-lg border-2 border-white ${selectedVisitor.device_type === 'bot' ? 'bg-white' : (selectedVisitor.subscriber_id || selectedVisitor.zalo_user_id || selectedVisitor.email || selectedVisitor.phone) ? 'bg-[var(--color-primary)] text-white' : 'bg-slate-100 text-slate-400'}`}>
                                                 {selectedVisitor.device_type === 'bot' ? (
                                                     (() => {
                                                         const b = (selectedVisitor.browser || '').toLowerCase();
@@ -554,11 +664,11 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                                                         if (b.includes('amazon') || b.includes('aws')) return <img loading="lazy" decoding="async" src="https://upload.wikimedia.org/wikipedia/commons/d/de/Amazon_icon.png" className="w-8 h-8 object-contain" alt="" />;
                                                         if (b.includes('bytespider') || b.includes('tiktok')) return <img loading="lazy" decoding="async" src="https://img.freepik.com/premium-photo/tiktok-logo_1080029-103.jpg?semt=ais_hybrid&w=740&q=80" className="w-8 h-8 object-contain" alt="" />;
                                                         if (b.includes('baidu')) return <img loading="lazy" decoding="async" src="https://cdn-icons-png-flaticon.com/512/2504/2504887.png" className="w-8 h-8 object-contain" alt="" />;
-                                                        if (b.includes('mailflow')) return <div className="w-12 h-12 bg-slate-700 rounded-2xl flex items-center justify-center text-white shadow-lg"><Globe className="w-7 h-7" /></div>;
+                                                        if (b.includes('mailflow')) return <div className="w-12 h-12 bg-slate-700 rounded-[14px] flex items-center justify-center text-white shadow-lg"><Globe className="w-7 h-7" /></div>;
                                                         return <Bot className="w-8 h-8 text-slate-400" />;
                                                     })()
                                                 ) : selectedVisitor.avatar_url ? (
-                                                    <img loading="lazy" decoding="async" src={selectedVisitor.avatar_url} alt="" className="w-full h-full object-cover rounded-2xl" />
+                                                    <img loading="lazy" decoding="async" src={selectedVisitor.avatar_url} alt="" className="w-full h-full object-cover rounded-[14px]" />
                                                 ) : (
                                                     (selectedVisitor.email || selectedVisitor.first_name) ? (
                                                         <span className="text-xl font-bold uppercase">
@@ -568,7 +678,7 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                                                 )}
                                             </div>
                                             {((selectedVisitor as any).is_blocked || selectedVisitor.subscriber_id || selectedVisitor.zalo_user_id || selectedVisitor.email || selectedVisitor.phone || selectedVisitor.device_type === 'bot') && (
-                                                <div className={`absolute -bottom-1 -right-1 w-5 h-5 ${(selectedVisitor as any).is_blocked ? 'bg-rose-600' : (selectedVisitor.device_type === 'bot' ? 'bg-amber-600' : 'bg-emerald-500')} rounded-full flex items-center justify-center border-2 border-white shadow-sm`} title={(selectedVisitor as any).is_blocked ? 'Blocked' : (selectedVisitor.device_type === 'bot' ? 'Verified Bot' : 'Identified Customer')}>
+                                                <div className={`absolute -bottom-1 -right-1 w-5 h-5 ${(selectedVisitor as any).is_blocked ? 'bg-rose-600' : (selectedVisitor.device_type === 'bot' ? 'bg-[var(--color-primary)]' : 'bg-emerald-500')} rounded-full flex items-center justify-center border-2 border-white shadow-sm`} title={(selectedVisitor as any).is_blocked ? 'Blocked' : (selectedVisitor.device_type === 'bot' ? 'Verified Bot' : 'Identified Customer')}>
                                                     {(selectedVisitor as any).is_blocked ? <ShieldAlert className="w-3 h-3 text-white" /> : (
                                                         <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="5">
                                                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -578,30 +688,63 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                                             )}
                                         </div>
                                         <div>
-                                            <h4 className="text-xl font-bold text-slate-800 flex items-center gap-3">
-                                                {(selectedVisitor as any).is_blocked ? <span className="text-rose-600">Blocked User</span> : (selectedVisitor.device_type === 'bot' ? (selectedVisitor.browser || 'Bot') : (selectedVisitor.first_name && selectedVisitor.first_name !== 'Visitor' ? selectedVisitor.first_name : (selectedVisitor.email || (selectedVisitor.phone ? 'Phone Visitor' : 'Anonymous'))))}
-                                                {selectedVisitor.device_type === 'bot' ? (
-                                                    <span className="text-[10px] px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-xl font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-sm border border-emerald-100">
-                                                        <Check className="w-3 h-3" />
-                                                        Super Bot Verify
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <h4 className="text-xl font-bold text-slate-800 flex items-center gap-3">
+                                                    {(selectedVisitor as any).is_blocked ? <span className="text-rose-600">Blocked User</span> : (selectedVisitor.device_type === 'bot' ? (selectedVisitor.browser || 'Bot') : (selectedVisitor.first_name && selectedVisitor.first_name !== 'Visitor' ? selectedVisitor.first_name : (selectedVisitor.email || (selectedVisitor.phone ? 'Phone Visitor' : 'Anonymous'))))}
+                                                    {selectedVisitor.device_type === 'bot' ? (
+                                                        <span className="text-[10px] px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-xl font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-sm border border-emerald-100">
+                                                            <Check className="w-3 h-3" />
+                                                            Super Bot Verify
+                                                        </span>
+                                                    ) : (selectedVisitor.sessions > 1 || selectedVisitor.visit_count > 1) && (
+                                                        <span className="text-[10px] px-2.5 py-1 bg-blue-50 text-blue-600 rounded-xl font-bold uppercase tracking-wider">Khách quay lại</span>
+                                                    )}
+                                                </h4>
+                                                {selectedVisitor.contact_id && (
+                                                    <span
+                                                        onClick={(e) => openCrmContact360(e, selectedVisitor.contact_id)}
+                                                        className="text-[11px] font-mono text-[var(--color-text-muted)] bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded px-1.5 py-0.5 cursor-pointer"
+                                                    >
+                                                        CRM #{selectedVisitor.contact_id}
                                                     </span>
-                                                ) : (selectedVisitor.sessions > 1 || selectedVisitor.visit_count > 1) && (
-                                                    <span className="text-[10px] px-2.5 py-1 bg-blue-50 text-blue-600 rounded-xl font-bold uppercase tracking-wider">Khách quay lại</span>
                                                 )}
-                                            </h4>
-                                            <p className="text-sm text-slate-500 font-medium mt-0.5">
-                                                {selectedVisitor.device_type === 'bot' ? ((selectedVisitor.browser || '').toLowerCase().includes('mailflow') ? 'Bot cào của mailflow này Automated Verified Crawler' : 'Automated Verified Crawler') : (selectedVisitor.email || selectedVisitor.phone || `ID: ${selectedVisitor.id}`)}
-                                            </p>
+                                                <span className="text-[11px] font-mono text-[var(--color-text-muted)] bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
+                                                    Web ID: {selectedVisitor.id.substring(0, 8)}
+                                                </span>
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500 font-medium mt-1">
+                                                <span>
+                                                    {selectedVisitor.device_type === 'bot' ? ((selectedVisitor.browser || '').toLowerCase().includes('mailflow') ? 'Bot cào của mailflow này Automated Verified Crawler' : 'Automated Verified Crawler') : (selectedVisitor.email || selectedVisitor.phone_number || selectedVisitor.phone || `ID: ${selectedVisitor.id}`)}
+                                                </span>
+                                                {selectedVisitor.salesperson && (
+                                                    <span className="text-xs text-emerald-700 font-semibold inline-flex items-center gap-1">
+                                                        <UserCheck className="w-3.5 h-3.5" />
+                                                        Sale: {selectedVisitor.salesperson}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
-                                    <button onClick={() => setSelectedVisitor(null)} className="p-2 hover:bg-slate-50 rounded-full text-slate-400 hover:text-slate-600 transition-colors">
-                                        <X className="w-5 h-5" />
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        {selectedVisitor.contact_id && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => openCrmContact360(e, selectedVisitor.contact_id)}
+                                                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                                            >
+                                                <ExternalLink className="w-3.5 h-3.5" />
+                                                Hồ sơ CRM 360
+                                            </button>
+                                        )}
+                                        <button onClick={() => setSelectedVisitor(null)} className="p-2 hover:bg-slate-50 rounded-full text-slate-400 hover:text-slate-600 transition-colors">
+                                            <X className="w-5 h-5" />
+                                        </button>
+                                    </div>
                                 </div>
 
                                 {/* Visitor Info Cards */}
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl">
+                                    <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px]">
                                         <div className="flex items-center gap-2 mb-2">
                                             <div className="text-slate-500 p-1.5 bg-white rounded-lg shadow-sm">
                                                 {selectedVisitor.device_type === 'bot' ? <Bot className="w-4 h-4" /> :
@@ -616,7 +759,7 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                                             {selectedVisitor.device_type ? selectedVisitor.device_type.charAt(0).toUpperCase() + selectedVisitor.device_type.slice(1) : 'Unknown'}
                                         </p>
                                     </div>
-                                    <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl">
+                                    <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px]">
                                         <div className="flex items-center gap-2 mb-2">
                                             <div className="text-slate-500 p-1.5 bg-white rounded-lg shadow-sm">
                                                 {renderBrandIcon(selectedVisitor.os)}
@@ -625,7 +768,7 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                                         </div>
                                         <p className="text-sm font-bold text-slate-800 pl-1">{selectedVisitor.os || 'Unknown'}</p>
                                     </div>
-                                    <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl">
+                                    <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px]">
                                         <div className="flex items-center gap-2 mb-2">
                                             <div className="text-slate-500 p-1.5 bg-white rounded-lg shadow-sm">
                                                 {renderBrandIcon(selectedVisitor.browser)}
@@ -634,7 +777,7 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                                         </div>
                                         <p className="text-sm font-bold text-slate-800 pl-1">{selectedVisitor.browser || 'Unknown'}</p>
                                     </div>
-                                    <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl">
+                                    <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px]">
                                         <div className="flex items-center gap-2 mb-2">
                                             <div className="text-slate-500 p-1.5 bg-white rounded-lg shadow-sm">
                                                 <MapPin className="w-4 h-4" />
@@ -676,19 +819,19 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                                 {/* Journey Stats */}
                                 {visitorStats && (
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 flex-shrink-0">
-                                        <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl hover:border-slate-200 transition-colors">
+                                        <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px] hover:border-slate-200 transition-colors">
                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Time</p>
                                             <p className="text-xl font-black text-slate-800">{formatDuration(visitorStats.total_time || 0)}</p>
                                         </div>
-                                        <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl hover:border-slate-200 transition-colors">
+                                        <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px] hover:border-slate-200 transition-colors">
                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Page Views</p>
                                             <p className="text-xl font-black text-slate-800">{visitorStats.page_views || 0}</p>
                                         </div>
-                                        <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl hover:border-slate-200 transition-colors">
+                                        <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px] hover:border-slate-200 transition-colors">
                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Button Clicks</p>
                                             <p className="text-xl font-black text-slate-800">{visitorStats.clicks || 0}</p>
                                         </div>
-                                        <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl hover:border-slate-200 transition-colors">
+                                        <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px] hover:border-slate-200 transition-colors">
                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Canvas Clicks</p>
                                             <p className="text-xl font-black text-slate-800">{visitorStats.canvas_clicks || 0}</p>
                                         </div>
@@ -699,13 +842,13 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                                 <div className="flex items-center gap-6 mb-4 flex-shrink-0 border-b border-slate-100">
                                     <button
                                         onClick={() => setActiveJourneyTab('journey')}
-                                        className={`pb-3 text-sm font-bold transition-all border-b-2 whitespace-nowrap ${activeJourneyTab === 'journey' ? 'border-blue-600 text-slate-800' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+                                        className={`pb-3 text-sm font-bold transition-all border-b-2 whitespace-nowrap ${activeJourneyTab === 'journey' ? 'border-[var(--color-primary)] text-slate-800' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
                                     >
                                         Hành trình hiện tại
                                     </button>
                                     <button
                                         onClick={() => setActiveJourneyTab('loyalty')}
-                                        className={`pb-3 text-sm font-bold transition-all border-b-2 whitespace-nowrap ${activeJourneyTab === 'loyalty' ? 'border-blue-600 text-slate-800' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+                                        className={`pb-3 text-sm font-bold transition-all border-b-2 whitespace-nowrap ${activeJourneyTab === 'loyalty' ? 'border-[var(--color-primary)] text-slate-800' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
                                     >
                                         Loyalty
                                     </button>
@@ -714,7 +857,7 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
 
                                     <button
                                         onClick={() => selectedVisitor && handleJumpToChat(selectedVisitor)}
-                                        className="mr-4 pb-3 text-slate-400 hover:text-amber-600 transition-colors flex items-center gap-1.5 text-xs font-bold group"
+                                        className="mr-4 pb-3 text-slate-400 hover:text-[var(--color-primary)] transition-colors flex items-center gap-1.5 text-xs font-bold group"
                                         title="Chat với khách này"
                                     >
                                         <MessageSquare className="w-3.5 h-3.5" />
@@ -723,7 +866,7 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
 
                                     <button
                                         onClick={() => selectedVisitor && fetchVisitorJourney(selectedVisitor)}
-                                        className="pb-3 text-slate-400 hover:text-blue-600 transition-colors flex items-center gap-1.5 text-xs font-bold group"
+                                        className="pb-3 text-slate-400 hover:text-[var(--color-primary)] transition-colors flex items-center gap-1.5 text-xs font-bold group"
                                         title="Tải lại hành trình"
                                     >
                                         <RefreshCw className="w-3.5 h-3.5 group-hover:rotate-180 transition-transform duration-500" />
@@ -799,14 +942,14 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                                                     return filteredJourneyEvents.map((ev, idx) => (
                                                         <div key={idx} className="flex gap-4 items-start group">
                                                             <div className="mt-1 relative">
-                                                                <div className="relative z-10 bg-white p-1 rounded-full border border-slate-100 shadow-sm text-slate-500 group-hover:text-amber-600 group-hover:border-amber-100 transition-colors">
+                                                                <div className="relative z-10 bg-white p-1 rounded-full border border-slate-100 shadow-sm text-slate-500 group-hover:text-[var(--color-primary)] group-hover:border-amber-100 transition-colors">
                                                                     {renderEventIcon(ev.type)}
                                                                 </div>
                                                                 {idx !== filteredJourneyEvents.length - 1 && (
                                                                     <div className="absolute top-8 left-1/2 -translate-x-1/2 w-px h-full bg-slate-100 -z-0" />
                                                                 )}
                                                             </div>
-                                                            <div className="flex-1 min-w-0 bg-slate-50/50 p-4 rounded-2xl border border-slate-100/50 hover:bg-slate-50 hover:border-slate-200 transition-colors">
+                                                            <div className="flex-1 min-w-0 bg-slate-50/50 p-4 rounded-[14px] border border-slate-100/50 hover:bg-slate-50 hover:border-slate-200 transition-colors">
                                                                 <div className="flex items-start justify-between gap-3 mb-1">
                                                                     <div className="flex-1 min-w-0">
                                                                         <a
@@ -890,7 +1033,7 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                                     <div className="flex-1 overflow-y-auto pr-2">
                                         <div className="space-y-6">
                                             {/* Retention / Frequency */}
-                                            <div className="relative overflow-hidden bg-white p-5 rounded-3xl border border-slate-200/50 shadow-lg shadow-slate-100/50">
+                                            <div className="relative overflow-hidden bg-white p-5 rounded-[20px] border border-slate-200/50 shadow-lg shadow-slate-100/50">
                                                 <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-slate-50 to-slate-100 rounded-full blur-3xl opacity-30" />
                                                 <div className="relative">
                                                     <div className="flex items-center gap-2 mb-4">
@@ -900,13 +1043,13 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                                                         <h5 className="text-sm font-bold text-slate-800">Mức độ quay lại</h5>
                                                     </div>
                                                     <div className="grid grid-cols-2 gap-3">
-                                                        <div className="group relative bg-white/80 backdrop-blur-sm p-4 rounded-2xl border border-slate-200/50 hover:border-emerald-200 hover:shadow-md transition-all duration-300">
-                                                            <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/50 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                        <div className="group relative bg-white/80 backdrop-blur-sm p-4 rounded-[14px] border border-slate-200/50 hover:border-emerald-200 hover:shadow-md transition-all duration-300">
+                                                            <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/50 to-transparent rounded-[14px] opacity-0 group-hover:opacity-100 transition-opacity" />
                                                             <p className="relative text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Tổng phiên</p>
                                                             <p className="relative text-2xl font-black text-slate-800">{(selectedVisitor.sessions || 1).toLocaleString()}</p>
                                                         </div>
-                                                        <div className="group relative bg-white/80 backdrop-blur-sm p-4 rounded-2xl border border-slate-200/50 hover:border-emerald-200 hover:shadow-md transition-all duration-300">
-                                                            <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/50 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                        <div className="group relative bg-white/80 backdrop-blur-sm p-4 rounded-[14px] border border-slate-200/50 hover:border-emerald-200 hover:shadow-md transition-all duration-300">
+                                                            <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/50 to-transparent rounded-[14px] opacity-0 group-hover:opacity-100 transition-opacity" />
                                                             <p className="relative text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Tần suất</p>
                                                             <p className="relative text-lg font-black text-slate-800">
                                                                 {(selectedVisitor.sessions && selectedVisitor.sessions > 1) ? 'Thường xuyên' : 'Mới'}
@@ -917,7 +1060,7 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                                             </div>
 
                                             {/* Engagement */}
-                                            <div className="relative overflow-hidden bg-gradient-to-br from-white to-slate-50 p-5 rounded-3xl border border-slate-200/50 shadow-lg shadow-slate-100/50">
+                                            <div className="relative overflow-hidden bg-gradient-to-br from-white to-slate-50 p-5 rounded-[20px] border border-slate-200/50 shadow-lg shadow-slate-100/50">
                                                 <div className="absolute bottom-0 left-0 w-32 h-32 bg-gradient-to-tr from-emerald-50 to-cyan-50 rounded-full blur-3xl opacity-30" />
                                                 <div className="relative">
                                                     <div className="flex items-center gap-2 mb-4">
@@ -927,18 +1070,18 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                                                         <h5 className="text-sm font-bold text-slate-800">Tương tác theo Thời gian</h5>
                                                     </div>
                                                     <div className="space-y-2.5">
-                                                        <div className="group flex justify-between items-center p-3.5 bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/50 hover:border-emerald-200 hover:shadow-md transition-all duration-300">
-                                                            <div className="absolute inset-0 bg-gradient-to-r from-emerald-50/50 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                        <div className="group flex justify-between items-center p-3.5 bg-white/80 backdrop-blur-sm rounded-[14px] border border-slate-200/50 hover:border-emerald-200 hover:shadow-md transition-all duration-300">
+                                                            <div className="absolute inset-0 bg-gradient-to-r from-emerald-50/50 to-transparent rounded-[14px] opacity-0 group-hover:opacity-100 transition-opacity" />
                                                             <span className="relative text-xs font-semibold text-slate-600">Lần đầu truy cập</span>
                                                             <span className="relative text-xs font-black text-slate-800">{safeFormatDate(selectedVisitor.first_visit_at)}</span>
                                                         </div>
-                                                        <div className="group flex justify-between items-center p-3.5 bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/50 hover:border-cyan-200 hover:shadow-md transition-all duration-300">
-                                                            <div className="absolute inset-0 bg-gradient-to-r from-cyan-50/50 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                        <div className="group flex justify-between items-center p-3.5 bg-white/80 backdrop-blur-sm rounded-[14px] border border-slate-200/50 hover:border-cyan-200 hover:shadow-md transition-all duration-300">
+                                                            <div className="absolute inset-0 bg-gradient-to-r from-cyan-50/50 to-transparent rounded-[14px] opacity-0 group-hover:opacity-100 transition-opacity" />
                                                             <span className="relative text-xs font-semibold text-slate-600">Truy cập gần nhất</span>
                                                             <span className="relative text-xs font-black text-slate-800">{safeFormatDate(selectedVisitor.last_visit_at)}</span>
                                                         </div>
-                                                        <div className="group flex justify-between items-center p-3.5 bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/50 hover:border-emerald-200 hover:shadow-md transition-all duration-300">
-                                                            <div className="absolute inset-0 bg-gradient-to-r from-emerald-50/50 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                        <div className="group flex justify-between items-center p-3.5 bg-white/80 backdrop-blur-sm rounded-[14px] border border-slate-200/50 hover:border-emerald-200 hover:shadow-md transition-all duration-300">
+                                                            <div className="absolute inset-0 bg-gradient-to-r from-emerald-50/50 to-transparent rounded-[14px] opacity-0 group-hover:opacity-100 transition-opacity" />
                                                             <span className="relative text-xs font-semibold text-slate-600">Tổng Thời gian onsite</span>
                                                             <span className="relative text-xs font-black text-emerald-600">{formatDuration(visitorStats?.total_time || 0)}</span>
                                                         </div>
@@ -992,7 +1135,7 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                 confirmLabel="Xác nhận chặn"
                 message={
                     <div className="space-y-4">
-                        <div className="p-4 bg-rose-50 rounded-2xl border border-rose-100">
+                        <div className="p-4 bg-rose-50 rounded-[14px] border border-rose-100">
                             <p className="text-sm font-medium text-rose-800 leading-relaxed">
                                 Bạn đang thực hiện chặn địa chỉ IP <span className="font-black underline">{ipToBlock?.ip}</span> của <span className="font-black">{ipToBlock?.visitorName}</span>.
                             </p>
@@ -1003,7 +1146,7 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Lý do chặn (không bắt buộc)</label>
                             <textarea
-                                className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm focus:outline-none focus:ring-4 focus:ring-rose-500/10 focus:border-rose-300 transition-all min-h-[100px] resize-none"
+                                className="w-full bg-slate-50 border border-slate-200 rounded-[14px] p-4 text-sm focus:outline-none focus:ring-4 focus:ring-rose-500/10 focus:border-rose-300 transition-all min-h-[100px] resize-none"
                                 placeholder="Ví dụ: Spam click, Attack detection..."
                                 value={blockReason}
                                 onChange={(e) => setBlockReason(e.target.value)}
@@ -1050,7 +1193,7 @@ const BlockedIPsContent: React.FC<{ property: WebProperty }> = ({ property }) =>
     };
 
     return (
-        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 bg-white p-6 rounded-[32px] border border-slate-100 shadow-xl shadow-slate-200/50">
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 bg-[var(--color-surface)] p-6 rounded-[20px] border border-[var(--color-border)] shadow-xs">
             <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                     <div className="p-2.5 bg-rose-50 text-rose-600 rounded-xl">
@@ -1066,12 +1209,12 @@ const BlockedIPsContent: React.FC<{ property: WebProperty }> = ({ property }) =>
                     className="p-2.5 hover:bg-slate-50 rounded-xl transition-all border border-transparent hover:border-slate-100 group"
                     title="Làm mới"
                 >
-                    <RefreshCw className={`w-4 h-4 text-slate-400 group-hover:text-emerald-500 ${loading ? 'animate-spin' : ''}`} />
+                    <RefreshCw className="w-4 h-4 text-slate-400 group-hover:text-[var(--color-primary)] group-hover:rotate-180 transition-transform duration-500" />
                 </button>
             </div>
 
             {/* Mechanism Explanation */}
-            <div className="mb-6 bg-slate-50/80 rounded-2xl p-4 border border-slate-100">
+            <div className="mb-6 bg-slate-50/80 rounded-[14px] p-4 border border-slate-100">
                 <div className="flex gap-3">
                     <div className="mt-0.5">
                         <ShieldCheck className="w-4 h-4 text-slate-400" />
@@ -1084,7 +1227,20 @@ const BlockedIPsContent: React.FC<{ property: WebProperty }> = ({ property }) =>
             </div>
 
             <div className="space-y-2">
-                {ips.length > 0 ? (
+                {loading ? (
+                    Array.from({ length: 4 }).map((_, idx) => (
+                        <div key={`blocked-skeleton-${idx}`} className="flex items-center justify-between p-3 pl-4 bg-white border border-slate-100 rounded-xl">
+                            <div className="flex items-center gap-4 min-w-0 flex-1">
+                                <div className="w-8 h-8 rounded-lg animate-pulse bg-slate-200/70 dark:bg-white/[0.06] shrink-0" />
+                                <div className="space-y-1.5 flex-1">
+                                    <div className="h-3.5 w-32 rounded-[6px] animate-pulse bg-slate-200/70 dark:bg-white/[0.06]" />
+                                    <div className="h-2.5 w-48 rounded-[6px] animate-pulse bg-slate-200/70 dark:bg-white/[0.06]" />
+                                </div>
+                            </div>
+                            <div className="w-8 h-8 rounded-lg animate-pulse bg-slate-200/70 dark:bg-white/[0.06]" />
+                        </div>
+                    ))
+                ) : ips.length > 0 ? (
                     ips.map((item) => (
                         <div key={item.id} className="flex items-center justify-between p-3 pl-4 bg-white border border-slate-100 rounded-xl hover:border-rose-200 hover:shadow-sm transition-all group">
                             <div className="flex items-center gap-4 min-w-0">
@@ -1115,15 +1271,13 @@ const BlockedIPsContent: React.FC<{ property: WebProperty }> = ({ property }) =>
                         </div>
                     ))
                 ) : (
-                    !loading && (
-                        <div className="py-12 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
-                            <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm border border-slate-100">
-                                <ShieldCheck className="w-6 h-6 text-slate-300" />
-                            </div>
-                            <h4 className="text-sm font-bold text-slate-700">Chưa có IP bị chặn</h4>
-                            <p className="text-slate-400 text-xs mt-1">Website của bạn đang hoạt động bình thường</p>
+                    <div className="py-12 text-center bg-slate-50/50 rounded-[14px] border border-dashed border-slate-200">
+                        <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm border border-slate-100">
+                            <ShieldCheck className="w-6 h-6 text-slate-300" />
                         </div>
-                    )
+                        <h4 className="text-sm font-bold text-slate-700">Chưa có IP bị chặn</h4>
+                        <p className="text-slate-400 text-xs mt-1">Website của bạn đang hoạt động bình thường</p>
+                    </div>
                 )}
             </div>
         </div>

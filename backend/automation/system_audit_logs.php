@@ -34,7 +34,7 @@ if ($method === 'GET') {
         if ($isAdmin) {
             // Admin sees all logs globally
             $stmt = $pdo->prepare("
-                SELECT l.id, l.user_name, l.module, l.action, l.target_name, l.details, l.created_at, u.picture as user_picture
+                SELECT l.id, l.user_name, l.module, l.action, l.target_name, l.details, l.created_at, u.avatar_url as user_avatar, u.avatar_url as user_picture
                 FROM system_audit_logs l
                 LEFT JOIN users u ON l.user_id = u.id
                 ORDER BY l.created_at DESC
@@ -45,7 +45,7 @@ if ($method === 'GET') {
         } else {
             // Normal user sees only their own logs
             $stmt = $pdo->prepare("
-                SELECT l.id, l.user_name, l.module, l.action, l.target_name, l.details, l.created_at, u.picture as user_picture
+                SELECT l.id, l.user_name, l.module, l.action, l.target_name, l.details, l.created_at, u.avatar_url as user_avatar, u.avatar_url as user_picture
                 FROM system_audit_logs l
                 LEFT JOIN users u ON l.user_id = u.id
                 WHERE l.user_id = ?

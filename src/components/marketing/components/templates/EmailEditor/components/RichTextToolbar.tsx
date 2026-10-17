@@ -5,6 +5,7 @@ import { Bold, Italic, Underline, Strikethrough, Link, Palette, Eraser, AlignLef
 import InputModal from '../../../common/InputModal';
 import { PREMIUM_COLORS } from '../constants/editorConstants';
 import { getMktPortalRoot } from '../../../../utils/portalRoot';
+import { MYERP_MERGE_TAG_GROUPS } from '../../../../constants/mergeTags';
 
 interface RichTextToolbarProps {
     isVisible: boolean;
@@ -32,22 +33,7 @@ const FONT_FAMILIES = [
 
 const FONT_SIZES = ['11', '12', '13', '14', '15', '16', '18', '20', '22', '24', '28', '32', '36', '48'];
 
-const MERGE_TAGS = [
-    { label: 'Họ và tên', val: '{{fullName}}' },
-    { label: 'Tên', val: '{{firstName}}' },
-    { label: 'Họ', val: '{{lastName}}' },
-    { label: 'Email', val: '{{email}}' },
-    { label: 'Số điện thoại', val: '{{phoneNumber}}' },
-    { label: 'Công ty', val: '{{companyName}}' },
-    { label: 'Chức vụ', val: '{{jobTitle}}' },
-    { label: 'Thành phố', val: '{{city}}' },
-    { label: 'Quốc gia', val: '{{country}}' },
-    { label: 'Link Hủy đăng ký', val: '{{unsubscribe_url}}' },
-    { label: 'Tên chiến dịch', val: '{{campaignName}}' },
-];
-
 const SPECIAL_MERGE_TAGS = [
-    { label: 'Ngày hôm nay', val: '{{today}}', desc: 'dd/mm/yyyy' },
     { label: 'Ngày (yyyy-mm-dd)', val: '{{today_ymd}}', desc: 'yyyy-mm-dd' },
     { label: 'ID ngắn (10 số)', val: '{{random_id}}', desc: 'Random mỗi lần gửi' },
     { label: 'Mã 6 số', val: '{{random_6}}', desc: 'Random 6 chữ số' },
@@ -61,7 +47,7 @@ const ToolbarBtn: React.FC<{ onClick: () => void; title: string; active?: boolea
     <button
         onMouseDown={(e) => { e.preventDefault(); onClick(); }}
         title={title}
-        className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${active ? 'bg-blue-600 text-white' : 'hover:bg-slate-700 text-slate-300 hover:text-white'}`}
+        className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${active ? 'bg-[var(--color-primary)] text-white' : 'hover:bg-slate-700 text-slate-300 hover:text-white'}`}
     >
         {children}
     </button>
@@ -103,7 +89,6 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ isVisible, position, 
     const execCommand = (cmd: string, val?: string) => {
         if (onExecCommand) { onExecCommand(cmd, val); }
         else { document.execCommand(cmd, false, val); }
-        // refocus editable component
         if (elementRef?.current) {
             elementRef.current.focus();
         }
@@ -153,7 +138,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ isVisible, position, 
     return createPortal(
         <>
             <div
-                className={`fixed z-[100100] flex flex-col bg-slate-900 text-white rounded-2xl shadow-2xl px-1.5 py-1.5 gap-0.5 border border-slate-700/50 ${!isVisible ? 'invisible pointer-events-none' : 'animate-in fade-in zoom-in-95 duration-150'}`}
+                className={`fixed z-[100100] flex flex-col bg-slate-900 text-white rounded-[14px] shadow-2xl px-1.5 py-1.5 gap-0.5 border border-slate-700/50 ${!isVisible ? 'invisible pointer-events-none' : 'animate-in fade-in zoom-in-95 duration-150'}`}
                 style={{ top: effectiveTop, left: Math.max(180, Math.min(typeof window !== 'undefined' ? window.innerWidth - 180 : 800, position.left)), transform, width: 'max-content', marginTop }}
                 onMouseDown={(e) => e.preventDefault()}
                 onMouseEnter={onToolbarMouseEnter}
@@ -172,7 +157,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ isVisible, position, 
                             <Type className="w-3.5 h-3.5" />
                         </ToolbarBtn>
                         {showFontFamilyDropdown && (
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-slate-900 border border-slate-700 rounded-xl shadow-xl p-1 w-44 z-50 animate-in slide-in-from-bottom-2">
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-slate-900 border border-slate-700 rounded-[14px] shadow-xl p-1 w-44 z-50 animate-in slide-in-from-bottom-2">
                                 {FONT_FAMILIES.map(f => (
                                     <button key={f.val} onMouseDown={(e) => { e.preventDefault(); restoreSelection(); handleFontFamilyApply(f.val); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-800 rounded-lg transition-colors" style={{ fontFamily: f.val }}>{f.label}</button>
                                 ))}
@@ -187,7 +172,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ isVisible, position, 
                             className="p-1.5 hover:bg-slate-700 rounded-lg transition-colors text-slate-300 text-[10px] font-black h-7 min-w-[28px]"
                         >A<span className="text-[7px] ml-0.5 opacity-60">px</span></button>
                         {showFontSizeDropdown && (
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-slate-900 border border-slate-700 rounded-xl shadow-xl p-1.5 z-50 animate-in slide-in-from-bottom-2 grid grid-cols-4 gap-1 w-max">
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-slate-900 border border-slate-700 rounded-[14px] shadow-xl p-1.5 z-50 animate-in slide-in-from-bottom-2 grid grid-cols-4 gap-1 w-max">
                                 {FONT_SIZES.map(size => (
                                     <button key={size} onMouseDown={(e) => { e.preventDefault(); restoreSelection(); handleFontSizeApply(size); }} className="px-2 py-1.5 text-[10px] font-bold hover:bg-slate-800 rounded-lg text-center transition-colors text-slate-200">{size}</button>
                                 ))}
@@ -230,7 +215,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ isVisible, position, 
                             <Highlighter className="w-3.5 h-3.5" />
                         </ToolbarBtn>
                         {showColorPicker && (
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-slate-900 p-3 rounded-2xl border border-slate-700 shadow-2xl z-50 animate-in slide-in-from-bottom-2 w-max">
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-slate-900 p-3 rounded-[14px] border border-slate-700 shadow-2xl z-50 animate-in slide-in-from-bottom-2 w-max">
                                 <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-2">Nhập màu {colorPickerMode === 'text' ? 'chữ' : 'nền'}</p>
                                 <div className="flex gap-1.5 items-center mb-2">
                                     <div
@@ -245,6 +230,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ isVisible, position, 
                                             type="text"
                                             placeholder="#ffffff"
                                             value={hexInput}
+                                            onMouseDown={e => e.stopPropagation()}
                                             onChange={e => {
                                                 const raw = e.target.value;
                                                 const val = raw.startsWith('#') ? raw : `#${raw}`;
@@ -275,13 +261,14 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ isVisible, position, 
                                                 setPreviewColor('');
                                             }
                                         }}
-                                        className="bg-blue-600 text-white rounded-lg px-2 py-1.5 text-[10px] font-bold hover:bg-blue-500 transition-colors flex-shrink-0"
+                                        className="bg-[var(--color-primary)] text-white rounded-lg px-2 py-1.5 text-[10px] font-bold hover:opacity-90 transition-colors flex-shrink-0"
                                     >OK</button>
                                 </div>
                                 <input
                                     type="color"
                                     className="w-full h-7 cursor-pointer rounded-lg border border-slate-700 mb-2.5"
                                     value={previewColor || '#000000'}
+                                    onMouseDown={e => e.stopPropagation()}
                                     onChange={e => {
                                         setHexInput(e.target.value);
                                         setPreviewColor(e.target.value);
@@ -293,7 +280,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ isVisible, position, 
                                         <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Đang dùng</p>
                                         <div className="flex flex-wrap gap-1.5 max-w-[190px]">
                                             {usedColors.filter(c => c && c !== 'transparent' && c !== 'none' && !c.includes('gradient')).slice(0, 10).map((c, i) => (
-                                                <button key={i} onClick={() => { execCommand(colorPickerMode === 'text' ? 'foreColor' : 'backColor', c); setShowColorPicker(false); }} className="w-5 h-5 rounded-full border border-white/10 hover:scale-125 transition-transform shadow-sm ring-offset-slate-900 hover:ring-2 hover:ring-blue-400" style={{ backgroundColor: c }} title={c} />
+                                                <button key={i} onClick={() => { execCommand(colorPickerMode === 'text' ? 'foreColor' : 'backColor', c); setShowColorPicker(false); }} className="w-5 h-5 rounded-full border border-white/10 hover:scale-125 transition-transform shadow-sm ring-offset-slate-900 hover:ring-2 hover:ring-rose-400" style={{ backgroundColor: c }} title={c} />
                                             ))}
                                         </div>
                                     </div>
@@ -313,29 +300,36 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ isVisible, position, 
                     <div className="relative">
                         <button
                             onMouseDown={(e) => { e.preventDefault(); saveSelection(); closeAllDropdowns(); setShowMergeTags(v => !v); }}
-                            title="Chèn biến"
-                            className="px-2 py-1 rounded-lg transition-colors text-[9px] font-black text-blue-400 hover:bg-blue-600/20 border border-blue-600/30 hover:border-blue-600 flex-shrink-0"
+                            title="Chèn biến MYERP CRM / Tuyển sinh"
+                            className="px-2 py-1 rounded-lg transition-colors text-[9px] font-black text-rose-400 hover:bg-rose-600/20 border border-rose-600/30 hover:border-rose-500 flex-shrink-0"
                         >BIẾN</button>
                         {showMergeTags && (
                             <div
                                 onMouseDown={(e) => e.preventDefault()}
-                                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-slate-900 border border-slate-700 rounded-xl shadow-xl p-1 w-56 z-50 animate-in slide-in-from-bottom-2 max-h-72 overflow-y-auto"
+                                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-slate-900 border border-slate-700 rounded-[14px] shadow-xl p-1.5 w-64 z-50 animate-in slide-in-from-bottom-2 max-h-80 overflow-y-auto custom-scrollbar"
                             >
-                                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest px-3 pt-1.5 pb-1">Biến chuẩn</p>
-                                {MERGE_TAGS.map(tag => (
-                                    <button
-                                        key={tag.val}
-                                        onMouseDown={(e) => { e.preventDefault(); }}
-                                        onClick={() => insertMergeTag(tag.val)}
-                                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-800 rounded-lg transition-colors flex justify-between items-center"
-                                    >
-                                        <span className="text-slate-300">{tag.label}</span>
-                                        <span className="text-blue-400 text-[9px] font-mono">{tag.val}</span>
-                                    </button>
+                                {MYERP_MERGE_TAG_GROUPS.map((group, gIdx) => (
+                                    <React.Fragment key={group.id}>
+                                        {gIdx > 0 && <div className="border-t border-slate-700/80 my-1.5" />}
+                                        <p className="text-[8px] font-black text-rose-400 uppercase tracking-widest px-3 pt-1.5 pb-1">
+                                            {group.label}
+                                        </p>
+                                        {group.tags.map((item) => (
+                                            <button
+                                                key={item.key}
+                                                onMouseDown={(e) => { e.preventDefault(); }}
+                                                onClick={() => insertMergeTag(item.tag)}
+                                                className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-800 rounded-lg transition-colors flex justify-between items-center gap-2"
+                                            >
+                                                <span className="text-slate-300 truncate">{item.label}</span>
+                                                <span className="text-rose-400 text-[9px] font-mono shrink-0">{item.tag}</span>
+                                            </button>
+                                        ))}
+                                    </React.Fragment>
                                 ))}
 
                                 {/* Special Variables Section */}
-                                <div className="border-t border-slate-700 my-1" />
+                                <div className="border-t border-slate-700 my-1.5" />
                                 <p className="text-[8px] font-black text-emerald-400 uppercase tracking-widest px-3 pb-1 flex items-center gap-1">
                                     <Braces className="w-2.5 h-2.5" /> Biến đặc biệt
                                 </p>
@@ -357,7 +351,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ isVisible, position, 
 
                                 {customMergeTags.length > 0 && (
                                     <>
-                                        <div className="border-t border-slate-700 my-1" />
+                                        <div className="border-t border-slate-700 my-1.5" />
                                         <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest px-3 pb-1 flex items-center gap-1">
                                             <Tag className="w-2.5 h-2.5" /> Custom Fields
                                         </p>

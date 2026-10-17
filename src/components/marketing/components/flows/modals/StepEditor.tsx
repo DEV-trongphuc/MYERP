@@ -13,6 +13,7 @@ import RemoveActionConfig from '../config/RemoveActionConfig';
 import ListActionConfig from '../config/ListActionConfig';
 import AdvancedConditionConfig from '../config/AdvancedConditionConfig';
 import ZaloZNSStepConfig from '../config/ZaloZNSStepConfig';
+import CrmActionConfig from '../config/CrmActionConfig';
 
 const SplitTestConfig = ({ config, onChange, disabled }: any) => {
   const handleRatioChange = (val: string, isA: boolean) => {
@@ -35,7 +36,7 @@ const SplitTestConfig = ({ config, onChange, disabled }: any) => {
 
   return (
     <div className="space-y-6">
-      <div className="p-5 bg-blue-50 text-blue-700 rounded-2xl border border-blue-100 flex gap-4">
+      <div className="p-5 bg-blue-50 text-blue-700 rounded-[14px] border border-blue-100 flex gap-4">
         <Beaker className="w-6 h-6 shrink-0" />
         <p className="text-xs font-bold leading-relaxed">Phân chia lưu lượng Khách hàng ngẫu nhiên để thử nghiệm 2 kịch bản khác nhau.</p>
       </div>
@@ -46,7 +47,7 @@ const SplitTestConfig = ({ config, onChange, disabled }: any) => {
             type="number"
             value={config.ratioA === '' ? '' : (config.ratioA ?? 50)}
             onChange={(e) => handleRatioChange(e.target.value, true)}
-            className="w-full p-4 bg-slate-50 border-none rounded-2xl font-black text-xl text-blue-600 outline-none focus:ring-2 focus:ring-blue-200 transition-all"
+            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-[14px] font-black text-xl text-blue-600 outline-none focus:ring-2 focus:ring-blue-200 transition-all"
             disabled={disabled}
           />
         </div>
@@ -56,7 +57,7 @@ const SplitTestConfig = ({ config, onChange, disabled }: any) => {
             type="number"
             value={config.ratioB === '' ? '' : (config.ratioB ?? 50)}
             onChange={(e) => handleRatioChange(e.target.value, false)}
-            className="w-full p-4 bg-slate-50 border-none rounded-2xl font-black text-xl text-slate-400 outline-none focus:ring-2 focus:ring-blue-200 transition-all"
+            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-[14px] font-black text-xl text-slate-400 outline-none focus:ring-2 focus:ring-blue-200 transition-all"
             disabled={disabled}
           />
         </div>
@@ -99,14 +100,14 @@ const StepEditor: React.FC<StepEditorProps> = ({
     });
   };
 
-  let stepErrors = validationErrors.filter(e => e.stepId === localStep.id);
+  const stepErrors = validationErrors.filter(e => e.stepId === localStep.id);
 
   const hasEnrollment = (flow?.stats?.enrolled || 0) > 0;
   const isTriggerLocked = localStep.type === 'trigger' && hasEnrollment;
   const isDisabledForEditing = isFlowArchived || isTriggerLocked || isViewMode;
 
   const renderConfig = () => {
-    switch (localStep.type) {
+    switch (localStep.type as string) {
       case 'trigger': return <TriggerConfig config={localStep.config} onChange={handleConfigChange} disabled={isDisabledForEditing} locked={isTriggerLocked} allFlows={allFlows} currentFlowId={flow?.id} />;
       case 'action': return <EmailActionConfig config={localStep.config} onChange={handleConfigChange} disabled={isDisabledForEditing} />;
       case 'wait': return <WaitConfig config={localStep.config} onChange={handleConfigChange} disabled={isDisabledForEditing} />;
@@ -118,6 +119,7 @@ const StepEditor: React.FC<StepEditorProps> = ({
       case 'advanced_condition': return <AdvancedConditionConfig config={localStep.config} onChange={handleConfigChange} flow={flow} stepId={localStep.id} disabled={isDisabledForEditing} />;
       case 'remove_action': return <RemoveActionConfig config={localStep.config} onChange={handleConfigChange} disabled={isDisabledForEditing} />;
       case 'zalo_zns': return <ZaloZNSStepConfig config={localStep.config} onChange={handleConfigChange} disabled={isDisabledForEditing} flow={flow} onUpdateFlow={onUpdateFlow} />;
+      case 'crm_action': return <CrmActionConfig config={localStep.config} onChange={handleConfigChange} disabled={isDisabledForEditing} />;
       default: return null;
     }
   };
@@ -126,7 +128,7 @@ const StepEditor: React.FC<StepEditorProps> = ({
 
   const getHeaderStyle = () => {
     if (localStep.type === 'action') return 'from-blue-600 to-indigo-700';
-    switch (localStep.type) {
+    switch (localStep.type as string) {
       case 'trigger': return 'from-slate-800 to-slate-950';
       case 'update_tag': return 'from-emerald-500 to-emerald-700';
       case 'list_action': return 'from-orange-500 to-orange-700';
@@ -137,12 +139,13 @@ const StepEditor: React.FC<StepEditorProps> = ({
       case 'remove_action': return 'from-rose-500 to-rose-700';
       case 'advanced_condition': return 'from-blue-600 to-fuchsia-600';
       case 'zalo_zns': return 'from-blue-500 to-blue-700';
+      case 'crm_action': return 'from-indigo-600 to-slate-900';
       default: return 'from-slate-800 to-slate-950';
     }
   };
 
   const getModalSize = () => {
-    if (localStep.type === 'advanced_condition') return 'xl';
+    if ((localStep.type as string) === 'advanced_condition' || (localStep.type as string) === 'crm_action') return 'xl';
     return 'lg';
   };
 
@@ -182,10 +185,10 @@ const StepEditor: React.FC<StepEditorProps> = ({
                 icon={Save} 
                 onClick={() => onSave(localStep)} 
                 disabled={isDisabledForEditing}
-                className={`flex items-center justify-center font-bold tracking-tight select-none rounded-2xl px-5 py-2.5 text-xs md:text-sm gap-2 transition-all active:scale-[0.95] ${
+                className={`flex items-center justify-center font-bold tracking-tight select-none rounded-[var(--radius-md)] px-5 py-2.5 text-xs md:text-sm gap-2 transition-all active:scale-[0.95] ${
                   isDisabledForEditing
                     ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed shadow-none border-none'
-                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-750 hover:to-indigo-750 text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 border-none'
+                    : 'bg-[var(--color-primary)] hover:opacity-95 text-white shadow-md border-none'
                 }`}
               >
                 Lưu thay đổi
@@ -195,7 +198,7 @@ const StepEditor: React.FC<StepEditorProps> = ({
         }
       >
         <div className="space-y-6">
-          <div className={`relative p-8 rounded-[32px] text-white shadow-2xl overflow-hidden bg-gradient-to-br ${getHeaderStyle()}`}>
+          <div className={`relative p-8 rounded-xl text-white shadow-xl overflow-hidden bg-gradient-to-br ${getHeaderStyle()}`}>
             <div className="absolute -top-10 -right-10 opacity-10 rotate-12"><Sparkles className="w-40 h-40" /></div>
             <div className="relative z-10">
               <input
@@ -210,7 +213,7 @@ const StepEditor: React.FC<StepEditorProps> = ({
           </div>
 
           {isDisabledForEditing && (
-            <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl flex gap-3 animate-in fade-in slide-in-from-top-2">
+            <div className="p-4 bg-amber-50 border border-amber-100 rounded-[14px] flex gap-3 animate-in fade-in slide-in-from-top-2">
               <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
               <div className="space-y-1">
                 <p className="text-xs font-black text-amber-800 uppercase tracking-wider">Chế độ xem chi tiết</p>
@@ -224,7 +227,7 @@ const StepEditor: React.FC<StepEditorProps> = ({
           )}
 
           {stepErrors.length > 0 && (
-            <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl flex gap-3 animate-in fade-in zoom-in-95">
+            <div className="p-4 bg-rose-50 border border-rose-100 rounded-[14px] flex gap-3 animate-in fade-in zoom-in-95">
               <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
               <div className="space-y-1">
                 {stepErrors.map((e, i) => <p key={i} className="text-xs font-bold text-rose-700">{e.msg}</p>)}
@@ -249,7 +252,7 @@ const StepEditor: React.FC<StepEditorProps> = ({
               variant="custom"
               size="md"
               onClick={() => setShowActiveWarning(false)}
-              className="bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white shadow-lg shadow-rose-500/20 hover:shadow-rose-500/30 border-none transition-all active:scale-[0.95] rounded-2xl px-5 py-2.5 text-xs md:text-sm font-bold"
+              className="bg-[var(--color-primary)] hover:opacity-95 text-white shadow-md border-none transition-all active:scale-[0.95] rounded-[var(--radius-md)] px-5 py-2.5 text-xs md:text-sm font-bold"
             >
               Đã hiểu
             </Button>

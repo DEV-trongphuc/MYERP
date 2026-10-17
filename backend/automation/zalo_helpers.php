@@ -838,15 +838,15 @@ function upsertZaloSubscriber($pdo, $zaloUserId, $profile, $oaConfigId = null)
             $oaRealId = $stmtOAReal->fetchColumn();
 
             if ($existingZId) {
-                $pdo->prepare("UPDATE zalo_subscribers SET is_follower = 1, status = 'active', last_interaction_at = NOW(), display_name = ?, avatar = ?, zalo_list_id = ?, oa_id = ? WHERE id = ? AND workspace_id = ?")
-                    ->execute([$name, $avatar, $listId, $oaRealId, $existingZId, $workspace_id]);
+                $pdo->prepare("UPDATE zalo_subscribers SET is_follower = 1, status = 'active', last_interaction_at = NOW(), display_name = ?, avatar = ?, zalo_list_id = ?, oa_id = ?, subscriber_id = COALESCE(NULLIF(subscriber_id, ''), ?) WHERE id = ? AND workspace_id = ?")
+                    ->execute([$name, $avatar, $listId, $oaRealId, $mainSubId ?: null, $existingZId, $workspace_id]);
             } else {
                 $newZId = bin2hex(random_bytes(16));
                 $pdo->prepare("
                     INSERT INTO zalo_subscribers 
-                    (id, workspace_id, zalo_list_id, zalo_user_id, display_name, avatar, status, is_follower, oa_id, joined_at, last_interaction_at)
-                    VALUES (?, ?, ?, ?, ?, ?, 'active', 1, ?, NOW(), NOW())
-                ")->execute([$newZId, $workspace_id, $listId, $zaloUserId, $name, $avatar, $oaRealId]);
+                    (id, workspace_id, zalo_list_id, zalo_user_id, subscriber_id, display_name, avatar, status, is_follower, oa_id, joined_at, last_interaction_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, NOW(), NOW())
+                ")->execute([$newZId, $workspace_id, $listId, $zaloUserId, $mainSubId ?: null, $name, $avatar, $oaRealId]);
             }
 
         } catch (Exception $ex) {
@@ -855,7 +855,8 @@ function upsertZaloSubscriber($pdo, $zaloUserId, $profile, $oaConfigId = null)
     } else {
         // Fallback if no oaConfigId: Try to just update is_follower if exists
         try {
-            $pdo->prepare("UPDATE zalo_subscribers SET is_follower = 1 WHERE zalo_user_id = ?")->execute([$zaloUserId]);
+            $pdo->prepare("UPDATE zalo_subscribers SET is_follower = 1, subscriber_id = COALESCE(NULLIF(subscriber_id, ''), ?) WHERE zalo_user_id = ?")
+                ->execute([$mainSubId ?: null, $zaloUserId]);
         } catch (Exception $e) {
         }
     }
@@ -864,6 +865,20 @@ function upsertZaloSubscriber($pdo, $zaloUserId, $profile, $oaConfigId = null)
         $stmtFallback = $pdo->prepare("SELECT id FROM subscribers WHERE workspace_id = ? AND (zalo_user_id = ? OR email = ?) LIMIT 1");
         $stmtFallback->execute([$workspace_id, $zaloUserId, $email]);
         $mainSubId = $stmtFallback->fetchColumn();
+    }
+
+    if ($mainSubId) {
+        try {
+            $pdo->prepare("UPDATE zalo_subscribers SET subscriber_id = COALESCE(NULLIF(subscriber_id, ''), ?) WHERE zalo_user_id = ? AND workspace_id = ?")
+                ->execute([$mainSubId, $zaloUserId, $workspace_id]);
+            if (file_exists(__DIR__ . '/../utils/DomationContactMatcher.php')) {
+                require_once __DIR__ . '/../utils/DomationContactMatcher.php';
+                if (function_exists('domationSyncSubscriberMatchOnly')) {
+                    domationSyncSubscriberMatchOnly($pdo, $mainSubId);
+                }
+            }
+        } catch (Exception $eSyncMatch) {
+        }
     }
 
     return $mainSubId;

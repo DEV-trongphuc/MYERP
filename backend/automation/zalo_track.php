@@ -70,6 +70,7 @@ if ($zaloUserId) {
                     'reference_id' => $scenarioId,
                     'flow_id' => $flowId,
                     'campaign_id' => $campaignId,
+                    'workspace_id' => $workspace_id ?: 1,
                     'extra_data' => [
                         'url' => $targetUrl,
                         'label' => $label,
@@ -78,7 +79,7 @@ if ($zaloUserId) {
                 ]);
 
                 // Also keep legacy Zalo-specific activity for backward compatibility with Zalo logs
-                logZaloSubscriberActivity($pdo, $subId, 'zalo_clicked', $scenarioId, $label ? "Click Button: $label" : "Click Link: " . $targetUrl, null, $workspace_id);
+                logZaloSubscriberActivity($pdo, $subId, 'zalo_clicked', $scenarioId, $label ? "Click Button: $label" : "Click Link: " . $targetUrl, null, null, $workspace_id ?: 1);
 
                 updateZaloLeadScore($pdo, $zaloUserId, 'click', $scenarioId);
             }

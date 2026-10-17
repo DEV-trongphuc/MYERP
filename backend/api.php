@@ -12876,6 +12876,72 @@ switch ($action) {
         }
         $stmt->close();
 
+        // Mirror email / verified sender settings into mkt_system_settings & verified_senders so Marketing Automation stays 100% synced
+        try {
+            $mktMirror = [];
+            if (isset($input['ses_host'])) $mktMirror['smtp_host'] = (string)$input['ses_host'];
+            if (isset($input['ses_username'])) $mktMirror['smtp_user'] = (string)$input['ses_username'];
+            if (isset($input['ses_password']) && $input['ses_password'] !== '' && $input['ses_password'] !== '********') {
+                $mktMirror['smtp_pass'] = (string)$input['ses_password'];
+            }
+            if (isset($input['smtp_port'])) $mktMirror['smtp_port'] = (string)$input['smtp_port'];
+            if (isset($input['ses_sender_name'])) $mktMirror['smtp_from_name'] = (string)$input['ses_sender_name'];
+            if (isset($input['qa_test_emails'])) $mktMirror['internal_qa_emails'] = str_replace([',', ';'], "\n", (string)$input['qa_test_emails']);
+
+            $verifiedEmailsToSync = [];
+            if (!empty($input['verified_from_senders'])) {
+                foreach (preg_split('/[,;\n\r]+/', (string)$input['verified_from_senders']) as $em) {
+                    $em = strtolower(trim($em));
+                    if ($em !== '' && filter_var($em, FILTER_VALIDATE_EMAIL)) {
+                        $verifiedEmailsToSync[$em] = $em;
+                    }
+                }
+            }
+            if (!empty($input['ses_sender_email'])) {
+                $sesEm = strtolower(trim((string)$input['ses_sender_email']));
+                if ($sesEm !== '' && filter_var($sesEm, FILTER_VALIDATE_EMAIL)) {
+                    $verifiedEmailsToSync[$sesEm] = $sesEm;
+                }
+            }
+            if (!empty($verifiedEmailsToSync)) {
+                $joinedSenders = implode(', ', array_values($verifiedEmailsToSync));
+                $mktMirror['smtp_from_email'] = $joinedSenders;
+                $mktMirror['verified_from_senders'] = $joinedSenders;
+            }
+            if (!empty($input['ses_host']) && !empty($input['ses_username'])) {
+                $mktMirror['smtp_enabled'] = '1';
+            }
+
+            if (!empty($mktMirror)) {
+                $stmtMkt = $conn->prepare("INSERT INTO mkt_system_settings (workspace_id, `key`, `value`) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)");
+                if ($stmtMkt) {
+                    foreach ([0, 1] as $wsId) {
+                        foreach ($mktMirror as $mk => $mv) {
+                            $stmtMkt->bind_param("iss", $wsId, $mk, $mv);
+                            @$stmtMkt->execute();
+                        }
+                    }
+                    $stmtMkt->close();
+                }
+            }
+
+            if (!empty($verifiedEmailsToSync)) {
+                $defaultName = trim((string)($input['ses_sender_name'] ?? 'Viện Quốc Tế IDEAS'));
+                $stmtVs = $conn->prepare("INSERT INTO verified_senders (workspace_id, email, name, is_verified, is_default) VALUES (1, ?, ?, 1, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), is_verified = 1, is_default = VALUES(is_default)");
+                if ($stmtVs) {
+                    $idxVs = 0;
+                    foreach ($verifiedEmailsToSync as $vEm) {
+                        $isDef = ($idxVs === 0) ? 1 : 0;
+                        $stmtVs->bind_param("ssi", $vEm, $defaultName, $isDef);
+                        @$stmtVs->execute();
+                        $idxVs++;
+                    }
+                    $stmtVs->close();
+                }
+            }
+        } catch (\Throwable $ignoreMirror) {
+        }
+
         // Synchronize pipeline_stages table with pipeline_status_hierarchy settings
         $resH = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'pipeline_status_hierarchy'");
         $rowH = $resH->fetch_assoc();
@@ -13039,7 +13105,7 @@ switch ($action) {
         break;
 
     case 'test_email':
-        if (!isset($decodedUser) || !in_array($decodedUser['role'] ?? '', ['admin', 'superadmin', 'director'], true)) {
+        if (!isset($decodedUser) || !in_array($decodedUser['role'] ?? '', ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'marketing', 'mkt', 'digital_marketing'], true)) {
             http_response_code(403);
             echo json_encode(['success' => false, 'message' => 'Chỉ quản trị viên mới có quyền gửi email kiểm thử']);
             exit();
@@ -13048,6 +13114,14 @@ switch ($action) {
         $input = json_decode(file_get_contents('php://input'), true);
         $email = trim($input['email'] ?? '');
         $type = $input['type'] ?? 'system';
+        $reqSenderEmail = trim((string)($input['sender_email'] ?? ($input['from_email'] ?? '')));
+        $reqSenderName = trim((string)($input['sender_name'] ?? ($input['from_name'] ?? '')));
+        if ($reqSenderEmail !== '' && filter_var($reqSenderEmail, FILTER_VALIDATE_EMAIL)) {
+            $GLOBALS['override_sender_email'] = $reqSenderEmail;
+        }
+        if ($reqSenderName !== '') {
+            $GLOBALS['override_sender_name'] = $reqSenderName;
+        }
 
         if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             echo json_encode(['success' => false, 'message' => 'Email không hợp lệ']);

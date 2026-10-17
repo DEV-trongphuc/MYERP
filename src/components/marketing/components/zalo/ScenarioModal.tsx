@@ -5,7 +5,7 @@ import axios from 'axios';
 import { toast } from 'react-hot-toast';
 import Modal from '../common/Modal';
 import Input from '../common/Input';
-import { API_BASE_URL, DEMO_MODE } from '../../utils/config';
+import { API_BASE_URL } from '../../utils/config';
 
 const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port !== '';
 
@@ -48,7 +48,7 @@ const CustomSelect = ({ label, value, options, onChange }: { label?: string, val
             </div>
 
             {isVisible && (
-                <div className={`absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden z-[50] transform transition-all duration-200 ${animateDropdownIn ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-2 scale-95'}`}>
+                <div className={`absolute top-full left-0 right-0 mt-2 bg-white rounded-[14px] shadow-xl border border-slate-100 overflow-hidden z-[50] transform transition-all duration-200 ${animateDropdownIn ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-2 scale-95'}`}>
                     <div className="max-h-[200px] overflow-y-auto p-1.5 space-y-0.5">
                         {options.map((opt) => (
                             <div
@@ -169,13 +169,6 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
     }, [formData.image_url]);
 
     const fetchOas = async () => {
-        if (DEMO_MODE) {
-            const stored: any[] = JSON.parse(localStorage.getItem('mailflow_zalo_oa') || '[]');
-            const list = stored.length > 0 ? stored : [{ id: 'oa_demo_001', name: 'DOMATION Official Account' }];
-            setOaConfigs(list);
-            if (!formData.oa_config_id) setFormData(prev => ({ ...prev, oa_config_id: list[0].id }));
-            return;
-        }
         try {
             const res = await axios.get(`${API_BASE_URL}/zalo_oa.php?route=list`, { headers: getHeaders() });
             if (res.data.success) {
@@ -191,10 +184,6 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
     };
 
     const fetchAudienceLists = async () => {
-        if (DEMO_MODE) {
-            setAudienceLists([{ id: 'list_demo_001', name: 'Khách hàng VIP', oa_config_id: 'oa_demo_001' }]);
-            return;
-        }
         try {
             const res = await axios.get(`${API_BASE_URL}/zalo_audience.php?route=lists`, { headers: getHeaders() });
             if (res.data.success) {
@@ -206,13 +195,6 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
     };
 
     const fetchActiveChatbots = async () => {
-        if (DEMO_MODE) {
-            setActiveChatbots([
-                { property_id: 'wp_001', bot_name: 'AI DOMATION - Website Chính' },
-                { property_id: 'wp_002', bot_name: 'AI DOMATION - Bảng Giá' },
-            ]);
-            return;
-        }
         try {
             const res = await axios.get(`${API_BASE_URL}/ai_training.php?action=list_all_chatbots`, { headers: getHeaders() });
             if (res.data.success) {
@@ -230,19 +212,6 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
 
         setUploading(true);
         const uploadToast = toast.loading('Đang tải ảnh lên...');
-
-        // DEMO_MODE: use FileReader → base64 dataURL, no server upload
-        if (DEMO_MODE) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                const dataUrl = ev.target?.result as string;
-                setFormData(prev => ({ ...prev, message_type: 'image', image_url: dataUrl, attachment_id: 'demo_att_' + Date.now() }));
-                toast.success('Upload thành công (Demo)', { id: uploadToast });
-                setUploading(false);
-            };
-            reader.readAsDataURL(file);
-            return;
-        }
 
         try {
             const formDataUpload = new FormData();
@@ -320,19 +289,6 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
         }
 
         setLoading(true);
-        // DEMO_MODE: save to localStorage, skip conflict check & axios
-        if (DEMO_MODE) {
-            await new Promise(r => setTimeout(r, 500));
-            const payload = { ...formData, id: formData.id || crypto.randomUUID(), status: formData.status || 'active' };
-            const stored: any[] = JSON.parse(localStorage.getItem('mailflow_zalo_scenarios') || '[]');
-            const idx = stored.findIndex((s: any) => s.id === payload.id);
-            if (idx >= 0) stored[idx] = payload; else stored.unshift(payload);
-            localStorage.setItem('mailflow_zalo_scenarios', JSON.stringify(stored));
-            toast.success('Đã lưu kịch bản (Demo)');
-            setLoading(false);
-            onSave();
-            return;
-        }
         try {
             const conflictRes = await axios.get(`${API_BASE_URL}/zalo_automation.php?route=check_conflicts&oa_config_id=${formData.oa_config_id}&type=${formData.type}&trigger_text=${formData.trigger_text}&id=${formData.id}`, { headers: getHeaders() });
             if (conflictRes.data.success && conflictRes.data.conflicts.length > 0) {
@@ -410,9 +366,9 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
             <div className="bg-white w-full flex flex-col max-h-[90vh]">
                 {/* Header */}
                 <div className={`p-8 border-b border-slate-50 flex justify-between items-center relative overflow-hidden`}>
-                    <div className={`absolute inset-0 opacity-10 ${formData.type === 'welcome' ? 'bg-gradient-to-r from-amber-400 to-orange-500' : formData.type === 'holiday' ? 'bg-gradient-to-r from-rose-500 to-red-600' : 'bg-gradient-to-r from-blue-500 to-indigo-600'}`}></div>
+                    <div className={`absolute inset-0 opacity-10 ${formData.type === 'welcome' ? 'bg-gradient-to-r from-[#BD1D2D] to-[#9A1523]' : formData.type === 'holiday' ? 'bg-gradient-to-r from-rose-500 to-red-600' : 'bg-gradient-to-r from-blue-500 to-indigo-600'}`}></div>
                     <div className="relative z-10 flex items-center gap-4">
-                        <div className={`w-14 h-14 rounded-2xl shadow-xl flex items-center justify-center text-white ${formData.type === 'welcome' ? 'bg-gradient-to-br from-amber-400 to-orange-500 shadow-orange-500/30' : formData.type === 'holiday' ? 'bg-gradient-to-br from-rose-500 to-red-600 shadow-rose-500/30' : 'bg-gradient-to-br from-blue-500 to-indigo-600 shadow-blue-500/30'}`}>
+                        <div className={`w-14 h-14 rounded-[14px] shadow-xl flex items-center justify-center text-white ${formData.type === 'welcome' ? 'bg-gradient-to-br from-[#BD1D2D] to-[#9A1523] shadow-[var(--color-primary)]/30' : formData.type === 'holiday' ? 'bg-gradient-to-br from-rose-500 to-red-600 shadow-rose-500/30' : 'bg-gradient-to-br from-blue-500 to-indigo-600 shadow-blue-500/30'}`}>
                             {formData.type === 'welcome' ? <Star className="w-7 h-7" /> : formData.type === 'holiday' ? <Calendar className="w-7 h-7" /> : <Zap className="w-7 h-7" />}
                         </div>
                         <div>
@@ -443,7 +399,7 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
                                         label="Loại kích hoạt"
                                         value={formData.type}
                                         options={[
-                                            { value: 'welcome', label: <div className="flex items-center gap-2"><Star className="w-4 h-4 text-amber-600" /><span>Quan tâm</span></div> },
+                                            { value: 'welcome', label: <div className="flex items-center gap-2"><Star className="w-4 h-4 text-[var(--color-primary)]" /><span>Quan tâm</span></div> },
                                             { value: 'first_message', label: <div className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-rose-500" /><span>Bắt chuyện</span></div> },
                                             { value: 'keyword', label: <div className="flex items-center gap-2"><MessageCircle className="w-4 h-4 text-indigo-500" /><span>Từ khóa</span></div> },
                                             { value: 'ai_reply', label: <div className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-emerald-500" /><span>AI Phản hồi</span></div> },
@@ -472,7 +428,7 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
                             </div>
 
                             {formData.type === 'ai_reply' && (
-                                <div className="space-y-4 p-6 bg-emerald-50/50 rounded-[32px] border border-emerald-100 animate-in slide-in-from-top-2">
+                                <div className="space-y-4 p-6 bg-emerald-50/50 rounded-[18px] border border-emerald-100 animate-in slide-in-from-top-2">
                                     <div className="flex items-center justify-between">
                                         <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-2">
                                             <Sparkles className="w-4 h-4" /> Kích hoạt Trí Tuệ Nhân Tạo (AI)
@@ -488,7 +444,7 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
                                             }))}
                                             onChange={(val) => setFormData({ ...formData, ai_chatbot_id: val })}
                                         />
-                                        <div className="bg-white/50 p-4 rounded-2xl border border-emerald-100 space-y-2">
+                                        <div className="bg-white/50 p-4 rounded-[14px] border border-emerald-100 space-y-2">
                                             <div className="flex items-center gap-2 text-[10px] font-bold text-emerald-500 uppercase tracking-tight">
                                                 <Info className="w-3.5 h-3.5" /> Cơ chế hoạt động:
                                             </div>
@@ -504,7 +460,7 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
                             )}
 
                             {formData.type === 'keyword' && (
-                                <div className="space-y-4 p-6 bg-indigo-50/50 rounded-[32px] border border-indigo-100 animate-in slide-in-from-top-2">
+                                <div className="space-y-4 p-6 bg-indigo-50/50 rounded-[18px] border border-indigo-100 animate-in slide-in-from-top-2">
                                     <div className="flex items-center justify-between">
                                         <label className="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2">
                                             <MessageCircle className="w-4 h-4" /> Từ khóa kích hoạt
@@ -526,7 +482,7 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
                                         value={formData.trigger_text}
                                         onChange={(e) => setFormData({ ...formData, trigger_text: e.target.value })}
                                     />
-                                    <div className="bg-white/50 p-4 rounded-2xl border border-indigo-100 space-y-2">
+                                    <div className="bg-white/50 p-4 rounded-[14px] border border-indigo-100 space-y-2">
                                         <div className="flex items-center gap-2 text-[10px] font-bold text-indigo-400 uppercase tracking-tight">
                                             <AlertCircle className="w-3.5 h-3.5" /> Quy định từ khóa:
                                         </div>
@@ -541,7 +497,7 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
 
                             {/* Scheduling Section */}
                             {(formData.type === 'holiday' || formData.schedule_type) && (
-                                <div className={`bg-white p-6 rounded-[32px] border ${formData.type === 'holiday' ? 'border-rose-100 shadow-rose-500/5' : 'border-slate-100'} shadow-sm space-y-6`}>
+                                <div className={`bg-white p-6 rounded-[18px] border ${formData.type === 'holiday' ? 'border-rose-100 shadow-rose-500/5' : 'border-slate-100'} shadow-sm space-y-6`}>
                                     <div className="flex items-center justify-between">
                                         <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
                                             <Clock className={`w-4 h-4 ${formData.type === 'holiday' ? 'text-rose-500' : 'text-emerald-500'}`} />
@@ -564,7 +520,7 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
 
                                     {/* Holiday Specific: Priority Override */}
                                     {formData.type === 'holiday' && (
-                                        <div className="flex items-center justify-between gap-4 bg-rose-50/50 p-4 rounded-2xl border border-rose-100">
+                                        <div className="flex items-center justify-between gap-4 bg-rose-50/50 p-4 rounded-[14px] border border-rose-100">
                                             <div className="flex-1">
                                                 <div
                                                     onClick={() => setFormData({ ...formData, priority_override: formData.priority_override == 1 ? 0 : 1 })}
@@ -721,11 +677,11 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
                                             </div>
 
                                             {isPerDay && formData.schedule_type !== 'full' && (
-                                                <div className="space-y-3 bg-slate-50/50 p-4 rounded-[24px] border border-slate-100 animate-in fade-in slide-in-from-top-2">
+                                                <div className="space-y-3 bg-slate-50/50 p-4 rounded-[18px] border border-slate-100 animate-in fade-in slide-in-from-top-2">
                                                     {DAYS.map(day => {
                                                         if (!perDaySchedule[day.id]) return null;
                                                         return (
-                                                            <div key={day.id} className="flex items-center gap-4 bg-white p-3 rounded-2xl border border-slate-100/50 shadow-sm">
+                                                            <div key={day.id} className="flex items-center gap-4 bg-white p-3 rounded-[14px] border border-slate-100/50 shadow-sm">
                                                                 <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center text-[10px] font-black">{day.label}</div>
                                                                 <div className="flex-1 grid grid-cols-2 gap-4">
                                                                     <div className="flex items-center gap-2">
@@ -759,13 +715,13 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
 
                             {/* Content Output - Hide if AI */}
                             {formData.type !== 'ai_reply' && (
-                                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm space-y-6">
+                                <div className="bg-white p-6 rounded-[18px] border border-slate-100 shadow-sm space-y-6">
                                     <div className="flex items-center justify-between">
                                         <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
                                             <Smile className="w-4 h-4 text-emerald-500" /> Nội dung phản hồi (Output)
                                         </h3>
                                         {formData.type === 'welcome' && (
-                                            <span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-full text-[9px] font-black uppercase tracking-widest border border-amber-100">Chỉ gửi 1 tin</span>
+                                            <span className="px-3 py-1 bg-amber-50 text-[var(--color-primary)] rounded-full text-[9px] font-black uppercase tracking-widest border border-amber-100">Chỉ gửi 1 tin</span>
                                         )}
                                     </div>
 
@@ -773,7 +729,7 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
                                         <textarea
                                             placeholder="Nhập nội dung tin nhắn phản hồi..."
                                             rows={5}
-                                            className="w-full p-5 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-emerald-500/10 rounded-3xl text-sm font-medium transition-all outline-none resize-none shadow-inner"
+                                            className="w-full p-5 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-emerald-500/10 rounded-[18px] text-sm font-medium transition-all outline-none resize-none shadow-inner"
                                             value={formData.content}
                                             onChange={(e) => setFormData({ ...formData, content: e.target.value })}
                                         ></textarea>
@@ -787,7 +743,7 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
                                             </div>
 
                                             {formData.image_url ? (
-                                                <div className="relative rounded-2xl overflow-hidden border border-slate-200 group">
+                                                <div className="relative rounded-[14px] overflow-hidden border border-slate-200 group">
                                                     <img src={formData.image_url} alt="Uploaded" className="w-full h-48 object-cover" />
                                                     <div className="absolute inset-0 bg-slate-900/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                                         <label className="cursor-pointer bg-white text-slate-800 px-4 py-2 rounded-xl text-xs font-bold shadow-lg hover:scale-105 transition-transform flex items-center gap-2">
@@ -797,7 +753,7 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
                                                     </div>
                                                 </div>
                                             ) : (
-                                                <label className={`block w-full border-2 border-dashed border-slate-200 rounded-2xl p-8 hover:border-blue-400 hover:bg-blue-50/50 transition-all cursor-pointer group ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                                                <label className={`block w-full border-2 border-dashed border-slate-200 rounded-[14px] p-8 hover:border-blue-400 hover:bg-blue-50/50 transition-all cursor-pointer group ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
                                                     <div className="flex flex-col items-center justify-center gap-3">
                                                         <div className="w-12 h-12 bg-white rounded-full shadow-sm border border-slate-100 flex items-center justify-center text-blue-500 group-hover:scale-110 transition-transform">
                                                             {uploading ? <div className="w-5 h-5 border-2 border-slate-200 border-t-blue-500 rounded-full animate-spin" /> : <UploadCloud className="w-6 h-6" />}
@@ -827,7 +783,7 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
 
                                     <div className="space-y-3">
                                         {formData.buttons.map((btn: any, idx: number) => (
-                                            <div key={idx} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm animate-in slide-in-from-left-4 duration-300 group">
+                                            <div key={idx} className="bg-white p-4 rounded-[14px] border border-slate-100 shadow-sm animate-in slide-in-from-left-4 duration-300 group">
                                                 <div className="space-y-3">
                                                     {/* Row 1: Type, Title, Delete */}
                                                     <div className="flex gap-3 items-start">
@@ -908,7 +864,7 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
                                         <button
                                             onClick={handleAddButton}
                                             disabled={formData.buttons.length >= 4}
-                                            className="w-full py-4 border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 hover:border-blue-400 hover:bg-blue-50/30 hover:text-blue-500 transition-all font-bold text-xs flex items-center justify-center gap-2 group"
+                                            className="w-full py-4 border-2 border-dashed border-slate-200 rounded-[14px] text-slate-400 hover:border-blue-400 hover:bg-blue-50/30 hover:text-blue-500 transition-all font-bold text-xs flex items-center justify-center gap-2 group"
                                         >
                                             <div className="w-6 h-6 bg-slate-50 rounded-lg flex items-center justify-center group-hover:bg-blue-500 group-hover:text-white transition-all">
                                                 <Plus className="w-4 h-4" />
@@ -923,8 +879,8 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
                         {/* Preview Column */}
                         <div className="lg:w-5/12 p-8 bg-white border-l border-slate-100 hidden lg:block">
                             <div className="sticky top-0 flex flex-col justify-center items-center pt-4">
-                                <div className="relative w-[320px] h-[640px] bg-slate-900 rounded-[50px] border-[8px] border-slate-800 shadow-[0_40px_100px_-20px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden">
-                                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-7 bg-slate-800 rounded-b-3xl z-20"></div>
+                                <div className="relative w-[320px] h-[640px] bg-slate-900 rounded-[18px] border-[8px] border-slate-800 shadow-[0_40px_100px_-20px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden">
+                                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-7 bg-slate-800 rounded-b-[18px] z-20"></div>
 
                                     {/* Zalo Header Mockup */}
                                     <div className="bg-blue-600 px-4 pt-10 pb-3 flex items-center justify-between">
@@ -937,7 +893,7 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
                                     <div className="flex-1 bg-slate-100 p-4 space-y-4 overflow-y-auto custom-scrollbar">
                                         <div className="flex items-start gap-2 animate-in slide-in-from-left-4">
                                             <div className="w-8 h-8 rounded-full bg-blue-500 shadow-sm flex items-center justify-center text-white text-[10px] font-bold shrink-0">OA</div>
-                                            <div className="bg-white rounded-2xl rounded-tl-none shadow-sm overflow-hidden flex flex-col max-w-[85%]">
+                                            <div className="bg-white rounded-[14px] rounded-tl-none shadow-sm overflow-hidden flex flex-col max-w-[85%]">
                                                 {formData.image_url && (
                                                     <img src={formData.image_url} alt="Preview" className="w-full h-auto" />
                                                 )}
@@ -979,12 +935,12 @@ const ScenarioModal: React.FC<ScenarioModalProps> = ({ scenario, onClose: _onClo
                 <div className="px-8 py-5 bg-white border-t border-slate-100 flex justify-end gap-3 shrink-0 sticky bottom-0 z-10">
                     <button
                         onClick={onClose}
-                        className="px-8 py-3.5 rounded-2xl text-xs font-black text-slate-500 hover:bg-slate-50 active:scale-95 transition-all"
+                        className="px-8 py-3.5 rounded-[14px] text-xs font-black text-slate-500 hover:bg-slate-50 active:scale-95 transition-all"
                     >Hủy bỏ</button>
                     <button
                         onClick={handleSave}
                         disabled={loading}
-                        className="px-10 py-3.5 bg-slate-900 hover:bg-black text-white rounded-2xl text-xs font-black shadow-xl shadow-slate-200 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50"
+                        className="px-10 py-3.5 bg-slate-900 hover:bg-black text-white rounded-[14px] text-xs font-black shadow-xl shadow-slate-200 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50"
                     >
                         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                         {scenario ? 'Cập nhật kịch bản' : 'Kích hoạt ngay'}

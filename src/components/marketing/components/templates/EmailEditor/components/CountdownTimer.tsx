@@ -11,12 +11,10 @@ interface CountdownTimerProps {
 
 const CountdownTimer: React.FC<CountdownTimerProps> = ({ block, boxStyle, labelStyle }) => {
     // Extract styles to construct the image URL parameters
-    // Note: boxStyle usually has fontSize and color from the parent's generic logic
-    const digitColor = (block.style.color || '#ffffff').replace('#', '');
+    const digitColor = (block.style.digitColor || block.style.color || '#ffffff').replace('#', '');
     const labelColor = (block.style.labelColor || '#004a7c').replace('#', '');
-    // In editor, backgroundColor might be separate, but let's pass it if needed. 
-    // Usually timer background is transparent or handled by the container.
-    const bg = 'transparent';
+    const rawBg = block.style.contentBackgroundColor || block.style.backgroundColor || 'transparent';
+    const bg = rawBg === 'transparent' ? 'transparent' : rawBg.replace('#', '');
     const targetDateStr = block.style.targetDate || '';
 
     // Use server-side generated image to match actual email output
@@ -57,6 +55,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ block, boxStyle, labelS
                     <div style={{ flex: 1, textAlign: 'center' }}>NGÀY</div>
                     <div style={{ flex: 1, textAlign: 'center' }}>GIỜ</div>
                     <div style={{ flex: 1, textAlign: 'center' }}>PHÚT</div>
+                    <div style={{ flex: 1, textAlign: 'center' }}>GIÂY</div>
                 </div>
             </div>
         </div>

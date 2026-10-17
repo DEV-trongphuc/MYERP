@@ -112,6 +112,17 @@ export const buildCss = (s: EmailBlockStyle, viewMode: 'desktop' | 'mobile', bod
         gap: (rs as any).gap,
         contentBackgroundColor: (rs as any).contentBackgroundColor,
         targetDate: (rs as any).targetDate,
+        digitColor: (rs as any).digitColor,
         labelColor: (rs as any).labelColor,
+        surveyId: (rs as any).surveyId,
+        surveySlug: (rs as any).surveySlug,
+        surveyTitle: (rs as any).surveyTitle,
+        surveyDescription: (rs as any).surveyDescription,
+        surveyBadgeText: (rs as any).surveyBadgeText,
+        surveyButtonText: (rs as any).surveyButtonText,
+        surveyAccentColor: (rs as any).surveyAccentColor,
+        surveyCardBgColor: (rs as any).surveyCardBgColor,
+        surveyBorderColor: (rs as any).surveyBorderColor,
+        surveyButtonTextColor: (rs as any).surveyButtonTextColor,
     } as any;
 };

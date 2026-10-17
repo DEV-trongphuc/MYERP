@@ -304,7 +304,7 @@ const AdminLogsTab: React.FC<AdminLogsTabProps> = ({ className, categoryId, init
 
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
                         {/* Top Bots Chart (Col 1-5) */}
-                        <div className={`lg:col-span-12 xl:col-span-5 p-6 rounded-3xl border transition-all duration-300 ${isDarkTheme ? 'bg-[rgba(13,17,23,0.6)] backdrop-blur-md border-slate-800 shadow-none' : 'bg-white border-slate-100 shadow-sm'}`}>
+                        <div className={`lg:col-span-12 xl:col-span-5 p-6 rounded-[18px] border transition-all duration-300 ${isDarkTheme ? 'bg-[rgba(13,17,23,0.6)] backdrop-blur-md border-slate-800 shadow-none' : 'bg-white border-slate-100 shadow-sm'}`}>
                             <h3 className={`text-[11px] font-bold mb-6 uppercase tracking-wider flex items-center gap-2 ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>
                                 <div className={`p-1.5 rounded-lg ${isDarkTheme ? 'bg-slate-900 text-blue-400' : 'bg-blue-50 text-blue-500/80'}`}>
                                     <Bot size={14} />
@@ -334,7 +334,7 @@ const AdminLogsTab: React.FC<AdminLogsTabProps> = ({ className, categoryId, init
                         </div>
 
                         {/* Heatmap (Col 6-10) */}
-                        <div className={`lg:col-span-12 xl:col-span-5 p-6 rounded-3xl border transition-all duration-300 ${isDarkTheme ? 'bg-[rgba(13,17,23,0.6)] backdrop-blur-md border-slate-800 shadow-none' : 'bg-white border-slate-100 shadow-sm'}`}>
+                        <div className={`lg:col-span-12 xl:col-span-5 p-6 rounded-[18px] border transition-all duration-300 ${isDarkTheme ? 'bg-[rgba(13,17,23,0.6)] backdrop-blur-md border-slate-800 shadow-none' : 'bg-white border-slate-100 shadow-sm'}`}>
                             <div className="flex items-center justify-between mb-6">
                                 <h3 className={`text-[11px] font-bold uppercase tracking-wider flex items-center gap-2 ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>
                                     <div className={`p-1.5 rounded-lg ${isDarkTheme ? 'bg-slate-900 text-emerald-400' : 'bg-emerald-50 text-emerald-500/80'}`}>
@@ -399,7 +399,7 @@ const AdminLogsTab: React.FC<AdminLogsTabProps> = ({ className, categoryId, init
                     </div>
 
                     {/* Tables Tabbed Area */}
-                    <div className={`rounded-[32px] border transition-all duration-300 overflow-hidden ${isDarkTheme ? 'bg-[rgba(13,17,23,0.6)] backdrop-blur-md border-slate-800 shadow-none' : 'bg-white border-slate-100 shadow-sm'}`}>
+                    <div className={`rounded-[18px] border transition-all duration-300 overflow-hidden ${isDarkTheme ? 'bg-[rgba(13,17,23,0.6)] backdrop-blur-md border-slate-800 shadow-none' : 'bg-white border-slate-100 shadow-sm'}`}>
                         <div className={`px-8 py-2 border-b flex items-center justify-between ${isDarkTheme ? 'bg-slate-800/30 border-slate-800' : 'bg-slate-50/20 border-slate-50'}`}>
                             <div className="flex space-x-6">
                                 <button
@@ -445,7 +445,7 @@ const AdminLogsTab: React.FC<AdminLogsTabProps> = ({ className, categoryId, init
                                                 >
                                                     <td className="px-8 py-5">
                                                         <div className="flex items-center gap-3">
-                                                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black transition-colors ${isDarkTheme ? 'bg-slate-800 text-slate-500 group-hover:bg-blue-500/20 group-hover:text-blue-400' : 'bg-slate-100 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500'}`}>
+                                                            <div className={`w-10 h-10 rounded-[14px] flex items-center justify-center font-black transition-colors ${isDarkTheme ? 'bg-slate-800 text-slate-500 group-hover:bg-blue-500/20 group-hover:text-blue-400' : 'bg-slate-100 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500'}`}>
                                                                 {u.full_name?.[0]?.toUpperCase() || 'U'}
                                                             </div>
                                                             <div>
@@ -473,7 +473,7 @@ const AdminLogsTab: React.FC<AdminLogsTabProps> = ({ className, categoryId, init
                                                         </div>
                                                     </td>
                                                     <td className="px-8 py-5">
-                                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${u.role === 'admin' ? (isDarkTheme ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' : 'bg-orange-50 text-orange-600 border-orange-100') : (isDarkTheme ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-blue-50 text-blue-600 border-blue-100')}`}>
+                                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${u.role === 'admin' ? (isDarkTheme ? 'bg-[var(--color-primary)]/10 text-orange-400 border-[var(--color-primary)]/20' : 'bg-orange-50 text-[var(--color-primary)] border-orange-100') : (isDarkTheme ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-blue-50 text-blue-600 border-blue-100')}`}>
                                                             {u.role}
                                                         </span>
                                                     </td>
@@ -531,7 +531,7 @@ const AdminLogsTab: React.FC<AdminLogsTabProps> = ({ className, categoryId, init
                                                 >
                                                     <td className="px-8 py-5">
                                                         <div className="flex items-center gap-3">
-                                                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black transition-colors ${isDarkTheme ? 'bg-slate-800 text-slate-500 group-hover:bg-purple-500/20 group-hover:text-purple-400' : 'bg-slate-100 text-slate-400 group-hover:bg-purple-50 group-hover:text-purple-500'}`}>
+                                                            <div className={`w-10 h-10 rounded-[14px] flex items-center justify-center font-black transition-colors ${isDarkTheme ? 'bg-slate-800 text-slate-500 group-hover:bg-purple-500/20 group-hover:text-purple-400' : 'bg-slate-100 text-slate-400 group-hover:bg-purple-50 group-hover:text-purple-500'}`}>
                                                                 {b.name?.[0]?.toUpperCase() || 'B'}
                                                             </div>
                                                             <div>
@@ -599,7 +599,7 @@ const AdminLogsTab: React.FC<AdminLogsTabProps> = ({ className, categoryId, init
                     </div >
                 </div >
             ) : (
-                <div className={`rounded-[32px] border shadow-sm overflow-hidden ${isDarkTheme ? 'bg-slate-800/20 border-slate-700 shadow-none' : 'bg-white border-slate-100'}`}>
+                <div className={`rounded-[18px] border shadow-sm overflow-hidden ${isDarkTheme ? 'bg-slate-800/20 border-slate-700 shadow-none' : 'bg-white border-slate-100'}`}>
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left border-collapse">
                             <thead>
@@ -692,7 +692,7 @@ const CustomDropdown = ({ icon: Icon, label, children, isOpen, onToggle, onClose
             {isOpen && (
                 <>
                     <div className="fixed inset-0 z-10" onClick={onClose} />
-                    <div className={`absolute top-full right-0 mt-2 w-48 border rounded-2xl shadow-xl z-20 overflow-hidden animate-in fade-in zoom-in duration-150 origin-top-right ${isDarkTheme ? 'bg-slate-900/90 backdrop-blur-xl border-slate-800 shadow-black/40' : 'bg-white border-slate-100 shadow-slate-200/40'}`}>
+                    <div className={`absolute top-full right-0 mt-2 w-48 border rounded-[14px] shadow-xl z-20 overflow-hidden animate-in fade-in zoom-in duration-150 origin-top-right ${isDarkTheme ? 'bg-slate-900/90 backdrop-blur-xl border-slate-800 shadow-black/40' : 'bg-white border-slate-100 shadow-slate-200/40'}`}>
                         {children}
                     </div>
                 </>
@@ -706,7 +706,7 @@ const StatCard = ({ icon: Icon, label, value, color, isRatio, trend, className, 
         blue: isDarkTheme ? 'bg-blue-500/10 text-blue-400 shadow-blue-500/20' : 'bg-blue-50/50 text-blue-500 shadow-blue-100/50',
         purple: isDarkTheme ? 'bg-purple-500/10 text-purple-400 shadow-purple-500/20' : 'bg-purple-50/50 text-purple-500 shadow-purple-100/50',
         green: isDarkTheme ? 'bg-emerald-500/10 text-emerald-400 shadow-emerald-500/20' : 'bg-emerald-50/50 text-emerald-500 shadow-emerald-100/50',
-        orange: isDarkTheme ? 'bg-orange-500/10 text-orange-400 shadow-orange-500/20' : 'bg-orange-50/50 text-orange-500 shadow-orange-100/50',
+        orange: isDarkTheme ? 'bg-[var(--color-primary)]/10 text-orange-400 shadow-[var(--color-primary)]/20' : 'bg-orange-50/50 text-[var(--color-primary)] shadow-orange-100/50',
         indigo: isDarkTheme ? 'bg-indigo-500/10 text-indigo-400 shadow-indigo-500/20' : 'bg-indigo-50/50 text-indigo-500 shadow-indigo-100/50',
         pink: isDarkTheme ? 'bg-rose-500/10 text-rose-400 shadow-rose-500/20' : 'bg-rose-50/50 text-rose-500 shadow-rose-100/50'
     };
@@ -764,7 +764,7 @@ const BadgeAction = ({ action, isDarkTheme }: { action: string; isDarkTheme?: bo
     let color = isDarkTheme ? 'bg-white/5 text-slate-400 border-slate-800' : 'bg-slate-100 text-slate-600 border-slate-200';
     if (action.includes('create')) color = isDarkTheme ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-emerald-50 text-emerald-700 border-emerald-100';
     if (action.includes('delete')) color = isDarkTheme ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-rose-50 text-rose-700 border-rose-100';
-    if (action.includes('update')) color = isDarkTheme ? 'bg-amber-600/10 text-amber-400 border-amber-600/20' : 'bg-amber-50 text-amber-700 border-amber-100';
+    if (action.includes('update')) color = isDarkTheme ? 'bg-[var(--color-primary)]/10 text-amber-400 border-[var(--color-primary)]/20' : 'bg-amber-50 text-[#9A1523] border-amber-100';
     if (action.includes('train')) color = isDarkTheme ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-indigo-50 text-indigo-700 border-indigo-100';
 
     return (
@@ -800,7 +800,7 @@ const HeatmapGrid = ({ data, metricLabel, isDarkTheme }: { data: any[], metricLa
     }
 
     return (
-        <div className={`grid grid-cols-7 gap-1.5 p-2 rounded-2xl border ${isDarkTheme ? 'bg-black/20 border-slate-800' : 'bg-slate-50/50 border-slate-100'}`}>
+        <div className={`grid grid-cols-7 gap-1.5 p-2 rounded-[14px] border ${isDarkTheme ? 'bg-black/20 border-slate-800' : 'bg-slate-50/50 border-slate-100'}`}>
             {dates.map(date => (
                 <div key={date} className="group relative">
                     <div

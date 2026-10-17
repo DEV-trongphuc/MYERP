@@ -60,25 +60,85 @@ try {
             $stmtCount->execute([$listId, $workspace_id]);
             $total = (int) $stmtCount->fetchColumn();
 
-            // Get paginated data
-            $stmt = $pdo->prepare("SELECT * FROM zalo_subscribers WHERE zalo_list_id = ? AND workspace_id = ? ORDER BY last_interaction_at DESC LIMIT ? OFFSET ?");
+            // Get paginated data joined with subscribers, contacts, and users
+            $stmt = $pdo->prepare("
+                SELECT s.*,
+                       COALESCE(s.subscriber_id, m.id) AS subscriber_id,
+                       COALESCE(s.contact_id, m.contact_id) AS contact_id,
+                       COALESCE(NULLIF(s.manual_email, ''), CASE WHEN m.email LIKE '%@zalo-oa.vn' THEN NULL ELSE NULLIF(m.email, '') END, ct.email) AS email,
+                       COALESCE(NULLIF(s.phone_number, ''), NULLIF(m.phone_number, ''), NULLIF(m.phone, ''), ct.phone) AS phone_number,
+                       COALESCE(ct.owner_id, m.owner_id) AS owner_id,
+                       COALESCE(u.full_name, m.salesperson) AS salesperson,
+                       m.tags AS main_tags,
+                       ct.tags AS crm_tags
+                FROM zalo_subscribers s
+                LEFT JOIN subscribers m ON (m.id = s.subscriber_id OR (s.zalo_user_id IS NOT NULL AND s.zalo_user_id != '' AND m.zalo_user_id = s.zalo_user_id))
+                LEFT JOIN contacts ct ON ct.id = COALESCE(s.contact_id, m.contact_id) AND ct.deleted_at IS NULL
+                LEFT JOIN users u ON u.id = COALESCE(ct.owner_id, m.owner_id)
+                WHERE s.zalo_list_id = ? AND s.workspace_id = ?
+                GROUP BY s.id
+                ORDER BY s.last_interaction_at DESC
+                LIMIT ? OFFSET ?
+            ");
             $stmt->execute([$listId, $workspace_id, $limit, $offset]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            jsonResponse(true, $stmt->fetchAll(PDO::FETCH_ASSOC), '', ['total' => $total, 'page' => $page, 'limit' => $limit]);
+            foreach ($rows as &$r) {
+                $mergedTags = [];
+                foreach (['main_tags', 'crm_tags'] as $tk) {
+                    if (!empty($r[$tk])) {
+                        $decoded = is_array($r[$tk]) ? $r[$tk] : json_decode((string)$r[$tk], true);
+                        if (is_array($decoded)) {
+                            foreach ($decoded as $tg) {
+                                if (is_string($tg) && trim($tg) !== '') {
+                                    $mergedTags[] = trim($tg);
+                                }
+                            }
+                        }
+                    }
+                    unset($r[$tk]);
+                }
+                $r['tags'] = array_values(array_unique($mergedTags));
+            }
+            unset($r);
+
+            jsonResponse(true, $rows, '', ['total' => $total, 'page' => $page, 'limit' => $limit]);
         } elseif ($route === 'user_details') {
-            $id = $_GET['id'] ?? '';
+            $id = trim((string)($_GET['id'] ?? ''));
             if (!$id)
                 jsonResponse(false, null, "Thiếu ID người dùng");
-            $stmt = $pdo->prepare("SELECT * FROM zalo_subscribers WHERE id = ? AND workspace_id = ?");
-            $stmt->execute([$id, $workspace_id]);
+
+            $cleanZaloId = strpos($id, 'zalo_') === 0 ? substr($id, 5) : $id;
+
+            $stmt = $pdo->prepare("
+                SELECT s.*,
+                       COALESCE(s.subscriber_id, m.id) AS subscriber_id,
+                       COALESCE(s.contact_id, m.contact_id) AS contact_id,
+                       COALESCE(NULLIF(s.manual_email, ''), CASE WHEN m.email LIKE '%@zalo-oa.vn' THEN NULL ELSE NULLIF(m.email, '') END, ct.email) AS email,
+                       COALESCE(NULLIF(s.manual_email, ''), CASE WHEN m.email LIKE '%@zalo-oa.vn' THEN NULL ELSE NULLIF(m.email, '') END, ct.email) AS manual_email,
+                       COALESCE(NULLIF(s.phone_number, ''), NULLIF(m.phone_number, ''), NULLIF(m.phone, ''), ct.phone) AS phone_number,
+                       COALESCE(ct.owner_id, m.owner_id) AS owner_id,
+                       COALESCE(u.full_name, m.salesperson) AS salesperson
+                FROM zalo_subscribers s
+                LEFT JOIN subscribers m ON (m.id = s.subscriber_id OR (s.zalo_user_id IS NOT NULL AND s.zalo_user_id != '' AND m.zalo_user_id = s.zalo_user_id))
+                LEFT JOIN contacts ct ON ct.id = COALESCE(s.contact_id, m.contact_id) AND ct.deleted_at IS NULL
+                LEFT JOIN users u ON u.id = COALESCE(ct.owner_id, m.owner_id)
+                WHERE (s.id = ? OR s.zalo_user_id = ? OR s.zalo_user_id = ?) AND s.workspace_id = ?
+                LIMIT 1
+            ");
+            $stmt->execute([$id, $id, $cleanZaloId, $workspace_id]);
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
             if (!$user)
                 jsonResponse(false, null, "Không tìm thấy người dùng");
+
+            $realRowId = $user['id'];
             $stmtMsg = $pdo->prepare("SELECT * FROM zalo_user_messages WHERE zalo_user_id = ? ORDER BY created_at DESC LIMIT 20");
             $stmtMsg->execute([$user['zalo_user_id']]);
             $user['messages'] = array_reverse($stmtMsg->fetchAll(PDO::FETCH_ASSOC));
-            $stmtAct = $pdo->prepare("SELECT * FROM zalo_subscriber_activity WHERE subscriber_id = ? ORDER BY created_at DESC LIMIT 20");
-            $stmtAct->execute([$id]);
+
+            $subIdForAct = $user['subscriber_id'] ?: $realRowId;
+            $stmtAct = $pdo->prepare("SELECT * FROM zalo_subscriber_activity WHERE (subscriber_id = ? OR subscriber_id = ?) ORDER BY created_at DESC LIMIT 20");
+            $stmtAct->execute([$realRowId, $subIdForAct]);
             $user['activities'] = $stmtAct->fetchAll(PDO::FETCH_ASSOC);
             jsonResponse(true, $user);
         }
@@ -87,15 +147,24 @@ try {
     elseif ($method === 'POST') {
         if ($route === 'update_user') {
             $input = json_decode(file_get_contents('php://input'), true);
-            $id = $input['id'] ?? '';
+            $id = trim((string)($input['id'] ?? ''));
             if (!$id)
                 jsonResponse(false, null, "Thiếu ID người dùng");
+
+            $cleanZaloId = strpos($id, 'zalo_') === 0 ? substr($id, 5) : $id;
+            $stmtFind = $pdo->prepare("SELECT id FROM zalo_subscribers WHERE (id = ? OR zalo_user_id = ? OR zalo_user_id = ?) AND workspace_id = ? LIMIT 1");
+            $stmtFind->execute([$id, $id, $cleanZaloId, $workspace_id]);
+            $realId = $stmtFind->fetchColumn();
+            if (!$realId) {
+                jsonResponse(false, null, "Không tìm thấy người dùng");
+            }
+
             $name = $input['display_name'] ?? '';
             $gender = $input['gender'] ?? null;
             $birthday = $input['birthday'] ?? null;
-            $phone = $input['phone'] ?? null;
+            $phone = $input['phone'] ?? ($input['phone_number'] ?? null);
             $specialDay = $input['special_day'] ?? null;
-            $manualEmail = $input['email'] ?? null;
+            $manualEmail = $input['email'] ?? ($input['manual_email'] ?? null);
             $notes = $input['notes'] ?? null;
 
             $stmt = $pdo->prepare("
@@ -103,13 +172,13 @@ try {
                 SET display_name = ?, gender = ?, phone_number = ?, birthday = ?, special_day = ?, manual_email = ?, notes = ? 
                 WHERE id = ? AND workspace_id = ?
             ");
-            $stmt->execute([$name, $gender, $phone, $birthday, $specialDay, $manualEmail, $notes, $id, $workspace_id]);
+            $stmt->execute([$name, $gender, $phone, $birthday, $specialDay, $manualEmail, $notes, $realId, $workspace_id]);
 
-            // [NEW] Sync with Main List
-            require_once 'zalo_sync_helpers.php';
-            syncZaloToMain($pdo, $id);
+            // Sync with Main List & MYERP Contact
+            require_once __DIR__ . '/zalo_sync_helpers.php';
+            syncZaloToMain($pdo, $realId);
 
-            jsonResponse(true, null, 'Cập nhật thông tin thành công');
+            jsonResponse(true, ['id' => $realId], 'Cập nhật thông tin thành công');
         }
         // --- UPLOAD IMAGE ---
         elseif ($route === 'upload_image') {

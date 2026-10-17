@@ -1,7 +1,9 @@
 import * as React from 'react';
 import { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../../components/marketing/services/storageAdapter';
+import { getMktPortalRoot } from '../../components/marketing/utils/portalRoot';
 import { Subscriber, Segment, Flow } from '../../components/marketing/types';
 import {
     UserPlus, Layers, Users, RefreshCw,
@@ -30,7 +32,6 @@ import { Panel, Toolbar, SearchBox } from '../../components/marketing/components
 import { useIsAdmin } from '../../components/marketing/hooks/useAuthUser';
 import { usePermissionGuard } from '../../components/marketing/components/common/PermissionGuard';
 
-const CustomerProfileModal = React.lazy(() => import('../../components/marketing/components/audience/CustomerProfileModal'));
 const SegmentBuilderModal = React.lazy(() => import('../../components/marketing/components/audience/SegmentBuilderModal'));
 const ListFormModal = React.lazy(() => import('../../components/marketing/components/audience/ListFormModal'));
 const ImportSubscribersModal = React.lazy(() => import('../../components/marketing/components/audience/ImportSubscribersModal'));
@@ -90,13 +91,12 @@ const COLUMN_DEFINITIONS = [
     { id: 'status', label: 'Trạng thái', required: false },
     { id: 'source', label: 'Nguồn', required: false },
     { id: 'lastActivity', label: 'Hoạt động gần nhất', required: false },
-    { id: 'leadScore', label: 'Điểm Lead', required: false },
     { id: 'tags', label: 'Tags', required: false },
     { id: 'salesperson', label: 'Phụ trách', required: false },
     { id: 'joinedAt', label: 'Ngày tham gia', required: false },
 ];
 
-const DEFAULT_VISIBLE_COLUMNS = ['name', 'phone', 'status', 'source', 'lastActivity', 'leadScore', 'tags'];
+const DEFAULT_VISIBLE_COLUMNS = ['name', 'phone', 'status', 'source', 'lastActivity', 'tags'];
 
 const formatRelativeTime = (dateString?: string) => {
     if (!dateString) return 'Chưa có dữ liệu';
@@ -182,7 +182,7 @@ const Audience: React.FC = () => {
                 if (Array.isArray(parsed)) {
                     const normalized = parsed
                         .map((col: string) => (col === 'email' ? 'phone' : col))
-                        .filter((col: string, idx: number, arr: string[]) => col !== 'salesperson' && arr.indexOf(col) === idx);
+                        .filter((col: string, idx: number, arr: string[]) => col !== 'salesperson' && col !== 'leadScore' && arr.indexOf(col) === idx);
                     return normalized.length > 0 ? normalized : DEFAULT_VISIBLE_COLUMNS;
                 }
             } catch {
@@ -345,6 +345,16 @@ const Audience: React.FC = () => {
         }
     }, []);
 
+    const handleSelectSubscriber = React.useCallback((s: Subscriber | null | any) => {
+        if (!s) return;
+        const contactId = s.contact_id || s.myerp_contact_id;
+        if (contactId) {
+            window.dispatchEvent(new CustomEvent('open-customer-drawer', { detail: { id: Number(contactId), initialTab: 'journey360' } }));
+        } else {
+            window.dispatchEvent(new CustomEvent('open-customer-drawer', { detail: { phone: s.phone, email: s.email, contact: s, initialTab: 'journey360' } }));
+        }
+    }, []);
+
     const backToContacts = React.useCallback(() => setSelectedSubscriber(null), []);
     const backToGroups = React.useCallback(() => setViewingGroup(null), []);
 
@@ -403,8 +413,8 @@ const Audience: React.FC = () => {
         if (state?.openSubscriberId) {
             const subId = state.openSubscriberId;
             api.get<Subscriber>(`subscribers/${subId}`).then(res => {
-                if (res.success) {
-                    setSelectedSubscriber(res.data);
+                if (res.success && res.data) {
+                    handleSelectSubscriber(res.data);
                     navigate(location.pathname, { replace: true, state: { ...state, openSubscriberId: undefined } });
                 }
             });
@@ -415,8 +425,13 @@ const Audience: React.FC = () => {
         }
 
         const params = new URLSearchParams(location.search);
+        const qTab = params.get('tab');
         const qSegmentId = params.get('segment_id');
         const qListId = params.get('list_id');
+
+        if (qTab && ['contacts', 'segments', 'lists', 'tags'].includes(qTab)) {
+            setActiveTab(qTab as any);
+        }
 
         if (qSegmentId) {
             setActiveTab('segments');
@@ -473,6 +488,11 @@ const Audience: React.FC = () => {
         }
         setSelectedIds(newSet);
     }, [subscribers, selectedIds, isGlobalSelected]);
+
+    const handleClearSelection = React.useCallback(() => {
+        setSelectedIds(new Set());
+        if (isGlobalSelected) setIsGlobalSelected(false);
+    }, [isGlobalSelected]);
 
     // Generic fetch for Lists with pagination + AbortController
     const fetchLists = async (page = 1) => {
@@ -1297,6 +1317,7 @@ const Audience: React.FC = () => {
         setFilterSalesperson('');
         setFilterCustomAttrKey('');
         setFilterCustomAttrValue('');
+        handleClearSelection();
     };
 
     const filteredIntegrations = debouncedSearch
@@ -1312,15 +1333,7 @@ const Audience: React.FC = () => {
                 <PageHero
                     title="Tệp khách hàng & Phân khúc"
                     subtitle="Quản lý vòng đời khách hàng từ lúc đăng ký đến lúc chuyển đổi đa kênh."
-                    showStatus={true}
-                    statusText="Database Online"
                     actions={[
-                        {
-                            label: 'Mẹo tăng trưởng',
-                            icon: Lightbulb,
-                            onClick: () => setIsTipsModalOpen(true),
-                            primary: false
-                        },
                         {
                             label: 'Kết nối đồng bộ',
                             icon: RefreshCw,
@@ -1345,8 +1358,8 @@ const Audience: React.FC = () => {
                         loading={loading && subscribers.length === 0}
                         breakdown={
                             <>
-                                <span>Customer: {(stats.customer || 0).toLocaleString()}</span>
-                                <span>Lead: {(stats.lead || 0).toLocaleString()}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />Customer: {(stats.customer || 0).toLocaleString()}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />Lead: {(stats.lead || 0).toLocaleString()}</span>
                             </>
                         }
                     />
@@ -1358,8 +1371,8 @@ const Audience: React.FC = () => {
                         loading={loading && subscribers.length === 0}
                         breakdown={
                             <>
-                                <span>Active: {(stats.active || 0).toLocaleString()}</span>
-                                <span>Tổng: {stats.total.toLocaleString()}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Active: {(stats.active || 0).toLocaleString()}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-400" />Tổng: {stats.total.toLocaleString()}</span>
                             </>
                         }
                     />
@@ -1371,8 +1384,8 @@ const Audience: React.FC = () => {
                         loading={loading && subscribers.length === 0}
                         breakdown={
                             <>
-                                <span>Email: {(stats.email_reach || 0).toLocaleString()}</span>
-                                <span>Zalo/SĐT: {(stats.zalo_reach || 0).toLocaleString()}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />Email: {(stats.email_reach || 0).toLocaleString()}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-cyan-500" />Zalo/SĐT: {(stats.zalo_reach || 0).toLocaleString()}</span>
                             </>
                         }
                     />
@@ -1384,7 +1397,7 @@ const Audience: React.FC = () => {
                         loading={loading && subscribers.length === 0}
                         breakdown={
                             <>
-                                <span>Unsubscribed: {(stats.unsubscribed || 0).toLocaleString()}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-rose-500" />Unsubscribed: {(stats.unsubscribed || 0).toLocaleString()}</span>
                             </>
                         }
                     />
@@ -1394,7 +1407,10 @@ const Audience: React.FC = () => {
                     <div className="px-4 py-3 border-b border-[var(--color-border)] bg-[var(--color-surface)]">
                         <Tabs
                             activeId={activeTab}
-                            onChange={setActiveTab}
+                            onChange={(tab) => {
+                                setActiveTab(tab);
+                                handleClearSelection();
+                            }}
                             variant="segmented"
                             items={[
                                 { id: 'contacts', label: 'Tất cả liên hệ', icon: Users, count: pagination.total || stats.total },
@@ -1703,7 +1719,8 @@ const Audience: React.FC = () => {
                                     selectedIds={selectedIds}
                                     onToggleSelection={handleToggleSelection}
                                     onToggleSelectAll={handleToggleSelectAll}
-                                    onSelectSubscriber={setSelectedSubscriber}
+                                    onClearSelection={handleClearSelection}
+                                    onSelectSubscriber={handleSelectSubscriber}
                                     formatRelativeTime={formatRelativeTime}
                                     currentPage={pagination.page}
                                     totalPages={pagination.totalPages}
@@ -1871,13 +1888,37 @@ const Audience: React.FC = () => {
                         isOpen={isCreateListModalOpen || !!editingList}
                         onClose={() => { setIsCreateListModalOpen(false); setEditingList(null); }}
                         list={editingList}
-                        onSave={async (d, isNew) => {
+                        onSave={async (d: any, isNew) => {
                             setLoading(true);
                             try {
-                                let res;
+                                let res: any;
                                 if (isNew) {
-                                    res = await api.post('lists', { ...d, count: 0, source: d.source || 'Manual', created: new Date().toLocaleDateString('vi-VN') });
-                                    if (res.success) showToast('Đã tạo danh sách tĩnh', 'success');
+                                    if (d.auto_populate && d.criteria) {
+                                        const payload = {
+                                            ...d,
+                                            criteria: typeof d.criteria === 'string' ? d.criteria : JSON.stringify(d.criteria),
+                                            auto_populate: true,
+                                            include_crm_contacts: true,
+                                            source: d.source || 'CRM Deep Filter',
+                                            created: new Date().toLocaleDateString('vi-VN')
+                                        };
+                                        res = await api.post('lists?route=create_with_filter', payload);
+                                        if (!res?.success) {
+                                            res = await api.post('lists', payload);
+                                        }
+                                        if (res?.success) {
+                                            const addedCnt = res.data?.populated_count ?? res.data?.added_count ?? res.data?.count;
+                                            showToast(
+                                                addedCnt !== undefined
+                                                    ? `Đã tạo danh sách tĩnh và nạp ${Number(addedCnt).toLocaleString('vi-VN')} khách hàng`
+                                                    : 'Đã tạo danh sách tĩnh theo bộ lọc MYERP',
+                                                'success'
+                                            );
+                                        }
+                                    } else {
+                                        res = await api.post('lists', { ...d, count: 0, source: d.source || 'Manual', created: new Date().toLocaleDateString('vi-VN') });
+                                        if (res.success) showToast('Đã tạo danh sách tĩnh', 'success');
+                                    }
                                 } else {
                                     res = await api.put(`lists/${editingList.id}`, { ...editingList, ...d });
                                     if (res.success) showToast('Đã cập nhật danh sách', 'success');
@@ -2073,35 +2114,7 @@ const Audience: React.FC = () => {
                             setSplittingTarget({ id: group.id, name: group.name, type: (group as any).criteria ? 'segment' : 'list', count: (group as any).count || 0 });
                             setSplitSelectedIds(ids);
                         }}
-                        onViewProfile={setSelectedSubscriber}
-                    />
-                </React.Suspense>
-            )}
-
-            {selectedSubscriber && (
-                <React.Suspense fallback={null}>
-                    <CustomerProfileModal
-                        subscriber={selectedSubscriber}
-                        onClose={() => setSelectedSubscriber(null)}
-                        onUpdate={handleUpdateSubscriber}
-                        onDelete={handleDeleteSubscriber}
-                        allLists={allStaticLists}
-                        allSegments={allSegments}
-                        allFlows={flows}
-                        allTags={tags}
-                        checkMatch={checkSegmentMatch}
-                        onAddToList={async (subId, listId) => {
-                            const getRes = await api.get<any>(`subscribers?id=${subId}`);
-                            if (getRes.success) {
-                                const sub = getRes.data;
-                                if (Array.isArray(sub.listIds) && !sub.listIds.includes(listId)) {
-                                    await handleUpdateSubscriber({ ...sub, listIds: [...sub.listIds, listId] });
-                                }
-                            }
-                        }}
-                        onRemoveFromList={async (subId, listId) => {
-                            await handleRemoveFromList([subId], listId);
-                        }}
+                        onViewProfile={handleSelectSubscriber}
                     />
                 </React.Suspense>
             )}
@@ -2213,9 +2226,9 @@ const Audience: React.FC = () => {
                 </React.Suspense>
             )}
 
-            {isDateRangeModalOpen && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-[var(--color-surface)] rounded-[var(--radius-lg)] border border-[var(--color-border)] w-full max-w-sm shadow-xl p-6 space-y-4 animate-in zoom-in-95 duration-200">
+            {isDateRangeModalOpen && createPortal(
+                <div className="fixed inset-0 z-[110000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-[var(--color-surface)] rounded-[18px] border border-[var(--color-border)] w-full max-w-sm shadow-xl p-6 space-y-4 animate-in zoom-in-95 duration-200">
                         <div className="flex items-center justify-between">
                             <h3 className="text-base font-bold text-[var(--color-text)]">Chọn khoảng thời gian</h3>
                             <button onClick={() => setIsDateRangeModalOpen(false)} className="p-1 hover:bg-[var(--color-bg)] rounded-full text-[var(--color-text-light)] hover:text-[var(--color-text)] transition-colors">
@@ -2256,12 +2269,13 @@ const Audience: React.FC = () => {
                             }}>Áp dụng</Button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                getMktPortalRoot()
             )}
 
-            {isBulkListModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-[var(--color-surface)] rounded-[var(--radius-lg)] w-full max-w-lg shadow-2xl p-6 space-y-6 animate-in zoom-in-95 duration-200 relative border border-[var(--color-border)]">
+            {isBulkListModalOpen && createPortal(
+                <div className="fixed inset-0 z-[110000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-[var(--color-surface)] rounded-[18px] w-full max-w-lg shadow-2xl p-6 space-y-6 animate-in zoom-in-95 duration-200 relative border border-[var(--color-border)]">
                         <button onClick={() => setIsBulkListModalOpen(false)} className="absolute top-5 right-5 p-2 hover:bg-[var(--color-bg)] rounded-lg text-[var(--color-text-light)] hover:text-[var(--color-text)] transition-all">
                             <X className="w-5 h-5" />
                         </button>
@@ -2325,7 +2339,8 @@ const Audience: React.FC = () => {
                             </div>
                         </div>
                     </div>
-                </div>
+                </div>,
+                getMktPortalRoot()
             )}
 
             {isTipsModalOpen && (
@@ -2337,10 +2352,10 @@ const Audience: React.FC = () => {
                 </React.Suspense>
             )}
 
-            {formProtectionModal.isOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {formProtectionModal.isOpen && createPortal(
+                <div className="fixed inset-0 z-[110000] flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setFormProtectionModal(prev => ({ ...prev, isOpen: false }))} />
-                    <div className="relative bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+                    <div className="relative bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[18px] shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
                         <div className="flex items-start gap-4 mb-5">
                             <div className="w-11 h-11 bg-[var(--color-primary-light)] rounded-[var(--radius-md)] flex items-center justify-center shrink-0">
                                 <span className="text-xl">🔗</span>
@@ -2353,7 +2368,7 @@ const Audience: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--radius-md)] p-4 mb-4">
+                        <div className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[14px] p-4 mb-4">
                             <p className="text-xs font-semibold text-[var(--color-text-light)] mb-2.5">Form đang sử dụng danh sách này</p>
                             <div className="space-y-2">
                                 {formProtectionModal.linkedForms.map(form => (
@@ -2368,7 +2383,7 @@ const Audience: React.FC = () => {
                                             type="button"
                                             onClick={() => {
                                                 setFormProtectionModal(prev => ({ ...prev, isOpen: false }));
-                                                navigate(`/forms/${form.id}`);
+                                                navigate('/marketing/forms');
                                             }}
                                             className="text-xs font-semibold text-[var(--color-primary)] hover:underline px-2 py-1 rounded-md transition-colors"
                                         >
@@ -2379,7 +2394,7 @@ const Audience: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--radius-md)] px-4 py-3 text-xs text-[var(--color-text-light)] mb-5 leading-relaxed">
+                        <div className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[14px] px-4 py-3 text-xs text-[var(--color-text-light)] mb-5 leading-relaxed">
                             💡 Vào Form → Chỉnh sửa → Đổi <strong>"Danh sách nhận liên hệ"</strong> sang danh sách khác hoặc để trống, sau đó quay lại xóa danh sách này.
                         </div>
 
@@ -2395,14 +2410,15 @@ const Audience: React.FC = () => {
                                 size="sm"
                                 onClick={() => {
                                     setFormProtectionModal(prev => ({ ...prev, isOpen: false }));
-                                    navigate('/forms');
+                                    navigate('/marketing/forms');
                                 }}
                             >
                                 Đến trang Forms
                             </Button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                getMktPortalRoot()
             )}
 
             {AdminPermModal}

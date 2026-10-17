@@ -18,9 +18,9 @@ const VisibilitySettings: React.FC<VisibilitySettingsProps> = ({
     isDarkTheme
 }) => {
     return (
-        <div className={`p-8 rounded-[32px] border mt-8 space-y-6 transition-all duration-500 ${isDarkTheme ? 'bg-slate-800/20 border-slate-700' : 'bg-slate-50/60 border-slate-200'}`}>
+        <div className={`p-8 rounded-[18px] border mt-8 space-y-6 transition-all duration-500 ${isDarkTheme ? 'bg-slate-800/20 border-slate-700' : 'bg-slate-50/60 border-slate-200'}`}>
             <div className={`flex items-center gap-4 border-b pb-5 ${isDarkTheme ? 'border-slate-800' : 'border-slate-200'}`}>
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm border ${isDarkTheme ? 'bg-slate-900 border-slate-700 text-slate-200' : 'bg-white border-slate-100 text-slate-800'}`}>
+                <div className={`w-12 h-12 rounded-[14px] flex items-center justify-center shadow-sm border ${isDarkTheme ? 'bg-slate-900 border-slate-700 text-slate-200' : 'bg-white border-slate-100 text-slate-800'}`}>
                     <Layout className="w-6 h-6" />
                 </div>
                 <div>
@@ -34,11 +34,11 @@ const VisibilitySettings: React.FC<VisibilitySettingsProps> = ({
                 <div className="grid grid-cols-2 gap-4">
                     <div
                         onClick={() => setSettings({ ...settings, widget_position: 'bottom-right' })}
-                        className={`cursor-pointer group relative p-4 rounded-2xl border-2 transition-all duration-300 ${(!settings.widget_position || settings.widget_position === 'bottom-right') ? (isDarkTheme ? 'bg-slate-800 border-brand shadow-lg shadow-brand/10' : 'bg-white border-amber-600 shadow-lg shadow-amber-600/10') : (isDarkTheme ? 'bg-slate-900 border-slate-800 hover:border-slate-700' : 'bg-slate-50 border-slate-200 hover:border-slate-300')}`}
+                        className={`cursor-pointer group relative p-4 rounded-[14px] border-2 transition-all duration-300 ${(!settings.widget_position || settings.widget_position === 'bottom-right') ? (isDarkTheme ? 'bg-slate-800 border-[var(--color-primary)] shadow-lg shadow-[var(--color-primary)]/10' : 'bg-white border-[var(--color-primary)] shadow-lg shadow-[var(--color-primary)]/10') : (isDarkTheme ? 'bg-slate-900 border-slate-800 hover:border-slate-700' : 'bg-slate-50 border-slate-200 hover:border-slate-300')}`}
                     >
                         <div className="flex items-center gap-3 mb-3">
-                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${(!settings.widget_position || settings.widget_position === 'bottom-right') ? (isDarkTheme ? 'border-brand' : 'border-amber-600') : (isDarkTheme ? 'border-slate-700' : 'border-slate-300')}`}>
-                                {(!settings.widget_position || settings.widget_position === 'bottom-right') && <div className={`w-2.5 h-2.5 rounded-full ${isDarkTheme ? 'bg-brand' : 'bg-amber-600'}`} />}
+                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${(!settings.widget_position || settings.widget_position === 'bottom-right') ? (isDarkTheme ? 'border-[var(--color-primary)]' : 'border-[var(--color-primary)]') : (isDarkTheme ? 'border-slate-700' : 'border-slate-300')}`}>
+                                {(!settings.widget_position || settings.widget_position === 'bottom-right') && <div className={`w-2.5 h-2.5 rounded-full ${isDarkTheme ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-primary)]'}`} />}
                             </div>
                             <span className={`text-xs font-bold ${(!settings.widget_position || settings.widget_position === 'bottom-right') ? (isDarkTheme ? 'text-slate-100' : 'text-slate-800') : (isDarkTheme ? 'text-slate-500' : 'text-slate-500')}`}>Góc Phải (Mặc định)</span>
                         </div>
@@ -51,11 +51,11 @@ const VisibilitySettings: React.FC<VisibilitySettingsProps> = ({
 
                     <div
                         onClick={() => setSettings({ ...settings, widget_position: 'bottom-left' })}
-                        className={`cursor-pointer group relative p-4 rounded-2xl border-2 transition-all duration-300 ${settings.widget_position === 'bottom-left' ? (isDarkTheme ? 'bg-slate-800 border-brand shadow-lg shadow-brand/10' : 'bg-white border-amber-600 shadow-lg shadow-amber-600/10') : (isDarkTheme ? 'bg-slate-900 border-slate-800 hover:border-slate-700' : 'bg-slate-50 border-slate-200 hover:border-slate-300')}`}
+                        className={`cursor-pointer group relative p-4 rounded-[14px] border-2 transition-all duration-300 ${settings.widget_position === 'bottom-left' ? (isDarkTheme ? 'bg-slate-800 border-[var(--color-primary)] shadow-lg shadow-[var(--color-primary)]/10' : 'bg-white border-[var(--color-primary)] shadow-lg shadow-[var(--color-primary)]/10') : (isDarkTheme ? 'bg-slate-900 border-slate-800 hover:border-slate-700' : 'bg-slate-50 border-slate-200 hover:border-slate-300')}`}
                     >
                         <div className="flex items-center gap-3 mb-3">
-                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${settings.widget_position === 'bottom-left' ? (isDarkTheme ? 'border-brand' : 'border-amber-600') : (isDarkTheme ? 'border-slate-700' : 'border-slate-300')}`}>
-                                {settings.widget_position === 'bottom-left' && <div className={`w-2.5 h-2.5 rounded-full ${isDarkTheme ? 'bg-brand' : 'bg-amber-600'}`} />}
+                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${settings.widget_position === 'bottom-left' ? (isDarkTheme ? 'border-[var(--color-primary)]' : 'border-[var(--color-primary)]') : (isDarkTheme ? 'border-slate-700' : 'border-slate-300')}`}>
+                                {settings.widget_position === 'bottom-left' && <div className={`w-2.5 h-2.5 rounded-full ${isDarkTheme ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-primary)]'}`} />}
                             </div>
                             <span className={`text-xs font-bold ${settings.widget_position === 'bottom-left' ? (isDarkTheme ? 'text-slate-100' : 'text-slate-800') : (isDarkTheme ? 'text-slate-500' : 'text-slate-500')}`}>Góc Trái</span>
                         </div>
@@ -92,7 +92,7 @@ const VisibilitySettings: React.FC<VisibilitySettingsProps> = ({
                                 Tắt tự mở tại trang (URL Cụ thể)
                             </label>
                             <textarea
-                                className={`w-full border rounded-xl px-4 py-3 text-[12px] font-mono leading-relaxed outline-none transition-all shadow-sm min-h-[80px] ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-600 focus:border-brand shadow-none' : 'bg-white border-slate-200 text-slate-700 placeholder:text-slate-300 focus:border-amber-600 focus:ring-4 focus:ring-amber-600/5'}`}
+                                className={`w-full border rounded-xl px-4 py-3 text-[12px] font-mono leading-relaxed outline-none transition-all shadow-sm min-h-[80px] ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-600 focus:border-[var(--color-primary)] shadow-none' : 'bg-white border-slate-200 text-slate-700 placeholder:text-slate-300 focus:border-[var(--color-primary)] focus:ring-4 focus:ring-[var(--color-primary)]/5'}`}
                                 value={(settings.auto_open_excluded_pages || []).join('\n')}
                                 onChange={e => setSettings({ ...settings, auto_open_excluded_pages: e.target.value.split('\n') })}
                                 placeholder={`/lien-he\n/gio-hang`}
@@ -104,7 +104,7 @@ const VisibilitySettings: React.FC<VisibilitySettingsProps> = ({
                                 Tắt tự mở (Bắt đầu bằng...)
                             </label>
                             <textarea
-                                className={`w-full border rounded-xl px-4 py-3 text-[12px] font-mono leading-relaxed outline-none transition-all shadow-sm min-h-[80px] ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-600 focus:border-brand shadow-none' : 'bg-white border-slate-200 text-slate-700 placeholder:text-slate-300 focus:border-amber-600 focus:ring-4 focus:ring-amber-600/5'}`}
+                                className={`w-full border rounded-xl px-4 py-3 text-[12px] font-mono leading-relaxed outline-none transition-all shadow-sm min-h-[80px] ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-600 focus:border-[var(--color-primary)] shadow-none' : 'bg-white border-slate-200 text-slate-700 placeholder:text-slate-300 focus:border-[var(--color-primary)] focus:ring-4 focus:ring-[var(--color-primary)]/5'}`}
                                 value={(settings.auto_open_excluded_paths || []).join('\n')}
                                 onChange={e => setSettings({ ...settings, auto_open_excluded_paths: e.target.value.split('\n') })}
                                 placeholder={`/checkout\n/payment`}
@@ -121,7 +121,7 @@ const VisibilitySettings: React.FC<VisibilitySettingsProps> = ({
                         Ẩn widget tại trang (URL Cụ thể)
                     </label>
                     <textarea
-                        className={`w-full border rounded-xl px-4 py-3 text-[12px] font-mono leading-relaxed outline-none transition-all shadow-sm min-h-[80px] ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-600 focus:border-brand shadow-none' : 'bg-white border-slate-200 text-slate-700 placeholder:text-slate-300 focus:border-amber-600 focus:ring-4 focus:ring-amber-600/5'}`}
+                        className={`w-full border rounded-xl px-4 py-3 text-[12px] font-mono leading-relaxed outline-none transition-all shadow-sm min-h-[80px] ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-600 focus:border-[var(--color-primary)] shadow-none' : 'bg-white border-slate-200 text-slate-700 placeholder:text-slate-300 focus:border-[var(--color-primary)] focus:ring-4 focus:ring-[var(--color-primary)]/5'}`}
                         value={(settings.excluded_pages || []).join('\n')}
                         onChange={e => setSettings({ ...settings, excluded_pages: e.target.value.split('\n') })}
                         placeholder={`/dang-nhap\n/admin/dashboard\nhttps://domain.com/landing-page`}
@@ -135,7 +135,7 @@ const VisibilitySettings: React.FC<VisibilitySettingsProps> = ({
                         Ẩn widget tại trang (Bắt đầu bằng...)
                     </label>
                     <textarea
-                        className={`w-full border rounded-xl px-4 py-3 text-[12px] font-mono leading-relaxed outline-none transition-all shadow-sm min-h-[80px] ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-600 focus:border-brand shadow-none' : 'bg-white border-slate-200 text-slate-700 placeholder:text-slate-300 focus:border-amber-600 focus:ring-4 focus:ring-amber-600/5'}`}
+                        className={`w-full border rounded-xl px-4 py-3 text-[12px] font-mono leading-relaxed outline-none transition-all shadow-sm min-h-[80px] ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-600 focus:border-[var(--color-primary)] shadow-none' : 'bg-white border-slate-200 text-slate-700 placeholder:text-slate-300 focus:border-[var(--color-primary)] focus:ring-4 focus:ring-[var(--color-primary)]/5'}`}
                         value={(settings.excluded_paths || []).join('\n')}
                         onChange={e => setSettings({ ...settings, excluded_paths: e.target.value.split('\n') })}
                         placeholder={`/admin\n/private\n/account`}
@@ -145,7 +145,7 @@ const VisibilitySettings: React.FC<VisibilitySettingsProps> = ({
             </div>
 
             <div className="flex gap-4 pt-4">
-                <Button size="lg" className="w-full shadow-xl bg-orange-500 hover:bg-orange-600 border-none text-white font-bold shadow-orange-500/30 hover:-translate-y-0.5 transition-all active:translate-y-0" icon={Save} onClick={handleSaveSettings} isLoading={loading}>Lưu cấu hình AI</Button>
+                <Button size="lg" className="w-full shadow-xl bg-[var(--color-primary)] hover:bg-[#9A1523] border-none text-white font-bold shadow-[var(--color-primary)]/30 hover:-translate-y-0.5 transition-all active:translate-y-0" icon={Save} onClick={handleSaveSettings} isLoading={loading}>Lưu cấu hình AI</Button>
             </div>
         </div>
     );

@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../../../services/storageAdapter';
 import { toast } from 'react-hot-toast';
 import { Bug, Lightbulb, Heart, MessageSquare, RefreshCw, Image, ChevronDown, ChevronUp, CheckCircle, Clock, XCircle, AlertCircle } from 'lucide-react';
+import { getMktPortalRoot } from '../../../utils/portalRoot';
 
 type FeedbackStatus = 'new' | 'in_review' | 'resolved' | 'closed';
 type FeedbackType = 'bug' | 'suggestion' | 'praise' | 'other';
@@ -26,14 +28,14 @@ interface FeedbackItem {
 
 const TYPE_META: Record<FeedbackType, { label: string; icon: React.ReactNode; color: string; bg: string }> = {
     bug: { label: 'Lỗi', icon: <Bug className="w-3.5 h-3.5" />, color: '#ef4444', bg: 'bg-red-500/10 text-red-400' },
-    suggestion: { label: 'Góp ý', icon: <Lightbulb className="w-3.5 h-3.5" />, color: '#d97706', bg: 'bg-amber-600/10 text-amber-400' },
+    suggestion: { label: 'Góp ý', icon: <Lightbulb className="w-3.5 h-3.5" />, color: '#BD1D2D', bg: 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]' },
     praise: { label: 'Khen ngợi', icon: <Heart className="w-3.5 h-3.5" />, color: '#10b981', bg: 'bg-emerald-500/10 text-emerald-400' },
     other: { label: 'Khác', icon: <MessageSquare className="w-3.5 h-3.5" />, color: '#6366f1', bg: 'bg-indigo-500/10 text-indigo-400' },
 };
 
 const STATUS_META: Record<FeedbackStatus, { label: string; icon: React.ReactNode; cls: string }> = {
     new: { label: 'Mới', icon: <AlertCircle className="w-3.5 h-3.5" />, cls: 'bg-blue-500/10 text-blue-400 border-blue-500/30' },
-    in_review: { label: 'Đang xem xét', icon: <Clock className="w-3.5 h-3.5" />, cls: 'bg-amber-600/10 text-amber-400 border-amber-600/30' },
+    in_review: { label: 'Đang xem xét', icon: <Clock className="w-3.5 h-3.5" />, cls: 'bg-[var(--color-primary)]/10 text-[var(--color-primary)] border-[var(--color-primary)]/30' },
     resolved: { label: 'Đã xử lý', icon: <CheckCircle className="w-3.5 h-3.5" />, cls: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' },
     closed: { label: 'Đã đóng', icon: <XCircle className="w-3.5 h-3.5" />, cls: 'bg-slate-500/10 text-slate-400 border-slate-500/30' },
 };
@@ -48,7 +50,6 @@ const FeedbackRow: React.FC<{
     const [saving, setSaving] = useState(false);
     const [lightbox, setLightbox] = useState(false);
 
-    // Sync local state if parent refreshes the list
     useEffect(() => { setStatus(fb.status); setNote(fb.admin_note || ''); }, [fb.status, fb.admin_note]);
 
     const tm = TYPE_META[fb.type];
@@ -61,7 +62,7 @@ const FeedbackRow: React.FC<{
     };
 
     return (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden transition-all">
+        <div className="rounded-[14px] border border-slate-800 bg-slate-900/40 overflow-hidden transition-all">
             {/* Row header */}
             <div
                 className="flex items-start gap-3 p-4 cursor-pointer hover:bg-slate-800/30 transition-colors"
@@ -93,7 +94,7 @@ const FeedbackRow: React.FC<{
                         </span>
                         {fb.screenshot_url && (
                             <span className="flex items-center gap-0.5 text-[11px] text-indigo-400">
-                                <Image className="w-3 h-3" /> Cònh
+                                <Image className="w-3 h-3" /> Có ảnh
                             </span>
                         )}
                     </div>
@@ -121,7 +122,7 @@ const FeedbackRow: React.FC<{
                             <img
                                 src={fb.screenshot_url}
                                 alt="Screenshot"
-                                className="max-h-48 rounded-xl border border-slate-700 cursor-zoom-in object-cover"
+                                className="max-h-48 rounded-[14px] border border-slate-700 cursor-zoom-in object-cover"
                                 onClick={() => setLightbox(true)}
                             />
                         </div>
@@ -144,7 +145,7 @@ const FeedbackRow: React.FC<{
                                 onChange={e => setNote(e.target.value)}
                                 placeholder="Ghi chú xử lý..."
                                 rows={2}
-                                className="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-200 text-xs outline-none resize-none focus:border-indigo-500 placeholder:text-slate-600"
+                                className="w-full px-3 py-2 rounded-[var(--radius-md)] border border-slate-700 bg-slate-900 text-slate-200 text-xs outline-none resize-none focus:border-[var(--color-primary)] placeholder:text-slate-600"
                             />
                         </div>
                         <div className="sm:w-44 flex flex-col gap-2.5">
@@ -153,7 +154,7 @@ const FeedbackRow: React.FC<{
                                 <select
                                     value={status}
                                     onChange={e => setStatus(e.target.value as FeedbackStatus)}
-                                    className="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-200 text-xs outline-none focus:border-indigo-500"
+                                    className="w-full px-3 py-2 rounded-[var(--radius-md)] border border-slate-700 bg-slate-900 text-slate-200 text-xs outline-none focus:border-[var(--color-primary)]"
                                 >
                                     <option value="new">Mới</option>
                                     <option value="in_review">Đang xem xét</option>
@@ -164,7 +165,7 @@ const FeedbackRow: React.FC<{
                             <button
                                 onClick={handleSave}
                                 disabled={saving}
-                                className="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all active:scale-95 disabled:opacity-60"
+                                className="w-full py-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] hover:brightness-110 text-white text-xs font-bold transition-all active:scale-95 disabled:opacity-60"
                             >
                                 {saving ? 'Đang lưu...' : 'Lưu'}
                             </button>
@@ -174,10 +175,11 @@ const FeedbackRow: React.FC<{
             )}
 
             {/* Lightbox */}
-            {lightbox && fb.screenshot_url && (
-                <div className="fixed inset-0 z-[99999] bg-black/90 flex items-center justify-center p-4" onClick={() => setLightbox(false)}>
-                    <img src={fb.screenshot_url} alt="Screenshot full" className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain" />
-                </div>
+            {lightbox && fb.screenshot_url && createPortal(
+                <div className="fixed inset-0 z-[99999] bg-black/40 backdrop-blur-[1px] flex items-center justify-center p-4" onClick={() => setLightbox(false)}>
+                    <img src={fb.screenshot_url} alt="Screenshot full" className="max-w-full max-h-full rounded-[18px] shadow-2xl object-contain" />
+                </div>,
+                getMktPortalRoot()
             )}
         </div>
     );
@@ -198,7 +200,6 @@ const FeedbackAdminPanel: React.FC = () => {
             if (typeFilter) params.set('type', typeFilter);
             const res = await api.get<any>(`ai_org_chatbot?action=list_feedback&${params}`);
             if (res.success) {
-                // Normalize: API may return array directly, or {items:[], total:N}, or {data:[]}
                 const raw = res.data;
                 const list: FeedbackItem[] = Array.isArray(raw)
                     ? raw
@@ -219,7 +220,6 @@ const FeedbackAdminPanel: React.FC = () => {
         }
     }, [statusFilter, typeFilter]);
 
-    // Debounce filter changes — only fetch after 300ms idle
     useEffect(() => {
         const t = setTimeout(() => { fetchFeedbacks(); }, 300);
         return () => clearTimeout(t);
@@ -239,7 +239,6 @@ const FeedbackAdminPanel: React.FC = () => {
         }
     }, []);
 
-    // Summary counts — guard against non-array state during initial render
     const counts = (Array.isArray(feedbacks) ? feedbacks : []).reduce((acc, f) => {
         acc[f.status] = (acc[f.status] || 0) + 1;
         return acc;
@@ -256,7 +255,7 @@ const FeedbackAdminPanel: React.FC = () => {
                 <button
                     onClick={fetchFeedbacks}
                     disabled={loading}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-bold transition-all active:scale-95"
+                    className="flex items-center gap-2 px-4 py-2 rounded-[var(--radius-md)] bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-bold transition-all active:scale-95"
                 >
                     <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                     Làm mới
@@ -266,7 +265,7 @@ const FeedbackAdminPanel: React.FC = () => {
             {/* Status summary */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {(Object.entries(STATUS_META) as [FeedbackStatus, typeof STATUS_META[FeedbackStatus]][]).map(([k, m]) => (
-                    <div key={k} className={`flex items-center gap-2.5 px-4 py-3 rounded-xl border ${m.cls}`}>
+                    <div key={k} className={`flex items-center gap-2.5 px-4 py-3 rounded-[14px] border ${m.cls}`}>
                         {m.icon}
                         <div>
                             <p className="text-[13px] font-bold">{counts[k] || 0}</p>
@@ -281,7 +280,7 @@ const FeedbackAdminPanel: React.FC = () => {
                 <select
                     value={statusFilter}
                     onChange={e => setStatusFilter(e.target.value)}
-                    className="px-3 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 text-sm outline-none focus:border-indigo-500"
+                    className="px-3 py-2 rounded-[var(--radius-md)] border border-slate-700 bg-slate-900 text-slate-300 text-sm outline-none focus:border-[var(--color-primary)]"
                 >
                     <option value="">Tất cả Trạng thái</option>
                     <option value="new">Mới</option>
@@ -292,7 +291,7 @@ const FeedbackAdminPanel: React.FC = () => {
                 <select
                     value={typeFilter}
                     onChange={e => setTypeFilter(e.target.value)}
-                    className="px-3 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 text-sm outline-none focus:border-indigo-500"
+                    className="px-3 py-2 rounded-[var(--radius-md)] border border-slate-700 bg-slate-900 text-slate-300 text-sm outline-none focus:border-[var(--color-primary)]"
                 >
                     <option value="">Tất cả loại</option>
                     <option value="bug">Báo lỗi</option>
@@ -306,7 +305,7 @@ const FeedbackAdminPanel: React.FC = () => {
             {loading ? (
                 <div className="space-y-3">
                     {[1, 2, 3].map(i => (
-                        <div key={i} className="h-20 rounded-xl bg-slate-800/50 animate-pulse" />
+                        <div key={i} className="h-20 rounded-[14px] bg-slate-800/50 animate-pulse" />
                     ))}
                 </div>
             ) : feedbacks.length === 0 ? (

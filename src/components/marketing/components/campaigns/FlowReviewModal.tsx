@@ -35,7 +35,7 @@ const FlowReviewModal: React.FC<FlowReviewModalProps> = ({
                         onClick={onConfirm}
                         icon={Play}
                         isLoading={isProcessing}
-                        className="shadow-lg shadow-amber-600/20 bg-amber-600 hover:bg-amber-700 text-white border-transparent transition-all duration-500"
+                        className="shadow-lg shadow-amber-600/20 bg-[var(--color-primary)] hover:opacity-95 text-white border-transparent transition-all duration-500"
                     >
                         Xác nhận & Chạy ngay
                     </Button>
@@ -46,9 +46,9 @@ const FlowReviewModal: React.FC<FlowReviewModalProps> = ({
                 {/* Connection Visual */}
                 <div className="flex items-center justify-between gap-4">
                     {/* Campaign Card */}
-                    <div className={`flex-1 border rounded-2xl p-4 shadow-sm relative group transition-colors ${isDarkTheme ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+                    <div className={`flex-1 border rounded-[14px] p-4 shadow-sm relative group transition-colors ${isDarkTheme ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
                         <div className="flex items-center gap-3 mb-2">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${isDarkTheme ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' : 'bg-orange-50 text-[#ca7900] border-orange-100'}`}>
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${isDarkTheme ? 'bg-[var(--color-primary)]/10 text-orange-400 border-orange-500/20' : 'bg-orange-50 text-[#BD1D2D] border-orange-100'}`}>
                                 <Mail className="w-5 h-5" />
                             </div>
                             <div>
@@ -72,7 +72,7 @@ const FlowReviewModal: React.FC<FlowReviewModalProps> = ({
                     </div>
 
                     {/* Flow Card */}
-                    <div className={`flex-1 border rounded-2xl p-4 shadow-sm relative transition-colors ${isDarkTheme ? 'bg-emerald-950/20 border-emerald-900/40 text-emerald-100' : 'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>
+                    <div className={`flex-1 border rounded-[14px] p-4 shadow-sm relative transition-colors ${isDarkTheme ? 'bg-emerald-950/20 border-emerald-900/40 text-emerald-100' : 'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>
                         {flow ? (
                             <>
                                 <div className="absolute -top-2 -right-2 bg-emerald-500 text-white p-1 rounded-full shadow-md">
@@ -102,7 +102,7 @@ const FlowReviewModal: React.FC<FlowReviewModalProps> = ({
 
                 {/* Flow Preview Details */}
                 {flow && (
-                    <div className={`rounded-[24px] border p-6 ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                    <div className={`rounded-[18px] border p-6 ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
                         <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                             <Layers className="w-4 h-4" /> Xem trước quy trình
                         </h4>
@@ -147,7 +147,7 @@ const FlowReviewModal: React.FC<FlowReviewModalProps> = ({
                     </div>
                 )}
 
-                <div className={`p-4 rounded-2xl flex gap-3 border ${isDarkTheme ? 'bg-blue-950/20 border-blue-900/40 text-blue-200' : 'bg-blue-50 border-blue-100 text-blue-700'}`}>
+                <div className={`p-4 rounded-[14px] flex gap-3 border ${isDarkTheme ? 'bg-blue-950/20 border-blue-900/40 text-blue-200' : 'bg-blue-50 border-blue-100 text-blue-700'}`}>
                     <Zap className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
                     <div className="space-y-1">
                         <p className={`text-xs font-bold ${isDarkTheme ? 'text-blue-400' : 'text-blue-800'}`}>Hành động này sẽ:</p>

@@ -830,7 +830,7 @@ export const Header = ({
       if (urlObj.pathname.startsWith('/support-tickets')) {
         urlObj.pathname = '/tickets';
         targetLink = urlObj.pathname + urlObj.search;
-      } else if (urlObj.pathname.startsWith('/marketing')) {
+      } else if (urlObj.pathname === '/marketing-tasks') {
         urlObj.pathname = '/projects';
         if (!urlObj.searchParams.get('sub')) {
           urlObj.searchParams.set('sub', 'campaigns');
@@ -2701,7 +2701,22 @@ export const Header = ({
             'Quản lý tài khoản': 'Phân quyền tài khoản quản trị viên',
             'Quy tắc định tuyến': 'Thiết lập quy định chặn, skip và check-in',
             'Tích hợp Data': 'Cấu hình webhook và liên kết Google Sheets',
-            'CAPI': 'Cấu hình sự kiện Meta Conversion API'
+            'CAPI': 'Cấu hình sự kiện Meta Conversion API',
+            'Marketing': 'Tổng quan phễu Marketing, chiến dịch và chuyển đổi',
+            'Automation': 'Kịch bản nuôi dưỡng tự động đa kênh theo hành vi',
+            'Chiến dịch Email': 'Quản lý gửi Email hàng loạt, A/B testing và báo cáo',
+            'Mẫu thiết kế': 'Thư viện mẫu Email kéo thả và thiết kế cá nhân hóa',
+            'Tệp liên hệ': 'Quản lý phân khúc động, danh sách tĩnh và thẻ tag',
+            'Khảo sát': 'Biểu mẫu khảo sát, bài kiểm tra năng lực và NPS',
+            'Voucher & QR': 'Chiến dịch mã ưu đãi, QR code và rút gọn link',
+            'Social & Bot': 'Tích hợp Zalo OA, Facebook Messenger và kịch bản Bot',
+            'Đào tạo AI': 'Huấn luyện tri thức AI Copilot và quản lý hội thoại',
+            'Hành trình': 'Theo dõi hành trình khách hàng trên Website và UTM',
+            'API & Triggers': 'Cổng kết nối Webhook, Form thu Lead và sự kiện OTP',
+            'Báo cáo học tập': 'Thống kê kết quả học tập, chuyên cần và tiến độ học viên',
+            'Lớp học': 'Quản lý lớp học, lịch giảng dạy và danh sách học viên',
+            'Giảng viên': 'Quản lý hồ sơ giảng viên, lịch dạy và đánh giá',
+            'Chứng chỉ': 'Quản lý cấp phát chứng chỉ và văn bằng hoàn thành khóa học'
           };
 
           let visibleGroups = SIDEBAR_GROUPS.map(group => {
@@ -2766,15 +2781,15 @@ export const Header = ({
 
           // Dynamic Group Re-ordering based on role - Put QUY TRÌNH & PHÊ DUYỆT at the beginning
           const GROUP_ORDER_BY_ROLE: Record<string, string[]> = {
-            admin: ['QUY TRÌNH & PHÊ DUYỆT', 'TỔNG QUAN', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
-            superadmin: ['QUY TRÌNH & PHÊ DUYỆT', 'TỔNG QUAN', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
-            super_admin: ['QUY TRÌNH & PHÊ DUYỆT', 'TỔNG QUAN', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
-            director: ['QUY TRÌNH & PHÊ DUYỆT', 'TỔNG QUAN', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
+            admin: ['QUY TRÌNH & PHÊ DUYỆT', 'TỔNG QUAN', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'MARKETING & AUTOMATION', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
+            superadmin: ['QUY TRÌNH & PHÊ DUYỆT', 'TỔNG QUAN', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'MARKETING & AUTOMATION', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
+            super_admin: ['QUY TRÌNH & PHÊ DUYỆT', 'TỔNG QUAN', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'MARKETING & AUTOMATION', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
+            director: ['QUY TRÌNH & PHÊ DUYỆT', 'TỔNG QUAN', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'MARKETING & AUTOMATION', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
             accountant: ['QUY TRÌNH & PHÊ DUYỆT', 'TỔNG QUAN', 'TÀI CHÍNH', 'CHƯƠNG TRÌNH', 'NHÂN SỰ'],
             hr: ['QUY TRÌNH & PHÊ DUYỆT', 'TỔNG QUAN', 'NHÂN SỰ', 'CHƯƠNG TRÌNH'],
-            marketing: ['QUY TRÌNH & PHÊ DUYỆT', 'TỔNG QUAN', 'CHƯƠNG TRÌNH', 'KHÁCH HÀNG', 'CÀI ĐẶT HỆ THỐNG'],
-            sale_admin: ['QUY TRÌNH & PHÊ DUYỆT', 'TỔNG QUAN', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ'],
-            saleadmin: ['QUY TRÌNH & PHÊ DUYỆT', 'TỔNG QUAN', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ']
+            marketing: ['MARKETING & AUTOMATION', 'QUY TRÌNH & PHÊ DUYỆT', 'TỔNG QUAN', 'CHƯƠNG TRÌNH', 'KHÁCH HÀNG', 'CÀI ĐẶT HỆ THỐNG'],
+            sale_admin: ['QUY TRÌNH & PHÊ DUYỆT', 'TỔNG QUAN', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'MARKETING & AUTOMATION', 'CHƯƠNG TRÌNH', 'NHÂN SỰ'],
+            saleadmin: ['QUY TRÌNH & PHÊ DUYỆT', 'TỔNG QUAN', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'MARKETING & AUTOMATION', 'CHƯƠNG TRÌNH', 'NHÂN SỰ']
           };
           const activeRole = role.toLowerCase();
           const groupOrder = GROUP_ORDER_BY_ROLE[activeRole];
@@ -2928,16 +2943,17 @@ export const Header = ({
               'Tài khoản cá nhân'
             ],
             marketing: [
+              'Marketing',
+              'Automation',
+              'Chiến dịch Email',
+              'Tệp liên hệ',
+              'Social & Bot',
               'Quy trình',
               'Quản lý công',
               'WorkChat',
               'Chiến dịch',
               'Tiềm năng',
-              'Nhật ký Data',
-              'AI Pre-screener',
-              'Tích hợp Data',
-              'Bàn làm việc',
-              'Tài liệu'
+              'Bàn làm việc'
             ],
             sale_admin: [
               'Quy trình',
@@ -3063,7 +3079,7 @@ export const Header = ({
                               justifyContent: 'center',
                               flexShrink: 0,
                             }}>
-                              <AppIcon name={item.name} size={32} />
+                              <AppIcon name={(item as any).iconKey || item.name} size={32} />
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
                               <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -3143,7 +3159,7 @@ export const Header = ({
                                 justifyContent: 'center',
                                 flexShrink: 0
                               }}>
-                                <AppIcon name={item.name} size={isMobile ? 40 : 56} />
+                                <AppIcon name={(item as any).iconKey || item.name} size={isMobile ? 40 : 56} />
                               </div>
                               <span style={{ fontSize: isMobile ? '0.75rem' : '0.85rem', fontWeight: 800, color: 'var(--color-text)', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
                                 {t(item.name)}
@@ -3207,7 +3223,7 @@ export const Header = ({
                                   justifyContent: 'center',
                                   flexShrink: 0,
                                 }}>
-                                  <AppIcon name={item.name} size={isMobile ? 34 : 32} />
+                                  <AppIcon name={(item as any).iconKey || item.name} size={isMobile ? 34 : 32} />
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
                                   <span style={{ fontSize: isMobile ? '0.92rem' : '0.85rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

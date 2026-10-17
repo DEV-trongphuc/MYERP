@@ -1,3 +1,4 @@
+import { CrmSendTemplateEmailModal, CrmBulkMarketingModal } from '../components/crm/CrmMarketingModals';
 import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
@@ -553,6 +554,8 @@ export const DealsPage: React.FC = () => {
   const { addToast } = useUIStore();
   const currentUser = useAuthStore.getState().user;
   const [showImportExport, setShowImportExport] = useState(false);
+  const [showCrmEmailModal, setShowCrmEmailModal] = useState(false);
+  const [crmBulkMarketingModal, setCrmBulkMarketingModal] = useState<{ isOpen: boolean; mode: 'list' | 'flow' }>({ isOpen: false, mode: 'list' });
   const [pipelineView, setPipelineView] = useState<'deals' | 'contacts' | 'companies'>('contacts');
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [activeStageFilter, setActiveStageFilter] = useState<string | number>('all');
@@ -2122,6 +2125,12 @@ export const DealsPage: React.FC = () => {
                 <button className="btn ghost sm" style={{ color: 'var(--color-text)', display: 'inline-flex', alignItems: 'center', gap: '6px' }} onClick={() => bulkExport('filtered')} disabled={isExporting}>
                   {isExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
                   <span>{isExporting ? 'Đang xuất...' : 'Xuất CSV'}</span>
+                </button>
+                <button className="btn outline sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }} onClick={() => setShowCrmEmailModal(true)}>
+                  <Mail size={14} /> Gửi Email
+                </button>
+                <button className="btn outline sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }} onClick={() => setCrmBulkMarketingModal({ isOpen: true, mode: 'list' })}>
+                  <Sparkles size={14} /> Thêm vào List / Flow
                 </button>
                 <button className="btn primary sm" onClick={() => setShowBulkMove(true)}>
                   <RefreshCw size={14} /> Chuyển Giai đoạn
@@ -5229,6 +5238,41 @@ export const DealsPage: React.FC = () => {
         </AnimatePresence>,
         document.body
       )}
+
+      <CrmSendTemplateEmailModal
+        isOpen={showCrmEmailModal}
+        onClose={() => setShowCrmEmailModal(false)}
+        contacts={Object.values(items).flat().filter((it: any) => selected.has(it.id)).map((it: any) => ({
+          ...it,
+          id: Number(it.contact_id || it.id),
+          full_name: it.full_name || it.contact_name || it.title || it.name,
+          email: it.email || it.contact_email,
+          phone: it.phone || it.contact_phone,
+          program: it.program || it.project_name,
+          stage_name: it.stage_name,
+        }))}
+        onSuccess={() => {
+          setSelected(new Set());
+        }}
+      />
+      <CrmBulkMarketingModal
+        isOpen={crmBulkMarketingModal.isOpen}
+        onClose={() => setCrmBulkMarketingModal(prev => ({ ...prev, isOpen: false }))}
+        initialMode={crmBulkMarketingModal.mode}
+        contactIds={Object.values(items).flat().filter((it: any) => selected.has(it.id)).map((it: any) => Number(it.contact_id || it.id)).filter(Boolean)}
+        contacts={Object.values(items).flat().filter((it: any) => selected.has(it.id)).map((it: any) => ({
+          ...it,
+          id: Number(it.contact_id || it.id),
+          full_name: it.full_name || it.contact_name || it.title || it.name,
+          email: it.email || it.contact_email,
+          phone: it.phone || it.contact_phone,
+          program: it.program || it.project_name,
+          stage_name: it.stage_name,
+        }))}
+        onSuccess={() => {
+          setSelected(new Set());
+        }}
+      />
 
       {/* Bulk Move Modal */}
       {createPortal(

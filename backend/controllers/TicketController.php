@@ -368,6 +368,10 @@ class TicketController {
         if (!empty($validContacts)) {
             foreach ($validContacts as $cId) {
                 logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'task', "Tạo Ticket mới: {$data['subject']}", "Ticket #$id đã được khởi tạo cho khách hàng.", 'contact', (int)$cId);
+                try {
+                    require_once __DIR__ . '/../automation/trigger_helper.php';
+                    DomationEventDispatcher::dispatch($this->db, (int) $cId, 'erp_ticket_created', ['ticket_id' => (int) $id]);
+                } catch (\Throwable $eAuto) {}
             }
         }
 
@@ -564,16 +568,24 @@ class TicketController {
         }
 
         // Log if resolved
-        if (isset($data['status']) && $data['status'] === 'resolved') {
-            $tick = $this->db->prepare("SELECT subject, related_contacts FROM tickets WHERE id=? AND tenant_id=?");
+        if (isset($data['status']) && in_array($data['status'], ['resolved', 'closed'], true)) {
+            $tick = $this->db->prepare("SELECT subject, contact_id, related_contacts FROM tickets WHERE id=? AND tenant_id=?");
             $tick->execute([$id, $auth['tenant_id']]);
             $tData = $tick->fetch();
-            if ($tData && !empty($tData['related_contacts'])) {
-                $cIds = json_decode($tData['related_contacts'], true);
-                if (is_array($cIds)) {
-                    foreach ($cIds as $cId) {
+            if ($tData) {
+                $cIds = !empty($tData['related_contacts']) ? json_decode($tData['related_contacts'], true) : [];
+                if (!is_array($cIds)) $cIds = [];
+                if (!empty($tData['contact_id']) && !in_array((int) $tData['contact_id'], $cIds, true)) {
+                    $cIds[] = (int) $tData['contact_id'];
+                }
+                foreach ($cIds as $cId) {
+                    if ($data['status'] === 'resolved') {
                         logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'task', "Hoàn thành Ticket #$id", "Vấn đề \"{$tData['subject']}\" đã được xử lý xong.", 'contact', (int)$cId);
                     }
+                    try {
+                        require_once __DIR__ . '/../automation/trigger_helper.php';
+                        DomationEventDispatcher::dispatch($this->db, (int) $cId, 'erp_ticket_resolved', ['ticket_id' => $id]);
+                    } catch (\Throwable $eAuto) {}
                 }
             }
         }

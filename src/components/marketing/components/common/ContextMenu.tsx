@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getMktPortalRoot } from '../../utils/portalRoot';
 
@@ -16,10 +16,21 @@ interface ContextMenuProps {
     y: number;
     items: ContextMenuItem[];
     onClose: () => void;
+    align?: 'left' | 'right' | 'auto';
 }
 
-export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, onClose }) => {
+export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, onClose, align = 'auto' }) => {
     const menuRef = useRef<HTMLDivElement>(null);
+    const [pos, setPos] = useState(() => {
+        const estimatedW = 220;
+        let initialX = x;
+        if (typeof window !== 'undefined') {
+            if (align === 'right' || x + estimatedW > window.innerWidth - 16) {
+                initialX = Math.max(16, x - estimatedW);
+            }
+        }
+        return { top: y, left: initialX };
+    });
 
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
@@ -44,15 +55,24 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, onClose }
         };
     }, [onClose]);
 
-    // Keep menu inside viewport bounds
-    let adjustedX = x;
-    let adjustedY = y;
-    
-    if (menuRef.current) {
+    useLayoutEffect(() => {
+        if (!menuRef.current) return;
         const rect = menuRef.current.getBoundingClientRect();
-        if (x + rect.width > window.innerWidth) adjustedX = window.innerWidth - rect.width - 10;
-        if (y + rect.height > window.innerHeight) adjustedY = window.innerHeight - rect.height - 10;
-    }
+        let newX = x;
+        let newY = y;
+
+        if (align === 'right' || x + rect.width > window.innerWidth - 16) {
+            newX = Math.max(16, x - rect.width);
+            if (newX + rect.width > window.innerWidth - 16) {
+                newX = Math.max(16, window.innerWidth - rect.width - 16);
+            }
+        }
+        if (newY + rect.height > window.innerHeight - 16) {
+            newY = Math.max(16, window.innerHeight - rect.height - 16);
+        }
+
+        setPos({ top: newY, left: newX });
+    }, [x, y, align]);
 
     return createPortal(
         <div 
@@ -62,7 +82,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, onClose }
             <div
                 ref={menuRef}
                 className="absolute bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200 dark:border-slate-800 shadow-2xl rounded-2xl py-2 min-w-[200px] pointer-events-auto animate-in fade-in zoom-in-95 duration-200"
-                style={{ top: adjustedY, left: adjustedX }}
+                style={{ top: pos.top, left: pos.left }}
                 onContextMenu={(e) => {
                     e.preventDefault(); // Prevent default right click on the menu itself
                     e.stopPropagation();
@@ -77,6 +97,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, onClose }
                     return (
                         <button
                             key={item.id}
+                            type="button"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 item.onClick();

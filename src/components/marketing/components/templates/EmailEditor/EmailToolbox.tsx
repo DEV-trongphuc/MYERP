@@ -52,16 +52,26 @@ const EmailToolbox: React.FC<EmailToolboxProps> = ({ blocks, onDragStart, onSele
         );
     };
 
-    const ToolItem = ({ type, label, icon: IconName, layout }: any) => {
+    const ToolItem = ({ type, label, icon: IconName, layout, badge }: any) => {
         const Icon = IconMap[IconName as string] || IconMap.Layers; // Default to Layers if icon not found
         return (
             <div
                 draggable
-                onDragStart={(e) => onDragStart(e, type, layout)}
+                onDragStart={(e) => {
+                    (window as any).__mktDraggingToolboxType = type;
+                    onDragStart(e, type, layout);
+                }}
+                onDragEnd={() => {
+                    (window as any).__mktDraggingToolboxType = '';
+                }}
                 className="bg-white border border-slate-100 rounded-xl p-3 flex flex-col gap-2.5 cursor-grab active:cursor-grabbing hover:border-[var(--color-primary)]/40 hover:shadow-xs transition-all group h-[100px] justify-center items-center text-center shadow-[0_4px_10px_rgba(0,0,0,0.03)] active:scale-95 duration-300 relative overflow-hidden"
             >
-                
-                <div className="p-3 bg-slate-50 rounded-2xl group-hover:bg-[var(--color-primary)]/10 group-hover:text-[var(--color-primary)] transition-all duration-300 text-slate-400 group-hover:scale-110">
+                {badge && (
+                    <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full bg-[var(--color-primary)] text-white text-[8px] font-black uppercase tracking-wider shadow-xs">
+                        {badge}
+                    </span>
+                )}
+                <div className="p-3 bg-slate-50 rounded-[14px] group-hover:bg-[var(--color-primary)]/10 group-hover:text-[var(--color-primary)] transition-all duration-300 text-slate-400 group-hover:scale-110">
                     {type === 'layout' ? <LayoutVisual layout={layout} /> : <Icon className="w-5 h-5 transition-all" />}
                 </div>
                 <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest leading-none group-hover:text-slate-900 transition-colors">{label}</span>
@@ -94,6 +104,7 @@ const EmailToolbox: React.FC<EmailToolboxProps> = ({ blocks, onDragStart, onSele
                 case 'check_list': return IconMap.CheckCircle as LucideIcon;
                 case 'voucher': return IconMap.Ticket as LucideIcon;
                 case 'otp': return IconMap.KeyRound as LucideIcon;
+                case 'survey_card': return IconMap.ClipboardList as LucideIcon;
                 default: return IconMap.Layers as LucideIcon;
             }
         };
@@ -125,7 +136,7 @@ const EmailToolbox: React.FC<EmailToolboxProps> = ({ blocks, onDragStart, onSele
     };
 
     return (
-        <div className="w-72 bg-white border-r border-slate-200 flex flex-col z-40 h-full shadow-xl">
+        <div className="w-[320px] shrink-0 bg-white border-r border-slate-200 flex flex-col z-40 h-full shadow-xl">
             <div className="p-3 border-b border-slate-100 bg-slate-50/50">
                 <div className="flex gap-1 bg-slate-200/50 p-1 rounded-xl mb-3">
                     <button onClick={() => setActiveTab('blocks')} className={`flex-1 py-2 px-1 rounded-lg flex items-center justify-center gap-1 transition-all ${activeTab === 'blocks' ? 'bg-white shadow-sm text-[var(--color-primary)]' : 'text-slate-400 hover:text-slate-600'}`}>
@@ -151,7 +162,7 @@ const EmailToolbox: React.FC<EmailToolboxProps> = ({ blocks, onDragStart, onSele
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
                             placeholder="Tìm kiếm block..."
-                            className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-8 py-2 text-xs font-bold outline-none focus:border-amber-600 focus:ring-4 focus:ring-amber-600/10 transition-all placeholder:text-slate-300"
+                            className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-8 py-2 text-xs font-bold outline-none focus:border-[var(--color-primary)] focus:ring-4 focus:ring-[var(--color-primary)]/20 transition-all placeholder:text-slate-300"
                         />
                         {searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-300 hover:text-slate-500"><IconMap.X className="w-3 h-3" /></button>}
                     </div>
@@ -172,7 +183,7 @@ const EmailToolbox: React.FC<EmailToolboxProps> = ({ blocks, onDragStart, onSele
                                         </p>
                                         <div className="grid grid-cols-2 gap-2.5">
                                             {catTools.map(tool => (
-                                                <ToolItem key={tool.id} type={tool.type || tool.id} layout={tool.layout} label={tool.label} icon={tool.icon} />
+                                                <ToolItem key={tool.id} type={tool.type || tool.id} layout={tool.layout} label={tool.label} icon={tool.icon} badge={(tool as any).badge} />
                                             ))}
                                         </div>
                                     </div>
@@ -196,13 +207,13 @@ const EmailToolbox: React.FC<EmailToolboxProps> = ({ blocks, onDragStart, onSele
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Mẫu kéo thả nhanh</p>
                         <div className="grid grid-cols-2 gap-2.5">
                             {TOOLBOX_ITEMS.filter(t => t.cat === 'template_tab').map(tool => (
-                                <ToolItem key={tool.id} type={tool.type || tool.id} layout={tool.layout} label={tool.label} icon={tool.icon} />
+                                <ToolItem key={tool.id} type={tool.type || tool.id} layout={tool.layout} label={tool.label} icon={tool.icon} badge={(tool as any).badge} />
                             ))}
                         </div>
                         {TOOLBOX_ITEMS.filter(t => t.cat === 'template_tab').length === 0 && (
                             <div className="flex flex-col items-center justify-center py-12 px-4 opacity-70">
-                                <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mb-3 border-2 border-white shadow-sm">
-                                    <IconMap.LayoutTemplate className="w-8 h-8 text-amber-300" />
+                                <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-3 border-2 border-white shadow-sm">
+                                    <IconMap.LayoutTemplate className="w-8 h-8 text-[var(--color-primary)]/50" />
                                 </div>
                                 <p className="text-xs font-bold text-slate-500 tracking-tight">Chưa có mẫu nhanh</p>
                                 <p className="text-[10px] text-slate-400 mt-1 text-center font-medium">Các mẫu đang được cập nhật</p>
@@ -218,8 +229,8 @@ const EmailToolbox: React.FC<EmailToolboxProps> = ({ blocks, onDragStart, onSele
                             savedSections.map(item => <ToolboxSavedItem key={item.id} item={item} onDragStart={onDragStart} onDelete={onDeleteSavedSection} />)
                         ) : (
                             <div className="flex flex-col items-center justify-center py-12 px-4 opacity-70">
-                                <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-3 border-2 border-white shadow-sm">
-                                    <IconMap.BookmarkPlus className="w-8 h-8 text-blue-300" />
+                                <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-3 border-2 border-white shadow-sm">
+                                    <IconMap.BookmarkPlus className="w-8 h-8 text-[var(--color-primary)]/50" />
                                 </div>
                                 <p className="text-[11px] font-bold text-slate-500 tracking-tight">Chưa có mẫu lưu</p>
                                 <p className="text-[9px] text-slate-400 mt-1 text-center font-medium leading-relaxed">Chọn một phần trong email và nhấn <b className="text-slate-500">Lưu</b> để tái sử dụng sau này</p>

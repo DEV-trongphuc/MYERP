@@ -15,7 +15,10 @@ export const NAV_ICON_MAP: Record<string, string> = {
   audience_segments: '/marketing/audience',
   surveys_quiz: '/marketing/surveys',
   vouchers_qr: '/marketing/vouchers',
-  web_tracking: '/marketing/web-tracking'
+  social_bot: '/marketing/social-bot',
+  ai_training: '/marketing/ai-training',
+  web_tracking: '/marketing/web-tracking',
+  api_triggers: '/marketing/api-triggers'
 };
 
 export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '', style = {} }) => {
@@ -29,7 +32,7 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
   );
 
   // MKT 1. MARKETING DASHBOARD ('marketing_dashboard' / '/marketing')
-  if (normName === 'marketing_dashboard' || normName === '/marketing' || normName.includes('tổng quan marketing') || normName.includes('marketing dashboard')) {
+  if (normName === 'marketing_dashboard' || normName === '/marketing' || normName === 'marketing' || normName.includes('tổng quan marketing') || normName.includes('marketing dashboard')) {
     return (
       <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
         <defs>
@@ -51,7 +54,7 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
   }
 
   // MKT 2. AUTOMATION FLOWS ('automation_flows' / '/marketing/flows')
-  if (normName === 'automation_flows' || normName === '/marketing/flows' || normName.includes('kịch bản automation') || normName.includes('automation flow')) {
+  if (normName === 'automation_flows' || normName === '/marketing/flows' || normName === 'automation' || normName.includes('kịch bản automation') || normName.includes('automation flow')) {
     return (
       <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
         <defs>
@@ -98,7 +101,7 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
   }
 
   // MKT 4. EMAIL TEMPLATES ('email_templates' / '/marketing/templates')
-  if (normName === 'email_templates' || normName === '/marketing/templates' || normName.includes('mẫu email')) {
+  if (normName === 'email_templates' || normName === '/marketing/templates' || normName.includes('mẫu email') || normName.includes('mẫu thiết kế')) {
     return (
       <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
         <defs>
@@ -120,7 +123,7 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
   }
 
   // MKT 5. AUDIENCE SEGMENTS ('audience_segments' / '/marketing/audience')
-  if (normName === 'audience_segments' || normName === '/marketing/audience' || normName.includes('tệp khách hàng') || normName.includes('phân khúc')) {
+  if (normName === 'audience_segments' || normName === '/marketing/audience' || normName.includes('tệp khách hàng') || normName.includes('tệp liên hệ') || normName.includes('phân khúc')) {
     return (
       <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
         <defs>
@@ -187,8 +190,8 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
     );
   }
 
-  // MKT 8. WEB TRACKING & PIXEL ('web_tracking' / '/marketing/web-tracking' / 'journey360')
-  if (normName === 'web_tracking' || normName === '/marketing/web-tracking' || normName.includes('web tracking') || normName.includes('journey360') || normName.includes('đa kênh 360')) {
+  // MKT 8. WEB TRACKING & PIXEL ('web_tracking' / '/marketing/web-tracking' / 'journey360' / 'hành trình')
+  if (normName === 'web_tracking' || normName === '/marketing/web-tracking' || normName.includes('web tracking') || normName.includes('journey360') || normName.includes('đa kênh 360') || normName === 'hành trình' || normName.includes('hành trình')) {
     return (
       <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
         <defs>
@@ -204,6 +207,156 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
         <ellipse cx="28" cy="28" rx="6.5" ry="13.5" stroke="#2563eb" strokeWidth="1.6" />
         <line x1="14.5" y1="28" x2="41.5" y2="28" stroke="#2563eb" strokeWidth="1.6" />
         <circle cx="35" cy="21" r="3.5" fill="#ef4444" stroke="#ffffff" strokeWidth="1.2" />
+      </svg>
+    );
+  }
+
+  // MKT 9. SOCIAL BOT ('social_bot' / '/marketing/social-bot')
+  if (normName === 'social_bot' || normName === '/marketing/social-bot' || normName.includes('social bot')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_mkt_soc_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#0068FF" />
+            <stop offset="100%" stopColor="#2563eb" />
+          </linearGradient>
+          {filterDef('ai_mkt_soc_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_mkt_soc_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <circle cx="28" cy="28" r="14" fill="#ffffff" filter="url(#ai_mkt_soc_sh)" />
+        <rect x="21" y="21" width="14" height="11" rx="3" stroke="#2563eb" strokeWidth="1.8" />
+        <circle cx="25" cy="26" r="1.5" fill="#0068FF" />
+        <circle cx="31" cy="26" r="1.5" fill="#0068FF" />
+        <path d="M26 36L28 32H24L26 36Z" fill="#2563eb" />
+      </svg>
+    );
+  }
+
+  // MKT 10. API & WEBHOOK ('api_triggers' / '/marketing/api-triggers')
+  if (normName === 'api_triggers' || normName === '/marketing/api-triggers' || normName.includes('api & webhook') || normName.includes('api_triggers')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_mkt_api_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#8b5cf6" />
+            <stop offset="100%" stopColor="#6366f1" />
+          </linearGradient>
+          {filterDef('ai_mkt_api_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_mkt_api_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <circle cx="28" cy="28" r="14" fill="#ffffff" filter="url(#ai_mkt_api_sh)" />
+        <circle cx="23" cy="28" r="3" stroke="#6366f1" strokeWidth="1.8" />
+        <circle cx="33" cy="22" r="3" stroke="#6366f1" strokeWidth="1.8" />
+        <circle cx="33" cy="34" r="3" stroke="#6366f1" strokeWidth="1.8" />
+        <path d="M26 28H28C29.5 28 30.5 24 30.5 23" stroke="#6366f1" strokeWidth="1.5" />
+        <path d="M26 28H28C29.5 28 30.5 32 30.5 33" stroke="#6366f1" strokeWidth="1.5" />
+      </svg>
+    );
+  }
+
+  // MKT 11. AI TRAINING ('ai_training' / '/marketing/ai-training' / 'đào tạo ai')
+  if (normName === 'ai_training' || normName === '/marketing/ai-training' || normName.includes('đào tạo ai') || normName.includes('ai training')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_mkt_aitrain_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#BD1D2D" />
+            <stop offset="55%" stopColor="#9f1239" />
+            <stop offset="100%" stopColor="#4c1d95" />
+          </linearGradient>
+          {filterDef('ai_mkt_aitrain_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_mkt_aitrain_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.24)" strokeWidth="1" />
+        <rect x="13" y="13" width="30" height="30" rx="8" fill="#ffffff" filter="url(#ai_mkt_aitrain_sh)" />
+        <path d="M28 18C23.5 18 20 21.2 20 25.2C20 27.6 21.2 29.7 23 31V34.5C23 35.6 23.9 36.5 25 36.5H31C32.1 36.5 33 35.6 33 34.5V31C34.8 29.7 36 27.6 36 25.2C36 21.2 32.5 18 28 18Z" fill="#ffe4e6" stroke="#BD1D2D" strokeWidth="1.8" strokeLinejoin="round" />
+        <path d="M25 25.5L27.5 23L30.5 26L33 23.5" stroke="#BD1D2D" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="25" cy="25.5" r="1.4" fill="#BD1D2D" />
+        <circle cx="28" cy="29" r="1.4" fill="#7c3aed" />
+        <circle cx="31" cy="25.5" r="1.4" fill="#BD1D2D" />
+        <path d="M37.5 16.5L38.4 18.6L40.5 19.5L38.4 20.4L37.5 22.5L36.6 20.4L34.5 19.5L36.6 18.6L37.5 16.5Z" fill="#f59e0b" />
+      </svg>
+    );
+  }
+
+  // MKT 12. API TRIGGER SUB-ICONS ('trigger_form', 'trigger_purchase', 'trigger_custom', 'trigger_otp')
+  if (normName === 'trigger_form' || normName === 'biểu mẫu thu thập') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_trg_form_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#BD1D2D" />
+            <stop offset="100%" stopColor="#881337" />
+          </linearGradient>
+          {filterDef('ai_trg_form_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_trg_form_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <rect x="15" y="13" width="26" height="30" rx="5" fill="#ffffff" filter="url(#ai_trg_form_sh)" />
+        <rect x="19" y="18" width="18" height="3.5" rx="1.5" fill="#ffe4e6" stroke="#BD1D2D" strokeWidth="1" />
+        <rect x="19" y="24.5" width="18" height="3.5" rx="1.5" fill="#f1f5f9" />
+        <rect x="19" y="31" width="11" height="3.5" rx="1.5" fill="#f1f5f9" />
+        <rect x="32" y="31" width="5" height="3.5" rx="1.5" fill="#BD1D2D" />
+      </svg>
+    );
+  }
+
+  if (normName === 'trigger_purchase' || normName === 'đơn hàng webhook') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_trg_pur_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#10b981" />
+            <stop offset="100%" stopColor="#047857" />
+          </linearGradient>
+          {filterDef('ai_trg_pur_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_trg_pur_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <rect x="14" y="15" width="28" height="26" rx="5.5" fill="#ffffff" filter="url(#ai_trg_pur_sh)" />
+        <path d="M20 22H22.5L24.5 31H34L36 24H23.5" stroke="#059669" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="25.5" cy="34.5" r="1.8" fill="#10b981" />
+        <circle cx="33" cy="34.5" r="1.8" fill="#10b981" />
+      </svg>
+    );
+  }
+
+  if (normName === 'trigger_custom' || normName === 'sự kiện custom') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_trg_cus_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#2563eb" />
+            <stop offset="100%" stopColor="#1d4ed8" />
+          </linearGradient>
+          {filterDef('ai_trg_cus_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_trg_cus_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <circle cx="28" cy="28" r="14" fill="#ffffff" filter="url(#ai_trg_cus_sh)" />
+        <path d="M29.5 18L21.5 29H27.5L26.5 38L34.5 27H28.5L29.5 18Z" fill="#2563eb" stroke="#2563eb" strokeWidth="1.2" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  if (normName === 'trigger_otp' || normName === 'luồng & otp active') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_trg_otp_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#7c3aed" />
+            <stop offset="100%" stopColor="#4c1d95" />
+          </linearGradient>
+          {filterDef('ai_trg_otp_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_trg_otp_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <path d="M28 14L39 18.5V26.5C39 33.5 34.2 38.8 28 41.5C21.8 38.8 17 33.5 17 26.5V18.5L28 14Z" fill="#ffffff" filter="url(#ai_trg_otp_sh)" />
+        <rect x="23" y="25" width="10" height="8" rx="2" fill="#7c3aed" />
+        <path d="M25.5 25V23C25.5 21.6 26.6 20.5 28 20.5C29.4 20.5 30.5 21.6 30.5 23V25" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" />
+        <circle cx="28" cy="29" r="1.2" fill="#ffffff" />
       </svg>
     );
   }
@@ -1234,6 +1387,406 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
         <rect x="26" y="28" width="9" height="2" rx="1" fill="#64748b" />
         <rect x="19" y="33" width="4" height="4" rx="1" fill="#10b981" />
         <rect x="26" y="34" width="11" height="2" rx="1" fill="#64748b" />
+      </svg>
+    );
+  }
+
+  // FLOW 1. AI BOT TRIGGER ('flow_ai_bot' / 'flow_ai' / 'flow_bot' / 'ai_capture' / 'ai_chatbot_lead')
+  if (normName === 'flow_ai_bot' || normName === 'flow_ai' || normName === 'flow_bot' || normName === 'ai_capture' || normName === 'ai_chatbot_lead' || normName.includes('ai chatbot') || normName.includes('lead ai') || normName.includes('ai_bot')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_fl_bot_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#f43f5e" />
+            <stop offset="100%" stopColor="#be123c" />
+          </linearGradient>
+          {filterDef('ai_fl_bot_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_fl_bot_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <g filter="url(#ai_fl_bot_sh)">
+          {/* Antenna */}
+          <line x1="28" y1="12" x2="28" y2="16.5" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
+          <circle cx="28" cy="10.5" r="2.5" fill="#fde047" stroke="#ffffff" strokeWidth="1" />
+          {/* Ear sensors */}
+          <rect x="11.5" y="23" width="3" height="8" rx="1.5" fill="#ffffff" />
+          <rect x="41.5" y="23" width="3" height="8" rx="1.5" fill="#ffffff" />
+          {/* Bot Head */}
+          <rect x="14" y="16.5" width="28" height="21" rx="6.5" fill="#ffffff" />
+          {/* Visor Screen */}
+          <rect x="17.5" y="20" width="21" height="14" rx="4" fill="#0f172a" />
+          {/* Glowing Eyes */}
+          <circle cx="23" cy="27" r="2.5" fill="#38bdf8" />
+          <circle cx="23.8" cy="26.2" r="0.8" fill="#ffffff" />
+          <circle cx="33" cy="27" r="2.5" fill="#38bdf8" />
+          <circle cx="33.8" cy="26.2" r="0.8" fill="#ffffff" />
+          {/* Golden AI Sparkle Badge */}
+          <circle cx="39" cy="38.5" r="5" fill="#fbbf24" stroke="#ffffff" strokeWidth="1.2" />
+          <path d="M39 35.8L39.8 37.6L41.6 38.5L39.8 39.4L39 41.2L38.2 39.4L36.4 38.5L38.2 37.6L39 35.8Z" fill="#ffffff" />
+        </g>
+      </svg>
+    );
+  }
+
+  // FLOW 2. SMART SEGMENT TRIGGER ('flow_smart_segment' / 'flow_segment' / 'smart_segment' / 'welcome_segment')
+  if (normName === 'flow_smart_segment' || normName === 'flow_segment' || normName === 'smart_segment' || normName === 'welcome_segment' || (normName.includes('flow') && normName.includes('segment')) || normName.includes('phân khúc')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_fl_seg_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#f97316" />
+            <stop offset="100%" stopColor="#c2410c" />
+          </linearGradient>
+          {filterDef('ai_fl_seg_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_fl_seg_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <g filter="url(#ai_fl_seg_sh)">
+          {/* Bottom Floating Layer */}
+          <path d="M14 34L28 41L42 34" stroke="#ffedd5" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" fill="none" opacity="0.8" />
+          {/* Middle Floating Layer */}
+          <path d="M14 27.5L28 34.5L42 27.5" stroke="#ffffff" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          {/* Top Surface Isometric Plate */}
+          <path d="M28 14.5L42.5 21.5L28 28.5L13.5 21.5L28 14.5Z" fill="#ffffff" />
+          {/* Center Glowing Core */}
+          <circle cx="28" cy="21.5" r="3" fill="#ea580c" />
+          <circle cx="28" cy="21.5" r="1.2" fill="#ffffff" />
+          <circle cx="36" cy="18" r="1.5" fill="#fde047" />
+          <circle cx="20" cy="18" r="1.5" fill="#fde047" />
+        </g>
+      </svg>
+    );
+  }
+
+  // FLOW 3. LIST TRIGGER ('flow_list' / 'flow_list_plus' / 'welcome_list' / 'added_to_list')
+  if (normName === 'flow_list' || normName === 'flow_list_plus' || normName === 'welcome_list' || normName === 'added_to_list' || (normName.includes('flow') && normName.includes('list')) || normName.includes('danh sách')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_fl_lst_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#6366f1" />
+            <stop offset="100%" stopColor="#4338ca" />
+          </linearGradient>
+          {filterDef('ai_fl_lst_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_fl_lst_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <g filter="url(#ai_fl_lst_sh)">
+          {/* White Document Card */}
+          <rect x="14" y="13" width="28" height="30" rx="6.5" fill="#ffffff" />
+          {/* Row 1 with Check Badge */}
+          <rect x="18" y="18.5" width="4.5" height="4.5" rx="1.5" fill="#6366f1" />
+          <path d="M19.3 20.8L20.2 21.7L21.7 19.8" stroke="#ffffff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
+          <rect x="25" y="20" width="12" height="2" rx="1" fill="#64748b" />
+          {/* Row 2 with Check Badge */}
+          <rect x="18" y="25" width="4.5" height="4.5" rx="1.5" fill="#6366f1" />
+          <path d="M19.3 27.3L20.2 28.2L21.7 26.3" stroke="#ffffff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
+          <rect x="25" y="26.5" width="10" height="2" rx="1" fill="#64748b" />
+          {/* Row 3 */}
+          <rect x="18" y="31.5" width="4.5" height="4.5" rx="1.5" fill="#cbd5e1" />
+          <rect x="25" y="33" width="7" height="2" rx="1" fill="#94a3b8" />
+          {/* Emerald Plus Badge */}
+          <circle cx="38" cy="38" r="6" fill="#10b981" stroke="#ffffff" strokeWidth="1.5" />
+          <path d="M38 34.5V41.5M34.5 38H41.5" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
+        </g>
+      </svg>
+    );
+  }
+
+  // FLOW 4. PURCHASE TRIGGER ('flow_purchase' / 'purchase_success' / 'flow_cart' / 'flow_order' / 'flow_upsell')
+  if (normName === 'flow_purchase' || normName === 'purchase_success' || normName === 'flow_cart' || normName === 'flow_order' || normName.includes('mua hàng') || normName.includes('đơn hàng') || normName.includes('purchase') || normName.includes('upsell') || normName.includes('giỏ hàng')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_fl_pur_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#ec4899" />
+            <stop offset="100%" stopColor="#be185d" />
+          </linearGradient>
+          {filterDef('ai_fl_pur_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_fl_pur_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <g filter="url(#ai_fl_pur_sh)">
+          {/* White rounded card */}
+          <rect x="13.5" y="13.5" width="29" height="29" rx="7.5" fill="#ffffff" />
+          {/* Shopping cart basket */}
+          <path d="M18 18.5H21.5L24 30.5H33.5L36.5 22H23" stroke="#ec4899" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+          {/* Wheels */}
+          <circle cx="25.5" cy="34.5" r="2" fill="#be185d" />
+          <circle cx="32" cy="34.5" r="2" fill="#be185d" />
+          {/* Golden Star / Badge */}
+          <circle cx="37.5" cy="18" r="5.2" fill="#f59e0b" stroke="#ffffff" strokeWidth="1.4" />
+          <path d="M37.5 14.8L38.4 16.8L40.5 17.1L38.9 18.5L39.4 20.6L37.5 19.5L35.6 20.6L36.1 18.5L34.5 17.1L36.6 16.8L37.5 14.8Z" fill="#ffffff" />
+        </g>
+      </svg>
+    );
+  }
+
+  // FLOW 5. CUSTOM EVENT TRIGGER ('flow_custom_event' / 'custom_event_flow' / 'flow_event' / 'flow_zap')
+  if (normName === 'flow_custom_event' || normName === 'custom_event_flow' || normName === 'flow_event' || normName === 'flow_zap' || normName.includes('custom_event') || normName.includes('sự kiện') || normName.includes('event')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_fl_evt_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#8b5cf6" />
+            <stop offset="100%" stopColor="#6d28d9" />
+          </linearGradient>
+          {filterDef('ai_fl_evt_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_fl_evt_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <g filter="url(#ai_fl_evt_sh)">
+          {/* Crisp White Circle */}
+          <circle cx="28" cy="28" r="14.5" fill="#ffffff" />
+          {/* Lightning Bolt */}
+          <path d="M29.5 16L20 28.5H27L25 40L36 26.5H29L30.5 16Z" fill="#8b5cf6" stroke="#7c3aed" strokeWidth="0.8" strokeLinejoin="round" />
+          {/* Glowing Energy Sparks */}
+          <circle cx="17.5" cy="19.5" r="1.8" fill="#fbbf24" />
+          <circle cx="38.5" cy="35" r="2" fill="#fbbf24" />
+          <circle cx="37.5" cy="18.5" r="1.3" fill="#e9d5ff" />
+        </g>
+      </svg>
+    );
+  }
+
+  // FLOW 6. TAG TRIGGER ('flow_tag' / 'tag_added' / 'flow_label')
+  if (normName === 'flow_tag' || normName === 'tag_added' || normName === 'flow_label' || normName.includes('gắn tag') || normName.includes('nhãn') || normName.includes('tag')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_fl_tag_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#10b981" />
+            <stop offset="100%" stopColor="#047857" />
+          </linearGradient>
+          {filterDef('ai_fl_tag_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_fl_tag_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <g filter="url(#ai_fl_tag_sh)">
+          {/* Angled Modern Price Tag */}
+          <path d="M17 18C17 16.8954 17.8954 16 19 16H28C28.5304 16 29.0391 16.2107 29.4142 16.5858L41 28.1716C41.781 28.9526 41.781 30.219 41 31L32 40C31.219 40.781 29.9526 40.781 29.1716 40L17.5858 28.4142C17.2107 28.0391 17 27.5304 17 27V18Z" fill="#ffffff" />
+          {/* Tag Ribbon Hole */}
+          <circle cx="23" cy="22" r="2.8" fill="#10b981" />
+          {/* Ribbon String */}
+          <path d="M23 19.2C23 16 21 14 19 13.5" stroke="#ffffff" strokeWidth="1.6" strokeLinecap="round" fill="none" />
+          {/* Stripe Accent */}
+          <path d="M28 29L33.5 34.5" stroke="#a7f3d0" strokeWidth="2.2" strokeLinecap="round" />
+          <circle cx="37.5" cy="18.5" r="1.5" fill="#fde047" />
+        </g>
+      </svg>
+    );
+  }
+
+  // FLOW 7. FORM TRIGGER ('flow_form' / 'welcome_form' / 'form_submission')
+  if (normName === 'flow_form' || normName === 'welcome_form' || normName === 'form_submission' || normName.includes('form') || normName.includes('biểu mẫu')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_fl_frm_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#0d9488" />
+            <stop offset="100%" stopColor="#0f766e" />
+          </linearGradient>
+          {filterDef('ai_fl_frm_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_fl_frm_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <g filter="url(#ai_fl_frm_sh)">
+          {/* Form Card */}
+          <rect x="14" y="13" width="28" height="30" rx="6" fill="#ffffff" />
+          {/* Form Title Line */}
+          <rect x="18" y="17" width="12" height="3" rx="1.5" fill="#0d9488" />
+          {/* Input Field 1 */}
+          <rect x="18" y="22.5" width="20" height="5" rx="2" fill="#f0fdfa" stroke="#5eead4" strokeWidth="0.8" />
+          <rect x="20.5" y="24.5" width="8" height="1.5" rx="0.75" fill="#0d9488" />
+          {/* Input Field 2 */}
+          <rect x="18" y="29.5" width="20" height="5" rx="2" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="0.8" />
+          <rect x="20.5" y="31.5" width="11" height="1.5" rx="0.75" fill="#94a3b8" />
+          {/* Golden Submit Button Badge */}
+          <circle cx="38" cy="38" r="6" fill="#f59e0b" stroke="#ffffff" strokeWidth="1.5" />
+          <path d="M36 38H40M38.5 36L40.5 38L38.5 40" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </g>
+      </svg>
+    );
+  }
+
+  // FLOW 8. SURVEY TRIGGER ('flow_survey' / 'survey_response' / 'flow_feedback' / 'flow_quiz')
+  if (normName === 'flow_survey' || normName === 'survey_response' || normName === 'flow_feedback' || normName === 'flow_quiz' || normName.includes('khảo sát') || normName.includes('survey') || normName.includes('feedback')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_fl_srv_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#f59e0b" />
+            <stop offset="100%" stopColor="#b45309" />
+          </linearGradient>
+          {filterDef('ai_fl_srv_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_fl_srv_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <g filter="url(#ai_fl_srv_sh)">
+          {/* Survey Clipboard */}
+          <rect x="15" y="14" width="26" height="29" rx="5" fill="#ffffff" />
+          {/* Top Clip */}
+          <rect x="22" y="11.5" width="12" height="4.5" rx="2" fill="#78350f" />
+          <circle cx="28" cy="13.5" r="1.2" fill="#ffffff" />
+          {/* Row 1 checked */}
+          <circle cx="20" cy="20.5" r="2.2" fill="#10b981" />
+          <path d="M19.1 20.5L19.9 21.3L21.2 19.8" stroke="#ffffff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
+          <rect x="24.5" y="19.5" width="12" height="2" rx="1" fill="#475569" />
+          {/* Row 2 checked */}
+          <circle cx="20" cy="26" r="2.2" fill="#10b981" />
+          <path d="M19.1 26L19.9 26.8L21.2 25.3" stroke="#ffffff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
+          <rect x="24.5" y="25" width="9" height="2" rx="1" fill="#475569" />
+          {/* 3 Rating Stars */}
+          <path d="M20 31.5L20.6 32.8L22 33L21 34L21.2 35.5L20 34.8L18.8 35.5L19 34L18 33L19.4 32.8L20 31.5Z" fill="#f59e0b" />
+          <path d="M25 31.5L25.6 32.8L27 33L26 34L26.2 35.5L25 34.8L23.8 35.5L24 34L23 33L24.4 32.8L25 31.5Z" fill="#f59e0b" />
+          <path d="M30 31.5L30.6 32.8L32 33L31 34L31.2 35.5L30 34.8L28.8 35.5L29 34L28 33L29.4 32.8L30 31.5Z" fill="#f59e0b" />
+          {/* Edit Pen Badge */}
+          <circle cx="38" cy="38" r="5" fill="#f59e0b" stroke="#ffffff" strokeWidth="1.2" />
+          <path d="M36 40L39.5 36.5L40 37L36.5 40.5L35.5 40.5L36 40Z" fill="#ffffff" />
+        </g>
+      </svg>
+    );
+  }
+
+  // FLOW 9. ZALO TRIGGER ('flow_zalo' / 'flow_zalo_follow' / 'zalo_oa_welcome' / 'zalo_follow')
+  if (normName === 'flow_zalo' || normName === 'flow_zalo_follow' || normName === 'zalo_oa_welcome' || normName === 'zalo_follow' || normName.includes('zalo')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_fl_zalo_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#06b6d4" />
+            <stop offset="100%" stopColor="#0891b2" />
+          </linearGradient>
+          {filterDef('ai_fl_zalo_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_fl_zalo_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <g filter="url(#ai_fl_zalo_sh)">
+          {/* Rounded Chat Bubble */}
+          <path d="M14 26C14 18.5 20.2 14 28 14C35.8 14 42 18.5 42 26C42 33.5 35.8 38 28 38C25.5 38 23.2 37.3 21.2 36.2L15 38L16.8 32.7C15 30.7 14 28.5 14 26Z" fill="#ffffff" />
+          {/* Inner Silhouette */}
+          <circle cx="26" cy="24" r="4" fill="#0284c7" />
+          <path d="M19 33C19 29.5 22.2 28 26 28C29.8 28 33 29.5 33 33" fill="#0284c7" />
+          {/* Friend Plus Badge */}
+          <circle cx="36" cy="21" r="5" fill="#0068ff" stroke="#ffffff" strokeWidth="1.2" />
+          <path d="M36 18.5V23.5M33.5 21H38.5" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" />
+        </g>
+      </svg>
+    );
+  }
+
+  // FLOW 10. MAIL / TRIAL / CAMPAIGN TRIGGER ('flow_mail' / 'flow_trial' / 'flow_campaign' / 'campaign_tracking')
+  if (normName === 'flow_mail' || normName === 'flow_trial' || normName === 'flow_campaign' || normName === 'campaign_tracking' || normName === 'flow_broadcast' || normName.includes('mail') || normName.includes('trial') || normName.includes('email') || normName.includes('chiến dịch')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_fl_mail_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#2563eb" />
+            <stop offset="100%" stopColor="#1d4ed8" />
+          </linearGradient>
+          {filterDef('ai_fl_mail_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_fl_mail_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <g filter="url(#ai_fl_mail_sh)">
+          {/* White Envelope Card */}
+          <rect x="13" y="16" width="30" height="23" rx="5" fill="#ffffff" />
+          <path d="M14.5 18L28 28L41.5 18" stroke="#2563eb" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+          {/* Flying Paper Plane / Send Badge */}
+          <circle cx="38" cy="38" r="6" fill="#fbbf24" stroke="#ffffff" strokeWidth="1.5" />
+          <path d="M41 35L35 37.5L37.5 39L41 35Z" fill="#ffffff" />
+          <path d="M37.5 39V41.5L39 40" stroke="#ffffff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        </g>
+      </svg>
+    );
+  }
+
+  // FLOW 11. INACTIVITY TRIGGER ('flow_inactivity' / 'inactivity' / 'winback' / 'ngủ đông')
+  if (normName === 'flow_inactivity' || normName === 'inactivity' || normName === 'winback' || normName === 'ngủ đông' || normName === 'flow_winback' || normName.includes('ngủ đông') || normName.includes('inactivity') || normName.includes('winback')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_fl_inac_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#0284c7" />
+            <stop offset="100%" stopColor="#0369a1" />
+          </linearGradient>
+          {filterDef('ai_fl_inac_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_fl_inac_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <g filter="url(#ai_fl_inac_sh)">
+          {/* Frosted Clock Dial */}
+          <circle cx="28" cy="28" r="14.5" fill="#ffffff" />
+          <circle cx="28" cy="28" r="11" fill="#f0f9ff" stroke="#bae6fd" strokeWidth="1" />
+          {/* Clock Hands */}
+          <circle cx="28" cy="28" r="1.8" fill="#0284c7" />
+          <line x1="28" y1="28" x2="28" y2="21" stroke="#0284c7" strokeWidth="2.2" strokeLinecap="round" />
+          <line x1="28" y1="28" x2="33" y2="28" stroke="#0284c7" strokeWidth="2.2" strokeLinecap="round" />
+          {/* Snowflake Crystal Badge */}
+          <circle cx="38" cy="38" r="6" fill="#38bdf8" stroke="#ffffff" strokeWidth="1.5" />
+          <path d="M38 34.5V41.5M34.5 38H41.5M35.5 35.5L40.5 40.5M35.5 40.5L40.5 35.5" stroke="#ffffff" strokeWidth="1.2" strokeLinecap="round" />
+          {/* Ice Frost Sparkle */}
+          <circle cx="17.5" cy="18.5" r="1.5" fill="#e0f2fe" />
+        </g>
+      </svg>
+    );
+  }
+
+  // FLOW 12. BIRTHDAY TRIGGER ('flow_birthday' / 'birthday')
+  if (normName === 'flow_birthday' || normName.includes('sinh nhật') || normName.includes('birthday')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_fl_bday_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#ec4899" />
+            <stop offset="100%" stopColor="#f43f5e" />
+          </linearGradient>
+          {filterDef('ai_fl_bday_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_fl_bday_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <g filter="url(#ai_fl_bday_sh)">
+          {/* Candle & Flame */}
+          <rect x="26.5" y="15" width="3" height="7" rx="1" fill="#ffffff" />
+          <path d="M28 11C28 11 26 13 26 14C26 15.1 26.9 16 28 16C29.1 16 30 15.1 30 14C30 13 28 11 28 11Z" fill="#fbbf24" />
+          {/* Cake Top Layer */}
+          <rect x="19" y="22" width="18" height="7" rx="2" fill="#ffffff" />
+          {/* Cake Bottom Layer */}
+          <rect x="15" y="29" width="26" height="10" rx="3" fill="#ffffff" />
+          {/* Strawberry / Frosting dots */}
+          <circle cx="20" cy="33" r="1.5" fill="#f43f5e" />
+          <circle cx="28" cy="33" r="1.5" fill="#f43f5e" />
+          <circle cx="36" cy="33" r="1.5" fill="#f43f5e" />
+          {/* Sparkles */}
+          <circle cx="16" cy="18" r="1.5" fill="#fde047" />
+          <circle cx="40" cy="20" r="1.5" fill="#fde047" />
+        </g>
+      </svg>
+    );
+  }
+
+  // FLOW 13. ARCHIVED FLOW ('flow_archive' / 'archived_flow')
+  if (normName === 'flow_archive' || normName === 'archived_flow' || normName.includes('lưu trữ') || normName.includes('đã xóa')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_fl_arc_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#64748b" />
+            <stop offset="100%" stopColor="#334155" />
+          </linearGradient>
+          {filterDef('ai_fl_arc_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_fl_arc_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <g filter="url(#ai_fl_arc_sh)">
+          {/* Archive Document Box */}
+          <rect x="14" y="16" width="28" height="24" rx="5" fill="#ffffff" />
+          <rect x="18" y="21" width="20" height="3" rx="1.5" fill="#94a3b8" />
+          <rect x="22" y="27" width="12" height="2" rx="1" fill="#cbd5e1" />
+          {/* Clock / Archive Badge */}
+          <circle cx="38" cy="38" r="5.5" fill="#94a3b8" stroke="#ffffff" strokeWidth="1.2" />
+          <path d="M38 35.5V38.5H40" stroke="#ffffff" strokeWidth="1.2" strokeLinecap="round" />
+        </g>
       </svg>
     );
   }

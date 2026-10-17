@@ -195,7 +195,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                 <div className="py-4 space-y-4">
                     {/* Icon + title */}
                     <div className="text-center">
-                        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-3 ${isDarkTheme ? 'bg-rose-500/10 text-rose-500' : 'bg-rose-50 text-rose-500'}`}>
+                        <div className={`w-16 h-16 rounded-[14px] flex items-center justify-center mx-auto mb-3 ${isDarkTheme ? 'bg-rose-500/10 text-rose-500' : 'bg-rose-50 text-rose-500'}`}>
                             <Trash2 className="w-8 h-8" />
                         </div>
                         <p className={`text-sm font-bold ${isDarkTheme ? 'text-slate-200' : 'text-slate-700'}`}>Bạn có chắc chắn muốn xóa?</p>
@@ -286,7 +286,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                 title="Đổi Tên Thư Mục"
                 size="sm"
                 isDarkTheme={isDarkTheme}
-                footer={<div className="flex justify-between w-full"><Button variant="ghost" onClick={() => { setIsEditFolderModalOpen(false); setEditingFolder(null); setFolderName(''); }} isDarkTheme={isDarkTheme}>Hủy</Button><Button className={`font-bold border-none shadow-md hover:shadow-lg transition-all duration-500 ${isDarkTheme ? 'bg-gradient-to-r from-amber-600 to-amber-700 text-white' : 'bg-gradient-to-r from-amber-600 to-amber-600 text-white'}`} icon={Save} onClick={handleUpdateFolder} isLoading={loading} isDarkTheme={isDarkTheme}>Lưu Thay Đổi</Button></div>}
+                footer={<div className="flex justify-between w-full"><Button variant="ghost" onClick={() => { setIsEditFolderModalOpen(false); setEditingFolder(null); setFolderName(''); }} isDarkTheme={isDarkTheme}>Hủy</Button><Button className={`font-bold border-none shadow-md hover:shadow-lg transition-all duration-500 ${isDarkTheme ? 'bg-gradient-to-r from-[#BD1D2D] to-[#9A1523] text-white' : 'bg-gradient-to-r from-[#BD1D2D] to-[#9A1523] text-white'}`} icon={Save} onClick={handleUpdateFolder} isLoading={loading} isDarkTheme={isDarkTheme}>Lưu Thay Đổi</Button></div>}
             >
                 <div className="py-4 space-y-4">
                     <Input
@@ -311,18 +311,18 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                 {infoDoc && (
                     <div className="space-y-6 py-4">
                         <div className="grid grid-cols-2 gap-4">
-                            <div className={`p-4 rounded-2xl border ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                            <div className={`p-4 rounded-[14px] border ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
                                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Thời gian cào</label>
                                 <p className={`text-xs font-bold ${isDarkTheme ? 'text-slate-200' : 'text-slate-700'}`}>{new Date(infoDoc.created_at).toLocaleString()}</p>
                             </div>
-                            <div className={`p-4 rounded-2xl border ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                            <div className={`p-4 rounded-[14px] border ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
                                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Định danh đợt (Batch)</label>
                                 <p className={`text-[10px] font-bold break-all ${isDarkTheme ? 'text-slate-500' : 'text-slate-500'}`}>{infoDoc._meta?.batch_id || 'N/A'}</p>
                             </div>
                         </div>
 
                         {/* TAGS EDITOR */}
-                        <div className={`p-4 rounded-2xl border ${isDarkTheme ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-emerald-50 border-emerald-100'}`}>
+                        <div className={`p-4 rounded-[14px] border ${isDarkTheme ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-emerald-50 border-emerald-100'}`}>
                             <label className={`text-[9px] font-black uppercase tracking-widest block mb-2 ${isDarkTheme ? 'text-emerald-500/70' : 'text-emerald-400'}`}>
                                 TAGS PHÂN LOẠI (Hỗ trợ AI tìm kiếm)
                             </label>
@@ -347,7 +347,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
 
                         <div className="space-y-2">
                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Các liên kết có trong khối này ({infoDoc._meta?.urls?.length || 0})</label>
-                            <div className={`p-4 rounded-2xl border max-h-60 overflow-y-auto custom-scrollbar ${isDarkTheme ? 'bg-slate-950 border-slate-800' : 'bg-slate-900 border-slate-800'}`}>
+                            <div className={`p-4 rounded-[14px] border max-h-60 overflow-y-auto custom-scrollbar ${isDarkTheme ? 'bg-slate-950 border-slate-800' : 'bg-slate-900 border-slate-800'}`}>
                                 {infoDoc._meta?.urls ? (
                                     <div className="space-y-2">
                                         {infoDoc._meta.urls.map((u: string, i: number) => (
@@ -363,7 +363,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                             </div>
                         </div>
 
-                        <div className={`p-4 border rounded-2xl flex gap-3 ${isDarkTheme ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
+                        <div className={`p-4 border rounded-[14px] flex gap-3 ${isDarkTheme ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
                             <Zap className="w-5 h-5 text-emerald-500 shrink-0" />
                             <p className={`text-[10px] font-medium leading-relaxed ${isDarkTheme ? 'text-emerald-200/70' : 'text-emerald-900'}`}>
                                 Khối dữ liệu này chứa nội dung từ các trang web liệt kê phía trên. Dữ liệu này đã được AI Vector hóa để phản hồi Khách hàng.
@@ -385,7 +385,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                         href="https://ai.google.dev/gemini-api/docs/prompting-strategies?hl=vi"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className={`p-4 rounded-2xl border flex items-center gap-3 transition-all group cursor-pointer no-underline mb-4 ${isDarkTheme ? 'bg-slate-900 border-slate-800 hover:shadow-slate-950/50 hover:border-blue-500/30 hover:bg-slate-800/50' : 'bg-white border-slate-200 hover:shadow-lg hover:border-blue-200'}`}
+                        className={`p-4 rounded-[14px] border flex items-center gap-3 transition-all group cursor-pointer no-underline mb-4 ${isDarkTheme ? 'bg-slate-900 border-slate-800 hover:shadow-slate-950/50 hover:border-blue-500/30 hover:bg-slate-800/50' : 'bg-white border-slate-200 hover:shadow-lg hover:border-blue-200'}`}
                     >
                         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shrink-0 text-white group-hover:scale-110 transition-transform">
                             <ArrowRight className="w-4 h-4 -rotate-45" />
@@ -396,7 +396,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                         </div>
                     </a>
 
-                    <div className={`p-4 rounded-2xl border flex items-start gap-4 ${isDarkTheme ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-emerald-50/50 border-emerald-100/50'}`}>
+                    <div className={`p-4 rounded-[14px] border flex items-start gap-4 ${isDarkTheme ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-emerald-50/50 border-emerald-100/50'}`}>
                         <Zap className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
                         <p className={`text-xs leading-relaxed font-medium ${isDarkTheme ? 'text-emerald-300' : 'text-slate-600'}`}>
                             Dữ liệu đầu vào chất lượng quyết định 80% độ thông minh của AI. Hãy cấu trúc văn bản theo cách AI dễ "tìm thấy" nhất.
@@ -405,7 +405,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
 
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className={`p-5 border rounded-[24px] space-y-3 shadow-sm ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
+                        <div className={`p-5 border rounded-[18px] space-y-3 shadow-sm ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
                             <h5 className={`text-xs font-black uppercase tracking-widest flex items-center gap-2 ${isDarkTheme ? 'text-slate-200' : 'text-slate-800'}`}>
                                 <div className={`p-1.5 rounded-lg ${isDarkTheme ? 'bg-emerald-500/10' : 'bg-emerald-50'}`}><Braces className="w-3 h-3 text-emerald-500" /></div>
                                 Ngữ cảnh độc lập
@@ -414,7 +414,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                                 Đảm bảo mỗi đoạn văn bản đều đầy đủ ý. Thay vì ghi <span className={`font-bold ${isDarkTheme ? 'text-slate-200' : 'text-slate-800'}`}>"Giá nó là 5tr"</span>, hãy ghi <span className={`font-bold ${isDarkTheme ? 'text-slate-200' : 'text-slate-800'}`}>"Giá của khóa đào tạo EMBA là 5 triệu VNĐ"</span>.
                             </p>
                         </div>
-                        <div className={`p-5 border rounded-[24px] space-y-3 shadow-sm ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
+                        <div className={`p-5 border rounded-[18px] space-y-3 shadow-sm ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
                             <h5 className={`text-xs font-black uppercase tracking-widest flex items-center gap-2 ${isDarkTheme ? 'text-slate-200' : 'text-slate-800'}`}>
                                 <div className={`p-1.5 rounded-lg ${isDarkTheme ? 'bg-emerald-500/10' : 'bg-emerald-50'}`}><List className="w-3 h-3 text-emerald-500" /></div>
                                 Cấu trúc Q&A
@@ -425,7 +425,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                         </div>
                     </div>
 
-                    <div className={`p-5 rounded-[24px] border ${isDarkTheme ? 'bg-slate-800/30 border-slate-800' : 'bg-slate-50/80 border-slate-200/50'}`}>
+                    <div className={`p-5 rounded-[18px] border ${isDarkTheme ? 'bg-slate-800/30 border-slate-800' : 'bg-slate-50/80 border-slate-200/50'}`}>
                         <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">Checklist "Vàng" cho Content:</h5>
                         <ul className="space-y-3">
                             {[
@@ -469,7 +469,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                         </div>
 
                         {/* Animated Vector Visualization */}
-                        <div className={`relative h-32 rounded-[24px] overflow-hidden border shadow-inner group ${isDarkTheme ? 'bg-slate-950 border-slate-800' : 'bg-slate-900 border-slate-800'}`}>
+                        <div className={`relative h-32 rounded-[18px] overflow-hidden border shadow-inner group ${isDarkTheme ? 'bg-slate-950 border-slate-800' : 'bg-slate-900 border-slate-800'}`}>
                             <style>{`
                                 @keyframes float-dot {
                                     0% { transform: translate(0, 0); opacity: 0; }
@@ -600,7 +600,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                                     </div>
 
                                     {/* Content Card */}
-                                    <div className={`flex-1 flex items-center justify-between p-3 rounded-2xl border transition-all duration-300 ${item.isRecommended
+                                    <div className={`flex-1 flex items-center justify-between p-3 rounded-[14px] border transition-all duration-300 ${item.isRecommended
                                         ? (isDarkTheme ? 'bg-emerald-500/5 border-emerald-500/20 shadow-sm' : 'bg-emerald-50/20 border-emerald-200/60 shadow-sm')
                                         : (isDarkTheme ? 'bg-slate-900 border-slate-800 hover:border-slate-700' : 'bg-white border-slate-100 hover:border-slate-200')
                                         }`}>
@@ -620,7 +620,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                         </div>
                     </div>
 
-                    <div className={`p-4 rounded-2xl border flex items-start gap-3 ${isDarkTheme ? 'bg-indigo-500/10 border-indigo-500/20' : 'bg-indigo-50/50 border-indigo-100/50'}`}>
+                    <div className={`p-4 rounded-[14px] border flex items-start gap-3 ${isDarkTheme ? 'bg-indigo-500/10 border-indigo-500/20' : 'bg-indigo-50/50 border-indigo-100/50'}`}>
                         <div className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 shadow-sm ${isDarkTheme ? 'bg-slate-900 border-indigo-500/20' : 'bg-white border-indigo-100'}`}>
                             <Info className="w-4 h-4 text-indigo-500" />
                         </div>
@@ -642,7 +642,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                 <div className="space-y-8 py-4">
                     {/* Intro */}
                     <div className={`p-5 rounded-[2rem] border flex gap-4 items-center shadow-inner ${isDarkTheme ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-emerald-50 border-emerald-100/50'}`}>
-                        <div className={`w-14 h-14 rounded-2xl shadow-sm flex items-center justify-center shrink-0 ${isDarkTheme ? 'bg-slate-900 text-emerald-400' : 'bg-white text-emerald-500'}`}>
+                        <div className={`w-14 h-14 rounded-[14px] shadow-sm flex items-center justify-center shrink-0 ${isDarkTheme ? 'bg-slate-900 text-emerald-400' : 'bg-white text-emerald-500'}`}>
                             <Sparkles className="w-7 h-7 animate-pulse" />
                         </div>
                         <p className={`text-xs font-bold leading-relaxed ${isDarkTheme ? 'text-emerald-300' : 'text-emerald-800'}`}>
@@ -660,11 +660,11 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                             Nếu kiến thức có Link Web, Chatbox sẽ tự trích xuất thành **Nút mời bấm lớn** ở dưới cùng để khách dễ thấy.
                         </p>
 
-                        <div className={`ml-11 border rounded-2xl p-4 space-y-3 ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                        <div className={`ml-11 border rounded-[14px] p-4 space-y-3 ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
                             <div className={`p-3 rounded-xl border border-dashed text-[10px] font-mono italic ${isDarkTheme ? 'bg-slate-950 border-slate-800 text-slate-500' : 'bg-white border-slate-300 text-slate-400'}`}>
                                 "Xem thêm tại: https://ideas.edu.vn/kho-hang"
                             </div>
-                            <div className={`p-4 rounded-2xl rounded-tl-none shadow-xl ${isDarkTheme ? 'bg-slate-800' : 'bg-slate-900'}`}>
+                            <div className={`p-4 rounded-[14px] rounded-tl-none shadow-xl ${isDarkTheme ? 'bg-slate-800' : 'bg-slate-900'}`}>
                                 <div className={`backdrop-blur-md rounded-xl p-3 flex items-center justify-between border ${isDarkTheme ? 'bg-white/5 border-white/10' : 'bg-white/10 border-white/20'}`}>
                                     <div className="flex flex-col min-w-0 pr-2">
                                         <span className="text-[8px] font-bold text-white/50 uppercase">Đường dẫn đề xuất</span>
@@ -686,7 +686,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                             Link kết thúc bằng <span className="font-bold text-rose-600">.jpg, .png, .webp...</span> sẽ tự động hiện thành ảnh xem trực tiếp ngay trong chat.
                         </p>
 
-                        <div className={`ml-11 border rounded-2xl p-4 space-y-3 ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                        <div className={`ml-11 border rounded-[14px] p-4 space-y-3 ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
                             <div className={`p-3 rounded-xl border border-dashed text-[10px] font-mono italic ${isDarkTheme ? 'bg-slate-950 border-slate-800 text-slate-500' : 'bg-white border-slate-300 text-slate-400'}`}>
                                 "Ảnh mẫu: https://domain.com/san-pham.jpg"
                             </div>
@@ -705,7 +705,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                         <p className={`text-[11px] pl-11 ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>
                             Link kết thúc bằng <span className={`font-bold ${isDarkTheme ? 'text-blue-400' : 'text-blue-600'}`}>.pdf, .docx, .csv...</span> sẽ hiện thành khung tải file chuyên nghiệp.
                         </p>
-                    </div>      <div className={`ml-11 border rounded-2xl p-4 space-y-3 ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                    </div>      <div className={`ml-11 border rounded-[14px] p-4 space-y-3 ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
                         <div className={`p-3 rounded-xl border border-dashed text-[10px] font-mono italic ${isDarkTheme ? 'bg-slate-950 border-slate-800 text-slate-500' : 'bg-white border-slate-300 text-slate-400'}`}>
                             "Báo giá: https://domain.com/bao-gia.pdf"
                         </div>
@@ -735,8 +735,8 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                 isDarkTheme={isDarkTheme}
             >
                 <div className="space-y-6">
-                    <div className={`p-4 rounded-2xl border flex gap-4 items-start ${isDarkTheme ? 'bg-amber-600/10 border-amber-600/20' : 'bg-amber-50 border-amber-100'}`}>
-                        <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div className={`p-4 rounded-[14px] border flex gap-4 items-start ${isDarkTheme ? 'bg-[var(--color-primary)]/10 border-[var(--color-primary)]/20' : 'bg-amber-50 border-amber-100'}`}>
+                        <Info className="w-5 h-5 text-[var(--color-primary)] shrink-0 mt-0.5" />
                         <p className={`text-xs leading-relaxed font-medium ${isDarkTheme ? 'text-amber-300' : 'text-amber-900'}`}>
                             Toàn bộ dữ liệu được chọn sẽ được {bulkActionType === 'move' ? 'chuyển' : 'nhân bản'} sang bot đích.
                         </p>
@@ -747,7 +747,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                         <select
                             value={targetPropertyId}
                             onChange={(e) => setTargetPropertyId(e.target.value)}
-                            className={`w-full h-12 px-4 border-2 rounded-xl text-xs font-bold outline-none transition-colors appearance-none cursor-pointer ${isDarkTheme ? 'bg-slate-900 border-slate-800 text-slate-200 focus:bg-slate-950 focus:border-amber-600/50' : 'bg-slate-50 border-slate-100 text-slate-700 focus:bg-white focus:border-amber-600'}`}
+                            className={`w-full h-12 px-4 border-2 rounded-xl text-xs font-bold outline-none transition-colors appearance-none cursor-pointer ${isDarkTheme ? 'bg-slate-900 border-slate-800 text-slate-200 focus:bg-slate-950 focus:border-[var(--color-primary)]/50' : 'bg-slate-50 border-slate-100 text-slate-700 focus:bg-white focus:border-[var(--color-primary)]'}`}
                         >
                             <option value="">-- Chọn AI Chatbot --</option>
                             {chatbots.map(c => (
@@ -777,7 +777,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                 isDarkTheme={isDarkTheme}
             >
                 <div className="space-y-6 text-center">
-                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto ${isDarkTheme ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' : 'bg-rose-50 text-rose-500'}`}>
+                    <div className={`w-16 h-16 rounded-[14px] flex items-center justify-center mx-auto ${isDarkTheme ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' : 'bg-rose-50 text-rose-500'}`}>
                         <Trash2 className="w-8 h-8" />
                     </div>
                     <div>
@@ -930,10 +930,10 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
             >
                 <div className="space-y-6">
                     {/* Header Preview Section */}
-                    <div className={`flex items-center gap-5 p-5 rounded-3xl border shadow-inner ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50/50 border-slate-100'}`}>
+                    <div className={`flex items-center gap-5 p-5 rounded-[18px] border shadow-inner ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50/50 border-slate-100'}`}>
                         <div className="relative group shrink-0">
                             <div
-                                className={`w-20 h-20 rounded-2xl flex items-center justify-center overflow-hidden shadow-xl border-4 transition-all duration-500 group-hover:scale-105 ${isDarkTheme ? 'bg-slate-950' : 'bg-white'}`}
+                                className={`w-20 h-20 rounded-[14px] flex items-center justify-center overflow-hidden shadow-xl border-4 transition-all duration-500 group-hover:scale-105 ${isDarkTheme ? 'bg-slate-950' : 'bg-white'}`}
                                 style={{ borderColor: `${brandColor}${isDarkTheme ? '60' : '40'}`, backgroundColor: newCategoryAvatar ? (isDarkTheme ? '#0f172a' : 'white') : `${brandColor}10` }}
                             >
                                 {newCategoryAvatar ? (
@@ -984,7 +984,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                                     value={newCategoryName}
                                     onChange={(e) => setNewCategoryName(e.target.value)}
                                     placeholder="VD: Phòng Marketing..."
-                                    className={`w-full pl-11 pr-4 py-3 border-2 rounded-2xl outline-none transition-all text-sm font-bold ${isDarkTheme ? 'bg-slate-900 text-slate-200 focus:bg-slate-950' : 'bg-slate-50 text-slate-700 focus:bg-white'}`}
+                                    className={`w-full pl-11 pr-4 py-3 border-2 rounded-[14px] outline-none transition-all text-sm font-bold ${isDarkTheme ? 'bg-slate-900 text-slate-200 focus:bg-slate-950' : 'bg-slate-50 text-slate-700 focus:bg-white'}`}
                                     style={{ borderColor: brandColor + (isDarkTheme ? '40' : '20') }}
                                 />
                             </div>
@@ -995,7 +995,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Đường dẫn (Slug)</label>
                             <div className="flex items-center group">
                                 <div
-                                    className={`h-[48px] px-4 flex items-center gap-2 border-2 border-r-0 rounded-l-2xl font-bold text-[11px] ${isDarkTheme ? 'bg-slate-800 border-slate-800 text-slate-400' : 'bg-slate-100 border-slate-100 text-slate-400'}`}
+                                    className={`h-[48px] px-4 flex items-center gap-2 border-2 border-r-0 rounded-l-[14px] font-bold text-[11px] ${isDarkTheme ? 'bg-slate-800 border-slate-800 text-slate-400' : 'bg-slate-100 border-slate-100 text-slate-400'}`}
                                     style={{ borderColor: brandColor + '10' }}
                                 >
                                     <Globe className="w-3.5 h-3.5" />
@@ -1006,7 +1006,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                                     value={newCategorySlug}
                                     onChange={(e) => setNewCategorySlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
                                     placeholder="marketing"
-                                    className={`flex-1 h-[48px] px-4 border-2 rounded-r-2xl outline-none transition-all text-sm font-black ${isDarkTheme ? 'bg-slate-900 text-brand-light focus:bg-slate-950' : 'bg-slate-50 text-brand focus:bg-white'}`}
+                                    className={`flex-1 h-[48px] px-4 border-2 rounded-r-[14px] outline-none transition-all text-sm font-black ${isDarkTheme ? 'bg-slate-900 text-[var(--color-primary-light)] focus:bg-slate-950' : 'bg-slate-50 text-[var(--color-primary)] focus:bg-white'}`}
                                     style={{ borderColor: brandColor + (isDarkTheme ? '40' : '20') }}
                                 />
                             </div>
@@ -1019,7 +1019,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                                 value={newCategoryDesc}
                                 onChange={(e) => setNewCategoryDesc(e.target.value)}
                                 placeholder="Mục tiêu của nhóm này..."
-                                className={`w-full px-4 py-3 border-2 rounded-2xl outline-none resize-none h-20 transition-all text-sm font-medium ${isDarkTheme ? 'bg-slate-900 text-slate-300 focus:bg-slate-950' : 'bg-slate-50 text-slate-600 focus:bg-white'}`}
+                                className={`w-full px-4 py-3 border-2 rounded-[14px] outline-none resize-none h-20 transition-all text-sm font-medium ${isDarkTheme ? 'bg-slate-900 text-slate-300 focus:bg-slate-950' : 'bg-slate-50 text-slate-600 focus:bg-white'}`}
                                 style={{ borderColor: brandColor + (isDarkTheme ? '40' : '20') }}
                             />
                         </div>
@@ -1036,7 +1036,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                                     value={newCategoryAvatar}
                                     onChange={(e) => setNewCategoryAvatar(e.target.value)}
                                     placeholder="https://..."
-                                    className={`w-full pl-11 pr-4 py-3 border-2 rounded-2xl outline-none transition-all text-sm font-medium ${isDarkTheme ? 'bg-slate-900 text-slate-300 focus:bg-slate-950' : 'bg-slate-50 text-slate-600 focus:bg-white'}`}
+                                    className={`w-full pl-11 pr-4 py-3 border-2 rounded-[14px] outline-none transition-all text-sm font-medium ${isDarkTheme ? 'bg-slate-900 text-slate-300 focus:bg-slate-950' : 'bg-slate-50 text-slate-600 focus:bg-white'}`}
                                     style={{ borderColor: brandColor + (isDarkTheme ? '40' : '20') }}
                                 />
                             </div>
@@ -1054,7 +1054,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                                     value={newCategoryApiKey}
                                     onChange={(e) => setNewCategoryApiKey(e.target.value)}
                                     placeholder="AIza..."
-                                    className={`w-full pl-11 pr-4 py-3 border-2 rounded-2xl outline-none transition-all text-sm font-mono ${isDarkTheme ? 'bg-slate-900 text-slate-200 focus:bg-slate-950' : 'bg-slate-50 text-slate-800 focus:bg-white'}`}
+                                    className={`w-full pl-11 pr-4 py-3 border-2 rounded-[14px] outline-none transition-all text-sm font-mono ${isDarkTheme ? 'bg-slate-900 text-slate-200 focus:bg-slate-950' : 'bg-slate-50 text-slate-800 focus:bg-white'}`}
                                     style={{ borderColor: brandColor + (isDarkTheme ? '40' : '20') }}
                                 />
                             </div>
@@ -1063,7 +1063,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                         {/* Color Picker Section */}
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Màu chủ đạo</label>
-                            <div className={`flex items-center gap-3 h-[48px] px-4 border-2 rounded-2xl ${isDarkTheme ? 'bg-slate-900' : 'bg-slate-50'}`} style={{ borderColor: brandColor + (isDarkTheme ? '40' : '20') }}>
+                            <div className={`flex items-center gap-3 h-[48px] px-4 border-2 rounded-[14px] ${isDarkTheme ? 'bg-slate-900' : 'bg-slate-50'}`} style={{ borderColor: brandColor + (isDarkTheme ? '40' : '20') }}>
                                 <div className="relative overflow-hidden w-7 h-7 rounded-lg shadow-inner group">
                                     <input
                                         type="color"
@@ -1083,7 +1083,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                         </div>
 
                         {/* Small Guide Box */}
-                        <div className={`p-4 rounded-2xl border space-y-2 ${isDarkTheme ? 'bg-blue-500/10 border-blue-500/20' : 'bg-blue-50/50 border-blue-100/50'}`}>
+                        <div className={`p-4 rounded-[14px] border space-y-2 ${isDarkTheme ? 'bg-blue-500/10 border-blue-500/20' : 'bg-blue-50/50 border-blue-100/50'}`}>
                             <h5 className="text-[9px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-2">
                                 <Sparkles className="w-3 h-3 text-blue-400" /> Ghi chú
                             </h5>
@@ -1094,7 +1094,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                     </div>
 
                     {/* Footer Actions - STICKY */}
-                    <div className={`sticky bottom-0 -mx-6 px-6 py-4 border-t flex items-center justify-between z-10 rounded-b-3xl ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
+                    <div className={`sticky bottom-0 -mx-6 px-6 py-4 border-t flex items-center justify-between z-10 rounded-b-[18px] ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
                         <button
                             onClick={() => { setIsEditCategoryModalOpen(false); setEditingCategory(null); }}
                             className={`text-xs font-bold transition-colors ${isDarkTheme ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600'}`}
@@ -1105,7 +1105,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                         <button
                             onClick={handleUpdateCategory}
                             disabled={loading}
-                            className="px-8 py-3 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-lg hover:shadow-xl active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                            className="px-8 py-3 text-white rounded-[14px] text-xs font-black uppercase tracking-widest transition-all shadow-lg hover:shadow-xl active:scale-95 disabled:opacity-50 flex items-center gap-2"
                             style={{ backgroundColor: brandColor }}
                         >
                             {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
@@ -1123,7 +1123,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                 isDarkTheme={isDarkTheme}
             >
                 <div className="space-y-6">
-                    <div className={`p-4 rounded-2xl border flex gap-3 ${isDarkTheme ? 'bg-slate-800/50 border-slate-800' : 'bg-slate-50 border-slate-100'}`}>
+                    <div className={`p-4 rounded-[14px] border flex gap-3 ${isDarkTheme ? 'bg-slate-800/50 border-slate-800' : 'bg-slate-50 border-slate-100'}`}>
                         <Info className="w-5 h-5 text-slate-400 shrink-0" />
                         <p className={`text-[11px] font-medium ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>Chatbot mới sẽ được kế thừa cấu hình chung của nhóm. Bạn có thể tùy chỉnh lại sau.</p>
                     </div>
@@ -1229,7 +1229,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                     <div>
                         <label className={`block text-sm font-bold mb-2.5 ${isDarkTheme ? 'text-slate-300' : 'text-slate-800'}`}>Đường dẫn (Slug)</label>
                         <div className="flex items-center group">
-                            <div className={`h-[48px] px-4 flex items-center gap-2 border-2 border-r-0 rounded-l-2xl font-bold text-[11px] ${isDarkTheme ? 'bg-slate-800 border-slate-800 text-slate-400' : 'bg-slate-100 border-slate-200 text-slate-400'}`}>
+                            <div className={`h-[48px] px-4 flex items-center gap-2 border-2 border-r-0 rounded-l-[14px] font-bold text-[11px] ${isDarkTheme ? 'bg-slate-800 border-slate-800 text-slate-400' : 'bg-slate-100 border-slate-200 text-slate-400'}`}>
                                 <Globe className="w-3.5 h-3.5" />
                                 <span>/chat/</span>
                             </div>
@@ -1238,7 +1238,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                                 value={newBotSlug}
                                 onChange={(e) => setNewBotSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
                                 placeholder="my-bot"
-                                className={`flex-1 h-[48px] px-4 border-2 rounded-r-2xl outline-none transition-all text-sm font-black ${isDarkTheme ? 'bg-slate-900 border-slate-800 text-brand-light focus:bg-slate-950' : 'bg-slate-50 border-slate-200 text-brand focus:bg-white'}`}
+                                className={`flex-1 h-[48px] px-4 border-2 rounded-r-[14px] outline-none transition-all text-sm font-black ${isDarkTheme ? 'bg-slate-900 border-slate-800 text-[var(--color-primary-light)] focus:bg-slate-950' : 'bg-slate-50 border-slate-200 text-[var(--color-primary)] focus:bg-white'}`}
                                 style={{ borderColor: brandColor + (isDarkTheme ? '40' : '20') }}
                             />
                         </div>
@@ -1294,7 +1294,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                 isDarkTheme={isDarkTheme}
             >
                 <div className="space-y-6">
-                    <div className={`p-4 rounded-2xl border flex gap-3 ${isDarkTheme ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-emerald-50 border-emerald-100'}`}>
+                    <div className={`p-4 rounded-[14px] border flex gap-3 ${isDarkTheme ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-emerald-50 border-emerald-100'}`}>
                         <Share2 className="w-5 h-5 text-emerald-500 shrink-0" />
                         <p className={`text-xs font-medium ${isDarkTheme ? 'text-emerald-300' : 'text-emerald-700'}`}>Bất kỳ ai có đường dẫn này đều có thể trò chuyện với AI của bạn mà không cần đăng nhập.</p>
                     </div>
@@ -1338,7 +1338,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                 isDarkTheme={isDarkTheme}
             >
                 <div className="space-y-6 text-center">
-                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto ${isDarkTheme ? 'bg-rose-500/10 text-rose-500' : 'bg-rose-50 text-rose-500'}`}>
+                    <div className={`w-16 h-16 rounded-[14px] flex items-center justify-center mx-auto ${isDarkTheme ? 'bg-rose-500/10 text-rose-500' : 'bg-rose-50 text-rose-500'}`}>
                         <Trash2 className="w-8 h-8" />
                     </div>
                     <div>
@@ -1381,7 +1381,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                 onClose={() => setIsSynonymsModalOpen(false)}
                 title={
                     <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-lg ${isDarkTheme ? 'bg-gradient-to-br from-indigo-500 to-purple-600' : 'bg-gradient-to-br from-slate-800 to-slate-900'}`}>
+                        <div className={`w-10 h-10 rounded-[14px] flex items-center justify-center text-white shadow-lg ${isDarkTheme ? 'bg-gradient-to-br from-indigo-500 to-purple-600' : 'bg-gradient-to-br from-slate-800 to-slate-900'}`}>
                             <BrainCircuit className="w-6 h-6" />
                         </div>
                         <div>
@@ -1410,7 +1410,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                     {/* Scrollable Content */}
                     <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-8">
                         {/* Minimal Info Box */}
-                        <div className={`border rounded-2xl p-5 text-left flex gap-4 ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                        <div className={`border rounded-[14px] p-5 text-left flex gap-4 ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
                             <div className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${isDarkTheme ? 'bg-slate-950 border-slate-700' : 'bg-white border-slate-200'}`}>
                                 <Info className="w-4 h-4 text-slate-400" />
                             </div>
@@ -1426,7 +1426,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                         </div>
 
                         {/* Flat Input Section */}
-                        <div className={`border rounded-2xl overflow-hidden shadow-sm ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200'}`}>
+                        <div className={`border rounded-[14px] overflow-hidden shadow-sm ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200'}`}>
                             <div className="p-6 space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="space-y-2 text-left">
@@ -1513,7 +1513,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
                                     </div>
                                 ))}
                                 {Object.keys(synonyms || {}).length === 0 && (
-                                    <div className="col-span-full py-12 text-center bg-slate-50/50 border border-dashed border-slate-200 rounded-2xl">
+                                    <div className="col-span-full py-12 text-center bg-slate-50/50 border border-dashed border-slate-200 rounded-[14px]">
                                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest italic">Chưa có cấu hình dữ liệu</p>
                                     </div>
                                 )}

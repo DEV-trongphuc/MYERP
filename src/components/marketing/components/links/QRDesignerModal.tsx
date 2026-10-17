@@ -55,13 +55,13 @@ interface QRConfig {
 const DEFAULT_CONFIG: QRConfig = {
     value: '', width: 320, height: 320, margin: 10, pattern: 'square',
     fgColor: '#000000', fgGradientEnabled: false,
-    fgGradient: { type: 'linear', rotation: 0, colorStops: [{ offset: 0, color: '#f97316' }, { offset: 1, color: '#f59e0b' }] },
+    fgGradient: { type: 'linear', rotation: 0, colorStops: [{ offset: 0, color: '#BD1D2D' }, { offset: 1, color: '#991b1b' }] },
     bgColor: '#ffffff', bgGradientEnabled: false,
     bgGradient: { type: 'linear', rotation: 0, colorStops: [{ offset: 0, color: '#ffffff' }, { offset: 1, color: '#f8fafc' }] },
     isTransparent: false, eyeFrame: 'square', eyeBall: 'square',
     eyeFrameColor: '#000000', eyeBallColor: '#000000',
     logo: undefined, logoSize: 0.3, logoMargin: 5, excavate: true,
-    frameId: 'none', frameText: 'SCAN ME!', frameColor: '#f97316',
+    frameId: 'none', frameText: 'SCAN ME!', frameColor: '#BD1D2D',
     logoRadius: 0,
     useDirectLink: false
 };
@@ -300,7 +300,7 @@ const QRDesignerModal: React.FC<any> = ({ isOpen, onClose, onSave, initialConfig
     const EYE_BALLS: CornerDotType[] = ['square', 'dot'];
 
     const ColorBlock = ({ label, color, isGradient, gradient, onColorChange, onGradientToggle, onGradientChange }: any) => (
-        <div className="space-y-4 p-5 bg-slate-50/50 rounded-3xl border border-slate-100">
+        <div className="space-y-4 p-5 bg-slate-50/50 rounded-[18px] border border-slate-100">
             <div className="flex items-center justify-between">
                 <span className="text-xs font-black text-slate-800 uppercase tracking-tighter">{label}</span>
                 {onGradientToggle && (
@@ -373,14 +373,14 @@ const QRDesignerModal: React.FC<any> = ({ isOpen, onClose, onSave, initialConfig
     );
 
     return createPortal(
-        <div className="fixed inset-0 z-[9999] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white rounded-[40px] w-full max-w-7xl h-[92vh] shadow-2xl overflow-hidden flex flex-col md:flex-row animate-in zoom-in-95 duration-300">
+        <div className="fixed inset-0 z-[2147483646] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4" style={{ zIndex: 2147483646 }}>
+            <div className="bg-white rounded-[18px] w-full max-w-7xl h-[92vh] shadow-2xl overflow-hidden flex flex-col md:flex-row animate-in zoom-in-95 duration-300">
                 
                 {/* Left Panel */}
                 <div className="flex-1 flex flex-col border-r border-slate-100 overflow-hidden bg-slate-50/20">
                     <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white">
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-2xl bg-amber-600 flex items-center justify-center text-white shadow-md shadow-amber-200"><Wand2 className="w-5 h-5" /></div>
+                            <div className="w-10 h-10 rounded-2xl bg-[var(--color-primary)] flex items-center justify-center text-white shadow-md"><Wand2 className="w-5 h-5" /></div>
                             <div>
                                 <h2 className="text-lg font-black text-slate-800">Thiết kế QR chuyên nghiệp</h2>
                                 <p className="text-[11px] text-slate-500 font-medium">Tùy chỉnh phong cách độc đáo cho mã QR của bạn.</p>
@@ -394,7 +394,7 @@ const QRDesignerModal: React.FC<any> = ({ isOpen, onClose, onSave, initialConfig
                         {/* Section: Khung removed as per user request */}
 
                         {/* Section: Mẫu hoa văn */}
-                        <div className="bg-white rounded-[32px] border border-slate-100 overflow-hidden shadow-sm">
+                        <div className="bg-white rounded-[18px] border border-slate-100 overflow-hidden shadow-sm">
                             <div onClick={() => setExpandedSections(prev => prev.includes('pattern') ? prev.filter(s => s !== 'pattern') : [...prev, 'pattern'])} className="p-5 flex items-center justify-between cursor-pointer">
                                 <div className="flex items-center gap-3">
                                     <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center"><Grid className="w-5 h-5" /></div>
@@ -427,7 +427,7 @@ const QRDesignerModal: React.FC<any> = ({ isOpen, onClose, onSave, initialConfig
                         </div>
 
                         {/* Section: Góc mã QR */}
-                        <div className="bg-white rounded-[32px] border border-slate-100 overflow-hidden shadow-sm">
+                        <div className="bg-white rounded-[18px] border border-slate-100 overflow-hidden shadow-sm">
                             <div onClick={() => setExpandedSections(prev => prev.includes('eye') ? prev.filter(s => s !== 'eye') : [...prev, 'eye'])} className="p-5 flex items-center justify-between cursor-pointer">
                                 <div className="flex items-center gap-3">
                                     <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center"><Sliders className="w-5 h-5" /></div>
@@ -490,7 +490,7 @@ const QRDesignerModal: React.FC<any> = ({ isOpen, onClose, onSave, initialConfig
                         </div>
 
                         {/* Section: Logo & Nền */}
-                        <div className="bg-white rounded-[32px] border border-slate-100 overflow-hidden shadow-sm">
+                        <div className="bg-white rounded-[18px] border border-slate-100 overflow-hidden shadow-sm">
                             <div onClick={() => setExpandedSections(prev => prev.includes('logo') ? prev.filter(s => s !== 'logo') : [...prev, 'logo'])} className="p-5 flex items-center justify-between cursor-pointer">
                                 <div className="flex items-center gap-3">
                                     <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center"><ImageIcon className="w-5 h-5" /></div>
@@ -502,16 +502,16 @@ const QRDesignerModal: React.FC<any> = ({ isOpen, onClose, onSave, initialConfig
                                 <div className="p-5 pt-0 space-y-6">
                                     {targetUrl && (
                                         <div 
-                                            className="flex items-center justify-between p-4 bg-amber-50/50 rounded-2xl border border-amber-100 cursor-pointer" 
+                                            className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200 cursor-pointer" 
                                             onClick={() => setConfig(prev => ({ ...prev, useDirectLink: !prev.useDirectLink }))}
                                         >
                                             <div>
-                                                <span className="text-xs font-black text-amber-900 uppercase block">Hướng trực tiếp tới Web gốc</span>
-                                                <span className="text-[9px] text-amber-700/80 font-medium block">Hiển thị tên web của bạn khi quét (Không thống kê click)</span>
+                                                <span className="text-xs font-black text-slate-800 uppercase block">Hướng trực tiếp tới Web gốc</span>
+                                                <span className="text-[9px] text-slate-500 font-medium block">Hiển thị tên web của bạn khi quét (Không thống kê click)</span>
                                             </div>
                                             <button 
                                                 onClick={(e) => { e.preventDefault(); setConfig(prev => ({ ...prev, useDirectLink: !prev.useDirectLink })); }}
-                                                className={`w-9 h-5 rounded-full p-0.5 transition-colors ${config.useDirectLink ? 'bg-amber-500' : 'bg-slate-200'}`}
+                                                className={`w-9 h-5 rounded-full p-0.5 transition-colors ${config.useDirectLink ? 'bg-[var(--color-primary)]' : 'bg-slate-200'}`}
                                             >
                                                 <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${config.useDirectLink ? 'translate-x-4' : 'translate-x-0'}`} />
                                             </button>
@@ -526,7 +526,7 @@ const QRDesignerModal: React.FC<any> = ({ isOpen, onClose, onSave, initialConfig
                                         </div>
                                     </div>
                                     {config.logo && (
-                                        <div className="space-y-4 p-5 bg-slate-50/50 rounded-3xl border border-slate-100">
+                                        <div className="space-y-4 p-5 bg-slate-50/50 rounded-[18px] border border-slate-100">
                                             <span className="text-xs font-black text-slate-800 uppercase tracking-tighter block mb-2">Tùy chỉnh logo</span>
                                             
                                             {/* Slider: Logo Size */}
@@ -601,9 +601,9 @@ const QRDesignerModal: React.FC<any> = ({ isOpen, onClose, onSave, initialConfig
                     </div>
 
                     <div className="p-8 bg-white border-t border-slate-100 flex gap-4 shrink-0">
-                        <Button variant="ghost" className="flex-1 rounded-3xl h-14 text-sm font-black uppercase tracking-tighter" onClick={onClose}>Hủy bỏ</Button>
+                        <Button variant="ghost" className="flex-1 rounded-[14px] h-14 text-sm font-black uppercase tracking-tighter" onClick={onClose}>Hủy bỏ</Button>
                         <Button 
-                            className="flex-1 rounded-3xl h-14 text-sm font-black text-white uppercase tracking-tighter shadow-xl shadow-orange-100 bg-orange-500 hover:bg-orange-600" 
+                            className="flex-1 rounded-[14px] h-14 text-sm font-black text-white uppercase tracking-tighter shadow-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)]" 
                             icon={Check} 
                             onClick={async () => {
                                 setIsSaving(true);
@@ -621,8 +621,8 @@ const QRDesignerModal: React.FC<any> = ({ isOpen, onClose, onSave, initialConfig
                     <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, #000 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
                     
                     {/* Accent glowing orbs */}
-                    <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-orange-500/10 rounded-full blur-[100px] -mr-48 -mt-48 transition-all" />
-                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-amber-400/10 rounded-full blur-[100px] -ml-40 -mb-40 transition-all" />
+                    <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-[var(--color-primary)]/10 rounded-full blur-[100px] -mr-48 -mt-48 transition-all" />
+                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-[var(--color-primary)]/10 rounded-full blur-[100px] -ml-40 -mb-40 transition-all" />
 
                     <div className="relative z-10 w-full max-w-[360px] flex flex-col items-center">
                         <div className="mb-6 flex gap-3">
@@ -643,13 +643,13 @@ const QRDesignerModal: React.FC<any> = ({ isOpen, onClose, onSave, initialConfig
 
                         {/* Clean QR Canvas Frame */}
                         <div 
-                            className="bg-white p-4 rounded-[40px] shadow-xl shadow-slate-200/40 border border-slate-100 transition-all duration-700 w-full"
+                            className="bg-white p-4 rounded-[18px] shadow-xl shadow-slate-200/40 border border-slate-100 transition-all duration-700 w-full"
                         >
                             <div 
                                 className="relative flex flex-col items-center justify-center transition-all duration-700 overflow-hidden w-full aspect-square max-w-[320px] mx-auto"
                                 style={{
                                     border: config.frameId !== 'none' ? `16px solid ${config.frameColor}` : 'none',
-                                    borderRadius: '32px',
+                                    borderRadius: '18px',
                                     padding: config.frameId !== 'none' ? '28px 24px 56px' : '0',
                                     background: config.frameId !== 'none' ? config.frameColor : 'transparent',
                                 }}

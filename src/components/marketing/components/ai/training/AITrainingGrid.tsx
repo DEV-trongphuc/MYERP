@@ -141,25 +141,18 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                     --brand-border: hsl(var(--brand-h), var(--brand-s), 92%);
                     --brand-shadow: hsla(var(--brand-h), var(--brand-s), var(--brand-l), 0.15);
                 }
-                .bg-brand { background-color: var(--brand-primary) !important; }
-                .text-brand { color: var(--brand-primary) !important; }
-                .from-brand { --tw-gradient-from: var(--brand-primary) !important; --tw-gradient-to: var(--brand-primary-dark) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
-                .shadow-brand { box-shadow: 0 4px 12px -2px var(--brand-shadow) !important; }
+                .bg-[var(--color-primary)] { background-color: var(--brand-primary) !important; }
+                .text-[var(--color-primary)] { color: var(--brand-primary) !important; }
+                .from-[var(--color-primary)] { --tw-gradient-from: var(--brand-primary) !important; --tw-gradient-to: var(--brand-primary-dark) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+                .shadow-[var(--color-primary)] { box-shadow: 0 4px 12px -2px var(--brand-shadow) !important; }
             `}} />
             <div className="space-y-8">
                 <PageHero
                     title={<>AI <span className={hideWebsiteTab ? "text-white/70" : "text-slate-500 dark:text-slate-400"}>Training Center</span></>}
                     subtitle="Nạp kiến thức và huấn luyện bộ não AI cho từng website hoặc các kênh chatbot tập trung của bạn."
-                    showStatus={true}
-                    statusText="Neural Engine Ready"
-                    customGradient={hideWebsiteTab ? "from-brand to-brand-dark" : undefined}
-                    shadowColor={hideWebsiteTab ? "shadow-brand/30" : undefined}
+                    customGradient={hideWebsiteTab ? "from-[var(--color-primary)] to-[#9A1523]" : undefined}
+                    shadowColor={hideWebsiteTab ? "shadow-[var(--color-primary)]/30" : undefined}
                     actions={[
-                        {
-                            label: 'Mẹo Training',
-                            icon: Sparkles,
-                            onClick: () => setIsOptimizationModalOpen(true),
-                        },
                         {
                             label: 'Hướng dẫn AI',
                             icon: BookOpen,
@@ -168,7 +161,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                     ]}
                 />
 
-                <div className={`w-full rounded-[24px] md:rounded-[32px] border shadow-sm p-4 md:p-8 min-h-[600px] animate-in fade-in slide-in-from-bottom-5 duration-1000 delay-200 transition-colors ${isDarkTheme ? 'bg-[rgba(13,17,23,0.6)] backdrop-blur-md border-slate-800' : 'bg-white border-slate-200'}`}>
+                <div className={`w-full rounded-[18px] border shadow-sm p-4 md:p-6 min-h-[600px] animate-in fade-in slide-in-from-bottom-5 duration-700 delay-100 transition-colors ${isDarkTheme ? 'bg-[rgba(13,17,23,0.6)] backdrop-blur-md border-slate-800' : 'bg-white border-slate-200'}`}>
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 lg:gap-6 mb-6 lg:mb-10">
                         <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-6 flex-1">
                             {!hideWebsiteTab && (
@@ -186,7 +179,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                         className="flex-nowrap"
                                         items={[
                                             { id: 'website', label: 'AI Chatbot', icon: Globe },
-                                            { id: 'chat', label: 'AI Group Training', icon: Bot },
+                                            { id: 'chat', label: 'Huấn luyện nhóm', icon: Bot },
                                         ]}
                                         isDarkTheme={isDarkTheme}
                                     />
@@ -204,7 +197,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                             // In Autoflow the chatbot list is already the default view — no need to repeat it
                                             ...(!hideWebsiteTab ? [] : [{ id: 'chatbots', label: 'AI Agents', icon: Bot }]),
                                             { id: 'users', label: 'Quản trị User', icon: Users },
-                                            { id: 'feedback', label: 'Feedback', icon: MessageSquare },
+                                            { id: 'feedback', label: 'Phản hồi', icon: MessageSquare },
                                         ]}
                                         isDarkTheme={isDarkTheme}
                                     />
@@ -216,14 +209,14 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                         <div className="flex flex-wrap items-center gap-3 shrink-0">
                             <div className="relative group/tips shrink-0">
                                 <button
-                                    className={`w-full lg:w-auto h-10 md:h-11 px-4 lg:px-6 border rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${isDarkTheme ? 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800 shadow-inner shadow-slate-950/30' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 shadow-sm'}`}
+                                    className={`w-full lg:w-auto h-9 px-4 border rounded-[var(--radius-md)] text-xs font-semibold transition-all flex items-center justify-center gap-2 ${isDarkTheme ? 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800 shadow-inner shadow-slate-950/30' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 shadow-xs'}`}
                                 >
                                     <BookOpen className="w-4 h-4" style={{ color: activeBrandColor }} />
-                                    <span className="hidden sm:inline">Mẹo & Hướng dẫn</span>
+                                    <span className="hidden sm:inline">Hướng dẫn AI</span>
                                     <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover/tips:rotate-180 transition-transform duration-300" />
                                 </button>
 
-                                <div className={`absolute right-0 top-full mt-2 w-64 rounded-2xl shadow-xl border p-2 space-y-1 invisible opacity-0 group-hover/tips:visible group-hover/tips:opacity-100 transition-all duration-300 transform origin-top-right z-50 ${isDarkTheme ? 'bg-slate-900 border-slate-800 shadow-2xl shadow-slate-950' : 'bg-white border-slate-100'}`}>
+                                <div className={`absolute right-0 top-full mt-2 w-64 rounded-[14px] shadow-xl border p-2 space-y-1 invisible opacity-0 group-hover/tips:visible group-hover/tips:opacity-100 transition-all duration-300 transform origin-top-right z-50 ${isDarkTheme ? 'bg-slate-900 border-slate-800 shadow-2xl shadow-slate-950' : 'bg-white border-slate-100'}`}>
                                     <button
                                         onClick={() => setIsOptimizationModalOpen(true)}
                                         className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors text-left group ${isDarkTheme ? 'hover:bg-slate-800' : 'hover:bg-slate-50'}`}
@@ -273,7 +266,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                             {props.setActiveTab && hideWebsiteTab && (
                                 <button
                                     onClick={() => props.setActiveTab && props.setActiveTab('logs')}
-                                    className="h-10 md:h-11 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 whitespace-nowrap shadow-lg shadow-brand/20 hover:shadow-brand/40 hover:-translate-y-0.5 active:translate-y-0 text-white bg-gradient-to-r from-brand to-brand-dark"
+                                    className="h-10 md:h-11 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 whitespace-nowrap shadow-lg shadow-[var(--color-primary)]/20 hover:shadow-[var(--color-primary)]/40 hover:-translate-y-0.5 active:translate-y-0 text-white bg-gradient-to-r from-[var(--color-primary)] to-[#9A1523]"
                                 >
                                     <Activity size={16} className="text-white animate-pulse" />
                                     Logs & Stats
@@ -293,10 +286,10 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
 
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                 {loading ? (
-                                    [1, 2, 3].map(i => <div key={i} className={`h-48 rounded-[32px] animate-pulse ${isDarkTheme ? 'bg-slate-800' : 'bg-slate-50'}`} />)
+                                    [1, 2, 3].map(i => <div key={i} className={`h-48 rounded-[18px] animate-pulse ${isDarkTheme ? 'bg-slate-800' : 'bg-slate-50'}`} />)
                                 ) : filteredProperties.map(p => (
-                                    <div key={p.id} className={`group p-6 rounded-[32px] border transition-all flex flex-col justify-between gap-6 relative overflow-hidden ${isDarkTheme ? 'bg-slate-900 border-slate-800 hover:border-brand/30 shadow-inner shadow-slate-950/20' : 'bg-white border-slate-100 shadow-sm hover:shadow-xl hover:border-brand/30'}`}>
-                                        <div className={`absolute top-0 right-0 p-8 opacity-[0.03] group-hover:scale-125 transition-transform ${p.ai_enabled ? 'text-brand' : (isDarkTheme ? 'text-slate-400' : 'text-slate-500')
+                                    <div key={p.id} className={`group p-6 rounded-[18px] border transition-all flex flex-col justify-between gap-6 relative overflow-hidden ${isDarkTheme ? 'bg-slate-900 border-slate-800 hover:border-[var(--color-primary)]/30 shadow-inner shadow-slate-950/20' : 'bg-white border-slate-100 shadow-sm hover:shadow-xl hover:border-[var(--color-primary)]/30'}`}>
+                                        <div className={`absolute top-0 right-0 p-8 opacity-[0.03] group-hover:scale-125 transition-transform ${p.ai_enabled ? 'text-[var(--color-primary)]' : (isDarkTheme ? 'text-slate-400' : 'text-slate-500')
                                             }`}><img src="/imgs/ICON.png" className="w-32 h-32 object-contain grayscale brightness-0" alt="" /></div>
 
                                         <div className="flex justify-between items-start relative z-10">
@@ -315,7 +308,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                         </div>
 
                                         <div className="space-y-4 relative z-10">
-                                            <div className={`flex items-center justify-between p-3 rounded-2xl border transition-colors ${isDarkTheme ? 'bg-slate-800/50 border-slate-700 group-hover:bg-brand/10 group-hover:border-brand/20' : 'bg-slate-50 border-slate-100 group-hover:bg-brand/5 group-hover:border-brand/10'}`}>
+                                            <div className={`flex items-center justify-between p-3 rounded-[14px] border transition-colors ${isDarkTheme ? 'bg-slate-800/50 border-slate-700 group-hover:bg-[var(--color-primary)]/10 group-hover:border-[var(--color-primary)]/20' : 'bg-slate-50 border-slate-100 group-hover:bg-[var(--color-primary)]/5 group-hover:border-[var(--color-primary)]/10'}`}>
                                                 <div className="flex flex-col">
                                                     <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Tỷ lệ</span>
 
@@ -345,7 +338,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                         </div>
                     ) : (
                         <div className="space-y-6">
-                            <div className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 lg:p-6 rounded-[24px] border mb-6 gap-6 ${isDarkTheme ? 'bg-slate-800/30 border-slate-800' : 'bg-slate-50/50 border-slate-100'}`}>
+                            <div className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 lg:p-6 rounded-[18px] border mb-6 gap-6 ${isDarkTheme ? 'bg-slate-800/30 border-slate-800' : 'bg-slate-50/50 border-slate-100'}`}>
                                 <div className="flex items-center gap-3">
                                     {viewModeChat === 'chatbots' && (
                                         <button
@@ -430,7 +423,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                             {activeSubTab === 'chatbots' && (
                                                 <button
                                                     onClick={() => setIsCreateBotModalOpen(true)}
-                                                    className={`h-10 px-5 rounded-xl text-[10px] lg:text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm border ${isDarkTheme ? 'bg-brand text-white border-brand/20 hover:bg-brand-dark' : 'bg-brand text-white border-brand/10 hover:shadow-lg'}`}
+                                                    className={`h-10 px-5 rounded-xl text-[10px] lg:text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm border ${isDarkTheme ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]/20 hover:bg-[#9A1523]' : 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]/10 hover:shadow-lg'}`}
                                                 >
                                                     <Plus className="w-4 h-4" />
                                                     Tạo AI Agent
@@ -444,7 +437,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                                         const btn = document.getElementById('org-user-add-btn');
                                                         if (btn) btn.click();
                                                     }}
-                                                    className={`h-10 px-5 rounded-xl text-[10px] lg:text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm border ${isDarkTheme ? 'bg-brand text-white border-brand/20 hover:bg-brand-dark' : 'bg-brand text-white border-brand/10 hover:shadow-lg'}`}
+                                                    className={`h-10 px-5 rounded-xl text-[10px] lg:text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm border ${isDarkTheme ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]/20 hover:bg-[#9A1523]' : 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]/10 hover:shadow-lg'}`}
                                                 >
                                                     <Plus className="w-4 h-4" />
                                                     Thêm User Tổ chức
@@ -458,9 +451,9 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                             {viewModeChat === 'categories' ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {loading ? (
-                                        [1, 2, 3].map(i => <div key={i} className={`h-32 rounded-[24px] animate-pulse ${isDarkTheme ? 'bg-slate-800' : 'bg-slate-50'}`} />)
+                                        [1, 2, 3].map(i => <div key={i} className={`h-32 rounded-[18px] animate-pulse ${isDarkTheme ? 'bg-slate-800' : 'bg-slate-50'}`} />)
                                     ) : categories.length === 0 ? (
-                                        <div className={`col-span-full py-20 text-center border-2 border-dashed rounded-[32px] ${isDarkTheme ? 'border-slate-800 bg-slate-900/30' : 'border-slate-200 bg-slate-50/50'}`}>
+                                        <div className={`col-span-full py-20 text-center border-2 border-dashed rounded-[18px] ${isDarkTheme ? 'border-slate-800 bg-slate-900/30' : 'border-slate-200 bg-slate-50/50'}`}>
                                             <Building className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                                             <h3 className={`font-bold text-lg ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>Chưa có nhóm nào</h3>
                                             <p className="text-slate-500 mt-2 text-sm">Vui lòng tạo nhóm để quản lý các chatbot.</p>
@@ -472,7 +465,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                                 setSelectedCategoryId(c.id);
                                                 setViewModeChat('chatbots');
                                             }}
-                                            className={`group p-6 rounded-[24px] border transition-all duration-500 cursor-pointer relative overflow-hidden ${isDarkTheme ? 'bg-slate-900 border-slate-800 hover:border-brand/20' : 'bg-white border-slate-100 shadow-sm hover:shadow-lg hover:border-brand/20'}`}
+                                            className={`group p-6 rounded-[18px] border transition-all duration-500 cursor-pointer relative overflow-hidden ${isDarkTheme ? 'bg-slate-900 border-slate-800 hover:border-[var(--color-primary)]/20' : 'bg-white border-slate-100 shadow-sm hover:shadow-lg hover:border-[var(--color-primary)]/20'}`}
                                         >
                                             <div className="flex items-center justify-between mb-4">
                                                 <div className="flex items-center gap-4">
@@ -480,7 +473,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                                         className="w-12 h-12 rounded-[18px] flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-all duration-500 overflow-hidden"
                                                         style={{
                                                             background: !hideWebsiteTab
-                                                                ? 'linear-gradient(135deg, #f59e0b, #d97706)'
+                                                                ? 'linear-gradient(135deg, #f59e0b, #BD1D2D)'
                                                                 : `linear-gradient(135deg, ${c.brand_color || '#2563eb'}, ${c.brand_color ? c.brand_color + 'dd' : '#ffc107'})`,
                                                             boxShadow: !hideWebsiteTab
                                                                 ? '0 8px 20px -6px rgba(245, 158, 11, 0.6)'
@@ -490,8 +483,8 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                                         <Building className="w-6 h-6" />
                                                     </div>
                                                     <div>
-                                                        <h4 className={`text-base font-bold leading-tight ${(hideWebsiteTab && String(selectedCategoryId) === String(c.id)) ? 'text-brand' : (isDarkTheme ? 'text-slate-200' : 'text-slate-800')}`}>{c.name}</h4>
-                                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${(hideWebsiteTab && String(selectedCategoryId) === String(c.id)) ? (isDarkTheme ? 'bg-brand/20 text-brand' : 'bg-brand/10 text-brand') : (isDarkTheme ? 'bg-slate-800 text-slate-500' : 'bg-slate-100 text-slate-500')}`}>{(c.chatbot_count || 0).toLocaleString()} Chatbots</span>
+                                                        <h4 className={`text-base font-bold leading-tight ${(hideWebsiteTab && String(selectedCategoryId) === String(c.id)) ? 'text-[var(--color-primary)]' : (isDarkTheme ? 'text-slate-200' : 'text-slate-800')}`}>{c.name}</h4>
+                                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${(hideWebsiteTab && String(selectedCategoryId) === String(c.id)) ? (isDarkTheme ? 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]' : 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]') : (isDarkTheme ? 'bg-slate-800 text-slate-500' : 'bg-slate-100 text-slate-500')}`}>{(c.chatbot_count || 0).toLocaleString()} Chatbots</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -524,7 +517,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                                     >
                                                         <Trash2 className="w-4 h-4" />
                                                     </button>
-                                                    <ChevronRight className="w-5 h-5 text-brand" />
+                                                    <ChevronRight className="w-5 h-5 text-[var(--color-primary)]" />
                                                 </div>
                                             )}
                                         </div>
@@ -535,13 +528,13 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                     {activeSubTab === 'chatbots' ? (
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                             {filteredChatbots.length === 0 ? (
-                                                <div className={`col-span-full py-20 text-center border-2 border-dashed rounded-[32px] ${isDarkTheme ? 'border-slate-800 bg-slate-900/30' : 'border-slate-200 bg-slate-50/50'}`}>
+                                                <div className={`col-span-full py-20 text-center border-2 border-dashed rounded-[18px] ${isDarkTheme ? 'border-slate-800 bg-slate-900/30' : 'border-slate-200 bg-slate-50/50'}`}>
                                                     <Bot className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                                                     <h3 className={`font-bold text-lg ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>Chưa có AI Chatbot nào</h3>
                                                     <p className="text-slate-500 mt-2 text-sm">Nhấn "Tạo AI Agent" để bắt đầu.</p>
                                                 </div>
                                             ) : filteredChatbots.map(c => (
-                                                <div key={c.id} className={`group p-6 rounded-[32px] border transition-all flex flex-col justify-between gap-6 relative overflow-hidden ${isDarkTheme ? 'bg-slate-900 border-slate-800 hover:border-emerald-500/30 shadow-inner shadow-slate-950/20' : 'bg-white border-slate-100 shadow-sm hover:shadow-lg hover:border-emerald-200/50'}`}>
+                                                <div key={c.id} className={`group p-6 rounded-[18px] border transition-all flex flex-col justify-between gap-6 relative overflow-hidden ${isDarkTheme ? 'bg-slate-900 border-slate-800 hover:border-emerald-500/30 shadow-inner shadow-slate-950/20' : 'bg-white border-slate-100 shadow-sm hover:shadow-lg hover:border-emerald-200/50'}`}>
                                                     <div className="absolute top-4 right-4 z-20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); handleEditBot(c); }}
@@ -554,7 +547,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                                             <Trash2 className="w-4 h-4" />
                                                         </button>
                                                     </div>
-                                                    <div className={`absolute top-0 right-0 p-8 opacity-[0.03] transition-transform group-hover:scale-125 ${isDarkTheme ? 'text-brand' : 'text-emerald-600'}`}><img src="/imgs/ICON.png" className="w-32 h-32 object-contain grayscale brightness-0" alt="" /></div>
+                                                    <div className={`absolute top-0 right-0 p-8 opacity-[0.03] transition-transform group-hover:scale-125 ${isDarkTheme ? 'text-[var(--color-primary)]' : 'text-emerald-600'}`}><img src="/imgs/ICON.png" className="w-32 h-32 object-contain grayscale brightness-0" alt="" /></div>
 
                                                     <div className="flex justify-between items-start relative z-10">
                                                         <div className="flex items-center gap-4">
@@ -562,11 +555,11 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                                                 {c.settings?.bot_avatar || c.bot_avatar ? (
                                                                     <img
                                                                         src={c.settings?.bot_avatar || c.bot_avatar}
-                                                                        className={`w-full h-full object-cover rounded-2xl ${hideWebsiteTab ? 'grayscale group-hover:grayscale-0 transition-all duration-500' : ''}`}
+                                                                        className={`w-full h-full object-cover rounded-[14px] ${hideWebsiteTab ? 'grayscale group-hover:grayscale-0 transition-all duration-500' : ''}`}
                                                                         alt=""
                                                                     />
                                                                 ) : (
-                                                                    <div className={`w-full h-full rounded-[18px] flex items-center justify-center text-white shadow-lg overflow-hidden transition-all duration-500 ${hideWebsiteTab ? 'bg-brand shadow-brand/20' : 'bg-gradient-to-br from-[#c2410c] to-[#9a3412] shadow-orange-950/20 group-hover:shadow-orange-900/40'}`}>
+                                                                    <div className={`w-full h-full rounded-[18px] flex items-center justify-center text-white shadow-lg overflow-hidden transition-all duration-500 ${hideWebsiteTab ? 'bg-[var(--color-primary)] shadow-[var(--color-primary)]/20' : 'bg-gradient-to-br from-[#c2410c] to-[#9a3412] shadow-orange-950/20 group-hover:shadow-orange-900/40'}`}>
                                                                         <Bot className="w-6 h-6" />
                                                                     </div>
                                                                 )}
@@ -587,7 +580,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                                     </div>
 
                                                     <div className="space-y-4 relative z-10">
-                                                        <div style={{ backgroundColor: isDarkTheme ? '#1E293B' : 'var(--brand-surface)', borderColor: isDarkTheme ? '#334155' : 'var(--brand-border)' }} className="flex items-center justify-between p-3 rounded-2xl border transition-colors">
+                                                        <div style={{ backgroundColor: isDarkTheme ? '#1E293B' : 'var(--brand-surface)', borderColor: isDarkTheme ? '#334155' : 'var(--brand-border)' }} className="flex items-center justify-between p-3 rounded-[14px] border transition-colors">
                                                             <div className="flex flex-col">
                                                                 <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Tỷ lệ</span>
 
@@ -613,7 +606,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                             ))}
                                         </div>
                                     ) : activeSubTab === 'users' ? (
-                                        <div className={`p-4 rounded-[24px] border ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-100'}`}>
+                                        <div className={`p-4 rounded-[18px] border ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-100'}`}>
                                             <OrgUserManager
                                                 isDarkTheme={isDarkTheme}
                                                 hideHeader={true}
@@ -621,15 +614,15 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                             />
                                         </div>
                                     ) : activeSubTab === 'logs' ? (
-                                        <div className={`p-4 rounded-[24px] border ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-100'}`}>
+                                        <div className={`p-4 rounded-[18px] border ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-100'}`}>
                                             <AdminLogsTab categoryId={selectedCategoryId} />
                                         </div>
                                     ) : activeSubTab === 'feedback' ? (
-                                        <div className={`p-4 rounded-[24px] border ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-100'}`}>
+                                        <div className={`p-4 rounded-[18px] border ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-100'}`}>
                                             <FeedbackAdminPanel />
                                         </div>
                                     ) : (
-                                        <div className={`p-12 text-center border-2 border-dashed rounded-[32px] ${isDarkTheme ? 'border-slate-800 bg-slate-900/30' : 'bg-slate-200 bg-slate-50/50'}`}>
+                                        <div className={`p-12 text-center border-2 border-dashed rounded-[18px] ${isDarkTheme ? 'border-slate-800 bg-slate-900/30' : 'bg-slate-200 bg-slate-50/50'}`}>
                                             <Shield className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                                             <h3 className={`font-bold text-lg ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>Cài đặt Nhóm</h3>
                                             <p className="text-slate-500 mt-2 mb-6 text-sm">Quản lý thông tin cơ bản và cấu hình của nhóm AI này.</p>
@@ -638,7 +631,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                                     const cat = categories.find(c => String(c.id) === String(selectedCategoryId));
                                                     if (cat) handleEditCategory(cat);
                                                 }}
-                                                className="px-6 py-3 bg-brand text-white rounded-xl font-bold uppercase tracking-widest text-[10px] hover:shadow-lg transition-all"
+                                                className="px-6 py-3 bg-[var(--color-primary)] text-white rounded-xl font-bold uppercase tracking-widest text-[10px] hover:shadow-lg transition-all"
                                             >
                                                 Mở Cấu hình Nhóm
                                             </button>

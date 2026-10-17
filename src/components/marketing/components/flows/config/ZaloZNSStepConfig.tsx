@@ -616,7 +616,7 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
     return (
         <div className="space-y-8">
             {/* ZNS Time Policy Warning with Auto-Adjust */}
-            <div className={`p-5 rounded-[24px] border shadow-sm animate-in zoom-in-95 duration-500 ${isTimeInsecure ? 'bg-orange-50 border-orange-200' : 'bg-emerald-50/50 border-emerald-100'}`}>
+            <div className={`p-5 rounded-2xl border shadow-sm animate-in zoom-in-95 duration-500 ${isTimeInsecure ? 'bg-orange-50 border-orange-200' : 'bg-emerald-50/50 border-emerald-100'}`}>
                 <div className="flex items-start gap-4">
                     <div className={`w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm shrink-0 ${isTimeInsecure ? 'text-orange-500' : 'text-emerald-500'}`}>
                         {isTimeInsecure ? <ShieldAlert className="w-5 h-5" /> : <BadgeCheck className="w-5 h-5" />}
@@ -638,7 +638,7 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                         {isTimeInsecure && onUpdateFlow && !disabled && (
                             <button
                                 onClick={handleAutoAdjust}
-                                className="mt-2 flex items-center gap-2 px-3 py-1.5 bg-orange-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-orange-700 transition-all shadow-md shadow-orange-200 active:scale-95"
+                                className="mt-2 flex items-center gap-2 px-3 py-1.5 bg-[var(--color-primary)] text-white rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-[var(--color-primary-hover)] transition-all shadow-md shadow-[var(--color-primary)]/20 active:scale-95"
                             >
                                 <Zap className="w-3.5 h-3.5" />
                                 Tự động điều chỉnh Flow (06:00 - 22:00)
@@ -754,7 +754,7 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                             )}
                         </div>
 
-                        <div className="p-8 bg-white rounded-[32px] border-2 border-slate-100 shadow-xl shadow-slate-200/20">
+                        <div className="p-8 bg-white rounded-2xl border-2 border-slate-100 shadow-xl shadow-slate-200/20">
                             <div className="flex items-center justify-between mb-8">
                                 <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">
                                     Cấu hình Tham số (Parameters)
@@ -777,8 +777,8 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                                             disabled={disabled}
                                         />
-                                        <div className={`py-12 border-2 border-dashed rounded-[32px] flex flex-col items-center justify-center gap-4 transition-all ${csvFile ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-100 bg-slate-50/50 group-hover:border-blue-300 group-hover:bg-blue-50/30'}`}>
-                                            <div className={`w-16 h-16 rounded-3xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 ${csvFile ? 'bg-emerald-500 text-white' : 'bg-white text-slate-300'}`}>
+                                        <div className={`py-12 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center gap-4 transition-all ${csvFile ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-100 bg-slate-50/50 group-hover:border-blue-300 group-hover:bg-blue-50/30'}`}>
+                                            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 ${csvFile ? 'bg-emerald-500 text-white' : 'bg-white text-slate-300'}`}>
                                                 <UploadCloud className="w-8 h-8" />
                                             </div>
                                             <div className="text-center px-6">
@@ -1039,7 +1039,7 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                                     type="button"
                                     onClick={() => handleFallbackChange('skip')}
                                     disabled={disabled}
-                                    className={`flex flex-col items-center gap-2 p-4 rounded-[24px] border-2 transition-all cursor-pointer ${
+                                    className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all cursor-pointer ${
                                         (config.fallback_behavior || 'skip') === 'skip'
                                             ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200'
                                             : 'bg-white border-slate-100 text-slate-500 hover:border-blue-200'
@@ -1056,7 +1056,7 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                                     type="button"
                                     onClick={() => handleFallbackChange('mark_failed')}
                                     disabled={disabled}
-                                    className={`flex flex-col items-center gap-2 p-4 rounded-[24px] border-2 transition-all cursor-pointer ${
+                                    className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all cursor-pointer ${
                                         config.fallback_behavior === 'mark_failed'
                                             ? 'bg-rose-600 border-rose-600 text-white shadow-lg shadow-rose-200'
                                             : 'bg-white border-slate-100 text-slate-500 hover:border-rose-200'
@@ -1072,7 +1072,7 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                         </div>
 
                         {/* Info Box */}
-                        <div className="bg-indigo-50/50 border border-indigo-100 rounded-[32px] p-6 flex flex-col sm:flex-row items-start gap-4">
+                        <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-6 flex flex-col sm:flex-row items-start gap-4">
                             <div className="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center text-indigo-500 shrink-0">
                                 <HelpCircle className="w-6 h-6" />
                             </div>
@@ -1115,7 +1115,7 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                             )}
                         </div>
 
-                        <div className="bg-slate-50/50 rounded-[48px] p-12 border border-slate-100 relative overflow-hidden flex flex-col items-center group">
+                        <div className="bg-slate-50/50 rounded-2xl p-12 border border-slate-100 relative overflow-hidden flex flex-col items-center group">
                             {/* Background Decor */}
                             <div className="absolute top-0 right-0 w-64 h-64 bg-blue-100/30 rounded-full blur-3xl -mr-32 -mt-32"></div>
                             <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-100/30 rounded-full blur-3xl -ml-32 -mb-32"></div>
@@ -1137,7 +1137,7 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                                         </div>
                                     </div>
 
-                                    <div className="bg-white rounded-[50px] overflow-hidden relative pt-12 pb-2 h-[560px]">
+                                    <div className="bg-white rounded-2xl overflow-hidden relative pt-12 pb-2 h-[560px]">
                                         <iframe
                                             src={previewUrl}
                                             title="ZNS Preview"

@@ -67,7 +67,10 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
         position: 'relative',
         width: '100%',
         verticalAlign: 'top',
-        zIndex: isSelected ? 1000 : 'auto'
+        zIndex: isSelected ? 1000 : 'auto',
+        padding: 0,
+        border: 'none',
+        borderBottom: 'none'
     };
 
     const decorativeStyles: React.CSSProperties = {};
@@ -125,7 +128,7 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                 );
 
             case 'button': {
-                const btnBg = block.style.contentBackgroundColor || (block.style as any).buttonBackgroundColor || block.style.backgroundColor || '#d97706';
+                const btnBg = block.style.contentBackgroundColor || (block.style as any).buttonBackgroundColor || block.style.backgroundColor || '#BD1D2D';
                 const containerBg = 'transparent';
                 const btnColor = css.color ?? '#ffffff';
                 const align = css.textAlign ?? 'center';
@@ -146,7 +149,6 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                                 marginLeft: btnMarginLeft, marginRight: btnMarginRight,
                                 display: 'table',
                                 width: btnWidth === 'auto' ? 'fit-content' : btnWidth,
-                                minWidth: '120px',
                                 maxWidth: '100%',
                                 borderCollapse: 'separate'
                             }}
@@ -245,14 +247,14 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
             }
 
             case 'quote': {
-                const quoteBorderLeft = `${css.borderLeftWidth ?? '4px'} ${css.borderStyle ?? 'solid'} ${css.borderColor ?? '#d97706'}`;
+                const quoteBorderLeft = `${css.borderLeftWidth ?? '4px'} ${css.borderStyle ?? 'solid'} ${css.borderColor ?? '#BD1D2D'}`;
                 const quoteHasOtherBorders = css.borderTopWidth || css.borderRightWidth || css.borderBottomWidth;
                 return (
                     <div style={{
                         borderLeft: quoteBorderLeft,
-                        borderTop: quoteHasOtherBorders ? `${css.borderTopWidth ?? '0'} ${css.borderStyle ?? 'solid'} ${css.borderColor ?? '#d97706'}` : undefined,
-                        borderRight: quoteHasOtherBorders ? `${css.borderRightWidth ?? '0'} ${css.borderStyle ?? 'solid'} ${css.borderColor ?? '#d97706'}` : undefined,
-                        borderBottom: quoteHasOtherBorders ? `${css.borderBottomWidth ?? '0'} ${css.borderStyle ?? 'solid'} ${css.borderColor ?? '#d97706'}` : undefined,
+                        borderTop: quoteHasOtherBorders ? `${css.borderTopWidth ?? '0'} ${css.borderStyle ?? 'solid'} ${css.borderColor ?? '#BD1D2D'}` : undefined,
+                        borderRight: quoteHasOtherBorders ? `${css.borderRightWidth ?? '0'} ${css.borderStyle ?? 'solid'} ${css.borderColor ?? '#BD1D2D'}` : undefined,
+                        borderBottom: quoteHasOtherBorders ? `${css.borderBottomWidth ?? '0'} ${css.borderStyle ?? 'solid'} ${css.borderColor ?? '#BD1D2D'}` : undefined,
                         backgroundColor: css.backgroundColor ?? 'transparent',
                         padding: `${css.paddingTop ?? '15px'} ${css.paddingRight ?? '25px'} ${css.paddingBottom ?? '15px'} ${css.paddingLeft ?? '25px'}`,
                         color: css.color ?? '#334155',
@@ -297,7 +299,7 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
             }
 
             case 'timeline': {
-                const dotColor = cssAny.timelineDotColor || '#d97706';
+                const dotColor = cssAny.timelineDotColor || '#BD1D2D';
                 const lineColor = cssAny.timelineLineColor || '#e2e8f0';
                 const timelineFontFamily = css.fontFamily;
                 const titleClr = css.color || '#1e293b';
@@ -399,7 +401,7 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
             }
 
             case 'check_list': {
-                const checkColor = cssAny.checkIconColor ?? '#d97706';
+                const checkColor = cssAny.checkIconColor ?? '#BD1D2D';
                 const checkSize = parseInt(cssAny.checkIconSize ?? '20');
                 const showTitle = cssAny.showCheckListTitle !== false;
                 const checklistIcon = block.style.checkIcon || 'CheckCircle';
@@ -615,8 +617,8 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                                             alt={block.altText || 'Fallback preview'}
                                             onError={(e) => { e.currentTarget.style.display = 'none'; }}
                                         />
-                                        <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-slate-900/80 backdrop-blur-xs text-amber-300 font-mono text-[9px] font-bold border border-amber-500/30 flex items-center gap-1 shadow-sm">
-                                            <LucideIcons.Sparkles className="w-2.5 h-2.5" />
+                                        <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-slate-900/80 backdrop-blur-xs text-white font-mono text-[9px] font-bold border border-[#BD1D2D]/40 flex items-center gap-1 shadow-sm">
+                                            <LucideIcons.Sparkles className="w-2.5 h-2.5 text-[#BD1D2D]" />
                                             <span>{block.content}</span>
                                             <span className="text-white/60 font-sans font-normal">(Ảnh dự phòng)</span>
                                         </div>
@@ -630,12 +632,12 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                                             borderRadius: borderRadius || '16px',
                                             maxWidth: '100%',
                                         }}
-                                        className="w-full bg-gradient-to-br from-amber-50/80 via-orange-50/40 to-amber-100/30 border-2 border-dashed border-amber-300/80 rounded-2xl flex flex-col items-center justify-center p-6 text-center shadow-xs"
+                                        className="w-full bg-gradient-to-br from-[#BD1D2D]/5 via-rose-50/40 to-[#BD1D2D]/10 border-2 border-dashed border-[#BD1D2D]/40 rounded-[14px] flex flex-col items-center justify-center p-6 text-center shadow-xs"
                                     >
-                                        <div className="w-12 h-12 bg-amber-500/10 border border-amber-200 rounded-2xl flex items-center justify-center mb-2 shadow-xs">
-                                            <LucideIcons.Sparkles className="text-amber-600 w-6 h-6 animate-pulse" />
+                                        <div className="w-12 h-12 bg-[#BD1D2D]/10 border border-[#BD1D2D]/20 rounded-[14px] flex items-center justify-center mb-2 shadow-xs">
+                                            <LucideIcons.Sparkles className="text-[#BD1D2D] w-6 h-6 animate-pulse" />
                                         </div>
-                                        <div className="font-mono text-xs font-bold text-amber-900 bg-amber-200/60 px-2.5 py-1 rounded-lg border border-amber-300/70 mb-1">
+                                        <div className="font-mono text-xs font-bold text-[#BD1D2D] bg-[#BD1D2D]/10 px-2.5 py-1 rounded-lg border border-[#BD1D2D]/30 mb-1">
                                             {block.content}
                                         </div>
                                         <span className="text-[11px] font-bold text-slate-700 tracking-wide">ẢNH ĐỘNG CÁ NHÂN HÓA</span>
@@ -668,8 +670,8 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                                 </div>
                             )
                         ) : (
-                            <div className="w-full aspect-video bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center group/img transition-all hover:bg-slate-100 hover:border-emerald-500/30">
-                                <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-3 group-hover/img:scale-110 transition-transform">
+                            <div className="w-full aspect-video bg-slate-50 border-2 border-dashed border-slate-200 rounded-[14px] flex flex-col items-center justify-center group/img transition-all hover:bg-slate-100 hover:border-emerald-500/30">
+                                <div className="w-16 h-16 bg-white rounded-[14px] shadow-sm flex items-center justify-center mb-3 group-hover/img:scale-110 transition-transform">
                                     <LucideIcons.Image className="text-slate-300 w-8 h-8" />
                                 </div>
                                 <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400" style={{ fontFamily: bodyStyle.fontFamily }}>Kéo thả hoặc chọn ảnh</span>
@@ -689,7 +691,7 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
 
             case 'video': {
                 const videoAlign = css.textAlign as any || 'center';
-                const playBtnColor = cssAny.playButtonColor || '#d97706';
+                const playBtnColor = cssAny.playButtonColor || '#BD1D2D';
                 return (
                     <div style={{ textAlign: videoAlign }}>
                         {block.videoUrl ? (
@@ -733,7 +735,7 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                                 </div>
                             </div>
                         ) : (
-                            <div className="w-full aspect-video bg-slate-900 rounded-2xl flex flex-col items-center justify-center group/vid border-4 border-slate-800 shadow-inner overflow-hidden relative">
+                            <div className="w-full aspect-video bg-slate-900 rounded-[14px] flex flex-col items-center justify-center group/vid border-4 border-slate-800 shadow-inner overflow-hidden relative">
                                 <div className="absolute inset-0 bg-[linear-gradient(45deg,rgba(0,0,0,0.4)_0%,transparent_100%)]"></div>
                                 <div className="w-16 h-16 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center mb-4 group-hover/vid:scale-110 transition-transform border border-white/20">
                                     <LucideIcons.PlayCircle className="text-white/40 w-10 h-10" />
@@ -793,11 +795,11 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
 
             case 'voucher': {
                 const voucherStyle = cssAny.voucherStyle || 'ticket';
-                const vBorderColor = cssAny.voucherBorderColor || '#d97706';
+                const vBorderColor = cssAny.voucherBorderColor || '#BD1D2D';
                 const vBorderStyle = cssAny.voucherBorderStyle || 'dashed';
                 const vBg = cssAny.voucherBg || '#fffbe1';
                 const vTextColor = cssAny.voucherTextColor || '#b45309';
-                const btnBg = cssAny.voucherButtonBg || '#d97706';
+                const btnBg = cssAny.voucherButtonBg || '#BD1D2D';
                 const btnText = cssAny.voucherButtonTextColor || '#ffffff';
                 const linkId = block.voucherCampaignId;
                 
@@ -952,7 +954,7 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                 const globalMenuType = (block.style as any).headerMenuType || 'link';
                 const menuGap = (block.style as any).menuGap || '20px';
                 const logoWidth = (block.style as any).logoWidth || '120px';
-                const btnBg = (block.style as any).buttonBg || '#d97706';
+                const btnBg = (block.style as any).buttonBg || '#BD1D2D';
                 const btnColor = (block.style as any).buttonColor || '#ffffff';
                 const menuItems = block.items || [];
 
@@ -1028,9 +1030,9 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                                             className="group/resizer"
                                         >
                                             {/* Visual Handle */}
-                                            <div className="w-1.5 h-full flex flex-col items-center justify-center gap-1 group-hover/resizer:bg-amber-100/20 rounded-full transition-all">
-                                                <div className="w-1 h-12 bg-amber-500 rounded-full shadow-sm" />
-                                                <div className="absolute -right-1.5 bg-amber-600 text-white p-1 rounded-full shadow-lg opacity-0 group-hover/resizer:opacity-100 transition-opacity">
+                                            <div className="w-1.5 h-full flex flex-col items-center justify-center gap-1 group-hover/resizer:bg-[#BD1D2D]/10 rounded-full transition-all">
+                                                <div className="w-1 h-12 bg-[#BD1D2D] rounded-full shadow-sm" />
+                                                <div className="absolute -right-1.5 bg-[var(--color-primary)] text-white p-1 rounded-full shadow-lg opacity-0 group-hover/resizer:opacity-100 transition-opacity">
                                                     <LucideIcons.ChevronsLeftRight className="w-2.5 h-2.5" />
                                                 </div>
                                             </div>
@@ -1101,6 +1103,124 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                     />
                 );
 
+            case 'survey_card': {
+                const s = block.style || {};
+                const accent = s.surveyAccentColor || '#BD1D2D';
+                const cardBg = s.surveyCardBgColor || '#F8FAFC';
+                const borderCol = s.surveyBorderColor || '#BFDBFE';
+                const btnTextColor = s.surveyButtonTextColor || '#FFFFFF';
+                const badgeText = s.surveyBadgeText || 'KHẢO SÁT NHANH';
+                const titleText = s.surveyTitle || block.content || 'Khảo sát mức độ hài lòng của bạn';
+                const descText = s.surveyDescription || 'Ý kiến của bạn giúp chúng tôi nâng cao chất lượng dịch vụ mỗi ngày.';
+                const btnText = s.surveyButtonText || 'Tham gia khảo sát ngay →';
+                const radius = sanitizeRadius(s.borderRadius || '14px');
+
+                return (
+                    <table role="presentation" width="100%" cellPadding={0} cellSpacing={0} border={0} style={{ borderCollapse: 'separate' }}>
+                        <tbody>
+                            <tr>
+                                <td
+                                    align={(s.textAlign as any) || 'center'}
+                                    style={{
+                                        backgroundColor: cardBg,
+                                        border: `1.5px solid ${borderCol}`,
+                                        borderRadius: radius,
+                                        padding: '24px',
+                                        textAlign: (s.textAlign as any) || 'center',
+                                    }}
+                                >
+                                    {badgeText && (
+                                        <div
+                                            contentEditable={isSelected}
+                                            suppressContentEditableWarning
+                                            onBlur={(e) => onUpdateBlockStyle?.(block.id, { surveyBadgeText: e.currentTarget.innerText })}
+                                            style={{
+                                                display: 'inline-block',
+                                                backgroundColor: `${accent}18`,
+                                                color: accent,
+                                                fontSize: '11px',
+                                                fontWeight: 800,
+                                                letterSpacing: '0.08em',
+                                                textTransform: 'uppercase',
+                                                padding: '4px 12px',
+                                                borderRadius: '999px',
+                                                marginBottom: '12px',
+                                                outline: 'none',
+                                            }}
+                                        >
+                                            {badgeText}
+                                        </div>
+                                    )}
+                                    <div style={{ margin: '0 0 8px 0' }}>
+                                        <RichText
+                                            html={titleText}
+                                            onChange={(val) => onUpdateBlockStyle?.(block.id, { surveyTitle: val })}
+                                            disabled={!isSelected}
+                                            bodyLinkColor={bodyStyle.linkColor}
+                                            customMergeTags={customMergeTags}
+                                            style={{
+                                                fontSize: '18px',
+                                                fontWeight: 800,
+                                                color: '#0F172A',
+                                                lineHeight: 1.4,
+                                                textAlign: (s.textAlign as any) || 'center',
+                                                fontFamily: css.fontFamily ?? bodyStyle.fontFamily,
+                                            }}
+                                        />
+                                    </div>
+                                    <div style={{ margin: '0 0 18px 0' }}>
+                                        <RichText
+                                            html={descText}
+                                            onChange={(val) => onUpdateBlockStyle?.(block.id, { surveyDescription: val })}
+                                            disabled={!isSelected}
+                                            bodyLinkColor={bodyStyle.linkColor}
+                                            customMergeTags={customMergeTags}
+                                            style={{
+                                                fontSize: '14px',
+                                                color: '#475569',
+                                                lineHeight: 1.6,
+                                                textAlign: (s.textAlign as any) || 'center',
+                                                fontFamily: css.fontFamily ?? bodyStyle.fontFamily,
+                                            }}
+                                        />
+                                    </div>
+                                    <table role="presentation" cellPadding={0} cellSpacing={0} border={0} align={(s.textAlign as any) || 'center'} style={{ margin: s.textAlign === 'left' ? '0' : s.textAlign === 'right' ? '0 0 0 auto' : '0 auto' }}>
+                                        <tbody>
+                                            <tr>
+                                                <td
+                                                    align="center"
+                                                    style={{
+                                                        backgroundColor: accent,
+                                                        borderRadius: '10px',
+                                                        padding: '12px 28px',
+                                                    }}
+                                                >
+                                                    <span
+                                                        contentEditable={isSelected}
+                                                        suppressContentEditableWarning
+                                                        onBlur={(e) => onUpdateBlockStyle?.(block.id, { surveyButtonText: e.currentTarget.innerText })}
+                                                        style={{
+                                                            color: btnTextColor,
+                                                            fontSize: '14px',
+                                                            fontWeight: 700,
+                                                            textDecoration: 'none',
+                                                            display: 'inline-block',
+                                                            outline: 'none',
+                                                        }}
+                                                    >
+                                                        {btnText}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                );
+            }
+
             default:
                 return (
                     <RichText
@@ -1121,27 +1241,40 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
         }
     };
 
+    const s = block.style || {};
+
     return (
         <tr
             key={block.id} id={`block-${block.id}`}
-            draggable onDragStart={(e) => onDragStart(e, block.id)} onDragOver={(e) => onDragOver(e, block.id, block.type)} onDrop={(e) => onDrop(e, block.id)} onClick={(e) => { e.stopPropagation(); onSelectBlock(block.id); }}
+            draggable={!isSelected}
+            onDragStart={(e) => {
+                if (isSelected || document.activeElement?.closest('[contenteditable="true"], input, textarea')) {
+                    e.preventDefault();
+                    return;
+                }
+                onDragStart(e, block.id);
+            }}
+            onDragOver={(e) => onDragOver(e, block.id, block.type)} onDrop={(e) => onDrop(e, block.id)} onClick={(e) => { e.stopPropagation(); onSelectBlock(block.id); }}
             style={{
                 position: isSelected ? 'relative' : 'static',
                 zIndex: isSelected ? 1000 : 'auto'
             }}
         >
             <td 
-                className={`relative transition-all w-full ${
+                className={`relative transition-all w-full group/block ${
                     draggingBlockId === block.id 
-                        ? 'opacity-30 border-2 border-dashed border-blue-500 bg-blue-50/5' 
-                        : !isSelected 
-                            ? 'hover:ring-2 hover:ring-blue-600 hover:ring-dashed hover:bg-blue-600/5' 
-                            : ''
+                        ? 'opacity-30 border-2 border-dashed border-[#BD1D2D] bg-[#BD1D2D]/5' 
+                        : ''
                 }`} 
                 style={wrapperTdStyles}
             >
                 {dragOverId === block.id && dropPosition && <CanvasDropIndicator dropPosition={dropPosition} />}
-                <CanvasHandleOverlay block={block} color="ring-blue-600" isSelected={isSelected} onDragStart={onDragStart} onMoveOrder={onMoveOrder} onSwapColumns={onSwapColumns} onDuplicateBlock={onDuplicateBlock} onDeleteBlock={onDeleteBlock} onSelectParent={onSelectParent} onSaveSection={onSaveSection} />
+                <CanvasHandleOverlay block={block} color="ring-[#BD1D2D]" isSelected={isSelected} onDragStart={onDragStart} onMoveOrder={onMoveOrder} onSwapColumns={onSwapColumns} onDuplicateBlock={onDuplicateBlock} onDeleteBlock={onDeleteBlock} onSelectParent={onSelectParent} onSaveSection={onSaveSection} />
+
+                {/* Hover outline strictly contained inside block bounds */}
+                {!isSelected && (
+                    <div className="absolute inset-0 pointer-events-none border-2 border-transparent group-hover/block:border-[#BD1D2D]/40 rounded-[inherit] z-20 transition-colors" />
+                )}
 
                 <div style={{
                     ...decorativeStyles,
@@ -1150,7 +1283,7 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                     marginRight: marginRight ?? '0',
                     marginBottom: marginBottom ?? '0',
                     marginLeft: marginLeft ?? '0',
-                    width: '100%',
+                    width: (parseInt(String(s.marginLeft || marginLeft || 0)) || parseInt(String(s.marginRight || marginRight || 0))) ? 'auto' : '100%',
                     boxSizing: 'border-box'
                 }}>
                     {renderInner()}

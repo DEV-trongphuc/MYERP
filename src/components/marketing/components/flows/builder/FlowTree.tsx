@@ -1,8 +1,10 @@
-
-import React, { memo, useState, useRef, useCallback, useMemo } from 'react';
+import React, { memo, useState, useRef } from 'react';
 import { FlowStep, Flow, FormDefinition } from '../../../types';
 import { AddBtn, ErrorConnector } from './FlowTools';
-import { ActionNode, WaitNode, ConditionNode, TriggerNode, LinkNode, GhostNode, SplitTestNode, RemoveNode, ListActionNode, ZaloZNSNode, AdvancedConditionNode } from '../nodes/FlowNodes';
+import {
+    ActionNode, WaitNode, ConditionNode, TriggerNode, LinkNode, GhostNode,
+    SplitTestNode, RemoveNode, ListActionNode, ZaloZNSNode, CrmActionNode, AdvancedConditionNode
+} from '../nodes/FlowNodes';
 import { StraightConnector, BranchConnector, MultiBranchConnector } from './FlowConnector';
 import { Flag } from 'lucide-react';
 
@@ -25,21 +27,20 @@ interface FlowTreeProps {
     pathIds?: string;
     hasPendingEmail?: boolean;
     isReportMode?: boolean;
-    realtimeDistribution?: Record<string, { count: number, avg_wait: number }>;
+    realtimeDistribution?: Record<string, { count: number; avg_wait: number }>;
     onReportClick?: (stepId: string, type: string) => void;
 }
 
 const FlowTreeInner = memo(({
     step, nextPathIds,
-    stepId, parentId, parentType, branch,
+    parentId, parentType, branch,
     flow, allFlows, allForms = [], isViewMode = false, draggedStepId,
     onEditStep, onAddStep, onQuickAddWait, onSwapSteps, setDraggedStepId,
-    depth = 0, pathIds = '', hasPendingEmail = false,
+    depth = 0, hasPendingEmail = false,
     isReportMode, realtimeDistribution, onReportClick
 }: any) => {
-    // Track drag hover state (chỉ node đang hover mới sáng, không phải tất cả)
     const [isDragHovering, setIsDragHovering] = useState(false);
-    const dragEnterCount = useRef(0); // Counter để tránh flicker khi hover vào child elements
+    const dragEnterCount = useRef(0);
 
     const isCondition = step.type === 'condition';
     const steps = flow?.steps || [];
@@ -49,52 +50,43 @@ const FlowTreeInner = memo(({
     const isSending = ['action', 'zalo_zns', 'zalo_cs'].includes(step.type);
     const isWaiting = ['wait', 'condition'].includes(step.type);
 
-    // Logic: Show red error connector if any email follows another email without a wait in between
     const hasSpamError = hasPendingEmail && isSending;
     const nextPendingEmail = isSending ? true : (isWaiting ? false : hasPendingEmail);
 
-    // Check for redundant paths (Warning Logic)
     const isRedundant = () => {
         if (isViewMode) return false;
 
         const areStepsIdentical = (s1: FlowStep, s2: FlowStep) => {
             if (s1.type !== s2.type) return false;
-            // Compare config JSON strings
             return JSON.stringify(s1.config) === JSON.stringify(s2.config);
         };
 
         if (step.type === 'condition' && step.yesStepId && step.noStepId) {
-            const yesStep = steps.find(s => s.id === step.yesStepId);
-            const noStep = steps.find(s => s.id === step.noStepId);
+            const yesStep = steps.find((s: FlowStep) => s.id === step.yesStepId);
+            const noStep = steps.find((s: FlowStep) => s.id === step.noStepId);
             if (yesStep && noStep && areStepsIdentical(yesStep, noStep)) return true;
         }
 
         if (step.type === 'split_test' && step.pathAStepId && step.pathBStepId) {
-            const stepA = steps.find(s => s.id === step.pathAStepId);
-            const stepB = steps.find(s => s.id === step.pathBStepId);
+            const stepA = steps.find((s: FlowStep) => s.id === step.pathAStepId);
+            const stepB = steps.find((s: FlowStep) => s.id === step.pathBStepId);
             if (stepA && stepB && areStepsIdentical(stepA, stepB)) return true;
         }
 
         return false;
     };
 
-    // Calculate display count for report mode
     const getReportStats = () => {
         if (!isReportMode || !realtimeDistribution) return null;
 
-        // Shifted counts logic (simplified for recursion)
-        // In the tree, we can check if our parent was a WAIT step.
-        // If so, our count should include parent's count.
         let waiting = realtimeDistribution[step.id]?.count || 0;
 
-        // Find parent step
-        const parentStep = parentId ? steps.find(s => s.id === parentId) : null;
+        const parentStep = parentId ? steps.find((s: FlowStep) => s.id === parentId) : null;
         if (parentStep && parentStep.type === 'wait') {
             waiting += realtimeDistribution[parentStep.id]?.count || 0;
         }
 
         const processed = (step as any).stats?.processed || 0;
-        // For special nodes like condition, processed might be matched + timed_out
         let totalProcessed = processed;
         if (step.type === 'condition') {
             totalProcessed = Math.max(processed, ((step as any).stats?.matched || 0) + ((step as any).stats?.timed_out || 0));
@@ -111,7 +103,6 @@ const FlowTreeInner = memo(({
     };
 
     const reportStats = getReportStats();
-
     const hasWarning = isRedundant();
 
     const commonProps = React.useMemo(() => ({
@@ -145,7 +136,7 @@ const FlowTreeInner = memo(({
                 e.dataTransfer.dropEffect = 'move';
             }
         },
-        onDragLeave: (e: React.DragEvent) => {
+        onDragLeave: () => {
             if (draggedStepId && !isViewMode) {
                 dragEnterCount.current -= 1;
                 if (dragEnterCount.current <= 0) {
@@ -168,10 +159,16 @@ const FlowTreeInner = memo(({
         }
     }), [step, isDragHovering, hasSpamError, hasWarning, isViewMode, allForms, isReportMode, reportStats, draggedStepId, onReportClick, onEditStep, setDraggedStepId, onSwapSteps]);
 
-    const nextProps = React.useMemo(() => ({ flow, allFlows, allForms, isViewMode, draggedStepId, onEditStep, onAddStep, onQuickAddWait, onSwapSteps, setDraggedStepId, depth: depth + 1, pathIds: nextPathIds, hasPendingEmail: nextPendingEmail, isReportMode, realtimeDistribution, onReportClick }), [flow, allFlows, allForms, isViewMode, draggedStepId, onEditStep, onAddStep, onQuickAddWait, onSwapSteps, setDraggedStepId, depth, nextPathIds, nextPendingEmail, isReportMode, realtimeDistribution, onReportClick]);
+    const nextProps = React.useMemo(() => ({
+        flow, allFlows, allForms, isViewMode, draggedStepId,
+        onEditStep, onAddStep, onQuickAddWait, onSwapSteps, setDraggedStepId,
+        depth: depth + 1, pathIds: nextPathIds, hasPendingEmail: nextPendingEmail,
+        isReportMode, realtimeDistribution, onReportClick
+    }), [flow, allFlows, allForms, isViewMode, draggedStepId, onEditStep, onAddStep, onQuickAddWait, onSwapSteps, setDraggedStepId, depth, nextPathIds, nextPendingEmail, isReportMode, realtimeDistribution, onReportClick]);
+
     const CONNECTOR_HEIGHT = 100;
 
-    const handleDropOnAdd = (e: React.DragEvent, pId: string, br?: any) => {
+    const handleDropOnAdd = (e: React.DragEvent, pId: string) => {
         if (isViewMode) return;
         e.preventDefault();
         e.stopPropagation();
@@ -184,13 +181,12 @@ const FlowTreeInner = memo(({
 
     return (
         <div className="flex flex-col items-center relative animate-in fade-in duration-500 w-max min-w-full">
-
             {parentId && !hasSpamError && (!branch || parentType === 'advanced_condition') && !isViewMode && (
                 <AddBtn
                     onClick={() => onAddStep(parentId, branch as any, true)}
                     onQuickWait={() => onQuickAddWait(parentId, branch as any)}
                     isDropTarget={!!draggedStepId}
-                    onDrop={(e) => handleDropOnAdd(e, parentId, branch)}
+                    onDrop={(e) => handleDropOnAdd(e, parentId)}
                     isReportMode={isReportMode}
                 />
             )}
@@ -217,6 +213,7 @@ const FlowTreeInner = memo(({
                         case 'remove_action': return <RemoveNode {...commonProps} />;
                         case 'list_action': return <ListActionNode {...commonProps} />;
                         case 'zalo_zns': return <ZaloZNSNode {...commonProps} />;
+                        case 'crm_action': return <CrmActionNode {...commonProps} />;
                         case 'advanced_condition': return <AdvancedConditionNode {...commonProps} />;
                         default: return <ActionNode {...commonProps} />;
                     }
@@ -224,7 +221,6 @@ const FlowTreeInner = memo(({
             </div>
 
             <div className="w-full flex flex-col items-center">
-                {/* Terminate flow if remove action (delete or unsubscribe usually stops the flow) */}
                 {isRemove ? (
                     <div className="mt-2 flex flex-col items-center opacity-30">
                         <Flag className="w-5 h-5 text-rose-400" />
@@ -234,7 +230,7 @@ const FlowTreeInner = memo(({
                     step.config.linkedFlowId && (
                         <div className="flex flex-col items-center">
                             <StraightConnector height={40} />
-                            <GhostNode variant="link" label={`Kịch bản: ${allFlows.find(f => f.id === step.config.linkedFlowId)?.name || '...'}`} />
+                            <GhostNode variant="link" label={`Kịch bản: ${allFlows.find((f: Flow) => f.id === step.config.linkedFlowId)?.name || '...'}`} />
                         </div>
                     )
                 ) : (isCondition || isSplitTest) ? (
@@ -243,19 +239,19 @@ const FlowTreeInner = memo(({
                             <BranchConnector
                                 height={CONNECTOR_HEIGHT}
                                 dashed={true}
-                                leftColor={isCondition ? "#10b981" : "#8b5cf6"}
-                                rightColor={isCondition ? "#f43f5e" : "#8b5cf6"}
+                                leftColor={isCondition ? '#10b981' : '#8b5cf6'}
+                                rightColor={isCondition ? '#f43f5e' : '#8b5cf6'}
                             />
 
                             <div className="flex-1 flex flex-col items-center relative px-20 min-w-[300px]">
                                 <div className={`absolute top-[-50px] z-20 px-4 py-1.5 rounded-full shadow-lg text-[10px] font-bold uppercase tracking-widest border transform -translate-y-1/2 ring-4 ${isCondition ? 'bg-emerald-50 border-emerald-200 text-emerald-600 ring-emerald-50/50' : 'bg-white border-blue-200 text-blue-500 ring-blue-50/50'}`}>
-                                    {isCondition ? 'IF' : `NHÁNH A`}
+                                    {isCondition ? 'IF' : 'NHÁNH A'}
                                 </div>
                                 {isCondition ? (
                                     step.yesStepId ? <FlowTree stepId={step.yesStepId} parentId={step.id} parentType={step.type} branch="yes" {...nextProps} /> :
                                         !isViewMode && (
-                                            <div className={`flex flex-col items-center mt-4`}>
-                                                <AddBtn isDropTarget={!!draggedStepId} onDrop={(e) => handleDropOnAdd(e, step.id, 'yes')} onClick={() => onAddStep(step.id, 'yes')} onQuickWait={() => onQuickAddWait(step.id, 'yes')} branch="yes" isReportMode={isReportMode} />
+                                            <div className="flex flex-col items-center mt-4">
+                                                <AddBtn isDropTarget={!!draggedStepId} onDrop={(e) => handleDropOnAdd(e, step.id)} onClick={() => onAddStep(step.id, 'yes')} onQuickWait={() => onQuickAddWait(step.id, 'yes')} branch="yes" isReportMode={isReportMode} />
                                                 <div className={`flex flex-col items-center mt-4 ${isReportMode ? 'opacity-10' : 'opacity-30'}`}>
                                                     <Flag className="w-5 h-5 text-slate-300" />
                                                     <span className="text-[9px] font-black text-slate-300 uppercase mt-0.5">End</span>
@@ -265,8 +261,8 @@ const FlowTreeInner = memo(({
                                 ) : (
                                     step.pathAStepId ? <FlowTree stepId={step.pathAStepId} parentId={step.id} parentType={step.type} branch="A" {...nextProps} /> :
                                         !isViewMode && (
-                                            <div className={`flex flex-col items-center mt-4`}>
-                                                <AddBtn isDropTarget={!!draggedStepId} onDrop={(e) => handleDropOnAdd(e, step.id, 'A')} onClick={() => onAddStep(step.id, 'A')} onQuickWait={() => onQuickAddWait(step.id, 'A')} branch="A" isReportMode={isReportMode} />
+                                            <div className="flex flex-col items-center mt-4">
+                                                <AddBtn isDropTarget={!!draggedStepId} onDrop={(e) => handleDropOnAdd(e, step.id)} onClick={() => onAddStep(step.id, 'A')} onQuickWait={() => onQuickAddWait(step.id, 'A')} branch="A" isReportMode={isReportMode} />
                                                 <div className={`flex flex-col items-center mt-4 ${isReportMode ? 'opacity-10' : 'opacity-30'}`}>
                                                     <Flag className="w-5 h-5 text-slate-300" />
                                                     <span className="text-[9px] font-black text-slate-300 uppercase mt-0.5">End</span>
@@ -278,13 +274,13 @@ const FlowTreeInner = memo(({
 
                             <div className="flex-1 flex flex-col items-center relative px-20 min-w-[300px]">
                                 <div className={`absolute top-[-50px] z-20 px-4 py-1.5 rounded-full shadow-lg text-[10px] font-bold uppercase tracking-widest border transform -translate-y-1/2 ring-4 ${isCondition ? 'bg-rose-50 border-rose-200 text-rose-500 ring-rose-50/50' : 'bg-white border-slate-200 text-slate-400 ring-slate-50/50'}`}>
-                                    {isCondition ? 'ELSE' : `NHÁNH B`}
+                                    {isCondition ? 'ELSE' : 'NHÁNH B'}
                                 </div>
                                 {isCondition ? (
                                     step.noStepId ? <FlowTree stepId={step.noStepId} parentId={step.id} parentType={step.type} branch="no" {...nextProps} /> :
                                         !isViewMode && (
-                                            <div className={`flex flex-col items-center mt-4`}>
-                                                <AddBtn isDropTarget={!!draggedStepId} onDrop={(e) => handleDropOnAdd(e, step.id, 'no')} onClick={() => onAddStep(step.id, 'no')} onQuickWait={() => onQuickAddWait(step.id, 'no')} branch="no" isReportMode={isReportMode} />
+                                            <div className="flex flex-col items-center mt-4">
+                                                <AddBtn isDropTarget={!!draggedStepId} onDrop={(e) => handleDropOnAdd(e, step.id)} onClick={() => onAddStep(step.id, 'no')} onQuickWait={() => onQuickAddWait(step.id, 'no')} branch="no" isReportMode={isReportMode} />
                                                 <div className={`flex flex-col items-center mt-4 ${isReportMode ? 'opacity-10' : 'opacity-30'}`}>
                                                     <Flag className="w-5 h-5 text-slate-300" />
                                                     <span className="text-[9px] font-black text-slate-300 uppercase mt-0.5">End</span>
@@ -294,8 +290,8 @@ const FlowTreeInner = memo(({
                                 ) : (
                                     step.pathBStepId ? <FlowTree stepId={step.pathBStepId} parentId={step.id} parentType={step.type} branch="B" {...nextProps} /> :
                                         !isViewMode && (
-                                            <div className={`flex flex-col items-center mt-4`}>
-                                                <AddBtn isDropTarget={!!draggedStepId} onDrop={(e) => handleDropOnAdd(e, step.id, 'B')} onClick={() => onAddStep(step.id, 'B')} onQuickWait={() => onQuickAddWait(step.id, 'B')} branch="B" isReportMode={isReportMode} />
+                                            <div className="flex flex-col items-center mt-4">
+                                                <AddBtn isDropTarget={!!draggedStepId} onDrop={(e) => handleDropOnAdd(e, step.id)} onClick={() => onAddStep(step.id, 'B')} onQuickWait={() => onQuickAddWait(step.id, 'B')} branch="B" isReportMode={isReportMode} />
                                                 <div className={`flex flex-col items-center mt-4 ${isReportMode ? 'opacity-10' : 'opacity-30'}`}>
                                                     <Flag className="w-5 h-5 text-slate-300" />
                                                     <span className="text-[9px] font-black text-slate-300 uppercase mt-0.5">End</span>
@@ -315,33 +311,36 @@ const FlowTreeInner = memo(({
                             />
 
                             {/* Render Branches */}
-                            {(step.config.branches || []).map((b: any, index: number) => (
-                                <div key={b.id || index} className="flex flex-col items-center px-4 relative min-w-[300px] flex-1">
-                                    <div className="absolute" style={{ marginTop: -CONNECTOR_HEIGHT / 2, zIndex: 10 }}>
-                                        <div className="bg-white border border-blue-100 text-blue-600 text-[9px] font-bold px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap">
-                                            {b.label}
+                            {(step.config.branches || []).map((b: any, index: number) => {
+                                const branchStepId = b.nextStepId || b.stepId;
+                                return (
+                                    <div key={b.id || index} className="flex flex-col items-center px-4 relative min-w-[300px] flex-1">
+                                        <div className="absolute" style={{ marginTop: -CONNECTOR_HEIGHT / 2, zIndex: 10 }}>
+                                            <div className="bg-white border border-blue-100 text-blue-600 text-[9px] font-bold px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap">
+                                                {b.label}
+                                            </div>
                                         </div>
-                                    </div>
-                                    {b.stepId ? (
-                                        <FlowTree
-                                            {...nextProps}
-                                            stepId={b.stepId}
-                                            parentId={step.id}
-                                            parentType={step.type}
-                                            branch={b.id as any}
-                                        />
-                                    ) : (
-                                        <div className={`pt-10`}>
-                                            <AddBtn
-                                                onClick={() => onAddStep(step.id, b.id, false)}
-                                                onQuickWait={() => onQuickAddWait(step.id, b.id)}
-                                                isDropTarget={false}
-                                                isReportMode={isReportMode}
+                                        {branchStepId ? (
+                                            <FlowTree
+                                                {...nextProps}
+                                                stepId={branchStepId}
+                                                parentId={step.id}
+                                                parentType={step.type}
+                                                branch={b.id as any}
                                             />
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
+                                        ) : (
+                                            <div className="pt-10">
+                                                <AddBtn
+                                                    onClick={() => onAddStep(step.id, b.id, false)}
+                                                    onQuickWait={() => onQuickAddWait(step.id, b.id)}
+                                                    isDropTarget={false}
+                                                    isReportMode={isReportMode}
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
 
                             {/* Default Branch */}
                             <div className="flex flex-col items-center px-4 relative min-w-[300px] flex-1">
@@ -358,7 +357,7 @@ const FlowTreeInner = memo(({
                                         parentType={step.type}
                                     />
                                 ) : (
-                                    <div className={`pt-10`}>
+                                    <div className="pt-10">
                                         <AddBtn
                                             onClick={() => onAddStep(step.id, undefined, false)}
                                             onQuickWait={() => onQuickAddWait(step.id, undefined)}
@@ -368,7 +367,6 @@ const FlowTreeInner = memo(({
                                     </div>
                                 )}
                             </div>
-
                         </div>
                     </div>
                 ) : (
@@ -399,7 +397,6 @@ const FlowTreeInner = memo(({
     );
 });
 
-
 const FlowTree: React.FC<FlowTreeProps> = memo((props) => {
     const { stepId, flow, depth = 0, pathIds = '' } = props;
     if (!stepId) return null;
@@ -413,9 +410,9 @@ const FlowTree: React.FC<FlowTreeProps> = memo((props) => {
         return (
             <div className="flex flex-col items-center">
                 <StraightConnector height={40} isError={true} />
-                <GhostNode label={isActuallyLoop ? "CẢNH BÁO: Phát hiện vòng lặp" : "CẢNH BÁO: Quá tải độ sâu"} />
+                <GhostNode label={isActuallyLoop ? 'CẢNH BÁO: Phát hiện vòng lặp' : 'CẢNH BÁO: Quá tải độ sâu'} />
                 <div className="text-[9px] text-rose-500 font-bold mt-1">
-                    {isActuallyLoop ? `Bước này kết nối ngược lại bước [${step.label}]` : "Kịch bản quá dài hoặc vượt quá giới hạn 50 tầng"}
+                    {isActuallyLoop ? `Bước này kết nối ngược lại bước [${step.label}]` : 'Kịch bản quá dài hoặc vượt quá giới hạn 50 tầng'}
                 </div>
             </div>
         );
@@ -426,4 +423,3 @@ const FlowTree: React.FC<FlowTreeProps> = memo((props) => {
 });
 
 export default FlowTree;
-

@@ -37,7 +37,7 @@ const LinkGuideModal: React.FC<LinkGuideModalProps> = ({ isOpen, onClose }) => {
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} size="xl" noPadding>
-            <div className="flex flex-col md:flex-row min-h-[460px] bg-white rounded-[32px] overflow-hidden">
+            <div className="flex flex-col md:flex-row min-h-[460px] bg-white rounded-[18px] overflow-hidden">
                 {/* Left panel */}
                 <div className="w-full md:w-2/5 bg-slate-50 p-8 flex flex-col border-r border-slate-100">
                     <div className="w-12 h-12 rounded-2xl bg-indigo-100 flex items-center justify-center text-indigo-600 mb-6 shrink-0">

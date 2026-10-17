@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Survey } from '../../../types/survey';
 import { Link, QrCode, Code, Globe, Send, Copy, Check, ExternalLink, Loader2 } from 'lucide-react';
 import Modal from '../../common/Modal';
+import { getMarketingAuthHeaders } from '../../../utils/config';
 
 interface Props {
     survey: Survey;
@@ -10,7 +11,7 @@ interface Props {
     isDarkTheme?: boolean;
 }
 
-const API = '/api/surveys.php';
+const API = '/backend/automation/surveys.php';
 
 const SurveyPublishModal: React.FC<Props> = ({ survey, onClose, onPublish, isDarkTheme }) => {
     const [activeTab, setActiveTab] = useState<'link' | 'qr' | 'embed' | 'api'>('link');
@@ -30,7 +31,7 @@ const SurveyPublishModal: React.FC<Props> = ({ survey, onClose, onPublish, isDar
     useEffect(() => {
         if (activeTab === 'qr' && survey.id && !qrData) {
             setIsLoadingQr(true);
-            fetch(`${API}?action=qr&id=${survey.id}`)
+            fetch(`${API}?action=qr&id=${survey.id}`, { headers: getMarketingAuthHeaders(), credentials: 'include' })
                 .then(r => { if (!r.ok) throw new Error("Network error"); return r.json(); })
                 .then(res => { if (res.success) setQrData(res.data); })
                 .catch(err => console.error(err))
@@ -45,10 +46,10 @@ const SurveyPublishModal: React.FC<Props> = ({ survey, onClose, onPublish, isDar
 <script src="${window.location.origin}/widget/survey.js" async></script>`;
 
     const apiCode = `// Lấy schema câu hỏi
-GET ${window.location.origin}/api/survey_public.php?slug=${survey.slug}
+GET ${window.location.origin}/backend/automation/survey_public.php?slug=${survey.slug}
 
 // Nộp câu trả lời
-POST ${window.location.origin}/api/survey_public.php?slug=${survey.slug}&action=submit
+POST ${window.location.origin}/backend/automation/survey_public.php?slug=${survey.slug}&action=submit
 Content-Type: application/json
 
 {
@@ -85,7 +86,7 @@ Content-Type: application/json
                         <button
                             onClick={async () => { setIsPublishing(true); await onPublish(); setIsPublishing(false); }}
                             disabled={isPublishing}
-                            className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold uppercase tracking-wider px-3.5 py-2 rounded-lg transition-all whitespace-nowrap active:scale-95"
+                            className="flex items-center gap-1.5 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-xs font-bold uppercase tracking-wider px-3.5 py-2 rounded-lg transition-all whitespace-nowrap active:scale-95"
                         >
                             {isPublishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                             Xuất bản ngay
@@ -101,7 +102,7 @@ Content-Type: application/json
                             onClick={() => setActiveTab(tab)}
                             className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all
                                 ${activeTab === tab 
-                                    ? 'bg-amber-500 text-white shadow-sm' 
+                                    ? 'bg-[var(--color-primary)] text-white shadow-sm' 
                                     : `${isDarkTheme ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'}`}`}
                         >
                             <Icon className="w-3.5 h-3.5" />
@@ -131,7 +132,7 @@ Content-Type: application/json
                                     href={surveyUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="flex items-center justify-center w-11 h-11 bg-amber-500 hover:bg-amber-600 rounded-xl text-white transition-all active:scale-95"
+                                    className="flex items-center justify-center w-11 h-11 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] rounded-xl text-white transition-all active:scale-95"
                                 >
                                     <ExternalLink className="w-4 h-4" />
                                 </a>
@@ -155,7 +156,7 @@ Content-Type: application/json
                         <div className="flex flex-col items-center gap-4">
                             {isLoadingQr ? (
                                 <div className="flex flex-col items-center gap-2 py-8">
-                                    <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+                                    <Loader2 className="w-8 h-8 animate-spin text-[var(--color-primary)]" />
                                     <p className="text-sm text-slate-400 font-medium">Đang tạo QR Code...</p>
                                 </div>
                             ) : qrData ? (
@@ -168,7 +169,7 @@ Content-Type: application/json
                                         <a
                                             href={qrData.qr_image_url}
                                             download="survey-qr.png"
-                                            className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-semibold transition-all"
+                                            className="flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-xl text-sm font-semibold transition-all"
                                         >
                                             Tải PNG
                                         </a>

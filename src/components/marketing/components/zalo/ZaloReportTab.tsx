@@ -127,7 +127,7 @@ const ZaloReportTab: React.FC<ZaloReportProps> = ({ dateRange }) => {
 
         <TabTransition className="space-y-8">
             {/* Filters Row */}
-            <div className="bg-slate-50/50 p-6 rounded-[32px] border border-slate-100 flex flex-wrap items-center gap-6">
+            <div className="bg-slate-50/50 p-6 rounded-[18px] border border-slate-100 flex flex-wrap items-center gap-6">
                 <div className="shrink-0 min-w-[250px]">
                     <Select
                         value={selectedOA}
@@ -148,7 +148,7 @@ const ZaloReportTab: React.FC<ZaloReportProps> = ({ dateRange }) => {
                     />
                 </div>
 
-                <button onClick={fetchReport} className="p-3 bg-white hover:bg-slate-50 rounded-2xl border border-slate-100 shadow-sm transition-all group ml-auto">
+                <button onClick={fetchReport} className="p-3 bg-white hover:bg-slate-50 rounded-[14px] border border-slate-100 shadow-sm transition-all group ml-auto">
                     <RefreshCw className={`w-5 h-5 text-slate-400 group-hover:text-indigo-600 ${loading ? 'animate-spin' : ''}`} />
                 </button>
             </div>
@@ -170,7 +170,7 @@ const ZaloReportTab: React.FC<ZaloReportProps> = ({ dateRange }) => {
 
             {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
+                <div className="bg-white p-8 rounded-[18px] border border-slate-100 shadow-sm">
                     <div className="flex items-center justify-between mb-8">
                         <div>
                             <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Tăng trưởng & Quan tâm</h3>
@@ -205,7 +205,7 @@ const ZaloReportTab: React.FC<ZaloReportProps> = ({ dateRange }) => {
                     </div>
                 </div>
 
-                <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
+                <div className="bg-white p-8 rounded-[18px] border border-slate-100 shadow-sm">
                     <div className="flex items-center justify-between mb-8">
                         <div>
                             <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Tương tác khách lạ</h3>
@@ -234,13 +234,13 @@ const ZaloReportTab: React.FC<ZaloReportProps> = ({ dateRange }) => {
                     </div>
                 </div>
 
-                <div className="lg:col-span-2 bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
+                <div className="lg:col-span-2 bg-white p-8 rounded-[18px] border border-slate-100 shadow-sm">
                     <div className="flex items-center justify-between mb-8">
                         <div>
                             <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Vận hành Automation</h3>
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Số lượt kích hoạt kịch bản tự động</p>
                         </div>
-                        <Zap className="w-6 h-6 text-orange-500 opacity-20" />
+                        <Zap className="w-6 h-6 text-[var(--color-primary)] opacity-20" />
                     </div>
                     <div className="h-[350px]">
                         {loading ? (

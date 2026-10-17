@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ShieldAlert, Plus, Edit3, Trash2, CheckCircle2, Copy, Settings2, Key, Clock, FileText } from 'lucide-react';
 import { api } from '../../services/storageAdapter';
 import { Template } from '../../types';
@@ -9,6 +10,8 @@ import Select from '../common/Select';
 import toast from 'react-hot-toast';
 import ConfirmModal from '../common/ConfirmModal';
 import EmailEditor from '../templates/EmailEditor/index';
+import { getMktPortalRoot } from '../../utils/portalRoot';
+import { AppIcon } from '../../../common/AppIcons';
 
 export interface OTPProfile {
     id: string;
@@ -137,59 +140,78 @@ const OTPTriggersTab: React.FC = () => {
 
     return (
         <div className="space-y-6 pb-40">
-            <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                <div>
-                    <h3 className="text-lg font-bold text-slate-800">Cấu hình API sinh OTP</h3>
-                    <p className="text-xs text-slate-500 font-medium">Tạo profile thiết lập mật khẩu một lần (Mã xác thực).</p>
+            <div className="flex justify-between items-center bg-[var(--color-surface)] p-4 rounded-[20px] border border-[var(--color-border)] shadow-xs">
+                <div className="flex items-center gap-3">
+                    <AppIcon name="trigger_otp" size={38} className="shrink-0" />
+                    <div>
+                        <h3 className="text-base font-bold text-[var(--color-text)]">Cấu hình API sinh OTP</h3>
+                        <p className="text-xs text-[var(--color-text-muted)] font-medium">Tạo profile thiết lập mật khẩu một lần (Mã xác thực).</p>
+                    </div>
                 </div>
                 <Button icon={Plus} size="md" onClick={handleCreateNew}>Tạo OTP Profile</Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {loading ? (
-                    <div className="col-span-full space-y-4">
-                        {[1, 2, 3].map(i => <div key={i} className="h-32 bg-white rounded-[40px] animate-pulse border border-slate-100" />)}
-                    </div>
+                    <>
+                        {[1, 2, 3, 4, 5, 6].map(i => (
+                            <div key={i} className="rounded-[20px] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 space-y-4">
+                                <div className="flex justify-between items-start gap-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                                        <div className="space-y-2">
+                                            <div className="w-36 h-4 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[8px]" />
+                                            <div className="w-24 h-3 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[6px]" />
+                                        </div>
+                                    </div>
+                                    <div className="w-16 h-6 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[8px]" />
+                                </div>
+                                <div className="h-14 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
+                                <div className="h-9 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                            </div>
+                        ))}
+                    </>
                 ) : profiles.length === 0 ? (
-                    <div className="col-span-full py-20 text-center border-2 border-dashed border-slate-200 rounded-[40px] bg-slate-50/50">
-                        <ShieldAlert className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                        <h3 className="text-slate-500 font-bold text-lg">Chưa thiết lập Sinh OTP nào</h3>
-                        <p className="text-slate-400 mt-2 text-sm">Tạo profile để cấp mã xác thực qua Email.</p>
+                    <div className="col-span-full py-16 text-center border-2 border-dashed border-[var(--color-border)] rounded-[20px] bg-[var(--color-bg)]">
+                        <div className="flex justify-center mb-3">
+                            <AppIcon name="trigger_otp" size={44} />
+                        </div>
+                        <h3 className="text-[var(--color-text)] font-bold text-base">Chưa thiết lập Sinh OTP nào</h3>
+                        <p className="text-[var(--color-text-muted)] mt-1 text-xs">Tạo profile để cấp mã xác thực qua Email.</p>
                     </div>
                 ) : profiles.map(p => (
-                    <div key={p.id} className="group bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm hover:shadow-2xl hover:shadow-emerald-600/10 hover:border-emerald-200 transition-all flex flex-col justify-between gap-6 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-8 opacity-[0.03] text-emerald-600 group-hover:scale-125 transition-transform"><Key className="w-32 h-32" /></div>
+                    <div key={p.id} className="group hover-lift bg-[var(--color-surface)] p-5 rounded-[20px] border border-[var(--color-border)] shadow-xs hover:border-[var(--color-primary-light)] transition-all flex flex-col justify-between gap-4 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-8 opacity-[0.03] text-purple-600 group-hover:scale-125 transition-transform"><Key className="w-32 h-32" /></div>
 
                         <div className="flex justify-between items-start relative z-10">
-                            <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white shadow-lg shadow-emerald-600/30">
-                                    <ShieldAlert className="w-6 h-6" />
-                                </div>
+                            <div className="flex items-center gap-3">
+                                <AppIcon name="trigger_otp" size={38} className="shrink-0 transition-transform group-hover:scale-105" />
                                 <div className="min-w-0">
-                                    <h4 className="text-base font-bold text-slate-800 leading-tight truncate pr-2">{p.name}</h4>
-                                    <p className="text-[10px] text-slate-400 font-medium mt-1">ID: {p.id?.slice(0, 8)}...</p>
+                                    <h4 className="text-sm font-bold text-[var(--color-text)] leading-tight truncate pr-2">{p.name}</h4>
+                                    <p className="text-[10px] text-slate-400 font-mono mt-1 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 w-fit">ID: {p.id?.slice(0, 8)}...</p>
                                 </div>
                             </div>
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => handleEditClick(p)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><Edit3 className="w-4 h-4" /></button>
-                                <button onClick={() => setConfirmDeleteId(p.id)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"><Trash2 className="w-4 h-4" /></button>
+                            <div className="flex gap-1">
+                                <button onClick={() => handleEditClick(p)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all" title="Chỉnh sửa"><Edit3 className="w-3.5 h-3.5" /></button>
+                                <button onClick={() => setConfirmDeleteId(p.id)} className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all" title="Xóa"><Trash2 className="w-3.5 h-3.5" /></button>
                             </div>
                         </div>
 
-                        <div className="space-y-4 relative z-10">
-                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                        <div className="space-y-3 relative z-10">
+                            <div className="flex items-center justify-between p-2.5 bg-slate-50/70 rounded-xl border border-slate-200/60">
                                 <div className="flex flex-col">
-                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest"><Key className="w-3 h-3 inline mr-1"/>Định dạng</span>
-                                    <span className="text-sm font-black text-slate-700">{p.token_length} {p.token_type === 'numeric' ? 'Số' : 'Ký tự'}</span>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider"><Key className="w-3 h-3 inline mr-1"/>Định dạng</span>
+                                    <span className="text-xs font-extrabold text-slate-800">{p.token_length} {p.token_type === 'numeric' ? 'Số' : 'Ký tự'}</span>
                                 </div>
+                                <div className="h-6 w-px bg-slate-200"></div>
                                 <div className="flex flex-col items-end">
-                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest"><Clock className="w-3 h-3 inline mr-1"/>Hiệu lực (TTL)</span>
-                                    <span className="text-sm font-black text-slate-700">{p.ttl_minutes} phút</span>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider"><Clock className="w-3 h-3 inline mr-1"/>Hiệu lực (TTL)</span>
+                                    <span className="text-xs font-extrabold text-slate-800">{p.ttl_minutes} phút</span>
                                 </div>
                             </div>
 
-                            <button onClick={() => copyApiDoc(p.id)} className="w-full h-11 rounded-xl bg-slate-50 text-slate-600 border border-slate-200 text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-all flex items-center justify-center gap-2">
-                                <Copy className="w-4 h-4" /> Copy Mã Tích hợp (CURL)
+                            <button onClick={() => copyApiDoc(p.id)} className="w-full h-9 rounded-xl bg-[var(--color-bg)] text-slate-700 hover:text-[var(--color-primary)] border border-[var(--color-border)] text-xs font-semibold hover:bg-slate-100 hover:border-slate-300 transition-all flex items-center justify-center gap-1.5">
+                                <Copy className="w-3.5 h-3.5 text-[var(--color-primary)]" /> Copy Mã Tích hợp (CURL)
                             </button>
                         </div>
                     </div>
@@ -235,7 +257,7 @@ const OTPTriggersTab: React.FC = () => {
                         <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1 flex justify-between items-center w-full">
                             <span>Mẫu Email Gửi Mã (Template)</span>
                             {formData.email_template_id && (
-                                <button type="button" onClick={handleQuickEdit} className="text-amber-600 hover:text-amber-700 flex items-center gap-1 transition-colors">
+                                <button type="button" onClick={handleQuickEdit} className="text-[var(--color-primary)] hover:opacity-80 flex items-center gap-1 transition-colors">
                                     <Edit3 className="w-3 h-3" /> Sửa nhanh
                                 </button>
                             )}
@@ -250,7 +272,7 @@ const OTPTriggersTab: React.FC = () => {
                             icon={FileText}
                         />
                         <p className="text-[10px] text-slate-400 mt-2 px-1">
-                            Nếu tự thiết kế Email, đảm bảo chèn biến <code className="bg-amber-100 text-amber-700 px-1 py-0.5 rounded font-mono">[short_code]</code> vào nơi hiển thị mã.
+                            Nếu tự thiết kế Email, đảm bảo chèn biến <code className="bg-red-50 text-[var(--color-primary)] px-1 py-0.5 rounded font-mono">[short_code]</code> vào nơi hiển thị mã.
                         </p>
                     </div>
                 </div>
@@ -258,7 +280,7 @@ const OTPTriggersTab: React.FC = () => {
             <ConfirmModal isOpen={!!confirmDeleteId} onClose={() => setConfirmDeleteId(null)} onConfirm={executeDelete} title="Xác nhận xóa" message="Xóa OTP Profile này sẽ khiến các Form/API đang tích hợp không thể gửi mã xác nhận nữa." variant="danger" confirmLabel="Xóa Profile" />
 
             {/* Quick Edit Email Template Modal */}
-            {isEditorOpen && editingTemplate && (
+            {isEditorOpen && editingTemplate && createPortal(
                 <div className="fixed inset-0 z-[99999] bg-slate-50 flex flex-col">
                     <EmailEditor
                         template={editingTemplate}
@@ -266,7 +288,8 @@ const OTPTriggersTab: React.FC = () => {
                         onSave={handleSaveTemplate}
                         onCancel={() => setIsEditorOpen(false)}
                     />
-                </div>
+                </div>,
+                getMktPortalRoot()
             )}
         </div>
     );

@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
     Users, Target, Link2, Layout, Database, CheckCircle2, AlertCircle, X, ArrowRight,
     Search, Filter, ChevronDown, Download, RefreshCw, Smartphone, Globe, Mail, MapPin, Building,
@@ -10,6 +11,7 @@ import Select from '../common/Select';
 import { api } from '../../services/storageAdapter';
 import toast from 'react-hot-toast';
 import { SYSTEM_FIELDS } from './misaConstants';
+import { getMktPortalRoot } from '../../utils/portalRoot';
 
 interface MisaSetupProps {
     onBack: () => void;
@@ -783,7 +785,7 @@ const MisaSetup: React.FC<MisaSetupProps> = ({ onBack, onComplete, initialData }
                         {/* Virtual Email Toggle */}
                         <div className="space-y-4">
                             <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest pl-1">Nhận diện nâng cao</h4>
-                            <div className="bg-orange-50/30 border border-orange-100 p-6 rounded-[28px] space-y-4">
+                            <div className="bg-orange-50/30 border border-orange-100 p-6 rounded-[18px] space-y-4">
                                 <label className="flex items-center justify-between cursor-pointer group">
                                     <div className="flex-1 pr-8">
                                         <h5 className="text-sm font-bold text-slate-800 group-hover:text-orange-700 transition-colors">Tạo Email ảo cho người chỉ có SĐT</h5>
@@ -793,7 +795,7 @@ const MisaSetup: React.FC<MisaSetupProps> = ({ onBack, onComplete, initialData }
                                     </div>
                                     <div 
                                         onClick={() => setConfig({ ...config, createVirtualEmail: !config.createVirtualEmail })}
-                                        className={`relative w-14 h-8 rounded-full transition-all duration-300 ${config.createVirtualEmail ? 'bg-orange-500' : 'bg-slate-200'}`}
+                                        className={`relative w-14 h-8 rounded-full transition-all duration-300 ${config.createVirtualEmail ? 'bg-[var(--color-primary)]' : 'bg-slate-200'}`}
                                     >
                                         <div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-sm transition-all duration-300 ${config.createVirtualEmail ? 'translate-x-6' : ''}`} />
                                     </div>
@@ -806,7 +808,7 @@ const MisaSetup: React.FC<MisaSetupProps> = ({ onBack, onComplete, initialData }
             case 4:
                 return (
                     <div className="space-y-6">
-                        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-2xl border border-blue-100">
+                        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-[18px] border border-blue-100">
                             <div className="flex items-center gap-3 mb-2">
                                 <Eye className="w-6 h-6 text-blue-600" />
                                 <h4 className="text-lg font-bold text-blue-900">Xem trước kết quả mapping</h4>
@@ -815,7 +817,7 @@ const MisaSetup: React.FC<MisaSetupProps> = ({ onBack, onComplete, initialData }
                         </div>
 
                         {sampleContact && (
-                            <div className="bg-white border-2 border-slate-200 rounded-2xl p-6 shadow-sm">
+                            <div className="bg-white border-2 border-slate-200 rounded-[18px] p-6 shadow-sm">
                                 <div className="grid grid-cols-2 gap-4">
                                     {/* Dynamically render ALL mapped fields */}
                                     {Object.entries(config.mapping).map(([systemField, misaField]: [string, any]) => {
@@ -882,10 +884,10 @@ const MisaSetup: React.FC<MisaSetupProps> = ({ onBack, onComplete, initialData }
                 <div className="flex items-center gap-2 px-1">
                     {[1, 2, 3, 4].map((s) => (
                         <React.Fragment key={s}>
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${step >= s ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${step >= s ? 'bg-[var(--color-primary)] text-white' : 'bg-slate-100 text-slate-400'}`}>
                                 {step > s ? <Check className="w-4 h-4" /> : s}
                             </div>
-                            {s < 4 && <div className={`flex-1 h-0.5 rounded-full ${step > s ? 'bg-blue-500' : 'bg-slate-100'}`} />}
+                            {s < 4 && <div className={`flex-1 h-0.5 rounded-full ${step > s ? 'bg-[var(--color-primary)]' : 'bg-slate-100'}`} />}
                         </React.Fragment>
                     ))}
                 </div>
@@ -949,9 +951,9 @@ const MisaSetup: React.FC<MisaSetupProps> = ({ onBack, onComplete, initialData }
             </div>
 
             {/* JSON Viewer Modal */}
-            {showJsonModal && sampleContact && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowJsonModal(false)}>
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            {showJsonModal && sampleContact && createPortal(
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[110000] flex items-center justify-center p-4" onClick={() => setShowJsonModal(false)}>
+                    <div className="bg-white rounded-[18px] shadow-2xl max-w-4xl w-full max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
                         {/* Header */}
                         <div className="flex items-center justify-between p-6 border-b border-slate-100">
                             <div>
@@ -990,13 +992,14 @@ const MisaSetup: React.FC<MisaSetupProps> = ({ onBack, onComplete, initialData }
                         </div>
 
                         {/* Footer */}
-                        <div className="p-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
+                        <div className="p-4 border-t border-slate-100 bg-slate-50 rounded-b-[18px]">
                             <p className="text-xs text-slate-500 text-center">
                                 💡 <b>Mẹo:</b> Sử dụng dữ liệu này để kiểm tra tên trường chính xác từ MISA API
                             </p>
                         </div>
                     </div>
-                </div>
+                </div>,
+                getMktPortalRoot()
             )}
         </div>
     );

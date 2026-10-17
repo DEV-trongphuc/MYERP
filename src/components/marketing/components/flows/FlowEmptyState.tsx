@@ -8,7 +8,7 @@ interface FlowEmptyStateProps {
 }
 
 const FlowEmptyState: React.FC<FlowEmptyStateProps> = ({ onCreateClick }) => (
-  <div className="flex flex-col items-center justify-center py-32 bg-white rounded-[40px] border-2 border-dashed border-slate-200 text-center animate-in fade-in zoom-in-95 duration-500">
+  <div className="flex flex-col items-center justify-center py-32 bg-white rounded-2xl border-2 border-dashed border-slate-200 text-center animate-in fade-in zoom-in-95 duration-500">
     <div className="w-20 h-20 bg-orange-50 rounded-full flex items-center justify-center mb-8">
       <Sparkles className="w-10 h-10 text-orange-500" />
     </div>

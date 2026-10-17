@@ -84,7 +84,7 @@ function claimVoucherAtomic($pdo, $campaignId, $subscriberId, $rewardItemId = nu
 
         if ($codeAssigned) {
             // Record to voucher_claims INSIDE transaction for atomicity
-            $stmtSub = $pdo->prepare("SELECT email, phone_number, first_name, myerp_contact_id FROM subscribers WHERE id = ?");
+            $stmtSub = $pdo->prepare("SELECT email, phone_number, first_name, contact_id FROM subscribers WHERE id = ?");
             $stmtSub->execute([$subscriberId]);
             $sub = $stmtSub->fetch(PDO::FETCH_ASSOC);
             

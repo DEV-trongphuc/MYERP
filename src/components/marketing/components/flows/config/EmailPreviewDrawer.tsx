@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Smartphone, Monitor, SmartphoneNfc, Code, Check, Edit3, Copy, ArrowLeft, Send } from 'lucide-react';
+import { X, Smartphone, Monitor, SmartphoneNfc, Code, Check, Edit3, Copy, Send, ArrowLeft } from 'lucide-react';
 import { Template } from '../../../types';
 import QuickSendEmailModal from '../../templates/QuickSendEmailModal';
 import { Avatar } from '../../../../ui/Avatar';
@@ -27,17 +27,26 @@ const EmailPreviewDrawer: React.FC<EmailPreviewDrawerProps> = ({ template, htmlC
 
   const onClose = React.useCallback(() => {
     setAnimateIn(false);
-    setTimeout(_onClose, 500);
+    setTimeout(() => {
+      setIsVisible(false);
+      _onClose();
+    }, 220);
   }, [_onClose]);
 
   React.useEffect(() => {
     if (isOpen) {
       setIsVisible(true);
-      const timer = setTimeout(() => setAnimateIn(true), 10);
-      return () => clearTimeout(timer);
+      let raf2 = 0;
+      const raf1 = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => setAnimateIn(true));
+      });
+      return () => {
+        cancelAnimationFrame(raf1);
+        cancelAnimationFrame(raf2);
+      };
     } else {
       setAnimateIn(false);
-      const timer = setTimeout(() => setIsVisible(false), 500);
+      const timer = setTimeout(() => setIsVisible(false), 220);
       return () => clearTimeout(timer);
     }
   }, [isOpen]);
@@ -57,30 +66,30 @@ const EmailPreviewDrawer: React.FC<EmailPreviewDrawerProps> = ({ template, htmlC
   const showMock = !contentToRender;
 
   const drawerContent = (
-    <div className="fixed inset-0 flex justify-end" style={{ zIndex: 2147483625 }}>
+    <div className="fixed inset-0 z-[2147483625] flex justify-end" style={{ zIndex: 2147483625, pointerEvents: animateIn ? 'auto' : 'none' }}>
       <div
-        className={`absolute inset-0 bg-black/50 backdrop-blur-[2px] transition-opacity duration-500 ${animateIn ? 'opacity-100' : 'opacity-0'}`}
+        className="drawer-backdrop"
         onClick={onClose}
+        style={{
+          opacity: animateIn ? 1 : 0,
+          transition: 'opacity 0.22s cubic-bezier(0.25, 0.1, 0.25, 1)',
+          pointerEvents: animateIn ? 'auto' : 'none',
+          zIndex: 2147483620,
+          '--drawer-backdrop-z': 2147483620
+        } as React.CSSProperties}
       />
-      
-      {/* Floating Back Button on Backdrop */}
-      <div 
-        className={`hidden lg:flex absolute left-0 top-0 bottom-0 left-0 items-center justify-center z-40 transition-opacity duration-500 ${animateIn ? 'opacity-100' : 'opacity-0'}`}
-        style={{ pointerEvents: 'none' }}
-      >
-        <button
-          onClick={onClose}
-          className="w-12 h-12 rounded-full bg-slate-900/60 hover:bg-slate-900/80 text-white flex items-center justify-center shadow-2xl border border-slate-700/50 backdrop-blur-md transition-all duration-300 hover:scale-110 active:scale-95 cursor-pointer"
-          style={{ pointerEvents: 'auto' }}
-          title="Quay lại"
-        >
-          <ArrowLeft className="w-6 h-6" />
-        </button>
-      </div>
 
       <div
-        className={`relative w-full bg-[var(--color-bg)] shadow-2xl flex flex-col h-full border-l border-[var(--color-border)] transform transition-all duration-500 ease-in-out ${animateIn ? 'translate-x-0 opacity-100' : 'translate-x-[100px] opacity-0'}`}
-        style={{ width: 'calc(100vw - var(--sidebar-width, 220px))', maxWidth: 'none' }}
+        className="drawer-panel fixed top-0 right-0 bottom-0 z-[2147483625] w-full bg-[var(--color-bg)] shadow-2xl flex flex-col h-full border-l border-[var(--color-border)]"
+        style={{
+          width: 'calc(100vw - var(--sidebar-width, 220px))',
+          maxWidth: 'none',
+          zIndex: 2147483625,
+          opacity: animateIn ? 1 : 0,
+          transform: animateIn ? 'translate3d(0, 0, 0)' : 'translate3d(48px, 0, 0)',
+          transition: 'transform 0.22s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.20s cubic-bezier(0.25, 0.1, 0.25, 1)',
+          pointerEvents: animateIn ? 'auto' : 'none'
+        }}
       >
         <div className="px-6 py-4 bg-[var(--color-surface)] border-b border-[var(--color-border)] flex justify-between items-center shrink-0">
           <div className="flex items-center gap-3 min-w-0">
@@ -117,7 +126,7 @@ const EmailPreviewDrawer: React.FC<EmailPreviewDrawerProps> = ({ template, htmlC
             {/* Quick Send Button */}
             <button
               onClick={() => setShowQuickSend(true)}
-              className="btn primary px-3.5 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-xl shadow-sm font-black text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+              className="px-3.5 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-[var(--radius-md)] shadow-sm font-black text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
               title="Gửi email này nhanh cho danh sách khách hàng"
             >
               <Send className="w-3.5 h-3.5" />
@@ -147,13 +156,13 @@ const EmailPreviewDrawer: React.FC<EmailPreviewDrawerProps> = ({ template, htmlC
             {onAction && actionLabel && !onEdit && !onDuplicate && (
               <button
                 onClick={onAction}
-                className="btn primary px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-lg text-xs font-bold uppercase tracking-wider shadow-sm transition-all flex items-center gap-2 cursor-pointer"
+                className="px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-[var(--radius-md)] text-xs font-bold uppercase tracking-wider shadow-sm transition-all flex items-center gap-2 cursor-pointer"
               >
                 <Check className="w-4 h-4" /> {actionLabel}
               </button>
             )}
 
-            <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-all hover:rotate-90 cursor-pointer"><X className="w-5 h-5" /></button>
+            <button onClick={onClose} className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition-colors cursor-pointer" title="Đóng"><X className="w-5 h-5" /></button>
           </div>
         </div>
 
@@ -170,10 +179,10 @@ const EmailPreviewDrawer: React.FC<EmailPreviewDrawerProps> = ({ template, htmlC
               </div>
             </div>
 
-            <div className="flex-1 bg-white relative overflow-hidden">
+            <div className="email-canvas-scope flex-1 bg-white relative overflow-hidden">
               {showMock ? (
                 <div className="absolute inset-0 p-8 text-center flex flex-col items-center justify-center">
-                  <div className="w-16 h-16 bg-[#fff4e0] rounded-2xl mx-auto flex items-center justify-center text-[#ca7900] mb-4">
+                  <div className="w-16 h-16 bg-[#fff4e0] rounded-2xl mx-auto flex items-center justify-center text-[var(--color-primary)] mb-4">
                     <SmartphoneNfc className="w-8 h-8" />
                   </div>
                   <h1 className="text-2xl font-black text-slate-800 mb-2">Chưa có nội dung</h1>

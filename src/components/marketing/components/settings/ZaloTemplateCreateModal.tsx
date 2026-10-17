@@ -696,7 +696,7 @@ const ZaloTemplateCreateModal: React.FC<ZaloTemplateCreateModalProps> = ({ isOpe
                         )}
 
                         {/* ZBS Guidelines Link */}
-                        <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl text-emerald-700 text-sm flex items-start justify-between gap-4 mb-6 shadow-sm">
+                        <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-[14px] text-emerald-700 text-sm flex items-start justify-between gap-4 mb-6 shadow-sm">
                             <div className="flex gap-4">
                                 <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0">
                                     <FileCheck className="w-6 h-6" />
@@ -720,7 +720,7 @@ const ZaloTemplateCreateModal: React.FC<ZaloTemplateCreateModalProps> = ({ isOpe
                                 Cấu hình chung
                             </h3>
 
-                            <div className="bg-white p-5 rounded-2xl border border-slate-200/60 shadow-sm space-y-5">
+                            <div className="bg-white p-5 rounded-[14px] border border-slate-200/60 shadow-sm space-y-5">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-700 mb-1.5">Tên Template</label>
                                     <input
@@ -790,7 +790,7 @@ const ZaloTemplateCreateModal: React.FC<ZaloTemplateCreateModalProps> = ({ isOpe
                                 <Layout className="w-4 h-4" />
                                 Thiết kế Header
                             </h3>
-                            <div className="bg-white p-5 rounded-2xl border border-slate-200/60 shadow-sm space-y-5">
+                            <div className="bg-white p-5 rounded-[14px] border border-slate-200/60 shadow-sm space-y-5">
                                 {/* Header Type Cards */}
                                 <div className="grid grid-cols-2 gap-3">
                                     <div
@@ -816,8 +816,8 @@ const ZaloTemplateCreateModal: React.FC<ZaloTemplateCreateModalProps> = ({ isOpe
                                 {/* Zalo Image Guidelines */}
                                 <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl mb-4">
                                     <div className="flex items-center gap-2 mb-2">
-                                        <AlertCircle className="w-4 h-4 text-amber-600" />
-                                        <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Lưu ý QUY ĐỊNH HÌNH ẢNH:</span>
+                                        <AlertCircle className="w-4 h-4 text-[var(--color-primary)]" />
+                                        <span className="text-xs font-bold text-[#9A1523] uppercase tracking-wider">Lưu ý QUY ĐỊNH HÌNH ẢNH:</span>
                                     </div>
                                     <div className="space-y-3 text-[11px] text-amber-800/90 leading-relaxed font-medium">
                                         <div>
@@ -905,7 +905,7 @@ const ZaloTemplateCreateModal: React.FC<ZaloTemplateCreateModalProps> = ({ isOpe
                                 <AlignLeft className="w-4 h-4" />
                                 Nội dung chính
                             </h3>
-                            <div className="bg-white p-5 rounded-2xl border border-slate-200/60 shadow-sm space-y-5">
+                            <div className="bg-white p-5 rounded-[14px] border border-slate-200/60 shadow-sm space-y-5">
                                 <div>
                                     <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Tiêu đề (Title)</label>
                                     <input
@@ -933,12 +933,12 @@ const ZaloTemplateCreateModal: React.FC<ZaloTemplateCreateModalProps> = ({ isOpe
                                 {/* Special Forms for Types */}
                                 {type === '2' && (
                                     <div className="p-4 bg-orange-50 rounded-xl border border-orange-100 space-y-3">
-                                        <h4 className="text-xs font-bold text-orange-700 uppercase">Cấu hình OTP</h4>
+                                        <h4 className="text-xs font-bold text-[#9A1523] uppercase">Cấu hình OTP</h4>
                                         <div className="flex gap-2">
-                                            <input type="text" className="w-1/2 px-3 py-2 rounded-lg border border-orange-200 text-xs font-mono text-orange-600 outline-none bg-white"
+                                            <input type="text" className="w-1/2 px-3 py-2 rounded-lg border border-orange-200 text-xs font-mono text-[var(--color-primary)] outline-none bg-white"
                                                 value={builder.body.otp || ''} placeholder="Biến OTP (VD: <otp>)"
                                                 onChange={e => updateBody('otp', e.target.value)} />
-                                            <p className="text-[10px] text-orange-500 flex-1">Nhập tên biến OTP sẽ được thay thế khi gửi tin.</p>
+                                            <p className="text-[10px] text-[var(--color-primary)] flex-1">Nhập tên biến OTP sẽ được thay thế khi gửi tin.</p>
                                         </div>
                                     </div>
                                 )}
@@ -1022,7 +1022,7 @@ const ZaloTemplateCreateModal: React.FC<ZaloTemplateCreateModalProps> = ({ isOpe
                                 <MousePointerClick className="w-4 h-4" />
                                 Nút hành động
                             </h3>
-                            <div className="bg-white p-5 rounded-2xl border border-slate-200/60 shadow-sm space-y-4">
+                            <div className="bg-white p-5 rounded-[14px] border border-slate-200/60 shadow-sm space-y-4">
                                 {builder.footer.buttons.map((btn, idx) => (
                                     <div key={idx} className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3 relative group transition-all hover:shadow-sm">
                                         <button onClick={() => removeButton(idx)} className="absolute top-3 right-3 text-slate-400 hover:text-rose-500 transition-colors"><X className="w-4 h-4" /></button>
@@ -1075,7 +1075,7 @@ const ZaloTemplateCreateModal: React.FC<ZaloTemplateCreateModalProps> = ({ isOpe
                                     Cấu hình tham số
                                 </h3>
 
-                                <div className="bg-white p-5 rounded-2xl border-l-4 border-l-indigo-500 shadow-sm space-y-4">
+                                <div className="bg-white p-5 rounded-[14px] border-l-4 border-l-indigo-500 shadow-sm space-y-4">
                                     <p className="text-xs text-slate-500">
                                         Hệ thống tự động phát hiện <b>{detectedParams.length} biến</b> trong nội dung.
                                         Vui lòng định nghĩa loại dữ liệu và giá trị mẫu để Zalo duyệt nhanh hơn.
@@ -1134,9 +1134,9 @@ const ZaloTemplateCreateModal: React.FC<ZaloTemplateCreateModalProps> = ({ isOpe
                     </div>
 
                     {/* PHONE SIMULATOR - ZNS PREVIEW */}
-                    <div className="w-[340px] h-[660px] bg-slate-50 rounded-[44px] border-[12px] border-slate-800 shadow-2xl overflow-hidden flex flex-col relative transform scale-[0.95] translate-y-4">
+                    <div className="w-[340px] h-[660px] bg-slate-50 rounded-[18px] border-[12px] border-slate-800 shadow-2xl overflow-hidden flex flex-col relative transform scale-[0.95] translate-y-4">
                         {/* Notch */}
-                        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-6 bg-slate-800 rounded-b-2xl z-20"></div>
+                        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-6 bg-slate-800 rounded-b-[14px] z-20"></div>
 
                         {/* Status Bar */}
                         <div className="h-12 flex items-end justify-between px-6 pb-2 select-none z-10 shrink-0">
@@ -1150,7 +1150,7 @@ const ZaloTemplateCreateModal: React.FC<ZaloTemplateCreateModalProps> = ({ isOpe
                         {/* Scrollable Content */}
                         <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-8 pt-4">
                             {/* ZNS WHITE CARD */}
-                            <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-slate-100 overflow-hidden relative">
+                            <div className="bg-white rounded-[14px] shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-slate-100 overflow-hidden relative">
                                 
                                 {/* 1. Header Img */}
                                 {builder.header.type === 'LOGO' ? (

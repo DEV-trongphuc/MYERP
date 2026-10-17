@@ -61,7 +61,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
                         type="text"
                         value={value}
                         onChange={(e) => onChange(e.target.value)}
-                        className={`flex-1 bg-white border border-slate-200 rounded-xl px-2 py-1.5 text-[10px] outline-none focus:border-amber-500 transition-all shadow-sm ${compact ? 'h-8' : ''}`}
+                        className={`flex-1 bg-white border border-slate-200 rounded-xl px-2 py-1.5 text-[10px] outline-none focus:border-[var(--color-primary)] transition-all shadow-sm ${compact ? 'h-8' : ''}`}
                         placeholder={compact ? "Dán link ảnh hoặc {{biến_ảnh}}..." : "https://... hoặc {{cert_img}}"}
                     />
                     <button
@@ -78,7 +78,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
                 isVariable ? (
                     <div className="space-y-2.5">
                         {/* Dynamic Variable Info Card */}
-                        <div className="w-full rounded-2xl bg-gradient-to-r from-amber-50 via-orange-50/40 to-amber-50/20 border border-amber-200/80 p-2.5 relative group flex items-center justify-between shadow-xs">
+                        <div className="w-full rounded-[14px] bg-gradient-to-r from-amber-50 via-orange-50/40 to-amber-50/20 border border-amber-200/80 p-2.5 relative group flex items-center justify-between shadow-xs">
                             <div className="flex items-center gap-2.5 min-w-0">
                                 <div className="w-7 h-7 rounded-xl bg-amber-500/10 border border-amber-200 flex items-center justify-center shrink-0">
                                     <Sparkles className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
@@ -104,7 +104,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
 
                         {/* Fallback Image Input (serves as Preview & Fallback) */}
                         {onFallbackChange && (
-                            <div className="p-3 bg-slate-50/80 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-2">
+                            <div className="p-3 bg-slate-50/80 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[14px] space-y-2">
                                 <div className="flex items-center justify-between">
                                     <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
                                         <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
@@ -138,7 +138,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
 
                         {/* Image Preview Area */}
                         {fallbackValue ? (
-                            <div className="w-full rounded-2xl bg-slate-100 border border-slate-200 overflow-hidden relative group flex items-center justify-center min-h-[96px]">
+                            <div className="w-full rounded-[14px] bg-slate-100 border border-slate-200 overflow-hidden relative group flex items-center justify-center min-h-[96px]">
                                 <img 
                                     src={fallbackValue} 
                                     alt="Fallback Preview" 
@@ -162,7 +162,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
                                 )}
                             </div>
                         ) : (
-                            <div className="w-full rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-4 text-center">
+                            <div className="w-full rounded-[14px] border-2 border-dashed border-slate-200 bg-slate-50/50 p-4 text-center">
                                 <ImageIcon className="w-5 h-5 text-slate-300 mx-auto mb-1" />
                                 <p className="text-[10px] font-bold text-slate-500">Chưa có ảnh xem trước</p>
                                 <p className="text-[9px] text-slate-400 mt-0.5">Điền link ảnh dự phòng ở trên để xem trước giao diện trực tiếp trên mẫu</p>

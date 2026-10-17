@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Modal from '../common/Modal';
 import { api } from '../../services/storageAdapter';
 import { useSettings } from '../contexts/SettingsContext';
 import { Subscriber, List } from '../../types';
+import { MYERP_MERGE_TAG_GROUPS } from '../../constants/mergeTags';
 import {
     Send,
     Users,
@@ -15,14 +16,11 @@ import {
     Plus,
     AlertCircle,
     CheckCircle2,
-    Sparkles,
-    UserCheck,
-    ChevronDown,
-    Filter,
-    Layers,
     Trash2,
     AtSign,
-    User
+    User,
+    Braces,
+    ChevronDown
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -37,7 +35,6 @@ interface QuickSendEmailModalProps {
 
 const cleanSubjectText = (raw?: string): string => {
     if (!raw) return 'Thông báo từ hệ thống';
-    // Remove prefixes like [Test], Test:, [QA Check], (Test), etc.
     let cleaned = raw.replace(/^\[?(?:Test|QA Check|Kiểm tra|Demo)\]?\s*[:-]?\s*/i, '').trim();
     return cleaned || 'Thông báo từ hệ thống';
 };
@@ -58,6 +55,8 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
     const [fromEmail, setFromEmail] = useState<string>('');
     const [fromName, setFromName] = useState<string>('');
     const [activeTab, setActiveTab] = useState<'subscribers' | 'import'>('subscribers');
+    const [showSubjectVars, setShowSubjectVars] = useState(false);
+    const subjectVarsRef = useRef<HTMLDivElement>(null);
 
     // Subscribers & Lists data
     const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
@@ -80,6 +79,18 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
     // Sending State
     const [isSending, setIsSending] = useState(false);
     const [sendResult, setSendResult] = useState<{ total: number; sent: number; failed: number; errors: string[] } | null>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (subjectVarsRef.current && !subjectVarsRef.current.contains(e.target as Node)) {
+                setShowSubjectVars(false);
+            }
+        };
+        if (showSubjectVars) {
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+        }
+    }, [showSubjectVars]);
 
     // Reset when modal opens
     useEffect(() => {
@@ -128,7 +139,6 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
     const filteredSubscribers = useMemo(() => {
         return subscribers.filter(sub => {
             if (!sub.email) return false;
-            // List filter
             if (selectedListId !== 'all') {
                 const subLists = (sub as any).listIds || (sub as any).lists || [];
                 const inList = Array.isArray(subLists)
@@ -136,7 +146,6 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
                     : false;
                 if (!inList) return false;
             }
-            // Search filter
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase();
                 const fullName = `${sub.firstName || ''} ${sub.lastName || ''}`.toLowerCase();
@@ -159,7 +168,6 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
             line = line.trim();
             if (!line) continue;
 
-            // Check if format "Name <email@domain.com>"
             const angleMatch = line.match(/([^<]+)<([^>]+)>/);
             if (angleMatch) {
                 const name = angleMatch[1].trim();
@@ -188,7 +196,6 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
         }
     }, [activeTab, selectedSubscribers, parsedImportEmails]);
 
-    // Toggle subscriber selection
     const toggleSubscriber = (sub: Subscriber) => {
         setSelectedSubscribers(prev => {
             const copy = { ...prev };
@@ -201,7 +208,6 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
         });
     };
 
-    // Select all filtered
     const handleSelectAllFiltered = () => {
         setSelectedSubscribers(prev => {
             const copy = { ...prev };
@@ -212,12 +218,10 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
         });
     };
 
-    // Deselect all
     const handleDeselectAll = () => {
         setSelectedSubscribers({});
     };
 
-    // Handle Send Action
     const handleSend = async () => {
         if (!subject.trim()) {
             toast.error('Vui lòng nhập tiêu đề email');
@@ -247,13 +251,18 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
                     email: s.email,
                     first_name: s.firstName || '',
                     last_name: s.lastName || '',
+                    full_name: `${s.firstName || ''} ${s.lastName || ''}`.trim() || s.fullName || '',
                     phone_number: s.phoneNumber || '',
                     company_name: s.companyName || '',
+                    job_title: s.jobTitle || '',
+                    city: s.city || '',
+                    custom_attributes: (s as any).customAttributes || (s as any).custom_attributes || {},
                 }));
             } else {
                 recipientsPayload = parsedImportEmails.map(p => ({
                     email: p.email,
                     first_name: p.name || '',
+                    full_name: p.name || '',
                 }));
             }
 
@@ -261,6 +270,7 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
                 subject: subject.trim(),
                 from_email: fromEmail.trim() || undefined,
                 from_name: fromName.trim() || undefined,
+                sender_name: fromName.trim() || undefined,
                 html_content: finalHtml,
                 template_name: template?.name || 'Quick Send',
                 recipients: recipientsPayload,
@@ -295,7 +305,7 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
             isDarkTheme={isDarkTheme}
             title={
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-white shadow-md shadow-amber-500/20">
+                    <div className="w-10 h-10 rounded-[14px] bg-[var(--color-primary)] flex items-center justify-center text-white shadow-md shadow-rose-900/20">
                         <Send className="w-5 h-5" />
                     </div>
                     <div>
@@ -305,7 +315,7 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
                         <p className="text-xs font-semibold text-slate-400 mt-0.5 flex items-center gap-1.5">
                             <span>Mẫu: <b>{template?.name || 'Email Template'}</b></span>
                             <span className="w-1 h-1 rounded-full bg-slate-300" />
-                            <span className="text-amber-600 font-bold">{totalRecipientsCount} người nhận</span>
+                            <span className="text-[var(--color-primary)] font-bold">{totalRecipientsCount} người nhận</span>
                         </p>
                     </div>
                 </div>
@@ -315,7 +325,7 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
                     <div className="text-xs text-slate-500 font-medium">
                         {totalRecipientsCount > 0 ? (
                             <span>
-                                Sẵn sàng gửi tới <strong className="text-amber-600">{totalRecipientsCount}</strong> người nhận
+                                Sẵn sàng gửi tới <strong className="text-[var(--color-primary)]">{totalRecipientsCount}</strong> người nhận
                                 {fromEmail ? ` từ ${fromEmail}` : ''}
                                 {ccInput.trim() ? ` (+ CC)` : ''}
                                 {bccInput.trim() ? ` (+ BCC)` : ''}
@@ -329,7 +339,7 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
                             type="button"
                             onClick={onClose}
                             disabled={isSending}
-                            className={`px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all ${
+                            className={`px-4 py-2.5 rounded-[var(--radius-md)] font-bold text-xs uppercase tracking-wider transition-all ${
                                 isDarkTheme
                                     ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -341,7 +351,7 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
                             type="button"
                             onClick={handleSend}
                             disabled={isSending || totalRecipientsCount === 0}
-                            className="px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider text-white bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 shadow-lg shadow-amber-500/25 transition-all flex items-center gap-2 disabled:opacity-50 disabled:pointer-events-none active:scale-95"
+                            className="px-6 py-2.5 rounded-[var(--radius-md)] font-black text-xs uppercase tracking-wider text-white bg-[var(--color-primary)] hover:opacity-90 shadow-lg shadow-rose-900/20 transition-all flex items-center gap-2 disabled:opacity-50 disabled:pointer-events-none active:scale-95"
                         >
                             {isSending ? (
                                 <>
@@ -363,16 +373,16 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
                 {/* Result Notification Banner */}
                 {sendResult && (
                     <div
-                        className={`p-4 rounded-2xl border flex items-start gap-3 transition-all ${
+                        className={`p-4 rounded-[14px] border flex items-start gap-3 transition-all ${
                             sendResult.failed === 0
                                 ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                                : 'bg-amber-50 border-amber-200 text-amber-900'
+                                : 'bg-rose-50 border-rose-200 text-rose-900'
                         }`}
                     >
                         {sendResult.failed === 0 ? (
                             <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
                         ) : (
-                            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
                         )}
                         <div className="text-xs">
                             <h4 className="font-bold text-sm mb-1">
@@ -394,17 +404,17 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
                 )}
 
                 {/* Sender & Subject Configuration */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-slate-50/80 rounded-[14px] border border-slate-200">
                     <div>
                         <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1">
-                            <AtSign className="w-3.5 h-3.5 text-amber-500" />
+                            <AtSign className="w-3.5 h-3.5 text-[var(--color-primary)]" />
                             Email gửi đi (Sender)
                         </label>
                         {senderEmails && senderEmails.length > 1 ? (
                             <select
                                 value={fromEmail}
                                 onChange={e => setFromEmail(e.target.value)}
-                                className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-xs font-semibold transition-all bg-white text-slate-700"
+                                className="w-full px-3 py-2 rounded-[var(--radius-md)] border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500/15 focus:border-[var(--color-primary)] text-xs font-semibold transition-all bg-white text-slate-700"
                             >
                                 {senderEmails.map(e => (
                                     <option key={e} value={e}>{e}</option>
@@ -415,46 +425,78 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
                                 type="email"
                                 value={fromEmail}
                                 onChange={e => setFromEmail(e.target.value)}
-                                placeholder={senderEmails[0] || 'marketing@ka-en.com.vn'}
-                                className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-xs font-semibold transition-all bg-white"
+                                placeholder={senderEmails[0] || 'marketing@ideas.edu.vn'}
+                                className="w-full px-3 py-2 rounded-[var(--radius-md)] border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500/15 focus:border-[var(--color-primary)] text-xs font-semibold transition-all bg-white"
                             />
                         )}
                     </div>
 
                     <div>
                         <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1">
-                            <User className="w-3.5 h-3.5 text-amber-500" />
+                            <User className="w-3.5 h-3.5 text-[var(--color-primary)]" />
                             Tên hiển thị người gửi (Tùy chọn)
                         </label>
                         <input
                             type="text"
                             value={fromName}
                             onChange={e => setFromName(e.target.value)}
-                            placeholder="Ví dụ: IDEAS AI Platform"
-                            className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-xs font-semibold transition-all bg-white"
+                            placeholder="Ví dụ: Viện Quốc tế IDEAS"
+                            className="w-full px-3 py-2 rounded-[var(--radius-md)] border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500/15 focus:border-[var(--color-primary)] text-xs font-semibold transition-all bg-white"
                         />
                     </div>
                 </div>
 
-                {/* Email Subject Input */}
+                {/* Email Subject Input + MYERP Variable Picker */}
                 <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                        Tiêu đề Email <span className="text-rose-500">*</span>
-                    </label>
-                    <div className="relative">
-                        <input
-                            type="text"
-                            value={subject}
-                            onChange={e => setSubject(e.target.value)}
-                            placeholder="Nhập tiêu đề email..."
-                            className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-sm font-semibold transition-all bg-white"
-                        />
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 flex items-center gap-1 font-mono">
-                            <span>Biến:</span>
-                            <span className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-600">{"{{firstName}}"}</span>
-                            <span className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-600">{"{{email}}"}</span>
+                    <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
+                            Tiêu đề Email <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative" ref={subjectVarsRef}>
+                            <button
+                                type="button"
+                                onClick={() => setShowSubjectVars(v => !v)}
+                                className="px-2.5 py-1 rounded-[var(--radius-md)] bg-rose-50 hover:bg-rose-100 text-[var(--color-primary)] border border-rose-200 text-[11px] font-bold flex items-center gap-1 transition-all"
+                            >
+                                <Braces className="w-3 h-3" />
+                                Chèn biến CRM
+                                <ChevronDown className="w-3 h-3" />
+                            </button>
+                            {showSubjectVars && (
+                                <div className="absolute right-0 top-full mt-1.5 z-50 w-72 max-h-72 overflow-y-auto bg-white border border-slate-200 rounded-[14px] shadow-2xl p-1.5 custom-scrollbar">
+                                    {MYERP_MERGE_TAG_GROUPS.map((group, gIdx) => (
+                                        <React.Fragment key={group.id}>
+                                            {gIdx > 0 && <div className="border-t border-slate-100 my-1" />}
+                                            <p className="px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-[var(--color-primary)]">
+                                                {group.label}
+                                            </p>
+                                            {group.tags.map(t => (
+                                                <button
+                                                    key={t.key}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setSubject(prev => `${prev}${t.tag}`);
+                                                        setShowSubjectVars(false);
+                                                    }}
+                                                    className="w-full px-2.5 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-rose-50 hover:text-[var(--color-primary)] rounded-lg flex items-center justify-between gap-2 transition-colors"
+                                                >
+                                                    <span className="truncate">{t.label}</span>
+                                                    <code className="text-[10px] font-mono text-slate-400 shrink-0">{t.tag}</code>
+                                                </button>
+                                            ))}
+                                        </React.Fragment>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
+                    <input
+                        type="text"
+                        value={subject}
+                        onChange={e => setSubject(e.target.value)}
+                        placeholder="Nhập tiêu đề email..."
+                        className="w-full px-4 py-2.5 rounded-[var(--radius-md)] border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500/15 focus:border-[var(--color-primary)] text-sm font-semibold transition-all bg-white"
+                    />
                 </div>
 
                 {/* Tabs: Choose from Subscribers vs Import/Paste */}
@@ -465,7 +507,7 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
                             onClick={() => setActiveTab('subscribers')}
                             className={`pb-3 px-4 text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 border-b-2 -mb-[2px] ${
                                 activeTab === 'subscribers'
-                                    ? 'border-amber-500 text-amber-600'
+                                    ? 'border-[var(--color-primary)] text-[var(--color-primary)]'
                                     : 'border-transparent text-slate-400 hover:text-slate-600'
                             }`}
                         >
@@ -477,7 +519,7 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
                             onClick={() => setActiveTab('import')}
                             className={`pb-3 px-4 text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 border-b-2 -mb-[2px] ${
                                 activeTab === 'import'
-                                    ? 'border-amber-500 text-amber-600'
+                                    ? 'border-[var(--color-primary)] text-[var(--color-primary)]'
                                     : 'border-transparent text-slate-400 hover:text-slate-600'
                             }`}
                         >
@@ -491,7 +533,6 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
                         <div className="space-y-3">
                             {/* Filter Bar */}
                             <div className="flex flex-col sm:flex-row gap-2.5">
-                                {/* Search box */}
                                 <div className="relative flex-1">
                                     <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                                     <input
@@ -499,7 +540,7 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
                                         value={searchQuery}
                                         onChange={e => setSearchQuery(e.target.value)}
                                         placeholder="Tìm theo tên, email, số điện thoại..."
-                                        className="w-full pl-9 pr-4 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                                        className="w-full pl-9 pr-4 py-2 bg-slate-50 rounded-[var(--radius-md)] border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-rose-500/15 focus:border-[var(--color-primary)]"
                                     />
                                     {searchQuery && (
                                         <button
@@ -512,12 +553,11 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
                                     )}
                                 </div>
 
-                                {/* List Filter */}
                                 <div className="sm:w-56">
                                     <select
                                         value={selectedListId}
                                         onChange={e => setSelectedListId(e.target.value)}
-                                        className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-700"
+                                        className="w-full px-3 py-2 bg-slate-50 rounded-[var(--radius-md)] border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-rose-500/15 focus:border-[var(--color-primary)] text-slate-700"
                                     >
                                         <option value="all">Tất cả danh sách ({subscribers.length})</option>
                                         {lists.map(l => (
@@ -528,12 +568,11 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
                                     </select>
                                 </div>
 
-                                {/* Select All / Deselect buttons */}
                                 <div className="flex items-center gap-1 shrink-0">
                                     <button
                                         type="button"
                                         onClick={handleSelectAllFiltered}
-                                        className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-xl text-xs font-bold transition-all"
+                                        className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-[var(--color-primary)] rounded-[var(--radius-md)] text-xs font-bold transition-all"
                                     >
                                         Chọn tất cả ({filteredSubscribers.length})
                                     </button>
@@ -541,7 +580,7 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
                                         <button
                                             type="button"
                                             onClick={handleDeselectAll}
-                                            className="p-2 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-xl transition-all"
+                                            className="p-2 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-[var(--radius-md)] transition-all"
                                             title="Bỏ chọn tất cả"
                                         >
                                             <Trash2 className="w-4 h-4" />
@@ -552,14 +591,14 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
 
                             {/* Selected Chips Bar */}
                             {selectedList.length > 0 && (
-                                <div className="flex items-center gap-1.5 p-2 bg-amber-50/50 border border-amber-200/60 rounded-xl overflow-x-auto max-h-24 flex-wrap">
-                                    <span className="text-[11px] font-bold text-amber-800 shrink-0 mr-1">
+                                <div className="flex items-center gap-1.5 p-2 bg-rose-50/50 border border-rose-200/60 rounded-[14px] overflow-x-auto max-h-24 flex-wrap">
+                                    <span className="text-[11px] font-bold text-[var(--color-primary)] shrink-0 mr-1">
                                         Đã chọn {selectedList.length}:
                                     </span>
                                     {selectedList.slice(0, 15).map(sub => (
                                         <span
                                             key={sub.id}
-                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white border border-amber-200 text-[11px] font-medium text-slate-700 shadow-sm"
+                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white border border-rose-200 text-[11px] font-medium text-slate-700 shadow-sm"
                                         >
                                             <span className="truncate max-w-[140px]">{sub.firstName ? `${sub.firstName} (${sub.email})` : sub.email}</span>
                                             <button
@@ -572,7 +611,7 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
                                         </span>
                                     ))}
                                     {selectedList.length > 15 && (
-                                        <span className="text-[11px] font-bold text-amber-600">
+                                        <span className="text-[11px] font-bold text-[var(--color-primary)]">
                                             +{selectedList.length - 15} người khác
                                         </span>
                                     )}
@@ -580,10 +619,10 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
                             )}
 
                             {/* Subscribers Scroll List */}
-                            <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white max-h-64 overflow-y-auto divide-y divide-slate-100">
+                            <div className="border border-slate-200 rounded-[14px] overflow-hidden bg-white max-h-64 overflow-y-auto divide-y divide-slate-100">
                                 {isLoadingData ? (
                                     <div className="p-8 text-center text-slate-400 flex items-center justify-center gap-2 text-xs">
-                                        <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
+                                        <Loader2 className="w-4 h-4 animate-spin text-[var(--color-primary)]" />
                                         Đang tải danh sách khách hàng...
                                     </div>
                                 ) : filteredSubscribers.length === 0 ? (
@@ -599,14 +638,14 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
                                                 key={sub.id}
                                                 onClick={() => toggleSubscriber(sub)}
                                                 className={`p-3 flex items-center justify-between gap-3 cursor-pointer transition-colors ${
-                                                    isSelected ? 'bg-amber-50/70' : 'hover:bg-slate-50'
+                                                    isSelected ? 'bg-rose-50/70' : 'hover:bg-slate-50'
                                                 }`}
                                             >
                                                 <div className="flex items-center gap-3 min-w-0">
                                                     <div
                                                         className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all shrink-0 ${
                                                             isSelected
-                                                                ? 'bg-amber-500 border-amber-500 text-white'
+                                                                ? 'bg-[var(--color-primary)] border-[var(--color-primary)] text-white'
                                                                 : 'border-slate-300 bg-white'
                                                         }`}
                                                     >
@@ -653,15 +692,14 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
 nguyenvana@gmail.com
 Trần Văn B <tranvanb@gmail.com>
 lethic@gmail.com, Lê Thị C`}
-                                    className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 leading-relaxed"
+                                    className="w-full p-3 bg-slate-50 rounded-[var(--radius-md)] border border-slate-200 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-rose-500/15 focus:border-[var(--color-primary)] leading-relaxed"
                                 />
                             </div>
 
-                            {/* Parsing Status & Tags */}
                             <div className="flex items-center justify-between text-xs">
                                 <span className="text-slate-500 font-medium">
                                     Đã nhận diện:{' '}
-                                    <strong className="text-amber-600">{parsedImportEmails.length}</strong> địa chỉ hợp lệ
+                                    <strong className="text-[var(--color-primary)]">{parsedImportEmails.length}</strong> địa chỉ hợp lệ
                                 </span>
                                 {rawEmailsInput && (
                                     <button
@@ -675,13 +713,13 @@ lethic@gmail.com, Lê Thị C`}
                             </div>
 
                             {parsedImportEmails.length > 0 && (
-                                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl max-h-36 overflow-y-auto flex flex-wrap gap-1.5">
+                                <div className="p-3 bg-slate-50 border border-slate-200 rounded-[14px] max-h-36 overflow-y-auto flex flex-wrap gap-1.5">
                                     {parsedImportEmails.map((p, idx) => (
                                         <span
                                             key={idx}
                                             className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 shadow-sm"
                                         >
-                                            <Mail className="w-3 h-3 text-amber-500" />
+                                            <Mail className="w-3 h-3 text-[var(--color-primary)]" />
                                             <span>{p.name ? `${p.name} <${p.email}>` : p.email}</span>
                                         </span>
                                     ))}
@@ -696,14 +734,14 @@ lethic@gmail.com, Lê Thị C`}
                     <button
                         type="button"
                         onClick={() => setShowCcBcc(!showCcBcc)}
-                        className="text-xs font-bold text-slate-500 hover:text-amber-600 flex items-center gap-1.5 transition-colors"
+                        className="text-xs font-bold text-slate-500 hover:text-[var(--color-primary)] flex items-center gap-1.5 transition-colors"
                     >
                         <Plus className={`w-3.5 h-3.5 transition-transform ${showCcBcc ? 'rotate-45' : ''}`} />
                         {showCcBcc ? 'Ẩn tùy chọn CC / BCC' : 'Thêm CC / BCC (Gửi sao chép & gửi ẩn)'}
                     </button>
 
                     {showCcBcc && (
-                        <div className="mt-3 space-y-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
+                        <div className="mt-3 space-y-3 p-3.5 bg-slate-50 rounded-[14px] border border-slate-200">
                             <div>
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
                                     CC (Sao chép email):
@@ -713,7 +751,7 @@ lethic@gmail.com, Lê Thị C`}
                                     value={ccInput}
                                     onChange={e => setCcInput(e.target.value)}
                                     placeholder="sales@company.com, support@company.com"
-                                    className="w-full px-3 py-2 bg-white rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                                    className="w-full px-3 py-2 bg-white rounded-[var(--radius-md)] border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-rose-500/15 focus:border-[var(--color-primary)]"
                                 />
                             </div>
                             <div>
@@ -725,7 +763,7 @@ lethic@gmail.com, Lê Thị C`}
                                     value={bccInput}
                                     onChange={e => setBccInput(e.target.value)}
                                     placeholder="crm@company.com, audit@company.com"
-                                    className="w-full px-3 py-2 bg-white rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                                    className="w-full px-3 py-2 bg-white rounded-[var(--radius-md)] border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-rose-500/15 focus:border-[var(--color-primary)]"
                                 />
                             </div>
                             <p className="text-[10px] text-slate-400 italic">

@@ -44,7 +44,7 @@ const FlowSidebar: React.FC<FlowSidebarProps> = ({
                                 <button
                                     key={i}
                                     onClick={() => err.stepId && onSelectStep(err.stepId)}
-                                    className={`w-full text-left p-4 border rounded-2xl transition-all group flex gap-3 items-start relative overflow-hidden ${err.type === 'critical'
+                                    className={`w-full text-left p-4 border rounded-xl transition-all group flex gap-3 items-start relative overflow-hidden ${err.type === 'critical'
                                         ? 'bg-rose-50/50 border-rose-100 hover:border-rose-300'
                                         : 'hover:border-amber-400 bg-amber-50/30'
                                         }`}
@@ -52,7 +52,7 @@ const FlowSidebar: React.FC<FlowSidebarProps> = ({
                                 >
                                     <div 
                                         className={`mt-0.5 p-1.5 rounded-lg shrink-0 ${err.type === 'critical' ? 'bg-rose-100 text-rose-600' : ''}`}
-                                        style={err.type !== 'critical' ? { backgroundColor: '#fef3c7', color: '#d97706' } : undefined}
+                                        style={err.type !== 'critical' ? { backgroundColor: '#fef3c7', color: '#BD1D2D' } : undefined}
                                     >
                                         <AlertOctagon className="w-3.5 h-3.5" />
                                     </div>
@@ -64,25 +64,25 @@ const FlowSidebar: React.FC<FlowSidebarProps> = ({
                                             {err.msg}
                                         </p>
                                         {err.stepId && (
-                                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-tighter text-slate-400 mt-2 group-hover:text-amber-600 transition-colors">
+                                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-tighter text-slate-400 mt-2 group-hover:text-[var(--color-primary)] transition-colors">
                                                 {err.msg.includes('tự sửa') ? 'Bấm để tự sửa' : 'Bấm để sửa'} <ChevronRight className="w-2.5 h-2.5" />
                                             </span>
                                         )}
                                     </div>
                                     <div 
                                         className={`absolute left-0 top-0 bottom-0 w-1 ${err.type === 'critical' ? 'bg-rose-500' : ''}`}
-                                        style={err.type !== 'critical' ? { backgroundColor: '#d97706' } : undefined}
+                                        style={err.type !== 'critical' ? { backgroundColor: '#BD1D2D' } : undefined}
                                     ></div>
                                 </button>
                             ))}
                         </div>
                     ) : (
-                        <div className="bg-emerald-50/50 p-4 lg:p-6 rounded-[32px] border border-emerald-100/50 flex flex-col items-center text-center group transition-all">
-                            <div className="w-8 h-8 lg:w-10 lg:h-10 bg-white dark:bg-slate-900 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/10 mb-2 lg:mb-3 group-hover:scale-110 transition-transform">
-                                <CheckCircle2 className="w-4 h-4 lg:w-5 lg:h-5 text-emerald-500" />
+                        <div className="bg-emerald-50/50 dark:bg-emerald-950/20 p-5 rounded-xl border border-emerald-100 dark:border-emerald-800/40 flex flex-col items-center text-center group transition-all">
+                            <div className="w-9 h-9 bg-white dark:bg-slate-900 rounded-full flex items-center justify-center shadow-md shadow-emerald-500/10 mb-2 group-hover:scale-110 transition-transform">
+                                <CheckCircle2 className="w-4.5 h-4.5 text-emerald-500" />
                             </div>
-                            <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Luồng an toàn</p>
-                            <p className="text-[10px] text-emerald-600/60 font-bold mt-0.5">Sẵn sàng kích hoạt</p>
+                            <p className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 uppercase tracking-widest">Luồng an toàn</p>
+                            <p className="text-[10px] text-emerald-600/70 dark:text-emerald-400/70 font-semibold mt-0.5">Sẵn sàng kích hoạt</p>
                         </div>
                     )}
                 </div>
@@ -93,7 +93,7 @@ const FlowSidebar: React.FC<FlowSidebarProps> = ({
                         <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
                             <Clock className="w-3.5 h-3.5 text-indigo-500" /> Thời gian hoàn hành
                         </h4>
-                        <div className="bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 rounded-xl p-3">
+                        <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-xl p-3.5">
                             <div className="flex items-baseline justify-between mb-2">
                                 <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Tổng quan:</span>
                                 <span className="text-[11px] font-black text-slate-700 dark:text-slate-200">
@@ -121,7 +121,7 @@ const FlowSidebar: React.FC<FlowSidebarProps> = ({
                         <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
                             <Send className="w-3.5 h-3.5 text-sky-500" /> Thống kê Gửi tin
                         </h4>
-                        <div className="bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 rounded-xl p-3">
+                        <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-xl p-3.5">
                             <div className="flex items-baseline justify-between mb-2">
                                 <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Tổng quan:</span>
                                 <span className="text-[11px] font-black text-sky-600 dark:text-sky-400">
@@ -151,7 +151,7 @@ const FlowSidebar: React.FC<FlowSidebarProps> = ({
                         ) : logs.map((log) => (
                             <div key={log.id} className="relative group">
                                 <div className="absolute -left-[18.5px] top-1.5 w-2 h-2 rounded-full bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700/60 group-hover:border-slate-400 z-10" />
-                                <div className="bg-slate-50 dark:bg-slate-950/50 rounded-2xl p-3 border border-transparent hover:border-slate-200 dark:border-slate-700/60 hover:bg-white dark:bg-slate-900 transition-all">
+                                <div className="bg-slate-50 dark:bg-slate-950/50 rounded-[14px] p-3 border border-transparent hover:border-slate-200 dark:border-slate-700/60 hover:bg-white dark:bg-slate-900 transition-all">
                                     <div className="flex justify-between items-start mb-1 gap-2">
                                         <p className="text-[11px] font-black text-slate-700 dark:text-slate-200 leading-tight flex-1 whitespace-normal break-words">{log.action}</p>
                                         <span className="text-[9px] font-black text-slate-300 uppercase shrink-0 flex items-center gap-1">
@@ -172,7 +172,7 @@ const FlowSidebar: React.FC<FlowSidebarProps> = ({
                 <div className="p-4 border-t border-slate-100 dark:border-slate-800 shrink-0">
                     <button
                         onClick={onOpenHistory}
-                        className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-950 hover:bg-blue-50/50 border border-slate-100 dark:border-slate-800 hover:border-blue-200 rounded-2xl transition-all group"
+                        className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-950 hover:bg-blue-50/50 border border-slate-100 dark:border-slate-800 hover:border-blue-200 rounded-[14px] transition-all group"
                     >
                         <div className="flex items-center gap-2.5">
                             <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all">

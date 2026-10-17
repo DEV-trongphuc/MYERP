@@ -548,7 +548,9 @@ class DepositController {
                     WHERE project_id = ? 
                       AND unit_code = ? 
                       AND status NOT IN ('rejected', 'cancelled')
+                      AND deleted_at IS NULL
                     LIMIT 1
+                    FOR UPDATE
                 ");
                 $stmtCheckUnit->execute([$projectId, $unitCode]);
                 $existingDeposit = $stmtCheckUnit->fetch();
@@ -1078,6 +1080,16 @@ class DepositController {
             }
 
             $this->db->commit();
+            if (!empty($depositData['contact_id'])) {
+                try {
+                    require_once __DIR__ . '/../automation/trigger_helper.php';
+                    DomationEventDispatcher::dispatch($this->db, (int) $depositData['contact_id'], 'erp_deposit_approved', [
+                        'deposit_id' => $id,
+                        'milestone_id' => $milestoneId,
+                        'amount' => $total
+                    ]);
+                } catch (\Throwable $eAuto) {}
+            }
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'APPROVE_DEPOSIT_MILESTONE', 'deposit_milestone', $milestoneId, "Duyệt đóng tiền đợt ID: $milestoneId, thực nhận: " . number_format($total, 0, ',', '.') . " VND");
              
              // Log interaction for contact's timeline

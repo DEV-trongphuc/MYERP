@@ -80,6 +80,9 @@ const PublicSurveyPage = lazy(() => import('./pages/marketing/PublicSurveyPage')
 const VouchersQrPage = lazy(() => import('./pages/marketing/VouchersQrPage'));
 const PublicVoucherClaimPage = lazy(() => import('./pages/marketing/PublicVoucherClaimPage'));
 const WebTrackingOmnichannelPage = lazy(() => import('./pages/marketing/WebTrackingOmnichannelPage'));
+const SocialBotPage = lazy(() => import('./pages/marketing/SocialBotPage'));
+const AITrainingMarketingPage = lazy(() => import('./pages/marketing/AITrainingPage'));
+const ApiTriggersPage = lazy(() => import('./pages/marketing/ApiTriggersPage'));
 import { RouteTabSkeleton } from './components/ui/Skeleton';
 
 // Instant route-aware skeleton fallback so no tab ever flashes a blank white screen while lazy chunks load
@@ -227,7 +230,7 @@ const AppTabs = () => {
         }
         return <Integrations key="integrations" />;
       case '/settings':
-        if (!['admin', 'superadmin', 'super_admin'].includes(user?.role || '')) {
+        if (!['admin', 'superadmin', 'super_admin', 'director', 'marketing', 'manager'].includes(user?.role || '') && !isMarketing(user)) {
           return <AccessDeniedView key="access-denied-settings" />;
         }
         return <Settings key="settings" />;
@@ -278,8 +281,14 @@ const AppTabs = () => {
         return <div className="mkt-scope" key="marketing-surveys"><SurveysQuizPage /></div>;
       case '/marketing/vouchers':
         return <div className="mkt-scope" key="marketing-vouchers"><VouchersQrPage /></div>;
+      case '/marketing/social-bot':
+        return <div className="mkt-scope" key="marketing-social-bot"><SocialBotPage /></div>;
+      case '/marketing/ai-training':
+        return <div className="mkt-scope" key="marketing-ai-training"><AITrainingMarketingPage /></div>;
       case '/marketing/web-tracking':
         return <div className="mkt-scope" key="marketing-web-tracking"><WebTrackingOmnichannelPage /></div>;
+      case '/marketing/api-triggers':
+        return <div className="mkt-scope" key="marketing-api-triggers"><ApiTriggersPage /></div>;
       default:
         if (path.startsWith('/marketing/surveys/') && path.endsWith('/edit')) {
           return <div className="mkt-scope" key={path}><SurveysQuizPage /></div>;

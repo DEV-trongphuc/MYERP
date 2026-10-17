@@ -108,7 +108,7 @@ const ButtonPill: React.FC<{ btn: ScenarioNodeBtn; colorIdx: number }> = ({ btn,
 
     // Color schemes
     const schemes = [
-        { icon: 'text-amber-700', circle: 'bg-gradient-to-br from-amber-400 to-amber-600', border: 'border-amber-200', shadow: 'shadow-amber-100', text: 'text-amber-800' },
+        { icon: 'text-[#9A1523]', circle: 'bg-gradient-to-br from-[#BD1D2D] to-[#9A1523]', border: 'border-amber-200', shadow: 'shadow-amber-100', text: 'text-amber-800' },
         { icon: 'text-blue-700', circle: 'bg-gradient-to-br from-blue-400 to-blue-600', border: 'border-blue-200', shadow: 'shadow-blue-100', text: 'text-blue-800' },
         { icon: 'text-pink-700', circle: 'bg-gradient-to-br from-rose-400 to-rose-500', border: 'border-rose-200', shadow: 'shadow-rose-100', text: 'text-rose-800' },
         { icon: 'text-blue-700', circle: 'bg-gradient-to-br from-blue-400 to-blue-600', border: 'border-blue-200', shadow: 'shadow-blue-100', text: 'text-blue-800' },
@@ -159,7 +159,7 @@ const DeleteConfirm: React.FC<{ label?: string; onConfirm: () => void; onCancel:
     return ReactDOM.createPortal(
         <div className="fixed inset-0 z-[99999999] flex items-center justify-center">
             <div className={`absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity duration-200 ${show ? 'opacity-100' : 'opacity-0'}`} onClick={onCancel} />
-            <div className={`relative bg-white rounded-2xl shadow-2xl border border-slate-100 p-6 w-full max-w-sm mx-4 transition-all duration-200 ${show ? 'scale-100 opacity-100 translate-y-0' : 'scale-90 opacity-0 translate-y-4'}`}>
+            <div className={`relative bg-white rounded-[14px] shadow-2xl border border-slate-100 p-6 w-full max-w-sm mx-4 transition-all duration-200 ${show ? 'scale-100 opacity-100 translate-y-0' : 'scale-90 opacity-0 translate-y-4'}`}>
                 <div className="flex items-start gap-4 mb-5">
                     <div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center shrink-0">
                         <Trash2 className="w-5 h-5 text-rose-600" />
@@ -196,7 +196,7 @@ const ButtonRenameModal: React.FC<{
     return ReactDOM.createPortal(
         <div className="fixed inset-0 z-[99999999] flex items-center justify-center">
             <div className={`absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity duration-200 ${show ? 'opacity-100' : 'opacity-0'}`} onClick={onClose} />
-            <div className={`relative bg-white rounded-2xl shadow-2xl border border-slate-100 p-6 w-full max-w-sm mx-4 transition-all duration-200 ${show ? 'scale-100 opacity-100 translate-y-0' : 'scale-90 opacity-0 translate-y-4'}`}>
+            <div className={`relative bg-white rounded-[14px] shadow-2xl border border-slate-100 p-6 w-full max-w-sm mx-4 transition-all duration-200 ${show ? 'scale-100 opacity-100 translate-y-0' : 'scale-90 opacity-0 translate-y-4'}`}>
                 <h3 className="text-sm font-bold text-slate-800 mb-4">Mô tả/Tên nhánh</h3>
                 <input 
                     type="text" 
@@ -243,7 +243,7 @@ const NodeCard: React.FC<{
             <div
                 id={`sc-node-${node.id}`}
                 onClick={onClick}
-                className="group relative w-[260px] bg-white rounded-[28px] border border-slate-100 z-20 cursor-pointer
+                className="group relative w-[260px] bg-white rounded-[18px] border border-slate-100 z-20 cursor-pointer
                     shadow-[0_8px_30px_rgba(0,0,0,0.05)]
                     hover:shadow-[0_20px_40px_rgba(59,130,246,0.12)]
                     hover:-translate-y-1.5 hover:ring-2 hover:ring-blue-100
@@ -253,18 +253,18 @@ const NodeCard: React.FC<{
                     <div className="flex items-start gap-4">
                         {/* Icon */}
                         {isRoot ? (
-                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shrink-0 shadow-lg shadow-amber-200 group-hover:scale-110 group-hover:rotate-3 transition-transform">
+                            <div className="w-12 h-12 rounded-[14px] bg-gradient-to-br from-[#BD1D2D] to-[#9A1523] flex items-center justify-center shrink-0 shadow-lg shadow-amber-200 group-hover:scale-110 group-hover:rotate-3 transition-transform">
                                 <Zap className="w-5 h-5 text-white" />
                             </div>
                         ) : (
-                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center shrink-0 shadow-lg shadow-blue-200 group-hover:scale-110 group-hover:rotate-3 transition-transform">
+                            <div className="w-12 h-12 rounded-[14px] bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center shrink-0 shadow-lg shadow-blue-200 group-hover:scale-110 group-hover:rotate-3 transition-transform">
                                 <MessageSquare className="w-5 h-5 text-white" />
                             </div>
                         )}
 
                         <div className="flex-1 overflow-hidden pt-0.5">
                             <div className="flex items-center gap-2 mb-1.5">
-                                <p className={`text-[9px] font-bold uppercase tracking-widest leading-none ${isRoot ? 'text-amber-600' : 'text-blue-600'}`}>
+                                <p className={`text-[9px] font-bold uppercase tracking-widest leading-none ${isRoot ? 'text-[var(--color-primary)]' : 'text-blue-600'}`}>
                                     {isRoot ? 'Trigger · Bước 1' : 'Reply Node'}
                                 </p>
                                 {hasLeadForm && (
@@ -277,7 +277,7 @@ const NodeCard: React.FC<{
                             {/* Message — single line */}
                             <p className="text-sm font-bold text-slate-800 truncate leading-tight">
                                 {isRoot && !messages[0] && firstKeyword ? (
-                                    <span className="text-amber-600">Từ khóa: {firstKeyword}</span>
+                                    <span className="text-[var(--color-primary)]">Từ khóa: {firstKeyword}</span>
                                 ) : (
                                     <>{messages[0]?.slice(0, 36) || 'Chưa có nội dung...'}{(messages[0]?.length || 0) > 36 && '…'}</>
                                 )}
@@ -416,13 +416,13 @@ const NodeEditPanel: React.FC<{
             <div className="fixed inset-0 z-[99998] flex items-center justify-center p-4" style={{ pointerEvents: animIn ? 'auto' : 'none' }}>
                 <div className={`absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity duration-200 ${animIn ? 'opacity-100' : 'opacity-0'}`} onClick={close} />
 
-                <div className={`relative flex flex-col bg-white rounded-[28px] shadow-2xl border border-slate-100 w-full transition-all duration-200 ${animIn ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-4'}`}
+                <div className={`relative flex flex-col bg-white rounded-[18px] shadow-2xl border border-slate-100 w-full transition-all duration-200 ${animIn ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-4'}`}
                     style={{ maxWidth: 520, maxHeight: '88vh' }}>
 
                     {/* Header */}
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0 rounded-t-[28px] bg-slate-50/80">
+                    <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0 rounded-t-[18px] bg-slate-50/80">
                         <div className="flex items-center gap-3">
-                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-md ${isRoot ? 'bg-gradient-to-br from-amber-400 to-amber-600 shadow-amber-200' : 'bg-gradient-to-br from-blue-400 to-indigo-500 shadow-blue-200'}`}>
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-md ${isRoot ? 'bg-gradient-to-br from-[#BD1D2D] to-[#9A1523] shadow-amber-200' : 'bg-gradient-to-br from-blue-400 to-indigo-500 shadow-blue-200'}`}>
                                 {isRoot ? <Zap className="w-4 h-4 text-white" /> : <MessageSquare className="w-4 h-4 text-white" />}
                             </div>
                             <div>
@@ -447,14 +447,14 @@ const NodeEditPanel: React.FC<{
                         {isRoot && onKeywordsChange && (
                             <div className="space-y-3">
                                 <label className="text-[9px] font-bold uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
-                                    <Zap className="w-3 h-3 text-amber-500" /> Từ khóa kích hoạt (cách nhau bằng dấu phẩy)
+                                    <Zap className="w-3 h-3 text-[var(--color-primary)]" /> Từ khóa kích hoạt (cách nhau bằng dấu phẩy)
                                 </label>
                                 <input
                                     type="text"
                                     value={keywords || ''}
                                     onChange={e => onKeywordsChange(e.target.value)}
                                     placeholder="Ví dụ: học phí, bao nhiêu tiền, giá..."
-                                    className="w-full h-11 px-4 rounded-2xl border border-slate-200 bg-slate-50/80 text-sm font-bold text-slate-800 placeholder-slate-400 outline-none focus:border-amber-400 focus:bg-white focus:ring-2 focus:ring-amber-50 transition-all"
+                                    className="w-full h-11 px-4 rounded-[14px] border border-slate-200 bg-slate-50/80 text-sm font-bold text-slate-800 placeholder-slate-400 outline-none focus:border-[var(--color-primary)] focus:bg-white focus:ring-2 focus:ring-[var(--color-primary)]/10 transition-all"
                                 />
                             </div>
                         )}
@@ -471,7 +471,7 @@ const NodeEditPanel: React.FC<{
                                         onChange={e => updateMsg(i, e.target.value)}
                                         placeholder={i === 0 ? 'Nhập nội dung chatbot gửi...' : 'Tin nhắn tiếp theo (delay 1 giây)...'}
                                         rows={3}
-                                        className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50/80 text-sm font-medium text-slate-800 placeholder-slate-400 outline-none focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-50 transition-all resize-y min-h-[80px]"
+                                        className="w-full px-4 py-3 rounded-[14px] border border-slate-200 bg-slate-50/80 text-sm font-medium text-slate-800 placeholder-slate-400 outline-none focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-50 transition-all resize-y min-h-[80px]"
                                     />
                                     {messages.length > 1 && (
                                         <button onClick={() => removeMsg(i)} className="absolute top-2 right-2 p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all"><X className="w-3.5 h-3.5" /></button>
@@ -490,7 +490,7 @@ const NodeEditPanel: React.FC<{
                                 <FormInput className="w-3 h-3 text-emerald-500" /> Hành động đặc biệt
                             </label>
                             <button onClick={toggleLeadForm}
-                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border-2 text-left transition-all
+                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-[14px] border-2 text-left transition-all
                                     ${hasLeadForm ? 'bg-emerald-50 border-emerald-400 shadow-sm shadow-emerald-100' : 'bg-white border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/30'}`}>
                                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all ${hasLeadForm ? 'bg-emerald-500 shadow-md shadow-emerald-200' : 'bg-slate-100'}`}>
                                     <FormInput className={`w-4 h-4 ${hasLeadForm ? 'text-white' : 'text-slate-400'}`} />
@@ -526,8 +526,8 @@ const NodeEditPanel: React.FC<{
                                 {buttons.map((btn, i) => {
                                     const isWild = btn.label === '*';
                                     return (
-                                        <div key={btn.id} className={`flex items-center gap-2 px-3 py-2 rounded-2xl border ${isWild ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200 shadow-sm'}`}>
-                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${isWild ? 'bg-gradient-to-br from-emerald-400 to-emerald-600' : 'bg-gradient-to-br from-amber-400 to-amber-600'}`}>
+                                        <div key={btn.id} className={`flex items-center gap-2 px-3 py-2 rounded-[14px] border ${isWild ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200 shadow-sm'}`}>
+                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${isWild ? 'bg-gradient-to-br from-emerald-400 to-emerald-600' : 'bg-gradient-to-br from-[#BD1D2D] to-[#9A1523]'}`}>
                                                 {isWild ? <Keyboard className="w-3 h-3 text-white" /> : <MousePointerClick className="w-3 h-3 text-white" />}
                                             </div>
                                             <span className="text-xs font-bold text-slate-700 flex-1 truncate">
@@ -569,7 +569,7 @@ const NodeEditPanel: React.FC<{
                     </div>
 
                     {/* Footer */}
-                    <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-slate-100 shrink-0 rounded-b-[28px] bg-slate-50/60">
+                    <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-slate-100 shrink-0 rounded-b-[18px] bg-slate-50/60">
                         <button onClick={close} className="h-10 px-5 rounded-xl text-sm font-bold border border-slate-200 text-slate-600 hover:bg-slate-100 transition-all">Hủy</button>
                         <button onClick={handleSave} className="h-10 px-6 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-blue-500 to-indigo-600 shadow-md shadow-blue-200/60 hover:shadow-blue-300/60 active:scale-95 transition-all flex items-center gap-2">
                             <Save className="w-4 h-4" /> Lưu node

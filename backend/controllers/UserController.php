@@ -7,8 +7,8 @@ class UserController {
 
     public function index(array $auth): void {
         // Allow all authenticated users to retrieve the active user list based on unified accounts.is_active = 1
-        $where = ["a.is_active = 1"];
-        $params = [];
+        $where = ["a.is_active = 1", "(u.tenant_id = ? OR u.tenant_id IS NULL)"];
+        $params = [(int)($auth['tenant_id'] ?? 1)];
         
         $teamOnly = isset($_GET['team_only']) && (string)$_GET['team_only'] === '1';
         if ($teamOnly) {

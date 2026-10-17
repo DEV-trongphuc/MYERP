@@ -47,18 +47,18 @@ const FastRepliesSettings: React.FC<FastRepliesSettingsProps> = ({ settings, set
                 <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkTheme ? 'text-slate-500' : 'text-slate-400'}`}>
                     Phối hợp phản hồi nhanh - Tiết kiệm TOKEN AI và tránh truy xuất Knowledge không cần thiết.
                 </label>
-                <Zap className="w-3.5 h-3.5 text-amber-600" />
+                <Zap className="w-3.5 h-3.5 text-[var(--color-primary)]" />
             </div>
 
             {/* Input Area - Simplified */}
-            <div className={`p-5 rounded-[24px] border shadow-sm space-y-4 transition-all duration-500 ${isDarkTheme ? 'bg-slate-800/20 border-slate-700' : 'bg-white border-slate-200'}`}>
+            <div className={`p-5 rounded-[18px] border shadow-sm space-y-4 transition-all duration-500 ${isDarkTheme ? 'bg-slate-800/20 border-slate-700' : 'bg-white border-slate-200'}`}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
                             Từ khóa (Cách nhau bằng dấu phẩy)
                         </label>
                         <input
-                            className={`w-full h-11 px-4 border rounded-xl text-xs font-medium outline-none transition-all ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-600 focus:border-brand shadow-none' : 'bg-white border-slate-200 text-slate-700 placeholder:text-slate-300 focus:border-amber-600 focus:ring-4 focus:ring-amber-600/5'}`}
+                            className={`w-full h-11 px-4 border rounded-xl text-xs font-medium outline-none transition-all ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-600 focus:border-[var(--color-primary)] shadow-none' : 'bg-white border-slate-200 text-slate-700 placeholder:text-slate-300 focus:border-[var(--color-primary)] focus:ring-4 focus:ring-[var(--color-primary)]/5'}`}
                             placeholder="VD: chào, hi, hello"
                             value={newFastReply.pattern}
                             onChange={e => setNewFastReply({ ...newFastReply, pattern: e.target.value })}
@@ -70,12 +70,12 @@ const FastRepliesSettings: React.FC<FastRepliesSettingsProps> = ({ settings, set
                         </label>
                         <div className="flex gap-2">
                             <input
-                                className={`flex-1 h-11 px-4 border rounded-xl text-xs font-medium outline-none transition-all ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-600 focus:border-brand shadow-none' : 'bg-white border-slate-200 text-slate-700 placeholder:text-slate-300 focus:border-amber-600 focus:ring-4 focus:ring-amber-600/5'}`}
+                                className={`flex-1 h-11 px-4 border rounded-xl text-xs font-medium outline-none transition-all ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-600 focus:border-[var(--color-primary)] shadow-none' : 'bg-white border-slate-200 text-slate-700 placeholder:text-slate-300 focus:border-[var(--color-primary)] focus:ring-4 focus:ring-[var(--color-primary)]/5'}`}
                                 placeholder="Chào bạn! Mình có thể..."
                                 value={newFastReply.reply}
                                 onChange={e => setNewFastReply({ ...newFastReply, reply: e.target.value })}
                             />
-                            <Button className="h-11 px-6 bg-gradient-to-r from-amber-600 to-amber-600 border-none text-white font-bold shadow-lg shadow-amber-600/20 hover:shadow-amber-600/40 transition-all" icon={Plus} onClick={addFastReply}>Thêm</Button>
+                            <Button className="h-11 px-6 bg-gradient-to-r from-[#BD1D2D] to-[#9A1523] border-none text-white font-bold shadow-lg shadow-[var(--color-primary)]/20 hover:shadow-[#9A1523]/40 transition-all" icon={Plus} onClick={addFastReply}>Thêm</Button>
                         </div>
                     </div>
                 </div>
@@ -92,7 +92,7 @@ const FastRepliesSettings: React.FC<FastRepliesSettingsProps> = ({ settings, set
             {/* List Area */}
             <div className="space-y-3">
                 {(settings.fast_replies || []).map((fr: FastReply, idx: number) => (
-                    <div key={idx} className={`border rounded-[20px] p-1.5 hover:shadow-md transition-all duration-300 group ${isDarkTheme ? 'bg-slate-800/20 border-slate-700 hover:border-slate-600 hover:bg-slate-800/40' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
+                    <div key={idx} className={`border rounded-[14px] p-1.5 hover:shadow-md transition-all duration-300 group ${isDarkTheme ? 'bg-slate-800/20 border-slate-700 hover:border-slate-600 hover:bg-slate-800/40' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
                         {editingIdx === idx ? (
                             <div className="space-y-4 p-4">
                                 <div className="space-y-1.5">
@@ -101,7 +101,7 @@ const FastRepliesSettings: React.FC<FastRepliesSettingsProps> = ({ settings, set
                                     </label>
                                     <input
                                         type="text"
-                                        className={`w-full border rounded-xl px-4 py-3 text-xs font-bold outline-none transition-all shadow-sm ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-200 focus:border-brand shadow-none' : 'bg-white border-slate-200 text-slate-700 focus:border-amber-600 focus:ring-4 focus:ring-amber-600/5'}`}
+                                        className={`w-full border rounded-xl px-4 py-3 text-xs font-bold outline-none transition-all shadow-sm ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-200 focus:border-[var(--color-primary)] shadow-none' : 'bg-white border-slate-200 text-slate-700 focus:border-[var(--color-primary)] focus:ring-4 focus:ring-[var(--color-primary)]/5'}`}
                                         value={fr.pattern}
                                         onChange={e => updateFastReply(idx, 'pattern', e.target.value)}
                                         placeholder="chào, hi, hello..."
@@ -120,7 +120,7 @@ const FastRepliesSettings: React.FC<FastRepliesSettingsProps> = ({ settings, set
                                         Nội dung phản hồi
                                     </label>
                                     <textarea
-                                        className={`w-full border rounded-xl px-4 py-3 text-xs font-medium leading-relaxed outline-none transition-all shadow-sm min-h-[80px] resize-none ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-600 focus:border-brand shadow-none' : 'bg-white border-slate-200 text-slate-700 placeholder:text-slate-300 focus:border-amber-600 focus:ring-4 focus:ring-amber-600/5'}`}
+                                        className={`w-full border rounded-xl px-4 py-3 text-xs font-medium leading-relaxed outline-none transition-all shadow-sm min-h-[80px] resize-none ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-600 focus:border-[var(--color-primary)] shadow-none' : 'bg-white border-slate-200 text-slate-700 placeholder:text-slate-300 focus:border-[var(--color-primary)] focus:ring-4 focus:ring-[var(--color-primary)]/5'}`}
                                         value={fr.reply}
                                         onChange={e => updateFastReply(idx, 'reply', e.target.value)}
                                         placeholder="Nhập nội dung..."
@@ -137,7 +137,7 @@ const FastRepliesSettings: React.FC<FastRepliesSettingsProps> = ({ settings, set
                                 <div className="flex justify-end gap-2">
                                     <button
                                         onClick={() => setEditingIdx(null)}
-                                        className={`px-6 py-2 text-[10px] font-bold uppercase tracking-widest rounded-xl transition-all shadow-lg ${isDarkTheme ? 'bg-brand hover:bg-brand-dark text-white' : 'bg-slate-900 hover:bg-black text-white'}`}
+                                        className={`px-6 py-2 text-[10px] font-bold uppercase tracking-widest rounded-xl transition-all shadow-lg ${isDarkTheme ? 'bg-[var(--color-primary)] hover:bg-[#9A1523] text-white' : 'bg-slate-900 hover:bg-black text-white'}`}
                                     >
                                         Hoàn tất
                                     </button>
@@ -153,7 +153,7 @@ const FastRepliesSettings: React.FC<FastRepliesSettingsProps> = ({ settings, set
                                         </div>
                                         <div className="flex flex-wrap gap-1.5">
                                             {fr.pattern.split(',').map((kw: string, i: number) => kw.trim() ? (
-                                                <span key={i} className={`text-[11px] font-medium px-2 py-0.5 rounded-full border transition-colors cursor-default ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-300 hover:border-brand hover:text-brand' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-200 hover:text-blue-600'}`}>
+                                                <span key={i} className={`text-[11px] font-medium px-2 py-0.5 rounded-full border transition-colors cursor-default ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-300 hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-200 hover:text-blue-600'}`}>
                                                     {kw.trim()}
                                                 </span>
                                             ) : null)}
@@ -189,8 +189,8 @@ const FastRepliesSettings: React.FC<FastRepliesSettingsProps> = ({ settings, set
                 ))}
 
                 {(settings.fast_replies || []).length === 0 && (
-                    <div className={`py-12 text-center border-2 border-dashed rounded-[24px] ${isDarkTheme ? 'bg-slate-800/20 border-slate-700' : 'bg-slate-50/50 border-slate-100'}`}>
-                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3 border shadow-sm ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-600' : 'bg-white border-slate-50 text-slate-200'}`}>
+                    <div className={`py-12 text-center border-2 border-dashed rounded-[18px] ${isDarkTheme ? 'bg-slate-800/20 border-slate-700' : 'bg-slate-50/50 border-slate-100'}`}>
+                        <div className={`w-14 h-14 rounded-[14px] flex items-center justify-center mx-auto mb-3 border shadow-sm ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-600' : 'bg-white border-slate-50 text-slate-200'}`}>
                             <Zap className="w-6 h-6" />
                         </div>
                         <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wide">Chưa có phản hồi nhanh</h4>

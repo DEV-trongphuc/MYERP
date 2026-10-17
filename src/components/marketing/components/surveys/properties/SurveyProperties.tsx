@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Survey, SurveyBlock, MatrixRow, MatrixCol, ThankYouPage } from '../../../types/survey';
 import {
     Settings, Plus, Trash2, GripVertical, Upload, Link, AlignLeft, AlignCenter, AlignRight,
-    Image, Palette, Settings2, Heart, Calendar, Clock, Hash, Zap, GitMerge, ChevronDown
+    Image, Palette, Settings2, Heart, Calendar, Clock, Hash, Zap, GitMerge, ChevronDown, ArrowUp, ArrowDown
 } from 'lucide-react';
 import { API_BASE_URL } from '../../../utils/config';
 import { api } from '../../../services/storageAdapter';
@@ -102,20 +102,27 @@ const Label: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 
 const FieldInput: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = (props) => {
     const [localVal, setLocalVal] = useState(props.value ?? '');
-    useEffect(() => { setLocalVal(props.value ?? ''); }, [props.value]);
+    const isTyping = useRef(false);
+    const onChangeRef = useRef(props.onChange);
+    onChangeRef.current = props.onChange;
+
+    useEffect(() => {
+        if (!isTyping.current) {
+            setLocalVal(props.value ?? '');
+        }
+    }, [props.value]);
     
     // Auto-sync debounced
-    const isTyping = useRef(false);
     useEffect(() => {
         if (!isTyping.current) return;
         const timer = setTimeout(() => {
-            if (localVal !== props.value && props.onChange) {
-                props.onChange({ target: { value: localVal } } as any);
+            if (localVal !== props.value && onChangeRef.current) {
+                onChangeRef.current({ target: { value: localVal } } as any);
             }
             isTyping.current = false;
         }, 300);
         return () => clearTimeout(timer);
-    }, [localVal, props.onChange, props.value]);
+    }, [localVal, props.value]);
 
     return (
         <input 
@@ -128,30 +135,37 @@ const FieldInput: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = (props
             onBlur={e => {
                 if (isTyping.current) {
                     isTyping.current = false;
-                    if (props.onChange) props.onChange({ target: { value: localVal } } as any);
+                    if (onChangeRef.current) onChangeRef.current({ target: { value: localVal } } as any);
                 }
                 if (props.onBlur) props.onBlur(e);
             }}
-            className={`w-full px-3 py-2 text-xs bg-white border border-slate-200 hover:border-slate-300 rounded-xl focus:outline-none focus:border-amber-500 focus:ring-[3px] focus:ring-amber-500/20 transition-all shadow-sm ${props.className ?? ''}`} 
+            className={`w-full px-3 py-2 text-xs bg-white border border-slate-200 hover:border-slate-300 rounded-xl focus:outline-none focus:border-[var(--color-primary)] focus:ring-[3px] focus:ring-[var(--color-primary)]/20 transition-all shadow-sm ${props.className ?? ''}`} 
         />
     );
 };
 
 const FieldTextarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement>> = (props) => {
     const [localVal, setLocalVal] = useState(props.value ?? '');
-    useEffect(() => { setLocalVal(props.value ?? ''); }, [props.value]);
-    
     const isTyping = useRef(false);
+    const onChangeRef = useRef(props.onChange);
+    onChangeRef.current = props.onChange;
+
+    useEffect(() => {
+        if (!isTyping.current) {
+            setLocalVal(props.value ?? '');
+        }
+    }, [props.value]);
+    
     useEffect(() => {
         if (!isTyping.current) return;
         const timer = setTimeout(() => {
-            if (localVal !== props.value && props.onChange) {
-                props.onChange({ target: { value: localVal } } as any);
+            if (localVal !== props.value && onChangeRef.current) {
+                onChangeRef.current({ target: { value: localVal } } as any);
             }
             isTyping.current = false;
         }, 300);
         return () => clearTimeout(timer);
-    }, [localVal, props.onChange, props.value]);
+    }, [localVal, props.value]);
 
     return (
         <textarea 
@@ -164,11 +178,11 @@ const FieldTextarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement>>
             onBlur={e => {
                 if (isTyping.current) {
                     isTyping.current = false;
-                    if (props.onChange) props.onChange({ target: { value: localVal } } as any);
+                    if (onChangeRef.current) onChangeRef.current({ target: { value: localVal } } as any);
                 }
                 if (props.onBlur) props.onBlur(e);
             }}
-            className={`w-full px-3 py-2.5 text-xs bg-white border border-slate-200 hover:border-slate-300 rounded-xl focus:outline-none focus:border-amber-500 focus:ring-[3px] focus:ring-amber-500/20 transition-all shadow-sm resize-none ${props.className ?? ''}`} 
+            className={`w-full px-3 py-2.5 text-xs bg-white border border-slate-200 hover:border-slate-300 rounded-xl focus:outline-none focus:border-[var(--color-primary)] focus:ring-[3px] focus:ring-[var(--color-primary)]/20 transition-all shadow-sm resize-none ${props.className ?? ''}`} 
         />
     );
 };
@@ -197,7 +211,7 @@ const FieldSelect: React.FC<React.SelectHTMLAttributes<HTMLSelectElement>> = (pr
 const Toggle: React.FC<{ value: boolean; onChange: () => void; label: string }> = ({ value, onChange, label }) => (
     <div className="flex items-center justify-between py-0.5">
         <span className="text-xs font-medium text-slate-600">{label}</span>
-        <button onClick={onChange} className={`relative w-9 h-5 rounded-full transition-colors ${value ? 'bg-amber-500' : 'bg-slate-200'}`}>
+        <button onClick={onChange} className={`relative w-9 h-5 rounded-full transition-colors ${value ? 'bg-[var(--color-primary)]' : 'bg-slate-200'}`}>
             <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${value ? 'left-4' : 'left-0.5'}`} />
         </button>
     </div>
@@ -209,7 +223,7 @@ const AlignButtons: React.FC<{ value?: string; onChange: (v: 'left' | 'center' |
             const Icon = a === 'left' ? AlignLeft : a === 'center' ? AlignCenter : AlignRight;
             return (
                 <button key={a} onClick={() => onChange(a)}
-                    className={`flex-1 py-1.5 rounded-lg flex items-center justify-center transition-all ${value === a ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                    className={`flex-1 py-1.5 rounded-lg flex items-center justify-center transition-all ${value === a ? 'bg-[var(--color-primary)] text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
                 >
                     <Icon className="w-3.5 h-3.5" />
                 </button>
@@ -309,7 +323,7 @@ const ImageUploader: React.FC<{
                 <Label>{label}</Label>
                 <button
                     onClick={() => setIsLibraryOpen(true)}
-                    className="text-[10px] font-bold text-amber-600 hover:text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors"
+                    className="text-[10px] font-bold text-[var(--color-primary)] bg-amber-50 px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors"
                 >
                     <Image className="w-3 h-3" /> Thư viện
                 </button>
@@ -323,7 +337,7 @@ const ImageUploader: React.FC<{
                     <button key={t.key}
                         onClick={() => setTab(t.key)}
                         className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all ${
-                            tab === t.key ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                            tab === t.key ? 'bg-[var(--color-primary)] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
                         }`}
                     >{t.label}</button>
                 ))}
@@ -388,7 +402,7 @@ const MatrixEditor: React.FC<{
             <div>
                 <div className="flex items-center justify-between mb-1.5">
                     <Label>Hàng (Tiêu chí)</Label>
-                    <button onClick={addRow} className="flex items-center gap-1 text-[10px] text-amber-600 hover:text-amber-700 font-bold">
+                    <button onClick={addRow} className="flex items-center gap-1 text-[10px] text-[var(--color-primary)] font-bold">
                         <Plus className="w-3 h-3" /> Thêm
                     </button>
                 </div>
@@ -412,7 +426,7 @@ const MatrixEditor: React.FC<{
             <div>
                 <div className="flex items-center justify-between mb-1.5">
                     <Label>Cột (Mức đánh giá)</Label>
-                    <button onClick={addCol} className="flex items-center gap-1 text-[10px] text-amber-600 hover:text-amber-700 font-bold">
+                    <button onClick={addCol} className="flex items-center gap-1 text-[10px] text-[var(--color-primary)] font-bold">
                         <Plus className="w-3 h-3" /> Thêm
                     </button>
                 </div>
@@ -497,12 +511,12 @@ const ThankYouDesigner: React.FC<{
                 <button
                     onClick={() => setActiveIndex(-1)}
                     className={`px-3 py-1.5 text-[10px] font-bold rounded-lg transition-all ${
-                        activeIndex === -1 ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-200'
+                        activeIndex === -1 ? 'bg-[var(--color-primary)] text-white shadow-sm' : 'text-slate-500 hover:bg-slate-200'
                     }`}
                 >Mặc định</button>
                 {extraPages.map((p, i) => (
                     <div key={p.id ?? i} className={`flex items-center rounded-lg transition-all ${
-                        activeIndex === i ? 'bg-amber-500 text-white shadow-sm' : 'bg-transparent text-slate-500 hover:bg-slate-200'
+                        activeIndex === i ? 'bg-[var(--color-primary)] text-white shadow-sm' : 'bg-transparent text-slate-500 hover:bg-slate-200'
                     }`}>
                         <button
                             onClick={() => setActiveIndex(i)}
@@ -552,7 +566,7 @@ const ThankYouDesigner: React.FC<{
                 <FieldInput value={ty.ctaUrl ?? ''} onChange={e => upd({ ctaUrl: e.target.value })} placeholder="https://..." />
             </div>
             {/* Button color */}
-            <ColorRow label="Màu nút CTA" value={(ty as any).ctaColor ?? '#f59e0b'} onChange={v => upd({ ...(ty as any), ctaColor: v })} />
+            <ColorRow label="Màu nút CTA" value={(ty as any).ctaColor ?? '#BD1D2D'} onChange={v => upd({ ...(ty as any), ctaColor: v })} />
             <SectionDivider label="Redirect" />
             <div>
                 <Label>URL chuyển hướng</Label>
@@ -570,6 +584,7 @@ const ThankYouDesigner: React.FC<{
 // ─── Main component ──────────────────────────────────────────────────
 const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBlockId, onUpdateBlock, onUpdateSurvey }) => {
     const [settingsTab, setSettingsTab] = useState<'theme' | 'settings' | 'thankyou' | 'voucher'>('theme');
+    const [dragOptionIndex, setDragOptionIndex] = useState<number | null>(null);
 
     // Auto-switch to thankyou tab when __thankyou__ block is clicked
     React.useEffect(() => {
@@ -587,7 +602,7 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
     // Survey-level settings (nothing selected OR special blocks)
     if (!selectedBlock) {
         return (
-            <div className="w-80 bg-white border-l border-slate-100 flex flex-col overflow-hidden">
+            <div className="w-[380px] shrink-0 bg-white border-l border-slate-100 flex flex-col overflow-hidden">
                 {/* Header */}
                 <div className="px-4 py-3 border-b border-slate-100">
                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.12em] flex items-center gap-2">
@@ -600,7 +615,7 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
                         <button key={key} onClick={() => setSettingsTab(key)}
                             className={`flex-1 py-2.5 flex flex-col items-center gap-0.5 text-[9px] font-bold transition-all ${
                                 settingsTab === key
-                                    ? 'text-amber-600 border-b-2 border-amber-500'
+                                    ? 'text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]'
                                     : 'text-slate-400 hover:text-slate-600'
                             }`}
                         >
@@ -613,8 +628,8 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
 
                     {settingsTab === 'theme' && (
                         <>
-                            <ColorRow label="Màu chủ đạo" value={survey.theme?.primaryColor || '#f59e0b'} onChange={v => onUpdateSurvey({ theme: { ...survey.theme, primaryColor: v } })} />
-                            <ColorRow label="Màu nền trang" value={survey.theme?.backgroundColor || '#0f172a'} onChange={v => onUpdateSurvey({ theme: { ...survey.theme, backgroundColor: v } })} />
+                            <ColorRow label="Màu chủ đạo" value={survey.theme?.primaryColor || '#BD1D2D'} onChange={v => onUpdateSurvey({ theme: { ...survey.theme, primaryColor: v } })} />
+                            <ColorRow label="Màu nền trang" value={survey.theme?.backgroundColor || '#f8fafc'} onChange={v => onUpdateSurvey({ theme: { ...survey.theme, backgroundColor: v } })} />
                             <ColorRow label="Màu card" value={survey.theme?.cardBackground || '#ffffff'} onChange={v => onUpdateSurvey({ theme: { ...survey.theme, cardBackground: v } })} />
                             <ShadowRow label="Đổ bóng Card" value={survey.theme?.cardShadow || 'none'} onChange={v => onUpdateSurvey({ theme: { ...survey.theme, cardShadow: v } as any })} />
                             <ColorRow label="Màu chữ" value={survey.theme?.textColor || '#1e293b'} onChange={v => onUpdateSurvey({ theme: { ...survey.theme, textColor: v } })} />
@@ -628,7 +643,7 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
                                         <button key={s} onClick={() => onUpdateSurvey({ theme: { ...survey.theme, coverStyle: s } })}
                                             className={`py-1.5 text-[10px] font-bold rounded-lg capitalize transition-all ${
                                                 (survey.theme?.coverStyle ?? 'minimal') === s
-                                                    ? 'bg-amber-500 text-white'
+                                                    ? 'bg-[var(--color-primary)] text-white'
                                                     : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                                             }`}
                                         >{lbl}</button>
@@ -639,8 +654,8 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
                             {/* Gradient color pickers when gradient mode */}
                             {survey.theme?.coverStyle === 'gradient' && (
                                 <>
-                                    <ColorRow label="Màu gradient đầu" value={(survey.theme as any).gradientFrom ?? survey.theme?.primaryColor ?? '#b45309'} onChange={v => onUpdateSurvey({ theme: { ...survey.theme, gradientFrom: v } as any })} />
-                                    <ColorRow label="Màu gradient cuối" value={(survey.theme as any).gradientTo ?? '#f59e0b'} onChange={v => onUpdateSurvey({ theme: { ...survey.theme, gradientTo: v } as any })} />
+                                    <ColorRow label="Màu gradient đầu" value={(survey.theme as any).gradientFrom ?? survey.theme?.primaryColor ?? '#991b1b'} onChange={v => onUpdateSurvey({ theme: { ...survey.theme, gradientFrom: v } as any })} />
+                                    <ColorRow label="Màu gradient cuối" value={(survey.theme as any).gradientTo ?? '#BD1D2D'} onChange={v => onUpdateSurvey({ theme: { ...survey.theme, gradientTo: v } as any })} />
                                 </>
                             )}
 
@@ -661,7 +676,7 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
                                         <button key={h} onClick={() => onUpdateSurvey({ theme: { ...survey.theme, coverHeight: h } })}
                                             className={`py-1.5 text-[10px] font-bold rounded-lg uppercase transition-all ${
                                                 (survey.theme?.coverHeight ?? 'md') === h
-                                                    ? 'bg-amber-500 text-white'
+                                                    ? 'bg-[var(--color-primary)] text-white'
                                                     : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                                             }`}
                                         >{h}</button>
@@ -821,7 +836,7 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
                                     <button
                                         onClick={() => onUpdateSurvey({ flow_trigger_id: (survey as any).flow_trigger_id ? null : 'enable_intent' } as any)}
                                         className={`relative w-10 h-5 rounded-full transition-colors shadow-inner ${
-                                            (survey as any).flow_trigger_id ? 'bg-amber-500' : 'bg-slate-300'
+                                            (survey as any).flow_trigger_id ? 'bg-[var(--color-primary)]' : 'bg-slate-300'
                                         }`}
                                     >
                                         <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${
@@ -909,7 +924,7 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
             changes.buttonUrl = '';
             changes.buttonStyle = 'filled';
             changes.buttonAlign = 'center';
-            changes.buttonColor = '#f59e0b';
+            changes.buttonColor = '#BD1D2D';
         }
         if (newType === 'link_block') {
             changes.linkText = 'Xem thêm';
@@ -926,7 +941,7 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
     };
 
     return (
-        <div className="w-80 bg-white border-l border-slate-100 flex flex-col overflow-hidden">
+        <div className="w-[380px] shrink-0 bg-white border-l border-slate-100 flex flex-col overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-100">
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.12em] flex items-center gap-2">
                     <Settings className="w-3.5 h-3.5" /> Cấu hình câu hỏi
@@ -1071,25 +1086,98 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
                             <Label>Lựa chọn</Label>
                             <button
                                 onClick={() => update({ options: [...(block.options ?? []), { id: crypto.randomUUID(), label: `Lựa chọn ${(block.options?.length ?? 0) + 1}`, value: String((block.options?.length ?? 0) + 1) }] })}
-                                className="flex items-center gap-1 text-[10px] text-amber-600 hover:text-amber-700 font-bold"
+                                className="flex items-center gap-1 text-[10px] text-[var(--color-primary)] font-bold"
                             >
                                 <Plus className="w-3 h-3" /> Thêm
                             </button>
                         </div>
                         <div className="space-y-1.5">
-                            {(block.options ?? []).map(opt => (
-                                <div key={opt.id} className="flex items-center gap-1.5">
-                                    <GripVertical className="w-3 h-3 text-slate-300 flex-shrink-0" />
-                                    <FieldInput
-                                        value={opt.label}
-                                        onChange={e => update({ options: block.options?.map(o => o.id === opt.id ? { ...o, label: e.target.value, value: e.target.value.toLowerCase().replace(/\s+/g, '_') } : o) })}
-                                        className="!px-2 !py-1 !text-xs !bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-300"
-                                    />
-                                    <button onClick={() => update({ options: block.options?.filter(o => o.id !== opt.id) })} className="p-1 text-slate-300 hover:text-red-400 transition-colors">
-                                        <Trash2 className="w-3 h-3" />
-                                    </button>
-                                </div>
-                            ))}
+                            {(block.options ?? []).map((opt, optIdx) => {
+                                const totalOpts = (block.options ?? []).length;
+                                const moveOption = (fromIdx: number, toIdx: number) => {
+                                    const list = [...(block.options ?? [])];
+                                    if (fromIdx < 0 || toIdx < 0 || fromIdx >= list.length || toIdx >= list.length || fromIdx === toIdx) return;
+                                    const [moved] = list.splice(fromIdx, 1);
+                                    list.splice(toIdx, 0, moved);
+                                    update({ options: list });
+                                };
+                                return (
+                                    <div
+                                        key={opt.id}
+                                        onDragOver={e => {
+                                            if (dragOptionIndex === null || dragOptionIndex === optIdx) return;
+                                            e.preventDefault();
+                                            e.dataTransfer.dropEffect = 'move';
+                                        }}
+                                        onDrop={e => {
+                                            e.preventDefault();
+                                            if (dragOptionIndex !== null && dragOptionIndex !== optIdx) {
+                                                moveOption(dragOptionIndex, optIdx);
+                                            }
+                                            setDragOptionIndex(null);
+                                        }}
+                                        className={`flex items-center gap-1 rounded-lg transition-all ${dragOptionIndex === optIdx ? 'opacity-40' : ''}`}
+                                    >
+                                        <div
+                                            draggable
+                                            onDragStart={e => {
+                                                e.stopPropagation();
+                                                setDragOptionIndex(optIdx);
+                                                e.dataTransfer.effectAllowed = 'move';
+                                                try { e.dataTransfer.setData('text/plain', String(optIdx)); } catch {}
+                                            }}
+                                            onDragEnd={() => setDragOptionIndex(null)}
+                                            className="p-0.5 cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 flex-shrink-0"
+                                            title="Kéo để sắp xếp"
+                                        >
+                                            <GripVertical className="w-3 h-3" />
+                                        </div>
+                                        <FieldInput
+                                            value={opt.label}
+                                            onChange={e => update({
+                                                options: block.options?.map(o =>
+                                                    o.id === opt.id
+                                                        ? {
+                                                              ...o,
+                                                              label: e.target.value,
+                                                              value: o.value || e.target.value.toLowerCase().replace(/\s+/g, '_') || o.id,
+                                                          }
+                                                        : o
+                                                ),
+                                            })}
+                                            className="!px-2 !py-1 !text-xs !bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-300"
+                                        />
+                                        <div className="flex items-center flex-shrink-0">
+                                            <button
+                                                type="button"
+                                                disabled={optIdx === 0}
+                                                onClick={() => moveOption(optIdx, optIdx - 1)}
+                                                className="p-0.5 text-slate-300 hover:text-slate-600 disabled:opacity-25 transition-colors"
+                                                title="Di chuyển lên"
+                                            >
+                                                <ArrowUp className="w-3 h-3" />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={optIdx === totalOpts - 1}
+                                                onClick={() => moveOption(optIdx, optIdx + 1)}
+                                                className="p-0.5 text-slate-300 hover:text-slate-600 disabled:opacity-25 transition-colors"
+                                                title="Di chuyển xuống"
+                                            >
+                                                <ArrowDown className="w-3 h-3" />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => update({ options: block.options?.filter(o => o.id !== opt.id) })}
+                                                className="p-1 text-slate-300 hover:text-red-400 transition-colors"
+                                                title="Xoá lựa chọn"
+                                            >
+                                                <Trash2 className="w-3 h-3" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                         {['single_choice', 'multi_choice'].includes(block.type) && (
                             <div className="mt-2">
@@ -1119,7 +1207,7 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
                                     onClick={() => update({ dateMode: 'date' } as any)}
                                     className={`py-1.5 flex items-center justify-center gap-1.5 text-[10px] font-bold rounded-lg transition-all ${
 
-                                        (block as any).dateMode !== 'datetime' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                        (block as any).dateMode !== 'datetime' ? 'bg-[var(--color-primary)] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                                     }`}
                                 >
                                     <Calendar className="w-3 h-3" /> Chỉ ngày
@@ -1127,7 +1215,7 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
                                 <button
                                     onClick={() => update({ dateMode: 'datetime' } as any)}
                                     className={`py-1.5 flex items-center justify-center gap-1.5 text-[10px] font-bold rounded-lg transition-all ${
-                                        (block as any).dateMode === 'datetime' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                        (block as any).dateMode === 'datetime' ? 'bg-[var(--color-primary)] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                                     }`}
                                 >
                                     <Clock className="w-3 h-3" /> Ngày + giờ
@@ -1154,7 +1242,7 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
                                     const next = [...cur, { value: cur.length + 1, label: `Mức ${cur.length + 1}` }];
                                     update({ likertPoints: next, likertLabels: next.map((p: any) => p.label) } as any);
                                 }}
-                                className="flex items-center gap-1 text-[10px] text-amber-600 hover:text-amber-700 font-bold"
+                                className="flex items-center gap-1 text-[10px] text-[var(--color-primary)] font-bold"
                             >
                                 <Plus className="w-3 h-3" /> Thêm
                             </button>
@@ -1252,7 +1340,7 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
                             <div className="grid grid-cols-4 gap-1">
                                 {(['25%', '50%', '75%', '100%'] as const).map(w => (
                                     <button key={w} onClick={() => update({ imageWidth: w })}
-                                        className={`py-1 text-[10px] font-bold rounded-lg transition-all ${(block.imageWidth ?? '100%') === w ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                                        className={`py-1 text-[10px] font-bold rounded-lg transition-all ${(block.imageWidth ?? '100%') === w ? 'bg-[var(--color-primary)] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
                                     >{w}</button>
                                 ))}
                             </div>
@@ -1276,12 +1364,12 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
                             <div className="grid grid-cols-3 gap-1">
                                 {(['filled', 'outline', 'ghost'] as const).map(s => (
                                     <button key={s} onClick={() => update({ buttonStyle: s })}
-                                        className={`py-1.5 text-[10px] font-bold rounded-lg capitalize transition-all ${(block.buttonStyle ?? 'filled') === s ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                                        className={`py-1.5 text-[10px] font-bold rounded-lg capitalize transition-all ${(block.buttonStyle ?? 'filled') === s ? 'bg-[var(--color-primary)] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
                                     >{s}</button>
                                 ))}
                             </div>
                         </div>
-                        <ColorRow label="Màu nút" value={block.buttonColor ?? '#f59e0b'} onChange={v => update({ buttonColor: v })} />
+                        <ColorRow label="Màu nút" value={block.buttonColor ?? '#BD1D2D'} onChange={v => update({ buttonColor: v })} />
                         <ShadowRow label="Đổ bóng nút" value={block.buttonShadow ?? 'none'} onChange={v => update({ buttonShadow: v })} />
                         <div>
                             <Label>Căn chỉnh</Label>

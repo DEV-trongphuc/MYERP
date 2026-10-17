@@ -54,14 +54,14 @@ const WebJourneyReport: React.FC<WebReportProps> = ({ dateRange }) => {
     const stats = [
         { label: 'NB. TRUY CẬP (USERS)', value: overview.visitors || 0, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
         { label: 'PHIÊN (SESSIONS)', value: overview.sessions || 0, icon: ArrowUpRight, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-        { label: 'XEM TRANG (VIEWS)', value: overview.pageViews || 0, icon: MousePointerClick, color: 'text-orange-600', bg: 'bg-orange-50' },
+        { label: 'XEM TRANG (VIEWS)', value: overview.pageViews || 0, icon: MousePointerClick, color: 'text-[var(--color-primary)]', bg: 'bg-orange-50' },
         { label: 'Thời gian TB', value: overview.avgDuration ? `${Math.round(overview.avgDuration)}s` : '0s', icon: Clock, color: 'text-emerald-600', bg: 'bg-emerald-50' },
     ];
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
             {/* Filters Row */}
-            <div className="bg-slate-50/50 p-6 rounded-[32px] border border-slate-100 flex flex-wrap items-center gap-6">
+            <div className="bg-slate-50/50 p-6 rounded-[18px] border border-slate-100 flex flex-wrap items-center gap-6">
                 <div className="shrink-0 min-w-[250px]">
                     <Select
                         value={propertyId}
@@ -86,7 +86,7 @@ const WebJourneyReport: React.FC<WebReportProps> = ({ dateRange }) => {
             {/* Stats Grid */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
                 {stats.map((stat, idx) => (
-                    <div key={idx} className="bg-white rounded-2xl lg:rounded-[32px] p-4 lg:p-6 border border-slate-100 shadow-sm flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 group hover:shadow-md transition-all">
+                    <div key={idx} className="bg-white rounded-[14px] lg:rounded-[18px] p-4 lg:p-6 border border-slate-100 shadow-sm flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 group hover:shadow-md transition-all">
                         <div className="space-y-1 w-full">
                             <h4 className="text-[9px] lg:text-[10px] font-black text-slate-400 uppercase tracking-widest">{stat.label}</h4>
                             {loading ? (
@@ -95,7 +95,7 @@ const WebJourneyReport: React.FC<WebReportProps> = ({ dateRange }) => {
                                 <div className="text-xl lg:text-3xl font-black text-slate-800 tracking-tight">{stat.value.toLocaleString()}</div>
                             )}
                         </div>
-                        <div className={`w-10 h-10 lg:w-14 lg:h-14 ${stat.bg} rounded-xl lg:rounded-2xl flex items-center justify-center shrink-0`}>
+                        <div className={`w-10 h-10 lg:w-14 lg:h-14 ${stat.bg} rounded-xl lg:rounded-[14px] flex items-center justify-center shrink-0`}>
                             <stat.icon className={`w-5 h-5 lg:w-6 lg:h-6 ${stat.color}`} />
                         </div>
                     </div>
@@ -105,7 +105,7 @@ const WebJourneyReport: React.FC<WebReportProps> = ({ dateRange }) => {
             {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Traffic Trend */}
-                <div className="lg:col-span-2 bg-white p-5 lg:p-8 rounded-2xl lg:rounded-[40px] border border-slate-100 shadow-sm">
+                <div className="lg:col-span-2 bg-white p-5 lg:p-8 rounded-[14px] lg:rounded-[18px] border border-slate-100 shadow-sm">
                     <div className="flex items-center justify-between mb-8">
                         <div>
                             <h3 className="text-sm lg:text-base font-black text-slate-800 uppercase tracking-tight">Lưu lượng truy cập</h3>
@@ -141,7 +141,7 @@ const WebJourneyReport: React.FC<WebReportProps> = ({ dateRange }) => {
                 </div>
 
                 {/* Top Sources */}
-                <div className="bg-white p-5 lg:p-8 rounded-2xl lg:rounded-[40px] border border-slate-100 shadow-sm">
+                <div className="bg-white p-5 lg:p-8 rounded-[14px] lg:rounded-[18px] border border-slate-100 shadow-sm">
                     <div className="mb-6">
                         <h3 className="text-sm lg:text-base font-black text-slate-800 uppercase tracking-tight">Nguồn truy cập</h3>
                     </div>
@@ -178,7 +178,7 @@ const WebJourneyReport: React.FC<WebReportProps> = ({ dateRange }) => {
             </div>
 
             {/* Top Pages Table */}
-            <div className="bg-white p-5 lg:p-8 rounded-2xl lg:rounded-[40px] border border-slate-100 shadow-sm">
+            <div className="bg-white p-5 lg:p-8 rounded-[14px] lg:rounded-[18px] border border-slate-100 shadow-sm">
                 <h3 className="text-sm lg:text-base font-black text-slate-800 uppercase tracking-tight mb-6">Trang phổ biến nhất</h3>
                 <div className="overflow-x-auto -mx-5 lg:-mx-0">
                     <div className="inline-block min-w-full align-middle px-5 lg:px-0">

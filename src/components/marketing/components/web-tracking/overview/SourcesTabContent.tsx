@@ -48,7 +48,7 @@ const SourcesTabContent: React.FC<SourcesTabContentProps> = ({ stats }) => {
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
             {/* Header Card */}
-            <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-xl shadow-slate-200/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="bg-white p-4 rounded-[18px] border border-slate-100 shadow-xl shadow-slate-200/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                     <div className="w-11 h-11 bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-xl shadow-lg shadow-blue-500/20 flex items-center justify-center">
                         <Share2 className="w-5 h-5" />
@@ -93,7 +93,7 @@ const SourcesTabContent: React.FC<SourcesTabContentProps> = ({ stats }) => {
                     };
 
                     return (
-                        <div key={idx} className="group relative bg-white p-3.5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-lg hover:shadow-slate-200/50 transition-all duration-300">
+                        <div key={idx} className="group relative bg-white p-3.5 rounded-[14px] border border-slate-100 shadow-sm hover:shadow-lg hover:shadow-slate-200/50 transition-all duration-300">
                             <div className="flex items-center justify-between gap-4">
                                 {/* Left side: Source Info */}
                                 <div className="flex items-center gap-3.5 flex-1 min-w-0">
@@ -170,8 +170,8 @@ const SourcesTabContent: React.FC<SourcesTabContentProps> = ({ stats }) => {
                 })}
 
                 {groupedSources.length === 0 && (
-                    <div className="py-24 text-center bg-slate-50/50 rounded-[40px] border border-dashed border-slate-200">
-                        <div className="w-20 h-20 bg-white rounded-[32px] shadow-sm flex items-center justify-center mx-auto mb-6">
+                    <div className="py-24 text-center bg-slate-50/50 rounded-[18px] border border-dashed border-slate-200">
+                        <div className="w-20 h-20 bg-white rounded-[18px] shadow-sm flex items-center justify-center mx-auto mb-6">
                             <Share2 className="w-10 h-10 text-slate-200" />
                         </div>
                         <h4 className="text-lg font-black text-slate-800 mb-1">No traffic data found</h4>

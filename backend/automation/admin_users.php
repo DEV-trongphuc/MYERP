@@ -25,7 +25,7 @@ $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
 
 if ($method === 'GET' && $action === 'list') {
-    $stmt = $pdo->query("SELECT id, email, name, role, status, last_login, picture FROM users ORDER BY last_login DESC, created_at DESC");
+    $stmt = $pdo->query("SELECT u.id, u.email, u.full_name AS name, u.role, u.status, u.last_login_at AS last_login, u.avatar_url AS picture FROM users u ORDER BY u.last_login_at DESC, u.created_at DESC");
     $users = $stmt->fetchAll();
 
     if (!empty($users)) {

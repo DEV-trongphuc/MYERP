@@ -211,7 +211,8 @@ try {
             break;
 
         case 'tag_add':
-            $tag = $data['tag'] ?? '';
+        case 'add_tag':
+            $tag = $data['tag'] ?? $data['tagName'] ?? $data['tag_name'] ?? '';
             if (!$tag)
                 jsonResponse(false, null, 'Tag required');
 
@@ -226,12 +227,6 @@ try {
                 $tagId = $newTagId;
             }
 
-            // [BUG FIX P0] Removed JSON_ARRAY_APPEND on subscribers.tags:
-            //   - The system migrated to relational subscriber_tags table.
-            //   - On migrated schemas, subscribers.tags column may not exist → SQL Error.
-            //   - Using the relational table is correct and consistent with all other paths.
-            // [BUG FIX P1] Chunked INSERT IGNORE: a single INSERT for 100k subscribers
-            //   generates 200k+ PDO placeholders, exceeding MySQL's 65,535 limit → crash.
             $CHUNK = 500;
             $affectedCount = 0;
             foreach (array_chunk($subscriberIds, $CHUNK) as $chunk) {
@@ -252,21 +247,16 @@ try {
             break;
 
         case 'tag_remove':
-            $tag = $data['tag'] ?? '';
+        case 'remove_tag':
+            $tag = $data['tag'] ?? $data['tagName'] ?? $data['tag_name'] ?? '';
             if (!$tag)
                 jsonResponse(false, null, 'Tag required');
 
             // 1. Get Tag ID
-            // [FIX AUDIT-02] Scope Tag lookup to workspace
             $stmtT = $pdo->prepare("SELECT id FROM domation_tags WHERE name = ? AND workspace_id = ?");
             $stmtT->execute([$tag, $workspace_id]);
             $tagId = $stmtT->fetchColumn();
 
-            // [BUG FIX P0] Removed row-by-row JSON update loop:
-            //   - The old code fetched each subscriber's JSON tags and updated them one-by-one.
-            //   - On migrated schemas, subscribers.tags may not exist → SQL Error per row.
-            //   - Also N+1 updates: 100k subscribers = 100k UPDATEs inside a transaction.
-            // [BUG FIX P1] Chunked DELETE from relational table instead.
             if ($tagId) {
                 $CHUNK = 500;
                 foreach (array_chunk($subscriberIds, $CHUNK) as $chunk) {
@@ -274,18 +264,16 @@ try {
                     $pdo->prepare("DELETE FROM subscriber_tags WHERE workspace_id = ? AND tag_id = ? AND subscriber_id IN ($ph)")
                         ->execute(array_merge([$workspace_id, $tagId], $chunk));
                 }
-                // affectedCount = number of subscribers that had this tag
                 $affectedCount = count($subscriberIds);
             }
             break;
 
         case 'list_add':
-            $listId = $data['listId'] ?? '';
+        case 'add_to_list':
+            $listId = $data['listId'] ?? $data['list_id'] ?? $data['targetListId'] ?? '';
             if (!$listId)
                 jsonResponse(false, null, 'List ID required');
 
-            // [BUG FIX P1] Chunked INSERT IGNORE to prevent 65,535 placeholder crash.
-            // Single INSERT for 100k × 2 columns = 200k placeholders → MySQL crash.
             $CHUNK = 500;
             $affectedCount = 0;
             foreach (array_chunk($subscriberIds, $CHUNK) as $chunk) {
@@ -304,18 +292,21 @@ try {
             // Trigger automation in BULK
             enrollSubscribersBulk($pdo, $subscriberIds, 'list', $listId, $workspace_id);
 
-            // Update list count once (recalculate for accuracy)
-            $pdo->prepare("UPDATE lists SET subscriber_count = (SELECT COUNT(*) FROM subscriber_lists WHERE workspace_id = ? AND list_id = ?) WHERE workspace_id = ? AND id = ?")
-                ->execute([$workspace_id, $listId, $workspace_id, $listId]);
+            // Recalculate both subscriber_count & phone_count for accuracy
+            $pdo->prepare("
+                UPDATE lists 
+                SET subscriber_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl WHERE sl.workspace_id = ? AND sl.list_id = ?),
+                    phone_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ? WHERE sl.workspace_id = ? AND sl.list_id = ? AND s.phone_number IS NOT NULL AND TRIM(s.phone_number) != '')
+                WHERE workspace_id = ? AND id = ?
+            ")->execute([$workspace_id, $listId, $workspace_id, $workspace_id, $listId, $workspace_id, $listId]);
             break;
 
         case 'list_remove':
-            $listId = $data['listId'] ?? '';
+        case 'remove_from_list':
+            $listId = $data['listId'] ?? $data['list_id'] ?? $data['targetListId'] ?? '';
             if (!$listId)
                 jsonResponse(false, null, 'List ID required');
 
-            // [FIX P43-B1] Chunked DELETE — same 65k placeholder limit as list_add.
-            // Old: single DELETE with $placeholders from L166 = crash for 100k IDs.
             $CHUNK = 500;
             $affectedCount = 0;
             foreach (array_chunk($subscriberIds, $CHUNK) as $chunk) {
@@ -325,14 +316,18 @@ try {
                 $affectedCount += $stmt->rowCount();
             }
 
-            // Update list count once after all chunks
-            $pdo->prepare("UPDATE lists SET subscriber_count = (SELECT COUNT(*) FROM subscriber_lists WHERE workspace_id = ? AND list_id = ?) WHERE workspace_id = ? AND id = ?")
-                ->execute([$workspace_id, $listId, $workspace_id, $listId]);
+            // Recalculate both subscriber_count & phone_count once after all chunks
+            $pdo->prepare("
+                UPDATE lists 
+                SET subscriber_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl WHERE sl.workspace_id = ? AND sl.list_id = ?),
+                    phone_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ? WHERE sl.workspace_id = ? AND sl.list_id = ? AND s.phone_number IS NOT NULL AND TRIM(s.phone_number) != '')
+                WHERE workspace_id = ? AND id = ?
+            ")->execute([$workspace_id, $listId, $workspace_id, $workspace_id, $listId, $workspace_id, $listId]);
             break;
 
         case 'enroll_flow':
             // [NEW] Bulk Enroll to Flow
-            $flowId = $data['flowId'] ?? '';
+            $flowId = $data['flowId'] ?? $data['flow_id'] ?? '';
             if (!$flowId)
                 jsonResponse(false, null, 'Flow ID required');
 
@@ -395,9 +390,6 @@ try {
                 }
             }
 
-            // [FIX] Removed: dead code $vals/$batchPlaceholders loop + unsafe $subIdList string interpolation.
-            // Use INSERT...SELECT with parameterized placeholders for atomicity and safety.
-            // Chunked to avoid 65,535 placeholder limit: 100k IDs + 3 scalar params = crash.
             $ENROLL_CHUNK = 500;
             $affectedCount = 0;
             foreach (array_chunk($subscriberIds, $ENROLL_CHUNK) as $chunk) {
@@ -427,11 +419,12 @@ try {
             break;
 
         case 'import':
-            // Logic adapted from api/subscribers.php route=subscribers_bulk
             $subscribers = $data['subscribers'] ?? [];
             if (!is_array($subscribers) || empty($subscribers)) {
                 jsonResponse(false, null, 'Invalid data format or empty list.');
             }
+
+            require_once __DIR__ . '/../utils/DomationContactMatcher.php';
 
             if (!function_exists('standardize_phone')) {
                 function standardize_phone($phone) {
@@ -444,7 +437,7 @@ try {
                     }
                     if (substr($clean, 0, 3) === '084') {
                         $clean = '0' . substr($clean, 3);
-                    } elseif (substr($clean, 0, 2) === '84') {
+                    } elseif (substr($clean, 0, 2) === '84' && strlen($clean) >= 10) {
                         $clean = '0' . substr($clean, 2);
                     }
                     if (strlen($clean) === 9 && substr($clean, 0, 1) !== '0') {
@@ -485,56 +478,146 @@ try {
 
             $chunkSize = 500;
             $chunks = array_chunk($subscribers, $chunkSize);
-            $createVirtualEmail = $data['createVirtualEmail'] ?? false;
+            $createVirtualEmail = isset($data['createVirtualEmail']) ? (bool)$data['createVirtualEmail'] : true;
             $totalProcessed = 0;
             $allAffectedListSubscribers = [];
+            $importedSubscriberIds = [];
 
-            // Cache tags for speed
-            // [FIX BUG-BO-1] Scoped to workspace_id — old code fetched ALL workspace tags.
-            // If two workspaces had a tag named "VIP", the first one's tag ID would be used
-            // for the second workspace's subscribers → cross-workspace tag contamination.
-            // Same fix pattern as subscribers.php:253.
+            $tagMap = [];
             $stmtT = $pdo->prepare("SELECT id, name FROM domation_tags WHERE workspace_id = ?");
             $stmtT->execute([$workspace_id]);
-            while ($t = $stmtT->fetch())
+            while ($t = $stmtT->fetch()) {
                 $tagMap[strtolower(trim($t['name']))] = $t['id'];
+            }
 
             foreach ($chunks as $chunk) {
-                // [FIX] Pre-fetch existing IDs to ensure relations use the correct ID for existing users
                 $emailsInChunk = [];
                 $phonesInChunk = [];
+                $phones9InChunk = [];
                 foreach ($chunk as $d) {
-                    if (!empty($d['email']))
-                        $emailsInChunk[] = $d['email'];
-                    $ph = $d['phoneNumber'] ?? $d['phone'] ?? '';
-                    $ph = standardize_phone($ph);
-                    if (!empty($ph))
+                    $rawEm = trim((string)($d['email'] ?? ''));
+                    $emLower = strtolower($rawEm);
+                    $emNorm = DomationContactMatcher::normalizeEmail($rawEm);
+                    if ($emLower !== '') {
+                        $emailsInChunk[] = $emLower;
+                    }
+                    if ($emNorm !== '') {
+                        $emailsInChunk[] = $emNorm;
+                    }
+                    $ph = standardize_phone($d['phoneNumber'] ?? $d['phone'] ?? '');
+                    $ph9 = DomationContactMatcher::normalizePhone9($ph);
+                    if ($ph !== '') {
                         $phonesInChunk[] = $ph;
+                        $emailsInChunk[] = $ph . '@no-email.domation';
+                    }
+                    if ($ph9 !== '') {
+                        $phones9InChunk[] = $ph9;
+                        $emailsInChunk[] = 'phone_' . $ph9 . '@phone.local';
+                    }
                 }
+                $emailsInChunk = array_values(array_unique($emailsInChunk));
+                $phonesInChunk = array_values(array_unique($phonesInChunk));
+                $phones9InChunk = array_values(array_unique($phones9InChunk));
 
                 $existingMap = [];
                 $existingPhoneMap = [];
-                
-                if (!empty($emailsInChunk) || !empty($phonesInChunk)) {
-                    $emailPlaceholders = !empty($emailsInChunk) ? implode(',', array_fill(0, count($emailsInChunk), '?')) : "''";
-                    $phonePlaceholders = !empty($phonesInChunk) ? implode(',', array_fill(0, count($phonesInChunk), '?')) : "''";
-                    
-                    $sqlEx = "SELECT id, email, phone_number FROM subscribers 
-                              WHERE (email IN ($emailPlaceholders) OR phone_number IN ($phonePlaceholders)) 
-                              AND workspace_id = ?";
-                    
-                    $paramsEx = array_merge($emailsInChunk, $phonesInChunk, [$workspace_id]);
+                $existingPhone9Map = [];
+                $existingSubEmailById = [];
+                $existingContactByEmail = [];
+                $existingContactByPhone9 = [];
+
+                // 1. Pre-fetch existing subscribers by email / email_norm / phone_number / phone_norm9
+                if (!empty($emailsInChunk) || !empty($phonesInChunk) || !empty($phones9InChunk)) {
+                    $exConds = [];
+                    $paramsEx = [$workspace_id];
+                    if (!empty($emailsInChunk)) {
+                        $ePh = implode(',', array_fill(0, count($emailsInChunk), '?'));
+                        $exConds[] = "LOWER(TRIM(email)) IN ($ePh)";
+                        $exConds[] = "email_norm IN ($ePh)";
+                        $paramsEx = array_merge($paramsEx, $emailsInChunk, $emailsInChunk);
+                    }
+                    if (!empty($phonesInChunk)) {
+                        $pPh = implode(',', array_fill(0, count($phonesInChunk), '?'));
+                        $exConds[] = "phone_number IN ($pPh)";
+                        $paramsEx = array_merge($paramsEx, $phonesInChunk);
+                    }
+                    if (!empty($phones9InChunk)) {
+                        $p9Ph = implode(',', array_fill(0, count($phones9InChunk), '?'));
+                        $exConds[] = "phone_norm9 IN ($p9Ph)";
+                        $paramsEx = array_merge($paramsEx, $phones9InChunk);
+                    }
+
+                    $sqlEx = "SELECT id, email, email_norm, phone_number, phone_norm9, contact_id FROM subscribers 
+                              WHERE workspace_id = ? AND (" . implode(' OR ', $exConds) . ")";
                     $stmtEx = $pdo->prepare($sqlEx);
                     $stmtEx->execute($paramsEx);
-                    
+
                     while ($row = $stmtEx->fetch(PDO::FETCH_ASSOC)) {
-                        if ($row['email']) $existingMap[strtolower(trim($row['email']))] = $row['id'];
-                        if ($row['phone_number']) {
-                            // Normalize stored phone for lookup using the same standardize_phone logic
+                        $sid = (string)$row['id'];
+                        $existingSubEmailById[$sid] = (string)($row['email'] ?? '');
+                        if (!empty($row['email'])) {
+                            $existingMap[strtolower(trim($row['email']))] = $sid;
+                        }
+                        if (!empty($row['email_norm'])) {
+                            $existingMap[strtolower(trim($row['email_norm']))] = $sid;
+                        }
+                        if (!empty($row['phone_number'])) {
                             $norm = standardize_phone($row['phone_number']);
-                            if ($norm) {
-                                $existingPhoneMap[$norm] = $row['id'];
+                            if ($norm !== '') {
+                                $existingPhoneMap[$norm] = $sid;
                             }
+                            $norm9 = DomationContactMatcher::normalizePhone9($row['phone_number']);
+                            if ($norm9 !== '') {
+                                $existingPhone9Map[$norm9] = $sid;
+                            }
+                        }
+                        if (!empty($row['phone_norm9'])) {
+                            $existingPhone9Map[(string)$row['phone_norm9']] = $sid;
+                        }
+                    }
+
+                    // 2. Pre-fetch existing MYERP contacts (including owner, stage, pipeline, lead_status, program)
+                    $cConds = [];
+                    $cParams = [];
+                    if (!empty($emailsInChunk)) {
+                        $ePh = implode(',', array_fill(0, count($emailsInChunk), '?'));
+                        $cConds[] = "LOWER(TRIM(c.email)) IN ($ePh)";
+                        $cParams = array_merge($cParams, $emailsInChunk);
+                    }
+                    if (!empty($phones9InChunk)) {
+                        $p9Ph = implode(',', array_fill(0, count($phones9InChunk), '?'));
+                        $cConds[] = "RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(c.phone, ''), ' ', ''), '.', ''), '-', ''), '+', ''), 9) IN ($p9Ph)";
+                        $cConds[] = "RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(c.mobile, ''), ' ', ''), '.', ''), '-', ''), '+', ''), 9) IN ($p9Ph)";
+                        $cParams = array_merge($cParams, $phones9InChunk, $phones9InChunk);
+                    }
+                    if (!empty($cConds)) {
+                        try {
+                            $stmtCrm = $pdo->prepare("
+                                SELECT c.id, c.email, c.phone, c.mobile, c.domation_subscriber_id,
+                                       c.owner_id, u.full_name AS owner_name,
+                                       c.stage_id, COALESCE(ps.system_slug, NULLIF(TRIM(c.pipeline_status), '')) AS pipeline_status,
+                                       c.lead_status, c.program
+                                FROM contacts c
+                                LEFT JOIN users u ON u.id = c.owner_id
+                                LEFT JOIN pipeline_stages ps ON ps.id = c.stage_id
+                                WHERE c.deleted_at IS NULL
+                                  AND (" . implode(' OR ', $cConds) . ")
+                                ORDER BY (c.tenant_id = ?) DESC, c.id DESC
+                            ");
+                            $stmtCrm->execute(array_merge($cParams, [$workspace_id]));
+                            while ($cRow = $stmtCrm->fetch(PDO::FETCH_ASSOC)) {
+                                $cEm = DomationContactMatcher::normalizeEmail($cRow['email'] ?? '');
+                                if ($cEm !== '' && !isset($existingContactByEmail[$cEm])) {
+                                    $existingContactByEmail[$cEm] = $cRow;
+                                }
+                                foreach (['phone', 'mobile'] as $pField) {
+                                    $cPh9 = DomationContactMatcher::normalizePhone9($cRow[$pField] ?? '');
+                                    if ($cPh9 !== '' && !isset($existingContactByPhone9[$cPh9])) {
+                                        $existingContactByPhone9[$cPh9] = $cRow;
+                                    }
+                                }
+                            }
+                        } catch (\Throwable $eCrmPre) {
                         }
                     }
                 }
@@ -547,56 +630,171 @@ try {
                 $tagSubParams = [];
 
                 foreach ($chunk as $d) {
-                    $email = $d['email'] ?? '';
-                    $phone = $d['phoneNumber'] ?? $d['phone'] ?? '';
-                    $phone = standardize_phone($phone);
+                    $email = trim((string)($d['email'] ?? ''));
+                    $phone = standardize_phone($d['phoneNumber'] ?? $d['phone'] ?? '');
+                    $emailNormInput = DomationContactMatcher::normalizeEmail($email);
+                    $phoneNorm9 = DomationContactMatcher::normalizePhone9($phone);
+                    $cleanEmail = strtolower($email);
 
-                    if (empty($email) && !empty($phone) && $createVirtualEmail) {
-                        $email = $phone . '@no-email.domation';
+                    // Resolve existing subscriber ID by email_norm -> email -> phone_norm9 -> phone
+                    $id = null;
+                    if ($emailNormInput !== '' && isset($existingMap[$emailNormInput])) {
+                        $id = $existingMap[$emailNormInput];
+                    } elseif ($cleanEmail !== '' && isset($existingMap[$cleanEmail])) {
+                        $id = $existingMap[$cleanEmail];
+                    } elseif ($phoneNorm9 !== '' && isset($existingPhone9Map[$phoneNorm9])) {
+                        $id = $existingPhone9Map[$phoneNorm9];
+                    } elseif ($phone !== '' && isset($existingPhoneMap[$phone])) {
+                        $id = $existingPhoneMap[$phone];
                     }
 
-                    if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL))
+                    // Resolve matched CRM contact (if any)
+                    $matchedContact = null;
+                    if ($emailNormInput !== '' && isset($existingContactByEmail[$emailNormInput])) {
+                        $matchedContact = $existingContactByEmail[$emailNormInput];
+                    } elseif ($cleanEmail !== '' && isset($existingContactByEmail[$cleanEmail])) {
+                        $matchedContact = $existingContactByEmail[$cleanEmail];
+                    } elseif ($phoneNorm9 !== '' && isset($existingContactByPhone9[$phoneNorm9])) {
+                        $matchedContact = $existingContactByPhone9[$phoneNorm9];
+                    }
+
+                    $contactId = $matchedContact ? (int)$matchedContact['id'] : null;
+                    if (!$id && $matchedContact && !empty($matchedContact['domation_subscriber_id'])) {
+                        $domSubId = (string)$matchedContact['domation_subscriber_id'];
+                        if (isset($existingSubEmailById[$domSubId])) {
+                            $id = $domSubId;
+                        }
+                    }
+
+                    // If email is empty, inherit from existing subscriber or matched CRM contact, or generate deterministic placeholder email
+                    if ($email === '' && $id && !empty($existingSubEmailById[$id])) {
+                        $email = $existingSubEmailById[$id];
+                    } elseif ($email === '' && $matchedContact && !empty($matchedContact['email'])) {
+                        $email = trim((string)$matchedContact['email']);
+                    } elseif ($email === '' && $phoneNorm9 !== '') {
+                        $email = "phone_{$phoneNorm9}@phone.local";
+                    } elseif ($email === '' && $phone !== '') {
+                        $email = "phone_{$phone}@phone.local";
+                    }
+
+                    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                         continue;
-                    // Use existing ID if available, otherwise generate new
+                    }
+
                     $cleanEmail = strtolower(trim($email));
-                    $normPhone = $phone;
+                    $isPlaceholderEmail = (
+                        strpos($cleanEmail, '@phone.local') !== false ||
+                        strpos($cleanEmail, '@no-email.domation') !== false ||
+                        strpos($cleanEmail, '@zalo-oa.vn') !== false ||
+                        strpos($cleanEmail, '@facebook.com') !== false
+                    );
+                    $emailNorm = !$isPlaceholderEmail ? DomationContactMatcher::normalizeEmail($cleanEmail) : '';
+                    $emailNorm = ($emailNorm !== '') ? $emailNorm : null;
 
-                    $id = $existingMap[$cleanEmail] ?? $existingPhoneMap[$normPhone] ?? ($d['id'] ?? bin2hex(random_bytes(16)));
+                    if (!$id) {
+                        $id = $existingMap[$cleanEmail] ?? ($d['id'] ?? ($contactId ? ('crm_' . $contactId) : bin2hex(random_bytes(16))));
+                    }
 
-                    $firstName = $d['firstName'] ?? '';
-                    $lastName = $d['lastName'] ?? '';
+                    // Keep existing real email if import row only had a synthetic placeholder address
+                    if (
+                        isset($existingSubEmailById[$id]) &&
+                        $existingSubEmailById[$id] !== '' &&
+                        strpos($existingSubEmailById[$id], '@no-email.domation') === false &&
+                        strpos($existingSubEmailById[$id], '@phone.local') === false &&
+                        $isPlaceholderEmail
+                    ) {
+                        $email = $existingSubEmailById[$id];
+                        $cleanEmail = strtolower(trim($email));
+                        $emailNorm = DomationContactMatcher::normalizeEmail($cleanEmail) ?: null;
+                    }
+
+                    $existingMap[$cleanEmail] = $id;
+                    if ($emailNorm !== null) {
+                        $existingMap[$emailNorm] = $id;
+                    }
+                    if ($phone !== '') $existingPhoneMap[$phone] = $id;
+                    if ($phoneNorm9 !== '') $existingPhone9Map[$phoneNorm9] = $id;
+                    $importedSubscriberIds[] = $id;
+
+                    $firstName = $d['firstName'] ?? $d['first_name'] ?? '';
+                    $lastName = $d['lastName'] ?? $d['last_name'] ?? '';
                     $status = $d['status'] ?? 'active';
                     $source = $d['source'] ?? 'Bulk Import';
-                    $salesperson = $d['salesperson'] ?? '';
-                    $job = $d['jobTitle'] ?? '';
-                    $company = $d['companyName'] ?? '';
+
+                    $ownerId = ($matchedContact && !empty($matchedContact['owner_id']))
+                        ? (int)$matchedContact['owner_id']
+                        : (!empty($d['owner_id']) ? (int)$d['owner_id'] : null);
+                    $crmSalesperson = ($matchedContact && !empty($matchedContact['owner_name']))
+                        ? trim((string)$matchedContact['owner_name'])
+                        : '';
+                    $salesperson = trim((string)($d['salesperson'] ?? '')) ?: $crmSalesperson;
+                    $stageId = ($matchedContact && !empty($matchedContact['stage_id']))
+                        ? (int)$matchedContact['stage_id']
+                        : (!empty($d['stage_id']) ? (int)$d['stage_id'] : null);
+                    $pipelineStatus = ($matchedContact && !empty($matchedContact['pipeline_status']))
+                        ? (string)$matchedContact['pipeline_status']
+                        : (!empty($d['pipeline_status']) ? (string)$d['pipeline_status'] : null);
+                    $leadStatus = ($matchedContact && !empty($matchedContact['lead_status']))
+                        ? (string)$matchedContact['lead_status']
+                        : (!empty($d['lead_status']) ? (string)$d['lead_status'] : null);
+                    $program = ($matchedContact && !empty($matchedContact['program']))
+                        ? (string)$matchedContact['program']
+                        : (!empty($d['program']) ? (string)$d['program'] : null);
+
+                    $job = $d['jobTitle'] ?? $d['job_title'] ?? '';
+                    $company = $d['companyName'] ?? $d['company_name'] ?? '';
                     $country = $d['country'] ?? '';
                     $city = $d['city'] ?? '';
                     $gender = $d['gender'] ?? '';
                     $dob = !empty($d['dateOfBirth']) ? standardize_dob($d['dateOfBirth']) : null;
                     $anniv = !empty($d['anniversaryDate']) ? standardize_dob($d['anniversaryDate']) : null;
-
-                    // Insert Subscriber
                     $customAt = !empty($d['customAttributes']) ? json_encode($d['customAttributes']) : '{}';
-                    $subValues[] = "(?, ?, ?, ?, ?, ?, ?, ?, NOW(), '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                    array_push($subParams, $workspace_id, $id, $email, $firstName, $lastName, $status, $source, $salesperson, $phone, $job, $company, $country, $city, $gender, $dob, $anniv, $customAt);
+
+                    $subValues[] = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    array_push(
+                        $subParams,
+                        $workspace_id,
+                        $id,
+                        $contactId,
+                        $ownerId,
+                        $salesperson,
+                        $stageId,
+                        $pipelineStatus,
+                        $leadStatus,
+                        $program,
+                        $email,
+                        $emailNorm,
+                        $phoneNorm9 !== '' ? $phoneNorm9 : null,
+                        $firstName,
+                        $lastName,
+                        $status,
+                        $source,
+                        $phone,
+                        $job,
+                        $company,
+                        $country,
+                        $city,
+                        $gender,
+                        $dob,
+                        $anniv,
+                        $customAt
+                    );
 
                     // Tags
                     if (!empty($d['tags']) && is_array($d['tags'])) {
                         foreach ($d['tags'] as $tagName) {
                             $tnL = strtolower(trim($tagName));
+                            if ($tnL === '') continue;
                             if (isset($tagMap[$tnL])) {
                                 $tagSubValues[] = "(?, ?, ?)";
                                 array_push($tagSubParams, $workspace_id, $id, $tagMap[$tnL]);
                             } else {
-                                // Create new tag on fly (Optional, but good for import)
                                 try {
                                     $newTagId = uniqid();
                                     $pdo->prepare("INSERT INTO domation_tags (id, name, workspace_id, created_at) VALUES (?, ?, ?, NOW())")->execute([$newTagId, trim($tagName), $workspace_id]);
-                                    $tagId = $newTagId;
-                                    $tagMap[$tnL] = $tagId;
+                                    $tagMap[$tnL] = $newTagId;
                                     $tagSubValues[] = "(?, ?, ?)";
-                                    array_push($tagSubParams, $workspace_id, $id, $tagId);
+                                    array_push($tagSubParams, $workspace_id, $id, $newTagId);
                                 } catch (Exception $e) {
                                 }
                             }
@@ -604,12 +802,14 @@ try {
                     }
 
                     // Lists
-                    if (!empty($d['listIds']) && is_array($d['listIds'])) {
-                        foreach ($d['listIds'] as $lid) {
+                    $rowListIds = $d['listIds'] ?? $d['list_ids'] ?? (!empty($data['listId']) ? [$data['listId']] : []);
+                    if (!empty($rowListIds) && is_array($rowListIds)) {
+                        foreach ($rowListIds as $lid) {
                             $listValues[] = "(?, ?, ?)";
                             array_push($listParams, $workspace_id, $id, $lid);
-                            if (!isset($allAffectedListSubscribers[$lid]))
+                            if (!isset($allAffectedListSubscribers[$lid])) {
                                 $allAffectedListSubscribers[$lid] = [];
+                            }
                             $allAffectedListSubscribers[$lid][] = $id;
                         }
                     }
@@ -617,20 +817,26 @@ try {
                 }
 
                 if (!empty($subValues)) {
-                    // [FIX P2-1] Added workspace_id to columns — previously missing, causing
-                    // imported subscribers to have NULL workspace_id (data isolation failure).
-                    $sqlSub = "INSERT INTO subscribers (workspace_id, id, email, first_name, last_name, status, source, salesperson, joined_at, notes, phone_number, job_title, company_name, country, city, gender, date_of_birth, anniversary_date, custom_attributes) 
+                    $sqlSub = "INSERT INTO subscribers (workspace_id, id, contact_id, owner_id, salesperson, stage_id, pipeline_status, lead_status, program, email, email_norm, phone_norm9, first_name, last_name, status, source, joined_at, notes, phone_number, job_title, company_name, country, city, gender, date_of_birth, anniversary_date, custom_attributes) 
                                VALUES " . implode(',', $subValues) . "
                                ON DUPLICATE KEY UPDATE 
+                               contact_id = COALESCE(subscribers.contact_id, VALUES(contact_id)),
+                               owner_id = COALESCE(VALUES(owner_id), subscribers.owner_id),
+                               salesperson = IF(VALUES(salesperson) IS NOT NULL AND VALUES(salesperson) != '', VALUES(salesperson), subscribers.salesperson),
+                               stage_id = COALESCE(VALUES(stage_id), subscribers.stage_id),
+                               pipeline_status = COALESCE(NULLIF(VALUES(pipeline_status), ''), subscribers.pipeline_status),
+                               lead_status = COALESCE(NULLIF(VALUES(lead_status), ''), subscribers.lead_status),
+                               program = COALESCE(NULLIF(VALUES(program), ''), subscribers.program),
                                first_name = IF(VALUES(first_name) IS NOT NULL AND VALUES(first_name) != '', VALUES(first_name), first_name),
                                last_name = CASE 
                                    WHEN VALUES(last_name) IS NOT NULL AND VALUES(last_name) != '' THEN VALUES(last_name)
                                    WHEN VALUES(first_name) IS NOT NULL AND VALUES(first_name) != '' AND VALUES(first_name) LIKE '% %' THEN ''
                                    ELSE last_name 
                                END,
-                               email = IF(email LIKE '%@facebook.com' AND VALUES(email) NOT LIKE '%@facebook.com', VALUES(email), email),
+                               email = IF((email LIKE '%@facebook.com' OR email LIKE '%@no-email.domation' OR email LIKE '%@phone.local') AND VALUES(email) NOT LIKE '%@facebook.com' AND VALUES(email) NOT LIKE '%@no-email.domation' AND VALUES(email) NOT LIKE '%@phone.local', VALUES(email), email),
+                               email_norm = COALESCE(VALUES(email_norm), email_norm),
+                               phone_norm9 = COALESCE(VALUES(phone_norm9), phone_norm9),
                                status = VALUES(status),
-                               salesperson = IF(VALUES(salesperson) != '', VALUES(salesperson), salesperson), 
                                phone_number = IF(VALUES(phone_number) != '', VALUES(phone_number), phone_number),
                                job_title = IF(VALUES(job_title) != '', VALUES(job_title), job_title),
                                company_name = IF(VALUES(company_name) != '', VALUES(company_name), company_name),
@@ -654,21 +860,28 @@ try {
                 }
             }
 
+            // Reconcile imported subscribers with MYERP /contacts
+            if (!empty($importedSubscriberIds) && class_exists('DomationContactMatcher')) {
+                DomationContactMatcher::batchMatchSubscribersWithContacts($pdo, $importedSubscriberIds, (int)$workspace_id);
+            }
+
             // Post-process Lists (Automations & Counts)
             foreach ($allAffectedListSubscribers as $lid => $subs) {
-                // Trigger 'added_to_list' automation
                 enrollSubscribersBulk($pdo, $subs, 'added_to_list', $lid, $workspace_id);
 
-                // Update counts properly
-                $pdo->prepare("UPDATE lists SET subscriber_count = (SELECT COUNT(*) FROM subscriber_lists WHERE workspace_id = ? AND list_id = ?) WHERE workspace_id = ? AND id = ?")->execute([$workspace_id, $lid, $workspace_id, $lid]);
+                $pdo->prepare("
+                    UPDATE lists 
+                    SET subscriber_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl WHERE sl.workspace_id = ? AND sl.list_id = ?),
+                        phone_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ? WHERE sl.workspace_id = ? AND sl.list_id = ? AND s.phone_number IS NOT NULL AND TRIM(s.phone_number) != '')
+                    WHERE workspace_id = ? AND id = ?
+                ")->execute([$workspace_id, $lid, $workspace_id, $workspace_id, $lid, $workspace_id, $lid]);
             }
 
             $affectedCount = $totalProcessed;
             break;
 
         case 'status_change':
-            // [NEW P43-B2] Bulk status update — previously missing, causing silent failure
-            // when UI sent 'status_change' bulk action from Subscriber modal.
+        case 'update_status':
             $newStatus = $data['status'] ?? '';
             $allowedStatuses = ['active', 'lead', 'customer', 'unsubscribed', 'bounced', 'inactive'];
             if (!in_array($newStatus, $allowedStatuses))
@@ -684,11 +897,15 @@ try {
             }
             break;
 
+        case 'sync_to_crm':
+        case 'match_crm':
+            require_once __DIR__ . '/../utils/DomationContactMatcher.php';
+            $affectedCount = DomationContactMatcher::batchMatchSubscribersWithContacts($pdo, $subscriberIds, (int)$workspace_id);
+            break;
+
         default:
             jsonResponse(false, null, 'Invalid operation type');
     }
-
-    // [SYNC FIX REMOVED] inline logic handles sync now
 
     $pdo->commit();
     jsonResponse(true, ['affected' => $affectedCount], 'Operation successful');

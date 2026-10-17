@@ -15,6 +15,8 @@ import { useChatPage } from '../contexts/ChatPageContext';
 import OrgUserManager from '../components/ai/org/OrgUserManager';
 import FeedbackAdminPanel from '../components/ai/training/FeedbackAdminPanel';
 import { API_BASE_URL } from '../utils/config';
+import { useAuthStore } from '../../../store/authStore';
+import { AppIcon } from '../../common/AppIcons';
 
 
 interface AIDoc {
@@ -143,22 +145,33 @@ const AITraining: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'training' | 'settings' | 'embed' | 'instruction' | 'inbox' | 'logs' | 'scenarios'>('inbox');
     const [newDoc, setNewDoc] = useState<{ name: string, content: string, tags: string, batchName?: string }>({ name: '', content: '', tags: '', batchName: '' });
     const [tagInput, setTagInput] = useState('');
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [docSearchTerm, setDocSearchTerm] = useState('');
     const [mainTab, setMainTab] = useState<'website' | 'chat'>('website');
     const [categorySubTab, setCategorySubTab] = useState<'chatbots' | 'users' | 'logs' | 'settings' | 'feedback'>('chatbots');
 
     const { orgUser } = useChatPage();
+    const authUser = useAuthStore(s => s.user);
 
-    // ── Autoflow Admin Fallback ──────────────────────────────────────────────
-    // When inside /ai-training (Autoflow shell), orgUser may be null if the user
-    // never logged in to AI Space directly. In that case, we use the Autoflow
-    // session info from localStorage to create a virtual admin orgUser so that
-    // all admin UI elements (edit/delete/create groups & bots) are visible.
-    // This effectiveOrgUser is passed to AITrainingGrid via orgUserOverride prop.
+    // ── MYERP Authenticated User Integration ─────────────────────────────────
+    // Use the authenticated MYERP user from useAuthStore (or AI Space orgUser)
+    // so AI Training & Internal AI Chat always reflect the real logged-in user.
     const effectiveOrgUser = React.useMemo(() => {
-        if (orgUser) return orgUser; // Already logged in as AI Space user
+        if (orgUser) return orgUser;
+        if (authUser) {
+            const rawRole = String(authUser.role || '').toLowerCase();
+            const isAdminRole = ['admin', 'superadmin', 'super_admin', 'manager', 'director'].includes(rawRole) || authUser.id === 1;
+            return {
+                id: `erp-${authUser.id}`,
+                erp_user_id: authUser.id,
+                email: authUser.email,
+                full_name: authUser.full_name || authUser.email,
+                role: (isAdminRole ? 'admin' : 'member') as 'admin' | 'member',
+                status: 'active' as const,
+                permissions: isAdminRole ? { modes: ['*'], access: '*' } : { modes: ['chat'], access: 'standard' },
+            };
+        }
         try {
             const savedUser = JSON.parse(
                 localStorage.getItem('user') ||
@@ -166,36 +179,23 @@ const AITraining: React.FC = () => {
                 localStorage.getItem('authUser') ||
                 'null'
             );
-            const isAutoflowAdmin = savedUser && (
-                savedUser.id === 1 || savedUser.id === '1' ||
-                savedUser.role === 'admin' || savedUser.is_admin ||
-                savedUser.isAdmin || savedUser.admin === true ||
-                savedUser.type === 'admin' || savedUser.user_type === 'admin'
-            );
-            if (isAutoflowAdmin) {
+            if (savedUser && (savedUser.email || savedUser.full_name || savedUser.username)) {
+                const rawRole = String(savedUser.role || savedUser.user_type || '').toLowerCase();
+                const isAdminRole = ['admin', 'superadmin', 'super_admin', 'manager', 'director'].includes(rawRole) ||
+                    savedUser.id === 1 || savedUser.id === '1' || savedUser.is_admin || savedUser.isAdmin;
                 return {
-                    id: 'admin-001',
-                    email: savedUser.email || 'admin@autoflow.vn',
-                    full_name: savedUser.full_name || savedUser.name || savedUser.username || 'Super Admin',
-                    role: 'admin' as const,
+                    id: savedUser.id ? `erp-${savedUser.id}` : 'erp-user',
+                    erp_user_id: savedUser.id,
+                    email: savedUser.email || '',
+                    full_name: savedUser.full_name || savedUser.name || savedUser.username || 'Nhân sự MYERP',
+                    role: (isAdminRole ? 'admin' : 'member') as 'admin' | 'member',
                     status: 'active' as const,
-                    permissions: { modes: ['*'], access: '*' },
-                };
-            }
-            // Also check isAuthenticated flag (Autoflow sets this on login)
-            if (localStorage.getItem('isAuthenticated') === 'true') {
-                return {
-                    id: 'admin-001',
-                    email: 'admin@autoflow.vn',
-                    full_name: 'Super Admin',
-                    role: 'admin' as const,
-                    status: 'active' as const,
-                    permissions: { modes: ['*'], access: '*' },
+                    permissions: isAdminRole ? { modes: ['*'], access: '*' } : { modes: ['chat'], access: 'standard' },
                 };
             }
         } catch { /* ignore */ }
         return null;
-    }, [orgUser]);
+    }, [orgUser, authUser]);
 
 
     const [newQuickAction, setNewQuickAction] = useState('');
@@ -1728,8 +1728,72 @@ Lịch sử hoạt động:
     ), [chatbots, searchTerm]);
 
     return (
-        <div className="animate-fade-in space-y-8 pb-20 w-full min-w-0">
-            {viewMode === 'grid' ? (
+        <div className="animate-fade-in space-y-6 pb-20 w-full min-w-0">
+            {viewMode === 'grid' && (
+                <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[20px] p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                        <AppIcon name="ai_training" size={40} className="shrink-0" />
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-base font-bold text-[var(--color-text)] truncate">Trung tâm Huấn luyện AI & Tri thức Đa kênh</h2>
+                                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-violet-500/10 text-violet-600 dark:text-violet-400">
+                                    RAG Vector Engine
+                                </span>
+                            </div>
+                            <p className="text-xs text-[var(--color-text-muted)] mt-0.5 truncate">
+                                Nạp tài liệu, kịch bản phản hồi và đồng bộ tri thức cho AI Livechat Website ({properties.length} miền) & Nội bộ ({chatbots.length} bot)
+                            </p>
+                        </div>
+                    </div>
+                    <div className="inline-flex items-center gap-1 p-1 rounded-[14px] bg-[var(--color-bg)] border border-[var(--color-border)] shrink-0">
+                        <button
+                            type="button"
+                            onClick={() => setMainTab('website')}
+                            className={`px-3.5 py-1.5 rounded-[10px] text-xs font-semibold transition-all inline-flex items-center gap-2 ${
+                                mainTab === 'website'
+                                    ? 'bg-[var(--color-surface)] text-[var(--color-text)] shadow-xs'
+                                    : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+                            }`}
+                        >
+                            <AppIcon name="ai_training" size={16} />
+                            <span>AI Chatbot Website ({properties.length})</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setMainTab('chat')}
+                            className={`px-3.5 py-1.5 rounded-[10px] text-xs font-semibold transition-all inline-flex items-center gap-2 ${
+                                mainTab === 'chat'
+                                    ? 'bg-[var(--color-surface)] text-[var(--color-text)] shadow-xs'
+                                    : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+                            }`}
+                        >
+                            <Brain className="w-4 h-4 text-violet-500" />
+                            <span>Huấn luyện nhóm ({categories.length})</span>
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {viewMode === 'grid' && loading && properties.length === 0 && categories.length === 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {[1, 2, 3, 4, 5, 6].map((i) => (
+                        <div key={i} className="rounded-[20px] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 space-y-4">
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-11 h-11 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[14px]" />
+                                    <div className="space-y-2">
+                                        <div className="w-36 h-4 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[8px]" />
+                                        <div className="w-24 h-3 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[6px]" />
+                                    </div>
+                                </div>
+                                <div className="w-16 h-6 animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-full" />
+                            </div>
+                            <div className="h-14 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[16px]" />
+                            <div className="h-10 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06] rounded-[12px]" />
+                        </div>
+                    ))}
+                </div>
+            ) : viewMode === 'grid' ? (
                 <AITrainingGrid
                     mainTab={mainTab}
                     setMainTab={setMainTab}

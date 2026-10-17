@@ -1,6 +1,7 @@
 
 // components/templates/EmailEditor/index.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import TestEmailModal from '../../campaigns/TestEmailModal';
 import { createPortal } from 'react-dom';
 import { EmailBlock, EmailBodyStyle, EmailBlockType, EmailBlockStyle, Template, TemplateGroup } from '../../../types';
 import EmailTopBar from './EmailTopBar';
@@ -26,9 +27,10 @@ import { getMktPortalRoot } from '../../../utils/portalRoot';
 interface EmailEditorProps {
     template?: Template;
     groups: TemplateGroup[];
-    onSave: (data: Partial<Template>) => void;
+    onSave: (data: Partial<Template> & { visibility?: 'shared' | 'personal' }) => void;
     onCancel: () => void;
     customMergeTags?: { label: string; key: string }[];
+    canSetShared?: boolean;
 }
 
 // ─── Validation helpers ───────────────────────────────────────────────────────
@@ -61,7 +63,7 @@ const normalizeUrl = (url: string): string => {
 const collectLinkBlocks = (blocks: EmailBlock[], out: { id: string; url: string; label: string }[] = []): typeof out => {
     for (const block of blocks) {
         const url = block.url?.trim();
-        if (url && url !== '#' && (block.type === 'button' || block.type === 'image')) {
+        if (url && url !== '#' && (block.type === 'button' || block.type === 'image' || block.type === 'survey_card')) {
             out.push({
                 id: block.id,
                 url,
@@ -112,7 +114,7 @@ const scanBlocks = (blocks: EmailBlock[]): ValidationIssue[] => {
                 });
             }
 
-            if (block.type === 'button') {
+            if (block.type === 'button' || block.type === 'survey_card') {
                 if (isInvalidUrl(block.url)) {
                     issues.push({
                         blockId: block.id,
@@ -335,7 +337,7 @@ const applyCtaTracking = (currentUrl: string, index: number): string => {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onCancel, customMergeTags = [] }) => {
+const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onCancel, customMergeTags = [], canSetShared = true }) => {
     const [editorMode, setEditorMode] = useState<'visual' | 'code'>(
         (template?.htmlContent && (!template.blocks || template.blocks.length === 0)) ? 'code' : 'visual'
     );
@@ -345,6 +347,11 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
     const [bodyStyle, setBodyStyle] = useState<EmailBodyStyle>(template?.bodyStyle || DEFAULT_BODY_STYLE);
     const [name, setName] = useState(template?.name || 'Thiết kế mới');
     const [groupId, setGroupId] = useState(template?.groupId || '');
+    const [visibility, setVisibility] = useState<'shared' | 'personal'>(() => {
+        const v = (template as any)?.visibility || (template?.bodyStyle as any)?.visibility;
+        if (v === 'personal' || v === 'shared') return v;
+        return canSetShared ? 'shared' : 'personal';
+    });
 
     const [customHtml, setCustomHtml] = useState(template?.htmlContent || '');
     const handleSetEditorMode = useCallback((newMode: 'visual' | 'code') => {
@@ -359,7 +366,10 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
     const [historyIndex, setHistoryIndex] = useState(0);
     // [UX] Track which history index was last saved to compute isDirty
     const [savedHistoryIndex, setSavedHistoryIndex] = useState(0);
-    const isDirty = historyIndex !== savedHistoryIndex;
+    const [hasUncommittedChanges, setHasUncommittedChanges] = useState(false);
+    const historyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [isTestModalOpen, setIsTestModalOpen] = useState(false);
+    const isDirty = historyIndex !== savedHistoryIndex || hasUncommittedChanges;
 
     const [savedSections, setSavedSections] = useState<{ id: string, name: string, data: EmailBlock }[]>([]);
     const [saveSectionModal, setSaveSectionModal] = useState<{ isOpen: boolean, block: EmailBlock | null, name: string }>({ isOpen: false, block: null, name: '' });
@@ -445,6 +455,11 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
         newHistory.push(newBlocks);
         if (newHistory.length > 50) newHistory.shift();
         setHistory(newHistory);
+        if (historyDebounceRef.current) {
+            clearTimeout(historyDebounceRef.current);
+            historyDebounceRef.current = null;
+        }
+        setHasUncommittedChanges(false);
         setHistoryIndex(newHistory.length - 1);
         setBlocks(newBlocks);
     }, [history, historyIndex]);
@@ -553,19 +568,24 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
 
     const handleSaveData = useCallback(() => {
         const finalHtml = editorMode === 'code' ? customHtml : compileHTML(blocks, bodyStyle, name);
+        const effectiveVisibility: 'shared' | 'personal' = canSetShared ? visibility : 'personal';
         onSave({
             name,
             groupId,
+            visibility: effectiveVisibility,
             blocks: (blocks && blocks.length > 0) ? blocks : [],
-            bodyStyle: bodyStyle || DEFAULT_BODY_STYLE,
+            bodyStyle: { ...(bodyStyle || DEFAULT_BODY_STYLE), visibility: effectiveVisibility } as any,
             htmlContent: finalHtml,
             thumbnail: ''
         });
-        // [UX] Mark this historyIndex as "saved" so isDirty becomes false
+        if (historyDebounceRef.current) {
+            clearTimeout(historyDebounceRef.current);
+            historyDebounceRef.current = null;
+        }
+        setHasUncommittedChanges(false);
         setSavedHistoryIndex(historyIndex);
-        // Re-scan after save so badge stays fresh
         setTimeout(() => silentScan(), 0);
-    }, [editorMode, customHtml, blocks, bodyStyle, name, groupId, historyIndex, onSave, silentScan]);
+    }, [editorMode, customHtml, blocks, bodyStyle, name, groupId, visibility, canSetShared, historyIndex, onSave, silentScan]);
 
     // Keyboard Shortcuts: Ctrl+Z (Undo), Ctrl+Y/Ctrl+Shift+Z (Redo), Ctrl+S (Save)
     useEffect(() => {
@@ -601,6 +621,18 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
             addToHistory(newBlocks);
         } else {
             setBlocks(newBlocks);
+            setHasUncommittedChanges(true);
+            if (historyDebounceRef.current) clearTimeout(historyDebounceRef.current);
+            historyDebounceRef.current = setTimeout(() => {
+                historyDebounceRef.current = null;
+                setHistory(prev => {
+                    const next = [...prev.slice(0, historyIndex + 1), newBlocks];
+                    if (next.length > 50) next.shift();
+                    setHistoryIndex(next.length - 1);
+                    return next;
+                });
+                setHasUncommittedChanges(false);
+            }, 600);
         }
         // Invalidate validation when blocks change
         if (validationIssues !== undefined) {
@@ -684,7 +716,7 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
     };
 
     const editorContent = (
-        <div className="fixed inset-0 z-[100000] bg-[#f1f5f9] flex flex-col animate-in zoom-in-[0.98] fade-in slide-in-from-bottom-4 duration-300 font-sans shadow-2xl">
+        <div className="fixed inset-0 z-[2147483630] bg-[#f1f5f9] flex flex-col animate-in zoom-in-[0.98] fade-in slide-in-from-bottom-4 duration-300 font-sans shadow-2xl" style={{ zIndex: 2147483630 }}>
             <EmailTopBar
                 name={name} setName={setName}
                 groupId={groupId} setGroupId={setGroupId}
@@ -693,11 +725,15 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
                 viewMode={viewMode} setViewMode={setViewMode} canUndo={historyIndex > 0} canRedo={historyIndex < history.length - 1}
                 onUndo={handleUndo} onRedo={handleRedo} onSave={handleSaveData} onCancel={onCancel}
                 onPreview={() => { const win = window.open(); win?.document.write(editorMode === 'code' ? customHtml : compileHTML(blocks, bodyStyle, name, { isPreview: true })); }}
-                onSendTest={handleSendTest}
+                onSendTest={(email) => handleSendTest(email)}
+                onOpenTestModal={() => setIsTestModalOpen(true)}
                 onValidate={runValidation}
                 validationIssueCount={validationIssues?.length}
                 showValidation={showValidation}
                 isDirty={isDirty}
+                visibility={visibility}
+                setVisibility={setVisibility}
+                canSetShared={canSetShared}
             />
             <div className="flex-1 flex overflow-hidden">
                 {editorMode === 'visual' && (
@@ -800,7 +836,20 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
                         }}
                         onUpdateBodyStyle={setBodyStyle}
                         onDeleteBlock={(id) => { updateBlocks(deleteBlockDeep(blocks, id)); setSelectedBlockId(null); }}
-                        onDuplicateBlock={(block) => { updateBlocks([...blocks, duplicateBlockDeep(block)]); setSelectedBlockId(null); }}
+                        onDuplicateBlock={(block) => {
+                            const newBlock = duplicateBlockDeep(block);
+                            const insertAfter = (list: EmailBlock[]): EmailBlock[] => {
+                                const idx = list.findIndex(x => x.id === block.id);
+                                if (idx !== -1) {
+                                    const copy = [...list];
+                                    copy.splice(idx + 1, 0, newBlock);
+                                    return copy;
+                                }
+                                return list.map(item => item.children ? { ...item, children: insertAfter(item.children) } : item);
+                            };
+                            updateBlocks(insertAfter(blocks));
+                            setSelectedBlockId(newBlock.id);
+                        }}
                         onDeselect={() => setSelectedBlockId(null)}
                     />
                 )}
@@ -842,7 +891,7 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
                     onClose={() => setSaveSectionModal({ isOpen: false, block: null, name: '' })}
                     title="Lưu mẫu giao diện (Section)"
                     size="sm"
-                    zIndex={100300}
+                    zIndex={2147483645}
                     footer={
                         <div className="flex justify-between w-full">
                             <Button variant="ghost" onClick={() => setSaveSectionModal({ isOpen: false, block: null, name: '' })}>Hủy</Button>
@@ -851,8 +900,8 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
                     }
                 >
                     <div className="space-y-6">
-                        <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex gap-4 items-center">
-                            <div className="p-3 bg-white rounded-2xl shadow-sm text-blue-600">
+                        <div className="p-4 bg-blue-50 border border-blue-100 rounded-[14px] flex gap-4 items-center">
+                            <div className="p-3 bg-white rounded-[14px] shadow-sm text-blue-600">
                                 <Box className="w-6 h-6" />
                             </div>
                             <div>
@@ -895,6 +944,33 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
                 templateName={name}
                 emailId={template?.id}
             /></React.Suspense>
+
+            <TestEmailModal
+                isOpen={isTestModalOpen}
+                onClose={() => setIsTestModalOpen(false)}
+                campaignName={name}
+                onSend={async (emails, senderEmail, senderName) => {
+                    const finalHtml = editorMode === 'code' ? customHtml : compileHTML(blocks, bodyStyle, name);
+                    const result = await api.post<any>('send_test_email', {
+                        emails,
+                        email: emails[0] || '',
+                        subject: name,
+                        htmlContent: finalHtml,
+                        content: finalHtml,
+                        sender_email: senderEmail || undefined,
+                        from_email: senderEmail || undefined,
+                        sender_name: senderName || undefined,
+                        from_name: senderName || undefined,
+                    });
+                    if (result.success) {
+                        toast.success(`Đã gửi email test đến ${emails.length} người nhận${senderEmail ? ` (từ ${senderEmail})` : ''}!`);
+                        setIsTestModalOpen(false);
+                    } else {
+                        toast.error(result.message || result.error || 'Gửi thất bại');
+                        throw new Error(result.message || result.error || 'Gửi thất bại');
+                    }
+                }}
+            />
 
         </div>
     );

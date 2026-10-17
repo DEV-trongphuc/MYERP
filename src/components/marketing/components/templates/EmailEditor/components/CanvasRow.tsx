@@ -229,8 +229,14 @@ const CanvasRow: React.FC<CanvasRowProps> = (props) => {
                 position: isRowActive ? 'relative' : 'static',
                 zIndex: isRowActive ? 1000 : 'auto'
             }}
-            draggable
-            onDragStart={(e) => onDragStart(e, row.id)}
+            draggable={!isSelected && resizingIdx === null}
+            onDragStart={(e) => {
+                if (isSelected || resizingIdx !== null || document.activeElement?.closest('[contenteditable="true"], input, textarea')) {
+                    e.preventDefault();
+                    return;
+                }
+                onDragStart(e, row.id);
+            }}
             onDragOver={(e) => onDragOver(e, row.id, 'row')}
             onDrop={(e) => onDrop(e, row.id)}
             onClick={(e) => { e.stopPropagation(); onSelectBlock(row.id); }}
@@ -239,7 +245,7 @@ const CanvasRow: React.FC<CanvasRowProps> = (props) => {
                 {dragOverId === row.id && dropPosition && <CanvasDropIndicator dropPosition={dropPosition} />}
                 <CanvasHandleOverlay
                     block={row}
-                    color="ring-amber-400"
+                    color="ring-[#BD1D2D]"
                     isSelected={isSelected}
                     onDragStart={onDragStart}
                     onMoveOrder={onMoveOrder}
@@ -306,7 +312,7 @@ const CanvasRow: React.FC<CanvasRowProps> = (props) => {
                                                             onMouseLeave={() => { if (resizingIdx === null) setHoverHandleIdx(null); }}
                                                             style={{
                                                                 position: 'absolute',
-                                                                left: '-4px',
+                                                                left: 0,
                                                                 top: 0, bottom: 0,
                                                                 width: '8px',
                                                                 cursor: 'ew-resize',
@@ -322,7 +328,7 @@ const CanvasRow: React.FC<CanvasRowProps> = (props) => {
                                                                 minHeight: '30px',
                                                                 height: (hoverHandleIdx === -1 || resizingIdx === -1) ? '60%' : '30%',
                                                                 borderRadius: '2px',
-                                                                background: (hoverHandleIdx === -1 || resizingIdx === -1) ? '#d97706' : 'rgba(148,163,184,0.4)',
+                                                                background: (hoverHandleIdx === -1 || resizingIdx === -1) ? '#BD1D2D' : 'rgba(148,163,184,0.4)',
                                                                 opacity: (hoverHandleIdx === -1 || resizingIdx === -1) ? 1 : 0,
                                                                 transition: 'height 0.15s, background 0.15s, opacity 0.15s',
                                                                 pointerEvents: 'none',
@@ -338,7 +344,7 @@ const CanvasRow: React.FC<CanvasRowProps> = (props) => {
                                                             onMouseLeave={() => { if (resizingIdx === null) setHoverHandleIdx(null); }}
                                                             style={{
                                                                 position: totalCols === 1 ? 'absolute' : 'relative',
-                                                                right: totalCols === 1 ? '-4px' : undefined,
+                                                                right: totalCols === 1 ? 0 : undefined,
                                                                 top: 0, bottom: 0,
                                                                 width: '8px',
                                                                 flexShrink: 0,
@@ -357,7 +363,7 @@ const CanvasRow: React.FC<CanvasRowProps> = (props) => {
                                                                 minHeight: '30px',
                                                                 height: (hoverHandleIdx === idx || resizingIdx === idx) ? '60%' : '30%',
                                                                 borderRadius: '2px',
-                                                                background: '#d97706',
+                                                                background: '#BD1D2D',
                                                                 opacity: (hoverHandleIdx === idx || resizingIdx === idx) ? 1 : 0,
                                                                 transition: 'height 0.15s, opacity 0.15s',
                                                                 pointerEvents: 'none',

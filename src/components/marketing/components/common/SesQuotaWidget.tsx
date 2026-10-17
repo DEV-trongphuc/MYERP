@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../../services/storageAdapter';
+import { getMktPortalRoot } from '../../utils/portalRoot';
 import toast from 'react-hot-toast';
 import {
     Mail, TrendingDown, AlertTriangle, CheckCircle2, RefreshCw,
@@ -104,7 +106,7 @@ const SesQuotaWidget: React.FC<Props> = ({ mode = 'sidebar', className = '', sta
 
     if (loading) {
         return (
-            <div className={`animate-pulse rounded-2xl border border-slate-100 dark:border-slate-800/60 p-4 ${className}`}>
+            <div className={`animate-pulse rounded-[14px] border border-slate-100 dark:border-slate-800/60 p-4 ${className}`}>
                 <div className="h-4 w-24 bg-slate-100 dark:bg-slate-800 rounded mb-3" />
                 <div className="space-y-2">
                     {[1, 2, 3].map(i => <div key={i} className="h-3 bg-slate-100 dark:bg-slate-800 rounded" />)}
@@ -150,7 +152,7 @@ const SesQuotaWidget: React.FC<Props> = ({ mode = 'sidebar', className = '', sta
     // ── Inline mode (for Campaigns page — compact horizontal strip) ───────────
     if (mode === 'inline') {
         return (
-            <div className={`flex flex-wrap items-center gap-4 px-5 py-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] text-xs font-bold ${className}`}>
+            <div className={`flex flex-wrap items-center gap-4 px-5 py-3.5 rounded-[14px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] text-xs font-bold ${className}`}>
                 {/* Status dot */}
                 <div className="flex items-center gap-1.5">
                     <span className={`w-1.5 h-1.5 rounded-full ${status !== 'good' ? 'animate-pulse' : ''} ${STATUS_DOT[status]}`} />
@@ -237,12 +239,12 @@ const SesQuotaWidget: React.FC<Props> = ({ mode = 'sidebar', className = '', sta
                 </button>
 
                 {/* IAM Setup Modal */}
-                {showIamModal && (
-                    <div className="fixed inset-0 bg-slate-950/70 z-[9999] flex items-center justify-center p-4">
-                        <div className="bg-white dark:bg-slate-900 rounded-[28px] w-full max-w-2xl shadow-2xl overflow-hidden text-left border border-slate-100 dark:border-slate-800 config-modal-entrance">
+                {showIamModal && createPortal(
+                    <div className="fixed inset-0 bg-slate-950/70 z-[110000] flex items-center justify-center p-4">
+                        <div className="bg-white dark:bg-slate-900 rounded-[18px] w-full max-w-2xl shadow-2xl overflow-hidden text-left border border-slate-100 dark:border-slate-800 config-modal-entrance">
                             <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
                                 <div className="flex items-center gap-4">
-                                    <div className="p-2.5 bg-amber-100 text-amber-600 rounded-2xl shadow-sm">
+                                    <div className="p-2.5 bg-amber-100 text-amber-600 rounded-[14px] shadow-sm">
                                         <Key className="w-5 h-5" />
                                     </div>
                                     <div>
@@ -261,22 +263,22 @@ const SesQuotaWidget: React.FC<Props> = ({ mode = 'sidebar', className = '', sta
                                         Cách lấy khóa (Chỉ 3 bước)
                                     </h4>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        <div className="p-4 rounded-[20px] bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 relative group">
+                                        <div className="p-4 rounded-[14px] bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 relative group">
                                             <div className="absolute -top-3 -left-3 w-8 h-8 rounded-xl bg-slate-800 text-white flex items-center justify-center text-sm font-black ring-4 ring-white dark:ring-slate-900 shadow-md">1</div>
                                             <p className="text-[10px] text-slate-400 font-bold mb-1.5 ml-1 mt-1 uppercase tracking-wider">Mở khóa AWS</p>
                                             <a href="https://us-east-1.console.aws.amazon.com/iam/home?#/security_credentials" target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1 group-hover:underline">
                                                 Mở Web IAM <ExternalLink className="w-3.5 h-3.5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                                             </a>
                                         </div>
-                                        <div className="p-4 rounded-[20px] bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 relative">
+                                        <div className="p-4 rounded-[14px] bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 relative">
                                             <div className="absolute -top-3 -left-3 w-8 h-8 rounded-xl bg-slate-800 text-white flex items-center justify-center text-sm font-black ring-4 ring-white dark:ring-slate-900 shadow-md">2</div>
                                             <p className="text-[10px] text-slate-400 font-bold mb-1.5 ml-1 mt-1 uppercase tracking-wider">Tạo Khóa mới</p>
-                                            <p className="text-xs text-slate-600 dark:text-slate-300 font-medium leading-relaxed">Bấm nút <b className="text-amber-600">Create access key</b>, tích "I understand..."</p>
+                                            <p className="text-xs text-slate-600 dark:text-slate-300 font-medium leading-relaxed">Bấm nút <b className="text-[var(--color-primary)]">Create access key</b>, tích "I understand..."</p>
                                         </div>
-                                        <div className="p-4 rounded-[20px] bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/50 relative">
-                                            <div className="absolute -top-3 -left-3 w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center text-sm font-black ring-4 ring-white dark:ring-slate-900 shadow-md shadow-amber-500/30">3</div>
-                                            <p className="text-[10px] text-amber-600 font-bold mb-1.5 ml-1 mt-1 uppercase tracking-wider">Lưu Mật khẩu</p>
-                                            <p className="text-xs text-amber-800 dark:text-amber-500 font-bold leading-relaxed">Copy 2 dòng KEY gán xuống khung bên dưới.</p>
+                                        <div className="p-4 rounded-[14px] bg-[var(--color-primary-light)] border border-[var(--color-primary)]/20 relative">
+                                            <div className="absolute -top-3 -left-3 w-8 h-8 rounded-xl bg-[var(--color-primary)] text-white flex items-center justify-center text-sm font-black ring-4 ring-white dark:ring-slate-900 shadow-md shadow-[var(--color-primary)]/30">3</div>
+                                            <p className="text-[10px] text-[var(--color-primary)] font-bold mb-1.5 ml-1 mt-1 uppercase tracking-wider">Lưu Mật khẩu</p>
+                                            <p className="text-xs text-slate-800 dark:text-slate-200 font-bold leading-relaxed">Copy 2 dòng KEY gán xuống khung bên dưới.</p>
                                         </div>
                                     </div>
                                     <p className="text-[10px] text-slate-400 italic font-medium px-1">*Lưu ý: IAM Secret Key là chuỗi ~40 ký tự. Không phải Mật khẩu SMTP gửi mail bắt đầu bằng B hoặc S.</p>
@@ -286,10 +288,10 @@ const SesQuotaWidget: React.FC<Props> = ({ mode = 'sidebar', className = '', sta
                                         <label className="block text-[10px] font-black text-slate-800 dark:text-slate-300 uppercase tracking-widest mb-2 ml-1">Access Key ID</label>
                                         <div className="relative group">
                                             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                                <Key className="w-4 h-4 text-slate-400 group-focus-within:text-amber-500 transition-colors" />
+                                                <Key className="w-4 h-4 text-slate-400 group-focus-within:text-[var(--color-primary)] transition-colors" />
                                             </div>
                                             <input
-                                                className="w-full pl-10 pr-4 py-3.5 border-2 border-slate-200 rounded-2xl text-sm font-medium focus:border-amber-400 focus:ring-4 focus:ring-amber-400/10 focus:outline-none dark:bg-slate-800 dark:border-slate-700 transition-all placeholder:text-slate-300"
+                                                className="w-full pl-10 pr-4 py-3.5 border-2 border-slate-200 rounded-[14px] text-sm font-medium focus:border-[var(--color-primary)] focus:ring-4 focus:ring-[var(--color-primary)]/10 focus:outline-none dark:bg-slate-800 dark:border-slate-700 transition-all placeholder:text-slate-300"
                                                 placeholder="AKIA..."
                                                 value={iamKeys.access}
                                                 onChange={e => setIamKeys(prev => ({ ...prev, access: e.target.value }))}
@@ -300,10 +302,10 @@ const SesQuotaWidget: React.FC<Props> = ({ mode = 'sidebar', className = '', sta
                                         <label className="block text-[10px] font-black text-slate-800 dark:text-slate-300 uppercase tracking-widest mb-2 ml-1">Secret Access Key</label>
                                         <div className="relative group">
                                             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                                <KeyRound className="w-4 h-4 text-slate-400 group-focus-within:text-amber-500 transition-colors" />
+                                                <KeyRound className="w-4 h-4 text-slate-400 group-focus-within:text-[var(--color-primary)] transition-colors" />
                                             </div>
                                             <input
-                                                className="w-full pl-10 pr-4 py-3.5 border-2 border-slate-200 rounded-2xl text-sm font-medium focus:border-amber-400 focus:ring-4 focus:ring-amber-400/10 focus:outline-none dark:bg-slate-800 dark:border-slate-700 transition-all placeholder:text-slate-300"
+                                                className="w-full pl-10 pr-4 py-3.5 border-2 border-slate-200 rounded-[14px] text-sm font-medium focus:border-[var(--color-primary)] focus:ring-4 focus:ring-[var(--color-primary)]/10 focus:outline-none dark:bg-slate-800 dark:border-slate-700 transition-all placeholder:text-slate-300"
                                                 placeholder="Khoảng 40 ký tự..."
                                                 type="password"
                                                 value={iamKeys.secret}
@@ -313,12 +315,13 @@ const SesQuotaWidget: React.FC<Props> = ({ mode = 'sidebar', className = '', sta
                                     </div>
                                 </div>
                             </div>
-                            <div className="px-6 md:px-8 py-5 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3 rounded-b-[28px]">
-                                <button className="px-6 py-2.5 text-xs font-black text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors tracking-wide" onClick={() => setShowIamModal(false)}>HỦY</button>
-                                <Button className="px-8 py-2.5 text-xs h-11 bg-gradient-to-r from-[#2563eb] to-blue-600 hover:from-[#561dd0] hover:to-blue-700 shadow-lg shadow-[#2563eb]/20 text-white rounded-xl font-black tracking-widest border-none" isLoading={isSavingIam} onClick={handleSaveIam} icon={Save}>CẬP NHẬT KẾT NỐI</Button>
+                            <div className="px-6 md:px-8 py-5 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3 rounded-b-[18px]">
+                                <button className="px-6 py-2.5 text-xs font-black text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-[var(--radius-md)] transition-colors tracking-wide" onClick={() => setShowIamModal(false)}>HỦY</button>
+                                <Button className="px-8 py-2.5 text-xs h-10 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] shadow-sm text-white rounded-[var(--radius-md)] font-bold tracking-wider border-none" isLoading={isSavingIam} onClick={handleSaveIam} icon={Save}>CẬP NHẬT KẾT NỐI</Button>
                             </div>
                         </div>
-                    </div>
+                    </div>,
+                    getMktPortalRoot()
                 )}
             </div>
         );
@@ -326,7 +329,7 @@ const SesQuotaWidget: React.FC<Props> = ({ mode = 'sidebar', className = '', sta
 
     // ── Sidebar mode (for Dashboard — vertical card on right side) ────────────
     return (
-        <div className={`bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800/60 shadow-sm overflow-hidden ${className}`}>
+        <div className={`bg-white dark:bg-slate-900 rounded-[18px] border border-slate-100 dark:border-slate-800/60 shadow-sm overflow-hidden ${className}`}>
 
             {/* Header */}
             <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/30">

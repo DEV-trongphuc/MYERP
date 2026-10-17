@@ -37,7 +37,7 @@ const ActivateFlowModal: React.FC<ActivateFlowModalProps> = ({
                             onClick={handleConfirm}
                             isLoading={isLoading}
                             disabled={isLoading}
-                            className="bg-amber-600 hover:bg-amber-600 text-white shadow-lg shadow-amber-600/30 transition-all duration-500"
+                            className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white shadow-lg shadow-[var(--color-primary)]/30 transition-all duration-500"
                             icon={Rocket}
                         >
                             {linkedCampaignName && activateCampaign ? 'Kích hoạt Cả hai' : 'Kích hoạt Flow'}
@@ -69,8 +69,8 @@ const ActivateFlowModal: React.FC<ActivateFlowModalProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => setActivateCampaign(!activateCampaign)}
-                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${activateCampaign
-                                        ? 'bg-gradient-to-r from-orange-500 to-amber-600 shadow-lg shadow-orange-500/30'
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:ring-offset-2 ${activateCampaign
+                                        ? 'bg-[var(--color-primary)] shadow-lg shadow-[var(--color-primary)]/30'
                                         : 'bg-gray-300'
                                         }`}
                                 >
@@ -85,7 +85,7 @@ const ActivateFlowModal: React.FC<ActivateFlowModalProps> = ({
                                     <h4 className={`font-bold text-sm transition-colors ${activateCampaign ? 'text-slate-800' : 'text-slate-500'}`}>
                                         Chiến dịch liên kết: {linkedCampaignName}
                                     </h4>
-                                    {activateCampaign && <span className="px-1.5 py-0.5 bg-orange-100 text-[#ca7900] text-[10px] font-black uppercase tracking-wider rounded">Auto</span>}
+                                    {activateCampaign && <span className="px-1.5 py-0.5 bg-orange-100 text-[var(--color-primary)] text-[10px] font-black uppercase tracking-wider rounded">Auto</span>}
                                 </div>
                                 <p className={`text-xs transition-colors ${activateCampaign ? 'text-slate-600' : 'text-slate-400'}`}>
                                     Tự động chuyển Trạng thái chiến dịch từ <strong>Waiting Flow</strong> sang <strong>Ready/Scheduled</strong>.

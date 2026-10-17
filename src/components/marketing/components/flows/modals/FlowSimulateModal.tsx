@@ -25,8 +25,8 @@ const getNodeStyle = (step: any) => {
     if (type === 'trigger') {
         const tType = config.type || 'segment';
         switch (tType) {
-            case 'segment': return config.targetSubtype === 'list' ? { icon: List, gradient: 'from-orange-500 to-[#ca7900]', text: 'text-orange-600', bg: 'bg-orange-50', label: 'Kích hoạt: Danh sách' } : { icon: Layers, gradient: 'from-orange-500 to-[#ca7900]', text: 'text-orange-600', bg: 'bg-orange-50', label: 'Kích hoạt: Phân khúc' };
-            case 'form': return { icon: FileInput, gradient: 'from-[#f59e0b] to-[#d97706]', text: 'text-yellow-600', bg: 'bg-yellow-50', label: 'Kích hoạt: Biểu mẫu' };
+            case 'segment': return config.targetSubtype === 'list' ? { icon: List, gradient: 'from-orange-500 to-[#BD1D2D]', text: 'text-orange-600', bg: 'bg-orange-50', label: 'Kích hoạt: Danh sách' } : { icon: Layers, gradient: 'from-orange-500 to-[#BD1D2D]', text: 'text-orange-600', bg: 'bg-orange-50', label: 'Kích hoạt: Phân khúc' };
+            case 'form': return { icon: FileInput, gradient: 'from-[#BD1D2D] to-[#991522]', text: 'text-[var(--color-primary)]', bg: 'bg-rose-50', label: 'Kích hoạt: Biểu mẫu' };
             case 'purchase': return { icon: ShoppingCart, gradient: 'from-pink-500 to-rose-600', text: 'text-pink-600', bg: 'bg-pink-50', label: 'Kích hoạt: Đơn hàng' };
             case 'custom_event': return { icon: Zap, gradient: 'from-blue-500 to-indigo-600', text: 'text-blue-600', bg: 'bg-blue-50', label: 'Sự kiện tùy chỉnh' };
             case 'tag': return { icon: Tag, gradient: 'from-emerald-500 to-teal-600', text: 'text-emerald-600', bg: 'bg-emerald-50', label: 'Kích hoạt: Gắn thẻ' };
@@ -422,7 +422,7 @@ const FlowSimulateModal: React.FC<FlowSimulateModalProps> = ({ isOpen, onClose, 
                                                 </div>
 
                                                 {/* Step Content Card */}
-                                                <div className={`border rounded-[24px] p-4 shadow-sm transition-all duration-300 group-hover:shadow-md ${step.branchTaken ? (isDarkTheme ? 'bg-indigo-950/20 border-indigo-900/40 ring-4 ring-indigo-950/30' : 'border-indigo-100 ring-4 ring-indigo-50/50 bg-white') : (isDarkTheme ? 'bg-slate-900 border-slate-800' : 'border-slate-100 bg-white')}`}>
+                                                <div className={`border rounded-2xl p-4 shadow-sm transition-all duration-300 group-hover:shadow-md ${step.branchTaken ? (isDarkTheme ? 'bg-indigo-950/20 border-indigo-900/40 ring-4 ring-indigo-950/30' : 'border-indigo-100 ring-4 ring-indigo-50/50 bg-white') : (isDarkTheme ? 'bg-slate-900 border-slate-800' : 'border-slate-100 bg-white')}`}>
                                                     <div className="flex flex-col gap-3">
                                                         <div className="flex items-start justify-between">
                                                             <div className="flex items-start gap-4">
@@ -485,7 +485,7 @@ const FlowSimulateModal: React.FC<FlowSimulateModalProps> = ({ isOpen, onClose, 
                         ) : (
                             <div className="h-full flex flex-col items-center justify-center text-slate-350 space-y-6 animate-in fade-in zoom-in-95 duration-700">
                                 <div className="relative">
-                                    <div className={`w-24 h-24 rounded-[28px] shadow-xl flex items-center justify-center border ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
+                                    <div className={`w-24 h-24 rounded-2xl shadow-xl flex items-center justify-center border ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
                                         <Beaker className="w-10 h-10 text-blue-500/40 animate-pulse" />
                                     </div>
                                     <div className="absolute -top-3 -right-3 w-8 h-8 bg-orange-400 rounded-xl shadow-lg flex items-center justify-center text-white animate-bounce">

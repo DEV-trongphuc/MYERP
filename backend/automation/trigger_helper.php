@@ -27,7 +27,7 @@ function triggerFlows($pdo, $subscriberId, $triggerType, $targetValue, $workspac
  * Replaces individual CURL triggers with set-based SQL and single worker trigger.
  * [SECURITY FIX] Added optional $workspaceId to ensure flows are scoped to the correct tenant.
  */
-function enrollSubscribersBulk($pdo, array $subscriberIds, $triggerType, $targetValue, $workspaceId = null)
+function enrollSubscribersBulk($pdo, array $subscriberIds, $triggerType, $targetValue = null, $workspaceId = null, $specificFlowId = null)
 {
     if (empty($subscriberIds))
         return 0;
@@ -44,10 +44,15 @@ function enrollSubscribersBulk($pdo, array $subscriberIds, $triggerType, $target
     }
 
     // 1. Find matching flows using the optimized trigger_type column
-    // [FIX] Added workspace_id scoping to prevent cross-tenant leakage
-    $sqlFlows = "SELECT id, workspace_id, name, steps, config FROM flows WHERE workspace_id = ? AND status = 'active' AND (trigger_type = ? OR trigger_type = 'segment')";
+    // [FIX] Added workspace_id scoping + optional specificFlowId to prevent cross-enrolling into unrelated date/segment flows
+    $sqlFlows = "SELECT id, workspace_id, name, steps, config FROM flows WHERE workspace_id = ? AND status = 'active' AND (trigger_type = ? OR trigger_type = 'erp_event' OR trigger_type = 'custom_event' OR trigger_type = 'segment' OR trigger_type = 'list' OR trigger_type IS NULL)";
+    $flowParams = [$workspaceId, $triggerType];
+    if ($specificFlowId !== null && $specificFlowId !== '') {
+        $sqlFlows .= " AND id = ?";
+        $flowParams[] = $specificFlowId;
+    }
     $stmtFlows = $pdo->prepare($sqlFlows);
-    $stmtFlows->execute([$workspaceId, $triggerType]);
+    $stmtFlows->execute($flowParams);
     $flows = $stmtFlows->fetchAll();
 
     $enrolledTotal = 0;
@@ -73,11 +78,13 @@ function enrollSubscribersBulk($pdo, array $subscriberIds, $triggerType, $target
         $flowTargetSubtype = $tConfig['targetSubtype'] ?? ''; 
         $flowTargetId = $tConfig['targetId'] ?? '';
 
-        // Match "list" or "added_to_list" trigger against flows that are technically "segment" type but "list" subtype
+        // Match "list" or "added_to_list" trigger against flows that are "list" or "segment" with list/sync subtype
         $isMatch = false;
         if ($flowTriggerType === $triggerType) {
             $isMatch = true;
-        } elseif (($triggerType === 'list' || $triggerType === 'added_to_list') && $flowTriggerType === 'segment' && $flowTargetSubtype === 'list') {
+        } elseif (in_array($triggerType, ['erp_event', 'custom_event'], true) && in_array($flowTriggerType, ['erp_event', 'custom_event'], true)) {
+            $isMatch = true;
+        } elseif (($triggerType === 'list' || $triggerType === 'added_to_list') && ($flowTriggerType === 'list' || ($flowTriggerType === 'segment' && in_array($flowTargetSubtype, ['list', 'sync'], true)))) {
             $isMatch = true;
         }
 
@@ -226,8 +233,8 @@ function enrollSubscribersBulk($pdo, array $subscriberIds, $triggerType, $target
             foreach (array_chunk($subscriberIds, $ENROLL_CHUNK) as $chunk) {
                 $placeholders = implode(',', array_fill(0, count($chunk), '?'));
 
-                $sqlIns = "INSERT INTO subscriber_flow_states (workspace_id, subscriber_id, flow_id, step_id, step_type, scheduled_at, status, created_at, updated_at, last_step_at)
-                           SELECT ?, s.id, ?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW()
+                $sqlIns = "INSERT INTO subscriber_flow_states (workspace_id, subscriber_id, contact_id, flow_id, step_id, step_type, scheduled_at, status, created_at, updated_at, last_step_at)
+                           SELECT ?, s.id, s.contact_id, ?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW()
                            FROM subscribers s
                            WHERE s.id IN ($placeholders)
                            AND s.workspace_id = ?
@@ -301,7 +308,7 @@ function checkDynamicTriggers($pdo, $subscriberId)
                 $stmtCheck = $pdo->prepare($sql);
                 $stmtCheck->execute($params);
                 if ($stmtCheck->fetch()) {
-                    enrollSubscribersBulk($pdo, [$subscriberId], 'segment', $tTargetId);
+                    enrollSubscribersBulk($pdo, [$subscriberId], 'segment', $tTargetId, $workspaceId, $flow['id']);
                 }
             }
         }
@@ -369,7 +376,7 @@ function checkDynamicTriggers($pdo, $subscriberId)
                 $stmtDate = $pdo->prepare($sql);
                 $stmtDate->execute($params);
                 if ($stmtDate->fetch()) {
-                    enrollSubscribersBulk($pdo, [$subscriberId], 'date', $tTargetId);
+                    enrollSubscribersBulk($pdo, [$subscriberId], 'date', $tTargetId, $workspaceId, $flow['id']);
                 }
 
             } elseif ($field === 'specificDate') {
@@ -414,7 +421,7 @@ function checkDynamicTriggers($pdo, $subscriberId)
                         continue;
                 }
 
-                enrollSubscribersBulk($pdo, [$subscriberId], 'date', $tTargetId);
+                enrollSubscribersBulk($pdo, [$subscriberId], 'date', $tTargetId, $workspaceId, $flow['id']);
 
             } elseif ($field === 'lastActivity') {
                 // ✅ Trigger khi subscriber ngủ đông (không có activity trong N ngày)
@@ -454,7 +461,7 @@ function checkDynamicTriggers($pdo, $subscriberId)
                         continue;
                 }
 
-                enrollSubscribersBulk($pdo, [$subscriberId], 'date', $tTargetId);
+                enrollSubscribersBulk($pdo, [$subscriberId], 'date', $tTargetId, $workspaceId, $flow['id']);
 
             } elseif ($field === 'custom_field_date') {
                 // Trigger based on a date stored in a custom attribute
@@ -529,7 +536,7 @@ function checkDynamicTriggers($pdo, $subscriberId)
                         continue; // Not in any target list
                 }
 
-                enrollSubscribersBulk($pdo, [$subscriberId], 'date', $tTargetId);
+                enrollSubscribersBulk($pdo, [$subscriberId], 'date', $tTargetId, $workspaceId, $flow['id']);
             }
         }
     }
@@ -571,6 +578,84 @@ if (!function_exists('wakeupWaitingSubscribers')) {
             }
         } catch (Exception $e) {
             error_log('[wakeupWaitingSubscribers] Failed: ' . $e->getMessage());
+        }
+    }
+}
+
+if (!class_exists('DomationEventDispatcher')) {
+    class DomationEventDispatcher
+    {
+        public static function dispatch($pdo, int $contactId, string $eventCode, array $meta = []): void
+        {
+            if ($contactId <= 0 || trim($eventCode) === '') {
+                return;
+            }
+            try {
+                $stmtSub = $pdo->prepare("SELECT id, workspace_id FROM subscribers WHERE contact_id = ? LIMIT 1");
+                $stmtSub->execute([$contactId]);
+                $sub = $stmtSub->fetch(PDO::FETCH_ASSOC);
+
+                if (!$sub) {
+                    $stmtC = $pdo->prepare("SELECT id, full_name, email, phone, source, owner_id, stage_id, lead_status, temperature, city, district FROM contacts WHERE id = ? AND deleted_at IS NULL LIMIT 1");
+                    $stmtC->execute([$contactId]);
+                    $cRow = $stmtC->fetch(PDO::FETCH_ASSOC);
+                    if (!$cRow) {
+                        return;
+                    }
+                    $email = trim((string) ($cRow['email'] ?? ''));
+                    $phone = trim((string) ($cRow['phone'] ?? ''));
+                    if ($email !== '') {
+                        $stmtByEmail = $pdo->prepare("SELECT id, workspace_id FROM subscribers WHERE email = ? LIMIT 1");
+                        $stmtByEmail->execute([$email]);
+                        $sub = $stmtByEmail->fetch(PDO::FETCH_ASSOC);
+                    }
+                    if (!$sub && $phone !== '') {
+                        $stmtByPhone = $pdo->prepare("SELECT id, workspace_id FROM subscribers WHERE phone_number = ? LIMIT 1");
+                        $stmtByPhone->execute([$phone]);
+                        $sub = $stmtByPhone->fetch(PDO::FETCH_ASSOC);
+                    }
+                    if ($sub && !empty($sub['id'])) {
+                        $pdo->prepare("UPDATE subscribers SET contact_id = ? WHERE id = ? AND (contact_id IS NULL OR contact_id = 0)")
+                            ->execute([$contactId, $sub['id']]);
+                    } else {
+                        $wsStmt = $pdo->query("SELECT id FROM workspaces ORDER BY id ASC LIMIT 1");
+                        $defaultWs = $wsStmt ? ($wsStmt->fetchColumn() ?: 'ws_default') : 'ws_default';
+                        $subId = 'sub_erp_' . $contactId . '_' . substr(md5((string) microtime(true)), 0, 6);
+                        $safeEmail = $email !== '' ? $email : ("contact_{$contactId}@myerp.local");
+                        $pdo->prepare("
+                            INSERT IGNORE INTO subscribers (id, workspace_id, contact_id, email, first_name, phone_number, source, status, stage_id, lead_status, temperature, owner_id, city, district, joined_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, 'customer', ?, ?, ?, ?, ?, ?, NOW())
+                        ")->execute([
+                            $subId,
+                            $defaultWs,
+                            $contactId,
+                            $safeEmail,
+                            $cRow['full_name'] ?? 'Khách hàng',
+                            $phone !== '' ? $phone : null,
+                            $cRow['source'] ?? 'MYERP CRM',
+                            $cRow['stage_id'] ?? null,
+                            $cRow['lead_status'] ?? 'active',
+                            $cRow['temperature'] ?? 'hot',
+                            $cRow['owner_id'] ?? null,
+                            $cRow['city'] ?? null,
+                            $cRow['district'] ?? null
+                        ]);
+                        $sub = ['id' => $subId, 'workspace_id' => $defaultWs];
+                    }
+                }
+
+                $subscriberId = (string) ($sub['id'] ?? '');
+                $workspaceId = (string) ($sub['workspace_id'] ?? '');
+                if ($subscriberId === '' || $workspaceId === '') {
+                    return;
+                }
+
+                enrollSubscribersBulk($pdo, [$subscriberId], 'erp_event', $eventCode, $workspaceId);
+                wakeupWaitingSubscribers($pdo, $subscriberId, $workspaceId);
+                checkDynamicTriggers($pdo, $subscriberId);
+            } catch (\Throwable $e) {
+                error_log('[DomationEventDispatcher] Non-blocking error for contact ' . $contactId . ' (' . $eventCode . '): ' . $e->getMessage());
+            }
         }
     }
 }

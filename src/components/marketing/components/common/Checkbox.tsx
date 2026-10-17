@@ -51,7 +51,7 @@ const Checkbox: React.FC<CheckboxProps> = ({
           flex items-center justify-center transition-all duration-200 border-2
           ${sizeClasses[size]}
           ${checked
-                        ? 'bg-amber-600 border-amber-600 text-white shadow-lg shadow-amber-600/10'
+                        ? 'bg-[var(--color-primary)] border-[var(--color-primary)] text-white shadow-lg shadow-[var(--color-primary)]/10'
                         : 'bg-white border-slate-200 group-hover:border-slate-350'}
           ${disabled ? 'bg-slate-100 border-slate-200' : ''}
         `}

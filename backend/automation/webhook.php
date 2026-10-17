@@ -250,6 +250,28 @@ if ($method === 'POST') {
                                 // We'll keep it simple: Ensure it starts with 0 or +84
                             }
                             if ($email || $phone) {
+                                try {
+                                    $emailNorm = $email && class_exists('DomationContactMatcher') ? DomationContactMatcher::normalizeEmail($email) : ($email ? strtolower(trim($email)) : null);
+                                    $phoneNorm9 = $phone && class_exists('DomationContactMatcher') ? DomationContactMatcher::normalizePhone9($phone) : null;
+                                    if ($email || $phone) {
+                                        $pdo->prepare("UPDATE zalo_subscribers SET manual_email = COALESCE(NULLIF(?, ''), manual_email), phone_number = COALESCE(NULLIF(?, ''), phone_number) WHERE id = ?")
+                                            ->execute([$email, $phone, $subId]);
+                                    }
+                                    require_once __DIR__ . '/zalo_sync_helpers.php';
+                                    syncZaloToMain($pdo, $subId);
+                                    $stmtMainSub = $pdo->prepare("SELECT COALESCE(subscriber_id, (SELECT id FROM subscribers WHERE zalo_user_id = zalo_subscribers.zalo_user_id AND workspace_id = zalo_subscribers.workspace_id LIMIT 1)) FROM zalo_subscribers WHERE id = ? LIMIT 1");
+                                    $stmtMainSub->execute([$subId]);
+                                    $mainSubId = $stmtMainSub->fetchColumn();
+                                    if ($mainSubId) {
+                                        $pdo->prepare("UPDATE subscribers SET email_norm = COALESCE(?, email_norm), phone_norm9 = COALESCE(?, phone_norm9), phone_number = COALESCE(NULLIF(phone_number, ''), ?) WHERE id = ?")
+                                            ->execute([$emailNorm, $phoneNorm9, $phone, $mainSubId]);
+                                        if (function_exists('domationSyncSubscriberMatchOnly')) {
+                                            domationSyncSubscriberMatchOnly($pdo, $mainSubId);
+                                        }
+                                    }
+                                } catch (\Throwable $eZaloSyncNow) {
+                                }
+
                                 // 10M UPGRADE: Async Profile Sync & Linking
                                 dispatchQueueJob($pdo, 'sync_zalo_profile', [
                                     'sub_id' => $subId,
@@ -1583,12 +1605,23 @@ function upsertZaloSubscriberWebhook($pdo, $zaloUserId, $payload, $oaConfigId, $
         if ($stmtInsert->rowCount() > 0) {
             // First time created, increment count
             $pdo->prepare("UPDATE zalo_lists SET subscriber_count = subscriber_count + 1 WHERE id = ?")->execute([$listId]);
+            try {
+                require_once __DIR__ . '/zalo_sync_helpers.php';
+                syncZaloToMain($pdo, $newSubId);
+                if (function_exists('domationSyncSubscriberMatchOnly')) {
+                    $stmtM = $pdo->prepare("SELECT COALESCE(subscriber_id, (SELECT id FROM subscribers WHERE zalo_user_id = ? AND workspace_id = ? LIMIT 1)) FROM zalo_subscribers WHERE id = ? LIMIT 1");
+                    $stmtM->execute([$zaloUserId, $workspaceId, $newSubId]);
+                    $mId = $stmtM->fetchColumn();
+                    if ($mId) domationSyncSubscriberMatchOnly($pdo, $mId);
+                }
+            } catch (Exception $eSyncNew) {
+            }
             return $newSubId;
         }
 
         // 3. IF ALREADY EXISTS, UPDATE
         // Lock the row for update to ensure we have the latest status
-        $stmtExisting = $pdo->prepare("SELECT id, display_name, avatar, is_follower FROM zalo_subscribers WHERE workspace_id = ? AND zalo_user_id = ? FOR UPDATE");
+        $stmtExisting = $pdo->prepare("SELECT id, display_name, avatar, is_follower, subscriber_id, contact_id FROM zalo_subscribers WHERE workspace_id = ? AND zalo_user_id = ? FOR UPDATE");
         $stmtExisting->execute([$workspaceId, $zaloUserId]);
         $existing = $stmtExisting->fetch(PDO::FETCH_ASSOC);
 
@@ -1629,7 +1662,6 @@ function upsertZaloSubscriberWebhook($pdo, $zaloUserId, $payload, $oaConfigId, $
                     $newIsFollower = 1;
                 elseif ($event === 'unfollow')
                     $newIsFollower = 0;
-                // Else usage of $newStatus variable from logic above, but safer to rely on event or explicit change
 
                 if ($newIsFollower !== null) {
                     try {
@@ -1646,6 +1678,21 @@ function upsertZaloSubscriberWebhook($pdo, $zaloUserId, $payload, $oaConfigId, $
                     }
                 }
             }
+
+            if (empty($existing['subscriber_id']) || empty($existing['contact_id'])) {
+                try {
+                    require_once __DIR__ . '/zalo_sync_helpers.php';
+                    syncZaloToMain($pdo, $subId);
+                    if (function_exists('domationSyncSubscriberMatchOnly')) {
+                        $stmtM = $pdo->prepare("SELECT COALESCE(subscriber_id, (SELECT id FROM subscribers WHERE zalo_user_id = ? AND workspace_id = ? LIMIT 1)) FROM zalo_subscribers WHERE id = ? LIMIT 1");
+                        $stmtM->execute([$zaloUserId, $workspaceId, $subId]);
+                        $mId = $stmtM->fetchColumn();
+                        if ($mId) domationSyncSubscriberMatchOnly($pdo, $mId);
+                    }
+                } catch (Exception $eSyncExisting) {
+                }
+            }
+
             return $subId;
         }
     } catch (Exception $e) {
@@ -1656,7 +1703,21 @@ function upsertZaloSubscriberWebhook($pdo, $zaloUserId, $payload, $oaConfigId, $
     // Safety fallback: search with prepared statement (Scoped by workspaceId)
     $stmtFallback = $pdo->prepare("SELECT id FROM zalo_subscribers WHERE zalo_user_id = ? AND workspace_id = ? LIMIT 1");
     $stmtFallback->execute([$zaloUserId, $workspaceId]);
-    return $stmtFallback->fetchColumn();
+    $fallbackId = $stmtFallback->fetchColumn();
+    if ($fallbackId) {
+        try {
+            require_once __DIR__ . '/zalo_sync_helpers.php';
+            syncZaloToMain($pdo, $fallbackId);
+            if (function_exists('domationSyncSubscriberMatchOnly')) {
+                $stmtM = $pdo->prepare("SELECT COALESCE(subscriber_id, (SELECT id FROM subscribers WHERE zalo_user_id = ? AND workspace_id = ? LIMIT 1)) FROM zalo_subscribers WHERE id = ? LIMIT 1");
+                $stmtM->execute([$zaloUserId, $workspaceId, $fallbackId]);
+                $mId = $stmtM->fetchColumn();
+                if ($mId) domationSyncSubscriberMatchOnly($pdo, $mId);
+            }
+        } catch (Exception $eSyncFb) {
+        }
+    }
+    return $fallbackId;
 }
 
 // Helper to add tag

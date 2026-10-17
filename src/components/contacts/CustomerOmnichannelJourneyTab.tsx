@@ -60,8 +60,8 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
   const [journeyData, setJourneyData] = useState<any>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Sub-tabs in Section 3
-  const [activeSubTab, setActiveSubTab] = useState<'timeline' | 'flows' | 'surveys' | 'web'>('timeline');
+  // Sub-tabs in unified workspace
+  const [activeSubTab, setActiveSubTab] = useState<'timeline' | 'conversations' | 'flows' | 'surveys' | 'web'>('timeline');
   const [timelineChannelFilter, setTimelineChannelFilter] = useState<
     'all' | 'web' | 'email' | 'flow' | 'survey' | 'voucher'
   >('all');
@@ -564,586 +564,598 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
   })();
 
   return (
-    <div className="animate-fade" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingBottom: '2rem' }}>
-      {/* Header Banner */}
+    <div className="animate-fade" style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingBottom: '1.5rem' }}>
+      {/* Compact Header Bar + Quick Actions */}
       <div
         style={{
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: '12px',
-          padding: '14px 18px',
-          borderRadius: '14px',
-          background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.09) 0%, rgba(14, 165, 233, 0.05) 100%)',
-          border: '1px solid rgba(37, 99, 235, 0.18)'
+          gap: '8px',
+          padding: '9px 14px',
+          borderRadius: '10px',
+          background: 'linear-gradient(135deg, rgba(189, 29, 45, 0.06) 0%, rgba(189, 29, 45, 0.02) 100%)',
+          border: '1px solid rgba(189, 29, 45, 0.14)'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: '12px',
-              background: '#2563eb',
-              color: '#ffffff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)'
-            }}
-          >
-            <Activity size={20} />
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--color-text)' }}>
-                Hành trình & Đa kênh 360° (Omnichannel Customer Journey)
-              </h3>
-            </div>
-            <p style={{ margin: '2px 0 0', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-              Đồng bộ tự động dấu chân số từ Website, Email/ZNS, Kịch bản Automation, Khảo sát, Voucher & Hội thoại đa kênh
-            </p>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <button
-            type="button"
-            onClick={() => fetchJourney(undefined, true)}
-            disabled={loading || refreshing}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <Activity size={16} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+          <span style={{ fontSize: '0.86rem', fontWeight: 800, color: 'var(--color-text)' }}>
+            Hành trình & Đa kênh 360°
+          </span>
+          <span
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '6px',
-              padding: '7px 12px',
-              borderRadius: '8px',
-              fontSize: '0.78rem',
+              gap: '4px',
+              padding: '2px 8px',
+              borderRadius: '999px',
+              fontSize: '0.68rem',
               fontWeight: 700,
+              color: tempPill.color,
+              background: tempPill.bg
+            }}
+          >
+            <Flame size={11} />
+            {summary.engagement_score} điểm • {tempPill.label}
+          </span>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              padding: '2px 8px',
+              borderRadius: '999px',
+              fontSize: '0.68rem',
+              fontWeight: 600,
+              color: mktStatusBadge.color,
+              background: mktStatusBadge.bg
+            }}
+          >
+            {mktStatusBadge.label}
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={openEnrollFlowModal}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '4px 10px',
+              borderRadius: '7px',
+              border: '1px solid rgba(189, 29, 45, 0.22)',
               background: 'var(--color-surface)',
-              color: '#2563eb',
-              border: '1px solid rgba(37, 99, 235, 0.25)',
+              color: 'var(--color-primary)',
+              fontSize: '0.72rem',
+              fontWeight: 700,
               cursor: 'pointer'
             }}
           >
-            <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
-            <span>Làm mới</span>
+            <Plus size={12} />
+            <span>Gán Kịch bản</span>
           </button>
+          <button
+            type="button"
+            onClick={openIssueVoucherModal}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '4px 10px',
+              borderRadius: '7px',
+              border: '1px solid var(--color-border)',
+              background: 'var(--color-surface)',
+              color: 'var(--color-text)',
+              fontSize: '0.72rem',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            <Ticket size={12} style={{ color: '#e11d48' }} />
+            <span>Cấp Voucher</span>
+          </button>
+          {summary.active_voucher_code && (
+            <button
+              type="button"
+              onClick={() => handleRedeemVoucher(summary.active_voucher_code)}
+              disabled={Boolean(submittingAction)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '4px 10px',
+                borderRadius: '7px',
+                border: '1px solid rgba(16, 185, 129, 0.28)',
+                background: 'rgba(16, 185, 129, 0.08)',
+                color: '#059669',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              <CheckCircle2 size={12} />
+              <span>Redeem ({summary.active_voucher_code})</span>
+            </button>
+          )}
         </div>
       </div>
 
       {errorMsg && (
         <div
           style={{
-            padding: '12px 16px',
-            borderRadius: '10px',
+            padding: '8px 12px',
+            borderRadius: '8px',
             background: 'rgba(239, 68, 68, 0.08)',
             color: '#dc2626',
-            fontSize: '0.82rem',
+            fontSize: '0.78rem',
             display: 'flex',
             alignItems: 'center',
-            gap: '8px'
+            gap: '6px'
           }}
         >
-          <AlertCircle size={16} />
+          <AlertCircle size={14} />
           <span>{errorMsg}</span>
         </div>
       )}
 
-      {/* SECTION 1: Dải 6 Thẻ Chỉ Số Hoạt Động & Tương Tác - Compact & Basic */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-        {/* Card 1: Điểm Tương Tác */}
-        <div className="p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-xs flex flex-col justify-between gap-1.5 hover:border-[var(--color-border-hover)] transition-all">
-          <div className="flex items-center justify-between text-xs font-semibold text-[var(--color-text-muted)]">
-            <span>Tương tác số</span>
-            <Flame size={14} style={{ color: tempPill.color }} />
+      {/* SECTION 1: Compact 6-Tile Interactive Metric Strip */}
+      <div
+        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))',
+          gap: '8px'
+        }}
+      >
+        {/* Tile 1: Tổng tương tác */}
+        <div
+          onClick={() => {
+            setActiveSubTab('timeline');
+            setTimelineChannelFilter('all');
+          }}
+          style={{
+            padding: '8px 11px',
+            borderRadius: '10px',
+            background: 'var(--color-surface)',
+            border: activeSubTab === 'timeline' && timelineChannelFilter === 'all'
+              ? '1px solid rgba(189, 29, 45, 0.45)'
+              : '1px solid var(--color-border)',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Dấu chân số</span>
+            <Flame size={13} style={{ color: tempPill.color, flexShrink: 0 }} />
           </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-xl font-bold text-[var(--color-text)]">{summary.engagement_score}</span>
-            <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded-full" style={{ color: tempPill.color, background: tempPill.bg }}>
-              {tempPill.label}
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '4px' }}>
+            <span style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.2 }}>
+              {unifiedTimeline.length} <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>sự kiện</span>
             </span>
           </div>
-          <div className="text-[11px] text-[var(--color-text-muted)] truncate">
-            {mktStatusBadge.label}
+          <div style={{ fontSize: '0.67rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            Điểm: {summary.engagement_score} ({tempPill.label})
           </div>
         </div>
 
-        {/* Card 2: Website */}
-        <div className="p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-xs flex flex-col justify-between gap-1.5 hover:border-[var(--color-border-hover)] transition-all">
-          <div className="flex items-center justify-between text-xs font-semibold text-[var(--color-text-muted)]">
-            <span>Website</span>
-            <Globe size={14} className="text-sky-500" />
+        {/* Tile 2: Website */}
+        <div
+          onClick={() => setActiveSubTab('web')}
+          style={{
+            padding: '8px 11px',
+            borderRadius: '10px',
+            background: 'var(--color-surface)',
+            border: activeSubTab === 'web'
+              ? '1px solid rgba(14, 165, 233, 0.5)'
+              : '1px solid var(--color-border)',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Website</span>
+            <Globe size={13} style={{ color: '#0ea5e9', flexShrink: 0 }} />
           </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-xl font-bold text-[var(--color-text)]">{summary.web_sessions_count}</span>
-            <span className="text-[11px] text-[var(--color-text-muted)]">phiên</span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+            <span style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.2 }}>
+              {summary.web_sessions_count}{' '}
+              <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>phiên</span>
+            </span>
           </div>
-          <div className="text-[11px] text-[var(--color-text-muted)] truncate">
+          <div style={{ fontSize: '0.67rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {summary.web_pageviews_count} xem • {summary.max_scroll_depth}% cuộn
           </div>
         </div>
 
-        {/* Card 3: Email & ZNS */}
-        <div className="p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-xs flex flex-col justify-between gap-1.5 hover:border-[var(--color-border-hover)] transition-all">
-          <div className="flex items-center justify-between text-xs font-semibold text-[var(--color-text-muted)]">
-            <span>Email & ZNS</span>
-            <Mail size={14} className="text-pink-500" />
+        {/* Tile 3: Email & ZNS */}
+        <div
+          onClick={() => {
+            setActiveSubTab('timeline');
+            setTimelineChannelFilter('email');
+          }}
+          style={{
+            padding: '8px 11px',
+            borderRadius: '10px',
+            background: 'var(--color-surface)',
+            border: activeSubTab === 'timeline' && timelineChannelFilter === 'email'
+              ? '1px solid rgba(236, 72, 153, 0.5)'
+              : '1px solid var(--color-border)',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Email & ZNS</span>
+            <Mail size={13} style={{ color: '#ec4899', flexShrink: 0 }} />
           </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-xl font-bold text-[var(--color-text)]">{summary.stats_email_sent}</span>
-            <span className="text-[11px] text-[var(--color-text-muted)]">đã gửi</span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+            <span style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.2 }}>
+              {summary.stats_email_sent}{' '}
+              <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>đã gửi</span>
+            </span>
           </div>
-          <div className="text-[11px] text-[var(--color-text-muted)] truncate">
-            Mở: {summary.stats_email_opened} ({openRate}%)
-          </div>
-        </div>
-
-        {/* Card 4: Automation Flow */}
-        <div className="p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-xs flex flex-col justify-between gap-1.5 hover:border-[var(--color-border-hover)] transition-all">
-          <div className="flex items-center justify-between text-xs font-semibold text-[var(--color-text-muted)]">
-            <span>Automation</span>
-            <GitBranch size={14} className="text-indigo-500" />
-          </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-xl font-bold text-[var(--color-text)]">{summary.active_flow_count}</span>
-            <span className="text-[11px] text-[var(--color-text-muted)]">đang chạy</span>
-          </div>
-          <div className="text-[11px] text-[var(--color-text-muted)] truncate flex items-center justify-between">
-            <span>Xong: {summary.completed_flow_count}</span>
-            <button
-              type="button"
-              onClick={openEnrollFlowModal}
-              className="text-[10px] text-blue-600 hover:underline font-semibold"
-            >
-              + Gán luồng
-            </button>
+          <div style={{ fontSize: '0.67rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            Mở: {summary.stats_email_opened} ({openRate}%) • Click: {clickRate}%
           </div>
         </div>
 
-        {/* Card 5: Khảo Sát / Quiz */}
-        <div className="p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-xs flex flex-col justify-between gap-1.5 hover:border-[var(--color-border-hover)] transition-all">
-          <div className="flex items-center justify-between text-xs font-semibold text-[var(--color-text-muted)]">
-            <span>Khảo sát / Quiz</span>
-            <ClipboardCheck size={14} className="text-amber-500" />
+        {/* Tile 4: Automation */}
+        <div
+          onClick={() => setActiveSubTab('flows')}
+          style={{
+            padding: '8px 11px',
+            borderRadius: '10px',
+            background: 'var(--color-surface)',
+            border: activeSubTab === 'flows'
+              ? '1px solid rgba(99, 102, 241, 0.5)'
+              : '1px solid var(--color-border)',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Automation</span>
+            <GitBranch size={13} style={{ color: '#6366f1', flexShrink: 0 }} />
           </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-xl font-bold text-[var(--color-text)]">{summary.survey_completed_count}</span>
-            <span className="text-[11px] text-[var(--color-text-muted)]">đã nộp</span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+            <span style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.2 }}>
+              {summary.active_flow_count}{' '}
+              <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>đang chạy</span>
+            </span>
           </div>
-          <div className="text-[11px] text-[var(--color-text-muted)] truncate flex items-center justify-between">
-            <span className="truncate">{surveyResponses[0]?.survey_title || 'Chưa nộp'}</span>
-            {surveyResponses.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setActiveSubTab('surveys')}
-                className="text-[10px] text-blue-600 hover:underline font-semibold shrink-0 ml-1"
-              >
-                Xem
-              </button>
-            )}
+          <div style={{ fontSize: '0.67rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            Hoàn tất: {summary.completed_flow_count} luồng
           </div>
         </div>
 
-        {/* Card 6: Voucher & QR */}
-        <div className="p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-xs flex flex-col justify-between gap-1.5 hover:border-[var(--color-border-hover)] transition-all">
-          <div className="flex items-center justify-between text-xs font-semibold text-[var(--color-text-muted)]">
-            <span>Voucher & QR</span>
-            <QrCode size={14} className="text-rose-500" />
+        {/* Tile 5: Khảo Sát / Quiz */}
+        <div
+          onClick={() => setActiveSubTab('surveys')}
+          style={{
+            padding: '8px 11px',
+            borderRadius: '10px',
+            background: 'var(--color-surface)',
+            border: activeSubTab === 'surveys'
+              ? '1px solid rgba(245, 158, 11, 0.5)'
+              : '1px solid var(--color-border)',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Khảo sát / Quiz</span>
+            <ClipboardCheck size={13} style={{ color: '#f59e0b', flexShrink: 0 }} />
           </div>
-          <div className="flex items-baseline gap-1.5">
-            {summary.active_voucher_code ? (
-              <span className="text-sm font-bold text-rose-600 font-mono tracking-wider truncate">{summary.active_voucher_code}</span>
-            ) : (
-              <span className="text-xs text-[var(--color-text-muted)]">Chưa có mã</span>
-            )}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+            <span style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.2 }}>
+              {summary.survey_completed_count}{' '}
+              <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>đã nộp</span>
+            </span>
           </div>
-          <div className="text-[11px] text-[var(--color-text-muted)] truncate flex items-center justify-between">
-            <button
-              type="button"
-              onClick={openIssueVoucherModal}
-              className="text-[10px] text-blue-600 hover:underline font-semibold"
-            >
-              + Cấp mã
-            </button>
-            {summary.active_voucher_code && (
-              <button
-                type="button"
-                onClick={() => handleRedeemVoucher(summary.active_voucher_code)}
-                disabled={Boolean(submittingAction)}
-                className="text-[10px] text-emerald-600 hover:underline font-semibold"
-              >
-                Redeem
-              </button>
-            )}
+          <div style={{ fontSize: '0.67rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {surveyResponses[0]?.survey_title || 'Chưa có phản hồi'}
+          </div>
+        </div>
+
+        {/* Tile 6: Hội thoại & Voucher */}
+        <div
+          onClick={() => setActiveSubTab('conversations')}
+          style={{
+            padding: '8px 11px',
+            borderRadius: '10px',
+            background: 'var(--color-surface)',
+            border: activeSubTab === 'conversations'
+              ? '1px solid rgba(189, 29, 45, 0.5)'
+              : '1px solid var(--color-border)',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Chat & Voucher</span>
+            <MessageSquare size={13} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+            <span style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.2 }}>
+              {linkedConversations.length}{' '}
+              <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>hội thoại</span>
+            </span>
+          </div>
+          <div style={{ fontSize: '0.67rem', color: summary.active_voucher_code ? '#e11d48' : 'var(--color-text-muted)', fontWeight: summary.active_voucher_code ? 700 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {summary.active_voucher_code ? `Mã: ${summary.active_voucher_code}` : 'Voucher: Chưa cấp'}
           </div>
         </div>
       </div>
 
-      {/* SECTION 2: Hộp Thư Hội Thoại Đa Kênh Đã Khớp (Linked Conversations: Web AI Chat, Meta Fanpage, Zalo OA) */}
+      {/* SECTION 2: Unified Omnichannel Workspace Card (Single Card for Timeline, Conversations, Automation, Surveys, Web/UTM) */}
       <div
         style={{
-          padding: '16px',
-          borderRadius: '14px',
+          padding: '12px 14px',
+          borderRadius: '12px',
           background: 'var(--color-surface)',
-          boxShadow: '0 2px 12px rgba(0,0,0,0.04)'
+          border: '1px solid var(--color-border)'
         }}
       >
+        {/* Top Navigation Row: Sub-tabs on left + Contextual Filter Pills on right */}
         <div
           style={{
             display: 'flex',
             flexWrap: 'wrap',
             alignItems: 'center',
             justifyContent: 'space-between',
-            gap: '10px',
-            marginBottom: '12px'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <MessageSquare size={18} color="#2563eb" />
-            <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: 'var(--color-text)' }}>
-              Hộp Thư Hội Thoại Đa Kênh Đã Khớp (Web AI Chat • Meta Fanpage • Zalo OA)
-            </h4>
-            <span
-              style={{
-                fontSize: '0.7rem',
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: '999px',
-                background: 'rgba(37, 99, 235, 0.1)',
-                color: '#2563eb'
-              }}
-            >
-              {linkedConversations.length} hội thoại
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-            {[
-              { id: 'all', label: 'Tất cả kênh' },
-              { id: 'web_ai', label: 'Web AI Chat' },
-              { id: 'meta', label: 'Meta Fanpage' },
-              { id: 'zalo', label: 'Zalo OA' }
-            ].map((ch) => (
-              <button
-                key={ch.id}
-                type="button"
-                onClick={() => setConvChannel(ch.id as any)}
-                style={{
-                  padding: '5px 11px',
-                  borderRadius: '999px',
-                  border: 'none',
-                  fontSize: '0.73rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  background: convChannel === ch.id ? '#2563eb' : 'var(--color-bg)',
-                  color: convChannel === ch.id ? '#ffffff' : 'var(--color-text-muted)'
-                }}
-              >
-                {ch.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {linkedConversations.length === 0 ? (
-          <div
-            style={{
-              padding: '24px 16px',
-              textAlign: 'center',
-              borderRadius: '10px',
-              background: 'var(--color-bg)',
-              color: 'var(--color-text-muted)',
-              fontSize: '0.8rem'
-            }}
-          >
-            Chưa có lịch sử hội thoại Web AI Chat, Meta Fanpage hoặc Zalo OA nào khớp với SĐT / Email của khách hàng này.
-          </div>
-        ) : (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: selectedConv ? 'minmax(240px, 1fr) 2fr' : '1fr',
-              gap: '12px'
-            }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '320px', overflowY: 'auto' }}>
-              {linkedConversations.map((conv: any, idx: number) => {
-                const isSelected = selectedConv && (selectedConv.id || selectedConv.session_id) === (conv.id || conv.session_id);
-                return (
-                  <div
-                    key={conv.id || conv.session_id || idx}
-                    onClick={() => setSelectedConv(conv)}
-                    style={{
-                      padding: '10px 12px',
-                      borderRadius: '10px',
-                      background: isSelected ? 'rgba(37, 99, 235, 0.08)' : 'var(--color-bg)',
-                      borderLeft: isSelected ? '3px solid #2563eb' : '3px solid transparent',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '4px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                      <span
-                        style={{
-                          fontSize: '0.7rem',
-                          fontWeight: 800,
-                          color: '#2563eb',
-                          background: 'rgba(37, 99, 235, 0.1)',
-                          padding: '2px 7px',
-                          borderRadius: '999px'
-                        }}
-                      >
-                        {conv._channelLabel}
-                      </span>
-                      <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>
-                        {formatDateTimeVN(conv.updated_at || conv.created_at || conv.last_message_at)}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                      {conv.visitor_name || conv.customer_name || conv.sender_name || contact?.full_name || 'Khách hàng'}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: '0.75rem',
-                        color: 'var(--color-text-muted)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}
-                    >
-                      {conv.last_message || conv.message || conv.summary || 'Bấm để xem chi tiết bong bóng hội thoại'}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {selectedConv && (
-              <div
-                style={{
-                  padding: '12px 14px',
-                  borderRadius: '10px',
-                  background: 'var(--color-bg)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px',
-                  maxHeight: '320px',
-                  overflowY: 'auto'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '6px', borderBottom: '1px solid var(--color-border-light)' }}>
-                  <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--color-text)' }}>
-                    Nội dung hội thoại ({selectedConv._channelLabel})
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedConv(null)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-                {Array.isArray(selectedConv.messages) && selectedConv.messages.length > 0 ? (
-                  selectedConv.messages.map((m: any, mIdx: number) => {
-                    const isAgent = m.role === 'assistant' || m.sender === 'agent' || m.direction === 'outbound';
-                    return (
-                      <div
-                        key={m.id || mIdx}
-                        style={{
-                          alignSelf: isAgent ? 'flex-end' : 'flex-start',
-                          maxWidth: '82%',
-                          padding: '8px 12px',
-                          borderRadius: '12px',
-                          background: isAgent ? '#2563eb' : 'var(--color-surface)',
-                          color: isAgent ? '#ffffff' : 'var(--color-text)',
-                          fontSize: '0.78rem',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-                        }}
-                      >
-                        <div>{m.content || m.text || m.message}</div>
-                        <div style={{ fontSize: '0.65rem', opacity: 0.75, marginTop: '3px', textAlign: 'right' }}>
-                          {formatDateTimeVN(m.created_at || m.timestamp)}
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div
-                    style={{
-                      padding: '10px 12px',
-                      borderRadius: '10px',
-                      background: 'var(--color-surface)',
-                      fontSize: '0.8rem',
-                      color: 'var(--color-text)'
-                    }}
-                  >
-                    {selectedConv.message || selectedConv.last_message || selectedConv.content || 'Không có tin nhắn chi tiết'}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* SECTION 3 & 4: Sub-tabs cho Unified Timeline, Lịch sử Automation Flow, Câu trả lời Khảo sát & Phiên Web/UTM */}
-      <div
-        style={{
-          padding: '16px',
-          borderRadius: '14px',
-          background: 'var(--color-surface)',
-          boxShadow: '0 2px 12px rgba(0,0,0,0.04)'
-        }}
-      >
-        {/* Sub-tab Navigation */}
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
             gap: '8px',
-            paddingBottom: '12px',
-            marginBottom: '14px',
+            paddingBottom: '10px',
+            marginBottom: '10px',
             borderBottom: '1px solid var(--color-border-light)'
           }}
         >
-          {[
-            { id: 'timeline', label: 'Dòng thời gian Hành trình Đa kênh', count: unifiedTimeline.length },
-            { id: 'flows', label: 'Lịch sử Kịch bản Automation', count: activeFlows.length + completedFlows.length },
-            { id: 'surveys', label: 'Chi tiết Câu trả lời Khảo sát / Quiz', count: surveyResponses.length },
-            { id: 'web', label: 'Chi tiết Phiên truy cập Website & UTM', count: webSessions.length }
-          ].map((st) => {
-            const active = activeSubTab === st.id;
-            return (
-              <button
-                key={st.id}
-                type="button"
-                onClick={() => setActiveSubTab(st.id as any)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '7px 14px',
-                  borderRadius: '10px',
-                  border: 'none',
-                  fontSize: '0.78rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  background: active ? '#2563eb' : 'var(--color-bg)',
-                  color: active ? '#ffffff' : 'var(--color-text)'
-                }}
-              >
-                <span>{st.label}</span>
-                <span
+          {/* Main Sub-Tabs */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+            {[
+              { id: 'timeline', label: 'Dòng thời gian', count: unifiedTimeline.length, icon: Activity },
+              { id: 'conversations', label: 'Hội thoại Chat', count: linkedConversations.length, icon: MessageSquare },
+              { id: 'flows', label: 'Automation', count: activeFlows.length + completedFlows.length, icon: GitBranch },
+              { id: 'surveys', label: 'Khảo sát / Quiz', count: surveyResponses.length, icon: ClipboardCheck },
+              { id: 'web', label: 'Website & UTM', count: webSessions.length, icon: Globe }
+            ].map((st) => {
+              const active = activeSubTab === st.id;
+              const IconComp = st.icon;
+              return (
+                <button
+                  key={st.id}
+                  type="button"
+                  onClick={() => setActiveSubTab(st.id as any)}
                   style={{
-                    padding: '1px 6px',
-                    borderRadius: '999px',
-                    fontSize: '0.68rem',
-                    background: active ? 'rgba(255,255,255,0.22)' : 'rgba(37, 99, 235, 0.1)',
-                    color: active ? '#ffffff' : '#2563eb'
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '5px 11px',
+                    borderRadius: '8px',
+                    border: active ? '1px solid var(--color-primary)' : '1px solid transparent',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    background: active ? 'var(--color-primary)' : 'var(--color-bg)',
+                    color: active ? '#ffffff' : 'var(--color-text)'
                   }}
                 >
-                  {st.count}
-                </span>
-              </button>
-            );
-          })}
+                  <IconComp size={13} style={{ opacity: active ? 1 : 0.7 }} />
+                  <span>{st.label}</span>
+                  <span
+                    style={{
+                      padding: '0px 5px',
+                      borderRadius: '999px',
+                      fontSize: '0.66rem',
+                      fontWeight: 800,
+                      background: active ? 'rgba(255,255,255,0.22)' : 'rgba(189, 29, 45, 0.1)',
+                      color: active ? '#ffffff' : 'var(--color-primary)'
+                    }}
+                  >
+                    {st.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Right-side Contextual Filter Pills (Inline on the same bar!) */}
+          {activeSubTab === 'timeline' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+              {[
+                { id: 'all', label: 'Tất cả' },
+                { id: 'web', label: 'Web' },
+                { id: 'email', label: 'Email/ZNS' },
+                { id: 'flow', label: 'Flow' },
+                { id: 'survey', label: 'Khảo sát' },
+                { id: 'voucher', label: 'Voucher' }
+              ].map((flt) => {
+                const isFltActive = timelineChannelFilter === flt.id;
+                return (
+                  <button
+                    key={flt.id}
+                    type="button"
+                    onClick={() => setTimelineChannelFilter(flt.id as any)}
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      fontSize: '0.69rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      background: isFltActive ? 'rgba(189, 29, 45, 0.12)' : 'transparent',
+                      color: isFltActive ? 'var(--color-primary)' : 'var(--color-text-muted)'
+                    }}
+                  >
+                    {flt.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {activeSubTab === 'conversations' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+              {[
+                { id: 'all', label: 'Tất cả kênh' },
+                { id: 'web_ai', label: 'Web AI' },
+                { id: 'meta', label: 'Meta' },
+                { id: 'zalo', label: 'Zalo OA' }
+              ].map((ch) => {
+                const isChActive = convChannel === ch.id;
+                return (
+                  <button
+                    key={ch.id}
+                    type="button"
+                    onClick={() => setConvChannel(ch.id as any)}
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      fontSize: '0.69rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      background: isChActive ? 'rgba(189, 29, 45, 0.12)' : 'transparent',
+                      color: isChActive ? 'var(--color-primary)' : 'var(--color-text-muted)'
+                    }}
+                  >
+                    {ch.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {activeSubTab === 'flows' && (
+            <button
+              type="button"
+              onClick={openEnrollFlowModal}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '4px 10px',
+                borderRadius: '7px',
+                background: 'var(--color-primary)',
+                color: '#ffffff',
+                border: 'none',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              <Plus size={12} />
+              <span>Đưa vào Kịch bản</span>
+            </button>
+          )}
         </div>
 
         {/* SUB-TAB 1: Unified Timeline */}
         {activeSubTab === 'timeline' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-              {[
-                { id: 'all', label: 'Tất cả' },
-                { id: 'web', label: 'Website & Pageviews' },
-                { id: 'email', label: 'Email & ZNS' },
-                { id: 'flow', label: 'Automation Flow' },
-                { id: 'survey', label: 'Form & Khảo sát' },
-                { id: 'voucher', label: 'Voucher & QR' }
-              ].map((flt) => (
-                <button
-                  key={flt.id}
-                  type="button"
-                  onClick={() => setTimelineChannelFilter(flt.id as any)}
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: '999px',
-                    border: 'none',
-                    fontSize: '0.72rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    background: timelineChannelFilter === flt.id ? 'rgba(37, 99, 235, 0.14)' : 'var(--color-bg)',
-                    color: timelineChannelFilter === flt.id ? '#2563eb' : 'var(--color-text-muted)'
-                  }}
-                >
-                  {flt.label}
-                </button>
-              ))}
-            </div>
-
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {loading ? (
-              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-                <Loader2 size={22} className="animate-spin" style={{ margin: '0 auto 8px' }} />
-                <div style={{ fontSize: '0.8rem' }}>Đang đồng bộ dòng thời gian 360°...</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {[1, 2, 3, 4].map((idx) => (
+                  <div
+                    key={idx}
+                    className="animate-pulse"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '10px',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      background: 'var(--color-bg)',
+                      borderLeft: '3px solid rgba(189, 29, 45, 0.25)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                      <div className="h-4 w-14 rounded-full bg-slate-200/80 dark:bg-white/[0.08]" />
+                      <div className="h-4 w-48 rounded-md bg-slate-200/80 dark:bg-white/[0.08]" />
+                    </div>
+                    <div className="h-3.5 w-20 rounded-md bg-slate-200/60 dark:bg-white/[0.05]" />
+                  </div>
+                ))}
               </div>
             ) : unifiedTimeline.length === 0 ? (
               <div
                 style={{
-                  padding: '28px 16px',
+                  padding: '18px 14px',
                   textAlign: 'center',
-                  borderRadius: '10px',
+                  borderRadius: '8px',
                   background: 'var(--color-bg)',
                   color: 'var(--color-text-muted)',
-                  fontSize: '0.8rem'
+                  fontSize: '0.78rem'
                 }}
               >
                 Chưa có sự kiện tương tác số nào trong bộ lọc kênh này.
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '420px', overflowY: 'auto' }}>
                 {unifiedTimeline.map((ev: any, idx: number) => (
                   <div
                     key={ev.id || idx}
                     style={{
                       display: 'flex',
-                      alignItems: 'flex-start',
+                      alignItems: 'center',
                       justifyContent: 'space-between',
-                      gap: '12px',
-                      padding: '10px 14px',
-                      borderRadius: '10px',
+                      gap: '10px',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
                       background: 'var(--color-bg)',
-                      borderLeft: '3px solid #2563eb'
+                      borderLeft: '3px solid var(--color-primary)'
                     }}
                   >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0, flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                         <span
                           style={{
-                            fontSize: '0.68rem',
+                            fontSize: '0.64rem',
                             fontWeight: 800,
                             textTransform: 'uppercase',
-                            padding: '1px 7px',
+                            padding: '1px 6px',
                             borderRadius: '999px',
-                            background: 'rgba(37, 99, 235, 0.12)',
-                            color: '#2563eb'
+                            background: 'rgba(189, 29, 45, 0.1)',
+                            color: 'var(--color-primary)',
+                            flexShrink: 0
                           }}
                         >
                           {ev.channel || ev.event_type || 'Digital'}
                         </span>
-                        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                        <span style={{ fontSize: '0.79rem', fontWeight: 700, color: 'var(--color-text)' }}>
                           {ev.title || ev.event_name || ev.subject || 'Hoạt động tương tác số'}
                         </span>
                       </div>
                       {ev.description && (
-                        <div style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)' }}>
+                        <div
+                          style={{
+                            fontSize: '0.73rem',
+                            color: 'var(--color-text-muted)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
                           {ev.description}
                         </div>
                       )}
                     </div>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', flexShrink: 0 }}>
                       {formatDateTimeVN(ev.created_at || ev.occurred_at || ev.timestamp)}
                     </span>
                   </div>
@@ -1153,50 +1165,171 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
           </div>
         )}
 
-        {/* SUB-TAB 2: Lịch sử Kịch bản Automation */}
-        {activeSubTab === 'flows' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                Danh sách Kịch bản Automation đang chạy & đã hoàn tất
-              </span>
-              <button
-                type="button"
-                onClick={openEnrollFlowModal}
+        {/* SUB-TAB 2: Hội thoại Đa kênh (Web AI Chat, Meta Fanpage, Zalo OA) */}
+        {activeSubTab === 'conversations' && (
+          <div>
+            {linkedConversations.length === 0 ? (
+              <div
                 style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  padding: '6px 12px',
+                  padding: '18px 14px',
+                  textAlign: 'center',
                   borderRadius: '8px',
-                  background: '#2563eb',
-                  color: '#ffffff',
-                  border: 'none',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  cursor: 'pointer'
+                  background: 'var(--color-bg)',
+                  color: 'var(--color-text-muted)',
+                  fontSize: '0.78rem'
                 }}
               >
-                <Plus size={13} />
-                <span>+ Đưa vào Kịch bản</span>
-              </button>
-            </div>
+                Chưa có lịch sử hội thoại Web AI Chat, Meta Fanpage hoặc Zalo OA nào khớp với SĐT / Email của khách hàng này.
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: selectedConv ? 'minmax(220px, 1fr) 2fr' : '1fr',
+                  gap: '10px'
+                }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '340px', overflowY: 'auto' }}>
+                  {linkedConversations.map((conv: any, idx: number) => {
+                    const isSelected = selectedConv && (selectedConv.id || selectedConv.session_id) === (conv.id || conv.session_id);
+                    return (
+                      <div
+                        key={conv.id || conv.session_id || idx}
+                        onClick={() => setSelectedConv(conv)}
+                        style={{
+                          padding: '8px 11px',
+                          borderRadius: '8px',
+                          background: isSelected ? 'rgba(189, 29, 45, 0.08)' : 'var(--color-bg)',
+                          borderLeft: isSelected ? '3px solid var(--color-primary)' : '3px solid transparent',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '3px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                          <span
+                            style={{
+                              fontSize: '0.66rem',
+                              fontWeight: 800,
+                              color: 'var(--color-primary)',
+                              background: 'rgba(189, 29, 45, 0.1)',
+                              padding: '1px 6px',
+                              borderRadius: '999px'
+                            }}
+                          >
+                            {conv._channelLabel}
+                          </span>
+                          <span style={{ fontSize: '0.67rem', color: 'var(--color-text-muted)' }}>
+                            {formatDateTimeVN(conv.updated_at || conv.created_at || conv.last_message_at)}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                          {conv.visitor_name || conv.customer_name || conv.sender_name || contact?.full_name || 'Khách hàng'}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '0.73rem',
+                            color: 'var(--color-text-muted)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          {conv.last_message || conv.message || conv.summary || 'Bấm để xem chi tiết hội thoại'}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
 
+                {selectedConv && (
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      background: 'var(--color-bg)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '6px',
+                      maxHeight: '340px',
+                      overflowY: 'auto'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '5px', borderBottom: '1px solid var(--color-border-light)' }}>
+                      <span style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--color-text)' }}>
+                        Nội dung hội thoại ({selectedConv._channelLabel})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedConv(null)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                    {Array.isArray(selectedConv.messages) && selectedConv.messages.length > 0 ? (
+                      selectedConv.messages.map((m: any, mIdx: number) => {
+                        const isAgent = m.role === 'assistant' || m.sender === 'agent' || m.direction === 'outbound';
+                        return (
+                          <div
+                            key={m.id || mIdx}
+                            style={{
+                              alignSelf: isAgent ? 'flex-end' : 'flex-start',
+                              maxWidth: '82%',
+                              padding: '7px 11px',
+                              borderRadius: '10px',
+                              background: isAgent ? 'var(--color-primary)' : 'var(--color-surface)',
+                              color: isAgent ? '#ffffff' : 'var(--color-text)',
+                              fontSize: '0.76rem',
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                            }}
+                          >
+                            <div>{m.content || m.text || m.message}</div>
+                            <div style={{ fontSize: '0.64rem', opacity: 0.75, marginTop: '2px', textAlign: 'right' }}>
+                              {formatDateTimeVN(m.created_at || m.timestamp)}
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div
+                        style={{
+                          padding: '8px 10px',
+                          borderRadius: '8px',
+                          background: 'var(--color-surface)',
+                          fontSize: '0.76rem',
+                          color: 'var(--color-text)'
+                        }}
+                      >
+                        {selectedConv.message || selectedConv.last_message || selectedConv.content || 'Không có tin nhắn chi tiết'}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* SUB-TAB 3: Lịch sử Kịch bản Automation */}
+        {activeSubTab === 'flows' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {activeFlows.length === 0 && completedFlows.length === 0 ? (
               <div
                 style={{
-                  padding: '24px',
+                  padding: '18px 14px',
                   textAlign: 'center',
-                  borderRadius: '10px',
+                  borderRadius: '8px',
                   background: 'var(--color-bg)',
                   color: 'var(--color-text-muted)',
-                  fontSize: '0.8rem'
+                  fontSize: '0.78rem'
                 }}
               >
                 Khách hàng chưa được đưa vào kịch bản Automation nào.
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {[...activeFlows, ...completedFlows].map((fl: any, idx: number) => {
                   const isActive = fl.status === 'active' || fl.status === 'paused';
                   const isPaused = fl.status === 'paused';
@@ -1204,57 +1337,57 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
                     <div
                       key={fl.id || idx}
                       style={{
-                        padding: '12px 14px',
-                        borderRadius: '10px',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
                         background: 'var(--color-bg)',
                         display: 'flex',
                         flexWrap: 'wrap',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        gap: '10px'
+                        gap: '8px'
                       }}
                     >
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--color-text)' }}>
                             {fl.flow_name || fl.name || `Kịch bản #${fl.flow_id || idx + 1}`}
                           </span>
                           <span
                             style={{
-                              fontSize: '0.68rem',
+                              fontSize: '0.65rem',
                               fontWeight: 700,
-                              padding: '2px 8px',
+                              padding: '1px 7px',
                               borderRadius: '999px',
                               background: isPaused
                                 ? 'rgba(245, 158, 11, 0.14)'
                                 : isActive
-                                ? 'rgba(37, 99, 235, 0.12)'
+                                ? 'rgba(189, 29, 45, 0.12)'
                                 : 'rgba(16, 185, 129, 0.12)',
-                              color: isPaused ? '#d97706' : isActive ? '#2563eb' : '#059669'
+                              color: isPaused ? '#d97706' : isActive ? 'var(--color-primary)' : '#059669'
                             }}
                           >
                             {isPaused ? 'Tạm dừng' : isActive ? 'Đang chạy' : 'Đã hoàn tất'}
                           </span>
                         </div>
-                        <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '3px' }}>
-                          Bước hiện tại: {fl.current_step_name || fl.current_node || 'Hoàn thành'} • Tham gia lúc:{' '}
+                        <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                          Bước: {fl.current_step_name || fl.current_node || 'Hoàn thành'} • Tham gia:{' '}
                           {formatDateTimeVN(fl.enrolled_at || fl.created_at)}
                         </div>
                       </div>
 
                       {isActive && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                           <button
                             type="button"
                             onClick={() => handleFlowStateChange(fl, isPaused ? 'resume' : 'pause')}
                             disabled={Boolean(submittingAction)}
                             style={{
-                              padding: '5px 10px',
+                              padding: '4px 9px',
                               borderRadius: '6px',
                               border: 'none',
                               background: isPaused ? '#059669' : '#f59e0b',
                               color: '#ffffff',
-                              fontSize: '0.72rem',
+                              fontSize: '0.7rem',
                               fontWeight: 700,
                               cursor: 'pointer'
                             }}
@@ -1266,12 +1399,12 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
                             onClick={() => handleFlowStateChange(fl, 'exit')}
                             disabled={Boolean(submittingAction)}
                             style={{
-                              padding: '5px 10px',
+                              padding: '4px 9px',
                               borderRadius: '6px',
                               border: 'none',
                               background: 'rgba(239, 68, 68, 0.14)',
                               color: '#dc2626',
-                              fontSize: '0.72rem',
+                              fontSize: '0.7rem',
                               fontWeight: 700,
                               cursor: 'pointer'
                             }}
@@ -1288,18 +1421,18 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
           </div>
         )}
 
-        {/* SUB-TAB 3: Chi tiết Câu trả lời Khảo sát / Quiz */}
+        {/* SUB-TAB 4: Chi tiết Câu trả lời Khảo sát / Quiz */}
         {activeSubTab === 'surveys' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {surveyResponses.length === 0 ? (
               <div
                 style={{
-                  padding: '24px',
+                  padding: '18px 14px',
                   textAlign: 'center',
-                  borderRadius: '10px',
+                  borderRadius: '8px',
                   background: 'var(--color-bg)',
                   color: 'var(--color-text-muted)',
-                  fontSize: '0.8rem'
+                  fontSize: '0.78rem'
                 }}
               >
                 Chưa có dữ liệu câu trả lời Khảo sát / Bài test nào của khách hàng này.
@@ -1318,7 +1451,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
                   <div
                     key={srKey}
                     style={{
-                      borderRadius: '10px',
+                      borderRadius: '8px',
                       background: 'var(--color-bg)',
                       overflow: 'hidden'
                     }}
@@ -1326,7 +1459,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
                     <div
                       onClick={() => setExpandedSurveyId(isExpanded ? null : srKey)}
                       style={{
-                        padding: '12px 14px',
+                        padding: '9px 12px',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
@@ -1334,29 +1467,29 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
                       }}
                     >
                       <div>
-                        <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text)' }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--color-text)' }}>
                           {sr.survey_title || sr.title || `Khảo sát #${sr.survey_id || idx + 1}`}
                         </div>
-                        <div style={{ fontSize: '0.73rem', color: 'var(--color-text-muted)' }}>
+                        <div style={{ fontSize: '0.71rem', color: 'var(--color-text-muted)' }}>
                           Nộp lúc: {formatDateTimeVN(sr.submitted_at || sr.created_at)}
                           {sr.score !== undefined ? ` • Điểm: ${sr.score}` : ''}
                         </div>
                       </div>
-                      {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      {isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
                     </div>
 
                     {isExpanded && (
                       <div
                         style={{
-                          padding: '10px 14px 14px',
+                          padding: '8px 12px 10px',
                           borderTop: '1px solid var(--color-border-light)',
                           display: 'flex',
                           flexDirection: 'column',
-                          gap: '8px'
+                          gap: '6px'
                         }}
                       >
                         {answers.length === 0 ? (
-                          <div style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)' }}>
+                          <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)' }}>
                             {sr.summary || 'Đã ghi nhận hoàn thành khảo sát.'}
                           </div>
                         ) : (
@@ -1364,15 +1497,15 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
                             <div
                               key={aIdx}
                               style={{
-                                padding: '8px 10px',
-                                borderRadius: '8px',
+                                padding: '6px 9px',
+                                borderRadius: '6px',
                                 background: 'var(--color-surface)'
                               }}
                             >
-                              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
                                 Câu {aIdx + 1}: {ans.question || ans.label || ans.field}
                               </div>
-                              <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#2563eb', marginTop: '2px' }}>
+                              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-primary)', marginTop: '1px' }}>
                                 {String(ans.answer ?? ans.value ?? '—')}
                               </div>
                             </div>
@@ -1387,18 +1520,18 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
           </div>
         )}
 
-        {/* SUB-TAB 4: Chi tiết Phiên truy cập Website & UTM */}
+        {/* SUB-TAB 5: Chi tiết Phiên truy cập Website & UTM */}
         {activeSubTab === 'web' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {webSessions.length === 0 ? (
               <div
                 style={{
-                  padding: '24px',
+                  padding: '18px 14px',
                   textAlign: 'center',
-                  borderRadius: '10px',
+                  borderRadius: '8px',
                   background: 'var(--color-bg)',
                   color: 'var(--color-text-muted)',
-                  fontSize: '0.8rem'
+                  fontSize: '0.78rem'
                 }}
               >
                 Chưa ghi nhận phiên truy cập Website (Web Sessions & Pageviews) cho khách hàng này.
@@ -1417,7 +1550,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
                   <div
                     key={wsKey}
                     style={{
-                      borderRadius: '10px',
+                      borderRadius: '8px',
                       background: 'var(--color-bg)',
                       overflow: 'hidden'
                     }}
@@ -1425,65 +1558,63 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
                     <div
                       onClick={() => setExpandedSessionId(isExpanded ? null : wsKey)}
                       style={{
-                        padding: '12px 14px',
+                        padding: '9px 12px',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         cursor: 'pointer',
-                        gap: '10px'
+                        gap: '8px'
                       }}
                     >
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: '0.83rem', fontWeight: 800, color: 'var(--color-text)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.79rem', fontWeight: 800, color: 'var(--color-text)' }}>
                             Phiên #{idx + 1} • {ws.landing_page || ws.domain || 'Website'}
                           </span>
                           {ws.utm_source && (
                             <span
                               style={{
-                                fontSize: '0.68rem',
+                                fontSize: '0.65rem',
                                 fontWeight: 700,
-                                padding: '2px 7px',
+                                padding: '1px 6px',
                                 borderRadius: '999px',
-                                background: 'rgba(37, 99, 235, 0.12)',
-                                color: '#2563eb'
+                                background: 'rgba(189, 29, 45, 0.1)',
+                                color: 'var(--color-primary)'
                               }}
                             >
                               UTM: {ws.utm_source} / {ws.utm_medium || '—'} / {ws.utm_campaign || '—'}
                             </span>
                           )}
                         </div>
-                        <div style={{ fontSize: '0.73rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                          Thời gian: {formatDateTimeVN(ws.started_at || ws.created_at)} • Thiết bị:{' '}
-                          {ws.device_type || ws.browser || 'Desktop/Mobile'} • Cuộn tối đa:{' '}
-                          {ws.max_scroll_depth ?? summary.max_scroll_depth}%
+                        <div style={{ fontSize: '0.71rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                          {formatDateTimeVN(ws.started_at || ws.created_at)} • {ws.device_type || ws.browser || 'Desktop/Mobile'} • Cuộn: {ws.max_scroll_depth ?? summary.max_scroll_depth}%
                         </div>
                       </div>
-                      {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      {isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
                     </div>
 
                     {isExpanded && pageViews.length > 0 && (
                       <div
                         style={{
-                          padding: '10px 14px 14px',
+                          padding: '8px 12px 10px',
                           borderTop: '1px solid var(--color-border-light)',
                           display: 'flex',
                           flexDirection: 'column',
-                          gap: '6px'
+                          gap: '5px'
                         }}
                       >
                         {pageViews.map((pv: any, pIdx: number) => (
                           <div
                             key={pv.id || pIdx}
                             style={{
-                              padding: '7px 10px',
-                              borderRadius: '8px',
+                              padding: '6px 9px',
+                              borderRadius: '6px',
                               background: 'var(--color-surface)',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'space-between',
                               gap: '8px',
-                              fontSize: '0.76rem'
+                              fontSize: '0.73rem'
                             }}
                           >
                             <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>
@@ -1615,7 +1746,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
                   padding: '8px 16px',
                   borderRadius: '8px',
                   border: 'none',
-                  background: '#2563eb',
+                  background: 'var(--color-primary)',
                   color: '#ffffff',
                   fontSize: '0.8rem',
                   fontWeight: 700,
@@ -1755,7 +1886,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
                   padding: '8px 16px',
                   borderRadius: '8px',
                   border: 'none',
-                  background: '#2563eb',
+                  background: 'var(--color-primary)',
                   color: '#ffffff',
                   fontSize: '0.8rem',
                   fontWeight: 700,

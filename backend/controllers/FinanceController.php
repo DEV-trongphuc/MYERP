@@ -263,7 +263,9 @@ class FinanceController
 
         if (empty($data['title']))
             respond(400, null, 'Tiêu đề hóa đơn là bắt buộc', false);
-        if (($data['total'] ?? 0) < 0) respond(422, null, 'Tổng tiền hóa đơn không được âm', false);
+        if (($data['subtotal'] ?? 0) < 0 || ($data['discount'] ?? 0) < 0 || ($data['tax'] ?? 0) < 0 || ($data['total'] ?? 0) < 0 || ($data['shipping_fee'] ?? 0) < 0) {
+            respond(422, null, 'Tổng tiền, tạm tính, thuế và chiết khấu hóa đơn không được âm', false);
+        }
 
         // Auto-generate invoice number (Race condition safe)
         if (empty($data['invoice_number'])) {
@@ -321,13 +323,13 @@ class FinanceController
                 $invStatus,
                 empty($data['issue_date']) ? date('Y-m-d') : $data['issue_date'],
                 empty($data['due_date']) ? date('Y-m-d', strtotime('+30 days')) : $data['due_date'],
-                $data['subtotal'] ?? 0,
-                $data['discount'] ?? 0,
-                $data['tax'] ?? 0,
-                $data['total'] ?? 0,
+                max(0, (float)($data['subtotal'] ?? 0)),
+                max(0, (float)($data['discount'] ?? 0)),
+                max(0, (float)($data['tax'] ?? 0)),
+                max(0, (float)($data['total'] ?? 0)),
                 $data['notes'] ?? null,
                 $data['shipping_customer_pay'] ?? 1,
-                $data['shipping_fee'] ?? 0,
+                max(0, (float)($data['shipping_fee'] ?? 0)),
                 $isPaid ? 1 : 0,
                 $isPaid ? date('Y-m-d H:i:s') : null
             ]);
@@ -380,6 +382,11 @@ class FinanceController
     {
         if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true)) respond(403, null, 'Bạn không có quyền cập nhật hóa đơn', false);
         $data = getBody();
+        foreach (['subtotal', 'discount', 'tax', 'total', 'shipping_fee'] as $numField) {
+            if (array_key_exists($numField, $data) && (float)$data[$numField] < 0) {
+                respond(422, null, 'Tổng tiền, tạm tính, thuế và chiết khấu hóa đơn không được âm', false);
+            }
+        }
         $fields = ['title', 'status', 'issue_date', 'due_date', 'subtotal', 'discount', 'tax', 'total', 'notes', 'contact_id', 'company_id', 'deal_id', 'shipping_customer_pay', 'shipping_fee'];
         $sets = [];
         $params = [];

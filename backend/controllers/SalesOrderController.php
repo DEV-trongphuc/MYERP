@@ -364,43 +364,46 @@ class SalesOrderController {
         $tenantId = (int)$auth['tenant_id'];
         $userId = (int)$auth['user_id'];
 
-        $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? FOR UPDATE");
-        $stmt->execute([$id, $tenantId]);
-        $so = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if (!$so) {
-            respond(404, null, 'Đơn bán hàng không tồn tại', false);
-        }
-
-        $isAdmin = in_array($auth['role'] ?? '', ['admin', 'superadmin', 'director']);
-        if (!$isAdmin && $so['created_by'] != $userId && $auth['role'] !== 'manager') {
-            respond(403, null, 'Bạn không có quyền chỉnh sửa đơn bán hàng này', false);
-        }
-
-        if ($so['status'] !== 'draft' && !$isAdmin) {
-            respond(422, null, 'Chỉ có thể chỉnh sửa đơn bán hàng khi ở trạng thái Nháp', false);
-        }
-
         $data = json_decode(file_get_contents('php://input'), true);
         if (!$data) {
             respond(400, null, 'Dữ liệu không hợp lệ', false);
         }
 
-        $contactId = !empty($data['contact_id']) ? (int)$data['contact_id'] : $so['contact_id'];
-        $companyId = !empty($data['company_id']) ? (int)$data['company_id'] : $so['company_id'];
-        $dealId = !empty($data['deal_id']) ? (int)$data['deal_id'] : $so['deal_id'];
-        $quoteId = !empty($data['quote_id']) ? (int)$data['quote_id'] : $so['quote_id'];
-        $orderDate = !empty($data['order_date']) ? trim($data['order_date']) : $so['order_date'];
-        $deliveryDate = !empty($data['delivery_date']) ? trim($data['delivery_date']) : $so['delivery_date'];
-        $notes = array_key_exists('notes', $data) ? trim($data['notes']) : $so['notes'];
-        $terms = array_key_exists('terms', $data) ? trim($data['terms']) : $so['terms'];
-        $discountTotal = array_key_exists('discount', $data) ? max(0, (float)$data['discount']) : (float)$so['discount'];
-        $taxPct = array_key_exists('tax_percent', $data) ? min(100, max(0, (float)$data['tax_percent'])) : 0;
-
-        $items = isset($data['items']) && is_array($data['items']) ? $data['items'] : null;
-
         $this->db->beginTransaction();
         try {
+            $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? FOR UPDATE");
+            $stmt->execute([$id, $tenantId]);
+            $so = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$so) {
+                $this->db->rollBack();
+                respond(404, null, 'Đơn bán hàng không tồn tại', false);
+            }
+
+            $isAdmin = in_array($auth['role'] ?? '', ['admin', 'superadmin', 'super_admin', 'director'], true);
+            if (!$isAdmin && (int)$so['created_by'] !== $userId && ($auth['role'] ?? '') !== 'manager') {
+                $this->db->rollBack();
+                respond(403, null, 'Bạn không có quyền chỉnh sửa đơn bán hàng này', false);
+            }
+
+            if ($so['status'] !== 'draft' && !$isAdmin) {
+                $this->db->rollBack();
+                respond(422, null, 'Chỉ có thể chỉnh sửa đơn bán hàng khi ở trạng thái Nháp', false);
+            }
+
+            $contactId = !empty($data['contact_id']) ? (int)$data['contact_id'] : $so['contact_id'];
+            $companyId = !empty($data['company_id']) ? (int)$data['company_id'] : $so['company_id'];
+            $dealId = !empty($data['deal_id']) ? (int)$data['deal_id'] : $so['deal_id'];
+            $quoteId = !empty($data['quote_id']) ? (int)$data['quote_id'] : $so['quote_id'];
+            $orderDate = !empty($data['order_date']) ? trim($data['order_date']) : $so['order_date'];
+            $deliveryDate = !empty($data['delivery_date']) ? trim($data['delivery_date']) : $so['delivery_date'];
+            $notes = array_key_exists('notes', $data) ? trim($data['notes']) : $so['notes'];
+            $terms = array_key_exists('terms', $data) ? trim($data['terms']) : $so['terms'];
+            $discountTotal = array_key_exists('discount', $data) ? max(0, (float)$data['discount']) : (float)$so['discount'];
+            $taxPct = array_key_exists('tax_percent', $data) ? min(100, max(0, (float)$data['tax_percent'])) : 0;
+
+            $items = isset($data['items']) && is_array($data['items']) ? $data['items'] : null;
+
             if ($items !== null) {
                 if (empty($items)) {
                     $this->db->rollBack();
@@ -475,6 +478,10 @@ class SalesOrderController {
             $this->db->commit();
             respond(200, ['id' => $id], 'Cập nhật đơn bán hàng thành công');
         } catch (\Throwable $e) {
+            if ($e instanceof \Exception && (get_class($e) === 'ResponseException' || get_class($e) === 'RespondException')) {
+                if ($this->db->inTransaction()) $this->db->rollBack();
+                throw $e;
+            }
             if ($this->db->inTransaction()) {
                 $this->db->rollBack();
             }
@@ -486,19 +493,39 @@ class SalesOrderController {
      * Phê duyệt Đơn bán hàng
      */
     public function approve(array $auth, int $id): void {
-        $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? FOR UPDATE");
-        $stmt->execute([$id, $auth['tenant_id']]);
-        $so = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if (!$so) {
-            respond(404, null, 'Đơn bán hàng không tồn tại', false);
-        }
-        if ($so['status'] !== 'draft' && $so['status'] !== 'pending') {
-            respond(422, null, 'Chỉ có thể phê duyệt đơn bán hàng ở trạng thái nháp hoặc chờ duyệt', false);
+        $role = strtolower(trim((string)($auth['role'] ?? '')));
+        if (!in_array($role, ['admin', 'super_admin', 'superadmin', 'director', 'manager', 'accountant', 'sale_admin'], true)) {
+            respond(403, null, 'Bạn không có quyền phê duyệt đơn bán hàng', false);
         }
 
-        $update = $this->db->prepare("UPDATE sales_orders SET status = 'approved' WHERE id = ?");
-        $update->execute([$id]);
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? FOR UPDATE");
+            $stmt->execute([$id, $auth['tenant_id']]);
+            $so = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$so) {
+                $this->db->rollBack();
+                respond(404, null, 'Đơn bán hàng không tồn tại', false);
+            }
+            if (!in_array($role, ['admin', 'super_admin', 'superadmin', 'director'], true) && (int)$so['created_by'] === (int)$auth['user_id']) {
+                $this->db->rollBack();
+                respond(403, null, 'Không thể tự duyệt đơn hàng của chính mình', false);
+            }
+            if ($so['status'] !== 'draft' && $so['status'] !== 'pending') {
+                $this->db->rollBack();
+                respond(422, null, 'Chỉ có thể phê duyệt đơn bán hàng ở trạng thái nháp hoặc chờ duyệt', false);
+            }
+
+            $update = $this->db->prepare("UPDATE sales_orders SET status = 'approved' WHERE id = ?");
+            $update->execute([$id]);
+            $this->db->commit();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
+        }
 
         // Dispatch approval notification to SO creator
         try {
@@ -520,27 +547,47 @@ class SalesOrderController {
      * Từ chối Đơn bán hàng
      */
     public function reject(array $auth, int $id): void {
+        $role = strtolower(trim((string)($auth['role'] ?? '')));
+        if (!in_array($role, ['admin', 'super_admin', 'superadmin', 'director', 'manager', 'accountant', 'sale_admin'], true)) {
+            respond(403, null, 'Bạn không có quyền từ chối đơn bán hàng', false);
+        }
+
         $data = json_decode(file_get_contents('php://input'), true) ?? [];
         $reason = trim($data['reason'] ?? $data['reject_reason'] ?? '');
 
-        $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? FOR UPDATE");
-        $stmt->execute([$id, $auth['tenant_id']]);
-        $so = $stmt->fetch(PDO::FETCH_ASSOC);
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? FOR UPDATE");
+            $stmt->execute([$id, $auth['tenant_id']]);
+            $so = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if (!$so) {
-            respond(404, null, 'Đơn bán hàng không tồn tại', false);
-        }
-        if ($so['status'] !== 'draft' && $so['status'] !== 'pending') {
-            respond(422, null, 'Chỉ có thể từ chối đơn bán hàng ở trạng thái nháp hoặc chờ duyệt', false);
-        }
+            if (!$so) {
+                $this->db->rollBack();
+                respond(404, null, 'Đơn bán hàng không tồn tại', false);
+            }
+            if (!in_array($role, ['admin', 'super_admin', 'superadmin', 'director'], true) && (int)$so['created_by'] === (int)$auth['user_id']) {
+                $this->db->rollBack();
+                respond(403, null, 'Không thể tự duyệt đơn hàng của chính mình', false);
+            }
+            if ($so['status'] !== 'draft' && $so['status'] !== 'pending') {
+                $this->db->rollBack();
+                respond(422, null, 'Chỉ có thể từ chối đơn bán hàng ở trạng thái nháp hoặc chờ duyệt', false);
+            }
 
-        $notes = $so['notes'] ?? '';
-        if (!empty($reason)) {
-            $notes = trim($notes . "\n[Từ chối ngày " . date('d/m/Y H:i') . " bởi " . ($auth['full_name'] ?? 'Quản lý') . "]: " . $reason);
-        }
+            $notes = $so['notes'] ?? '';
+            if (!empty($reason)) {
+                $notes = trim($notes . "\n[Từ chối ngày " . date('d/m/Y H:i') . " bởi " . ($auth['full_name'] ?? 'Quản lý') . "]: " . $reason);
+            }
 
-        $update = $this->db->prepare("UPDATE sales_orders SET status = 'rejected', notes = ? WHERE id = ?");
-        $update->execute([$notes, $id]);
+            $update = $this->db->prepare("UPDATE sales_orders SET status = 'rejected', notes = ? WHERE id = ?");
+            $update->execute([$notes, $id]);
+            $this->db->commit();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
+        }
 
         // Dispatch rejection notification to SO creator
         try {
@@ -563,18 +610,36 @@ class SalesOrderController {
      * Hủy Đơn bán hàng
      */
     public function cancel(array $auth, int $id): void {
-        $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? FOR UPDATE");
-        $stmt->execute([$id, $auth['tenant_id']]);
-        $so = $stmt->fetch(PDO::FETCH_ASSOC);
+        $role = strtolower(trim((string)($auth['role'] ?? '')));
+        $isPrivileged = in_array($role, ['admin', 'super_admin', 'superadmin', 'director', 'manager', 'accountant', 'sale_admin'], true);
 
-        if (!$so) {
-            respond(404, null, 'Đơn bán hàng không tồn tại', false);
-        }
-        if ($so['status'] === 'completed') {
-            respond(422, null, 'Không thể hủy đơn bán hàng đã hoàn thành', false);
-        }
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? FOR UPDATE");
+            $stmt->execute([$id, $auth['tenant_id']]);
+            $so = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        $this->db->prepare("UPDATE sales_orders SET status = 'cancelled' WHERE id = ?")->execute([$id]);
+            if (!$so) {
+                $this->db->rollBack();
+                respond(404, null, 'Đơn bán hàng không tồn tại', false);
+            }
+            if (!$isPrivileged && (int)$so['created_by'] !== (int)$auth['user_id']) {
+                $this->db->rollBack();
+                respond(403, null, 'Bạn không có quyền hủy đơn bán hàng này', false);
+            }
+            if ($so['status'] === 'completed') {
+                $this->db->rollBack();
+                respond(422, null, 'Không thể hủy đơn bán hàng đã hoàn thành', false);
+            }
+
+            $this->db->prepare("UPDATE sales_orders SET status = 'cancelled' WHERE id = ?")->execute([$id]);
+            $this->db->commit();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
+        }
         respond(200, ['id' => $id, 'status' => 'cancelled'], 'Hủy đơn bán hàng thành công');
     }
 
@@ -582,26 +647,38 @@ class SalesOrderController {
      * Xóa Đơn bán hàng (chỉ cho phép xóa khi là nháp hoặc người dùng có quyền admin)
      */
     public function destroy(array $auth, int $id): void {
-        $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? FOR UPDATE");
-        $stmt->execute([$id, $auth['tenant_id']]);
-        $so = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if (!$so) {
-            respond(404, null, 'Đơn bán hàng không tồn tại', false);
-        }
-
-        $isAdmin = in_array($auth['role'] ?? '', ['admin', 'superadmin', 'director']);
-        if (!$isAdmin && $so['status'] !== 'draft') {
-            respond(403, null, 'Chỉ có thể xóa đơn bán hàng khi ở trạng thái Nháp', false);
-        }
-
         $this->db->beginTransaction();
         try {
+            $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? FOR UPDATE");
+            $stmt->execute([$id, $auth['tenant_id']]);
+            $order = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$order) {
+                $this->db->rollBack();
+                respond(404, null, 'Đơn bán hàng không tồn tại', false);
+            }
+
+            $isAdmin = in_array($auth['role'] ?? '', ['admin', 'superadmin', 'super_admin', 'director'], true);
+            if (!$isAdmin) {
+                if ((int)$order['created_by'] !== (int)$auth['user_id']) {
+                    $this->db->rollBack();
+                    respond(403, null, 'Bạn không có quyền xóa đơn bán hàng của người khác', false);
+                }
+                if ($order['status'] !== 'draft') {
+                    $this->db->rollBack();
+                    respond(403, null, 'Chỉ có thể xóa đơn bán hàng khi ở trạng thái Nháp', false);
+                }
+            }
+
             $this->db->prepare("DELETE FROM sales_order_items WHERE so_id = ?")->execute([$id]);
             $this->db->prepare("DELETE FROM sales_orders WHERE id = ?")->execute([$id]);
             $this->db->commit();
             respond(200, ['id' => $id], 'Xóa đơn bán hàng thành công');
         } catch (\Throwable $e) {
+            if ($e instanceof \Exception && (get_class($e) === 'ResponseException' || get_class($e) === 'RespondException')) {
+                if ($this->db->inTransaction()) $this->db->rollBack();
+                throw $e;
+            }
             if ($this->db->inTransaction()) {
                 $this->db->rollBack();
             }

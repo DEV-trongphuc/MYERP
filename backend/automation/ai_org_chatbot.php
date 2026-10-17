@@ -1862,7 +1862,7 @@ Sử dụng tiếng Việt, chuyên nghiệp và súc tích.";
         // --- LONG-TERM MEMORY: FETCH USER PROFILE ---
         $userContext = "";
         try {
-            $stmtSub = $pdo->prepare("SELECT s.email, s.phone, s.name, s.lead_score, v.id as visitor_id
+            $stmtSub = $pdo->prepare("SELECT s.email, CONCAT_WS(' ', s.first_name, s.last_name) AS name, COALESCE(s.phone_number, s.phone) AS phone, s.lead_score, v.id as visitor_id
         FROM web_visitors v
         JOIN subscribers s ON v.subscriber_id = s.id
         WHERE v.id = ? LIMIT 1");
@@ -2844,6 +2844,36 @@ Sử dụng tiếng Việt, chuyên nghiệp và súc tích.";
             error_log('[EXCEPTION] ' . $e->getMessage() . ' in ' . __FILE__ . ':' . __LINE__);
             echo json_encode(['success' => false, 'message' => 'Lỗi hệ thống, vui lòng thử lại.']);
         }
+    } elseif ($action === 'chat_with_doc') {
+        $question = trim((string)($input['question'] ?? ''));
+        $fileName = trim((string)($input['file_name'] ?? 'Tài liệu'));
+        $fileContent = trim((string)($input['file_content'] ?? ''));
+        $propertyId = $input['property_id'] ?? 'org_internal';
+
+        if ($question === '') {
+            echo json_encode(['success' => false, 'message' => 'Vui lòng nhập câu hỏi']);
+            exit;
+        }
+
+        $settings = getSettingsCached($pdo, $propertyId, $GLOBAL_GEMINI_KEY);
+        $apiKey = (!empty($settings['gemini_api_key'])) ? $settings['gemini_api_key'] : $GLOBAL_GEMINI_KEY;
+        $selectedModel = $settings['model_name'] ?? 'gemini-2.5-flash';
+
+        $sysPrompt = "Bạn là Trợ lý Phân tích Tài liệu AI của MYERP. Hãy trả lời câu hỏi của người dùng dựa trên nội dung tài liệu dưới đây bằng tiếng Việt rõ ràng, chính xác.\n\nTÊN TÀI LIỆU: {$fileName}\nNỘI DUNG TÀI LIỆU:\n" . mb_substr($fileContent, 0, 12000);
+        $contents = [
+            [
+                'role' => 'user',
+                'parts' => [['text' => $question]]
+            ]
+        ];
+
+        $answer = generateResponse($contents, $sysPrompt, $apiKey, $selectedModel, 0.4, 2048);
+        echo json_encode([
+            'success' => true,
+            'answer' => $answer,
+            'message' => $answer
+        ]);
+        exit;
     }
 } catch (Throwable $e) {
     if (isset($pdo) && $pdo->inTransaction()) {

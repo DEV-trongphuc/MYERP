@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useState, useEffect } from 'react';
-import { Plus, MessageSquare, Star, Zap, Trash2, Edit2, Play, Pause, Search, BarChart, Info, CreditCard, AlertOctagon, Check, Calendar, Bot } from 'lucide-react';
+import { Plus, MessageSquare, Star, Zap, Trash2, Edit2, Play, Pause, Search, BarChart, Info, CreditCard, AlertOctagon, Check, Calendar, Bot, ChevronDown } from 'lucide-react';
 import ScenarioModal from './ScenarioModal.tsx';
 import AutomationStatsModal from './AutomationStatsModal.tsx';
 import ConfirmModal from '../common/ConfirmModal.tsx';
@@ -8,7 +8,9 @@ import axios from 'axios';
 import { toast } from 'react-hot-toast';
 import Input from '../common/Input';
 import TabTransition from '../common/TabTransition';
-import { API_BASE_URL, DEMO_MODE } from '../../utils/config';
+import { EmptyState } from '../common/EmptyState';
+import Skeleton from '../common/Skeleton';
+import { API_BASE_URL } from '../../utils/config';
 
 interface Scenario {
     id: string;
@@ -52,13 +54,6 @@ const ZaloAutomationTab: React.FC = () => {
     }, [selectedOAId]);
 
     const fetchOAs = async () => {
-        if (DEMO_MODE) {
-            const stored: any[] = JSON.parse(localStorage.getItem('mailflow_zalo_oa') || '[]');
-            const list = stored.length > 0 ? stored : [{ id: 'oa_demo_001', name: 'DOMATION Official Account', avatar: '' }];
-            setOaConfigs(list);
-            setSelectedOAId(list[0].id);
-            return;
-        }
         try {
             const res = await axios.get(`${API_BASE_URL}/zalo_oa.php`);
             if (res.data.success && res.data.data.length > 0) {
@@ -73,13 +68,6 @@ const ZaloAutomationTab: React.FC = () => {
     const fetchScenarios = async () => {
         if (!selectedOAId) return;
         setLoading(true);
-        if (DEMO_MODE) {
-            await new Promise(r => setTimeout(r, 350));
-            const stored: Scenario[] = JSON.parse(localStorage.getItem('mailflow_zalo_scenarios') || '[]');
-            setScenarios(stored);
-            setLoading(false);
-            return;
-        }
         try {
             const res = await axios.get(`${API_BASE_URL}/zalo_automation.php?route=list&oa_config_id=${selectedOAId}`);
             if (res.data.success) {
@@ -99,14 +87,6 @@ const ZaloAutomationTab: React.FC = () => {
             message: 'Bạn có chắc chắn muốn xóa kịch bản này? Hành động này không thể hoàn tác.',
             onConfirm: async () => {
                 setConfirmModal(prev => ({ ...prev, isOpen: false }));
-                if (DEMO_MODE) {
-                    const updated = JSON.parse(localStorage.getItem('mailflow_zalo_scenarios') || '[]')
-                        .filter((s: any) => s.id !== id);
-                    localStorage.setItem('mailflow_zalo_scenarios', JSON.stringify(updated));
-                    setScenarios(updated);
-                    toast.success('Đã xóa kịch bản');
-                    return;
-                }
                 try {
                     await axios.delete(`${API_BASE_URL}/zalo_automation.php?route=delete&id=${id}`);
                     toast.success('Đã xóa kịch bản');
@@ -120,14 +100,6 @@ const ZaloAutomationTab: React.FC = () => {
 
     const toggleStatus = async (scenario: Scenario) => {
         const newStatus = scenario.status === 'active' ? 'inactive' : 'active';
-        if (DEMO_MODE) {
-            const stored = JSON.parse(localStorage.getItem('mailflow_zalo_scenarios') || '[]');
-            const updated = stored.map((s: any) => s.id === scenario.id ? { ...s, status: newStatus } : s);
-            localStorage.setItem('mailflow_zalo_scenarios', JSON.stringify(updated));
-            setScenarios(updated);
-            toast.success(`Đã ${newStatus === 'active' ? 'kích hoạt' : 'tạm dừng'}`);
-            return;
-        }
         try {
             await axios.post(`${API_BASE_URL}/zalo_automation.php?route=save`, {
                 ...scenario,
@@ -149,25 +121,25 @@ const ZaloAutomationTab: React.FC = () => {
 
     return (
         <TabTransition className="space-y-6">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm relative z-20">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-[14px] border border-slate-100 shadow-sm relative z-20">
 
                 {/* OA Dropdown Selector */}
                 <div className="relative w-full md:w-72">
                     <button
                         onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                        className="w-full flex items-center justify-between bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-xl px-4 py-2.5 font-bold hover:bg-slate-100 transition-colors"
+                        className="w-full h-9 flex items-center justify-between bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-[var(--radius-md)] px-3 py-2 font-medium hover:bg-slate-100 transition-colors"
                     >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
                             {selectedOA?.avatar ? (
-                                <img src={selectedOA.avatar} alt="" className="w-6 h-6 rounded-full object-cover border border-slate-200" />
+                                <img src={selectedOA.avatar} alt="" className="w-5 h-5 rounded-full object-cover border border-slate-200 shrink-0" />
                             ) : (
-                                <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-[10px]">
+                                <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-[10px] shrink-0 font-bold">
                                     {selectedOA?.name?.charAt(0) || 'O'}
                                 </div>
                             )}
-                            <span className="truncate max-w-[160px]">{selectedOA?.name || 'Chọn OA'}</span>
+                            <span className="truncate max-w-[170px] text-xs font-semibold">{selectedOA?.name || 'Chọn OA'}</span>
                         </div>
-                        <Search className={`w-4 h-4 text-slate-400 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                        <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
                     </button>
 
                     {isDropdownOpen && (
@@ -216,42 +188,49 @@ const ZaloAutomationTab: React.FC = () => {
                     <button
                         onClick={() => { setEditingScenario(null); setIsModalOpen(true); }}
                         disabled={!selectedOAId}
-                        className="h-11 px-6 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white shadow-lg shadow-orange-500/30 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shrink-0 w-full md:w-auto disabled:opacity-50 disabled:shadow-none hover:-translate-y-0.5"
+                        className="h-9 px-4 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white shadow-xs rounded-[var(--radius-md)] text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shrink-0 w-full md:w-auto disabled:opacity-50 disabled:shadow-none cursor-pointer"
                     >
                         <Plus className="w-4 h-4" />
-                        TẠO KỊCH BẢN MỚI
+                        Tạo kịch bản
                     </button>
                 </div>
             </div>
 
             {loading ? (
-                <div className="flex justify-center py-20">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {[1, 2, 3].map(i => (
+                        <div key={i} className="p-6 bg-white rounded-[18px] border border-slate-100 shadow-sm space-y-4">
+                            <div className="flex justify-between items-start">
+                                <Skeleton variant="rounded" width={48} height={48} className="rounded-[14px]" />
+                                <Skeleton variant="rounded" width={60} height={28} />
+                            </div>
+                            <Skeleton variant="text" width="70%" height={20} />
+                            <Skeleton variant="text" width="100%" height={14} />
+                            <Skeleton variant="text" width="90%" height={14} />
+                        </div>
+                    ))}
                 </div>
             ) : filteredScenarios.length === 0 ? (
-                <div className="text-center py-20 bg-slate-50/50 rounded-[32px] border-2 border-dashed border-slate-200">
-                    <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mx-auto mb-4 text-slate-300">
-                        <Zap className="w-8 h-8" />
-                    </div>
-                    <p className="text-slate-500 font-medium">Chưa có kịch bản nào được tạo</p>
-                    <button
-                        onClick={() => setIsModalOpen(true)}
-                        className="mt-4 text-emerald-500 font-bold hover:underline"
-                    >
-                        Bắt đầu tạo kịch bản đầu tiên
-                    </button>
+                <div className="bg-white rounded-[18px] border border-slate-100 shadow-sm">
+                    <EmptyState
+                        icon={Zap}
+                        title="Chưa có kịch bản nào"
+                        description="Bắt đầu thiết lập kịch bản chăm sóc hoặc phản hồi tự động cho tài khoản Zalo OA của bạn."
+                        ctaLabel="Tạo kịch bản"
+                        onCtaClick={() => setIsModalOpen(true)}
+                    />
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filteredScenarios.map((scenario) => (
-                        <div key={scenario.id} className="group bg-white rounded-[28px] border border-slate-100 shadow-sm hover:shadow-2xl hover:shadow-blue-500/10 transition-all p-6 relative overflow-hidden cursor-pointer hover:-translate-y-1" onClick={() => { setEditingScenario(scenario); setIsModalOpen(true); }}>
-                            <div className={`absolute top-0 right-0 w-40 h-40 -mr-12 -mt-12 rounded-full opacity-[0.03] transition-transform group-hover:scale-125 ${scenario.type === 'welcome' ? 'bg-amber-600' :
+                        <div key={scenario.id} className="group bg-white rounded-[18px] border border-slate-100 shadow-sm hover:shadow-md hover:border-[var(--color-primary-light)] transition-all p-6 relative overflow-hidden cursor-pointer hover:-translate-y-0.5" onClick={() => { setEditingScenario(scenario); setIsModalOpen(true); }}>
+                            <div className={`absolute top-0 right-0 w-40 h-40 -mr-12 -mt-12 rounded-full opacity-[0.03] transition-transform group-hover:scale-125 ${scenario.type === 'welcome' ? 'bg-[var(--color-primary)]' :
                                 scenario.type === 'ai_reply' ? 'bg-purple-500' :
                                     scenario.type === 'holiday' ? 'bg-rose-500' :
                                         'bg-blue-500'}`}></div>
 
                             <div className="flex justify-between items-start mb-6 relative z-10">
-                                <div className={`p-3.5 rounded-2xl shadow-sm ${scenario.type === 'welcome' ? 'bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-orange-500/20' :
+                                <div className={`p-3.5 rounded-[14px] shadow-sm ${scenario.type === 'welcome' ? 'bg-gradient-to-br from-[#BD1D2D] to-[#9A1523] text-white shadow-[var(--color-primary)]/20' :
                                     scenario.type === 'ai_reply' ? 'bg-gradient-to-br from-fuchsia-500 to-purple-600 text-white shadow-purple-500/20' :
                                         scenario.type === 'holiday' ? 'bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-rose-500/20' :
                                             'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-blue-500/20'}`}>
@@ -287,7 +266,7 @@ const ZaloAutomationTab: React.FC = () => {
 
                             <div className="relative z-10 space-y-3">
                                 <div className="flex items-center gap-2">
-                                    <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-widest border ${scenario.type === 'welcome' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                                    <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-widest border ${scenario.type === 'welcome' ? 'bg-amber-50 text-[var(--color-primary)] border-amber-100' :
                                         scenario.type === 'ai_reply' ? 'bg-purple-50 text-purple-600 border-purple-100' :
                                             scenario.type === 'holiday' ? 'bg-rose-50 text-rose-600 border-rose-100' :
                                                 'bg-blue-50 text-blue-600 border-blue-100'}`}>

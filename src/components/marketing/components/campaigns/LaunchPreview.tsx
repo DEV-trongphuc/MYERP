@@ -403,11 +403,11 @@ const LaunchPreview: React.FC<LaunchPreviewProps> = ({
 
             {/* Top Bar: Quality Check OR Progress Tracking */}
             {formData.status === CampaignStatus.SENDING ? (
-                <div className="bg-emerald-900 rounded-[24px] p-6 shadow-xl border border-emerald-500/20 relative overflow-hidden group">
+                <div className="bg-emerald-900 rounded-[18px] p-6 shadow-xl border border-emerald-500/20 relative overflow-hidden group">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-400 opacity-[0.05] rounded-full blur-[40px]"></div>
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-6 relative z-10">
                         <div className="flex items-center gap-4">
-                            <div className="p-3 bg-emerald-500/20 rounded-2xl text-emerald-400 border border-emerald-500/20 animate-pulse">
+                            <div className="p-3 bg-emerald-500/20 rounded-[14px] text-emerald-400 border border-emerald-500/20 animate-pulse">
                                 <Send className="w-6 h-6" />
                             </div>
                             <div>
@@ -438,7 +438,7 @@ const LaunchPreview: React.FC<LaunchPreviewProps> = ({
                     </div>
                 </div>
             ) : (
-                <div className="bg-[#0f172a] rounded-[24px] p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl border border-white/5 relative overflow-hidden group">
+                <div className="bg-[#0f172a] rounded-[18px] p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl border border-white/5 relative overflow-hidden group">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-[#2563eb] opacity-[0.05] rounded-full blur-[40px] transition-transform group-hover:scale-150"></div>
                     <div className="flex items-center gap-3 relative z-10 pl-2">
                         <div className="p-2 bg-white/10 rounded-xl text-[#2563eb] border border-white/10"><ShieldCheck className="w-5 h-5" /></div>
@@ -461,9 +461,9 @@ const LaunchPreview: React.FC<LaunchPreviewProps> = ({
 
             {/* [NEW] ZNS Data Audit Alert */}
             {isZns && (isAuditing || (auditData && auditData.total_missing > 0)) && (
-                <div className={`rounded-[24px] p-6 border transition-all animate-in slide-in-from-top-4 duration-500 ${auditData?.total_missing ? 'bg-rose-50 border-rose-200' : 'bg-blue-50 border-blue-100'}`}>
+                <div className={`rounded-[18px] p-6 border transition-all animate-in slide-in-from-top-4 duration-500 ${auditData?.total_missing ? 'bg-rose-50 border-rose-200' : 'bg-blue-50 border-blue-100'}`}>
                     <div className="flex items-start gap-4">
-                        <div className={`p-3 rounded-2xl ${auditData?.total_missing ? 'bg-rose-500 text-white shadow-lg shadow-rose-200' : 'bg-blue-500 text-white animate-pulse'}`}>
+                        <div className={`p-3 rounded-[14px] ${auditData?.total_missing ? 'bg-rose-500 text-white shadow-lg shadow-rose-200' : 'bg-blue-500 text-white animate-pulse'}`}>
                             {isAuditing ? <Loader2 className="w-6 h-6 animate-spin" /> : <AlertTriangle className="w-6 h-6" />}
                         </div>
                         <div className="flex-1">
@@ -510,7 +510,7 @@ const LaunchPreview: React.FC<LaunchPreviewProps> = ({
 
                 {/* COLUMN 1: SUMMARY & AUDIENCE (7 Cols on XL) */}
                 <div className="space-y-4 xl:col-span-7">
-                    <div className="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-xs h-full flex flex-col">
+                    <div className="bg-white border border-slate-200/90 rounded-[14px] overflow-hidden shadow-xs h-full flex flex-col">
                         {/* Summary Header */}
                         <div className="p-4 sm:p-5 border-b border-slate-100 relative overflow-hidden">
                             <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 rounded-bl-[60px] -mr-10 -mt-10 pointer-events-none"></div>
@@ -563,7 +563,7 @@ const LaunchPreview: React.FC<LaunchPreviewProps> = ({
                                 {formData.target?.segmentIds.map((id: string) => (
                                     <div key={id} className="flex items-center justify-between px-3.5 py-2.5 bg-white border border-slate-200/80 rounded-xl shadow-xs">
                                         <div className="flex items-center gap-2.5">
-                                            <div className="w-7 h-7 rounded-lg bg-orange-50 text-[#ca7900] flex items-center justify-center border border-orange-100 shrink-0"><Layers className="w-3.5 h-3.5" /></div>
+                                            <div className="w-7 h-7 rounded-lg bg-orange-50 text-[#BD1D2D] flex items-center justify-center border border-orange-100 shrink-0"><Layers className="w-3.5 h-3.5" /></div>
                                             <div><p className="text-xs font-bold text-slate-800">{allSegments.find(s => s.id === id)?.name}</p><p className="text-[9px] text-slate-400 font-bold uppercase tracking-wide">Dynamic Segment</p></div>
                                         </div>
                                         <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full">{allSegments.find(s => s.id === id)?.count || 0}</span>
@@ -647,10 +647,10 @@ const LaunchPreview: React.FC<LaunchPreviewProps> = ({
 
                     {/* Automation Connection Logic */}
                     {linkedFlow ? (
-                        <div className={`p-4 rounded-2xl border transition-all group ${activeFlow.status === 'active' ? 'bg-emerald-50/70 border-emerald-200' : 'bg-amber-50/70 border-amber-200'}`}>
+                        <div className={`p-4 rounded-[14px] border transition-all group ${activeFlow.status === 'active' ? 'bg-emerald-50/70 border-emerald-200' : 'bg-amber-50/70 border-amber-200'}`}>
                             <div className="flex items-start justify-between">
                                 <div className="flex items-center gap-3">
-                                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${activeFlow.status === 'active' ? 'bg-emerald-500 text-white shadow-xs' : 'bg-amber-600 text-white shadow-xs'}`}>
+                                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${activeFlow.status === 'active' ? 'bg-emerald-500 text-white shadow-xs' : 'bg-[var(--color-primary)] text-white shadow-xs'}`}>
                                         <GitMerge className="w-4.5 h-4.5" />
                                     </div>
                                     <div>
@@ -676,7 +676,7 @@ const LaunchPreview: React.FC<LaunchPreviewProps> = ({
                             )}
                         </div>
                     ) : (
-                        <div className={`p-4 border transition-all rounded-2xl ${connectFlow ? 'bg-blue-50/50 border-blue-200 shadow-xs' : 'bg-white border-slate-200/90 shadow-xs'}`}>
+                        <div className={`p-4 border transition-all rounded-[14px] ${connectFlow ? 'bg-blue-50/50 border-blue-200 shadow-xs' : 'bg-white border-slate-200/90 shadow-xs'}`}>
                             <div
                                 className={`flex items-center justify-between group ${isAlreadySent ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
                                 onClick={() => !isAlreadySent && setConnectFlow(!connectFlow)}
@@ -746,7 +746,7 @@ const LaunchPreview: React.FC<LaunchPreviewProps> = ({
 
                     {/* ATTACHMENTS SECTION */}
                     {!isZns && (
-                        <div className="p-4 border border-slate-200/90 bg-white rounded-2xl shadow-xs space-y-3.5">
+                        <div className="p-4 border border-slate-200/90 bg-white rounded-[14px] shadow-xs space-y-3.5">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2.5">
                                     <div className="p-1.5 rounded-lg bg-blue-50 text-blue-600"><Paperclip className="w-4 h-4" /></div>
@@ -897,7 +897,7 @@ const LaunchPreview: React.FC<LaunchPreviewProps> = ({
                     )}
 
                     {/* Timing Card */}
-                    <div className="p-4 border border-slate-200/90 bg-white rounded-2xl shadow-xs space-y-3.5">
+                    <div className="p-4 border border-slate-200/90 bg-white rounded-[14px] shadow-xs space-y-3.5">
                         <div className="flex items-center gap-2.5">
                             <div className={`p-1.5 rounded-lg transition-colors ${scheduleMode === 'now' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'}`}>
                                 <Clock className="w-4 h-4" />
@@ -947,7 +947,7 @@ const LaunchPreview: React.FC<LaunchPreviewProps> = ({
                             <button
                                 onClick={() => !isAlreadySent && setScheduleMode('later')}
                                 disabled={isAlreadySent}
-                                className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase transition-all flex items-center justify-center gap-2 ${scheduleMode === 'later' ? 'bg-white shadow-md text-[#ca7900]' : 'text-slate-600 hover:text-slate-900'} ${isAlreadySent ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase transition-all flex items-center justify-center gap-2 ${scheduleMode === 'later' ? 'bg-white shadow-md text-[#BD1D2D]' : 'text-slate-600 hover:text-slate-900'} ${isAlreadySent ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
                                 <Calendar className="w-3.5 h-3.5" /> Lên lịch gửi
                             </button>
@@ -964,7 +964,7 @@ const LaunchPreview: React.FC<LaunchPreviewProps> = ({
                                                 <button
                                                     key={i}
                                                     onClick={() => { setSelectedDate(d); setIsCustomDate(false); }}
-                                                    className={`flex flex-col items-center justify-center w-14 h-16 rounded-xl border transition-all flex-shrink-0 ${isSelected ? 'border-[#2563eb] bg-orange-50 text-[#ca7900] shadow-sm' : 'border-slate-100 bg-white text-slate-500 hover:border-slate-200'}`}
+                                                    className={`flex flex-col items-center justify-center w-14 h-16 rounded-xl border transition-all flex-shrink-0 ${isSelected ? 'border-[#2563eb] bg-orange-50 text-[#BD1D2D] shadow-sm' : 'border-slate-100 bg-white text-slate-500 hover:border-slate-200'}`}
                                                 >
                                                     <span className="text-[9px] font-bold uppercase">{getDayLabel(d, i)}</span>
                                                     <span className="text-lg font-black mt-0.5">{d.getDate()}</span>
@@ -972,7 +972,7 @@ const LaunchPreview: React.FC<LaunchPreviewProps> = ({
                                                 </button>
                                             );
                                         })}
-                                        <button onClick={() => setIsCustomDate(true)} className={`flex flex-col items-center justify-center w-14 h-16 rounded-xl border transition-all flex-shrink-0 ${isCustomDate ? 'border-[#2563eb] bg-orange-50 text-[#ca7900] shadow-sm' : 'border-slate-100 bg-white text-slate-500 hover:border-slate-200'}`}>
+                                        <button onClick={() => setIsCustomDate(true)} className={`flex flex-col items-center justify-center w-14 h-16 rounded-xl border transition-all flex-shrink-0 ${isCustomDate ? 'border-[#2563eb] bg-orange-50 text-[#BD1D2D] shadow-sm' : 'border-slate-100 bg-white text-slate-500 hover:border-slate-200'}`}>
                                             <CalendarDays className="w-3.5 h-3.5 mb-0.5" />
                                             <span className="text-[8px] font-bold uppercase text-center leading-tight">Ngày<br />khác</span>
                                         </button>
@@ -1041,7 +1041,7 @@ const LaunchPreview: React.FC<LaunchPreviewProps> = ({
             </div>
 
             {/* FULL WIDTH INLINE PREVIEW */}
-            <div className="bg-slate-100 rounded-[32px] p-2 sm:p-4 border border-slate-200 shadow-sm relative overflow-hidden flex flex-col items-center">
+            <div className="bg-slate-100 rounded-[18px] p-2 sm:p-4 border border-slate-200 shadow-sm relative overflow-hidden flex flex-col items-center">
                 {/* Preview Toolbar */}
                 <div className="w-full flex justify-between items-center px-4 py-3 mb-2">
                     <h5 className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
@@ -1056,8 +1056,8 @@ const LaunchPreview: React.FC<LaunchPreviewProps> = ({
                 </div>
 
                 {/* Iframe Container */}
-                <div className="w-full flex justify-center bg-slate-200/50 rounded-[24px] overflow-hidden border border-slate-200 min-h-[600px] relative">
-                    <div className={`transition-all duration-500 ease-in-out bg-white shadow-2xl overflow-hidden my-8 relative ${previewDevice === 'mobile' || isZns ? 'w-[375px] h-[667px] rounded-[32px] border-8 border-slate-800' : 'w-full max-w-3xl h-[700px] rounded-2xl border border-slate-200/60'}`}>
+                <div className="w-full flex justify-center bg-slate-200/50 rounded-[18px] overflow-hidden border border-slate-200 min-h-[600px] relative">
+                    <div className={`transition-all duration-500 ease-in-out bg-white shadow-2xl overflow-hidden my-8 relative ${previewDevice === 'mobile' || isZns ? 'w-[375px] h-[667px] rounded-[18px] border-8 border-slate-800' : 'w-full max-w-3xl h-[700px] rounded-[14px] border border-slate-200/60'}`}>
                         {(previewDevice === 'mobile' || isZns) && <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-6 bg-slate-800 rounded-b-xl z-20"></div>}
                         {isZns ? (
                             <iframe

@@ -162,14 +162,14 @@ export const MultiFileUploadModal: React.FC<MultiFileUploadModalProps> = ({ isOp
     const successCount = files.filter(f => f.status === 'success').length;
 
     const modalContent = (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/70 animate-in fade-in duration-300">
-            <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-5xl h-[85vh] min-h-[600px] flex flex-col overflow-hidden animate-in zoom-in-95">
+        <div className="fixed inset-0 z-[2147483646] flex items-center justify-center p-4 bg-slate-950/70 animate-in fade-in duration-300" style={{ zIndex: 2147483646 }}>
+            <div className="bg-white rounded-[18px] shadow-2xl w-full max-w-5xl h-[85vh] min-h-[600px] flex flex-col overflow-hidden animate-in zoom-in-95">
                 
                 {/* HEAD */}
                 <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-blue-100 rounded-bl-full -mr-16 -mt-16 opacity-50"></div>
                     <div className="flex items-center gap-4 relative z-10">
-                         <div className="w-12 h-12 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200">
+                         <div className="w-12 h-12 bg-blue-600 text-white rounded-[14px] flex items-center justify-center shadow-lg shadow-blue-200">
                              <UploadCloud className="w-6 h-6" />
                          </div>
                          <div>
@@ -191,7 +191,7 @@ export const MultiFileUploadModal: React.FC<MultiFileUploadModalProps> = ({ isOp
                             onDragLeave={() => setIsDragging(false)}
                             onDrop={handleDrop}
                             onClick={() => fileInputRef.current?.click()}
-                            className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed rounded-3xl p-6 text-center cursor-pointer transition-all duration-300 ${isDragging ? 'border-blue-500 bg-blue-50 scale-105' : 'border-slate-300 hover:border-blue-400 bg-white hover:bg-slate-50'}`}
+                            className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed rounded-[18px] p-6 text-center cursor-pointer transition-all duration-300 ${isDragging ? 'border-blue-500 bg-blue-50 scale-105' : 'border-slate-300 hover:border-blue-400 bg-white hover:bg-slate-50'}`}
                         >
                             <input type="file" multiple className="hidden" ref={fileInputRef} onChange={handleFileSelect} disabled={isChecking || isUploading}/>
                             <div className="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mb-4">

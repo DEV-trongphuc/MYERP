@@ -195,10 +195,11 @@ class DomationOmnichannelController
 
             try {
                 $stmtTags = $this->db->prepare("
-                    SELECT DISTINCT st.tag
+                    SELECT DISTINCT dt.name AS tag
                     FROM subscriber_tags st
-                    WHERE st.subscriber_id IN ($inSub) AND st.tag IS NOT NULL AND st.tag != ''
-                    ORDER BY st.tag ASC
+                    INNER JOIN domation_tags dt ON dt.id = st.tag_id
+                    WHERE st.subscriber_id IN ($inSub) AND dt.name IS NOT NULL AND dt.name != ''
+                    ORDER BY dt.name ASC
                 ");
                 $stmtTags->execute($subIds);
                 $subscriberTags = $stmtTags->fetchAll(PDO::FETCH_COLUMN) ?: [];
@@ -403,7 +404,7 @@ class DomationOmnichannelController
             try {
                 $this->db->prepare("
                     INSERT INTO subscriber_activity (
-                        workspace_id, subscriber_id, contact_id, type, reference_id, label, details, created_at
+                        workspace_id, subscriber_id, contact_id, type, reference_id, reference_name, details, created_at
                     ) VALUES (?, ?, ?, 'enter_flow', ?, ?, ?, NOW())
                 ")->execute([
                     $workspaceId,
@@ -609,7 +610,7 @@ class DomationOmnichannelController
 
                 $this->db->prepare("
                     INSERT INTO subscriber_activity (
-                        workspace_id, subscriber_id, contact_id, type, reference_id, label, details, created_at
+                        workspace_id, subscriber_id, contact_id, type, reference_id, reference_name, details, created_at
                     ) VALUES (?, ?, ?, 'voucher_sent', ?, ?, ?, NOW())
                 ")->execute([
                     $workspaceId,
@@ -728,7 +729,7 @@ class DomationOmnichannelController
             if ($subId) {
                 $this->db->prepare("
                     INSERT INTO subscriber_activity (
-                        workspace_id, subscriber_id, contact_id, type, reference_id, label, details, created_at
+                        workspace_id, subscriber_id, contact_id, type, reference_id, reference_name, details, created_at
                     ) VALUES (?, ?, ?, 'voucher_redeem', ?, ?, ?, NOW())
                 ")->execute([
                     (int)($voucher['workspace_id'] ?? 1),

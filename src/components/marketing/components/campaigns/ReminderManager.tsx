@@ -71,9 +71,9 @@ const ReminderManager: React.FC<ReminderManagerProps> = ({ reminders, templates,
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
+      <div className="flex justify-between items-center bg-white p-5 rounded-[18px] border border-slate-200 shadow-sm">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-orange-50 rounded-2xl flex items-center justify-center text-[#ca7900]"><BellRing className="w-6 h-6" /></div>
+          <div className="w-12 h-12 bg-orange-50 rounded-[14px] flex items-center justify-center text-[#BD1D2D]"><BellRing className="w-6 h-6" /></div>
           <div>
             <h5 className="text-sm font-bold text-slate-800 uppercase tracking-tight">Kế hoạch nhắc nhở</h5>
             <p className="text-[11px] text-slate-500 font-medium">{isZns ? 'Gửi tin nhắn follow-up tự động nếu khách không tương tác.' : 'Gửi email follow-up tự động nếu khách không tương tác.'}</p>
@@ -86,7 +86,7 @@ const ReminderManager: React.FC<ReminderManagerProps> = ({ reminders, templates,
           <button
             onClick={add}
             disabled={reminders.length >= MAX_REMINDERS}
-            className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-[10px] font-bold uppercase transition-all shadow-lg ${reminders.length >= MAX_REMINDERS
+            className={`flex items-center gap-2 px-5 py-3 rounded-[14px] text-[10px] font-bold uppercase transition-all shadow-lg ${reminders.length >= MAX_REMINDERS
               ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
               : 'bg-slate-900 text-white hover:bg-black hover:shadow-xl'
               }`}
@@ -98,7 +98,7 @@ const ReminderManager: React.FC<ReminderManagerProps> = ({ reminders, templates,
 
       <div className="space-y-6">
         {reminders.map((rem, idx) => (
-          <div key={rem.id} className="bg-white border border-slate-200 rounded-[32px] overflow-hidden shadow-sm relative transition-all hover:shadow-md animate-in slide-in-from-bottom-2 duration-300">
+          <div key={rem.id} className="bg-white border border-slate-200 rounded-[18px] overflow-hidden shadow-sm relative transition-all hover:shadow-md animate-in slide-in-from-bottom-2 duration-300">
 
             {/* Header / Toolbar */}
             <div className="bg-slate-50/50 px-6 py-4 flex justify-between items-center border-b border-slate-100">
@@ -125,7 +125,7 @@ const ReminderManager: React.FC<ReminderManagerProps> = ({ reminders, templates,
                       <button
                         key={opt.id}
                         onClick={() => update(rem.id, { type: opt.id as any })}
-                        className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${rem.type === opt.id ? 'border-[#2563eb] bg-orange-50 text-[#ca7900] shadow-sm' : 'border-slate-100 bg-white text-slate-500 hover:border-slate-300'}`}
+                        className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${rem.type === opt.id ? 'border-[#2563eb] bg-orange-50 text-[#BD1D2D] shadow-sm' : 'border-slate-100 bg-white text-slate-500 hover:border-slate-300'}`}
                       >
                         <div className="flex items-center gap-3">
                           <opt.icon className="w-4 h-4" />
@@ -198,12 +198,12 @@ const ReminderManager: React.FC<ReminderManagerProps> = ({ reminders, templates,
                   <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 ml-1">{isZns ? 'Giao diện Tin nhắn' : 'Giao diện Email'}</label>
 
                   {activeTemplateDrawer === rem.id ? (
-                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 animate-in zoom-in-95 duration-200 relative">
+                    <div className="bg-slate-50 p-4 rounded-[14px] border border-slate-200 animate-in zoom-in-95 duration-200 relative">
                       <button onClick={() => setActiveTemplateDrawer(null)} className="absolute top-2 right-2 p-1.5 bg-white rounded-full text-slate-400 hover:text-slate-800 shadow-sm z-10"><ChevronUp className="w-4 h-4" /></button>
                       <div className="mb-4">
                         <button
                           onClick={() => { update(rem.id, { templateId: '' }); setActiveTemplateDrawer(null); }}
-                          className={`w-full text-left px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-between mb-2 border transition-all ${!rem.templateId ? 'bg-orange-50 border-[#2563eb] text-[#ca7900]' : 'bg-white border-slate-200 hover:border-slate-300'}`}
+                          className={`w-full text-left px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-between mb-2 border transition-all ${!rem.templateId ? 'bg-orange-50 border-[#2563eb] text-[#BD1D2D]' : 'bg-white border-slate-200 hover:border-slate-300'}`}
                         >
                           {isZns ? 'Sử dụng mẫu của ZNS chính (Mặc định)' : 'Sử dụng mẫu của Email chính (Mặc định)'}
                           {!rem.templateId && <Check className="w-4 h-4" />}
@@ -218,7 +218,7 @@ const ReminderManager: React.FC<ReminderManagerProps> = ({ reminders, templates,
                   ) : (
                     <button
                       onClick={() => setActiveTemplateDrawer(rem.id)}
-                      className="w-full flex items-center gap-4 p-3 bg-white border border-slate-200 rounded-2xl hover:border-[#2563eb] hover:shadow-md transition-all group text-left"
+                      className="w-full flex items-center gap-4 p-3 bg-white border border-slate-200 rounded-[14px] hover:border-[#2563eb] hover:shadow-md transition-all group text-left"
                     >
                       {/* Mini Preview Box */}
                       <div className="w-16 h-12 rounded-lg border border-slate-200 overflow-hidden relative shrink-0 bg-slate-50 flex items-center justify-center group-hover:border-[#2563eb]/30 transition-colors">
@@ -241,7 +241,7 @@ const ReminderManager: React.FC<ReminderManagerProps> = ({ reminders, templates,
                               </>
                           ) : (
                               <>
-                                  <p className="text-sm font-bold text-slate-700 group-hover:text-[#ca7900] transition-colors truncate">Sử dụng mẫu Mặc định</p>
+                                  <p className="text-sm font-bold text-slate-700 group-hover:text-[#BD1D2D] transition-colors truncate">Sử dụng mẫu Mặc định</p>
                                   <p className="text-[10px] text-slate-400 font-medium">{isZns ? 'Giống tin nhắn chính' : 'Giống email chính'}</p>
                               </>
                           )}
@@ -253,7 +253,7 @@ const ReminderManager: React.FC<ReminderManagerProps> = ({ reminders, templates,
 
                 {/* Live Preview Block */}
                 {!isZns && (
-                  <div className="mt-6 bg-slate-100 rounded-[24px] p-4 border border-slate-200 shadow-sm animate-in fade-in zoom-in-95 duration-300">
+                  <div className="mt-6 bg-slate-100 rounded-[18px] p-4 border border-slate-200 shadow-sm animate-in fade-in zoom-in-95 duration-300">
                     <div className="flex items-center justify-between mb-3 min-h-[40px]">
                       <div className="flex items-center gap-2">
                         <Eye className="w-4 h-4 text-orange-500 shrink-0" />
@@ -302,13 +302,13 @@ const ReminderManager: React.FC<ReminderManagerProps> = ({ reminders, templates,
         ))}
 
         {reminders.length === 0 && (
-          <div className="py-12 border-2 border-dashed border-slate-200 rounded-[32px] text-center bg-slate-50/50 flex flex-col items-center justify-center gap-3">
+          <div className="py-12 border-2 border-dashed border-slate-200 rounded-[18px] text-center bg-slate-50/50 flex flex-col items-center justify-center gap-3">
             <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm text-slate-300"><BellRing className="w-8 h-8" /></div>
             <div>
               <p className="text-sm font-bold text-slate-600">Chưa có nhắc nhở</p>
               <p className="text-xs text-slate-400 mt-1">{isZns ? 'Thêm tin nhắn follow-up để tăng tỷ lệ chuyển đổi.' : 'Thêm email follow-up để tăng tỷ lệ chuyển đổi.'}</p>
             </div>
-            <button onClick={add} className="mt-2 text-xs font-bold text-[#ca7900] hover:underline uppercase tracking-wider">Thêm ngay</button>
+            <button onClick={add} className="mt-2 text-xs font-bold text-[#BD1D2D] hover:underline uppercase tracking-wider">Thêm ngay</button>
           </div>
         )}
       </div>

@@ -1,4 +1,4 @@
-﻿import * as React from 'react';
+import * as React from 'react';
 import { useState } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 
@@ -46,12 +46,12 @@ const ItemsPerPageSelector: React.FC<ItemsPerPageSelectorProps> = ({
                                 key={option}
                                 onClick={() => handleSelect(option)}
                                 className={`w-full flex items-center justify-between px-4 py-2.5 transition-all ${value === option
-                                        ? 'bg-[#fff9f2] text-[#ca7900] font-bold'
+                                        ? 'bg-[var(--color-primary-light)] text-[var(--color-primary)] font-bold'
                                         : 'hover:bg-slate-50 text-slate-600'
                                     }`}
                             >
                                 <span className="text-xs font-semibold">{option} items</span>
-                                {value === option && <Check className="w-3.5 h-3.5 text-[#2563eb]" />}
+                                {value === option && <Check className="w-3.5 h-3.5 text-[var(--color-primary)]" />}
                             </button>
                         ))}
                     </div>

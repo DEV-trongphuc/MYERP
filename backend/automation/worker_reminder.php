@@ -115,7 +115,11 @@ foreach ($reminders as $rem) {
         // Base candidates: Received Main Campaign AND NOT (Received This Reminder OR Clicked/Opened based on settings)
         // Optimized for PERFORMANCE (Round 41): Replaced NOT IN with NOT EXISTS or simpler JOIN logic
         $sql = "
-            SELECT DISTINCT l.recipient, s.id as subscriber_id, s.first_name, s.last_name, s.email, s.phone_number, s.custom_attributes, a_main.created_at as individual_sent_at
+            SELECT DISTINCT l.recipient, s.id as subscriber_id, s.id, s.contact_id, s.first_name, s.last_name, s.email, s.phone_number,
+                   s.company_name, s.job_title, s.city, s.district, s.ward, s.country, s.address, s.gender,
+                   s.date_of_birth, s.anniversary_date, s.joined_at, s.custom_attributes,
+                   s.program, s.stage_id, s.owner_id, s.salesperson,
+                   a_main.created_at as individual_sent_at
             FROM mail_delivery_logs l
             JOIN subscribers s ON l.subscriber_id = s.id
             JOIN subscriber_activity a_main ON s.id = a_main.subscriber_id 
@@ -189,17 +193,24 @@ foreach ($reminders as $rem) {
                         continue;
                 }
 
-                // [BUG-4 FIX] Use replaceMergeTags() from flow_helpers.php instead of local stub.
-                // Old resolveMergeTags() only handled 4 fields � templates with {{phone}},
-                // {{unsubscribeLink}}, {{company}}, custom_attributes all rendered as raw tags.
-                $personalSubject = replaceMergeTags($rem['subject'], $sub);
-                $personalHtml    = replaceMergeTags($htmlContent, $sub);
+                // [BUG-4 FIX] Use replaceMergeTags() from flow_helpers.php with full CRM & campaign context.
+                $unsubUrl = rtrim($apiUrl, '/') . '/webhook.php?type=unsubscribe&sid=' . urlencode((string)$sub['subscriber_id'])
+                    . '&cid=' . urlencode((string)$rem['campaign_id'])
+                    . '&rid=' . urlencode((string)$rem['id']);
+                $remContext = [
+                    'unsubscribe_url' => $unsubUrl,
+                    'unsubscribeLink' => $unsubUrl,
+                    'campaign_name' => $rem['campaign_name'] ?? '',
+                    'campaignName' => $rem['campaign_name'] ?? '',
+                ];
+                $personalSubject = replaceMergeTags($rem['subject'], $sub, $remContext, $pdo);
+                $personalHtml    = replaceMergeTags($htmlContent, $sub, $remContext, $pdo);
 
                 // [FIX P7-C2] Inject dynamic sender with priority chain:
                 // 1. reminder.sender_email (per-reminder override)
                 // 2. campaign.sender_email (campaign-level branding)
                 // 3. system default (already set in Mailer constructor)
-                // Previously all reminders always sent from system default � branding was lost.
+                // Previously all reminders always sent from system default  branding was lost.
                 // NOTE: Mailer::setDynamicSender() only accepts email. Sender name is taken
                 // from smtp_from_name in mkt_system_settings (Mailer internal resolution).
                 $remSender = !empty($rem['sender_email']) ? $rem['sender_email']
@@ -214,8 +225,8 @@ foreach ($reminders as $rem) {
                 // sesAcquireRateSlot() (flow_helpers.php) coordinates across campaign + flow + reminder workers.
                 sesAcquireRateSlot(); // 100ms interval = 10/s shared total across all senders
 
-                // Send
-                $res = $mailer->send($sub['email'], $personalSubject, $personalHtml, $sub['subscriber_id'], $rem['campaign_id'], null, null, [], $rem['id'], null, "Reminder: " . $rem['subject']);
+                // Send (pass null for $templateHash and $rem['id'] for $reminderId)
+                $res = $mailer->send($sub['email'], $personalSubject, $personalHtml, $sub['subscriber_id'], $rem['campaign_id'], null, null, [], null, null, "Reminder: " . $rem['subject'], false, true, null, $rem['id']);
 
                 if ($res === true) {
                     // Collect for batch log

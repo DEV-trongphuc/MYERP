@@ -74,7 +74,7 @@ const CanvasSection: React.FC<CanvasSectionProps> = (props) => {
     return (
         <div
             key={section.id} id={`block-${section.id}`}
-            className={`transition-all duration-200 ${isThisDragging ? 'opacity-35 border-2 border-dashed border-blue-500/60 bg-blue-50/5' : ''}`}
+            className={`transition-all duration-200 ${isThisDragging ? 'opacity-35 border-2 border-dashed border-[#BD1D2D]/60 bg-[#BD1D2D]/5' : ''}`}
             style={{
                 position: 'relative',
                 width: '100%',
@@ -83,20 +83,17 @@ const CanvasSection: React.FC<CanvasSectionProps> = (props) => {
                 marginLeft: 'auto',
                 marginRight: 'auto'
             }}
-            draggable onDragStart={(e) => onDragStart(e, section.id)} onDragOver={(e) => onDragOver(e, section.id, 'section')} onDrop={(e) => onDrop(e, section.id)} onClick={(e) => { e.stopPropagation(); onSelectBlock(section.id); }}
+            draggable={!isSelected}
+            onDragStart={(e) => {
+                if (isSelected || document.activeElement?.closest('[contenteditable="true"], input, textarea')) {
+                    e.preventDefault();
+                    return;
+                }
+                onDragStart(e, section.id);
+            }}
+            onDragOver={(e) => onDragOver(e, section.id, 'section')} onDrop={(e) => onDrop(e, section.id)} onClick={(e) => { e.stopPropagation(); onSelectBlock(section.id); }}
         >
             {dragOverId === section.id && dropPosition && <CanvasDropIndicator dropPosition={dropPosition} />}
-            <CanvasHandleOverlay
-                block={section}
-                color="ring-slate-400"
-                isSelected={isSelected}
-                onDragStart={onDragStart}
-                onMoveOrder={onMoveOrder}
-                onSwapColumns={onSwapColumns}
-                onDuplicateBlock={onDuplicateBlock}
-                onDeleteBlock={onDeleteBlock}
-                onSaveSection={onSaveSection}
-            />
 
             <table
                 align="center" border={0} cellPadding={0} cellSpacing={0}
@@ -117,7 +114,19 @@ const CanvasSection: React.FC<CanvasSectionProps> = (props) => {
                 <tbody>
                     <tr>
                         <td align="center" style={{ padding: `${css.paddingTop ?? '0px'} ${css.paddingRight ?? '0px'} ${css.paddingBottom ?? '0px'} ${css.paddingLeft ?? '0px'}` }}>
-                            <table align="center" border={0} cellPadding={0} cellSpacing={0} width="100%" role="presentation" style={{ maxWidth: bodyStyle.contentWidth, margin: '0 auto', backgroundColor: innerBg }}>
+                            <div className="relative mx-auto" style={{ maxWidth: bodyStyle.contentWidth, width: '100%' }}>
+                                <CanvasHandleOverlay
+                                    block={section}
+                                    color="ring-[#BD1D2D]"
+                                    isSelected={isSelected}
+                                    onDragStart={onDragStart}
+                                    onMoveOrder={onMoveOrder}
+                                    onSwapColumns={onSwapColumns}
+                                    onDuplicateBlock={onDuplicateBlock}
+                                    onDeleteBlock={onDeleteBlock}
+                                    onSaveSection={onSaveSection}
+                                />
+                                <table align="center" border={0} cellPadding={0} cellSpacing={0} width="100%" role="presentation" style={{ maxWidth: bodyStyle.contentWidth, margin: '0 auto', backgroundColor: innerBg }}>
                                 <tbody>
                                     {section.children?.map(row => (
                                         <CanvasRow key={row.id} {...props} row={row} onSelectParent={() => onSelectBlock(section.id)} onResizeColumns={onResizeColumns} onLeftResizeColumns={onLeftResizeColumns} />
@@ -126,15 +135,15 @@ const CanvasSection: React.FC<CanvasSectionProps> = (props) => {
                                         <tr>
                                             <td>
                                                 <div 
-                                                    className={`py-12 text-center flex flex-col items-center justify-center border-2 border-dashed m-8 rounded-[32px] transition-all duration-300 group/empty
+                                                    className={`py-12 text-center flex flex-col items-center justify-center border-2 border-dashed m-8 rounded-[18px] transition-all duration-300 group/empty
                                                         ${dragOverId === section.id
-                                                            ? "border-blue-600 bg-blue-50/50 text-blue-600 scale-[0.98] ring-2 ring-blue-500/20"
+                                                            ? "border-[#BD1D2D] bg-[#BD1D2D]/10 text-[#BD1D2D] ring-2 ring-[#BD1D2D]/20"
                                                             : draggingBlockId !== null
-                                                                ? "border-blue-400/50 bg-blue-50/10 text-blue-500/60 animate-pulse"
-                                                                : "bg-slate-50/50 border-slate-200 text-slate-300 hover:bg-slate-50 hover:border-blue-600/30"
+                                                                ? "border-[#BD1D2D]/50 bg-[#BD1D2D]/5 text-[#BD1D2D]/60 animate-pulse"
+                                                                : "bg-slate-50/50 border-slate-200 text-slate-300 hover:bg-slate-50 hover:border-[#BD1D2D]/30"
                                                         }`}
                                                 >
-                                                    <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-4 group-hover/empty:scale-110 transition-transform">
+                                                    <div className="w-16 h-16 bg-white rounded-[14px] shadow-sm flex items-center justify-center mb-4 group-hover/empty:scale-110 transition-transform">
                                                         <Layout className="w-8 h-8 text-slate-200" />
                                                     </div>
                                                     <span className="font-bold uppercase text-[10px] tracking-[0.3em] text-slate-400" style={{ fontFamily: bodyStyle.fontFamily }}>Section Trống</span>
@@ -145,6 +154,7 @@ const CanvasSection: React.FC<CanvasSectionProps> = (props) => {
                                     )}
                                 </tbody>
                             </table>
+                            </div>
                         </td>
                     </tr>
                 </tbody>

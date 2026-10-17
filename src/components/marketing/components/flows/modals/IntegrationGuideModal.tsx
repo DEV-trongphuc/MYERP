@@ -70,8 +70,8 @@ ${jsFields}
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Tài liệu tích hợp API" size="lg">
             <div className="space-y-6 pb-10">
-                <div className="p-6 bg-orange-50 border-2 border-orange-100 rounded-[32px] flex gap-5">
-                    <div className="p-3 bg-white rounded-2xl text-[#ca7900] shadow-sm shrink-0 h-fit"><BookOpen className="w-6 h-6" /></div>
+                <div className="p-6 bg-orange-50 border-2 border-orange-100 rounded-2xl flex gap-5">
+                    <div className="p-3 bg-white rounded-2xl text-[var(--color-primary)] shadow-sm shrink-0 h-fit"><BookOpen className="w-6 h-6" /></div>
                     <div>
                         <p className="text-sm font-black text-orange-900 mb-1">Quy định tham số truyền tin</p>
                         <p className="text-[11px] text-orange-700 leading-relaxed font-medium">
@@ -81,7 +81,7 @@ ${jsFields}
                 </div>
 
                 {/* Bảng quy định các trường */}
-                <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
                     <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex items-center gap-2">
                         <List className="w-4 h-4 text-slate-400" />
                         <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Danh sách Keys cần gửi</span>
@@ -136,7 +136,7 @@ ${jsFields}
                                 {copied === 'js' ? <><Check className="w-3 h-3" /> ĐÃ CHÉP</> : <><Copy className="w-3 h-3" /> SAO CHÉP CODE</>}
                             </button>
                         </div>
-                        <div className="bg-[#0f172a] rounded-3xl p-6 overflow-x-auto border-b-4 border-slate-800 shadow-xl">
+                        <div className="bg-[#0f172a] rounded-2xl p-6 overflow-x-auto border-b-4 border-slate-800 shadow-xl">
                             <pre className="text-[11px] font-mono text-emerald-300 leading-relaxed">{jsSnippet}</pre>
                         </div>
                     </div>
@@ -149,12 +149,12 @@ ${jsFields}
                                 {copied === 'html' ? <><Check className="w-3 h-3" /> ĐÃ CHÉP</> : <><Copy className="w-3 h-3" /> SAO CHÉP CODE</>}
                             </button>
                         </div>
-                        <div className="bg-[#0f172a] rounded-3xl p-6 overflow-x-auto border-b-4 border-slate-800 shadow-xl">
+                        <div className="bg-[#0f172a] rounded-2xl p-6 overflow-x-auto border-b-4 border-slate-800 shadow-xl">
                             <pre className="text-[11px] font-mono text-indigo-200 leading-relaxed">{htmlSnippet}</pre>
                         </div>
                     </div>
 
-                    <div className="p-5 bg-slate-50 border border-slate-200 rounded-[28px]">
+                    <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2"><Terminal className="w-3.5 h-3.5" /> API Endpoint (POST)</p>
                         <div className="flex items-center justify-between gap-2 bg-white p-3 rounded-xl border border-slate-100 shadow-inner overflow-hidden">
                             <code className="text-[10px] text-slate-600 truncate font-mono">{endpoint}</code>

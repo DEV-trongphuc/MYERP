@@ -91,7 +91,7 @@ const WaitConfig: React.FC<WaitConfigProps> = ({ config, onChange, disabled }) =
         ))}
       </div>
 
-      <div className="p-5 bg-amber-50 text-amber-700 rounded-[28px] border border-amber-100 flex gap-4 shadow-sm items-center">
+      <div className="p-5 bg-amber-50 text-amber-700 rounded-2xl border border-amber-100 flex gap-4 shadow-sm items-center">
         <div className="p-3 bg-white rounded-2xl shadow-sm text-amber-600">
           <Clock className="w-6 h-6 shrink-0" />
         </div>

@@ -256,8 +256,12 @@ function sendEmailNotification($to, $subject, $title, $content, $ccEmailString =
             $mail->CharSet = 'UTF-8';
             $mail->Timeout = 15;
 
-            $senderEmail = $settings['ses_sender_email'] ?? 'no-reply@Ideas.test';
-            $senderName = $settings['ses_sender_name'] ?? 'IDEAS TEAM';
+            $senderEmail = (!empty($GLOBALS['override_sender_email']) && filter_var($GLOBALS['override_sender_email'], FILTER_VALIDATE_EMAIL))
+                ? $GLOBALS['override_sender_email']
+                : ($settings['ses_sender_email'] ?? 'systemnoti@ideas.edu.vn');
+            $senderName = !empty($GLOBALS['override_sender_name'])
+                ? $GLOBALS['override_sender_name']
+                : ($settings['ses_sender_name'] ?? 'IDEAS TEAM');
 
             $mail->setFrom($senderEmail, $senderName);
             $mail->addAddress($to);

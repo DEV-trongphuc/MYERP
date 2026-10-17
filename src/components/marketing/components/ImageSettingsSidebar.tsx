@@ -1,6 +1,8 @@
-﻿import * as React from 'react';
+import * as React from 'react';
 import { useState, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { X, ImageIcon, Check, MousePointer2, Plus, Layout, Wand2, Settings2, ArrowRight } from 'lucide-react';
+import { getMktPortalRoot } from '../utils/portalRoot';
 
 interface ImageStyle {
     id: string;
@@ -130,9 +132,10 @@ const ImageSettingsSidebar: React.FC<ImageSettingsSidebarProps> = ({
         ))
     ), [IMAGE_STYLES, imageStyle, setImageStyle, isDarkTheme]);
 
-    return (
+    return createPortal(
         <div
-            className={`fixed inset-0 z-[9999] transition-all duration-500 ${isOpen ? 'visible opacity-100' : 'invisible opacity-0 pointer-events-none'}`}
+            className={`fixed inset-0 z-[2147483645] transition-all duration-500 ${isOpen ? 'visible opacity-100' : 'invisible opacity-0 pointer-events-none'}`}
+            style={{ zIndex: 2147483645 }}
         >
             {/* Backdrop */}
             <div
@@ -166,7 +169,7 @@ const ImageSettingsSidebar: React.FC<ImageSettingsSidebarProps> = ({
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6 space-y-6 md:space-y-8 pb-80">
 
                     {/* Status Toggle - Modern iOS-style Switch */}
-                    <div className={`border rounded-[28px] p-6 flex items-center justify-between shadow-sm transition-all ${isDarkTheme ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-gradient-to-br from-emerald-50 to-emerald-100/30 border-emerald-100'}`}>
+                    <div className={`border rounded-[18px] p-6 flex items-center justify-between shadow-sm transition-all ${isDarkTheme ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-gradient-to-br from-emerald-50 to-emerald-100/30 border-emerald-100'}`}>
                         <div className="flex items-center gap-4">
                             <div className={`w-3.5 h-3.5 rounded-full transition-all duration-500 ${isImageGenMode ? 'bg-emerald-500 animate-pulse shadow-[0_0_15px_rgba(16,185,129,0.5)]' : 'bg-slate-300'}`}></div>
                             <div>
@@ -216,7 +219,7 @@ const ImageSettingsSidebar: React.FC<ImageSettingsSidebarProps> = ({
                         </div>
 
                         {isCustomSize ? (
-                            <div className={`border rounded-[28px] p-5 space-y-4 ${isDarkTheme ? 'bg-slate-900/50 border-white/5' : 'bg-slate-50 border-slate-100'}`}>
+                            <div className={`border rounded-[18px] p-5 space-y-4 ${isDarkTheme ? 'bg-slate-900/50 border-white/5' : 'bg-slate-50 border-slate-100'}`}>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
                                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Width (px)</span>
@@ -328,7 +331,8 @@ const ImageSettingsSidebar: React.FC<ImageSettingsSidebarProps> = ({
                 .custom-scrollbar::-webkit-scrollbar-thumb { background: ${isDarkTheme ? '#334155' : '#e2e8f0'}; border-radius: 20px; }
                 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: ${isDarkTheme ? '#475569' : '#cbd5e1'}; }
             `}</style>
-        </div>
+        </div>,
+        getMktPortalRoot()
     );
 };
 

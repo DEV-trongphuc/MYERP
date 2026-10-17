@@ -123,12 +123,12 @@ const LiveTrafficModal: React.FC<LiveTrafficModalProps> = ({ isOpen, onClose: _o
                     ) : visitors.length > 0 ? (
                         <div className="grid gap-4">
                             {visitors.map((v) => (
-                                <div key={v.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:border-blue-200 hover:shadow-md transition-all group">
+                                <div key={v.id} className="bg-white p-4 rounded-[14px] border border-slate-100 shadow-sm hover:border-blue-200 hover:shadow-md transition-all group">
                                     <div className="flex items-start justify-between gap-4">
                                         {/* Visitor Info */}
                                         <div className="flex items-center gap-4 min-w-[200px]">
                                             <div className="relative">
-                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 border-white shadow-sm overflow-hidden flex-shrink-0 ${(v.subscriber_id || v.zalo_user_id || v.email || v.phone) ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 border-white shadow-sm overflow-hidden flex-shrink-0 ${(v.subscriber_id || v.zalo_user_id || v.email || v.phone) ? 'bg-[var(--color-primary)] text-white' : 'bg-slate-100 text-slate-400'}`}>
                                                     {v.avatar_url ? (
                                                         <img src={v.avatar_url} alt="" className="w-full h-full object-cover" />
                                                     ) : (

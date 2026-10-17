@@ -1,7 +1,9 @@
 import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Trash2, ArrowRight, Loader2, Eraser, CheckCircle2, Moon, AlertTriangle, Calculator, ChevronDown, Check, AlertCircle, Plus } from 'lucide-react';
 import { api } from '../../services/storageAdapter';
+import { getMktPortalRoot } from '../../utils/portalRoot';
 import toast from 'react-hot-toast';
 
 interface CleanupModalProps {
@@ -315,7 +317,7 @@ const CleanupModal: React.FC<CleanupModalProps> = ({ target, onClose: _onClose, 
 
     if (!target) return null;
 
-    return (
+    return createPortal(
         <div className="fixed inset-0 z-[110000] flex items-center justify-center p-4">
             <div
                 className={`absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity duration-300 ease-out ${animateIn ? 'opacity-100' : 'opacity-0'}`}
@@ -323,13 +325,13 @@ const CleanupModal: React.FC<CleanupModalProps> = ({ target, onClose: _onClose, 
             />
             <div
                 style={{ transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }}
-                className={`bg-white rounded-[24px] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] ring-1 ring-white/20 font-sans relative transform transition-all duration-500 ${animateIn ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-8'}`}
+                className={`bg-white rounded-[18px] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] ring-1 ring-white/20 font-sans relative transform transition-all duration-500 ${animateIn ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-8'}`}
             >
 
                 {isLoading && (
                     <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-50 flex items-center justify-center">
                         <div className="flex flex-col items-center gap-2">
-                            <Loader2 className="w-8 h-8 text-[#2563eb] animate-spin" />
+                            <Loader2 className="w-8 h-8 text-[var(--color-primary)] animate-spin" />
                             <p className="text-xs font-bold text-slate-500 animate-pulse">Đang xử lý...</p>
                         </div>
                     </div>
@@ -545,15 +547,15 @@ const CleanupModal: React.FC<CleanupModalProps> = ({ target, onClose: _onClose, 
 
                 {/* Footer - Compact */}
                 <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 bg-white sticky bottom-0 z-10 shrink-0">
-                    <button onClick={onClose} className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 transition-colors bg-white hover:bg-slate-50 rounded-lg">
+                    <button onClick={onClose} className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 transition-colors bg-white hover:bg-slate-50 rounded-[var(--radius-md)]">
                         Hủy
                     </button>
                     <button
                         onClick={handleCleanup}
                         disabled={isLoading}
-                        className={`px-6 py-2.5 rounded-xl text-white font-bold hover:shadow-lg transition-all flex items-center gap-2 shadow-md text-xs ${isLoading ? 'bg-slate-400 cursor-not-allowed shadow-none' :
-                            action === 'delete' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20' :
-                                'bg-gradient-to-r from-[#2563eb] to-blue-600 hover:from-[#561dd0] hover:to-blue-700 shadow-[#2563eb]/20'
+                        className={`px-6 py-2.5 rounded-[var(--radius-md)] text-white font-bold hover:shadow-md transition-all flex items-center gap-2 shadow-sm text-xs ${isLoading ? 'bg-slate-400 cursor-not-allowed shadow-none' :
+                            action === 'delete' ? 'bg-rose-600 hover:bg-rose-700' :
+                                'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)]'
                             }`}
                     >
                         {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
@@ -562,7 +564,8 @@ const CleanupModal: React.FC<CleanupModalProps> = ({ target, onClose: _onClose, 
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        getMktPortalRoot()
     );
 };
 
