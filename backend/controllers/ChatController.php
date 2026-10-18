@@ -5182,167 +5182,199 @@ class ChatController {
     }
 
     /**
-     * Instant Deterministic Multi-Domain Semantic & Context Router (<1ms Zero-Network Latency)
-     * Maps user query intent and active browser context into domain and tool requirements without blocking CURL round-trips.
+     * AI Semantic Micro-Router for Multi-Agent Swarm (Zero Regex / Pure Agentic Prompt Analyzer)
+     * Ultra-fast AI classifier that analyzes user prompt intent and active browser context into domain and tool requirements.
+     * Uses the free AI model endpoint first and seamlessly falls back to Gemini Flash Lite.
      */
-    private function routeQueryWithAiMicroRouter(string $userQuery, string $apiKey, string $model, ?array $currentContext = null): array {
+    private function routeQueryWithAiMicroRouter(
+        string $userQuery,
+        string $apiKey,
+        string $model,
+        ?array $currentContext = null,
+        string $openRouterKey = '',
+        string $openRouterModel = 'google/gemma-4-31b-it:free'
+    ): array {
         $safeFallback = [
             'intent_type' => 'database_action',
             'primary_domain' => null,
             'matched_domains' => [],
             'requires_tools' => true,
             'is_multi_domain' => true,
+            'is_mutation_or_proposal' => false,
             'reasoning' => 'Fallback safe default'
         ];
 
         $trimmed = trim($userQuery);
-        if ($trimmed === '') {
+        if ($trimmed === '' || (empty($openRouterKey) && empty($apiKey))) {
             return $safeFallback;
         }
 
-        require_once __DIR__ . '/AgentToolRegistry.php';
-        $qLower = mb_strtolower($trimmed, 'UTF-8');
-        $qAscii = AgentToolRegistry::removeVietnameseAccents($qLower);
-
-        // 1. Pure conversational check (greetings, thanks, short social phrases)
-        if (preg_match('/^(xin chao|chao|hello|hi|hey|cam on|thanks|thank you|tks|tam biet|bye|ok|oke|vang|da|tuyet voi|tot qua)(\s+(ban|em|anh|chi|ad|ai|si ideas|ideas))?[!.,?\s]*$/u', $qAscii)) {
-            return [
-                'intent_type' => 'conversational',
-                'primary_domain' => 'none',
-                'matched_domains' => [],
-                'requires_tools' => false,
-                'is_multi_domain' => false,
-                'reasoning' => 'Instant conversational greeting/acknowledgment'
-            ];
-        }
-
-        // 2. Active Browser Context & Pronoun Resolution
-        $contextDomain = null;
+        $contextHint = "";
         if (!empty($currentContext) && is_array($currentContext)) {
+            $hints = [];
+            $path = trim((string)($currentContext['pathname'] ?? ''));
+            $pageTitle = trim((string)($currentContext['page_title'] ?? ''));
+            if ($path !== '') {
+                $hints[] = "Màn hình đang mở: {$path}" . ($pageTitle !== '' ? " ({$pageTitle})" : "");
+            }
             $activeEntity = $currentContext['active_entity'] ?? null;
-            $eType = strtolower(trim((string)($activeEntity['type'] ?? '')));
-            $path = strtolower(trim((string)($currentContext['pathname'] ?? '')));
-
-            if (in_array($eType, ['contact', 'lead', 'deal', 'student', 'customer'], true) || strpos($path, '/crm') !== false || strpos($path, '/contacts') !== false || strpos($path, '/leads') !== false) {
-                $contextDomain = 'sales';
-            } elseif (in_array($eType, ['expense', 'deposit', 'sales_order', 'purchase_order', 'invoice', 'payment'], true) || strpos($path, '/finance') !== false || strpos($path, '/expenses') !== false || strpos($path, '/accounting') !== false) {
-                $contextDomain = 'finance';
-            } elseif (in_array($eType, ['employee', 'staff', 'leave', 'attendance', 'payslip', 'approval'], true) || strpos($path, '/hrm') !== false || strpos($path, '/attendance') !== false || strpos($path, '/approvals') !== false) {
-                $contextDomain = 'hrm';
-            } elseif ($eType === 'task' || strpos($path, '/tasks') !== false || strpos($path, '/projects') !== false) {
-                $contextDomain = 'tasks';
-            } elseif (strpos($path, '/inventory') !== false || strpos($path, '/assets') !== false) {
-                $contextDomain = 'assets_inventory';
+            if (!empty($activeEntity) && is_array($activeEntity) && !empty($activeEntity['id'])) {
+                $eType = $activeEntity['type'] ?? 'thực thể';
+                $eId = (int)$activeEntity['id'];
+                $eName = trim((string)($activeEntity['name'] ?? ''));
+                $hints[] = "Drawer hồ sơ đang mở: {$eType} ID #{$eId}" . ($eName !== '' ? " ({$eName})" : "");
+            }
+            if (!empty($hints)) {
+                $contextHint = "\n[NGỮ CẢNH TRÌNH DUYỆT]: " . implode(' | ', $hints);
             }
         }
 
-        // 3. Multi-Domain Keyword Scoring Matrix (Accented + Unaccented)
-        $domainKeywords = [
-            'sales' => [
-                'lead', 'leads', 'data', 'khach hang', 'hoc vien', 'tu van', 'crm', 'pipeline', 'pipieline', 'pipe line',
-                'giai doan', 'stage', 'phu trach', 'pheu', 'chia so', 'vong xoay',
-                'bu data', 'trung lead', 'cham soc', 'ngam lead', 'stale', 'chot sale', 'chot deal', 'lich hen',
-                'goi lai', 'sale', 'tuyen sinh', 'nguon lead', 'chua coc', 'da coc', 'trang thai lead', 'phan bo',
-                'them data', 'data ca nhan', 'tao data', 'them lead', 'giao data', 'giao lead', 'chuyen lead',
-                'don hang so', 'don dat hang', 'dot thu', 'lich dong hoc phi', 'bao gia', 'phieu hop tac', 'co hoi b2b'
-            ],
-            'finance' => [
-                'thu chi', 'chi phi', 'phieu chi', 'phieu thu', 'po', 'purchase order', 'so', 'sales order',
-                'dat coc', 'tien coc', 'hoc phi', 'cong no', 'phai thu', 'tam ung', 'dong tien', 'ngan sach',
-                'hoa don', 'doanh thu', 'giai ngan', 'thanh toan', 'so quy', 'ke toan', 'duyet chi',
-                'don mua hang', 'nha cung cap', 'supplier', 'vendor', 'de xuat chi', 'duyet chi cap 1',
-                'duyet chi cap 2', 'duyet chi cap 3', 'unc', 'uy nhiem chi', 'giai ngan unc', 'dot dong hoc phi',
-                'milestone', 'duyet unc', 'bao gia', 'quote', 'phieu hop tac'
-            ],
-            'hrm' => [
-                'nhan su', 'nhan vien', 'cham cong', 'di tre', 've som', 'tang ca', 'ot', 'wfh', 'nghi phep',
-                'phep nam', 'giai trinh', 'quen cham', 'bo sung cong', 'doi ca', 'bang luong', 'phieu luong',
-                'luong', 'danh ba', 'so do phong ban', 'truong phong', 'quan ly', 'nghi viec', 'vang mat',
-                'ai nghi', 'ai off', 'ket don', 'giu don', 'phe duyet', 'duyet don', 'hop dong lao dong',
-                'ho so ca nhan', 'so tai khoan', 'ngan hang', 'cccd', 'xac nhan cong', 'chot cong',
-                'xac nhan phieu luong', 'xac nhan luong', 'nghi bu', 'dinh muc di tre', 'tam ung luong',
-                'luong deal', 'luong thoa thuan', 'tai san cua toi', 'hop dong cua toi', 'tao don nghi', 'xin ot', 'xin wfh'
-            ],
-            'tasks' => [
-                'task', 'cong viec', 'viec con', 'subtask', 'tien do', 'deadline', 'qua han', 'overdue',
-                'checklist', 'giao viec', 'du an', 'project', 'ban lam viec', 'ke hoach',
-                'duyet viec', 'duyet task', 'viec cho duyet', 'phu thuoc', 'dependency', 'blocked by',
-                'focus', 'pomodoro', 'deep work', 'nhom viec', 'task group', 'an viec', 'wbs'
-            ],
-            'academic' => [
-                'emba', 'mba', 'msc', 'dba', 'istec', 'umef', 'thuy si', 'phap', 'tin chi', 'ects',
-                'luan van', 'capstone', 'khoa hoc', 'chuong trinh dao tao', 'lich khai giang', 'thoi khoa bieu',
-                'giang vien', 'hoc vu', 'kiem dinh'
-            ],
-            'records_legal' => [
-                'ho so nhap hoc', 'bang cap', 'bang dai hoc', 'bang diem', 'dich thuat', 'cong chung',
-                'cccd', 'ho chieu', 'cv tieng anh', 'chung chi', 'hop dong dao tao', 'phap ly', 'thieu giay to',
-                'xet tuyen', 'tham dinh ho so'
-            ],
-            'assets_inventory' => [
-                'ton kho', 'an pham', 'qua tang', 'tui qua', 'balo', 'ao polo', 'so tay', 'but ky',
-                'giao trinh', 'tai san', 'cap phat', 'ban giao', 'thu hoi', 'laptop', 'thiet bi', 'nhap kho'
-            ],
-            'b2b_partner' => [
-                'b2b', 'doi tac', 'doanh nghiep', 'in-house', 'inhouse', 'hop tac', 'khach hang doanh nghiep',
-                'deal b2b', 'hop dong b2b'
-            ],
-            'marketing_campaigns' => [
-                'marketing', 'chien dich', 'quang cao', 'ads', 'facebook ads', 'google ads', 'tiktok',
-                'cpl', 'cac', 'edufair', 'workshop', 'hoi thao', 'su kien', 'broadcast', 'zalo zns', 'sms'
-            ],
-            'executive_bi' => [
-                'p&l', 'loi nhuan', 'dong tien rong', 'ban giam doc', 'giam doc', 'ceo', 'suc khoe tai chinh',
-                'kpi toan vien', 'bao cao tong hop', 'buc tranh toan dien', 'toan vien', 'da chieu', 'so sanh',
-                'ty le chuyen doi', 'burn rate', ' Z-score', 'bat thuong'
-            ],
-            'system_it' => [
-                'ticket', 'sla', 'khieu nai', 'su co', 'loi he thong', 'webhook', 'cronjob', 'sync sheet',
-                'audit log', 'ky thuat', 'it support'
-            ]
-        ];
+        $routerSystemPrompt = "Bạn là AI Semantic Router tối cao của hệ thống MYERP (Viện IDEAS).\n"
+            . "Nhiệm vụ: Phân tích câu hỏi/yêu cầu của người dùng để phân loại Ý định (Intent) và Phân hệ nghiệp vụ (Domain).\n"
+            . "11 Phân hệ nghiệp vụ chuyên trách:\n"
+            . "- 'sales': Quản lý Lead, CRM, tư vấn tuyển sinh, khách hàng, học viên theo giai đoạn (pipeline/stage), phân bổ lead, vòng xoay chia số, bù data cho Sale, trùng lead, lịch hẹn gọi lại, chốt deal, xuất file / export danh sách lead theo pipeline, giới tính, ngày tháng, chương trình đào tạo, lọc dữ liệu CRM đa tầng nhiều cấp (query_crm_leads_multitier).\n"
+            . "- 'finance': Thu chi, học phí, công nợ học viên, phiếu thu, phiếu chi, đặt cọc, tạm ứng, dòng tiền, SO/PO, phân tích chi phí & ngân sách đa tầng theo phòng ban và hạng mục (query_finance_multitier_analytics).\n"
+            . "- 'hrm': Nhân sự, chấm công, đi trễ, về sớm, tăng ca OT, WFH làm việc từ xa, nghỉ phép, giải trình, bảng lương, phiếu lương, danh bạ nhân sự, xuất bảng công, duyệt đơn từ.\n"
+            . "- 'tasks': Công việc cá nhân, tiến độ, deadline, checklist, giao việc, dự án.\n"
+            . "- 'academic': Chương trình đào tạo (EMBA, MBA, MSc AI, DBA), môn học, thời khóa biểu, lịch khai giảng, giảng viên.\n"
+            . "- 'records_legal': Hồ sơ nhập học (CCCD, bằng cấp, bảng điểm), tính hợp lệ, pháp lý, hợp đồng đào tạo.\n"
+            . "- 'assets_inventory': Tồn kho, ấn phẩm, quà tặng, balo, áo polo, tài sản, laptop thiết bị bàn giao.\n"
+            . "- 'b2b_partner': Khách hàng doanh nghiệp, đối tác B2B, thỏa thuận hợp tác, đào tạo in-house.\n"
+            . "- 'marketing_campaigns': Chiến dịch tiếp thị, quảng cáo Ads, CPL, CAC, nguồn lead tuyển sinh.\n"
+            . "- 'executive_bi': Báo cáo tổng hợp P&L, dòng tiền ròng, KPI toàn viện, sức khỏe tài chính Ban Giám Đốc, phân tích đa chiều chuyên sâu.\n"
+            . "- 'system_it': Lỗi phần mềm, ticket CNTT, giám sát SLA vi phạm, hạ tầng kỹ thuật.\n\n"
+            . "Phân loại intent_type:\n"
+            . "- 'conversational': Lời chào, cảm ơn, khen ngợi, tạm biệt, trò chuyện xã giao thuần túy.\n"
+            . "- 'knowledge_qa': Hỏi thông tin chung, quy chế, chính sách, học phí niêm yết, kiến thức đào tạo (không yêu cầu tra cứu dữ liệu động).\n"
+            . "- 'database_action': Tra cứu, thống kê hoặc thao tác dữ liệu cụ thể (khách hàng, học viên, nhân sự, phiếu thu/chi, đặt cọc, task), lọc dữ liệu đa tầng đa cấp, tạo đơn từ, đề xuất hành động.\n"
+            . "- 'cross_domain': Yêu cầu phức tạp đan xen nhiều phân hệ khác nhau.\n\n"
+            . "QUY TẮC:\n"
+            . "- Khi người dùng yêu cầu lọc, tìm kiếm, thống kê hoặc bóc tách dữ liệu theo bất kỳ điều kiện nào (chương trình, nguồn, giai đoạn pipeline, chuyên viên phụ trách, chi nhánh, tiền cọc, ngày tháng, phòng ban, hạng mục chi): BẮT BUỘC chọn intent_type='database_action' hoặc 'cross_domain' và requires_tools=true.\n"
+            . "- Nếu có [NGỮ CẢNH TRÌNH DUYỆT] đi kèm và câu hỏi ngắn/dùng đại từ ('tóm tắt', 'kiểm tra bạn này', 'xem hồ sơ', 'đã cọc chưa', 'phiếu này', 'task này'): BẮT BUỘC gán primary_domain tương ứng với đối tượng/màn hình đang mở (contact/crm -> 'sales', expense/deposit -> 'finance', approval/hrm -> 'hrm', task -> 'tasks') và chọn intent_type='database_action', requires_tools=true.\n"
+            . "- requires_tools: false chỉ khi là 'conversational' hoặc 'knowledge_qa' thuần túy; true nếu là 'database_action' hoặc 'cross_domain'.\n"
+            . "- is_multi_domain: true nếu câu hỏi liên quan từ 2 phân hệ trở lên.\n"
+            . "- is_mutation_or_proposal: true nếu người dùng yêu cầu tạo mới, thêm, sửa, cập nhật, giao việc, chuyển/chia lead, duyệt/từ chối đơn, ghi chú, đặt lịch hẹn, hoặc lập thẻ đề xuất hành động; false nếu chỉ tra cứu/báo cáo.\n"
+            . "Trả về duy nhất 1 JSON object chuẩn, không kèm markdown backticks:\n"
+            . "{\"intent_type\": \"conversational\"|\"knowledge_qa\"|\"database_action\"|\"cross_domain\", \"primary_domain\": \"sales\"|\"finance\"|\"hrm\"|\"tasks\"|\"academic\"|\"records_legal\"|\"assets_inventory\"|\"b2b_partner\"|\"marketing_campaigns\"|\"executive_bi\"|\"system_it\"|\"none\", \"matched_domains\": [\"sales\"], \"requires_tools\": boolean, \"is_multi_domain\": boolean, \"is_mutation_or_proposal\": boolean, \"reasoning\": \"lý do ngắn gọn\"}";
 
-        $scores = [];
-        foreach ($domainKeywords as $domain => $keywords) {
-            $score = 0;
-            foreach ($keywords as $kw) {
-                if (strpos($qAscii, $kw) !== false) {
-                    $score += (strpos($kw, ' ') !== false) ? 2 : 1;
+        $userPrompt = "Yêu cầu cần phân loại: \"" . mb_substr($trimmed, 0, 500) . "\"" . $contextHint;
+
+        // 1. Try Free AI Model Pool (OpenRouter) if available and not in cooldown
+        if ($openRouterKey !== '' && !$this->isOpenRouterKeyInCooldown($openRouterKey)) {
+            $batches = $this->getOpenRouterModelBatches($openRouterModel);
+            $primaryBatch = $batches[0] ?? ['google/gemma-4-31b-it:free'];
+            $orPayload = [
+                'model' => $primaryBatch[0],
+                'models' => $primaryBatch,
+                'messages' => [
+                    ['role' => 'system', 'content' => $routerSystemPrompt],
+                    ['role' => 'user', 'content' => $userPrompt]
+                ],
+                'temperature' => 0.1,
+                'max_tokens' => 250,
+                'reasoning' => ['enabled' => false]
+            ];
+
+            $chOr = curl_init('https://openrouter.ai/api/v1/chat/completions');
+            curl_setopt($chOr, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($chOr, CURLOPT_POST, true);
+            curl_setopt($chOr, CURLOPT_POSTFIELDS, json_encode($orPayload, JSON_UNESCAPED_UNICODE));
+            curl_setopt($chOr, CURLOPT_HTTPHEADER, [
+                'Authorization: Bearer ' . $openRouterKey,
+                'Content-Type: application/json',
+                'HTTP-Referer: https://myerp.ideas.edu.vn',
+                'X-Title: MYERP SI IDEAS Micro-Router'
+            ]);
+            curl_setopt($chOr, CURLOPT_TIMEOUT, 6);
+            curl_setopt($chOr, CURLOPT_CONNECTTIMEOUT, 3);
+            curl_setopt($chOr, CURLOPT_SSL_VERIFYPEER, true);
+
+            $respOr = curl_exec($chOr);
+            $httpOr = (int)curl_getinfo($chOr, CURLINFO_HTTP_CODE);
+            curl_close($chOr);
+
+            if ($httpOr === 200 && $respOr) {
+                $decodedOr = json_decode((string)$respOr, true);
+                $rawOrText = $this->stripReasoningTags((string)($decodedOr['choices'][0]['message']['content'] ?? ''));
+                if ($rawOrText !== '') {
+                    $cleanOrJson = trim((string)preg_replace('/^```(?:json)?|```$/m', '', $rawOrText));
+                    if (preg_match('/\{[\s\S]*\}/', $cleanOrJson, $jsonMatch)) {
+                        $cleanOrJson = $jsonMatch[0];
+                    }
+                    $parsedOr = json_decode($cleanOrJson, true);
+                    if (is_array($parsedOr) && isset($parsedOr['intent_type'])) {
+                        if (empty($parsedOr['matched_domains']) && !empty($parsedOr['primary_domain']) && $parsedOr['primary_domain'] !== 'none') {
+                            $parsedOr['matched_domains'] = [$parsedOr['primary_domain']];
+                        }
+                        return $parsedOr;
+                    }
+                }
+            } elseif ($httpOr === 429) {
+                $respStr = (string)$respOr;
+                if (stripos($respStr, 'free-models-per-day') !== false) {
+                    $this->markOpenRouterKeyCooldown($openRouterKey, 600);
                 }
             }
-            if ($score > 0) {
-                $scores[$domain] = $score;
+        }
+
+        // 2. Fallback to Gemini Flash Lite Micro-Router
+        if ($apiKey !== '') {
+            $payload = [
+                'systemInstruction' => [
+                    'parts' => [
+                        ['text' => $routerSystemPrompt]
+                    ]
+                ],
+                'contents' => [
+                    [
+                        'role' => 'user',
+                        'parts' => [
+                            ['text' => $userPrompt]
+                        ]
+                    ]
+                ],
+                'generationConfig' => [
+                    'temperature' => 0.1,
+                    'maxOutputTokens' => 250,
+                    'responseMimeType' => 'application/json'
+                ]
+            ];
+
+            $routerUrl = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key=" . urlencode($apiKey);
+            $ch = curl_init($routerUrl);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload, JSON_UNESCAPED_UNICODE));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 8);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 4);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+
+            $resp = curl_exec($ch);
+            $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($httpCode === 200 && $resp) {
+                $json = json_decode((string)$resp, true);
+                $rawText = (string)($json['candidates'][0]['content']['parts'][0]['text'] ?? '');
+                if ($rawText !== '') {
+                    $cleanJson = trim((string)preg_replace('/^```(?:json)?|```$/m', '', $rawText));
+                    $parsed = json_decode($cleanJson, true);
+                    if (is_array($parsed) && isset($parsed['intent_type'])) {
+                        if (empty($parsed['matched_domains']) && !empty($parsed['primary_domain']) && $parsed['primary_domain'] !== 'none') {
+                            $parsed['matched_domains'] = [$parsed['primary_domain']];
+                        }
+                        return $parsed;
+                    }
+                }
             }
         }
 
-        if ($contextDomain !== null && (empty($scores) || preg_match('/\b(ban nay|anh nay|chi nay|ho so nay|phieu nay|don nay|task nay|khach nay|hoc vien nay|tom tat|kiem tra)\b/u', $qAscii))) {
-            $scores[$contextDomain] = ($scores[$contextDomain] ?? 0) + 3;
-        }
-
-        arsort($scores);
-        $matchedDomains = array_keys($scores);
-
-        // 4. Cross-domain / Executive Synthesis detection
-        $isCrossDomainSignal = (bool)preg_match('/\b(ket hop|lien phong ban|so sanh|ty le|chi phi tren moi|cpl|cac|p&l|dong tien rong|buc tranh|toan dien|tong hop toan vien|vua .* vua)\b/u', $qAscii);
-        if ($isCrossDomainSignal && !in_array('executive_bi', $matchedDomains, true)) {
-            $matchedDomains[] = 'executive_bi';
-        }
-
-        $isMultiDomain = count($matchedDomains) >= 2 || $isCrossDomainSignal;
-        $primaryDomain = $matchedDomains[0] ?? $contextDomain ?? null;
-
-        return [
-            'intent_type' => $isMultiDomain ? 'cross_domain' : 'database_action',
-            'primary_domain' => $primaryDomain,
-            'matched_domains' => array_slice($matchedDomains, 0, 3),
-            'requires_tools' => true,
-            'is_multi_domain' => $isMultiDomain,
-            'reasoning' => 'Instant deterministic PHP router (' . implode(',', array_slice($matchedDomains, 0, 3)) . ')'
-        ];
+        return $safeFallback;
     }
 
     /**
-     * Call Gemini 3.5 Flash Lite via Google Generative Language REST API
+     * Call AI Engine (Free OpenRouter Pool Primary + Gemini 3.5 Flash Lite Fallback)
      * Supports Autonomous Two-Way Tool Loop (Function Calling) with Zero-Trust RBAC
      */
     private function callGeminiFlashLite(array $conversationHistory, string $systemPrompt, ?array $attachedFile = null, ?callable $onChunk = null, ?array $authContext = null, ?callable $onStep = null, array &$executedAgentSteps = []): ?string {
@@ -5473,38 +5505,58 @@ class ChatController {
             $explicitAgentId = $authContext['metadata']['active_agent_id'] ?? null;
             $tools = null;
             $isPureConversational = false;
+            $isMutationOrProposalIntent = false;
 
             if (!empty($explicitAgentId) && isset($agentToolMap[$explicitAgentId])) {
                 // Scoped directly to the UI-selected sub-agent
                 $tools = AgentToolRegistry::getGeminiToolsDeclaration($agentToolMap[$explicitAgentId]);
             } else {
-                // 2. Instant Deterministic Multi-Domain Router (<1ms)
+                // 2. AI SEMANTIC MICRO-ROUTER (ZERO REGEX / 100% LLM INTENT PARSER)
                 $currentContext = $authContext['metadata']['current_context'] ?? null;
-                $routeDecision = $this->routeQueryWithAiMicroRouter($lastMsgText, $apiKey, $model, $currentContext);
+                $routeDecision = $this->routeQueryWithAiMicroRouter(
+                    $lastMsgText,
+                    $apiKey,
+                    $model,
+                    $currentContext,
+                    $openRouterKey,
+                    $openRouterModel
+                );
                 $intentType = $routeDecision['intent_type'] ?? 'database_action';
                 $primaryDomain = $routeDecision['primary_domain'] ?? null;
-                $matchedDomains = $routeDecision['matched_domains'] ?? [];
+                $matchedDomains = is_array($routeDecision['matched_domains'] ?? null) ? $routeDecision['matched_domains'] : [];
+                $isMultiDomain = (bool)($routeDecision['is_multi_domain'] ?? false);
                 $requiresTools = (bool)($routeDecision['requires_tools'] ?? true);
+                $isMutationOrProposalIntent = (bool)($routeDecision['is_mutation_or_proposal'] ?? false);
 
                 if ($intentType === 'conversational' || !$requiresTools) {
                     $isPureConversational = ($intentType === 'conversational');
                     $tools = null;
-                } elseif (!empty($matchedDomains)) {
-                    $scopedToolNames = [];
+                } elseif ($isMultiDomain || $intentType === 'cross_domain' || empty($primaryDomain) || $primaryDomain === 'none') {
+                    if (!empty($matchedDomains)) {
+                        $scopedToolNames = [];
+                        foreach ($matchedDomains as $dom) {
+                            if (isset($agentToolMap[$dom])) {
+                                $scopedToolNames = array_merge($scopedToolNames, $agentToolMap[$dom]);
+                            }
+                        }
+                        $scopedToolNames[] = 'query_cross_domain_executive_synthesis';
+                        $scopedToolNames = array_values(array_unique($scopedToolNames));
+                        $tools = AgentToolRegistry::getGeminiToolsDeclaration($scopedToolNames);
+                    } else {
+                        // Full Swarm tools
+                        $tools = AgentToolRegistry::getGeminiToolsDeclaration(null);
+                    }
+                } elseif (isset($agentToolMap[$primaryDomain])) {
+                    $scopedToolNames = $agentToolMap[$primaryDomain];
                     foreach ($matchedDomains as $dom) {
                         if (isset($agentToolMap[$dom])) {
                             $scopedToolNames = array_merge($scopedToolNames, $agentToolMap[$dom]);
                         }
                     }
-                    if (count($matchedDomains) >= 2 || $intentType === 'cross_domain') {
-                        $scopedToolNames[] = 'query_cross_domain_executive_synthesis';
-                    }
                     $scopedToolNames = array_values(array_unique($scopedToolNames));
                     $tools = AgentToolRegistry::getGeminiToolsDeclaration($scopedToolNames);
-                } elseif (!empty($primaryDomain) && isset($agentToolMap[$primaryDomain])) {
-                    $tools = AgentToolRegistry::getGeminiToolsDeclaration($agentToolMap[$primaryDomain]);
                 } else {
-                    // Safe fallback: Essential Swarm tools
+                    // Safe fallback: Full Swarm tools
                     $tools = AgentToolRegistry::getGeminiToolsDeclaration(null);
                 }
             }
@@ -5531,10 +5583,6 @@ class ChatController {
                     ]
                 ];
             }
-
-            // Detect whether user is asking to mutate state or draft an action proposal (which may need search -> draft 2-step chain)
-            $lastMsgAscii = AgentToolRegistry::removeVietnameseAccents(mb_strtolower($lastMsgText, 'UTF-8'));
-            $isMutationOrProposalIntent = (bool)preg_match('/\b(tao|lap|them|sua|cap nhat|chuyen|chia|bu|duyet|tu choi|xac nhan|chot|giai ngan|xin nghi|nghi phep|giai trinh|doi ca|dat lich|hen goi|ghi chu|note|dinh kem|ban giao|nhap kho|de xuat)\b/u', $lastMsgAscii);
 
             // ==========================================
             // PRIMARY ENGINE: OPENROUTER FREE MULTI-MODEL POOL (WITH FULL TOOL CALLING)
@@ -6051,7 +6099,6 @@ class ChatController {
                     $msgText = preg_replace('/<<<NEXT_BEST_ACTIONS:\s*[\s\S]*?>>>/', '', $msgText);
                     $msgText = preg_replace('/<<<SAVE_MEMORY:\s*[\s\S]*?>>>/', '', $msgText);
                     $msgText = trim((string)preg_replace('/\n{3,}/', "\n\n", $msgText));
-                    $msgText .= "\n[Hệ thống: Báo cáo trên là dữ liệu lịch sử của câu hỏi cũ. Với câu hỏi mới tiếp theo của người dùng, BẮT BUỘC phải gọi công cụ (tool_calls) để truy vấn Database thực tế. Nếu câu hỏi mới KHÔNG nêu giới hạn ngày/thời gian (ví dụ chỉ hỏi theo pipeline/chuyên viên), tuyệt đối KHÔNG tự ý gán lại from_date/to_date của câu hỏi cũ mà phải để trống from_date/to_date để lấy toàn bộ dữ liệu!]";
                 }
 
                 if ($idx === $historyCount - 1 && !empty($attachedFile)) {
@@ -6150,44 +6197,6 @@ class ChatController {
                     $directText = trim(str_replace($fnMatch[0], '', $directText));
                 }
 
-                // Zero-Trust Anti-Hallucination Guard on Turn 1:
-                // If tools are required (!isPureConversational) and the model tried to answer from stale chat history without calling a tool,
-                // force a Turn-1 tool call (`tool_choice = 'required'` + explicit mandate) so it MUST query MySQL!
-                if ($toolTurn === 1 && empty($toolCalls) && !$isPureConversational && !empty($openAiTools)) {
-                    $forcedMessages = $messages;
-                    $forcedMessages[] = [
-                        'role' => 'system',
-                        'content' => 'BẮT BUỘC GỌI CÔNG CỤ (MANDATORY TOOL CALL): Bạn chưa gọi bất kỳ công cụ (tool_calls) nào ở lượt này. Tuyệt đối KHÔNG được tự trả lời dựa trên lịch sử hội thoại cũ. Hãy gọi ngay công cụ phù hợp (ví dụ: query_crm_leads_multitier, query_deposits_and_revenue_multitier, query_finance_multitier_analytics, query_hrm_workforce_and_payroll_multitier, query_tasks_and_projects_multitier, search_contacts...) để lấy dữ liệu thực tế từ MySQL!'
-                    ];
-                    $retryJson = $this->executeOpenRouterRequestWithPool(
-                        $openRouterKey,
-                        $preferredModel,
-                        $forcedMessages,
-                        $openAiTools,
-                        'required'
-                    );
-                    if (is_array($retryJson) && !empty($retryJson['choices'][0]['message'])) {
-                        $retryMsg = $retryJson['choices'][0]['message'];
-                        $retryTools = $retryMsg['tool_calls'] ?? [];
-                        $retryText = $this->stripReasoningTags((string)($retryMsg['content'] ?? ''));
-                        if (empty($retryTools) && preg_match('/<function=([a-zA-Z0-9_]+)>\s*(\{[\s\S]*?\})\s*<\/function>/', $retryText, $fnMatch2)) {
-                            $retryTools = [[
-                                'id' => 'call_' . substr(md5(uniqid('', true)), 0, 8),
-                                'type' => 'function',
-                                'function' => [
-                                    'name' => trim($fnMatch2[1]),
-                                    'arguments' => trim($fnMatch2[2])
-                                ]
-                            ]];
-                            $retryText = trim(str_replace($fnMatch2[0], '', $retryText));
-                        }
-                        if (!empty($retryTools)) {
-                            $toolCalls = $retryTools;
-                            $directText = $retryText;
-                        }
-                    }
-                }
-
                 if (empty($toolCalls)) {
                     if ($directText === '') {
                         return null;
@@ -6252,13 +6261,6 @@ class ChatController {
                                 'label' => "Đang thực thi công cụ: {$toolName}"
                             ]
                         ]);
-                    }
-
-                    if ($toolName === 'query_crm_leads_multitier' && (!empty($toolArgs['from_date']) || !empty($toolArgs['to_date']))) {
-                        $qCheckAscii = AgentToolRegistry::removeVietnameseAccents(mb_strtolower($lastUserQuestion, 'UTF-8'));
-                        if (!preg_match('/\b(ngay|tuan|thang|nam|quy|hom|qua|nay|tu|den|thoi gian|trong do|trong so do|o tren|vua roi|gan day|moi nhat|202[0-9])\b|[0-9]{1,2}\/[0-9]{1,2}/u', $qCheckAscii)) {
-                            unset($toolArgs['from_date'], $toolArgs['to_date']);
-                        }
                     }
 
                     $t0 = microtime(true);

@@ -842,6 +842,88 @@
       })();
     </script>
     <script>
+      // Self-Healing Asset 404 / Chunk Error Recovery & Watchdog
+      (function() {
+        var assetFailed = false;
+
+        function forceHideSplash() {
+          document.documentElement.classList.add('hide-initial-splash');
+          var splash = document.getElementById('ideas-splash-screen');
+          if (splash) {
+            splash.classList.add('splash-fade-out');
+            splash.style.display = 'none';
+          }
+        }
+
+        function recoverFromAssetError(reason) {
+          assetFailed = true;
+          try {
+            var now = Date.now();
+            var lastReload = parseInt(sessionStorage.getItem('myerp_asset_reload_ts') || '0', 10);
+            if (now - lastReload < 15000) {
+              console.warn('[MYERP Recovery] Already reloaded within 15s, skipping loop (' + reason + ')');
+              forceHideSplash();
+              return;
+            }
+            sessionStorage.setItem('myerp_asset_reload_ts', String(now));
+            console.warn('[MYERP Recovery] Recovering from stale asset (' + reason + ')...');
+
+            var cleanupPromises = [];
+            if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistrations) {
+              cleanupPromises.push(
+                navigator.serviceWorker.getRegistrations().then(function(regs) {
+                  return Promise.all(regs.map(function(r) { return r.unregister(); }));
+                }).catch(function() {})
+              );
+            }
+            if ('caches' in window && caches.keys) {
+              cleanupPromises.push(
+                caches.keys().then(function(keys) {
+                  return Promise.all(keys.map(function(k) { return caches.delete(k); }));
+                }).catch(function() {})
+              );
+            }
+            cleanupPromises.push(
+              fetch('/index.html?_cb=' + now, { cache: 'reload' }).catch(function() {})
+            );
+
+            Promise.all(cleanupPromises).finally(function() {
+              window.location.replace(window.location.pathname + '?_v=' + now + window.location.hash);
+            });
+          } catch (err) {
+            forceHideSplash();
+          }
+        }
+
+        // Capture phase listener catches <script type="module" src="/assets/index-*.js"> and <link rel="modulepreload"> 404s
+        window.addEventListener('error', function(e) {
+          var target = e && e.target;
+          if (target && target !== window) {
+            var tag = (target.tagName || '').toUpperCase();
+            var url = target.src || target.href || '';
+            if ((tag === 'SCRIPT' || tag === 'LINK') && url.indexOf('/assets/') !== -1) {
+              recoverFromAssetError(tag + ' 404: ' + url);
+            }
+          }
+        }, true);
+
+        window.addEventListener('vite:preloadError', function() {
+          recoverFromAssetError('vite:preloadError');
+        });
+
+        // Fallback watchdog timer: if #root still has 0 children after 8 seconds, recover or force-hide splash
+        setTimeout(function() {
+          var root = document.getElementById('root');
+          if (root && root.children.length === 0) {
+            if (assetFailed) {
+              recoverFromAssetError('watchdog_asset_failed');
+            } else {
+              forceHideSplash();
+            }
+          }
+        }, 8000);
+      })();
+
       // Register PWA Service Worker for Browser Omnibox Install Button & Desktop Notifications
       if ('serviceWorker' in navigator) {
         if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {

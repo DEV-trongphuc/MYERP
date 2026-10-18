@@ -12,51 +12,10 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../config/Database.php';
 $pdo = Database::getInstance();
 
-echo "=== MIGRATION 314 V2: RESTORE & SURGICAL STAGE SYNC (PRESERVING updated_at) ===\n";
+echo "=== MIGRATION 314 V2: SURGICAL STAGE SYNC (STAGING CROSS-DB SYNC DISABLED & LOCKED) ===\n";
 
 try {
-    // 1. Check and restore any rows in vhvxoigh_myerp.contacts whose updated_at was bumped today (>= 2026-10-16 11:00:00) compared to vhvxoigh_erpstagging.contacts
-    $chkStmt = $pdo->query("
-        SELECT p.id, p.full_name, p.phone, p.owner_id, u.full_name as owner_name, u.role as owner_role,
-               p.stage_id as p_stage, s.stage_id as s_stage,
-               p.pipeline_status as p_pipe, s.pipeline_status as s_pipe,
-               p.updated_at as p_upd, s.updated_at as s_upd
-        FROM vhvxoigh_myerp.contacts p
-        JOIN vhvxoigh_erpstagging.contacts s ON p.id = s.id
-        LEFT JOIN vhvxoigh_myerp.users u ON p.owner_id = u.id
-        WHERE p.updated_at >= '2026-10-16 11:00:00'
-          AND p.updated_at != s.updated_at
-        ORDER BY p.updated_at DESC
-    ");
-    $mutatedRows = $chkStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-    echo "Found " . count($mutatedRows) . " rows with altered updated_at since 11:00:00:\n";
-    foreach (array_slice($mutatedRows, 0, 25) as $r) {
-        echo sprintf(
-            "  #%d %s (Owner: %s [%s]): stage %s->%s, pipe '%s'->'%s', updated_at '%s' -> '%s'\n",
-            $r['id'],
-            $r['full_name'],
-            $r['owner_name'] ?? 'NULL',
-            $r['owner_role'] ?? '',
-            $r['s_stage'] ?? 'NULL',
-            $r['p_stage'] ?? 'NULL',
-            $r['s_pipe'] ?? 'NULL',
-            $r['p_pipe'] ?? 'NULL',
-            $r['s_upd'],
-            $r['p_upd']
-        );
-    }
-
-    $restoreStmt = $pdo->prepare("
-        UPDATE vhvxoigh_myerp.contacts p
-        JOIN vhvxoigh_erpstagging.contacts s ON p.id = s.id
-        SET p.stage_id = s.stage_id,
-            p.pipeline_status = s.pipeline_status,
-            p.updated_at = s.updated_at
-        WHERE p.updated_at >= '2026-10-16 11:00:00'
-          AND p.updated_at != s.updated_at
-    ");
-    $restoreStmt->execute();
-    echo "Restored " . $restoreStmt->rowCount() . " rows to their exact original stage_id, pipeline_status, and updated_at!\n";
+    // Cross-DB sync with vhvxoigh_erpstagging is permanently disabled to ensure Staging never affects Production.
 
     // 2. Surgical sync ONLY for rows where pipeline_status = 'nop_ho_so' and stage_id < 39, preserving updated_at = updated_at!
     $syncNopHoSo = $pdo->prepare("

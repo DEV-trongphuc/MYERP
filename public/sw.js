@@ -1,5 +1,5 @@
-﻿// MYERP Service Worker for PWA Omnibox Install & Desktop Push Notifications
-const SW_VERSION = 'myerp-sw-v1792304056';
+// MYERP Service Worker for PWA Omnibox Install & Desktop Push Notifications
+const SW_VERSION = 'myerp-sw-v1792306427648';
 
 self.addEventListener('install', (event) => {
   // Force new service worker to activate immediately without waiting
@@ -22,48 +22,31 @@ self.addEventListener('message', (event) => {
   }
 });
 
-// Pass-through fetch handler for Chrome/Edge PWA installability requirements
+// Pure pass-through fetch handler for Chrome/Edge PWA installability requirements.
+// Never call event.respondWith() so the browser handles all navigations, HTML documents,
+// Vite /assets/ bundles, and API calls natively with zero FetchEvent promise rejections.
 self.addEventListener('fetch', (event) => {
-  // 1. Only handle GET requests
   if (event.request.method !== 'GET') return;
-
+  if (event.request.mode === 'navigate') return;
+  if (
+    event.request.destination === 'document' ||
+    event.request.destination === 'script' ||
+    event.request.destination === 'style'
+  ) {
+    return;
+  }
   const url = new URL(event.request.url);
-
-  // 2. Completely bypass Service Worker in local dev environment (localhost / 127.0.0.1)
   if (
-    url.hostname === 'localhost' ||
-    url.hostname === '127.0.0.1' ||
-    self.location.hostname === 'localhost' ||
-    self.location.hostname === '127.0.0.1'
+    url.pathname === '/' ||
+    url.pathname.endsWith('.html') ||
+    url.pathname.startsWith('/assets/') ||
+    url.pathname.endsWith('.js') ||
+    url.pathname.endsWith('.css')
   ) {
     return;
   }
-
-  // 3. Never intercept backend API calls, action params, auth tokens, or chat streaming
-  if (
-    url.pathname.includes('/backend') ||
-    url.pathname.includes('api.php') ||
-    url.pathname.startsWith('/api') ||
-    url.pathname.includes('/chat/') ||
-    url.searchParams.has('action') ||
-    url.searchParams.has('token')
-  ) {
-    return;
-  }
-
-  // 4. Never intercept Server-Sent Events (SSE) or long-lived streams
-  const acceptHeader = event.request.headers.get('accept') || '';
-  if (acceptHeader.includes('text/event-stream')) {
-    return;
-  }
-
-  // 5. Never intercept version manifests, audio/video assets
-  if (url.pathname.endsWith('version.json') || url.pathname.endsWith('.mp3')) {
-    return;
-  }
-
-  // Directly fetch from live network - no stale offline cache
-  event.respondWith(fetch(event.request));
+  // No-op pass-through: let browser native network stack handle all requests directly
+  return;
 });
 
 // Push notification listener
@@ -71,9 +54,9 @@ self.addEventListener('push', (event) => {
   if (!event.data) return;
   try {
     const data = event.data.json();
-    const title = data.title || 'MYERP ThÃƒÂ´ng BÃƒÂ¡o';
+    const title = data.title || 'MYERP Thông Báo';
     const options = {
-      body: data.body || 'BÃ¡ÂºÂ¡n cÃƒÂ³ thÃƒÂ´ng bÃƒÂ¡o mÃ¡Â»â€ºi tÃ¡Â»Â« hÃ¡Â»â€¡ thÃ¡Â»â€˜ng.',
+      body: data.body || 'Bạn có thông báo mới từ hệ thống.',
       icon: '/LOGO.jpg',
       badge: '/LOGO.jpg',
       vibrate: [100, 50, 100],
@@ -85,7 +68,7 @@ self.addEventListener('push', (event) => {
   } catch (err) {
     const text = event.data.text();
     event.waitUntil(
-      self.registration.showNotification('MYERP ThÃƒÂ´ng BÃƒÂ¡o', {
+      self.registration.showNotification('MYERP Thông Báo', {
         body: text,
         icon: '/LOGO.jpg'
       })

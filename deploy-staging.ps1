@@ -11,17 +11,15 @@ param(
     [switch]$SkipBuild = $false,
     [switch]$CloneDatabase = $false,
     [Alias("sync-schema")]
-    [switch]$SyncSchemaOnly = $false,
-    [switch]$ConfirmUnlockStaging = $false
+    [switch]$SyncSchemaOnly = $false
 )
 
-if (-not $ConfirmUnlockStaging) {
-    Write-Host "=========================================================" -ForegroundColor Yellow
-    Write-Host "   [STAGING LOCKED] Môi trường Staging đã được khóa tách biệt!" -ForegroundColor Yellow
-    Write-Host "   Bỏ qua thao tác deploy/sync lên myerp-stagging.ideas.edu.vn." -ForegroundColor Gray
-    Write-Host "=========================================================" -ForegroundColor Yellow
-    exit 0
-}
+# HARD LOCK: Staging is permanently frozen at its current stable version
+Write-Host "=========================================================" -ForegroundColor Red
+Write-Host "   [STAGING PERMANENTLY LOCKED] Môi trường Staging đã khóa cứng ở phiên bản hiện tại!" -ForegroundColor Yellow
+Write-Host "   Tuyệt đối không deploy/ghi đè lên myerp-stagging.ideas.edu.vn hoặc ảnh hưởng Production." -ForegroundColor Gray
+Write-Host "=========================================================" -ForegroundColor Red
+exit 0
 
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 

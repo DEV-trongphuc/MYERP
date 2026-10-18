@@ -5,17 +5,15 @@
 
 param(
     [switch]$DryRun = $false,
-    [switch]$ForceClone = $false,
-    [switch]$ConfirmUnlockStaging = $false
+    [switch]$ForceClone = $false
 )
 
-if (-not $ConfirmUnlockStaging) {
-    Write-Host "=========================================================" -ForegroundColor Yellow
-    Write-Host "   [STAGING DB LOCKED] CSDL Staging (vhvxoigh_erpstagging) đã khóa tách biệt!" -ForegroundColor Yellow
-    Write-Host "   Bỏ qua thao tác đồng bộ tự động vào môi trường Staging." -ForegroundColor Gray
-    Write-Host "=========================================================" -ForegroundColor Yellow
-    exit 0
-}
+# HARD LOCK: Staging DB is permanently frozen and isolated from Production
+Write-Host "=========================================================" -ForegroundColor Red
+Write-Host "   [STAGING DB PERMANENTLY LOCKED] CSDL Staging (vhvxoigh_erpstagging) đã khóa cứng hoàn toàn!" -ForegroundColor Yellow
+Write-Host "   Ngắt toàn bộ đồng bộ giữa Production và Staging." -ForegroundColor Gray
+Write-Host "=========================================================" -ForegroundColor Red
+exit 0
 
 $sshKey = "C:\Users\LENOVO\.ssh\id_ed25519"
 $sshUser = "vhvxoigh"

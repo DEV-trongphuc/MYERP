@@ -17,6 +17,11 @@ param(
 
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
+if ($RemoteDir -match "stagging|staging") {
+    Write-Host "ERROR: [STAGING LOCKED] Không được phép dùng deploy-myerp.ps1 để deploy vào thư mục Staging ($RemoteDir)!" -ForegroundColor Red
+    exit 1
+}
+
 Write-Host "=========================================================" -ForegroundColor Cyan
 Write-Host "   MYERP HIGH-SPEED DEPLOYMENT -> https://myerp.ideas.edu.vn" -ForegroundColor Cyan
 Write-Host "=========================================================" -ForegroundColor Cyan
