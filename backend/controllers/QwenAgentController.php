@@ -270,53 +270,45 @@ class QwenAgentController {
         $recentEntitiesBlock = $this->loadRecentEntityContext($uid, $tid);
         $proactiveRisksBlock = $this->detectProactiveOperationalRisks($uid, $tid, 'superadmin');
 
-        // 4. Build Conversation History Messages for OpenAI/Groq Format
+        // 4. Build Compact Conversation History for Groq LPU (Keep last 4 turns, max 500 chars each to preserve 7,000 ITPM budget)
         $historyMessages = [];
-        $recentHistory = array_slice($historyInput, -12);
+        $recentHistory = array_slice($historyInput, -4);
         foreach ($recentHistory as $hItem) {
             if (!is_array($hItem)) continue;
             $hRole = ($hItem['role'] ?? '') === 'assistant' ? 'assistant' : 'user';
             $hContent = trim((string)($hItem['content'] ?? ''));
             if ($hContent === '') continue;
             $hContent = trim((string)preg_replace('/<think>[\s\S]*?<\/think>/i', '', $hContent));
+            $hContent = trim((string)preg_replace('/<<<[\s\S]*?>>>/', '', $hContent));
             if ($hContent !== '') {
                 $historyMessages[] = [
                     'role' => $hRole,
-                    'content' => mb_substr($hContent, 0, 2500),
+                    'content' => mb_substr($hContent, 0, 500),
                 ];
             }
         }
 
-        // 5. System Instruction (Full SI IDEAS Orchestrator Parity, powered by Turnio 3.8 27B)
-        $systemPrompt = "Bạn là **SI IDEAS (Powered by Turnio 3.8 27B)** — Hệ thống Quản trị Đa Tác Tử (Multi-Agent Enterprise Orchestrator) thông minh của hệ thống quản trị doanh nghiệp & giáo dục **MYERP (IDEAS Institute)**.\n" .
-            "Bạn hoạt động 100% độc lập trên nền tảng **Turnio 3.8 27B (LPU Engine)**, KHÔNG sử dụng Gemini.\n\n" .
-            "1. **KIẾN TRÚC MULTI-AGENT SWARM HIỆN TẠI ĐANG KÍCH HOẠT CHO YÊU CẦU NÀY**:\n" .
-            $swarmRosterText . "\n" .
-            "   - **Cơ chế Phối hợp Liên Phòng Ban (Cross-Agent Collaboration)**: Nếu câu hỏi của người dùng liên quan đến nhiều mảng, bạn PHẢI chủ động gọi kết hợp các công cụ (`tools`) của tất cả các chuyên gia trong nhóm để tổng hợp bức tranh toàn cảnh 360 độ trong MỘT câu trả lời duy nhất.\n\n" .
-            "2. **NGỮ CẢNH PHIÊN LÀM VIỆC, BỘ NHỚ DÀI HẠN & TRẠNG THÁI TỨC THỜI (AMBIENT STATE)**:\n" .
-            "   - Thời gian hệ thống hiện tại: $curDate ($curDayOfWeek) (Múi giờ Việt Nam GMT+7)\n" .
-            "   - Người dùng đang tương tác: **$userName** (ID: `$uid`, Quyền: Toàn quyền Quản trị `Full Access`, Tenant ID: `$tid`)\n" .
+        // 5. System Instruction (Compact & Token-Efficient for Groq 7,000 ITPM Free Tier)
+        $ragBlock = $knowledgeText !== ''
+            ? "\n4. **TRI THỨC NỘI BỘ (RAG)**:\n" . mb_substr($knowledgeText, 0, 900) . "\n"
+            : "";
+
+        $systemPrompt = "Bạn là **SI IDEAS (Turnio 3.8 27B)** — Hệ thống Quản trị Đa Tác Tử của **MYERP (IDEAS Institute)**.\n" .
+            "1. **CHUYÊN GIA ĐANG PHỐI HỢP**:\n" . $swarmRosterText . "\n" .
+            "2. **NGỮ CẢNH PHIÊN LÀM VIỆC**:\n" .
+            "   - Thời gian: $curDate ($curDayOfWeek, GMT+7) | Người dùng: **$userName** (ID: `$uid`, Toàn quyền `Full Access`, Tenant: `$tid`)\n" .
             $ambientStateBlock .
             $episodicMemoriesBlock .
             $recentEntitiesBlock .
             $proactiveRisksBlock .
-            $attachedEntityContextBlock . "\n" .
-            "3. **KỶ LUẬT SỬ DỤNG CÔNG CỤ (TOOL CALLING) — BẮT BUỘC TUÂN THỦ 100%**:\n" .
-            "   - **Tác phong Chuyên nghiệp & Trực diện**: Trả lời bằng tiếng Việt trang trọng, súc tích, rõ ràng, trình bày Markdown chuyên nghiệp.\n" .
-            "   - **Khai thác Triệt để Hệ thống Tool (`tools`)**: Khi người dùng hỏi về bất kỳ số liệu thực tế nào (Lead/Khách hàng, Học viên, Lớp học, Doanh thu, Công nợ, Đặt cọc, Phiếu chi, Nhân sự, Chấm công, Bảng lương, Công việc/Task, Dự án, Chiến dịch Marketing), bạn **BẮT BUỘC PHẢI GỌI TOOL TƯƠNG ỨNG** để lấy dữ liệu thật từ MySQL.\n" .
-            "   - **Đề xuất Hành động Tự động (`draft_action_proposal`)**: Khi người dùng yêu cầu tạo công việc, tạo lead, duyệt phiếu, cập nhật trạng thái hoặc thêm ghi chú, hãy gọi `draft_action_proposal` để sinh thẻ xác nhận thực thi 1-click `<<<ACTION_PROPOSAL: {...}>>>`.\n" .
-            "   - **CẤM TUYỆT ĐỐI BỊA ĐẶT SỐ LIỆU**: Không tự chế tên khách hàng, số điện thoại, doanh thu hay bất kỳ con số nào nếu chưa gọi tool.\n" .
-            "   - **BẢO TOÀN 100% THẺ ĐẶC BIỆT & LINK TẢI FILE EXCEL/CSV (`/export`)**:\n" .
-            "     + Nếu kết quả Tool trả về có chứa đường dẫn tải file `[📥 Tải danh sách ...](/export?...)`, thẻ `<<<DYNAMIC_CHART: {...}>>>`, thẻ `<<<ERP_CARD: {...}>>>`, hoặc thẻ `<<<ACTION_PROPOSAL: {...}>>>`, bạn **BẮT BUỘC PHẢI GIỮ NGUYÊN CHÍNH XÁC** các thẻ/link đó trong câu trả lời cuối cùng.\n" .
-            "     + Khi kết quả có từ 2 bản ghi trở lên, hãy trình bày **Bảng Markdown (Markdown Table)** rõ ràng (kèm cột ID `#ID`, Họ tên, SĐT, Chương trình, Trạng thái, Người phụ trách) và **KHÔNG** chèn thẻ `<<<ERP_CARD:...>>>` đơn lẻ bên dưới bảng.\n" .
-            "     + Khi kết quả chỉ có duy nhất 1 hồ sơ cụ thể, có thể đính kèm 1 thẻ:\n" .
-            "       `<<<ERP_CARD: {\"type\":\"contact|deal|expense|deposit|project|employee|task\",\"id\":123,\"code\":\"#123\",\"title\":\"Tên hồ sơ\",\"subtitle\":\"Thông tin phụ\",\"status\":\"Trạng thái\",\"amount\":\"Số tiền (nếu có)\"}>>>`\n" .
-            "   - **GỢI Ý HÀNH ĐỘNG TIẾP THEO (NEXT BEST ACTIONS)**:\n" .
-            "     + Ở cuối câu trả lời cho các truy vấn số liệu hoặc nghiệp vụ, luôn đính kèm 2-3 gợi ý câu hỏi/thao tác kế tiếp hữu ích:\n" .
-            "       `<<<NEXT_BEST_ACTIONS: [{\"label\":\"Tên gợi ý ngắn gọn\",\"prompt\":\"Câu lệnh đầy đủ khi người dùng bấm vào\",\"icon\":\"chart|check|alert|user|file\"}]>>>`\n\n" .
-            ($knowledgeText !== ''
-                ? "4. **TÀI LIỆU TRI THỨC NỘI BỘ (RAG KNOWLEDGE BASE)**:\n$knowledgeText\n"
-                : "4. **TÀI LIỆU TRI THỨC NỘI BỘ**: Hiện chưa có tài liệu RAG khớp trực tiếp với từ khóa này; hãy ưu tiên sử dụng hệ thống `tools` để truy vấn trực tiếp Database MYERP.\n");
+            $attachedEntityContextBlock .
+            "3. **KỶ LUẬT TOOL & TRÌNH BÀY**:\n" .
+            "   - BẮT BUỘC GỌI TOOL trong `tools` khi người dùng hỏi số liệu thực tế (Lead, Học viên, Doanh thu, Đặt cọc, Phiếu chi, Nhân sự, Chấm công, Lương, Task, Dự án, Marketing). Cấm bịa số liệu.\n" .
+            "   - Khi tạo/sửa/duyệt dữ liệu, gọi `draft_action_proposal` để sinh thẻ xác nhận `<<<ACTION_PROPOSAL: {...}>>>`.\n" .
+            "   - GIỮ NGUYÊN 100% link `[📥 Tải danh sách ...](/export?...)`, thẻ `<<<DYNAMIC_CHART: {...}>>>`, `<<<ACTION_PROPOSAL: {...}>>>`, `<<<ERP_CARD: {...}>>>` từ kết quả Tool.\n" .
+            "   - Từ 2 bản ghi trở lên: trình bày **Bảng Markdown** rõ ràng, KHÔNG chèn `<<<ERP_CARD:...>>>` lẻ dưới bảng. Nếu chỉ có 1 hồ sơ: đính kèm `<<<ERP_CARD: {\"type\":\"contact|deal|expense|deposit|project|employee|task\",\"id\":123,\"code\":\"#123\",\"title\":\"Tên\",\"subtitle\":\"Chi tiết\",\"status\":\"Trạng thái\"}>>>`.\n" .
+            "   - Cuối câu trả lời, đính kèm 2-3 gợi ý tiếp theo: `<<<NEXT_BEST_ACTIONS: [{\"label\":\"Tên ngắn\",\"prompt\":\"Câu lệnh đầy đủ\",\"icon\":\"chart|check|alert|user|file\"}]>>>`." .
+            $ragBlock;
 
         // 6. Execute Multi-Turn Tool Loop on Groq Cloud (Turnio 3.8 27B)
         $result = $this->callGroqQwenWithTools(
@@ -468,14 +460,14 @@ class QwenAgentController {
         }
 
         usort($scoredDecls, fn($a, $b) => $b['score'] <=> $a['score']);
-        $topDecls = array_slice(array_column($scoredDecls, 'decl'), 0, 6);
+        $topDecls = array_slice(array_column($scoredDecls, 'decl'), 0, 4);
 
         $groqTools = [];
         foreach ($topDecls as $decl) {
             $name = $decl['name'] ?? '';
-            $desc = mb_substr(trim((string)($decl['description'] ?? '')), 0, 190);
+            $desc = mb_substr(trim((string)($decl['description'] ?? '')), 0, 110);
             $params = isset($decl['parameters']) && is_array($decl['parameters'])
-                ? $this->normalizeJsonSchema($decl['parameters'], 14)
+                ? $this->normalizeJsonSchema($decl['parameters'], 10)
                 : ['type' => 'object', 'properties' => (object)[]];
 
             $groqTools[] = [
@@ -495,7 +487,7 @@ class QwenAgentController {
      * Recursively normalize uppercase Gemini Schema types (OBJECT, STRING, INTEGER, NUMBER, BOOLEAN, ARRAY)
      * into compact lowercase OpenAI JSON Schema types required by Groq Cloud.
      */
-    private function normalizeJsonSchema(array $schema, int $maxProps = 20): array {
+    private function normalizeJsonSchema(array $schema, int $maxProps = 10): array {
         $priorityProps = [
             'action', 'analysis_type', 'query', 'search_query', 'programs', 'program', 'program_code',
             'stages', 'stage_name', 'sources', 'source', 'owners', 'owner_name', 'record_type',
@@ -511,7 +503,7 @@ class QwenAgentController {
             if ($k === 'type' && is_string($v)) {
                 $out['type'] = strtolower($v);
             } elseif ($k === 'description' && is_string($v)) {
-                $out['description'] = mb_substr(trim($v), 0, 65);
+                $out['description'] = mb_substr(trim($v), 0, 45);
             } elseif ($k === 'properties' && is_array($v)) {
                 if (empty($v)) {
                     $out['properties'] = (object)[];
@@ -531,13 +523,13 @@ class QwenAgentController {
                     foreach ($orderedKeys as $propName) {
                         $propSchema = $v[$propName];
                         $props[$propName] = is_array($propSchema)
-                            ? $this->normalizeJsonSchema($propSchema, 8)
+                            ? $this->normalizeJsonSchema($propSchema, 6)
                             : $propSchema;
                     }
                     $out['properties'] = $props;
                 }
             } elseif ($k === 'items' && is_array($v)) {
-                $out['items'] = $this->normalizeJsonSchema($v, 8);
+                $out['items'] = $this->normalizeJsonSchema($v, 6);
             } elseif ($k === 'required' && is_array($v)) {
                 $out['required'] = $v;
             } else {
@@ -557,7 +549,8 @@ class QwenAgentController {
     }
 
     /**
-     * Execute multi-turn OpenAI-compatible function calling against Groq Cloud (`qwen/qwen3.8-27b`).
+     * Execute multi-turn OpenAI-compatible function calling against Groq Cloud (`qwen/qwen3.8-27b`)
+     * with Slim Turn-2 Synthesis, Smart 429 Cooldown Retry, and Multi-Bucket LPU Pool Failover.
      */
     private function callGroqQwenWithTools(
         string $apiKey,
@@ -579,6 +572,21 @@ class QwenAgentController {
         }
         $messages[] = ['role' => 'user', 'content' => $userMessage];
 
+        // Slim Synthesis System Prompt used on Turn 1+ after tools have returned real MySQL data (saves ~900 tokens!)
+        $synthesisSystemPrompt = "Bạn là **SI IDEAS (Turnio 3.8 27B)** của MYERP. Hãy tổng hợp dữ liệu thực tế từ `tool` vừa thực thi thành câu trả lời tiếng Việt chuyên nghiệp, rõ ràng.\n" .
+            "- Nếu có >= 2 bản ghi: trình bày **Bảng Markdown** đầy đủ cột quan trọng (ID `#ID`, Họ tên, SĐT, Chương trình/Phòng ban, Trạng thái, Người phụ trách), KHÔNG chèn thẻ `<<<ERP_CARD:...>>>` lẻ dưới bảng.\n" .
+            "- Nếu chỉ có 1 hồ sơ: có thể đính kèm `<<<ERP_CARD: {\"type\":\"contact|deal|expense|deposit|project|employee|task\",\"id\":123,\"code\":\"#123\",\"title\":\"Tên\",\"subtitle\":\"Chi tiết\",\"status\":\"Trạng thái\"}>>>`.\n" .
+            "- Cuối câu trả lời, đính kèm 2-3 gợi ý tiếp theo: `<<<NEXT_BEST_ACTIONS: [{\"label\":\"Tên ngắn\",\"prompt\":\"Câu lệnh đầy đủ\",\"icon\":\"chart|check|alert|user|file\"}]>>>`.";
+
+        // Multi-Bucket LPU Failover Pool (Each model on Groq has its own independent 7,000-30,000 TPM quota bucket)
+        $lpuFallbackPool = array_values(array_unique([
+            $model,
+            'openai/gpt-oss-120b',
+            'llama-3.3-70b-versatile',
+            'openai/gpt-oss-20b',
+        ]));
+        $activeModel = $model;
+
         $maxTurns = 5;
         $executedSteps = [];
         $deterministicExports = [];
@@ -594,11 +602,28 @@ class QwenAgentController {
 
         for ($turn = 0; $turn < $maxTurns; $turn++) {
             $turnsUsed++;
+
+            // On Turn 1+ (after tool execution), trim old history and swap in the compact Synthesis System Prompt
+            // so Turn 1 uses ~850 input tokens instead of ~3,530 input tokens!
+            $turnMessages = $messages;
+            if (!empty($executedSteps)) {
+                $turnMessages = [
+                    ['role' => 'system', 'content' => $synthesisSystemPrompt],
+                    ['role' => 'user', 'content' => $userMessage],
+                ];
+                foreach ($messages as $mItem) {
+                    $mRole = $mItem['role'] ?? '';
+                    if (($mRole === 'assistant' && !empty($mItem['tool_calls'])) || $mRole === 'tool') {
+                        $turnMessages[] = $mItem;
+                    }
+                }
+            }
+
             $payload = [
-                'model' => $model,
-                'messages' => $messages,
+                'model' => $activeModel,
+                'messages' => $turnMessages,
                 'temperature' => $temperature,
-                'max_tokens' => 3072,
+                'max_tokens' => 2048,
             ];
             // Only attach tools on Turn 0 (or if no tool has executed yet) so Turn 2 synthesis saves ~1,000 tokens
             if (!empty($groqTools) && empty($executedSteps)) {
@@ -607,6 +632,34 @@ class QwenAgentController {
             }
 
             [$httpCode, $rawResp, $curlErr] = $this->httpPostGroq($apiKey, $payload, 45);
+
+            // Smart Anti-Rate-Limit Recovery on HTTP 429 (ITPM/RPM limit) or HTTP 413 (Payload too large)
+            if ($httpCode === 429 || $httpCode === 413) {
+                $errJson = is_string($rawResp) ? json_decode($rawResp, true) : null;
+                $errMsg = (string)($errJson['error']['message'] ?? '');
+
+                // 1) If Groq tells us "Please try again in X.XXs" and X <= 5.2s, wait and retry on the primary model!
+                if ($httpCode === 429 && preg_match('/try again in\s+([0-9.]+)s/i', $errMsg, $waitMatch)) {
+                    $waitSec = (float)$waitMatch[1];
+                    if ($waitSec > 0 && $waitSec <= 5.2) {
+                        usleep((int)(($waitSec + 0.35) * 1000000));
+                        [$httpCode, $rawResp, $curlErr] = $this->httpPostGroq($apiKey, $payload, 45);
+                    }
+                }
+
+                // 2) If still 429 or 413, failover immediately to the next independent LPU quota bucket!
+                if ($httpCode === 429 || $httpCode === 413) {
+                    foreach ($lpuFallbackPool as $candidateModel) {
+                        if ($candidateModel === $activeModel) continue;
+                        $payload['model'] = $candidateModel;
+                        [$httpCode, $rawResp, $curlErr] = $this->httpPostGroq($apiKey, $payload, 45);
+                        if ($rawResp !== false && $httpCode >= 200 && $httpCode < 300) {
+                            $activeModel = $candidateModel;
+                            break;
+                        }
+                    }
+                }
+            }
 
             if ($rawResp === false || $httpCode >= 400) {
                 $errJson = is_string($rawResp) ? json_decode($rawResp, true) : null;
@@ -859,8 +912,8 @@ class QwenAgentController {
             // Strip heavy widget tags from LLM context (already captured in $deterministicTags for deterministic injection)
             $compactJson = json_encode($toolResult, JSON_UNESCAPED_UNICODE) ?: '{}';
             $compactJson = (string)preg_replace('/<<<(?:DYNAMIC_CHART|ACTION_PROPOSAL|ERP_CARD):\s*[\s\S]*?>>>/', '[Widget đã được hệ thống đính kèm tự động]', $compactJson);
-            if (mb_strlen($compactJson, 'UTF-8') > 5500) {
-                $compactJson = mb_substr($compactJson, 0, 5500, 'UTF-8') . '... [Đã rút gọn bớt để tối ưu tốc độ Groq LPU]';
+            if (mb_strlen($compactJson, 'UTF-8') > 3200) {
+                $compactJson = mb_substr($compactJson, 0, 3200, 'UTF-8') . '... [Đã rút gọn bớt để tối ưu tốc độ Groq LPU]';
             }
 
             $messages[] = [
@@ -1091,7 +1144,7 @@ class QwenAgentController {
     }
 
     /**
-     * Fast AI Micro-Router using Qwen 3.8 27B on Groq (Zero Gemini).
+     * Fast AI Micro-Router using a separate lightweight LPU bucket (`openai/gpt-oss-20b`) so it consumes 0 tokens from `qwen/qwen3.8-27b`.
      */
     private function routeQueryWithQwenMicroRouter(string $query, string $apiKey, string $model): array {
         if ($apiKey === '' || mb_strlen(trim($query)) < 4) {
@@ -1100,7 +1153,7 @@ class QwenAgentController {
 
         try {
             $payload = [
-                'model' => $model,
+                'model' => 'openai/gpt-oss-20b',
                 'messages' => [
                     [
                         'role' => 'system',
