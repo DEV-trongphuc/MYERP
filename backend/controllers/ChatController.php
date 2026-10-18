@@ -6494,7 +6494,7 @@ class ChatController {
     }
 
     /**
-     * Get ranked OpenRouter `:free` model pool batches (only verified OpenRouter `:free` models that support tools).
+     * Get ranked OpenRouter `:free` model pool batches (only verified live OpenRouter `:free` models that support tools).
      */
     private function getOpenRouterModelBatches(string $preferredModel): array {
         $ignoreOverride = [
@@ -6502,13 +6502,15 @@ class ChatController {
             'nvidia/nemotron-3.5-lightning:free',
             'nvidia/nemotron-3-super-120b-a12b:free',
             'dots-studio/dots-3-note-preview:free',
-        ];
-        $fastPrimaryPool = [
-            'google/gemma-4-31b-it:free',
             'qwen/qwen3-coder:free',
             'openai/gpt-oss-120b:free',
             'qwen/qwen3-next-80b-a3b-instruct:free',
-            'nvidia/nemotron-3-super-120b-a12b:free',
+        ];
+        $fastPrimaryPool = [
+            'google/gemma-4-31b-it:free',
+            'google/gemma-4-26b-a4b-it:free',
+            'poolside/laguna-s-2.1:free',
+            'cohere/north-mini-code:free',
             'openrouter/free',
         ];
         if (
@@ -6522,6 +6524,23 @@ class ChatController {
         return array_chunk($fastPrimaryPool, 2);
     }
 
+    private function isOpenRouterKeyInCooldown(string $openRouterKey): bool {
+        $flagFile = rtrim(sys_get_temp_dir(), '/\\') . '/or_cooldown_' . substr(md5($openRouterKey), 0, 12) . '.flag';
+        if (is_file($flagFile)) {
+            $until = (int)@file_get_contents($flagFile);
+            if ($until > time()) {
+                return true;
+            }
+            @unlink($flagFile);
+        }
+        return false;
+    }
+
+    private function markOpenRouterKeyCooldown(string $openRouterKey, int $seconds = 180): void {
+        $flagFile = rtrim(sys_get_temp_dir(), '/\\') . '/or_cooldown_' . substr(md5($openRouterKey), 0, 12) . '.flag';
+        @file_put_contents($flagFile, (string)(time() + $seconds));
+    }
+
     /**
      * Stream OpenRouter Synthesis response in real-time via SSE (`$onChunk`) with full token output (`max_tokens: 15000`)
      */
@@ -6531,7 +6550,11 @@ class ChatController {
         array $messages,
         callable $onChunk
     ): ?string {
+        if ($this->isOpenRouterKeyInCooldown($openRouterKey)) {
+            return null;
+        }
         $batches = $this->getOpenRouterModelBatches($preferredModel);
+        $consecutive429 = 0;
 
         foreach ($batches as $batchIdx => $batchModels) {
             $primaryInBatch = $batchModels[0];
@@ -6561,8 +6584,8 @@ class ChatController {
                 'HTTP-Referer: https://myerp.ideas.edu.vn',
                 'X-Title: MYERP SI IDEAS Multi-Agent'
             ]);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 8);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 14);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
 
             curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$accumulated, &$sseBuffer, &$httpErrorBody, $onChunk) {
@@ -6608,6 +6631,14 @@ class ChatController {
             }
 
             error_log("OpenRouter Stream Batch #{$batchIdx} (" . implode(',', $batchModels) . ") HTTP {$httpCode} CurlErr={$curlErr} Body=" . substr($httpErrorBody, 0, 250));
+
+            if ($httpCode === 429) {
+                $consecutive429++;
+                if (stripos($httpErrorBody, 'free-models-per-day') !== false || $consecutive429 >= 2) {
+                    $this->markOpenRouterKeyCooldown($openRouterKey, stripos($httpErrorBody, 'free-models-per-day') !== false ? 600 : 90);
+                    break;
+                }
+            }
         }
 
         return null;
@@ -6623,7 +6654,11 @@ class ChatController {
         array $openAiTools = [],
         ?string $toolChoice = 'auto'
     ): ?array {
+        if ($this->isOpenRouterKeyInCooldown($openRouterKey)) {
+            return null;
+        }
         $batches = $this->getOpenRouterModelBatches($preferredModel);
+        $consecutive429 = 0;
 
         foreach ($batches as $batchIdx => $batchModels) {
             $primaryInBatch = $batchModels[0];
@@ -6654,8 +6689,8 @@ class ChatController {
                 'HTTP-Referer: https://myerp.ideas.edu.vn',
                 'X-Title: MYERP SI IDEAS Multi-Agent'
             ]);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 45);
-            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 14);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
 
             $resp = curl_exec($ch);
@@ -6670,7 +6705,16 @@ class ChatController {
                 }
             }
 
-            error_log("OpenRouter Batch #{$batchIdx} (" . implode(',', $batchModels) . ") HTTP {$httpCode} CurlErr={$curlErr} Resp=" . substr((string)$resp, 0, 350));
+            $respStr = (string)$resp;
+            error_log("OpenRouter Batch #{$batchIdx} (" . implode(',', $batchModels) . ") HTTP {$httpCode} CurlErr={$curlErr} Resp=" . substr($respStr, 0, 350));
+
+            if ($httpCode === 429) {
+                $consecutive429++;
+                if (stripos($respStr, 'free-models-per-day') !== false || $consecutive429 >= 2) {
+                    $this->markOpenRouterKeyCooldown($openRouterKey, stripos($respStr, 'free-models-per-day') !== false ? 600 : 90);
+                    break;
+                }
+            }
         }
 
         return null;

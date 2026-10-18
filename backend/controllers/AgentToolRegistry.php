@@ -2580,7 +2580,7 @@ class AgentToolRegistry {
         $unaccentedPattern = '%' . implode('%', array_map([self::class, 'removeVietnameseAccents'], $tokens)) . '%';
         $params[] = $tokenPattern;
         $params[] = $unaccentedPattern;
-        return "(CONVERT({$column} USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE ? OR CONVERT({$column} USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE ?)";
+        return "(CONVERT({$column} USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE ? OR REPLACE(REPLACE(CONVERT({$column} USING utf8mb4), 'đ', 'd'), 'Đ', 'D') COLLATE utf8mb4_unicode_ci LIKE ?)";
     }
 
     /**
@@ -10139,7 +10139,7 @@ class AgentToolRegistry {
                 // ==========================================
                 case 'query_crm_leads_multitier': {
                     $programsParam = trim((string)($args['programs'] ?? ($args['program'] ?? '')));
-                    $stagesParam = trim((string)($args['stages'] ?? ''));
+                    $stagesParam = trim((string)($args['stages'] ?? ($args['stage_name'] ?? ($args['stage'] ?? ($args['pipeline'] ?? ($args['stage_id'] ?? ''))))));
                     $stageOp = strtolower(trim((string)($args['stage_op'] ?? 'in')));
                     $sourcesParam = trim((string)($args['sources'] ?? ($args['source'] ?? '')));
                     $branchesParam = trim((string)($args['branches_or_cities'] ?? ($args['city'] ?? '')));
@@ -10183,6 +10183,10 @@ class AgentToolRegistry {
                     }
 
                     // 0a. Record Type Filter (lead vs customer vs all)
+                    // Note: Synced 100% with ContactController.php:365 — when filtering explicitly by pipeline stage (e.g. stage 13/14 where status='customer'), do NOT exclude c.status='customer'!
+                    if (!empty($stagesParam) && $stagesParam !== 'all' && in_array($recordType, ['lead', 'leads_only', 'tiem_nang'], true)) {
+                        $recordType = 'all';
+                    }
                     if ($recordType === 'lead' || $recordType === 'leads_only' || $recordType === 'tiem_nang') {
                         $where[] = "(c.status != 'customer' OR c.status IS NULL)";
                     } elseif ($recordType === 'customer' || $recordType === 'student' || $recordType === 'students_only') {
@@ -10226,18 +10230,17 @@ class AgentToolRegistry {
                         $stageNames = [];
 
                         foreach ($stageParts as $sp) {
-                            if (strpos($sp, '-') !== false) {
-                                $range = explode('-', $sp, 2);
-                                $minR = (int)trim($range[0]);
-                                $maxR = (int)trim($range[1]);
+                            if (preg_match('/^(?:pipeline|pipieline|giai\s*đoạn|giai\s*doan|stage|bước|buoc)?\s*0*(\d{1,2})\s*-\s*0*(\d{1,2})$/iu', $sp, $mRange)) {
+                                $minR = (int)$mRange[1];
+                                $maxR = (int)$mRange[2];
                                 if ($minR > 0 && $maxR >= $minR) {
                                     for ($r = $minR; $r <= $maxR; $r++) {
                                         if ($r <= 14) $orderIndexes[] = $r - 1;
                                         $stageIds[] = $r;
                                     }
                                 }
-                            } elseif (is_numeric($sp)) {
-                                $n = (int)$sp;
+                            } elseif (is_numeric($sp) || preg_match('/^(?:pipeline|pipieline|giai\s*đoạn|giai\s*doan|stage|bước|buoc)\s*0*(\d{1,2})\b/iu', $sp, $mStageNum) || preg_match('/^0*(\d{1,2})\s*[-–]/u', $sp, $mStageNum)) {
+                                $n = is_numeric($sp) ? (int)$sp : (int)$mStageNum[1];
                                 if ($n >= 1 && $n <= 14) {
                                     $orderIndexes[] = $n - 1;
                                 }

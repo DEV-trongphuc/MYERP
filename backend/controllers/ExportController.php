@@ -788,9 +788,7 @@ class ExportController {
 
             switch ($segment) {
                 case 'tiem_nang':
-                    if ($exportMode === 'full' || !empty($stage) || !empty($stageSlug) || !empty($_GET['stage_id']) || !empty($stagesParam)) {
-                        $where[] = "(t.status IS NULL OR t.status != 'customer')";
-                    } else {
+                    if (empty($stage) && empty($stageSlug) && empty($_GET['stage_id']) && empty($stagesParam) && empty($_GET['stage_ids']) && $exportMode !== 'full') {
                         $where[] = "((t.stage_id IS NULL OR t.stage_id != 44) AND (t.pipeline_status IS NULL OR t.pipeline_status NOT IN ('enrolled', 'hoc_vien')) AND (t.status IS NULL OR t.status != 'customer'))";
                     }
                     break;
