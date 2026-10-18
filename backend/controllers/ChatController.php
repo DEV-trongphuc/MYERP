@@ -3987,8 +3987,8 @@ class ChatController {
                 'category' => 'tasks',
                 'avatar' => '/stickers/ideas/ideas_16.webp',
                 'badge' => 'Kế hoạch',
-                'badgeColor' => '#2563eb',
-                'badgeBg' => '#dbeafe',
+                'badgeColor' => '#BD1D2D',
+                'badgeBg' => '#fef2f2',
                 'description' => 'Phân rã việc con (WBS), checklist, phân bổ phòng ban, theo dõi deadline.',
                 'statusText' => 'Đang lập kế hoạch & phân rã việc con...'
             ],
@@ -3999,8 +3999,8 @@ class ChatController {
                 'category' => 'finance',
                 'avatar' => '/stickers/ideas/ideas_25.webp',
                 'badge' => 'Tài chính',
-                'badgeColor' => '#059669',
-                'badgeBg' => '#d1fae5',
+                'badgeColor' => '#BD1D2D',
+                'badgeBg' => '#fef2f2',
                 'description' => 'Phiếu chi PO, phiếu thu SO, tiền cọc học phí, tạm ứng và dòng tiền.',
                 'statusText' => 'Đang đối soát số liệu PO / SO & thu chi...'
             ],
@@ -4011,8 +4011,8 @@ class ChatController {
                 'category' => 'hrm',
                 'avatar' => '/stickers/ideas/ideas_15.webp',
                 'badge' => 'Nhân sự',
-                'badgeColor' => '#7c3aed',
-                'badgeBg' => '#ede9fe',
+                'badgeColor' => '#BD1D2D',
+                'badgeBg' => '#fef2f2',
                 'description' => 'Sơ đồ phòng ban, ai quản lý, nhân sự nghỉ việc, chấm công, nay ai nghỉ & phép.',
                 'statusText' => 'Đang tra cứu sơ đồ phòng ban, nhân sự & lịch nghỉ...'
             ],
@@ -4023,8 +4023,8 @@ class ChatController {
                 'category' => 'sales',
                 'avatar' => '/stickers/ideas/ideas_10.webp',
                 'badge' => 'Tư vấn CRM',
-                'badgeColor' => '#d97706',
-                'badgeBg' => '#fef3c7',
+                'badgeColor' => '#BD1D2D',
+                'badgeBg' => '#fef2f2',
                 'description' => 'Tiềm năng Lead, kịch bản tư vấn, 12 tình huống chốt sale & chăm sóc khách hàng.',
                 'statusText' => 'Đang phân tích kịch bản tư vấn CRM...'
             ],
@@ -4035,8 +4035,8 @@ class ChatController {
                 'category' => 'academic',
                 'avatar' => '/stickers/ideas/ideas_12.webp',
                 'badge' => 'Học vụ',
-                'badgeColor' => '#0891b2',
-                'badgeBg' => '#cffafe',
+                'badgeColor' => '#BD1D2D',
+                'badgeBg' => '#fef2f2',
                 'description' => 'Chương trình quốc tế: EMBA, MBA, MSc AI, DBA ISTEC Paris, tín chỉ và luận văn.',
                 'statusText' => 'Đang tra cứu khung chương trình & điều kiện...'
             ],
@@ -4048,7 +4048,7 @@ class ChatController {
                 'avatar' => '/stickers/ideas/ideas_3.webp',
                 'badge' => 'Chỉ huy',
                 'badgeColor' => '#BD1D2D',
-                'badgeBg' => '#fee2e2',
+                'badgeBg' => '#fef2f2',
                 'description' => 'Điều phối chung, tri thức kiểm định quốc tế Swiss UMEF & ISTEC Paris.',
                 'statusText' => 'Đang tổng hợp câu trả lời...'
             ],
@@ -4059,8 +4059,8 @@ class ChatController {
                 'category' => 'records_legal',
                 'avatar' => '/stickers/ideas/ideas_18.webp',
                 'badge' => 'Thẩm định',
-                'badgeColor' => '#7c2d12',
-                'badgeBg' => '#ffedd5',
+                'badgeColor' => '#BD1D2D',
+                'badgeBg' => '#fef2f2',
                 'description' => 'Thẩm định CCCD, bằng Đại học, bảng điểm, dịch thuật công chứng, hợp đồng đào tạo & cam kết.',
                 'statusText' => 'Đang thẩm định danh mục hồ sơ & hợp đồng...'
             ],
@@ -4071,8 +4071,8 @@ class ChatController {
                 'category' => 'assets_inventory',
                 'avatar' => '/stickers/ideas/ideas_32.webp',
                 'badge' => 'Vật tư & TS',
-                'badgeColor' => '#ea580c',
-                'badgeBg' => '#ffedd5',
+                'badgeColor' => '#BD1D2D',
+                'badgeBg' => '#fef2f2',
                 'description' => 'Quản lý kho ấn phẩm, balo, áo polo, quà tặng tuyển sinh, giáo trình và tài sản công ty.',
                 'statusText' => 'Đang tra cứu tồn kho ấn phẩm & cấp phát tài sản...'
             ],
@@ -4083,8 +4083,8 @@ class ChatController {
                 'category' => 'marketing_campaigns',
                 'avatar' => '/stickers/ideas/ideas_20.webp',
                 'badge' => 'Marketing',
-                'badgeColor' => '#db2777',
-                'badgeBg' => '#fce7f3',
+                'badgeColor' => '#BD1D2D',
+                'badgeBg' => '#fef2f2',
                 'description' => 'Chiến dịch tuyển sinh, nguồn Lead, CPL, CAC, broadcast Zalo ZNS / SMS / Email và sự kiện.',
                 'statusText' => 'Đang phân tích hiệu quả chiến dịch & nguồn Lead...'
             ],
@@ -4095,8 +4095,8 @@ class ChatController {
                 'category' => 'executive_bi',
                 'avatar' => '/stickers/ideas/ideas_31.webp',
                 'badge' => 'Điều hành BI',
-                'badgeColor' => '#b45309',
-                'badgeBg' => '#fef3c7',
+                'badgeColor' => '#BD1D2D',
+                'badgeBg' => '#fef2f2',
                 'description' => 'Báo cáo P&L thời gian thực, dòng tiền ròng, phát hiện bất thường thu chi dành cho Ban Giám đốc.',
                 'statusText' => 'Đang tổng hợp báo cáo điều hành & phân tích P&L...'
             ],
@@ -4107,8 +4107,8 @@ class ChatController {
                 'category' => 'system_it',
                 'avatar' => '/stickers/ideas/ideas_11.webp',
                 'badge' => 'Kỹ thuật IT',
-                'badgeColor' => '#0284c7',
-                'badgeBg' => '#e0f2fe',
+                'badgeColor' => '#BD1D2D',
+                'badgeBg' => '#fef2f2',
                 'description' => 'Giám sát đồng bộ Google Sheets, webhook, cronjob, tra cứu audit log và hỗ trợ lỗi hệ thống.',
                 'statusText' => 'Đang kiểm tra trạng thái hệ thống & nhật ký vận hành...'
             ]
@@ -5183,21 +5183,22 @@ class ChatController {
 
     /**
      * AI Semantic Micro-Router for Multi-Agent Swarm (Zero Regex / Pure Agentic Prompt Analyzer)
-     * Ultra-fast AI classifier that analyzes user prompt intent and active browser context into domain and tool requirements.
-     * Uses the free AI model endpoint first and seamlessly falls back to Gemini Flash Lite.
+     * Ultra-fast AI classifier that analyzes user prompt intent and active browser context into domain and exact tool requirements.
+     * Uses Groq Cloud LPU (`openai/gpt-oss-20b` -> `qwen/qwen3.8-27b`) first and seamlessly falls back to Gemini Flash Lite.
      */
     private function routeQueryWithAiMicroRouter(
         string $userQuery,
         string $apiKey,
         string $model,
         ?array $currentContext = null,
-        string $openRouterKey = '',
-        string $openRouterModel = 'google/gemma-4-31b-it:free'
+        string $groqKey = '',
+        string $groqModel = 'qwen/qwen3.8-27b'
     ): array {
         $safeFallback = [
             'intent_type' => 'database_action',
             'primary_domain' => null,
             'matched_domains' => [],
+            'selected_tools' => [],
             'requires_tools' => true,
             'is_multi_domain' => true,
             'is_mutation_or_proposal' => false,
@@ -5205,7 +5206,7 @@ class ChatController {
         ];
 
         $trimmed = trim($userQuery);
-        if ($trimmed === '' || (empty($openRouterKey) && empty($apiKey))) {
+        if ($trimmed === '' || (empty($groqKey) && empty($apiKey))) {
             return $safeFallback;
         }
 
@@ -5230,89 +5231,94 @@ class ChatController {
         }
 
         $routerSystemPrompt = "Bạn là AI Semantic Router tối cao của hệ thống MYERP (Viện IDEAS).\n"
-            . "Nhiệm vụ: Phân tích câu hỏi/yêu cầu của người dùng để phân loại Ý định (Intent) và Phân hệ nghiệp vụ (Domain).\n"
-            . "11 Phân hệ nghiệp vụ chuyên trách:\n"
-            . "- 'sales': Quản lý Lead, CRM, tư vấn tuyển sinh, khách hàng, học viên theo giai đoạn (pipeline/stage), phân bổ lead, vòng xoay chia số, bù data cho Sale, trùng lead, lịch hẹn gọi lại, chốt deal, xuất file / export danh sách lead theo pipeline, giới tính, ngày tháng, chương trình đào tạo, lọc dữ liệu CRM đa tầng nhiều cấp (query_crm_leads_multitier).\n"
-            . "- 'finance': Thu chi, học phí, công nợ học viên, phiếu thu, phiếu chi, đặt cọc, tạm ứng, dòng tiền, SO/PO, phân tích chi phí & ngân sách đa tầng theo phòng ban và hạng mục (query_finance_multitier_analytics).\n"
-            . "- 'hrm': Nhân sự, chấm công, đi trễ, về sớm, tăng ca OT, WFH làm việc từ xa, nghỉ phép, giải trình, bảng lương, phiếu lương, danh bạ nhân sự, xuất bảng công, duyệt đơn từ.\n"
-            . "- 'tasks': Công việc cá nhân, tiến độ, deadline, checklist, giao việc, dự án.\n"
-            . "- 'academic': Chương trình đào tạo (EMBA, MBA, MSc AI, DBA), môn học, thời khóa biểu, lịch khai giảng, giảng viên.\n"
-            . "- 'records_legal': Hồ sơ nhập học (CCCD, bằng cấp, bảng điểm), tính hợp lệ, pháp lý, hợp đồng đào tạo.\n"
-            . "- 'assets_inventory': Tồn kho, ấn phẩm, quà tặng, balo, áo polo, tài sản, laptop thiết bị bàn giao.\n"
-            . "- 'b2b_partner': Khách hàng doanh nghiệp, đối tác B2B, thỏa thuận hợp tác, đào tạo in-house.\n"
-            . "- 'marketing_campaigns': Chiến dịch tiếp thị, quảng cáo Ads, CPL, CAC, nguồn lead tuyển sinh.\n"
-            . "- 'executive_bi': Báo cáo tổng hợp P&L, dòng tiền ròng, KPI toàn viện, sức khỏe tài chính Ban Giám Đốc, phân tích đa chiều chuyên sâu.\n"
-            . "- 'system_it': Lỗi phần mềm, ticket CNTT, giám sát SLA vi phạm, hạ tầng kỹ thuật.\n\n"
-            . "Phân loại intent_type:\n"
-            . "- 'conversational': Lời chào, cảm ơn, khen ngợi, tạm biệt, trò chuyện xã giao thuần túy.\n"
-            . "- 'knowledge_qa': Hỏi thông tin chung, quy chế, chính sách, học phí niêm yết, kiến thức đào tạo (không yêu cầu tra cứu dữ liệu động).\n"
-            . "- 'database_action': Tra cứu, thống kê hoặc thao tác dữ liệu cụ thể (khách hàng, học viên, nhân sự, phiếu thu/chi, đặt cọc, task), lọc dữ liệu đa tầng đa cấp, tạo đơn từ, đề xuất hành động.\n"
-            . "- 'cross_domain': Yêu cầu phức tạp đan xen nhiều phân hệ khác nhau.\n\n"
+            . "Nhiệm vụ: Phân tích ngữ nghĩa câu hỏi của người dùng để phân loại Ý định (Intent), Phân hệ nghiệp vụ (Domain) và chọn ra danh sách công cụ (selected_tools) phù hợp nhất.\n"
+            . "11 Phân hệ & Công cụ chủ lực:\n"
+            . "- 'sales': Quản lý Lead, CRM, học viên theo giai đoạn (pipeline/stage), phân bổ lead, vòng xoay chia số, trùng lead, lịch hẹn, xuất file lead, nhân khẩu học.\n"
+            . "  Tools: query_crm_leads_multitier, search_contacts, get_contact_360_profile, export_crm_leads_advanced, analyze_leads_demographics_and_job_titles, get_sales_leaderboard, smart_create_or_assign_leads, reassign_lead_owner, manage_lead_round_distribution, get_consultant_shift_and_fairshare_audit, check_lead_duplicate_and_fairshare_status, get_sales_performance_and_stale_leads, schedule_contact_activity, update_contact_pipeline, add_contact_consultation_note, update_contact_profile, quick_log_crm_activity, get_my_crm_inbox, draft_action_proposal.\n"
+            . "- 'finance': Thu chi, học phí, công nợ, phiếu thu SO, phiếu chi PO, đặt cọc, tạm ứng, dòng tiền, ngân sách phòng ban.\n"
+            . "  Tools: query_finance_multitier_analytics, query_deposits_and_revenue_multitier, filter_expenses_advanced, get_financial_overview, get_executive_financial_pulse, lookup_recent_cash_receipts_and_deposits, get_upcoming_tuition_receivables, get_contact_financial_summary, get_my_payment_proposals, smart_manage_po_so_and_approvals, approve_or_reject_erp_ticket, draft_action_proposal.\n"
+            . "- 'hrm': Nhân sự, chấm công hôm nay/theo tháng, đi trễ, về sớm, OT, WFH, nghỉ phép, ai nghỉ hôm nay, giải trình công, bảng lương, phiếu lương, danh bạ nhân sự, duyệt đơn.\n"
+            . "  Tools: query_hrm_workforce_and_payroll_multitier, query_company_attendance_and_work_hours, get_company_leave_and_absence, get_staff_directory_advanced, get_company_staff_directory, get_my_attendance_summary, get_my_payslip, manage_my_hr_profile_and_requests, smart_manage_hrm_and_payroll, get_pending_approvals, trace_approval_blocker, approve_or_reject_erp_ticket, draft_action_proposal.\n"
+            . "- 'tasks': Công việc cá nhân/team, tiến độ, deadline, việc con (subtask/checklist), giao việc, dự án.\n"
+            . "  Tools: query_tasks_and_projects_multitier, get_my_tasks, get_task_detail, smart_manage_tasks_and_subtasks, query_and_manage_projects, update_task_progress_and_status, complete_task_checklist_item, draft_action_proposal.\n"
+            . "- 'academic': Chương trình đào tạo (EMBA, MBA, MSc AI, DBA), môn học, lịch khai giảng, danh sách học viên học vụ.\n"
+            . "  Tools: get_academic_students_filter, get_program_details, get_academic_schedule_and_intakes, search_ideas_knowledge, query_crm_leads_multitier.\n"
+            . "- 'records_legal': Hồ sơ nhập học (CCCD, bằng cấp, bảng điểm), tính hợp lệ, hợp đồng đào tạo.\n"
+            . "  Tools: check_student_admission_records, get_academic_students_filter, get_contact_360_profile, attach_files_to_contact.\n"
+            . "- 'assets_inventory': Tồn kho, ấn phẩm, quà tặng, balo, áo polo, tài sản, laptop thiết bị.\n"
+            . "  Tools: query_inventory_and_assets_multitier, get_inventory_health_check, get_inventory_and_asset_status.\n"
+            . "- 'b2b_partner': Khách hàng doanh nghiệp, đối tác B2B, cơ hội hợp tác (deals).\n"
+            . "  Tools: query_deals_and_b2b_multitier, get_b2b_partner_and_contract_summary.\n"
+            . "- 'marketing_campaigns': Chiến dịch Marketing, Automation Flow, Voucher, Khảo sát, Website Tracking, Zalo/Meta đa kênh, dấu chân số 360.\n"
+            . "  Tools: query_omnichannel_journey_and_automation_analytics, get_lead_digital_footprint_360, smart_manage_automation_flows_and_campaigns, get_campaign_marketing_stats, query_crm_leads_multitier.\n"
+            . "- 'executive_bi': Báo cáo tổng hợp P&L, dòng tiền ròng, KPI toàn viện, tóm tắt đầu ngày cho Ban Giám Đốc.\n"
+            . "  Tools: query_cross_domain_executive_synthesis, get_executive_morning_brief, get_executive_financial_pulse, get_sales_leaderboard, query_crm_leads_multitier, query_finance_multitier_analytics, query_deposits_and_revenue_multitier.\n"
+            . "- 'system_it': Lỗi phần mềm, ticket CNTT, giám sát SLA vi phạm, sức khỏe hệ thống.\n"
+            . "  Tools: query_tickets_and_sla_multitier, get_ticket_status_and_sla_breaches, get_system_health_status.\n\n"
             . "QUY TẮC:\n"
-            . "- Khi người dùng yêu cầu lọc, tìm kiếm, thống kê hoặc bóc tách dữ liệu theo bất kỳ điều kiện nào (chương trình, nguồn, giai đoạn pipeline, chuyên viên phụ trách, chi nhánh, tiền cọc, ngày tháng, phòng ban, hạng mục chi): BẮT BUỘC chọn intent_type='database_action' hoặc 'cross_domain' và requires_tools=true.\n"
-            . "- Nếu có [NGỮ CẢNH TRÌNH DUYỆT] đi kèm và câu hỏi ngắn/dùng đại từ ('tóm tắt', 'kiểm tra bạn này', 'xem hồ sơ', 'đã cọc chưa', 'phiếu này', 'task này'): BẮT BUỘC gán primary_domain tương ứng với đối tượng/màn hình đang mở (contact/crm -> 'sales', expense/deposit -> 'finance', approval/hrm -> 'hrm', task -> 'tasks') và chọn intent_type='database_action', requires_tools=true.\n"
-            . "- requires_tools: false chỉ khi là 'conversational' hoặc 'knowledge_qa' thuần túy; true nếu là 'database_action' hoặc 'cross_domain'.\n"
-            . "- is_multi_domain: true nếu câu hỏi liên quan từ 2 phân hệ trở lên.\n"
-            . "- is_mutation_or_proposal: true nếu người dùng yêu cầu tạo mới, thêm, sửa, cập nhật, giao việc, chuyển/chia lead, duyệt/từ chối đơn, ghi chú, đặt lịch hẹn, hoặc lập thẻ đề xuất hành động; false nếu chỉ tra cứu/báo cáo.\n"
-            . "Trả về duy nhất 1 JSON object chuẩn, không kèm markdown backticks:\n"
-            . "{\"intent_type\": \"conversational\"|\"knowledge_qa\"|\"database_action\"|\"cross_domain\", \"primary_domain\": \"sales\"|\"finance\"|\"hrm\"|\"tasks\"|\"academic\"|\"records_legal\"|\"assets_inventory\"|\"b2b_partner\"|\"marketing_campaigns\"|\"executive_bi\"|\"system_it\"|\"none\", \"matched_domains\": [\"sales\"], \"requires_tools\": boolean, \"is_multi_domain\": boolean, \"is_mutation_or_proposal\": boolean, \"reasoning\": \"lý do ngắn gọn\"}";
+            . "- Khi người dùng yêu cầu lọc, tìm kiếm, thống kê hoặc bóc tách dữ liệu theo bất kỳ điều kiện nào: BẮT BUỘC chọn intent_type='database_action' hoặc 'cross_domain', requires_tools=true, và chọn từ 2 đến 5 tên công cụ phù hợp nhất vào mảng `selected_tools`.\n"
+            . "- Nếu có [NGỮ CẢNH TRÌNH DUYỆT] đi kèm và câu hỏi ngắn/dùng đại từ ('tóm tắt', 'kiểm tra bạn này', 'xem hồ sơ', 'đã cọc chưa', 'phiếu này', 'task này'): BẮT BUỘC gán primary_domain và selected_tools tương ứng với đối tượng đang mở (contact -> get_contact_360_profile, query_crm_leads_multitier; expense/deposit -> query_finance_multitier_analytics, query_deposits_and_revenue_multitier; task -> get_task_detail, query_tasks_and_projects_multitier).\n"
+            . "- is_mutation_or_proposal: true nếu người dùng yêu cầu tạo mới, thêm, sửa, cập nhật, giao việc, chuyển/chia lead, duyệt/từ chối đơn, ghi chú, đặt lịch hẹn, hoặc lập thẻ đề xuất hành động (luôn thêm 'draft_action_proposal' vào selected_tools).\n"
+            . "Trả về duy nhất 1 JSON object chuẩn, không kèm markdown:\n"
+            . "{\"intent_type\": \"conversational\"|\"knowledge_qa\"|\"database_action\"|\"cross_domain\", \"primary_domain\": \"sales\"|\"finance\"|\"hrm\"|\"tasks\"|\"academic\"|\"records_legal\"|\"assets_inventory\"|\"b2b_partner\"|\"marketing_campaigns\"|\"executive_bi\"|\"system_it\"|\"none\", \"matched_domains\": [\"sales\"], \"selected_tools\": [\"query_crm_leads_multitier\"], \"requires_tools\": boolean, \"is_multi_domain\": boolean, \"is_mutation_or_proposal\": boolean, \"reasoning\": \"lý do ngắn gọn\"}";
 
         $userPrompt = "Yêu cầu cần phân loại: \"" . mb_substr($trimmed, 0, 500) . "\"" . $contextHint;
 
-        // 1. Try Free AI Model Pool (OpenRouter) if available and not in cooldown
-        if ($openRouterKey !== '' && !$this->isOpenRouterKeyInCooldown($openRouterKey)) {
-            $batches = $this->getOpenRouterModelBatches($openRouterModel);
-            $primaryBatch = $batches[0] ?? ['google/gemma-4-31b-it:free'];
-            $orPayload = [
-                'model' => $primaryBatch[0],
-                'models' => $primaryBatch,
-                'messages' => [
-                    ['role' => 'system', 'content' => $routerSystemPrompt],
-                    ['role' => 'user', 'content' => $userPrompt]
-                ],
-                'temperature' => 0.1,
-                'max_tokens' => 250,
-                'reasoning' => ['enabled' => false]
-            ];
-
-            $chOr = curl_init('https://openrouter.ai/api/v1/chat/completions');
-            curl_setopt($chOr, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($chOr, CURLOPT_POST, true);
-            curl_setopt($chOr, CURLOPT_POSTFIELDS, json_encode($orPayload, JSON_UNESCAPED_UNICODE));
-            curl_setopt($chOr, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $openRouterKey,
-                'Content-Type: application/json',
-                'HTTP-Referer: https://myerp.ideas.edu.vn',
-                'X-Title: MYERP SI IDEAS Micro-Router'
-            ]);
-            curl_setopt($chOr, CURLOPT_TIMEOUT, 6);
-            curl_setopt($chOr, CURLOPT_CONNECTTIMEOUT, 3);
-            curl_setopt($chOr, CURLOPT_SSL_VERIFYPEER, true);
-
-            $respOr = curl_exec($chOr);
-            $httpOr = (int)curl_getinfo($chOr, CURLINFO_HTTP_CODE);
-            curl_close($chOr);
-
-            if ($httpOr === 200 && $respOr) {
-                $decodedOr = json_decode((string)$respOr, true);
-                $rawOrText = $this->stripReasoningTags((string)($decodedOr['choices'][0]['message']['content'] ?? ''));
-                if ($rawOrText !== '') {
-                    $cleanOrJson = trim((string)preg_replace('/^```(?:json)?|```$/m', '', $rawOrText));
-                    if (preg_match('/\{[\s\S]*\}/', $cleanOrJson, $jsonMatch)) {
-                        $cleanOrJson = $jsonMatch[0];
-                    }
-                    $parsedOr = json_decode($cleanOrJson, true);
-                    if (is_array($parsedOr) && isset($parsedOr['intent_type'])) {
-                        if (empty($parsedOr['matched_domains']) && !empty($parsedOr['primary_domain']) && $parsedOr['primary_domain'] !== 'none') {
-                            $parsedOr['matched_domains'] = [$parsedOr['primary_domain']];
-                        }
-                        return $parsedOr;
-                    }
+        // 1. Primary AI Micro-Router on Groq Cloud LPU (`openai/gpt-oss-20b` independent quota bucket -> `$groqModel` `qwen/qwen3.8-27b`)
+        if ($groqKey !== '') {
+            $routerModels = array_values(array_unique(['openai/gpt-oss-20b', $groqModel, 'openai/gpt-oss-120b']));
+            foreach ($routerModels as $rm) {
+                if ($this->isGroqModelInCooldown($groqKey, $rm)) {
+                    continue;
                 }
-            } elseif ($httpOr === 429) {
-                $respStr = (string)$respOr;
-                if (stripos($respStr, 'free-models-per-day') !== false) {
-                    $this->markOpenRouterKeyCooldown($openRouterKey, 600);
+                $groqPayload = [
+                    'model' => $rm,
+                    'messages' => [
+                        ['role' => 'system', 'content' => $routerSystemPrompt],
+                        ['role' => 'user', 'content' => $userPrompt]
+                    ],
+                    'temperature' => 0.1,
+                    'max_tokens' => 300,
+                    'response_format' => ['type' => 'json_object']
+                ];
+
+                $chGr = curl_init('https://api.groq.com/openai/v1/chat/completions');
+                curl_setopt($chGr, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($chGr, CURLOPT_POST, true);
+                curl_setopt($chGr, CURLOPT_POSTFIELDS, json_encode($groqPayload, JSON_UNESCAPED_UNICODE));
+                curl_setopt($chGr, CURLOPT_HTTPHEADER, [
+                    'Authorization: Bearer ' . $groqKey,
+                    'Content-Type: application/json'
+                ]);
+                curl_setopt($chGr, CURLOPT_TIMEOUT, 6);
+                curl_setopt($chGr, CURLOPT_CONNECTTIMEOUT, 3);
+                curl_setopt($chGr, CURLOPT_SSL_VERIFYPEER, true);
+
+                $respGr = curl_exec($chGr);
+                $httpGr = (int)curl_getinfo($chGr, CURLINFO_HTTP_CODE);
+                curl_close($chGr);
+
+                if ($httpGr === 200 && $respGr) {
+                    $decodedGr = json_decode((string)$respGr, true);
+                    $rawGrText = $this->stripReasoningTags((string)($decodedGr['choices'][0]['message']['content'] ?? ''));
+                    if ($rawGrText !== '') {
+                        $cleanGrJson = trim((string)preg_replace('/^```(?:json)?|```$/m', '', $rawGrText));
+                        if (preg_match('/\{[\s\S]*\}/', $cleanGrJson, $jsonMatch)) {
+                            $cleanGrJson = $jsonMatch[0];
+                        }
+                        $parsedGr = json_decode($cleanGrJson, true);
+                        if (is_array($parsedGr) && isset($parsedGr['intent_type'])) {
+                            if (empty($parsedGr['matched_domains']) && !empty($parsedGr['primary_domain']) && $parsedGr['primary_domain'] !== 'none') {
+                                $parsedGr['matched_domains'] = [$parsedGr['primary_domain']];
+                            }
+                            if (!isset($parsedGr['selected_tools']) || !is_array($parsedGr['selected_tools'])) {
+                                $parsedGr['selected_tools'] = [];
+                            }
+                            return $parsedGr;
+                        }
+                    }
+                } elseif ($httpGr === 429) {
+                    $this->markGroqModelCooldown($groqKey, $rm, 45);
                 }
             }
         }
@@ -5335,7 +5341,7 @@ class ChatController {
                 ],
                 'generationConfig' => [
                     'temperature' => 0.1,
-                    'maxOutputTokens' => 250,
+                    'maxOutputTokens' => 300,
                     'responseMimeType' => 'application/json'
                 ]
             ];
@@ -5364,6 +5370,9 @@ class ChatController {
                         if (empty($parsed['matched_domains']) && !empty($parsed['primary_domain']) && $parsed['primary_domain'] !== 'none') {
                             $parsed['matched_domains'] = [$parsed['primary_domain']];
                         }
+                        if (!isset($parsed['selected_tools']) || !is_array($parsed['selected_tools'])) {
+                            $parsed['selected_tools'] = [];
+                        }
                         return $parsed;
                     }
                 }
@@ -5374,41 +5383,41 @@ class ChatController {
     }
 
     /**
-     * Call AI Engine (Free OpenRouter Pool Primary + Gemini 3.5 Flash Lite Fallback)
+     * Call AI Engine (Groq Cloud `qwen/qwen3.8-27b` Primary + Gemini 3.5 Flash Lite Fallback)
      * Supports Autonomous Two-Way Tool Loop (Function Calling) with Zero-Trust RBAC
      */
     private function callGeminiFlashLite(array $conversationHistory, string $systemPrompt, ?array $attachedFile = null, ?callable $onChunk = null, ?array $authContext = null, ?callable $onStep = null, array &$executedAgentSteps = []): ?string {
         try {
             $this->db = Database::ensureConnected($this->db);
-            $stmtKey = $this->db->prepare("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('openrouter_api_key', 'openrouter_model', 'gemini_api_key', 'gemini_model')");
+            $stmtKey = $this->db->prepare("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('groq_api_key', 'groq_model', 'gemini_api_key', 'gemini_model')");
             $stmtKey->execute();
             $settings = $stmtKey->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
 
-            $envOrKey = trim((string)($_ENV['OPENROUTER_API_KEY'] ?? getenv('OPENROUTER_API_KEY') ?: ''));
-            $dbOrKey = trim((string)($settings['openrouter_api_key'] ?? ''));
-            $openRouterKey = $dbOrKey !== '' ? $dbOrKey : $envOrKey;
-            if ($dbOrKey === '' && $envOrKey !== '') {
+            $envGroqKey = trim((string)($_ENV['GROQ_API_KEY'] ?? getenv('GROQ_API_KEY') ?: ''));
+            $dbGroqKey = trim((string)($settings['groq_api_key'] ?? ''));
+            $groqKey = $dbGroqKey !== '' ? $dbGroqKey : $envGroqKey;
+            if ($dbGroqKey === '' && $envGroqKey !== '') {
                 try {
-                    $stmtSeedOr = $this->db->prepare("
+                    $stmtSeedGr = $this->db->prepare("
                         INSERT INTO system_settings (setting_key, setting_value)
-                        VALUES ('openrouter_api_key', ?)
+                        VALUES ('groq_api_key', ?)
                         ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
                     ");
-                    $stmtSeedOr->execute([$envOrKey]);
+                    $stmtSeedGr->execute([$envGroqKey]);
                 } catch (\Throwable $eSeed) {
                     // Ignore DB write error
                 }
             }
-            $openRouterModel = trim((string)($settings['openrouter_model'] ?? ($_ENV['OPENROUTER_MODEL'] ?? getenv('OPENROUTER_MODEL') ?: 'google/gemma-4-31b-it:free')));
-            if ($openRouterModel === '' || in_array($openRouterModel, ['nvidia/nemotron-3.5-super-vl:free', 'nvidia/nemotron-3.5-lightning:free', 'dots-studio/dots-3-note-preview:free'], true)) {
-                $openRouterModel = 'google/gemma-4-31b-it:free';
+            $groqModel = trim((string)($settings['groq_model'] ?? ($_ENV['GROQ_MODEL'] ?? getenv('GROQ_MODEL') ?: 'qwen/qwen3.8-27b')));
+            if ($groqModel === '' || !in_array($groqModel, ['qwen/qwen3.8-27b', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'], true)) {
+                $groqModel = 'qwen/qwen3.8-27b';
             }
 
             $apiKey = trim($settings['gemini_api_key'] ?? '') ?: ($_ENV['GEMINI_API_KEY'] ?? getenv('GEMINI_API_KEY') ?: '');
             $model = trim($settings['gemini_model'] ?? 'gemini-3.5-flash-lite');
-            if (empty($openRouterKey) && empty($apiKey)) {
-                error_log("callGeminiFlashLite: Cả openrouter_api_key và gemini_api_key đều chưa được cấu hình.");
-                $errorMsg = "Hệ thống chưa được cấu hình AI API Key (OpenRouter / Gemini). Vui lòng liên hệ Quản trị viên để thiết lập API Key trong Cài đặt hệ thống.";
+            if (empty($groqKey) && empty($apiKey)) {
+                error_log("callGeminiFlashLite: Cả groq_api_key và gemini_api_key đều chưa được cấu hình.");
+                $errorMsg = "Hệ thống chưa được cấu hình AI API Key (Groq / Gemini). Vui lòng liên hệ Quản trị viên để thiết lập API Key trong Cài đặt hệ thống.";
                 if (is_callable($onChunk)) {
                     $onChunk($errorMsg);
                 }
@@ -5481,7 +5490,7 @@ class ChatController {
                 'records_legal' => ['check_student_admission_records', 'get_academic_students_filter', 'get_contact_360_profile', 'attach_files_to_contact', 'draft_action_proposal', 'get_system_navigation'],
                 'assets_inventory' => ['query_inventory_and_assets_multitier', 'get_inventory_health_check', 'get_inventory_and_asset_status', 'draft_action_proposal', 'get_system_navigation'],
                 'b2b_partner' => ['query_deals_and_b2b_multitier', 'get_b2b_partner_and_contract_summary', 'draft_action_proposal', 'get_system_navigation'],
-                'marketing_campaigns' => ['query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'smart_create_or_assign_leads', 'smart_manage_tasks_and_subtasks', 'query_and_manage_projects', 'manage_my_hr_profile_and_requests', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'check_lead_duplicate_and_fairshare_status', 'get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
+                'marketing_campaigns' => ['query_omnichannel_journey_and_automation_analytics', 'get_lead_digital_footprint_360', 'smart_manage_automation_flows_and_campaigns', 'query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'smart_create_or_assign_leads', 'smart_manage_tasks_and_subtasks', 'query_and_manage_projects', 'manage_my_hr_profile_and_requests', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'check_lead_duplicate_and_fairshare_status', 'get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
                 'executive_bi' => ['query_cross_domain_executive_synthesis', 'query_crm_leads_multitier', 'query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'query_tasks_and_projects_multitier', 'query_deals_and_b2b_multitier', 'query_tickets_and_sla_multitier', 'query_hrm_workforce_and_payroll_multitier', 'query_inventory_and_assets_multitier', 'smart_create_or_assign_leads', 'smart_manage_tasks_and_subtasks', 'query_and_manage_projects', 'manage_my_hr_profile_and_requests', 'smart_manage_hrm_and_payroll', 'smart_manage_po_so_and_approvals', 'get_executive_morning_brief', 'get_sales_leaderboard', 'filter_expenses_advanced', 'get_staff_directory_advanced', 'get_inventory_health_check', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'query_company_attendance_and_work_hours', 'get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'lookup_recent_cash_receipts_and_deposits', 'get_my_tasks', 'get_system_health_status', 'manage_lead_round_distribution', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'reassign_lead_owner', 'draft_action_proposal', 'get_system_navigation'],
                 'system_it' => ['query_tickets_and_sla_multitier', 'get_system_health_status', 'get_ticket_status_and_sla_breaches', 'draft_action_proposal', 'get_system_navigation']
             ];
@@ -5501,64 +5510,117 @@ class ChatController {
                 }
             }
 
-            // 1. Check if user explicitly chose a sub-agent persona in UI tabs
+            // 1. Run AI Semantic Micro-Router (ZERO REGEX / 100% LLM INTENT & TOOL PARSER)
             $explicitAgentId = $authContext['metadata']['active_agent_id'] ?? null;
             $tools = null;
+            $groqScopedTools = null;
             $isPureConversational = false;
             $isMutationOrProposalIntent = false;
 
-            if (!empty($explicitAgentId) && isset($agentToolMap[$explicitAgentId])) {
-                // Scoped directly to the UI-selected sub-agent
-                $tools = AgentToolRegistry::getGeminiToolsDeclaration($agentToolMap[$explicitAgentId]);
-            } else {
-                // 2. AI SEMANTIC MICRO-ROUTER (ZERO REGEX / 100% LLM INTENT PARSER)
-                $currentContext = $authContext['metadata']['current_context'] ?? null;
-                $routeDecision = $this->routeQueryWithAiMicroRouter(
-                    $lastMsgText,
-                    $apiKey,
-                    $model,
-                    $currentContext,
-                    $openRouterKey,
-                    $openRouterModel
-                );
-                $intentType = $routeDecision['intent_type'] ?? 'database_action';
-                $primaryDomain = $routeDecision['primary_domain'] ?? null;
-                $matchedDomains = is_array($routeDecision['matched_domains'] ?? null) ? $routeDecision['matched_domains'] : [];
-                $isMultiDomain = (bool)($routeDecision['is_multi_domain'] ?? false);
-                $requiresTools = (bool)($routeDecision['requires_tools'] ?? true);
-                $isMutationOrProposalIntent = (bool)($routeDecision['is_mutation_or_proposal'] ?? false);
+            $currentContext = $authContext['metadata']['current_context'] ?? null;
+            $routeDecision = $this->routeQueryWithAiMicroRouter(
+                $lastMsgText,
+                $apiKey,
+                $model,
+                $currentContext,
+                $groqKey,
+                $groqModel
+            );
+            $intentType = $routeDecision['intent_type'] ?? 'database_action';
+            $primaryDomain = (!empty($explicitAgentId) && isset($agentToolMap[$explicitAgentId]))
+                ? $explicitAgentId
+                : ($routeDecision['primary_domain'] ?? null);
+            $matchedDomains = is_array($routeDecision['matched_domains'] ?? null) ? $routeDecision['matched_domains'] : [];
+            if (!empty($explicitAgentId) && !in_array($explicitAgentId, $matchedDomains, true)) {
+                array_unshift($matchedDomains, $explicitAgentId);
+            }
+            $aiSelectedTools = is_array($routeDecision['selected_tools'] ?? null) ? $routeDecision['selected_tools'] : [];
+            $isMultiDomain = (bool)($routeDecision['is_multi_domain'] ?? false);
+            $requiresTools = (bool)($routeDecision['requires_tools'] ?? true);
+            $isMutationOrProposalIntent = (bool)($routeDecision['is_mutation_or_proposal'] ?? false);
 
-                if ($intentType === 'conversational' || !$requiresTools) {
-                    $isPureConversational = ($intentType === 'conversational');
-                    $tools = null;
-                } elseif ($isMultiDomain || $intentType === 'cross_domain' || empty($primaryDomain) || $primaryDomain === 'none') {
-                    if (!empty($matchedDomains)) {
-                        $scopedToolNames = [];
-                        foreach ($matchedDomains as $dom) {
-                            if (isset($agentToolMap[$dom])) {
-                                $scopedToolNames = array_merge($scopedToolNames, $agentToolMap[$dom]);
-                            }
-                        }
-                        $scopedToolNames[] = 'query_cross_domain_executive_synthesis';
-                        $scopedToolNames = array_values(array_unique($scopedToolNames));
-                        $tools = AgentToolRegistry::getGeminiToolsDeclaration($scopedToolNames);
-                    } else {
-                        // Full Swarm tools
-                        $tools = AgentToolRegistry::getGeminiToolsDeclaration(null);
-                    }
-                } elseif (isset($agentToolMap[$primaryDomain])) {
-                    $scopedToolNames = $agentToolMap[$primaryDomain];
+            if (!empty($explicitAgentId) && isset($agentToolMap[$explicitAgentId])) {
+                $tools = AgentToolRegistry::getGeminiToolsDeclaration($agentToolMap[$explicitAgentId]);
+            } elseif ($intentType === 'conversational' || !$requiresTools) {
+                $isPureConversational = ($intentType === 'conversational');
+                $tools = null;
+            } elseif ($isMultiDomain || $intentType === 'cross_domain' || empty($primaryDomain) || $primaryDomain === 'none') {
+                if (!empty($matchedDomains)) {
+                    $scopedToolNames = [];
                     foreach ($matchedDomains as $dom) {
                         if (isset($agentToolMap[$dom])) {
                             $scopedToolNames = array_merge($scopedToolNames, $agentToolMap[$dom]);
                         }
                     }
+                    $scopedToolNames[] = 'query_cross_domain_executive_synthesis';
                     $scopedToolNames = array_values(array_unique($scopedToolNames));
                     $tools = AgentToolRegistry::getGeminiToolsDeclaration($scopedToolNames);
                 } else {
-                    // Safe fallback: Full Swarm tools
                     $tools = AgentToolRegistry::getGeminiToolsDeclaration(null);
                 }
+            } elseif (isset($agentToolMap[$primaryDomain])) {
+                $scopedToolNames = $agentToolMap[$primaryDomain];
+                foreach ($matchedDomains as $dom) {
+                    if (isset($agentToolMap[$dom])) {
+                        $scopedToolNames = array_merge($scopedToolNames, $agentToolMap[$dom]);
+                    }
+                }
+                $scopedToolNames = array_values(array_unique($scopedToolNames));
+                $tools = AgentToolRegistry::getGeminiToolsDeclaration($scopedToolNames);
+            } else {
+                $tools = AgentToolRegistry::getGeminiToolsDeclaration(null);
+            }
+
+            // Build precision AI-selected tool declarations for Groq `qwen/qwen3.8-27b` (100% AI-chosen via $routeDecision['selected_tools'])
+            if (!$isPureConversational && !empty($tools)) {
+                $domainAnchorMap = [
+                    'sales' => ['query_crm_leads_multitier', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced'],
+                    'finance' => ['query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'filter_expenses_advanced', 'get_financial_overview'],
+                    'hrm' => ['query_hrm_workforce_and_payroll_multitier', 'query_company_attendance_and_work_hours', 'get_company_leave_and_absence', 'get_staff_directory_advanced', 'get_my_payslip'],
+                    'tasks' => ['query_tasks_and_projects_multitier', 'get_my_tasks', 'smart_manage_tasks_and_subtasks', 'query_and_manage_projects'],
+                    'academic' => ['get_academic_students_filter', 'get_program_details', 'get_academic_schedule_and_intakes', 'query_crm_leads_multitier'],
+                    'records_legal' => ['check_student_admission_records', 'get_academic_students_filter', 'get_contact_360_profile'],
+                    'assets_inventory' => ['query_inventory_and_assets_multitier', 'get_inventory_health_check', 'get_inventory_and_asset_status'],
+                    'b2b_partner' => ['query_deals_and_b2b_multitier', 'get_b2b_partner_and_contract_summary'],
+                    'marketing_campaigns' => ['query_omnichannel_journey_and_automation_analytics', 'get_lead_digital_footprint_360', 'smart_manage_automation_flows_and_campaigns', 'get_campaign_marketing_stats'],
+                    'executive_bi' => ['query_cross_domain_executive_synthesis', 'get_executive_morning_brief', 'get_executive_financial_pulse', 'get_sales_leaderboard', 'query_crm_leads_multitier'],
+                    'system_it' => ['query_tickets_and_sla_multitier', 'get_ticket_status_and_sla_breaches', 'get_system_health_status'],
+                ];
+                $groqToolNames = [];
+                foreach ($aiSelectedTools as $stName) {
+                    if (is_string($stName) && trim($stName) !== '') {
+                        $groqToolNames[] = trim($stName);
+                    }
+                }
+                if ($isMutationOrProposalIntent) {
+                    $groqToolNames[] = 'draft_action_proposal';
+                }
+                $anchorDom = (!empty($primaryDomain) && isset($domainAnchorMap[$primaryDomain])) ? $primaryDomain : 'executive_bi';
+                foreach ($domainAnchorMap[$anchorDom] as $ancTool) {
+                    $groqToolNames[] = $ancTool;
+                }
+                foreach ($matchedDomains as $mDom) {
+                    if (isset($domainAnchorMap[$mDom])) {
+                        $groqToolNames[] = $domainAnchorMap[$mDom][0];
+                    }
+                }
+                $groqToolNames = array_slice(array_values(array_unique($groqToolNames)), 0, 3);
+                $allDeclsForGroq = AgentToolRegistry::getGeminiToolsDeclaration(null)[0]['functionDeclarations'] ?? [];
+                $declByName = [];
+                foreach ($allDeclsForGroq as $dItem) {
+                    if (!empty($dItem['name'])) {
+                        $declByName[$dItem['name']] = $dItem;
+                    }
+                }
+                $strictGroqDecls = [];
+                foreach ($groqToolNames as $gName) {
+                    if (isset($declByName[$gName])) {
+                        $strictGroqDecls[] = $declByName[$gName];
+                    }
+                }
+                $groqScopedTools = !empty($strictGroqDecls)
+                    ? [['functionDeclarations' => $strictGroqDecls]]
+                    : $tools;
             }
 
             $payload = [
@@ -5585,35 +5647,37 @@ class ChatController {
             }
 
             // ==========================================
-            // PRIMARY ENGINE: OPENROUTER FREE MULTI-MODEL POOL (WITH FULL TOOL CALLING)
-            // Gemini is kept strictly as a fallback if OpenRouter fails or binary PDF/Audio inlineData is attached
+            // PRIMARY ENGINE: GROQ CLOUD `qwen/qwen3.8-27b` (WITH FULL AUTONOMOUS TOOL CALLING)
+            // Gemini is kept strictly as a fallback if Groq fails or binary PDF/Audio inlineData is attached
             // ==========================================
             $hasUnsupportedInlineBinary = !empty($attachedFile['inlineData']['mimeType'])
                 && strpos((string)$attachedFile['inlineData']['mimeType'], 'image/') !== 0;
 
-            if ($openRouterKey !== '' && !$hasUnsupportedInlineBinary) {
-                $openRouterReply = $this->callOpenRouterFreePrimary(
+            if ($groqKey !== '' && !$hasUnsupportedInlineBinary) {
+                $groqReply = $this->callGroqQwenPrimary(
                     $conversationHistory,
                     $systemPrompt,
                     $attachedFile,
-                    $tools,
+                    $groqScopedTools,
                     $isPureConversational,
                     $isMutationOrProposalIntent,
-                    $openRouterKey,
-                    $openRouterModel,
+                    $groqKey,
+                    $groqModel,
+                    $primaryDomain,
+                    $matchedDomains,
                     $onChunk,
                     $authContext,
                     $onStep,
                     $executedAgentSteps
                 );
-                if ($openRouterReply !== null && trim($openRouterReply) !== '') {
-                    return trim($openRouterReply);
+                if ($groqReply !== null && trim($groqReply) !== '') {
+                    return trim($groqReply);
                 }
-                error_log("OpenRouter Free Primary pool unavailable for this turn, falling back to Gemini ({$model})...");
+                error_log("Groq Qwen 3.8 27B primary pool unavailable for this turn, falling back to Gemini ({$model})...");
             }
 
             if (empty($apiKey)) {
-                $fallbackErr = "Hệ thống AI miễn phí (OpenRouter) hiện đang quá tải tạm thời và chưa có Gemini API Key dự phòng. Vui lòng thử lại sau vài giây.";
+                $fallbackErr = "Hệ thống AI (Groq Qwen 3.8 27B) hiện đang quá tải tạm thời và chưa có Gemini API Key dự phòng. Vui lòng thử lại sau vài giây.";
                 if (is_callable($onChunk)) {
                     $onChunk($fallbackErr);
                 }
@@ -6056,19 +6120,21 @@ class ChatController {
     }
 
     /**
-     * Primary Engine: Call OpenRouter Free Multi-Model Pool with Full Autonomous Multi-Turn Tool Calling
-     * Automatically fails over across top `:free` tool-capable models (Nemotron 3.5 Super VL 1M, Nemotron 3 Super 120B, Gemma 4 31B IT, Dots 3 Note 512K, Nemotron 3.5 Lightning 1M).
-     * Returns null ONLY if all OpenRouter free models fail, allowing seamless fallback to Gemini.
+     * Primary Engine: Call Groq Cloud `qwen/qwen3.8-27b` with Full Autonomous Multi-Turn Tool Calling
+     * Uses AI-routed domain context & tool schemas to stay within Groq Free Tier 7,000 ITPM / 8,000 TPM while preserving 100% intelligence, Smart UI Tags & Export Parity.
+     * Automatically fails over across Groq's independent model buckets (`qwen/qwen3.8-27b` -> `openai/gpt-oss-120b` -> `openai/gpt-oss-20b`) before falling back to Gemini.
      */
-    private function callOpenRouterFreePrimary(
+    private function callGroqQwenPrimary(
         array $conversationHistory,
         string $systemPrompt,
         ?array $attachedFile,
         ?array $geminiTools,
         bool $isPureConversational,
         bool $isMutationOrProposalIntent,
-        string $openRouterKey,
+        string $groqKey,
         string $preferredModel,
+        string $primaryDomain = 'executive_bi',
+        array $matchedDomains = [],
         ?callable $onChunk = null,
         ?array $authContext = null,
         ?callable $onStep = null,
@@ -6077,15 +6143,21 @@ class ChatController {
         $localSteps = [];
         try {
             $isStream = is_callable($onChunk);
+            $focusedSystemPrompt = $this->buildGroqFocusedSystemPrompt($systemPrompt, $primaryDomain, $matchedDomains, false);
+
             $messages = [
                 [
                     'role' => 'system',
-                    'content' => $systemPrompt
+                    'content' => $focusedSystemPrompt
                 ]
             ];
 
-            $historyCount = count($conversationHistory);
-            foreach ($conversationHistory as $idx => $msg) {
+            $recentHistory = count($conversationHistory) > 4
+                ? array_slice($conversationHistory, -4)
+                : $conversationHistory;
+            $historyCount = count($recentHistory);
+
+            foreach ($recentHistory as $idx => $msg) {
                 $isAssistant = ((int)($msg['sender_id'] ?? 0) === 9000001);
                 $role = $isAssistant ? 'assistant' : 'user';
                 $msgText = trim((string)($msg['content'] ?? ''));
@@ -6099,33 +6171,21 @@ class ChatController {
                     $msgText = preg_replace('/<<<NEXT_BEST_ACTIONS:\s*[\s\S]*?>>>/', '', $msgText);
                     $msgText = preg_replace('/<<<SAVE_MEMORY:\s*[\s\S]*?>>>/', '', $msgText);
                     $msgText = trim((string)preg_replace('/\n{3,}/', "\n\n", $msgText));
+                    if (mb_strlen($msgText, 'UTF-8') > 700) {
+                        $msgText = mb_substr($msgText, 0, 700, 'UTF-8') . '...';
+                    }
                 }
 
                 if ($idx === $historyCount - 1 && !empty($attachedFile)) {
                     if (!empty($attachedFile['extractedText'])) {
+                        $clippedDoc = mb_substr((string)$attachedFile['extractedText'], 0, 4500, 'UTF-8');
                         $docHeader = "--- [NỘI DUNG TÀI LIỆU ĐÍNH KÈM: " . ($attachedFile['fileName'] ?? 'Tài liệu') . "] ---\n"
-                            . $attachedFile['extractedText'] . "\n--- [HẾT TÀI LIỆU] ---\n\n";
+                            . $clippedDoc . "\n--- [HẾT TÀI LIỆU] ---\n\n";
                         $msgText = $docHeader . $msgText;
                     }
+                    // If an image is attached, Groq `qwen/qwen3.8-27b` is text-only so delegate vision turn to Gemini fallback
                     if (!empty($attachedFile['inlineData']['data']) && strpos((string)($attachedFile['inlineData']['mimeType'] ?? ''), 'image/') === 0) {
-                        $mime = $attachedFile['inlineData']['mimeType'];
-                        $b64 = $attachedFile['inlineData']['data'];
-                        $messages[] = [
-                            'role' => $role,
-                            'content' => [
-                                [
-                                    'type' => 'text',
-                                    'text' => $msgText !== '' ? $msgText : 'Hãy phân tích hình ảnh đính kèm này.'
-                                ],
-                                [
-                                    'type' => 'image_url',
-                                    'image_url' => [
-                                        'url' => "data:{$mime};base64,{$b64}"
-                                    ]
-                                ]
-                            ]
-                        ];
-                        continue;
+                        return null;
                     }
                 }
 
@@ -6144,10 +6204,10 @@ class ChatController {
             }
 
             $openAiTools = (!$isPureConversational && !empty($geminiTools))
-                ? $this->convertGeminiToolsToOpenRouter($geminiTools)
+                ? $this->convertGeminiToolsToGroq($geminiTools)
                 : [];
 
-            $maxToolTurns = 6;
+            $maxToolTurns = 4;
             $toolTurn = 0;
             $collectedExportMarkdowns = [];
             $collectedStructuredTags = [];
@@ -6157,8 +6217,8 @@ class ChatController {
                 $toolTurn++;
 
                 if (empty($openAiTools) && $toolTurn === 1 && $isStream && is_callable($onChunk)) {
-                    $streamedDirect = $this->streamOpenRouterSynthesisWithPool(
-                        $openRouterKey,
+                    $streamedDirect = $this->streamGroqSynthesisWithPool(
+                        $groqKey,
                         $preferredModel,
                         $messages,
                         $onChunk
@@ -6168,8 +6228,8 @@ class ChatController {
                     }
                 }
 
-                $resJson = $this->executeOpenRouterRequestWithPool(
-                    $openRouterKey,
+                $resJson = $this->executeGroqRequestWithPool(
+                    $groqKey,
                     $preferredModel,
                     $messages,
                     $openAiTools,
@@ -6184,17 +6244,32 @@ class ChatController {
                 $directText = $this->stripReasoningTags((string)($choiceMsg['content'] ?? ''));
                 $toolCalls = $choiceMsg['tool_calls'] ?? [];
 
-                // Fallback parser if a model emitted <function=name>{...}</function> in text
-                if (empty($toolCalls) && preg_match('/<function=([a-zA-Z0-9_]+)>\s*(\{[\s\S]*?\})\s*<\/function>/', $directText, $fnMatch)) {
-                    $toolCalls = [[
-                        'id' => 'call_' . substr(md5(uniqid('', true)), 0, 8),
-                        'type' => 'function',
-                        'function' => [
-                            'name' => trim($fnMatch[1]),
-                            'arguments' => trim($fnMatch[2])
-                        ]
-                    ]];
-                    $directText = trim(str_replace($fnMatch[0], '', $directText));
+                // Fallback parser if a model emitted <function=name>{...}</function> or <tool_call> in text
+                if (empty($toolCalls)) {
+                    if (preg_match('/<function=([a-zA-Z0-9_]+)>\s*(\{[\s\S]*?\})\s*<\/function>/', $directText, $fnMatch)) {
+                        $toolCalls = [[
+                            'id' => 'call_' . substr(md5(uniqid('', true)), 0, 8),
+                            'type' => 'function',
+                            'function' => [
+                                'name' => trim($fnMatch[1]),
+                                'arguments' => trim($fnMatch[2])
+                            ]
+                        ]];
+                        $directText = trim(str_replace($fnMatch[0], '', $directText));
+                    } elseif (preg_match('/<tool_call>\s*(\{[\s\S]*?\})\s*<\/tool_call>/', $directText, $tcMatch)) {
+                        $tcParsed = json_decode($tcMatch[1], true);
+                        if (is_array($tcParsed) && !empty($tcParsed['name'])) {
+                            $toolCalls = [[
+                                'id' => 'call_' . substr(md5(uniqid('', true)), 0, 8),
+                                'type' => 'function',
+                                'function' => [
+                                    'name' => trim((string)$tcParsed['name']),
+                                    'arguments' => json_encode($tcParsed['arguments'] ?? (object)[], JSON_UNESCAPED_UNICODE)
+                                ]
+                            ]];
+                            $directText = trim(str_replace($tcMatch[0], '', $directText));
+                        }
+                    }
                 }
 
                 if (empty($toolCalls)) {
@@ -6338,6 +6413,17 @@ class ChatController {
 
                     $compactResult = $this->compactToolResultForModel($toolResult);
                     if (is_array($compactResult)) {
+                        // Trim large preview arrays slightly for Groq 7K ITPM synthesis turn while preserving all summary metrics & top 10 rows
+                        foreach (['preview_top_15', 'records', 'items', 'leads', 'students', 'tasks', 'expenses'] as $listKey) {
+                            if (isset($compactResult[$listKey]) && is_array($compactResult[$listKey]) && count($compactResult[$listKey]) > 10) {
+                                $compactResult[$listKey] = array_slice($compactResult[$listKey], 0, 10);
+                            }
+                        }
+                        // Strip heavy dynamic_chart JSON from tool message since $collectedStructuredTags already preserves 100% of <<<DYNAMIC_CHART:...>>> deterministically
+                        if (isset($compactResult['dynamic_chart'])) {
+                            $compactResult['dynamic_chart'] = '[Đã tự động đính kèm biểu đồ DYNAMIC_CHART]';
+                        }
+
                         $lockFacts = [];
                         foreach (['total_matching', 'total_leads', 'total_Filtered_Records', 'total_records', 'total_expenses_vnd', 'total_deposit_vnd', 'net_cashflow_vnd', 'total_headcount', 'created_count', 'reassigned_count'] as $k) {
                             if (isset($compactResult[$k])) {
@@ -6352,7 +6438,7 @@ class ChatController {
                             }
                         }
                         $compactResult['_ground_truth_lock'] = [
-                            'mandate' => 'STRICT_DATABASE_GROUND_TRUTH: Bắt buộc dùng chính xác 100% con số từ kết quả SQL này. Tuyệt đối không tự cộng nhẩm lại từ preview_top_15 hay bịa số liệu. Giữ nguyên link [Tải file Excel...](/export?...) và các thẻ <<<DYNAMIC_CHART:...>>> / <<<ACTION_PROPOSAL:...>>>. Không dùng emoji trong tiêu đề ###. Nếu kết quả có > 1 bản ghi, cấm sinh thẻ <<<ERP_CARD:...>>> đơn lẻ dưới bảng.',
+                            'mandate' => 'STRICT_DATABASE_GROUND_TRUTH: Bắt buộc dùng chính xác 100% con số từ kết quả SQL này. Tuyệt đối không tự cộng nhẩm lại từ preview hay bịa số liệu. Giữ nguyên link [Tải file Excel...](/export?...) và các thẻ <<<ACTION_PROPOSAL:...>>>. Không dùng emoji trong tiêu đề ###. Nếu kết quả có > 1 bản ghi, cấm sinh thẻ <<<ERP_CARD:...>>> đơn lẻ dưới bảng.',
                             'verified_metrics' => $lockFacts
                         ];
                     }
@@ -6434,15 +6520,21 @@ class ChatController {
                 }
 
                 if ($hasTerminalActionSuccess || $requiresDisambiguationSynthesis || $toolTurn >= ($maxToolTurns - 1)) {
-                    // Keep 100% of the full $messages (including full $systemPrompt) so all 11 Agents & instructions remain intact
+                    // Use compact synthesis system prompt on Turn 2 so Turn 1 + Turn 2 stay under Groq's 7,000 ITPM limit
+                    $synthesisMessages = $messages;
+                    $synthesisMessages[0] = [
+                        'role' => 'system',
+                        'content' => $this->buildGroqFocusedSystemPrompt($systemPrompt, $primaryDomain, $matchedDomains, true)
+                    ];
+
                     $textFinal = '';
                     $alreadyStreamed = false;
 
                     if ($isStream && is_callable($onChunk)) {
-                        $streamedText = $this->streamOpenRouterSynthesisWithPool(
-                            $openRouterKey,
+                        $streamedText = $this->streamGroqSynthesisWithPool(
+                            $groqKey,
                             $preferredModel,
-                            $messages,
+                            $synthesisMessages,
                             $onChunk
                         );
                         if ($streamedText !== null && trim($streamedText) !== '') {
@@ -6452,10 +6544,10 @@ class ChatController {
                     }
 
                     if ($textFinal === '') {
-                        $finalResJson = $this->executeOpenRouterRequestWithPool(
-                            $openRouterKey,
+                        $finalResJson = $this->executeGroqRequestWithPool(
+                            $groqKey,
                             $preferredModel,
-                            $messages,
+                            $synthesisMessages,
                             [],
                             null
                         );
@@ -6490,44 +6582,155 @@ class ChatController {
 
             return null;
         } catch (\Throwable $e) {
-            error_log("callOpenRouterFreePrimary Exception: " . $e->getMessage());
+            error_log("callGroqQwenPrimary Exception: " . $e->getMessage());
             return null;
         }
     }
 
     /**
-     * Get ranked OpenRouter `:free` model pool batches (only verified live OpenRouter `:free` models that support tools).
+     * Build a focused, high-intelligence System Prompt for Groq `qwen/qwen3.8-27b`
+     * Preserves 100% of Persona, Salutation, RBAC, Dynamic Runtime Context (RAG, Screen Awareness, Ambient Snapshot, ERP Lookup, Memories, Risks),
+     * Active Domain Tool Rules, and Smart UI Tags while fitting comfortably within Groq's 7,000 ITPM budget.
      */
-    private function getOpenRouterModelBatches(string $preferredModel): array {
-        $ignoreOverride = [
-            'nvidia/nemotron-3.5-super-vl:free',
-            'nvidia/nemotron-3.5-lightning:free',
-            'nvidia/nemotron-3-super-120b-a12b:free',
-            'dots-studio/dots-3-note-preview:free',
-            'qwen/qwen3-coder:free',
-            'openai/gpt-oss-120b:free',
-            'qwen/qwen3-next-80b-a3b-instruct:free',
+    private function buildGroqFocusedSystemPrompt(
+        string $fullSystemPrompt,
+        string $primaryDomain,
+        array $matchedDomains = [],
+        bool $isSynthesisTurn = false
+    ): string {
+        // 1. Extract Persona, Salutation & RBAC header (up to "• QUY ĐỊNH GIỜ LÀM VIỆC")
+        $headerEndPos = strpos($fullSystemPrompt, "• QUY ĐỊNH GIỜ LÀM VIỆC");
+        $coreHeader = $headerEndPos !== false
+            ? trim(substr($fullSystemPrompt, 0, $headerEndPos))
+            : mb_substr($fullSystemPrompt, 0, 1200, 'UTF-8');
+
+        // 2. Extract Dynamic Runtime Context blocks appended at the bottom of $fullSystemPrompt
+        $dynamicTail = '';
+        $dynamicMarkers = [
+            'NĂNG LỰC PHÂN TÍCH TÀI LIỆU & FILE ĐÍNH KÈM',
+            '--- [KIẾN THỨC TỪ HUẤN LUYỆN AI DOANH NGHIỆP] ---',
+            '--- [BỨC TRANH TOÀN CẢNH HỆ THỐNG',
+            '--- [TRỰC GIÁC MÀN HÌNH & HỒ SƠ ĐANG MỞ',
+            '--- [DỮ LIỆU THỰC TẾ TRA CỨU TỪ HỆ THỐNG ERP',
+            '--- [GHI NHỚ CÁ NHÂN HÓA',
+            '--- [BỐI CẢNH ĐỐI TƯỢNG VỪA THAO TÁC',
+            '--- [CẢNH BÁO RỦI RO VẬN HÀNH',
+            '[GHI CHÚ HỆ THỐNG GIẢI NGHĨA ĐẠI TỪ]'
         ];
-        $fastPrimaryPool = [
-            'google/gemma-4-31b-it:free',
-            'google/gemma-4-26b-a4b-it:free',
-            'poolside/laguna-s-2.1:free',
-            'cohere/north-mini-code:free',
-            'openrouter/free',
+        $earliestPos = null;
+        foreach ($dynamicMarkers as $marker) {
+            $pos = strpos($fullSystemPrompt, $marker);
+            if ($pos !== false && ($earliestPos === null || $pos < $earliestPos)) {
+                $earliestPos = $pos;
+            }
+        }
+        if ($earliestPos !== null) {
+            $dynamicTail = trim(substr($fullSystemPrompt, $earliestPos));
+            if (mb_strlen($dynamicTail, 'UTF-8') > 2600) {
+                $dynamicTail = mb_substr($dynamicTail, 0, 2600, 'UTF-8') . "\n--- [HẾT BỐI CẢNH ĐỘNG] ---";
+            }
+        }
+
+        if ($isSynthesisTurn) {
+            return $coreHeader . "\n\n"
+                . "QUY CHUẨN TỔNG HỢP BÁO CÁO ĐIỀU HÀNH & SMART UI TAGS (BẮT BUỘC 100%):\n"
+                . "1. CHÂN LÝ DỮ LIỆU SQL (`STRICT_DATABASE_GROUND_TRUTH`): Dùng chính xác 100% con số từ kết quả công cụ SQL vừa thực thi (`total_matching`, `summary`, `_ground_truth_lock`). Tuyệt đối không tự cộng nhẩm lại từ danh sách xem trước hay bịa số liệu.\n"
+                . "2. KHÔNG DÙNG EMOJI TRONG TIÊU ĐỀ `###`: Trình bày chuẩn Enterprise SaaS trang trọng, dùng BẢNG MARKDOWN rõ ràng.\n"
+                . "3. BẢNG DANH SÁCH LEAD / HỌC VIÊN CRM: Dùng đúng các cột `| ID | HỌ VÀ TÊN | SĐT | CHƯƠNG TRÌNH | GIAI ĐOẠN | SALE PHỤ TRÁCH | TIỀN CỌC |`, cột HỌ VÀ TÊN gắn link `[Tên](/contacts?id=ID)`. Giữ nguyên link tải Excel `[Bấm vào đây để tải danh sách (File Excel/CSV)](/export?...)`.\n"
+                . "4. QUY TẮC THẺ ĐƠN LẺ (`<<<ERP_CARD:...>>>`): Nếu kết quả có > 1 bản ghi (`total_matching > 1`), CẤM sinh thẻ `<<<ERP_CARD:...>>>` đơn lẻ dưới bảng. Chỉ sinh `<<<ERP_CARD:...>>>` khi tra cứu đích danh 1 đối tượng duy nhất (`total_matching = 1`).\n"
+                . "5. GỢI Ý BƯỚC TIẾP THEO CUỐI BÀI: Chỉ giữ `<<<ACTION_PROPOSAL: {...}>>>` nếu công cụ trả về thẻ đề xuất thực thi; KHÔNG tự chế `<<<ACTION_PROPOSAL:...>>>` cho câu hỏi thống kê/tra cứu. Luôn kết thúc bằng `<<<NEXT_BEST_ACTIONS: [\"Gợi ý 1\", \"Gợi ý 2\", \"Gợi ý 3\"]>>>`.\n"
+                . ($dynamicTail !== '' ? "\n" . $dynamicTail : '');
+        }
+
+        $todayYmd = date('Y-m-d');
+        $last7Ymd = date('Y-m-d', strtotime('-7 days'));
+        $last30Ymd = date('Y-m-d', strtotime('-30 days'));
+        $monthStartYmd = date('Y-m-01');
+
+        $activeDomains = array_values(array_unique(array_merge([$primaryDomain], $matchedDomains)));
+        $domainRules = [];
+
+        foreach ($activeDomains as $dom) {
+            switch ($dom) {
+                case 'sales':
+                case 'academic':
+                case 'records_legal':
+                    $domainRules[] = "• QUY TẮC CRM LEADS, HỌC VIÊN & TUYỂN SINH (Mốc thời gian chuẩn: Hôm nay='{$todayYmd}', 7 ngày qua: from_date='{$last7Ymd}' & to_date='{$todayYmd}', 30 ngày qua: from_date='{$last30Ymd}' & to_date='{$todayYmd}', Tháng này: from_date='{$monthStartYmd}' & to_date='{$todayYmd}'):\n"
+                        . "  - Khi lọc/tra cứu/thống kê lead hoặc học viên theo bất kỳ điều kiện nào (tư vấn viên `owners`, chương trình `programs`, giai đoạn `stages` + `stage_op`, nguồn `sources`, địa bàn `branches_or_cities`, đặt cọc `financial_filter`, tương tác `interacted_within_days`/`min_call_count`/`note_keyword`, giới tính/tuổi/chức vụ, thiếu hồ sơ `missing_document`): BẮT BUỘC gọi `query_crm_leads_multitier` (truyền `record_type='all'` khi tìm data của tư vấn viên).\n"
+                        . "  - QUAN TRỌNG VỀ NGÀY THÁNG: Khi hỏi lead có/tạo trong N ngày qua (vd: 7 ngày qua, 30 ngày qua, hôm nay), BẮT BUỘC truyền `from_date` và `to_date` (kèm `date_field='created_at'`). TUYỆT ĐỐI KHÔNG truyền `stale_days` trừ khi người dùng hỏi rõ 'lead bỏ quên / chưa chăm sóc trên N ngày'!\n"
+                        . "  - Khi tra cứu 1 khách hàng/học viên cụ thể hoặc xem lịch sử ghi chú chăm sóc: Gọi `get_contact_360_profile` (mặc định trích xuất TOP 3 tương tác gần nhất).\n"
+                        . "  - Khi thêm data cá nhân, tạo lead mới hoặc phân bổ/chuyển giao lead cho đồng nghiệp: Gọi `smart_create_or_assign_leads` hoặc `reassign_lead_owner`.\n"
+                        . "  - Khi hỏi nhân khẩu học/chức vụ/ngành nghề: Gọi `analyze_leads_demographics_and_job_titles`.";
+                    break;
+                case 'finance':
+                    $domainRules[] = "• QUY TẮC TÀI CHÍNH, THU CHI, ĐẶT CỌC & PO/SO:\n"
+                        . "  - Khi hỏi chi phí, phiếu chi, PO, nhà cung cấp, tạm ứng, ngân sách, hóa đơn: Gọi `query_finance_multitier_analytics` hoặc `filter_expenses_advanced`.\n"
+                        . "  - Khi hỏi doanh thu đặt cọc, học phí, đơn bán hàng SO, đợt đóng học phí (`deposit_milestones`): Gọi `query_deposits_and_revenue_multitier`.\n"
+                        . "  - Khi yêu cầu tạo/duyệt phiếu chi, PO, SO, phiếu cọc: Gọi `smart_manage_po_so_and_approvals` hoặc `draft_action_proposal`.";
+                    break;
+                case 'hrm':
+                    $domainRules[] = "• QUY TẮC NHÂN SỰ, CHẤM CÔNG, ĐƠN TỪ & BẢNG LƯƠNG (QĐ 001/2024 VIỆN IDEAS):\n"
+                        . "  - Giờ làm việc: Sáng 08:00-12:00, Chiều 13:00-17:00 (5 ngày/tuần). Định mức đi trễ & về sớm miễn trừ hàng tháng: Nữ 60 phút/tháng, Nam 30 phút/tháng. Phép năm: 12 ngày/năm.\n"
+                        . "  - Khi hỏi đi làm hôm nay / có mặt / vắng mặt / chấm công: BẮT BUỘC gọi `query_company_attendance_and_work_hours` (`scope='today_status'`), trình bày 3 nhóm: Có mặt tại văn phòng, WFH có đơn duyệt, Chưa quẹt thẻ/Vắng mặt (tách riêng tài khoản ngừng chấm công >30 ngày, cấm gộp Bot SI IDEAS).\n"
+                        . "  - Khi hỏi danh bạ nhân sự: Gọi `get_staff_directory_advanced` hoặc `get_company_staff_directory`.\n"
+                        . "  - Khi hỏi lương/phiếu lương: Gọi `get_my_payslip` hoặc `query_hrm_workforce_and_payroll_multitier`.\n"
+                        . "  - Khi tạo/xác nhận đơn nghỉ phép, giải trình công, OT/WFH, tạm ứng hoặc duyệt đơn nhân sự: Gọi `manage_my_hr_profile_and_requests` hoặc `smart_manage_hrm_and_payroll`.";
+                    break;
+                case 'tasks':
+                    $domainRules[] = "• QUY TẮC CÔNG VIỆC (TASKS), VIỆC CON & DỰ ÁN:\n"
+                        . "  - Khi tra cứu công việc cá nhân/team/quá hạn: Gọi `query_tasks_and_projects_multitier` hoặc `get_my_tasks`.\n"
+                        . "  - Khi tạo/cập nhật công việc, checklist/việc con, duyệt task: Gọi `smart_manage_tasks_and_subtasks`.\n"
+                        . "  - Khi tra cứu hoặc quản lý dự án: Gọi `query_and_manage_projects`.";
+                    break;
+                case 'marketing_campaigns':
+                    $domainRules[] = "• QUY TẮC MARKETING AUTOMATION, ĐA KÊNH & CHIẾN DỊCH:\n"
+                        . "  - Khi hỏi hiệu quả kịch bản Automation Flow, điểm nghẽn, chiến dịch Email/ZNS, Voucher, Khảo sát, lưu lượng Web/UTM: Gọi `query_omnichannel_journey_and_automation_analytics`.\n"
+                        . "  - Khi xem dấu chân số 360° của 1 khách hàng: Gọi `get_lead_digital_footprint_360`.\n"
+                        . "  - Khi thao tác kịch bản Flow/Voucher/Đồng bộ: Gọi `smart_manage_automation_flows_and_campaigns`.";
+                    break;
+                default:
+                    $domainRules[] = "• QUY TẮC ĐIỀU HÀNH TỔNG HỢP (EXECUTIVE BI & CROSS-DOMAIN):\n"
+                        . "  - Khi hỏi bức tranh tổng thể, doanh thu - chi phí - dòng tiền ròng, tóm tắt đầu ngày, bảng xếp hạng Sale: Gọi `query_cross_domain_executive_synthesis`, `get_executive_morning_brief`, `get_executive_financial_pulse` hoặc `get_sales_leaderboard`.\n"
+                        . "  - Khi hỏi tồn kho/tài sản: Gọi `query_inventory_and_assets_multitier`. Khi hỏi B2B/Deals: Gọi `query_deals_and_b2b_multitier`. Khi hỏi Ticket/SLA: Gọi `query_tickets_and_sla_multitier`.";
+                    break;
+            }
+        }
+
+        $domainBlock = implode("\n", array_unique($domainRules));
+
+        return $coreHeader . "\n\n"
+            . $domainBlock . "\n\n"
+            . "QUY TẮC TRÌNH BÀY & SMART UI TAGS:\n"
+            . "• Không dùng từ '(Zero-Trust)'. Không dùng emoji trong tiêu đề `###`. Dùng BẢNG MARKDOWN khi có >= 2 đối tượng.\n"
+            . "• Khi trùng tên nhiều hồ sơ (`disambiguation_required: true`), không tự đoán mò mà liệt kê bảng so sánh và giữ nguyên `<<<CLARIFY_OPTIONS: [...]>>>`.\n"
+            . "• Chỉ sinh `<<<ERP_CARD: {...}>>>` khi kết quả có ĐÚNG 1 hồ sơ (`total_matching = 1`); cấm sinh thẻ đơn lẻ dưới bảng nhiều dòng.\n"
+            . "• Giữ nguyên link tải `[Bấm vào đây để tải danh sách (File Excel/CSV)](/export?...)`, và luôn kết thúc bằng `<<<NEXT_BEST_ACTIONS: [\"Gợi ý 1\", \"Gợi ý 2\", \"Gợi ý 3\"]>>>`.\n"
+            . ($dynamicTail !== '' ? "\n" . $dynamicTail : '');
+    }
+
+    /**
+     * Get ranked Groq Cloud model pool:
+     * 1. Primary: `qwen/qwen3.8-27b` (30 RPM, 1K RPD, 8K TPM, tool-calling native)
+     * 2. Failover 1: `openai/gpt-oss-120b` (independent 30 RPM, 1K RPD, 8K TPM bucket on Groq)
+     * 3. Failover 2: `openai/gpt-oss-20b` (independent 30 RPM, 1K RPD, 8K TPM bucket on Groq)
+     */
+    private function getGroqModelPool(string $preferredModel): array {
+        $pool = [
+            'qwen/qwen3.8-27b',
+            'openai/gpt-oss-120b',
+            'openai/gpt-oss-20b',
         ];
         if (
             $preferredModel !== '' &&
-            strpos($preferredModel, '/') !== false &&
-            !in_array($preferredModel, $ignoreOverride, true)
+            in_array($preferredModel, $pool, true)
         ) {
-            array_unshift($fastPrimaryPool, $preferredModel);
+            array_unshift($pool, $preferredModel);
         }
-        $fastPrimaryPool = array_values(array_unique($fastPrimaryPool));
-        return array_chunk($fastPrimaryPool, 2);
+        return array_values(array_unique($pool));
     }
 
-    private function isOpenRouterKeyInCooldown(string $openRouterKey): bool {
-        $flagFile = rtrim(sys_get_temp_dir(), '/\\') . '/or_cooldown_' . substr(md5($openRouterKey), 0, 12) . '.flag';
+    private function isGroqModelInCooldown(string $groqKey, string $modelId): bool {
+        $flagFile = rtrim(sys_get_temp_dir(), '/\\') . '/groq_cd_' . substr(md5($groqKey . '|' . $modelId), 0, 12) . '.flag';
         if (is_file($flagFile)) {
             $until = (int)@file_get_contents($flagFile);
             if ($until > time()) {
@@ -6538,36 +6741,33 @@ class ChatController {
         return false;
     }
 
-    private function markOpenRouterKeyCooldown(string $openRouterKey, int $seconds = 180): void {
-        $flagFile = rtrim(sys_get_temp_dir(), '/\\') . '/or_cooldown_' . substr(md5($openRouterKey), 0, 12) . '.flag';
+    private function markGroqModelCooldown(string $groqKey, string $modelId, int $seconds = 45): void {
+        $flagFile = rtrim(sys_get_temp_dir(), '/\\') . '/groq_cd_' . substr(md5($groqKey . '|' . $modelId), 0, 12) . '.flag';
         @file_put_contents($flagFile, (string)(time() + $seconds));
     }
 
     /**
-     * Stream OpenRouter Synthesis response in real-time via SSE (`$onChunk`) with full token output (`max_tokens: 15000`)
+     * Stream Groq Cloud Synthesis response in real-time via SSE (`$onChunk`) with full token output (`max_tokens: 8192`)
      */
-    private function streamOpenRouterSynthesisWithPool(
-        string $openRouterKey,
+    private function streamGroqSynthesisWithPool(
+        string $groqKey,
         string $preferredModel,
         array $messages,
         callable $onChunk
     ): ?string {
-        if ($this->isOpenRouterKeyInCooldown($openRouterKey)) {
-            return null;
-        }
-        $batches = $this->getOpenRouterModelBatches($preferredModel);
-        $consecutive429 = 0;
+        $models = $this->getGroqModelPool($preferredModel);
 
-        foreach ($batches as $batchIdx => $batchModels) {
-            $primaryInBatch = $batchModels[0];
+        foreach ($models as $modelIdx => $modelId) {
+            if ($this->isGroqModelInCooldown($groqKey, $modelId)) {
+                continue;
+            }
+
             $payload = [
-                'model' => $primaryInBatch,
-                'models' => $batchModels,
+                'model' => $modelId,
                 'messages' => $messages,
                 'temperature' => 0.2,
-                'max_tokens' => 15000,
+                'max_tokens' => 8192,
                 'top_p' => 0.95,
-                'reasoning' => ['enabled' => false],
                 'stream' => true,
             ];
 
@@ -6575,18 +6775,16 @@ class ChatController {
             $sseBuffer = '';
             $httpErrorBody = '';
 
-            $ch = curl_init('https://openrouter.ai/api/v1/chat/completions');
+            $ch = curl_init('https://api.groq.com/openai/v1/chat/completions');
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
             curl_setopt($ch, CURLOPT_POST, true);
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload, JSON_UNESCAPED_UNICODE));
             curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $openRouterKey,
+                'Authorization: Bearer ' . $groqKey,
                 'Content-Type: application/json',
-                'Accept: text/event-stream',
-                'HTTP-Referer: https://myerp.ideas.edu.vn',
-                'X-Title: MYERP SI IDEAS Multi-Agent'
+                'Accept: text/event-stream'
             ]);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 14);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 20);
             curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
 
@@ -6632,14 +6830,11 @@ class ChatController {
                 return $accumulated;
             }
 
-            error_log("OpenRouter Stream Batch #{$batchIdx} (" . implode(',', $batchModels) . ") HTTP {$httpCode} CurlErr={$curlErr} Body=" . substr($httpErrorBody, 0, 250));
+            error_log("Groq Stream Model #{$modelIdx} ({$modelId}) HTTP {$httpCode} CurlErr={$curlErr} Body=" . substr($httpErrorBody, 0, 300));
 
             if ($httpCode === 429) {
-                $consecutive429++;
-                if (stripos($httpErrorBody, 'free-models-per-day') !== false || $consecutive429 >= 2) {
-                    $this->markOpenRouterKeyCooldown($openRouterKey, stripos($httpErrorBody, 'free-models-per-day') !== false ? 600 : 90);
-                    break;
-                }
+                $cooldownSec = (stripos($httpErrorBody, 'tokens per day') !== false || stripos($httpErrorBody, 'requests per day') !== false) ? 600 : 35;
+                $this->markGroqModelCooldown($groqKey, $modelId, $cooldownSec);
             }
         }
 
@@ -6647,31 +6842,28 @@ class ChatController {
     }
 
     /**
-     * Execute OpenRouter Chat Completion across the ranked `:free` model pool with full intelligence & 15000 max_tokens.
+     * Execute Groq Cloud Chat Completion across the ranked model pool (`qwen/qwen3.8-27b` primary) with automatic `tool_use_failed` recovery.
      */
-    private function executeOpenRouterRequestWithPool(
-        string $openRouterKey,
+    private function executeGroqRequestWithPool(
+        string $groqKey,
         string $preferredModel,
         array $messages,
         array $openAiTools = [],
         ?string $toolChoice = 'auto'
     ): ?array {
-        if ($this->isOpenRouterKeyInCooldown($openRouterKey)) {
-            return null;
-        }
-        $batches = $this->getOpenRouterModelBatches($preferredModel);
-        $consecutive429 = 0;
+        $models = $this->getGroqModelPool($preferredModel);
 
-        foreach ($batches as $batchIdx => $batchModels) {
-            $primaryInBatch = $batchModels[0];
+        foreach ($models as $modelIdx => $modelId) {
+            if ($this->isGroqModelInCooldown($groqKey, $modelId)) {
+                continue;
+            }
+
             $payload = [
-                'model' => $primaryInBatch,
-                'models' => $batchModels,
+                'model' => $modelId,
                 'messages' => $messages,
                 'temperature' => 0.2,
-                'max_tokens' => 15000,
+                'max_tokens' => 8192,
                 'top_p' => 0.95,
-                'reasoning' => ['enabled' => false],
             ];
 
             if (!empty($openAiTools)) {
@@ -6681,17 +6873,15 @@ class ChatController {
                 }
             }
 
-            $ch = curl_init('https://openrouter.ai/api/v1/chat/completions');
+            $ch = curl_init('https://api.groq.com/openai/v1/chat/completions');
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_POST, true);
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload, JSON_UNESCAPED_UNICODE));
             curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $openRouterKey,
-                'Content-Type: application/json',
-                'HTTP-Referer: https://myerp.ideas.edu.vn',
-                'X-Title: MYERP SI IDEAS Multi-Agent'
+                'Authorization: Bearer ' . $groqKey,
+                'Content-Type: application/json'
             ]);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 14);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 20);
             curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
 
@@ -6708,14 +6898,56 @@ class ChatController {
             }
 
             $respStr = (string)$resp;
-            error_log("OpenRouter Batch #{$batchIdx} (" . implode(',', $batchModels) . ") HTTP {$httpCode} CurlErr={$curlErr} Resp=" . substr($respStr, 0, 350));
+
+            // Automatic recovery if Groq returns HTTP 400 `tool_use_failed` with `failed_generation`
+            if ($httpCode === 400 && stripos($respStr, 'tool_use_failed') !== false) {
+                $errDecoded = json_decode($respStr, true);
+                $failedGen = (string)($errDecoded['error']['failed_generation'] ?? '');
+                if ($failedGen !== '') {
+                    if (preg_match('/<function=([a-zA-Z0-9_]+)[>=\s]*(\{[\s\S]*?\})\s*(?:<\/function>|$)/', $failedGen, $fgMatch)) {
+                        return [
+                            'choices' => [[
+                                'message' => [
+                                    'role' => 'assistant',
+                                    'content' => '',
+                                    'tool_calls' => [[
+                                        'id' => 'call_' . substr(md5(uniqid('', true)), 0, 8),
+                                        'type' => 'function',
+                                        'function' => [
+                                            'name' => trim($fgMatch[1]),
+                                            'arguments' => trim($fgMatch[2])
+                                        ]
+                                    ]]
+                                ]
+                            ]]
+                        ];
+                    }
+                    if (preg_match('/"name"\s*:\s*"([a-zA-Z0-9_]+)"[\s\S]*?"(?:arguments|parameters)"\s*:\s*(\{[\s\S]*?\})/', $failedGen, $fgJsonMatch)) {
+                        return [
+                            'choices' => [[
+                                'message' => [
+                                    'role' => 'assistant',
+                                    'content' => '',
+                                    'tool_calls' => [[
+                                        'id' => 'call_' . substr(md5(uniqid('', true)), 0, 8),
+                                        'type' => 'function',
+                                        'function' => [
+                                            'name' => trim($fgJsonMatch[1]),
+                                            'arguments' => trim($fgJsonMatch[2])
+                                        ]
+                                    ]]
+                                ]
+                            ]]
+                        ];
+                    }
+                }
+            }
+
+            error_log("Groq Model #{$modelIdx} ({$modelId}) HTTP {$httpCode} CurlErr={$curlErr} Resp=" . substr($respStr, 0, 350));
 
             if ($httpCode === 429) {
-                $consecutive429++;
-                if (stripos($respStr, 'free-models-per-day') !== false || $consecutive429 >= 2) {
-                    $this->markOpenRouterKeyCooldown($openRouterKey, stripos($respStr, 'free-models-per-day') !== false ? 600 : 90);
-                    break;
-                }
+                $cooldownSec = (stripos($respStr, 'tokens per day') !== false || stripos($respStr, 'requests per day') !== false) ? 600 : 35;
+                $this->markGroqModelCooldown($groqKey, $modelId, $cooldownSec);
             }
         }
 
@@ -6723,16 +6955,41 @@ class ChatController {
     }
 
     /**
-     * Convert Gemini functionDeclarations into OpenAI / OpenRouter `tools` schema (100% full descriptions, zero truncation)
+     * Convert Gemini functionDeclarations into OpenAI / Groq `tools` schema
+     * Keeps 100% of parameter names, types, enums, and core semantics while ordering primary filter parameters first for `qwen/qwen3.8-27b`.
      */
-    private function convertGeminiToolsToOpenRouter(?array $geminiTools): array {
-        $declarations = $geminiTools[0]['functionDeclarations'] ?? [];
+    private function convertGeminiToolsToGroq(?array $geminiTools): array {
+        $declarations = array_slice($geminiTools[0]['functionDeclarations'] ?? [], 0, 3);
         $openAiTools = [];
+        $priorityParamOrder = [
+            'owners', 'from_date', 'to_date', 'date_field', 'programs', 'stages', 'stage_op',
+            'financial_filter', 'sources', 'branches_or_cities', 'record_type', 'search_query',
+            'query', 'contact_id', 'limit'
+        ];
         foreach ($declarations as $decl) {
             $name = $decl['name'] ?? '';
             if ($name === '') continue;
-            $desc = (string)($decl['description'] ?? '');
-            $params = $this->normalizeOpenRouterSchemaProperty($decl['parameters'] ?? ['type' => 'OBJECT', 'properties' => []]);
+            $desc = trim((string)($decl['description'] ?? ''));
+            if (mb_strlen($desc, 'UTF-8') > 160) {
+                $desc = mb_substr($desc, 0, 160, 'UTF-8');
+            }
+            $desc .= ' (CHỈ truyền đúng tham số người dùng yêu cầu lọc; BỎ QUA không truyền các tham số khác. Lọc N ngày qua dùng from_date & to_date, cấm dùng stale_days trừ khi hỏi lead bỏ quên).';
+            $rawParams = $decl['parameters'] ?? ['type' => 'OBJECT', 'properties' => []];
+            if (!empty($rawParams['properties']) && is_array($rawParams['properties'])) {
+                $orderedProps = [];
+                foreach ($priorityParamOrder as $pKey) {
+                    if (isset($rawParams['properties'][$pKey])) {
+                        $orderedProps[$pKey] = $rawParams['properties'][$pKey];
+                    }
+                }
+                foreach ($rawParams['properties'] as $k => $v) {
+                    if (!isset($orderedProps[$k])) {
+                        $orderedProps[$k] = $v;
+                    }
+                }
+                $rawParams['properties'] = $orderedProps;
+            }
+            $params = $this->normalizeGroqSchemaProperty($rawParams);
             $openAiTools[] = [
                 'type' => 'function',
                 'function' => [
@@ -6745,7 +7002,7 @@ class ChatController {
         return $openAiTools;
     }
 
-    private function normalizeOpenRouterSchemaProperty(array $prop): array {
+    private function normalizeGroqSchemaProperty(array $prop): array {
         $out = [];
         $type = strtolower((string)($prop['type'] ?? 'string'));
         if (!in_array($type, ['object', 'string', 'number', 'integer', 'boolean', 'array'], true)) {
@@ -6754,7 +7011,11 @@ class ChatController {
         $out['type'] = $type;
 
         if (!empty($prop['description'])) {
-            $out['description'] = (string)$prop['description'];
+            $pDesc = trim((string)$prop['description']);
+            if (mb_strlen($pDesc, 'UTF-8') > 95) {
+                $pDesc = mb_substr($pDesc, 0, 95, 'UTF-8');
+            }
+            $out['description'] = $pDesc;
         }
         if (!empty($prop['enum']) && is_array($prop['enum'])) {
             $out['enum'] = array_values($prop['enum']);
@@ -6764,7 +7025,7 @@ class ChatController {
             if (!empty($prop['properties']) && is_array($prop['properties'])) {
                 foreach ($prop['properties'] as $k => $v) {
                     if (is_array($v)) {
-                        $props[$k] = $this->normalizeOpenRouterSchemaProperty($v);
+                        $props[$k] = $this->normalizeGroqSchemaProperty($v);
                     }
                 }
             }
@@ -6774,7 +7035,7 @@ class ChatController {
             }
         } elseif ($type === 'array') {
             if (!empty($prop['items']) && is_array($prop['items'])) {
-                $out['items'] = $this->normalizeOpenRouterSchemaProperty($prop['items']);
+                $out['items'] = $this->normalizeGroqSchemaProperty($prop['items']);
             } else {
                 $out['items'] = ['type' => 'string'];
             }
@@ -6799,6 +7060,13 @@ class ChatController {
         // If multi-row result was returned, strip any hallucinated single <<<ERP_CARD:...>>> below the table
         if ($suppressSingleErpCard && strpos($text, '<<<ERP_CARD:') !== false) {
             $text = trim((string)preg_replace('/<<<ERP_CARD:\s*[\s\S]*?>>>/', '', $text));
+        }
+        // Strip any LLM-hallucinated <<<ACTION_PROPOSAL:...>>> that does not contain a valid "action_type"
+        if (strpos($text, '<<<ACTION_PROPOSAL:') !== false) {
+            $text = (string)preg_replace_callback('/<<<ACTION_PROPOSAL:\s*([\s\S]*?)>>>/', function ($m) {
+                return (strpos($m[1], '"action_type"') !== false) ? $m[0] : '';
+            }, $text);
+            $text = trim($text);
         }
 
         $appendParts = [];
