@@ -8,9 +8,6 @@ import {
   ShieldCheck,
   Trash2,
   KeyRound,
-  CheckCircle2,
-  AlertCircle,
-  Clock,
   Terminal,
   Database,
   ChevronDown,
@@ -21,7 +18,16 @@ import {
   Sliders,
   Brain,
   Play,
-  RefreshCw,
+  Briefcase,
+  X,
+  Info,
+  Target,
+  DollarSign,
+  Clock,
+  ClipboardList,
+  PenTool,
+  Trophy,
+  Package,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
@@ -31,9 +37,12 @@ import { ChatSmartErpCard } from '../components/chat/ChatSmartErpCard';
 import { ActionProposalCard } from '../components/chat/ActionProposalCard';
 import { NextBestActionChips } from '../components/chat/NextBestActionChips';
 import { ProactiveInsightCard } from '../components/chat/ProactiveInsightCard';
-import { SPECIALIZED_AGENTS } from '../constants/aiAgents';
+import { ChatErpCardModal } from '../components/chat/ChatErpCardModal';
+import { AgentDetailModal } from '../components/chat/AgentDetailModal';
+import { SPECIALIZED_AGENTS, type SpecializedAgent } from '../constants/aiAgents';
 import { downloadExportFile } from '../utils/exportHelper';
 import { useUIStore } from '../store/uiStore';
+import type { ErpEntitySearchResult } from '../types/chat';
 
 interface ExecutedStep {
   tool: string;
@@ -74,6 +83,7 @@ interface LabMessage {
   collaborating_agents?: CollaboratingAgent[];
   executed_steps?: ExecutedStep[];
   telemetry?: TelemetryData;
+  attached_entity?: ErpEntitySearchResult | null;
 }
 
 interface StatusInfo {
@@ -90,6 +100,65 @@ interface StatusInfo {
   total_tools: number;
   tool_names: string[];
 }
+
+const SLASH_COMMANDS = [
+  {
+    command: '/lead',
+    label: 'Truy vấn CRM Leads đa tầng',
+    description: 'Lọc học viên theo chương trình, giai đoạn, tiền cọc & nguồn',
+    icon: <Target size={14} />,
+    template: 'Lọc dữ liệu học viên chương trình MBA theo giai đoạn và tiền cọc',
+  },
+  {
+    command: '/po',
+    label: 'Phân tích Chi phí & PO',
+    description: 'Bóc tách chi phí, đề xuất PO, trễ hạn & ngân sách phòng ban',
+    icon: <DollarSign size={14} />,
+    template: 'Phân tích chi phí và đề xuất ngân sách tháng này, kiểm tra khoản trễ hạn',
+  },
+  {
+    command: '/chamcong',
+    label: 'Tình hình chấm công hôm nay',
+    description: 'Xem ai có mặt tại văn phòng, ai WFH, ai chưa check-in',
+    icon: <Clock size={14} />,
+    template: 'Tình hình đi làm và chấm công hôm nay thế nào?',
+  },
+  {
+    command: '/viec',
+    label: 'Công việc & Deadline của tôi',
+    description: 'Xem các task đang mở, việc trễ hạn hoặc sắp tới hạn',
+    icon: <ClipboardList size={14} />,
+    template: 'Xem các công việc của tôi đang mở hoặc sắp trễ hạn',
+  },
+  {
+    command: '/duyet',
+    label: 'Đơn từ & Đề xuất chờ duyệt',
+    description: 'Kiểm tra phiếu nghỉ phép, tạm ứng, PO đang chờ duyệt',
+    icon: <PenTool size={14} />,
+    template: 'Kiểm tra các đơn và đề xuất đang chờ phê duyệt',
+  },
+  {
+    command: '/leaderboard',
+    label: 'Bảng xếp hạng Doanh số Sale',
+    description: 'Xem xếp hạng doanh số tư vấn tuyển sinh tháng này',
+    icon: <Trophy size={14} />,
+    template: 'Bảng xếp hạng doanh số sale tháng này',
+  },
+  {
+    command: '/kho',
+    label: 'Cảnh báo tồn kho & Quà tặng',
+    description: 'Kiểm tra vật phẩm tuyển sinh sắp hết hàng',
+    icon: <Package size={14} />,
+    template: 'Kiểm tra cảnh báo tồn kho và quà phẩm tuyển sinh',
+  },
+  {
+    command: '/clear',
+    label: 'Làm sạch cửa sổ trò chuyện',
+    description: 'Xóa lịch sử tin nhắn tạm thời để bắt đầu chủ đề mới',
+    icon: <Sparkles size={14} />,
+    template: 'CLEAR_ACTION',
+  },
+];
 
 const TEST_PROMPTS = [
   {
@@ -130,7 +199,14 @@ const TEST_PROMPTS = [
   },
 ];
 
-const STORAGE_KEY = 'myerp_qwen_agent_lab_messages_v1';
+const STORAGE_KEY = 'myerp_turnio_agent_lab_messages_v2';
+
+const formatModelLabel = (modelId?: string): string => {
+  if (!modelId || modelId === 'qwen/qwen3.8-27b') return 'Turnio 3.8 27B';
+  if (modelId === 'openai/gpt-oss-120b') return 'Turnio 120B Pro';
+  if (modelId === 'openai/gpt-oss-20b') return 'Turnio 20B Lite';
+  return modelId;
+};
 
 export const QwenAgentLabPage: React.FC = () => {
   const navigate = useNavigate();
@@ -152,18 +228,18 @@ export const QwenAgentLabPage: React.FC = () => {
     }
     return [
       {
-        id: 'welcome_qwen',
+        id: 'welcome_turnio',
         role: 'assistant',
         content:
-          'Xin chào! Tôi là **SI IDEAS × Qwen 3.8 27B** hoạt động **100% độc lập trên Groq Cloud LPU (Đã loại bỏ hoàn toàn Gemini API)**.\n\n' +
-          'Tôi được kết nối trực tiếp với toàn bộ **70 Công cụ Nghiệp vụ (`AgentToolRegistry`)** và **Database MySQL thực tế** của MYERP (CRM Lead, Học viên, Thu chi PO/SO, Nhân sự, Chấm công, Công việc, Marketing Automation). Bạn có thể chọn một kịch bản kiểm thử bên trái hoặc nhập câu hỏi bất kỳ để kiểm chứng tốc độ và độ chính xác!',
+          'Xin chào! Tôi là **SI IDEAS × Turnio 3.8 27B** hoạt động **100% độc lập trên LPU Engine (Đã loại bỏ hoàn toàn Gemini API)**.\n\n' +
+          'Tôi được tích hợp đầy đủ cơ chế **Multi-Agent Swarm**, **70 Công cụ Nghiệp vụ (`AgentToolRegistry`)**, **Trí nhớ Dài hạn & Ngữ cảnh Thực thể 48h**, **Cảnh báo Rủi ro Chủ động (`Proactive Insight`)**, **Đề xuất Hành động 1-Click (`Action Proposal`)**, **Lệnh tắt `/` (Slash Commands)** và **Đính kèm Hồ sơ ERP (`#`)**. Bạn có thể chọn kịch bản bên trái hoặc nhập câu hỏi bất kỳ!',
         timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
         model: 'qwen/qwen3.8-27b',
         collaborating_agents: [
           {
             id: 'master',
-            badge: 'SI IDEAS (Qwen 3.8 27B • Zero Gemini)',
-            focus: 'Điều phối viên trung tâm kết nối 70 công cụ ERP trên Groq Cloud LPU.',
+            badge: 'SI IDEAS (Turnio 3.8 27B • Full Access)',
+            focus: 'Điều phối viên trung tâm kết nối 70 công cụ ERP & MySQL thực tế.',
           },
         ],
       },
@@ -176,6 +252,12 @@ export const QwenAgentLabPage: React.FC = () => {
   const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
   const [newApiKeyInput, setNewApiKeyInput] = useState<string>('');
   const [savingKey, setSavingKey] = useState<boolean>(false);
+
+  // Agent Chat Mechanisms: ERP Entity Attachment, Slash Commands, Agent Detail Modal
+  const [attachedEntity, setAttachedEntity] = useState<ErpEntitySearchResult | null>(null);
+  const [showErpCardModal, setShowErpCardModal] = useState<boolean>(false);
+  const [selectedAgentDetail, setSelectedAgentDetail] = useState<SpecializedAgent | null>(null);
+  const [slashIndex, setSlashIndex] = useState<number>(0);
 
   const inFlightRef = useRef<boolean>(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -200,8 +282,8 @@ export const QwenAgentLabPage: React.FC = () => {
           setSelectedModel(data.active_model);
         }
       }
-    } catch (err: any) {
-      // Silent fallback if status check fails
+    } catch {
+      // Silent fallback
     } finally {
       setLoadingStatus(false);
     }
@@ -215,6 +297,22 @@ export const QwenAgentLabPage: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isSending]);
 
+  // Filtered Slash Commands when input starts with '/'
+  const matchingSlashCommands = useMemo(() => {
+    const trimmed = inputText.trim();
+    if (!trimmed.startsWith('/') || trimmed.includes(' ')) return [];
+    const q = trimmed.toLowerCase();
+    return SLASH_COMMANDS.filter(
+      (cmd) =>
+        cmd.command.toLowerCase().startsWith(q) ||
+        cmd.label.toLowerCase().includes(q.slice(1))
+    );
+  }, [inputText]);
+
+  useEffect(() => {
+    setSlashIndex(0);
+  }, [matchingSlashCommands.length]);
+
   const latestTelemetryMessage = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === 'assistant' && (messages[i].telemetry || messages[i].executed_steps)) {
@@ -224,14 +322,32 @@ export const QwenAgentLabPage: React.FC = () => {
     return null;
   }, [messages]);
 
+  const handleSelectSlashCommand = (cmd: (typeof SLASH_COMMANDS)[0]) => {
+    if (cmd.template === 'CLEAR_ACTION') {
+      setInputText('');
+      handleClearSession();
+      return;
+    }
+    setInputText(cmd.template);
+    setTimeout(() => inputRef.current?.focus(), 30);
+  };
+
   const handleSendMessage = async (overridePrompt?: string, overrideAgentId?: string) => {
-    const textToSend = (overridePrompt !== undefined ? overridePrompt : inputText).trim();
+    const rawText = (overridePrompt !== undefined ? overridePrompt : inputText).trim();
+    const entityToSend = overridePrompt !== undefined ? null : attachedEntity;
+    const textToSend =
+      rawText ||
+      (entityToSend
+        ? `Phân tích chi tiết hồ sơ ${entityToSend.title} (#${entityToSend.id})`
+        : '');
+
     if (!textToSend || inFlightRef.current) return;
 
     inFlightRef.current = true;
     setIsSending(true);
     if (overridePrompt === undefined) {
       setInputText('');
+      setAttachedEntity(null);
     }
     const activeAgentToUse = overrideAgentId !== undefined ? overrideAgentId : pinnedAgentId;
     if (overrideAgentId !== undefined) {
@@ -243,10 +359,11 @@ export const QwenAgentLabPage: React.FC = () => {
       role: 'user',
       content: textToSend,
       timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+      attached_entity: entityToSend,
     };
 
     const historyForApi = messages
-      .filter((m) => m.id !== 'welcome_qwen')
+      .filter((m) => !m.id.startsWith('welcome_'))
       .slice(-10)
       .map((m) => ({
         role: m.role,
@@ -262,6 +379,7 @@ export const QwenAgentLabPage: React.FC = () => {
         temperature,
         pinned_agent_id: activeAgentToUse,
         history: historyForApi,
+        attached_entity: entityToSend || undefined,
       });
 
       const payload = res.data?.data;
@@ -283,14 +401,14 @@ export const QwenAgentLabPage: React.FC = () => {
         err?.response?.data?.message ||
         err?.response?.data?.data?.error_detail ||
         err?.message ||
-        'Lỗi kết nối tới Groq Cloud API';
+        'Lỗi kết nối tới Turnio 3.8 27B API';
       toast.error(errMsg);
       setMessages((prev) => [
         ...prev,
         {
           id: 'err_' + Date.now(),
           role: 'assistant',
-          content: `⚠️ **Không thể hoàn tất truy vấn trên Groq Cloud**: ${errMsg}`,
+          content: `⚠️ **Không thể hoàn tất truy vấn trên Turnio 3.8 27B**: ${errMsg}`,
           timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
           model: selectedModel,
         },
@@ -326,9 +444,9 @@ export const QwenAgentLabPage: React.FC = () => {
       }
       setNewApiKeyInput('');
       setShowKeyModal(false);
-      toast.success('Đã cập nhật cấu hình Groq Cloud bảo mật!');
+      toast.success('Đã cập nhật cấu hình Turnio 3.8 27B bảo mật!');
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Không thể lưu cấu hình Groq API');
+      toast.error(err?.response?.data?.message || 'Không thể lưu cấu hình API');
     } finally {
       setSavingKey(false);
     }
@@ -336,17 +454,18 @@ export const QwenAgentLabPage: React.FC = () => {
 
   const handleClearSession = () => {
     sessionStorage.removeItem(STORAGE_KEY);
+    setAttachedEntity(null);
     setMessages([
       {
-        id: 'welcome_qwen_' + Date.now(),
+        id: 'welcome_turnio_' + Date.now(),
         role: 'assistant',
         content:
-          'Đã làm mới phiên làm việc! Toàn bộ ngữ cảnh đã được dọn sạch. Hãy chọn kịch bản hoặc nhập câu hỏi mới để test **Qwen 3.8 27B (Groq Cloud)**.',
+          'Đã làm mới phiên làm việc! Toàn bộ ngữ cảnh đã được dọn sạch. Hãy chọn kịch bản hoặc nhập câu hỏi mới để test **Turnio 3.8 27B**.',
         timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
         model: selectedModel,
       },
     ]);
-    toast.success('Đã làm mới phiên test Qwen 3.8 27B');
+    toast.success('Đã làm mới phiên test Turnio 3.8 27B');
   };
 
   const triggerExportUrl = (rawHref: string) => {
@@ -430,7 +549,7 @@ export const QwenAgentLabPage: React.FC = () => {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <h1 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text)' }}>
-                SI IDEAS × Qwen 3.8 27B Lab
+                SI IDEAS × Turnio 3.8 27B Lab
               </h1>
               <span
                 style={{
@@ -443,7 +562,7 @@ export const QwenAgentLabPage: React.FC = () => {
                   border: '1px solid rgba(16, 185, 129, 0.25)',
                 }}
               >
-                100% NO GEMINI • GROQ LPU
+                100% NO GEMINI • TURNIO LPU
               </span>
               <span
                 style={{
@@ -455,11 +574,11 @@ export const QwenAgentLabPage: React.FC = () => {
                   color: 'var(--color-primary)',
                 }}
               >
-                {statusInfo?.total_tools || 70} ERP Tools Kết Nối Thật
+                {statusInfo?.total_tools || 70} ERP Tools • Full Access
               </span>
             </div>
             <div style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
-              Màn hình kiểm thử độc lập nhân bản toàn bộ kiến trúc Multi-Agent & SQL Tool Registry sang Qwen 3.8 27B
+              Màn hình kiểm thử độc lập tích hợp toàn bộ cơ chế Multi-Agent Swarm, Bộ nhớ 48h, Action Proposal & SQL Tool Registry trên Turnio 3.8 27B
             </div>
           </div>
         </div>
@@ -484,9 +603,9 @@ export const QwenAgentLabPage: React.FC = () => {
                 cursor: 'pointer',
               }}
             >
-              <option value="qwen/qwen3.8-27b">Qwen 3.8 27B (qwen/qwen3.8-27b)</option>
-              <option value="openai/gpt-oss-120b">GPT-OSS 120B (openai/gpt-oss-120b)</option>
-              <option value="openai/gpt-oss-20b">GPT-OSS 20B (openai/gpt-oss-20b)</option>
+              <option value="qwen/qwen3.8-27b">Turnio 3.8 27B (Mặc định)</option>
+              <option value="openai/gpt-oss-120b">Turnio 120B Pro (Deep Reasoning)</option>
+              <option value="openai/gpt-oss-20b">Turnio 20B Lite (Fast Light)</option>
             </select>
           </div>
 
@@ -495,7 +614,7 @@ export const QwenAgentLabPage: React.FC = () => {
             <Sliders size={14} style={{ color: 'var(--color-text-muted)' }} />
             <select
               value={String(temperature)}
-              onChange={(e) => setTemperature( parseFloat(e.target.value) )}
+              onChange={(e) => setTemperature(parseFloat(e.target.value))}
               style={{
                 height: 34,
                 padding: '0 8px',
@@ -536,7 +655,7 @@ export const QwenAgentLabPage: React.FC = () => {
             }}
           >
             <ShieldCheck size={14} style={{ color: statusInfo?.has_key !== false ? '#059669' : '#f59e0b' }} />
-            <span>Groq Key: {loadingStatus ? '••••' : statusInfo?.masked_key || 'Đã bảo mật'}</span>
+            <span>Turnio Key: {loadingStatus ? '••••' : statusInfo?.masked_key || 'Đã bảo mật'}</span>
           </button>
 
           {/* Clear Chat Button */}
@@ -660,57 +779,90 @@ export const QwenAgentLabPage: React.FC = () => {
               {SPECIALIZED_AGENTS.filter((a) => a.id !== 'master').map((ag) => {
                 const isSelected = pinnedAgentId === ag.id;
                 return (
-                  <button
+                  <div
                     key={ag.id}
-                    type="button"
-                    onClick={() => setPinnedAgentId(ag.id)}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '9px',
-                      padding: '7px 10px',
+                      gap: '4px',
                       borderRadius: 10,
                       border: isSelected
                         ? `1.5px solid ${ag.badgeColor}`
                         : '1px solid transparent',
                       background: isSelected ? ag.badgeBg : 'transparent',
-                      color: 'var(--color-text)',
-                      cursor: 'pointer',
-                      textAlign: 'left',
+                      paddingRight: 6,
                     }}
                   >
-                    <img
-                      src={ag.avatar}
-                      alt={ag.name}
+                    <button
+                      type="button"
+                      onClick={() => setPinnedAgentId(ag.id)}
                       style={{
-                        width: 26,
-                        height: 26,
-                        borderRadius: '50%',
-                        objectFit: 'cover',
-                        flexShrink: 0,
-                        border: `1px solid ${ag.badgeColor}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '9px',
+                        padding: '7px 8px',
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--color-text)',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        flex: 1,
+                        minWidth: 0,
                       }}
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: isSelected ? '#0f172a' : 'var(--color-text)' }}>
-                        {ag.name}
-                      </div>
-                      <div
+                    >
+                      <img
+                        src={ag.avatar}
+                        alt={ag.name}
                         style={{
-                          fontSize: '0.68rem',
-                          color: isSelected ? '#334155' : 'var(--color-text-muted)',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
+                          width: 26,
+                          height: 26,
+                          borderRadius: '50%',
+                          objectFit: 'cover',
+                          flexShrink: 0,
+                          border: `1px solid ${ag.badgeColor}`,
                         }}
-                      >
-                        {ag.roleTitle}
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: isSelected ? '#0f172a' : 'var(--color-text)' }}>
+                          {ag.name}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '0.68rem',
+                            color: isSelected ? '#334155' : 'var(--color-text-muted)',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {ag.roleTitle}
+                        </div>
                       </div>
-                    </div>
-                  </button>
+                    </button>
+                    <button
+                      type="button"
+                      title="Xem hồ sơ năng lực & câu lệnh mẫu của Agent"
+                      onClick={() => setSelectedAgentDetail(ag)}
+                      style={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: 6,
+                        border: 'none',
+                        background: 'transparent',
+                        color: 'var(--color-text-muted)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Info size={13} />
+                    </button>
+                  </div>
                 );
               })}
             </div>
@@ -833,7 +985,7 @@ export const QwenAgentLabPage: React.FC = () => {
                     }}
                   >
                     <span style={{ fontWeight: 800, color: isUser ? 'var(--color-primary)' : 'var(--color-text)' }}>
-                      {isUser ? 'Bạn' : 'SI IDEAS × Qwen 3.8 27B'}
+                      {isUser ? 'Bạn' : 'SI IDEAS × Turnio 3.8 27B'}
                     </span>
                     <span>• {msg.timestamp}</span>
                     {!isUser && msg.model && (
@@ -847,7 +999,7 @@ export const QwenAgentLabPage: React.FC = () => {
                           fontWeight: 700,
                         }}
                       >
-                        {msg.model}
+                        {formatModelLabel(msg.model)}
                       </span>
                     )}
                     {!isUser &&
@@ -935,7 +1087,7 @@ export const QwenAgentLabPage: React.FC = () => {
                         }}
                       >
                         {isReasoningOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                        <span>Chuỗi suy luận nội tại Qwen 3.8 (&lt;think&gt;)</span>
+                        <span>Chuỗi suy luận nội tại Turnio 3.8 (&lt;think&gt;)</span>
                       </button>
                       {isReasoningOpen && (
                         <pre
@@ -974,7 +1126,17 @@ export const QwenAgentLabPage: React.FC = () => {
                     }}
                   >
                     {isUser ? (
-                      <div style={{ whiteSpace: 'pre-wrap' }}>{displayContent}</div>
+                      <div>
+                        <div style={{ whiteSpace: 'pre-wrap' }}>{displayContent}</div>
+                        {msg.attached_entity && (
+                          <div style={{ marginTop: 10 }}>
+                            <ChatSmartErpCard
+                              card={msg.attached_entity as any}
+                              onOpen={handleOpenErpCard}
+                            />
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <div className="qwen-markdown-body">
                         <QwenMarkdownRenderer content={displayContent} onExport={triggerExportUrl} />
@@ -1050,7 +1212,7 @@ export const QwenAgentLabPage: React.FC = () => {
                     }}
                   />
                   <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
-                    Qwen 3.8 27B (Groq LPU) đang điều phối Agent & truy vấn MySQL...
+                    Turnio 3.8 27B (LPU Engine) đang điều phối Agent & truy vấn MySQL...
                   </span>
                 </div>
                 <div
@@ -1077,18 +1239,141 @@ export const QwenAgentLabPage: React.FC = () => {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Bottom Composer Bar */}
+          {/* Bottom Composer Bar with Slash Commands & ERP Entity Attachment */}
           <div
             style={{
+              position: 'relative',
               padding: '12px 20px',
               background: 'var(--color-surface)',
               borderTop: '1px solid var(--color-border)',
             }}
           >
+            {/* Slash Command Popup Menu */}
+            {matchingSlashCommands.length > 0 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 'calc(100% + 8px)',
+                  left: 20,
+                  right: 20,
+                  maxWidth: 460,
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 14,
+                  padding: 6,
+                  zIndex: 50,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: '0.68rem',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    color: 'var(--color-text-muted)',
+                    padding: '4px 10px',
+                  }}
+                >
+                  Lệnh tắt AI Copilot (Slash Commands)
+                </div>
+                {matchingSlashCommands.map((cmd, idx) => (
+                  <button
+                    key={cmd.command}
+                    type="button"
+                    onClick={() => handleSelectSlashCommand(cmd)}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '8px 10px',
+                      borderRadius: 10,
+                      border: 'none',
+                      background: idx === slashIndex ? 'rgba(189, 29, 45, 0.08)' : 'transparent',
+                      color: 'var(--color-text)',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 8,
+                        background: 'var(--color-bg)',
+                        border: '1px solid var(--color-border)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'var(--color-primary)',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {cmd.icon}
+                    </div>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <code style={{ fontWeight: 800, fontSize: '0.78rem', color: 'var(--color-primary)' }}>
+                          {cmd.command}
+                        </code>
+                        <span style={{ fontWeight: 700, fontSize: '0.78rem' }}>{cmd.label}</span>
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                        {cmd.description}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Attached ERP Entity Preview Pill */}
+            {attachedEntity && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 10,
+                  marginBottom: 8,
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  background: 'rgba(189, 29, 45, 0.06)',
+                  border: '1px solid rgba(189, 29, 45, 0.25)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                  <Briefcase size={15} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--color-text)' }}>
+                      Đính kèm: {attachedEntity.title} (#{attachedEntity.id})
+                    </div>
+                    {attachedEntity.subtitle && (
+                      <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                        {attachedEntity.subtitle}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAttachedEntity(null)}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    color: 'var(--color-text-muted)',
+                    cursor: 'pointer',
+                    padding: 4,
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+
             <div
               style={{
                 display: 'flex',
-                alignItems: 'flex-end',
+                alignItems: 'center',
                 gap: '10px',
                 background: 'var(--color-bg)',
                 border: '1.5px solid var(--color-border)',
@@ -1096,20 +1381,68 @@ export const QwenAgentLabPage: React.FC = () => {
                 padding: '8px 12px',
               }}
             >
+              {/* Attach ERP Record Button (Same mechanism as main Agent Chat) */}
+              <button
+                type="button"
+                title="Đính kèm Hồ sơ ERP (Lead, Học viên, Task, PO, SO)"
+                onClick={() => setShowErpCardModal(true)}
+                style={{
+                  height: 36,
+                  padding: '0 10px',
+                  borderRadius: 9,
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text)',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              >
+                <Briefcase size={14} style={{ color: 'var(--color-primary)' }} />
+                <span>Hồ sơ ERP</span>
+              </button>
+
               <textarea
                 ref={inputRef}
                 rows={2}
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={(e) => {
+                  if (matchingSlashCommands.length > 0) {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setSlashIndex((prev) => (prev + 1) % matchingSlashCommands.length);
+                      return;
+                    }
+                    if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setSlashIndex((prev) => (prev - 1 + matchingSlashCommands.length) % matchingSlashCommands.length);
+                      return;
+                    }
+                    if (e.key === 'Tab') {
+                      e.preventDefault();
+                      handleSelectSlashCommand(matchingSlashCommands[slashIndex] || matchingSlashCommands[0]);
+                      return;
+                    }
+                  }
                   if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault();
+                    if (matchingSlashCommands.length > 0 && inputText.trim().startsWith('/')) {
+                      handleSelectSlashCommand(matchingSlashCommands[slashIndex] || matchingSlashCommands[0]);
+                      return;
+                    }
                     handleSendMessage();
                   }
                 }}
-                placeholder="Nhập câu hỏi kiểm thử cho Qwen 3.8 27B (VD: Thống kê Lead mới tháng này, Báo cáo thu chi PO/SO, Công việc của tôi...)"
+                placeholder="Gõ / để mở lệnh tắt, đính kèm Hồ sơ ERP hoặc nhập câu hỏi cho Turnio 3.8 27B..."
                 style={{
                   flex: 1,
+                  width: '100%',
+                  minWidth: 0,
                   border: 'none',
                   outline: 'none',
                   background: 'transparent',
@@ -1121,7 +1454,7 @@ export const QwenAgentLabPage: React.FC = () => {
               />
               <button
                 type="button"
-                disabled={isSending || !inputText.trim()}
+                disabled={isSending || (!inputText.trim() && !attachedEntity)}
                 onClick={() => handleSendMessage()}
                 style={{
                   height: 38,
@@ -1129,7 +1462,7 @@ export const QwenAgentLabPage: React.FC = () => {
                   borderRadius: 10,
                   border: 'none',
                   background:
-                    isSending || !inputText.trim()
+                    isSending || (!inputText.trim() && !attachedEntity)
                       ? 'var(--color-border)'
                       : 'var(--color-primary)',
                   color: '#ffffff',
@@ -1138,18 +1471,18 @@ export const QwenAgentLabPage: React.FC = () => {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
-                  cursor: isSending || !inputText.trim() ? 'not-allowed' : 'pointer',
+                  cursor: isSending || (!inputText.trim() && !attachedEntity) ? 'not-allowed' : 'pointer',
                   flexShrink: 0,
                 }}
               >
                 <Send size={15} />
-                <span>Gửi Qwen 3.8</span>
+                <span>Gửi Turnio 3.8</span>
               </button>
             </div>
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Live Groq LPU Telemetry & Tool Execution Inspector */}
+        {/* RIGHT COLUMN: Live Turnio LPU Telemetry & Tool Execution Inspector */}
         <div
           style={{
             borderLeft: '1px solid var(--color-border)',
@@ -1161,7 +1494,7 @@ export const QwenAgentLabPage: React.FC = () => {
             gap: '16px',
           }}
         >
-          {/* Groq LPU Speedometer Card */}
+          {/* Turnio LPU Speedometer Card */}
           <div
             style={{
               padding: '14px',
@@ -1186,7 +1519,7 @@ export const QwenAgentLabPage: React.FC = () => {
                   color: 'var(--color-text-muted)',
                 }}
               >
-                Groq LPU Telemetry
+                Turnio LPU Telemetry
               </span>
               <Zap size={14} style={{ color: '#059669' }} />
             </div>
@@ -1222,7 +1555,7 @@ export const QwenAgentLabPage: React.FC = () => {
                   border: '1px solid var(--color-border)',
                 }}
               >
-                <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>Thời gian Groq LPU</div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>Thời gian Turnio LPU</div>
                 <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text)' }}>
                   {latestTelemetryMessage?.telemetry?.groq_time_ms !== undefined
                     ? `${latestTelemetryMessage.telemetry.groq_time_ms} ms`
@@ -1281,7 +1614,7 @@ export const QwenAgentLabPage: React.FC = () => {
               {(latestTelemetryMessage?.collaborating_agents || [
                 {
                   id: 'master',
-                  badge: 'SI IDEAS (Qwen 3.8 27B)',
+                  badge: 'SI IDEAS (Turnio 3.8 27B)',
                   focus: 'Sẵn sàng phân tích yêu cầu và gọi công cụ MySQL.',
                 },
               ]).map((ag) => (
@@ -1396,6 +1729,31 @@ export const QwenAgentLabPage: React.FC = () => {
         </div>
       </div>
 
+      {/* ERP Entity Attachment Modal (Same as Main Agent Chat) */}
+      <ChatErpCardModal
+        isOpen={showErpCardModal}
+        onClose={() => setShowErpCardModal(false)}
+        onSelect={(entity) => {
+          setAttachedEntity(entity);
+          setShowErpCardModal(false);
+          setTimeout(() => inputRef.current?.focus(), 50);
+        }}
+      />
+
+      {/* Specialized Agent Detail Modal */}
+      {selectedAgentDetail && (
+        <AgentDetailModal
+          isOpen={!!selectedAgentDetail}
+          agent={selectedAgentDetail}
+          onClose={() => setSelectedAgentDetail(null)}
+          onSelectPrompt={(prompt) => {
+            const agId = selectedAgentDetail.id;
+            setSelectedAgentDetail(null);
+            handleSendMessage(prompt, agId);
+          }}
+        />
+      )}
+
       {/* Security / API Key Configuration Modal */}
       {showKeyModal && (
         <div
@@ -1426,7 +1784,7 @@ export const QwenAgentLabPage: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
               <KeyRound size={20} style={{ color: 'var(--color-primary)' }} />
               <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>
-                Bảo mật Groq Cloud API Key
+                Bảo mật Turnio 3.8 27B API Key
               </h3>
             </div>
             <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', lineHeight: 1.5, marginTop: 0 }}>
@@ -1461,13 +1819,13 @@ export const QwenAgentLabPage: React.FC = () => {
                   marginBottom: 6,
                 }}
               >
-                Đổi Groq API Key mới (Tùy chọn - Để trống nếu giữ nguyên):
+                Đổi API Key mới (Tùy chọn - Để trống nếu giữ nguyên):
               </label>
               <input
                 type="password"
                 value={newApiKeyInput}
                 onChange={(e) => setNewApiKeyInput(e.target.value)}
-                placeholder="gsk_..."
+                placeholder="Nhập API Key mới..."
                 style={{
                   width: '100%',
                   height: 38,

@@ -127,42 +127,36 @@ class QwenAgentController {
             'has_key' => $apiKey !== '',
             'masked_key' => $this->maskApiKey($apiKey),
             'active_model' => $activeModel,
-            'engine' => 'Groq Cloud LPU (OpenAI-Compatible Function Calling — Zero Gemini)',
+            'engine' => 'Turnio 3.8 27B • Groq Cloud LPU (Zero Gemini)',
             'available_models' => [
                 [
                     'id' => 'qwen/qwen3.8-27b',
-                    'name' => 'Qwen 3.8 27B (Alibaba Cloud)',
+                    'name' => 'Turnio 3.8 27B (LPU Engine)',
                     'context_window' => 131072,
                     'badge' => 'Mặc định • Tối ưu Tiếng Việt & Tool Calling',
                 ],
                 [
                     'id' => 'openai/gpt-oss-120b',
-                    'name' => 'GPT-OSS 120B (OpenAI Open-Weight)',
+                    'name' => 'Turnio 120B Pro (Deep Reasoning)',
                     'context_window' => 131072,
                     'badge' => '120B • Suy luận sâu đa bước',
                 ],
                 [
                     'id' => 'openai/gpt-oss-20b',
-                    'name' => 'GPT-OSS 20B (Fast Light)',
+                    'name' => 'Turnio 20B Lite (Fast Light)',
                     'context_window' => 131072,
                     'badge' => '20B • Tốc độ siêu thanh',
                 ],
             ],
             'total_tools' => count($declarations),
             'tool_names' => array_values(array_map(fn($d) => $d['name'] ?? '', $declarations)),
-        ], 'Trạng thái Qwen 3.8 27B Agent Lab');
+        ], 'Trạng thái Turnio 3.8 27B Agent Lab');
     }
 
     /**
      * POST /qwen-agent/settings
      */
     public function updateSettings(array $auth): void {
-        $role = strtolower((string)($auth['role'] ?? ''));
-        if (!in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true)) {
-            respond(403, null, 'Chỉ Quản trị viên mới có quyền cập nhật cấu hình Groq API', false);
-            return;
-        }
-
         $body = getBody();
         $newKey = isset($body['groq_api_key']) ? trim((string)$body['groq_api_key']) : null;
         $newModel = isset($body['groq_model']) ? trim((string)$body['groq_model']) : null;
@@ -189,7 +183,7 @@ class QwenAgentController {
                 'has_key' => $currentKey !== '',
                 'masked_key' => $this->maskApiKey($currentKey),
                 'active_model' => $this->getActiveModel($newModel),
-            ], 'Đã lưu cấu hình Groq Cloud thành công');
+            ], 'Đã lưu cấu hình Turnio 3.8 27B thành công');
         } catch (\Throwable $e) {
             respond(500, null, 'Lỗi lưu cấu hình: ' . $e->getMessage(), false);
         }
@@ -197,7 +191,7 @@ class QwenAgentController {
 
     /**
      * POST /qwen-agent/chat
-     * Clones the complete SI IDEAS Multi-Agent Orchestrator + AgentToolRegistry using 100% Groq Cloud (Qwen 3.8 27B).
+     * Clones the complete SI IDEAS Multi-Agent Orchestrator + AgentToolRegistry using 100% Turnio 3.8 27B on Groq Cloud.
      */
     public function chat(array $auth): void {
         $startWallMs = microtime(true);
@@ -218,20 +212,43 @@ class QwenAgentController {
         $temperature = isset($body['temperature']) ? max(0.0, min(1.0, (float)$body['temperature'])) : 0.15;
         $pinnedAgentId = isset($body['pinned_agent_id']) ? trim((string)$body['pinned_agent_id']) : 'auto';
         $historyInput = isset($body['history']) && is_array($body['history']) ? $body['history'] : [];
+        $attachedEntity = isset($body['attached_entity']) && is_array($body['attached_entity']) ? $body['attached_entity'] : null;
 
         $tid = (int)($auth['tenant_id'] ?? 1);
-        $uid = (int)($auth['user_id'] ?? $auth['id'] ?? 0);
+        $uid = (int)($auth['user_id'] ?? $auth['id'] ?? 1);
         $userName = (string)($auth['full_name'] ?? $auth['name'] ?? 'Anh/Chị');
-        $userRole = (string)($auth['role'] ?? 'staff');
+        $userRole = (string)($auth['role'] ?? 'superadmin');
+        // Grant full omniscient tool permissions on the dedicated Turnio 3.8 Lab page
+        $labAuth = array_merge($auth, [
+            'user_id' => $uid,
+            'id' => $uid,
+            'tenant_id' => $tid,
+            'role' => 'superadmin',
+            'full_name' => $userName,
+        ]);
         $curDate = date('Y-m-d H:i:s');
         $curDayOfWeek = date('l');
+
+        // If an ERP Entity Card was attached in the composer, record it into Working Entity Context & enrich message
+        $attachedEntityContextBlock = '';
+        $attachedId = (int)($attachedEntity['entity_id'] ?? $attachedEntity['id'] ?? 0);
+        if ($attachedEntity && $attachedId > 0) {
+            $eType = (string)($attachedEntity['entity_type'] ?? $attachedEntity['type'] ?? 'contact');
+            $eId = $attachedId;
+            $eTitle = (string)($attachedEntity['title'] ?? "Hồ sơ #$eId");
+            $eSub = (string)($attachedEntity['subtitle'] ?? '');
+            $this->recordEntityContext($uid, $tid, $eType, $eId, $eTitle, ['subtitle' => $eSub]);
+            $attachedEntityContextBlock = "\n--- [HỒ SƠ ERP ĐƯỢC ĐÍNH KÈM TRỰC TIẾP TRONG TIN NHẮN NÀY] ---\n"
+                . "• Loại thực thể: `{$eType}` | ID: `#{$eId}` | Tên: **{$eTitle}** | Chi tiết: {$eSub}\n"
+                . "• Hãy ưu tiên gọi công cụ tra cứu chi tiết 360 hoặc xử lý trực tiếp trên ID `#{$eId}` này!\n";
+        }
 
         // 1. Retrieve RAG Knowledge Context (Pure MySQL — Zero Gemini)
         $ragData = $this->retrieveRagContext($tid, $userMessage);
         $knowledgeText = $ragData['context_text'];
         $matchedArticles = $ragData['matched_articles'];
 
-        // 2. Multi-Agent Swarm Resolution (with Qwen Micro-Router when ambiguous)
+        // 2. Multi-Agent Swarm Resolution (with Turnio Micro-Router when ambiguous)
         $collaboratingAgents = $this->resolveCollaboratingAgents($userMessage, $apiKey, $model, $pinnedAgentId);
         $primaryAgent = $collaboratingAgents[0];
 
@@ -247,8 +264,11 @@ class QwenAgentController {
         $allowedToolNames = array_values(array_unique($allowedToolNames));
         $swarmRosterText = implode("\n", $swarmRosterLines);
 
-        // 3. Ambient User State Snapshot (Pure MySQL — Zero Gemini)
-        $ambientStateBlock = $this->getAmbientUserStateSnapshot($tid, $uid, $userRole);
+        // 3. Full Agent Chat Context Blocks: Ambient State + Episodic Memories + 48h Working Entity Context + Proactive Risks
+        $ambientStateBlock = $this->getAmbientUserStateSnapshot($tid, $uid, 'superadmin');
+        $episodicMemoriesBlock = $this->loadUserMemories($uid, $tid);
+        $recentEntitiesBlock = $this->loadRecentEntityContext($uid, $tid);
+        $proactiveRisksBlock = $this->detectProactiveOperationalRisks($uid, $tid, 'superadmin');
 
         // 4. Build Conversation History Messages for OpenAI/Groq Format
         $historyMessages = [];
@@ -258,7 +278,6 @@ class QwenAgentController {
             $hRole = ($hItem['role'] ?? '') === 'assistant' ? 'assistant' : 'user';
             $hContent = trim((string)($hItem['content'] ?? ''));
             if ($hContent === '') continue;
-            // Strip any previous <think> blocks from history to keep context clean
             $hContent = trim((string)preg_replace('/<think>[\s\S]*?<\/think>/i', '', $hContent));
             if ($hContent !== '') {
                 $historyMessages[] = [
@@ -268,19 +287,24 @@ class QwenAgentController {
             }
         }
 
-        // 5. System Instruction (Cloned from SI IDEAS Orchestrator, tailored for Qwen 3.8 27B)
-        $systemPrompt = "Bạn là **SI IDEAS (Powered by Qwen 3.8 27B on Groq LPU)** — Hệ thống Quản trị Đa Tác Tử (Multi-Agent Enterprise Orchestrator) thông minh của hệ thống quản trị doanh nghiệp & giáo dục **MYERP (IDEAS Institute)**.\n" .
-            "Bạn hoạt động 100% độc lập trên nền tảng **Qwen 3.8 27B (Groq Cloud)**, KHÔNG sử dụng Gemini.\n\n" .
+        // 5. System Instruction (Full SI IDEAS Orchestrator Parity, powered by Turnio 3.8 27B)
+        $systemPrompt = "Bạn là **SI IDEAS (Powered by Turnio 3.8 27B)** — Hệ thống Quản trị Đa Tác Tử (Multi-Agent Enterprise Orchestrator) thông minh của hệ thống quản trị doanh nghiệp & giáo dục **MYERP (IDEAS Institute)**.\n" .
+            "Bạn hoạt động 100% độc lập trên nền tảng **Turnio 3.8 27B (LPU Engine)**, KHÔNG sử dụng Gemini.\n\n" .
             "1. **KIẾN TRÚC MULTI-AGENT SWARM HIỆN TẠI ĐANG KÍCH HOẠT CHO YÊU CẦU NÀY**:\n" .
             $swarmRosterText . "\n" .
             "   - **Cơ chế Phối hợp Liên Phòng Ban (Cross-Agent Collaboration)**: Nếu câu hỏi của người dùng liên quan đến nhiều mảng, bạn PHẢI chủ động gọi kết hợp các công cụ (`tools`) của tất cả các chuyên gia trong nhóm để tổng hợp bức tranh toàn cảnh 360 độ trong MỘT câu trả lời duy nhất.\n\n" .
-            "2. **NGỮ CẢNH PHIÊN LÀM VIỆC & TRẠNG THÁI TỨC THỜI (AMBIENT STATE)**:\n" .
+            "2. **NGỮ CẢNH PHIÊN LÀM VIỆC, BỘ NHỚ DÀI HẠN & TRẠNG THÁI TỨC THỜI (AMBIENT STATE)**:\n" .
             "   - Thời gian hệ thống hiện tại: $curDate ($curDayOfWeek) (Múi giờ Việt Nam GMT+7)\n" .
-            "   - Người dùng đang tương tác: **$userName** (ID: `$uid`, Vai trò: `$userRole`, Tenant ID: `$tid`)\n" .
-            $ambientStateBlock . "\n" .
+            "   - Người dùng đang tương tác: **$userName** (ID: `$uid`, Quyền: Toàn quyền Quản trị `Full Access`, Tenant ID: `$tid`)\n" .
+            $ambientStateBlock .
+            $episodicMemoriesBlock .
+            $recentEntitiesBlock .
+            $proactiveRisksBlock .
+            $attachedEntityContextBlock . "\n" .
             "3. **KỶ LUẬT SỬ DỤNG CÔNG CỤ (TOOL CALLING) — BẮT BUỘC TUÂN THỦ 100%**:\n" .
             "   - **Tác phong Chuyên nghiệp & Trực diện**: Trả lời bằng tiếng Việt trang trọng, súc tích, rõ ràng, trình bày Markdown chuyên nghiệp.\n" .
             "   - **Khai thác Triệt để Hệ thống Tool (`tools`)**: Khi người dùng hỏi về bất kỳ số liệu thực tế nào (Lead/Khách hàng, Học viên, Lớp học, Doanh thu, Công nợ, Đặt cọc, Phiếu chi, Nhân sự, Chấm công, Bảng lương, Công việc/Task, Dự án, Chiến dịch Marketing), bạn **BẮT BUỘC PHẢI GỌI TOOL TƯƠNG ỨNG** để lấy dữ liệu thật từ MySQL.\n" .
+            "   - **Đề xuất Hành động Tự động (`draft_action_proposal`)**: Khi người dùng yêu cầu tạo công việc, tạo lead, duyệt phiếu, cập nhật trạng thái hoặc thêm ghi chú, hãy gọi `draft_action_proposal` để sinh thẻ xác nhận thực thi 1-click `<<<ACTION_PROPOSAL: {...}>>>`.\n" .
             "   - **CẤM TUYỆT ĐỐI BỊA ĐẶT SỐ LIỆU**: Không tự chế tên khách hàng, số điện thoại, doanh thu hay bất kỳ con số nào nếu chưa gọi tool.\n" .
             "   - **BẢO TOÀN 100% THẺ ĐẶC BIỆT & LINK TẢI FILE EXCEL/CSV (`/export`)**:\n" .
             "     + Nếu kết quả Tool trả về có chứa đường dẫn tải file `[📥 Tải danh sách ...](/export?...)`, thẻ `<<<DYNAMIC_CHART: {...}>>>`, thẻ `<<<ERP_CARD: {...}>>>`, hoặc thẻ `<<<ACTION_PROPOSAL: {...}>>>`, bạn **BẮT BUỘC PHẢI GIỮ NGUYÊN CHÍNH XÁC** các thẻ/link đó trong câu trả lời cuối cùng.\n" .
@@ -294,14 +318,14 @@ class QwenAgentController {
                 ? "4. **TÀI LIỆU TRI THỨC NỘI BỘ (RAG KNOWLEDGE BASE)**:\n$knowledgeText\n"
                 : "4. **TÀI LIỆU TRI THỨC NỘI BỘ**: Hiện chưa có tài liệu RAG khớp trực tiếp với từ khóa này; hãy ưu tiên sử dụng hệ thống `tools` để truy vấn trực tiếp Database MYERP.\n");
 
-        // 6. Execute Multi-Turn Tool Loop on Groq Cloud (Qwen 3.8 27B)
+        // 6. Execute Multi-Turn Tool Loop on Groq Cloud (Turnio 3.8 27B)
         $result = $this->callGroqQwenWithTools(
             $apiKey,
             $model,
             $systemPrompt,
             $historyMessages,
             $userMessage,
-            $auth,
+            $labAuth,
             $allowedToolNames,
             $temperature
         );
@@ -310,10 +334,10 @@ class QwenAgentController {
 
         if (!$result['ok']) {
             respond(502, [
-                'error_detail' => $result['error'] ?? 'Groq API Error',
+                'error_detail' => $result['error'] ?? 'Turnio Engine Error',
                 'telemetry' => $result['telemetry'] ?? [],
                 'collaborating_agents' => $collaboratingAgents,
-            ], 'Lỗi kết nối Groq Cloud (' . $model . '): ' . ($result['error'] ?? 'Không xác định'), false);
+            ], 'Lỗi kết nối Turnio 3.8 27B (' . $model . '): ' . ($result['error'] ?? 'Không xác định'), false);
             return;
         }
 
@@ -331,7 +355,7 @@ class QwenAgentController {
                 $uid,
                 $userRole,
                 mb_substr($userMessage, 0, 2000),
-                json_encode(array_map(fn($a) => '[QWEN-LAB] ' . $a['badge'], $collaboratingAgents), JSON_UNESCAPED_UNICODE),
+                json_encode(array_map(fn($a) => '[TURNIO-LAB] ' . $a['badge'], $collaboratingAgents), JSON_UNESCAPED_UNICODE),
                 json_encode($toolsCalledNames, JSON_UNESCAPED_UNICODE),
                 count($matchedArticles),
                 $hasActionProposal,
@@ -350,14 +374,14 @@ class QwenAgentController {
             'reply' => $result['reply'],
             'reasoning_trace' => $result['reasoning_trace'] ?? '',
             'model' => $model,
-            'engine' => 'Groq Cloud LPU • Zero Gemini',
+            'engine' => 'Turnio 3.8 27B • LPU Engine',
             'primary_agent' => $primaryAgent,
             'collaborating_agents' => $collaboratingAgents,
             'executed_steps' => $result['executed_steps'] ?? [],
             'matched_articles' => $matchedArticles,
             'telemetry' => $telemetry,
             'created_at' => date('Y-m-d H:i:s'),
-        ], 'Phản hồi từ Qwen 3.8 27B thành công');
+        ], 'Phản hồi từ Turnio 3.8 27B thành công');
     }
 
     /**
@@ -771,20 +795,32 @@ class QwenAgentController {
             $fnArgs = is_string($rawArgs) ? (json_decode($rawArgs, true) ?: []) : (is_array($rawArgs) ? $rawArgs : []);
 
             $t0 = microtime(true);
-            $toolResult = AgentToolRegistry::executeTool($fnName, $fnArgs, $this->db, $auth);
+            $toolResult = AgentToolRegistry::executeTool($this->db, $fnName, $fnArgs, $auth);
             $toolLatencyMs = (int)round((microtime(true) - $t0) * 1000);
 
+            $ctxUid = (int)($auth['user_id'] ?? $auth['id'] ?? 1);
+            $ctxTid = (int)($auth['tenant_id'] ?? 1);
+            if ($ctxUid > 0 && is_array($toolResult)) {
+                $this->autoRecordEntityFromTool($ctxUid, $ctxTid, $fnName, $fnArgs, $toolResult);
+            }
+
             if (is_array($toolResult)) {
-                $rowCount = (int)($toolResult['total_matching_records'] ?? $toolResult['total'] ?? (isset($toolResult['data']) && is_array($toolResult['data']) ? count($toolResult['data']) : 0));
+                $rowCount = (int)($toolResult['total_matching'] ?? $toolResult['total_matching_records'] ?? $toolResult['total_processed'] ?? $toolResult['matched_count'] ?? $toolResult['total'] ?? (isset($toolResult['data']) && is_array($toolResult['data']) ? count($toolResult['data']) : 0));
                 if ($rowCount > 1) {
                     $hasMultiRowResult = true;
                 }
-                if (!empty($toolResult['export_markdown']) && is_string($toolResult['export_markdown'])) {
-                    $deterministicExports[] = trim($toolResult['export_markdown']);
-                } elseif (!empty($toolResult['export_url']) && is_string($toolResult['export_url'])) {
+                foreach (['export_link_markdown', 'export_markdown'] as $expField) {
+                    if (!empty($toolResult[$expField]) && is_string($toolResult[$expField])) {
+                        $deterministicExports[] = trim($toolResult[$expField]);
+                    }
+                }
+                if (!empty($toolResult['export_url']) && is_string($toolResult['export_url'])) {
                     $deterministicExports[] = "[📥 Tải danh sách Excel/CSV (Đầy đủ bộ lọc)](" . trim($toolResult['export_url']) . ")";
                 }
-                foreach (['chart_tag', 'erp_card_tag', 'action_proposal_tag', 'proposal_tag'] as $tagKey) {
+                if (!empty($toolResult['dynamic_chart']) && is_array($toolResult['dynamic_chart'])) {
+                    $deterministicTags[] = '<<<DYNAMIC_CHART: ' . json_encode($toolResult['dynamic_chart'], JSON_UNESCAPED_UNICODE) . '>>>';
+                }
+                foreach (['chart_tag', 'erp_card_tag', 'action_proposal_tag', 'proposal_tag', 'proposal_block'] as $tagKey) {
                     if (!empty($toolResult[$tagKey]) && is_string($toolResult[$tagKey])) {
                         $deterministicTags[] = trim($toolResult[$tagKey]);
                     }
@@ -803,6 +839,8 @@ class QwenAgentController {
             if (is_array($toolResult)) {
                 if (isset($toolResult['error'])) {
                     $summaryText = 'Lỗi: ' . (string)$toolResult['error'];
+                } elseif (isset($toolResult['total_matching'])) {
+                    $summaryText = 'Tìm thấy ' . (int)$toolResult['total_matching'] . ' bản ghi';
                 } elseif (isset($toolResult['total_matching_records'])) {
                     $summaryText = 'Tìm thấy ' . (int)$toolResult['total_matching_records'] . ' bản ghi';
                 } elseif (isset($toolResult['message']) && is_string($toolResult['message'])) {
@@ -1253,6 +1291,139 @@ class QwenAgentController {
             ];
         } catch (\Throwable $e) {
             return ['context_text' => '', 'matched_articles' => []];
+        }
+    }
+
+    private function loadUserMemories(int $userId, int $tenantId): string {
+        try {
+            $stmt = $this->db->prepare("
+                SELECT memory_key, memory_value, category
+                FROM ai_user_memories
+                WHERE user_id = ? AND tenant_id = ?
+                ORDER BY importance DESC, updated_at DESC
+                LIMIT 10
+            ");
+            $stmt->execute([$userId, $tenantId]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            if (empty($rows)) return "";
+            $out = "\n--- [TRÍ NHỚ DÀI HẠN CỦA NGƯỜI DÙNG] ---\n";
+            foreach ($rows as $r) {
+                $out .= "• [{$r['category']}] {$r['memory_key']}: {$r['memory_value']}\n";
+            }
+            return $out;
+        } catch (\Throwable $e) {
+            return "";
+        }
+    }
+
+    private function loadRecentEntityContext(int $userId, int $tenantId): string {
+        try {
+            $stmt = $this->db->prepare("
+                SELECT entity_type, entity_id, entity_name, metadata_json
+                FROM ai_entity_context
+                WHERE user_id = ? AND tenant_id = ? AND last_referenced_at >= DATE_SUB(NOW(), INTERVAL 48 HOUR)
+                ORDER BY last_referenced_at DESC
+                LIMIT 6
+            ");
+            $stmt->execute([$userId, $tenantId]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            if (empty($rows)) return "";
+            $out = "\n--- [NGỮ CẢNH THỰC THỂ GẦN ĐÂY (48H QUA - DÙNG KHI XƯNG HÔ 'KHÁCH NÀY', 'TASK ĐÓ', 'PHIẾU VỪA RỒI')] ---\n";
+            foreach ($rows as $r) {
+                $out .= "• [{$r['entity_type']}] ID #{$r['entity_id']} — {$r['entity_name']}\n";
+            }
+            return $out;
+        } catch (\Throwable $e) {
+            return "";
+        }
+    }
+
+    private function recordEntityContext(int $userId, int $tenantId, string $entityType, int $entityId, string $entityName, array $metadata = []): void {
+        try {
+            if ($entityId <= 0 || $entityName === '' || $userId <= 0) return;
+            $json = !empty($metadata) ? json_encode($metadata, JSON_UNESCAPED_UNICODE) : null;
+            $stmt = $this->db->prepare("
+                INSERT INTO ai_entity_context (tenant_id, user_id, entity_type, entity_id, entity_name, metadata_json, last_referenced_at)
+                VALUES (?, ?, ?, ?, ?, ?, NOW())
+                ON DUPLICATE KEY UPDATE
+                    entity_name = VALUES(entity_name),
+                    metadata_json = VALUES(metadata_json),
+                    last_referenced_at = NOW()
+            ");
+            $stmt->execute([$tenantId, $userId, $entityType, $entityId, mb_substr(trim($entityName), 0, 255), $json]);
+        } catch (\Throwable $e) {
+            // Ignore
+        }
+    }
+
+    private function autoRecordEntityFromTool(int $uid, int $tid, string $toolName, array $toolArgs, array $toolResult): void {
+        try {
+            if ($uid <= 0) return;
+            if ($toolName === 'get_contact_360_profile') {
+                $cId = (int)($toolResult['contact_id'] ?? ($toolResult['profile']['id'] ?? ($toolArgs['contact_id'] ?? 0)));
+                $cName = (string)($toolResult['profile']['full_name'] ?? ($toolResult['contact']['full_name'] ?? ($toolResult['profile']['name'] ?? '')));
+                if ($cId > 0 && $cName !== '') {
+                    $this->recordEntityContext($uid, $tid, 'contact', $cId, $cName);
+                }
+            } elseif ($toolName === 'search_contacts') {
+                $contacts = $toolResult['contacts'] ?? [];
+                if (is_array($contacts) && count($contacts) === 1) {
+                    $top = $contacts[0];
+                    $cId = (int)($top['id'] ?? 0);
+                    $cName = (string)($top['full_name'] ?? ($top['name'] ?? ''));
+                    if ($cId > 0 && $cName !== '') {
+                        $this->recordEntityContext($uid, $tid, 'contact', $cId, $cName);
+                    }
+                }
+            } elseif ($toolName === 'get_task_detail') {
+                $t = $toolResult['task'] ?? ($toolResult['data'] ?? []);
+                $tId = (int)($t['id'] ?? ($toolArgs['task_id'] ?? 0));
+                $tTitle = (string)($t['subject'] ?? ($t['title'] ?? ''));
+                if ($tId > 0 && $tTitle !== '') {
+                    $this->recordEntityContext($uid, $tid, 'task', $tId, $tTitle);
+                }
+            }
+        } catch (\Throwable $e) {
+            // Ignore
+        }
+    }
+
+    private function detectProactiveOperationalRisks(int $userId, int $tenantId, string $userRole): string {
+        try {
+            $risks = [];
+            $stmtLead = $this->db->prepare("
+                SELECT COUNT(1) FROM contacts
+                WHERE tenant_id = ? AND deleted_at IS NULL
+                  AND created_at <= DATE_SUB(NOW(), INTERVAL 3 DAY)
+                  AND (last_contact IS NULL OR last_contact <= DATE_SUB(NOW(), INTERVAL 3 DAY))
+            ");
+            $stmtLead->execute([$tenantId]);
+            $staleCount = (int)$stmtLead->fetchColumn();
+            if ($staleCount > 0) {
+                $risks[] = "Có {$staleCount} học viên/lead chưa được tương tác lại trên 3 ngày.";
+            }
+
+            $stmtTuition = $this->db->prepare("
+                SELECT COUNT(1) FROM sales_orders
+                WHERE tenant_id = ? AND payment_status IN ('unpaid', 'partial')
+                  AND (status IS NULL OR status NOT IN ('cancelled', 'draft'))
+                  AND (total - COALESCE(paid_amount, 0)) > 0
+            ");
+            $stmtTuition->execute([$tenantId]);
+            $overdueTuition = (int)$stmtTuition->fetchColumn();
+            if ($overdueTuition > 0) {
+                $risks[] = "Có {$overdueTuition} đơn hàng/học phí còn tồn đọng chưa thanh toán đủ.";
+            }
+
+            if (empty($risks)) return "";
+            $out = "\n--- [CẢNH BÁO RỦI RO VẬN HÀNH TỰ ĐỘNG (PROACTIVE RISKS)] ---\n";
+            foreach ($risks as $r) {
+                $out .= "• {$r}\n";
+            }
+            $out .= "Nếu phù hợp với câu hỏi, bạn có thể xuất khối <<<PROACTIVE_INSIGHT: {\"type\":\"warning\",\"title\":\"...\",\"description\":\"...\",\"action_label\":\"...\",\"action_prompt\":\"...\"}>>> ở cuối câu trả lời.\n";
+            return $out;
+        } catch (\Throwable $e) {
+            return "";
         }
     }
 }

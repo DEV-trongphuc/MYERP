@@ -144,6 +144,7 @@ if (in_array($baseAction, [
     'test-benchmark',
     'hrm',
     'chat',
+    'qwen-agent',
     'customer-journey-summary'
 ], true)) {
     $_SERVER['REQUEST_URI'] = '/backend/' . $action . (!empty($_GET) ? '?' . http_build_query($_GET) : '');
@@ -844,7 +845,11 @@ if (!in_array($action, $publicActions)) {
         'preview_routing',
         'get_fair_share_stats',
         'get_consultant_compensation_details',
-        'ai_training'
+        'ai_training',
+        'qwen-agent',
+        'qwen-agent/status',
+        'qwen-agent/chat',
+        'qwen-agent/settings'
     ], true)) {
         $resolvedScope = 'all';
     }
