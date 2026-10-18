@@ -304,15 +304,14 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
   // Merge contact fields + API response summary
   const summary = useMemo(() => {
     const s = journeyData?.summary || journeyData?.metrics || journeyData || {};
-    const engagementScore = Number(
-      s.engagement_score ?? contact?.engagement_score ?? contact?.lead_score ?? 0
-    );
-    const webSessionsCount = Number(
-      s.web_sessions_count ??
-        (Array.isArray(journeyData?.web_sessions) ? journeyData.web_sessions.length : 0) ??
-        contact?.web_sessions_count ??
-        0
-    );
+    const rawWebSessions = Array.isArray(journeyData?.web_sessions)
+      ? journeyData.web_sessions
+      : Array.isArray(journeyData?.web_sessions?.sessions)
+      ? journeyData.web_sessions.sessions
+      : Array.isArray(journeyData?.sessions)
+      ? journeyData.sessions
+      : [];
+
     const webPageviewsCount = Number(
       s.web_pageviews_count ?? contact?.web_pageviews_count ?? 0
     );
@@ -321,6 +320,12 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
     );
     const lastWebVisitAt =
       s.last_web_visit_at ?? contact?.last_web_visit_at ?? null;
+
+    const webSessionsCount = Math.max(
+      Number(s.web_sessions_count ?? contact?.web_sessions_count ?? 0),
+      rawWebSessions.length,
+      webPageviewsCount > 0 || Boolean(lastWebVisitAt) ? 1 : 0
+    );
 
     const statsEmailSent = Number(
       s.stats_email_sent ?? contact?.stats_email_sent ?? 0
@@ -333,6 +338,8 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
     );
     const lastEmailOpenAt =
       s.last_email_open_at ?? contact?.last_email_open_at ?? null;
+    const lastEmailClickAt =
+      s.last_email_click_at ?? contact?.last_email_click_at ?? null;
 
     const activeFlowCount = Number(
       s.active_flow_count ??
@@ -343,6 +350,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
     const completedFlowCount = Number(
       s.completed_flow_count ??
         (Array.isArray(journeyData?.completed_flows) ? journeyData.completed_flows.length : undefined) ??
+        (Array.isArray(journeyData?.flow_history) ? journeyData.flow_history.length : undefined) ??
         contact?.completed_flow_count ??
         0
     );
@@ -356,6 +364,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
     const surveyCompletedCount = Number(
       s.survey_completed_count ??
         (Array.isArray(journeyData?.survey_responses) ? journeyData.survey_responses.length : undefined) ??
+        (Array.isArray(journeyData?.surveys) ? journeyData.surveys.length : undefined) ??
         contact?.survey_completed_count ??
         0
     );
@@ -365,7 +374,6 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
       s.marketing_status ?? contact?.marketing_status ?? 'subscribed';
 
     return {
-      engagement_score: engagementScore,
       web_sessions_count: webSessionsCount,
       web_pageviews_count: webPageviewsCount,
       max_scroll_depth: maxScrollDepth,
@@ -374,6 +382,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
       stats_email_opened: statsEmailOpened,
       stats_email_clicked: statsEmailClicked,
       last_email_open_at: lastEmailOpenAt,
+      last_email_click_at: lastEmailClickAt,
       active_flow_count: activeFlowCount,
       completed_flow_count: completedFlowCount,
       active_flow_names: activeFlowNames,
@@ -386,7 +395,9 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
   const activeFlows: any[] = useMemo(() => {
     if (Array.isArray(journeyData?.active_flows)) return journeyData.active_flows;
     if (Array.isArray(journeyData?.flows)) {
-      return journeyData.flows.filter((f: any) => f.status === 'active' || f.status === 'paused');
+      return journeyData.flows.filter((f: any) =>
+        ['active', 'waiting', 'processing', 'paused'].includes(String(f.status || ''))
+      );
     }
     if (summary.active_flow_names) {
       return String(summary.active_flow_names)
@@ -403,6 +414,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
 
   const completedFlows: any[] = useMemo(() => {
     if (Array.isArray(journeyData?.completed_flows)) return journeyData.completed_flows;
+    if (Array.isArray(journeyData?.flow_history)) return journeyData.flow_history;
     if (Array.isArray(journeyData?.flows)) {
       return journeyData.flows.filter((f: any) => f.status === 'completed' || f.status === 'exited');
     }
@@ -418,12 +430,41 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
   }, [journeyData]);
 
   const webSessions: any[] = useMemo(() => {
-    return Array.isArray(journeyData?.web_sessions)
+    const raw = Array.isArray(journeyData?.web_sessions)
       ? journeyData.web_sessions
+      : Array.isArray(journeyData?.web_sessions?.sessions)
+      ? journeyData.web_sessions.sessions
       : Array.isArray(journeyData?.sessions)
       ? journeyData.sessions
       : [];
-  }, [journeyData]);
+    if (raw.length > 0) return raw;
+    if (summary.web_pageviews_count > 0 || summary.last_web_visit_at) {
+      const pvs = Array.isArray(journeyData?.web_page_views) && journeyData.web_page_views.length > 0
+        ? journeyData.web_page_views
+        : [
+            {
+              id: 'pv-summary',
+              page_title: `Truy cập & xem nội dung Website (${summary.web_pageviews_count || 1} trang)`,
+              url: 'Website',
+              scroll_depth: summary.max_scroll_depth || 0,
+              time_on_page: 0,
+              loaded_at: summary.last_web_visit_at
+            }
+          ];
+      return [
+        {
+          id: 'ws-summary',
+          landing_page: `Truy cập Website (${summary.web_pageviews_count || 1} lượt xem)`,
+          started_at: summary.last_web_visit_at,
+          device_type: 'Website',
+          max_scroll_depth: summary.max_scroll_depth || 0,
+          pageviews_count: summary.web_pageviews_count || 1,
+          page_views: pvs
+        }
+      ];
+    }
+    return [];
+  }, [journeyData, summary.web_pageviews_count, summary.last_web_visit_at, summary.max_scroll_depth]);
 
   const vouchersList: any[] = useMemo(() => {
     return Array.isArray(journeyData?.vouchers)
@@ -435,6 +476,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
 
   // Linked Omnichannel Conversations (Web AI Chat, Meta Fanpage, Zalo OA)
   const linkedConversations = useMemo(() => {
+    const rawChatMsgs: any[] = Array.isArray(journeyData?.chat_messages) ? journeyData.chat_messages : [];
     const domationAi = Array.isArray(journeyData?.domation_ai_conversations)
       ? journeyData.domation_ai_conversations.map((c: any) => ({ ...c, _channel: 'web_ai', _channelLabel: 'Web AI Chat' }))
       : Array.isArray(journeyData?.linked_conversations?.domation_ai_conversations)
@@ -453,37 +495,95 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
       ? journeyData.linked_conversations.zalo_user_messages.map((c: any) => ({ ...c, _channel: 'zalo', _channelLabel: 'Zalo OA' }))
       : [];
 
-    const combined = [...domationAi, ...metaConvs, ...zaloMsgs];
+    const chatFallback =
+      domationAi.length === 0 && metaConvs.length === 0 && zaloMsgs.length === 0
+        ? rawChatMsgs.map((m: any, idx: number) => ({
+            id: m.raw?.id || `chat-${idx}`,
+            _channel: m.channel === 'zalo' ? 'zalo' : m.channel === 'meta' ? 'meta' : 'web_ai',
+            _channelLabel: m.channel === 'zalo' ? 'Zalo OA' : m.channel === 'meta' ? 'Meta Fanpage' : 'Web AI Chat',
+            visitor_name: m.sender_name,
+            last_message: m.content,
+            created_at: m.occurred_at
+          }))
+        : [];
+
+    const combined = [...domationAi, ...metaConvs, ...zaloMsgs, ...chatFallback];
     if (convChannel === 'all') return combined;
     return combined.filter((item) => item._channel === convChannel);
   }, [journeyData, convChannel]);
 
-  // Unified Omnichannel Timeline
-  const unifiedTimeline = useMemo(() => {
+  // All Timeline Events (before channel filter)
+  const allTimelineEvents = useMemo(() => {
     const rawTimeline: any[] = Array.isArray(journeyData?.unified_timeline)
       ? journeyData.unified_timeline
       : Array.isArray(journeyData?.timeline)
       ? journeyData.timeline
       : [];
 
-    const synthesized: any[] = [...rawTimeline];
+    const synthesized: any[] = rawTimeline.map((item: any) => ({
+      ...item,
+      description: item.description || item.subtitle || '',
+      created_at: item.created_at || item.occurred_at || item.timestamp
+    }));
 
-    if (synthesized.length === 0) {
+    const hasEmailEvent = synthesized.some((ev) => {
+      const ch = String(ev.channel || ev.event_type || '').toLowerCase();
+      return ch.includes('email') || ch.includes('mail') || ch.includes('zns');
+    });
+    const hasWebEvent = synthesized.some((ev) => {
+      const ch = String(ev.channel || ev.event_type || '').toLowerCase();
+      return ch.includes('web') || ch.includes('page') || ch.includes('visit');
+    });
+
+    if (!hasEmailEvent && (summary.stats_email_sent > 0 || summary.stats_email_opened > 0 || summary.stats_email_clicked > 0)) {
+      if (summary.stats_email_clicked > 0) {
+        synthesized.push({
+          id: 'synth-email-click',
+          channel: 'email',
+          title: `Click liên kết trong Email (${summary.stats_email_clicked} lượt click)`,
+          description: 'Khách hàng đã bấm vào đường dẫn trong Email chăm sóc',
+          created_at: summary.last_email_click_at || summary.last_email_open_at
+        });
+      }
+      if (summary.stats_email_opened > 0) {
+        synthesized.push({
+          id: 'synth-email-open',
+          channel: 'email',
+          title: `Mở đọc Email (${summary.stats_email_opened} lượt mở)`,
+          description: `Đã gửi ${summary.stats_email_sent} email • Mở đọc ${summary.stats_email_opened} lần${summary.stats_email_clicked > 0 ? ` • Click ${summary.stats_email_clicked} lần` : ''}`,
+          created_at: summary.last_email_open_at
+        });
+      }
+      if (summary.stats_email_sent > 0) {
+        synthesized.push({
+          id: 'synth-email-sent',
+          channel: 'email',
+          title: `Đã gửi Email Marketing (${summary.stats_email_sent} email)`,
+          description: 'Lịch sử gửi Email & ZNS tự động cho khách hàng',
+          created_at: summary.last_email_open_at
+        });
+      }
+    }
+
+    if (!hasWebEvent && webSessions.length > 0) {
       webSessions.forEach((ws: any, idx: number) => {
         synthesized.push({
           id: `ws-${ws.id || idx}`,
           channel: 'web',
-          title: `Truy cập Website (${ws.utm_source || ws.referrer || 'Direct'})`,
-          description: ws.landing_page || ws.url || `Xem ${ws.pageviews_count || 1} trang • Cuộn ${ws.max_scroll_depth || 0}%`,
-          created_at: ws.started_at || ws.created_at || ws.last_activity_at
+          title: `Truy cập Website (${ws.pageviews_count || summary.web_pageviews_count || 1} lượt xem trang)`,
+          description: ws.landing_page || ws.url || `Cuộn trang tối đa ${ws.max_scroll_depth ?? summary.max_scroll_depth ?? 0}%`,
+          created_at: ws.started_at || ws.created_at || ws.last_active_at || summary.last_web_visit_at
         });
       });
+    }
+
+    if (synthesized.length === 0) {
       activeFlows.forEach((fl: any, idx: number) => {
         synthesized.push({
           id: `fl-a-${fl.id || idx}`,
           channel: 'flow',
-          title: `Đang trong kịch bản: ${fl.flow_name || fl.name}`,
-          description: `Bước hiện tại: ${fl.current_step_name || fl.current_node || 'Đang xử lý'} • Trạng thái: ${fl.status || 'active'}`,
+          title: `Đang chạy kịch bản: ${fl.flow_name || fl.name}`,
+          description: `Bước hiện tại: ${fl.step_label || fl.current_step_name || fl.current_node || 'Đang xử lý'}`,
           created_at: fl.enrolled_at || fl.updated_at || fl.created_at
         });
       });
@@ -492,7 +592,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
           id: `fl-c-${fl.id || idx}`,
           channel: 'flow',
           title: `Hoàn tất kịch bản: ${fl.flow_name || fl.name}`,
-          description: `Trạng thái: ${fl.status || 'completed'}`,
+          description: `Trạng thái: Đã hoàn tất`,
           created_at: fl.completed_at || fl.updated_at || fl.created_at
         });
       });
@@ -500,8 +600,8 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
         synthesized.push({
           id: `sr-${sr.id || idx}`,
           channel: 'survey',
-          title: `Hoàn thành Khảo sát / Quiz: ${sr.survey_title || sr.title || `#${sr.id || idx + 1}`}`,
-          description: sr.score !== undefined ? `Điểm đạt được: ${sr.score}` : 'Đã gửi câu trả lời khảo sát',
+          title: `Hoàn thành Khảo sát: ${sr.survey_title || sr.title || `#${sr.id || idx + 1}`}`,
+          description: 'Đã gửi câu trả lời khảo sát',
           created_at: sr.submitted_at || sr.created_at
         });
       });
@@ -510,28 +610,33 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
           id: `vc-${vc.id || idx}`,
           channel: 'voucher',
           title: `Mã ưu đãi ${vc.code || vc.voucher_code}`,
-          description: vc.status === 'redeemed' ? 'Đã sử dụng (Redeemed)' : 'Đang có hiệu lực',
-          created_at: vc.redeemed_at || vc.issued_at || vc.created_at
+          description: vc.status === 'used' || vc.status === 'redeemed' ? 'Đã sử dụng' : 'Đang có hiệu lực',
+          created_at: vc.used_at || vc.redeemed_at || vc.issued_at || vc.created_at
         });
       });
     }
 
-    return synthesized.filter((item) => {
+    return synthesized;
+  }, [journeyData, summary, webSessions, activeFlows, completedFlows, surveyResponses, vouchersList]);
+
+  // Filtered Omnichannel Timeline
+  const unifiedTimeline = useMemo(() => {
+    return allTimelineEvents.filter((item) => {
       if (timelineChannelFilter === 'all') return true;
-      const ch = String(item.channel || item.type || '').toLowerCase();
+      const ch = String(item.channel || item.event_type || item.type || '').toLowerCase();
       if (timelineChannelFilter === 'web') return ch.includes('web') || ch.includes('page') || ch.includes('visit');
-      if (timelineChannelFilter === 'email') return ch.includes('email') || ch.includes('zns') || ch.includes('mail');
+      if (timelineChannelFilter === 'email') return ch.includes('email') || ch.includes('zns') || ch.includes('mail') || ch.includes('zalo');
       if (timelineChannelFilter === 'flow') return ch.includes('flow') || ch.includes('automation');
       if (timelineChannelFilter === 'survey') return ch.includes('survey') || ch.includes('quiz') || ch.includes('form');
       if (timelineChannelFilter === 'voucher') return ch.includes('voucher') || ch.includes('qr') || ch.includes('coupon');
       return true;
     });
-  }, [journeyData, webSessions, activeFlows, completedFlows, surveyResponses, vouchersList, timelineChannelFilter]);
+  }, [allTimelineEvents, timelineChannelFilter]);
 
   if (!hasAccess) {
     return (
       <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-        Bạn không có quyền truy cập dữ liệu Hành trình & Đa kênh 360°.
+        Bạn không có quyền truy cập dữ liệu Hành trình tương tác.
       </div>
     );
   }
@@ -539,33 +644,48 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
   const openRate =
     summary.stats_email_sent > 0
       ? Math.min(100, Math.round((summary.stats_email_opened / summary.stats_email_sent) * 100))
+      : summary.stats_email_opened > 0
+      ? 100
       : 0;
   const clickRate =
     summary.stats_email_opened > 0
       ? Math.min(100, Math.round((summary.stats_email_clicked / summary.stats_email_opened) * 100))
       : 0;
 
-  const tempPill =
-    summary.engagement_score >= 60
-      ? { label: 'Hot', color: '#dc2626', bg: 'rgba(220, 38, 38, 0.12)' }
-      : summary.engagement_score >= 25
-      ? { label: 'Warm', color: '#d97706', bg: 'rgba(217, 119, 6, 0.12)' }
-      : { label: 'Cold', color: '#2563eb', bg: 'rgba(37, 99, 235, 0.12)' };
-
   const mktStatusBadge = (() => {
     const st = String(summary.marketing_status || 'subscribed').toLowerCase();
     if (st === 'unsubscribed' || st === 'opt_out') {
-      return { label: 'Đã hủy đăng ký', color: '#d97706', bg: 'rgba(245, 158, 11, 0.12)' };
+      return { label: 'Đã hủy đăng ký', color: '#d97706', bg: 'rgba(245, 158, 11, 0.1)' };
     }
     if (st === 'bounced' || st === 'complained' || st === 'invalid') {
-      return { label: 'Email lỗi', color: '#dc2626', bg: 'rgba(239, 68, 68, 0.12)' };
+      return { label: 'Email lỗi', color: '#dc2626', bg: 'rgba(239, 68, 68, 0.1)' };
     }
-    return { label: 'Đang nhận Email', color: '#059669', bg: 'rgba(16, 185, 129, 0.12)' };
+    return { label: 'Đang nhận Email', color: '#059669', bg: 'rgba(16, 185, 129, 0.1)' };
   })();
+
+  const getChannelBadgeMeta = (rawCh: string) => {
+    const ch = String(rawCh || '').toLowerCase();
+    if (ch.includes('web') || ch.includes('page')) {
+      return { label: 'Website', color: '#0284c7', bg: 'rgba(2, 132, 199, 0.1)' };
+    }
+    if (ch.includes('email') || ch.includes('mail') || ch.includes('zns')) {
+      return { label: 'Email / ZNS', color: '#db2777', bg: 'rgba(219, 39, 119, 0.1)' };
+    }
+    if (ch.includes('flow') || ch.includes('automation')) {
+      return { label: 'Automation', color: '#4f46e5', bg: 'rgba(79, 70, 229, 0.1)' };
+    }
+    if (ch.includes('survey') || ch.includes('quiz')) {
+      return { label: 'Khảo sát', color: '#d97706', bg: 'rgba(217, 119, 6, 0.1)' };
+    }
+    if (ch.includes('voucher')) {
+      return { label: 'Voucher', color: '#059669', bg: 'rgba(5, 150, 105, 0.1)' };
+    }
+    return { label: rawCh || 'Tương tác', color: '#475569', bg: 'rgba(100, 116, 139, 0.12)' };
+  };
 
   return (
     <div className="animate-fade" style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingBottom: '1.5rem' }}>
-      {/* Compact Header Bar + Quick Actions */}
+      {/* Simple Clean Header Bar (No Score / Points) */}
       <div
         style={{
           display: 'flex',
@@ -573,32 +693,16 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: '8px',
-          padding: '9px 14px',
-          borderRadius: '10px',
-          background: 'linear-gradient(135deg, rgba(189, 29, 45, 0.06) 0%, rgba(189, 29, 45, 0.02) 100%)',
-          border: '1px solid rgba(189, 29, 45, 0.14)'
+          padding: '8px 12px',
+          borderRadius: '8px',
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)'
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <Activity size={16} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
-          <span style={{ fontSize: '0.86rem', fontWeight: 800, color: 'var(--color-text)' }}>
-            Hành trình & Đa kênh 360°
-          </span>
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '2px 8px',
-              borderRadius: '999px',
-              fontSize: '0.68rem',
-              fontWeight: 700,
-              color: tempPill.color,
-              background: tempPill.bg
-            }}
-          >
-            <Flame size={11} />
-            {summary.engagement_score} điểm • {tempPill.label}
+          <Activity size={15} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+          <span style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--color-text)' }}>
+            Hành trình tương tác đa kênh
           </span>
           <span
             style={{
@@ -625,12 +729,12 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
               alignItems: 'center',
               gap: '4px',
               padding: '4px 10px',
-              borderRadius: '7px',
-              border: '1px solid rgba(189, 29, 45, 0.22)',
-              background: 'var(--color-surface)',
-              color: 'var(--color-primary)',
+              borderRadius: '6px',
+              border: '1px solid var(--color-border)',
+              background: 'var(--color-bg)',
+              color: 'var(--color-text)',
               fontSize: '0.72rem',
-              fontWeight: 700,
+              fontWeight: 600,
               cursor: 'pointer'
             }}
           >
@@ -645,16 +749,16 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
               alignItems: 'center',
               gap: '4px',
               padding: '4px 10px',
-              borderRadius: '7px',
+              borderRadius: '6px',
               border: '1px solid var(--color-border)',
-              background: 'var(--color-surface)',
+              background: 'var(--color-bg)',
               color: 'var(--color-text)',
               fontSize: '0.72rem',
               fontWeight: 600,
               cursor: 'pointer'
             }}
           >
-            <Ticket size={12} style={{ color: '#e11d48' }} />
+            <Ticket size={12} style={{ color: 'var(--color-text-muted)' }} />
             <span>Cấp Voucher</span>
           </button>
           {summary.active_voucher_code && (
@@ -667,7 +771,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
                 alignItems: 'center',
                 gap: '4px',
                 padding: '4px 10px',
-                borderRadius: '7px',
+                borderRadius: '6px',
                 border: '1px solid rgba(16, 185, 129, 0.28)',
                 background: 'rgba(16, 185, 129, 0.08)',
                 color: '#059669',
@@ -701,7 +805,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
         </div>
       )}
 
-      {/* SECTION 1: Compact 6-Tile Interactive Metric Strip */}
+      {/* SECTION 1: Simple Clean Summary Strip (No Score/Points) */}
       <div
         className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2"
         style={{
@@ -710,7 +814,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
           gap: '8px'
         }}
       >
-        {/* Tile 1: Tổng tương tác */}
+        {/* Tile 1: Tổng sự kiện */}
         <div
           onClick={() => {
             setActiveSubTab('timeline');
@@ -718,10 +822,10 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
           }}
           style={{
             padding: '8px 11px',
-            borderRadius: '10px',
+            borderRadius: '8px',
             background: 'var(--color-surface)',
             border: activeSubTab === 'timeline' && timelineChannelFilter === 'all'
-              ? '1px solid rgba(189, 29, 45, 0.45)'
+              ? '1px solid var(--color-primary)'
               : '1px solid var(--color-border)',
             cursor: 'pointer',
             display: 'flex',
@@ -731,15 +835,15 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
             <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Dấu chân số</span>
-            <Flame size={13} style={{ color: tempPill.color, flexShrink: 0 }} />
+            <Activity size={13} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '4px' }}>
-            <span style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.2 }}>
-              {unifiedTimeline.length} <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>sự kiện</span>
+            <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.2 }}>
+              {allTimelineEvents.length} <span style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>sự kiện</span>
             </span>
           </div>
           <div style={{ fontSize: '0.67rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            Điểm: {summary.engagement_score} ({tempPill.label})
+            Tất cả kênh tương tác
           </div>
         </div>
 
@@ -748,10 +852,10 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
           onClick={() => setActiveSubTab('web')}
           style={{
             padding: '8px 11px',
-            borderRadius: '10px',
+            borderRadius: '8px',
             background: 'var(--color-surface)',
             border: activeSubTab === 'web'
-              ? '1px solid rgba(14, 165, 233, 0.5)'
+              ? '1px solid var(--color-primary)'
               : '1px solid var(--color-border)',
             cursor: 'pointer',
             display: 'flex',
@@ -761,12 +865,12 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
             <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Website</span>
-            <Globe size={13} style={{ color: '#0ea5e9', flexShrink: 0 }} />
+            <Globe size={13} style={{ color: '#0284c7', flexShrink: 0 }} />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-            <span style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.2 }}>
+            <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.2 }}>
               {summary.web_sessions_count}{' '}
-              <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>phiên</span>
+              <span style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>phiên</span>
             </span>
           </div>
           <div style={{ fontSize: '0.67rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -782,10 +886,10 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
           }}
           style={{
             padding: '8px 11px',
-            borderRadius: '10px',
+            borderRadius: '8px',
             background: 'var(--color-surface)',
             border: activeSubTab === 'timeline' && timelineChannelFilter === 'email'
-              ? '1px solid rgba(236, 72, 153, 0.5)'
+              ? '1px solid var(--color-primary)'
               : '1px solid var(--color-border)',
             cursor: 'pointer',
             display: 'flex',
@@ -795,12 +899,12 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
             <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Email & ZNS</span>
-            <Mail size={13} style={{ color: '#ec4899', flexShrink: 0 }} />
+            <Mail size={13} style={{ color: '#db2777', flexShrink: 0 }} />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-            <span style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.2 }}>
+            <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.2 }}>
               {summary.stats_email_sent}{' '}
-              <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>đã gửi</span>
+              <span style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>đã gửi</span>
             </span>
           </div>
           <div style={{ fontSize: '0.67rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -813,10 +917,10 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
           onClick={() => setActiveSubTab('flows')}
           style={{
             padding: '8px 11px',
-            borderRadius: '10px',
+            borderRadius: '8px',
             background: 'var(--color-surface)',
             border: activeSubTab === 'flows'
-              ? '1px solid rgba(99, 102, 241, 0.5)'
+              ? '1px solid var(--color-primary)'
               : '1px solid var(--color-border)',
             cursor: 'pointer',
             display: 'flex',
@@ -826,12 +930,12 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
             <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Automation</span>
-            <GitBranch size={13} style={{ color: '#6366f1', flexShrink: 0 }} />
+            <GitBranch size={13} style={{ color: '#4f46e5', flexShrink: 0 }} />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-            <span style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.2 }}>
+            <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.2 }}>
               {summary.active_flow_count}{' '}
-              <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>đang chạy</span>
+              <span style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>đang chạy</span>
             </span>
           </div>
           <div style={{ fontSize: '0.67rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -844,10 +948,10 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
           onClick={() => setActiveSubTab('surveys')}
           style={{
             padding: '8px 11px',
-            borderRadius: '10px',
+            borderRadius: '8px',
             background: 'var(--color-surface)',
             border: activeSubTab === 'surveys'
-              ? '1px solid rgba(245, 158, 11, 0.5)'
+              ? '1px solid var(--color-primary)'
               : '1px solid var(--color-border)',
             cursor: 'pointer',
             display: 'flex',
@@ -857,12 +961,12 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
             <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Khảo sát / Quiz</span>
-            <ClipboardCheck size={13} style={{ color: '#f59e0b', flexShrink: 0 }} />
+            <ClipboardCheck size={13} style={{ color: '#d97706', flexShrink: 0 }} />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-            <span style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.2 }}>
+            <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.2 }}>
               {summary.survey_completed_count}{' '}
-              <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>đã nộp</span>
+              <span style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>đã nộp</span>
             </span>
           </div>
           <div style={{ fontSize: '0.67rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -875,10 +979,10 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
           onClick={() => setActiveSubTab('conversations')}
           style={{
             padding: '8px 11px',
-            borderRadius: '10px',
+            borderRadius: '8px',
             background: 'var(--color-surface)',
             border: activeSubTab === 'conversations'
-              ? '1px solid rgba(189, 29, 45, 0.5)'
+              ? '1px solid var(--color-primary)'
               : '1px solid var(--color-border)',
             cursor: 'pointer',
             display: 'flex',
@@ -888,25 +992,25 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
             <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Chat & Voucher</span>
-            <MessageSquare size={13} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+            <MessageSquare size={13} style={{ color: '#059669', flexShrink: 0 }} />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-            <span style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.2 }}>
+            <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.2 }}>
               {linkedConversations.length}{' '}
-              <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>hội thoại</span>
+              <span style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>hội thoại</span>
             </span>
           </div>
-          <div style={{ fontSize: '0.67rem', color: summary.active_voucher_code ? '#e11d48' : 'var(--color-text-muted)', fontWeight: summary.active_voucher_code ? 700 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: '0.67rem', color: summary.active_voucher_code ? '#059669' : 'var(--color-text-muted)', fontWeight: summary.active_voucher_code ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {summary.active_voucher_code ? `Mã: ${summary.active_voucher_code}` : 'Voucher: Chưa cấp'}
           </div>
         </div>
       </div>
 
-      {/* SECTION 2: Unified Omnichannel Workspace Card (Single Card for Timeline, Conversations, Automation, Surveys, Web/UTM) */}
+      {/* SECTION 2: Unified Omnichannel Workspace Card */}
       <div
         style={{
           padding: '12px 14px',
-          borderRadius: '12px',
+          borderRadius: '10px',
           background: 'var(--color-surface)',
           border: '1px solid var(--color-border)'
         }}
@@ -927,7 +1031,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
           {/* Main Sub-Tabs */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
             {[
-              { id: 'timeline', label: 'Dòng thời gian', count: unifiedTimeline.length, icon: Activity },
+              { id: 'timeline', label: 'Dòng thời gian', count: allTimelineEvents.length, icon: Activity },
               { id: 'conversations', label: 'Hội thoại Chat', count: linkedConversations.length, icon: MessageSquare },
               { id: 'flows', label: 'Automation', count: activeFlows.length + completedFlows.length, icon: GitBranch },
               { id: 'surveys', label: 'Khảo sát / Quiz', count: surveyResponses.length, icon: ClipboardCheck },
@@ -944,14 +1048,14 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '5px',
-                    padding: '5px 11px',
-                    borderRadius: '8px',
-                    border: active ? '1px solid var(--color-primary)' : '1px solid transparent',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
+                    padding: '5px 10px',
+                    borderRadius: '6px',
+                    border: active ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                    fontSize: '0.74rem',
+                    fontWeight: 600,
                     cursor: 'pointer',
-                    background: active ? 'var(--color-primary)' : 'var(--color-bg)',
-                    color: active ? '#ffffff' : 'var(--color-text)'
+                    background: active ? 'rgba(189, 29, 45, 0.08)' : 'var(--color-bg)',
+                    color: active ? 'var(--color-primary)' : 'var(--color-text)'
                   }}
                 >
                   <IconComp size={13} style={{ opacity: active ? 1 : 0.7 }} />
@@ -961,9 +1065,9 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
                       padding: '0px 5px',
                       borderRadius: '999px',
                       fontSize: '0.66rem',
-                      fontWeight: 800,
-                      background: active ? 'rgba(255,255,255,0.22)' : 'rgba(189, 29, 45, 0.1)',
-                      color: active ? '#ffffff' : 'var(--color-primary)'
+                      fontWeight: 700,
+                      background: active ? 'rgba(189, 29, 45, 0.14)' : 'rgba(100, 116, 139, 0.12)',
+                      color: active ? 'var(--color-primary)' : 'var(--color-text-muted)'
                     }}
                   >
                     {st.count}
@@ -973,7 +1077,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
             })}
           </div>
 
-          {/* Right-side Contextual Filter Pills (Inline on the same bar!) */}
+          {/* Right-side Contextual Filter Pills */}
           {activeSubTab === 'timeline' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
               {[
@@ -995,9 +1099,9 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
                       borderRadius: '6px',
                       border: 'none',
                       fontSize: '0.69rem',
-                      fontWeight: 700,
+                      fontWeight: 600,
                       cursor: 'pointer',
-                      background: isFltActive ? 'rgba(189, 29, 45, 0.12)' : 'transparent',
+                      background: isFltActive ? 'rgba(189, 29, 45, 0.1)' : 'transparent',
                       color: isFltActive ? 'var(--color-primary)' : 'var(--color-text-muted)'
                     }}
                   >
@@ -1027,9 +1131,9 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
                       borderRadius: '6px',
                       border: 'none',
                       fontSize: '0.69rem',
-                      fontWeight: 700,
+                      fontWeight: 600,
                       cursor: 'pointer',
-                      background: isChActive ? 'rgba(189, 29, 45, 0.12)' : 'transparent',
+                      background: isChActive ? 'rgba(189, 29, 45, 0.1)' : 'transparent',
                       color: isChActive ? 'var(--color-primary)' : 'var(--color-text-muted)'
                     }}
                   >
@@ -1049,12 +1153,12 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
                 alignItems: 'center',
                 gap: '4px',
                 padding: '4px 10px',
-                borderRadius: '7px',
+                borderRadius: '6px',
                 background: 'var(--color-primary)',
                 color: '#ffffff',
                 border: 'none',
                 fontSize: '0.72rem',
-                fontWeight: 700,
+                fontWeight: 600,
                 cursor: 'pointer'
               }}
             >
@@ -1067,7 +1171,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
         {/* SUB-TAB 1: Unified Timeline */}
         {activeSubTab === 'timeline' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {loading ? (
+            {loading && allTimelineEvents.length === 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {[1, 2, 3, 4].map((idx) => (
                   <div
@@ -1079,16 +1183,16 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
                       justifyContent: 'space-between',
                       gap: '10px',
                       padding: '8px 12px',
-                      borderRadius: '8px',
+                      borderRadius: '6px',
                       background: 'var(--color-bg)',
-                      borderLeft: '3px solid rgba(189, 29, 45, 0.25)'
+                      border: '1px solid var(--color-border-light)'
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
-                      <div className="h-4 w-14 rounded-full bg-slate-200/80 dark:bg-white/[0.08]" />
-                      <div className="h-4 w-48 rounded-md bg-slate-200/80 dark:bg-white/[0.08]" />
+                      <div className="h-4 w-14 rounded bg-slate-200/80 dark:bg-white/[0.08]" />
+                      <div className="h-4 w-48 rounded bg-slate-200/80 dark:bg-white/[0.08]" />
                     </div>
-                    <div className="h-3.5 w-20 rounded-md bg-slate-200/60 dark:bg-white/[0.05]" />
+                    <div className="h-3.5 w-20 rounded bg-slate-200/60 dark:bg-white/[0.05]" />
                   </div>
                 ))}
               </div>
@@ -1097,7 +1201,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
                 style={{
                   padding: '18px 14px',
                   textAlign: 'center',
-                  borderRadius: '8px',
+                  borderRadius: '6px',
                   background: 'var(--color-bg)',
                   color: 'var(--color-text-muted)',
                   fontSize: '0.78rem'
@@ -1107,59 +1211,61 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '420px', overflowY: 'auto' }}>
-                {unifiedTimeline.map((ev: any, idx: number) => (
-                  <div
-                    key={ev.id || idx}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '10px',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      background: 'var(--color-bg)',
-                      borderLeft: '3px solid var(--color-primary)'
-                    }}
-                  >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0, flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                        <span
-                          style={{
-                            fontSize: '0.64rem',
-                            fontWeight: 800,
-                            textTransform: 'uppercase',
-                            padding: '1px 6px',
-                            borderRadius: '999px',
-                            background: 'rgba(189, 29, 45, 0.1)',
-                            color: 'var(--color-primary)',
-                            flexShrink: 0
-                          }}
-                        >
-                          {ev.channel || ev.event_type || 'Digital'}
-                        </span>
-                        <span style={{ fontSize: '0.79rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                          {ev.title || ev.event_name || ev.subject || 'Hoạt động tương tác số'}
-                        </span>
-                      </div>
-                      {ev.description && (
-                        <div
-                          style={{
-                            fontSize: '0.73rem',
-                            color: 'var(--color-text-muted)',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap'
-                          }}
-                        >
-                          {ev.description}
+                {unifiedTimeline.map((ev: any, idx: number) => {
+                  const badge = getChannelBadgeMeta(ev.channel || ev.event_type || '');
+                  return (
+                    <div
+                      key={ev.id || idx}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '10px',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        background: 'var(--color-bg)',
+                        border: '1px solid var(--color-border-light)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0, flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <span
+                            style={{
+                              fontSize: '0.64rem',
+                              fontWeight: 700,
+                              padding: '1px 6px',
+                              borderRadius: '4px',
+                              background: badge.bg,
+                              color: badge.color,
+                              flexShrink: 0
+                            }}
+                          >
+                            {badge.label}
+                          </span>
+                          <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                            {ev.title || ev.event_name || ev.subject || 'Hoạt động tương tác'}
+                          </span>
                         </div>
-                      )}
+                        {ev.description && (
+                          <div
+                            style={{
+                              fontSize: '0.72rem',
+                              color: 'var(--color-text-muted)',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {ev.description}
+                          </div>
+                        )}
+                      </div>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                        {formatDateTimeVN(ev.created_at || ev.occurred_at || ev.timestamp)}
+                      </span>
                     </div>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                      {formatDateTimeVN(ev.created_at || ev.occurred_at || ev.timestamp)}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1441,8 +1547,12 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
               surveyResponses.map((sr: any, idx: number) => {
                 const srKey = sr.id || idx;
                 const isExpanded = expandedSurveyId === srKey || idx === 0;
-                const answers = Array.isArray(sr.answers)
+                const answers = Array.isArray(sr.answer_details) && sr.answer_details.length > 0
+                  ? sr.answer_details
+                  : Array.isArray(sr.answers)
                   ? sr.answers
+                  : sr.parsed_answers && typeof sr.parsed_answers === 'object'
+                  ? Object.entries(sr.parsed_answers).map(([q, a]) => ({ question: q, answer: String(a) }))
                   : sr.response_data && typeof sr.response_data === 'object'
                   ? Object.entries(sr.response_data).map(([q, a]) => ({ question: q, answer: String(a) }))
                   : [];
@@ -1467,12 +1577,11 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
                       }}
                     >
                       <div>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--color-text)' }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)' }}>
                           {sr.survey_title || sr.title || `Khảo sát #${sr.survey_id || idx + 1}`}
                         </div>
                         <div style={{ fontSize: '0.71rem', color: 'var(--color-text-muted)' }}>
                           Nộp lúc: {formatDateTimeVN(sr.submitted_at || sr.created_at)}
-                          {sr.score !== undefined ? ` • Điểm: ${sr.score}` : ''}
                         </div>
                       </div>
                       {isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}

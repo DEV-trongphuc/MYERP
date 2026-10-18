@@ -468,7 +468,7 @@ class DomationContactMatcher
                 if ($domationSubscriberId !== null) {
                     $stmtWv = $db->prepare("
                         SELECT
-                            MAX(COALESCE(wv.last_seen_at, wv.last_visit_at)) AS last_visit,
+                            MAX(wv.last_visit_at) AS last_visit,
                             COALESCE(SUM(wv.visit_count), 0) AS total_visits
                         FROM web_visitors wv
                         WHERE wv.contact_id = ? OR wv.subscriber_id = ?
@@ -477,7 +477,7 @@ class DomationContactMatcher
                 } else {
                     $stmtWv = $db->prepare("
                         SELECT
-                            MAX(COALESCE(wv.last_seen_at, wv.last_visit_at)) AS last_visit,
+                            MAX(wv.last_visit_at) AS last_visit,
                             COALESCE(SUM(wv.visit_count), 0) AS total_visits
                         FROM web_visitors wv
                         WHERE wv.contact_id = ?

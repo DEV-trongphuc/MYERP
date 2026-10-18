@@ -82,8 +82,24 @@ class DomationOmnichannelController
             $subIds[] = (string)$contact['domation_subscriber_id'];
         }
         try {
-            $stmt = $this->db->prepare("SELECT id FROM subscribers WHERE contact_id = ? ORDER BY updated_at DESC, joined_at DESC");
-            $stmt->execute([$contactId]);
+            $emailNorm = DomationContactMatcher::normalizeEmail((string)($contact['email'] ?? ''));
+            $rawPhone  = (string)($contact['phone'] ?: ($contact['mobile'] ?: ($contact['phone2'] ?? '')));
+            $phone9    = DomationContactMatcher::normalizePhone9($rawPhone);
+
+            $conds  = ["contact_id = ?"];
+            $params = [$contactId];
+            if ($emailNorm !== '') {
+                $conds[]  = "(email_norm = ? OR LOWER(TRIM(email)) = ?)";
+                $params[] = $emailNorm;
+                $params[] = $emailNorm;
+            }
+            if ($phone9 !== '') {
+                $conds[]  = "phone_norm9 = ?";
+                $params[] = $phone9;
+            }
+
+            $stmt = $this->db->prepare("SELECT id FROM subscribers WHERE (" . implode(' OR ', $conds) . ") ORDER BY updated_at DESC, joined_at DESC LIMIT 20");
+            $stmt->execute($params);
             while ($id = $stmt->fetchColumn()) {
                 $idStr = (string)$id;
                 if ($idStr !== '' && !in_array($idStr, $subIds, true)) {
@@ -223,9 +239,19 @@ class DomationOmnichannelController
         $activeFlowsData = $this->fetchContactFlowsData($contactId, $subIds);
         $vouchersData    = $this->fetchContactVouchersData($contactId, $subIds);
         $surveysData     = $this->fetchContactSurveysData($contactId, $subIds);
-        $webSessionsData = $this->fetchContactWebSessionsData($contactId, $subIds);
+        $webSessionsData = $this->fetchContactWebSessionsData($contactId, $subIds, $contact);
         $chatMessages    = $this->fetchContactChatMessages($contactId, $subIds, $contact);
-        $timeline        = $this->buildUnifiedTimeline($contactId, $subIds, $surveysData, $vouchersData['vouchers'], $webSessionsData, $chatMessages);
+        $timeline        = $this->buildUnifiedTimeline(
+            $contactId,
+            $subIds,
+            $surveysData,
+            $vouchersData['vouchers'],
+            $webSessionsData,
+            $chatMessages,
+            $activeFlowsData,
+            $contact,
+            $subscriberRow
+        );
 
         $summary = [
             'contact_id'             => (int)$contact['id'],
@@ -233,18 +259,20 @@ class DomationOmnichannelController
             'subscriber_ids'         => $subIds,
             'marketing_status'       => $contact['marketing_status'] ?? 'subscribed',
             'engagement_score'       => (int)($contact['engagement_score'] ?? 0),
-            'stats_email_sent'       => (int)($contact['stats_email_sent'] ?? 0),
-            'stats_email_opened'     => (int)($contact['stats_email_opened'] ?? 0),
-            'stats_email_clicked'    => (int)($contact['stats_email_clicked'] ?? 0),
-            'last_email_open_at'     => $contact['last_email_open_at'] ?? null,
-            'last_email_click_at'    => $contact['last_email_click_at'] ?? null,
+            'stats_email_sent'       => max((int)($contact['stats_email_sent'] ?? 0), (int)($subscriberRow['stats_sent'] ?? 0)),
+            'stats_email_opened'     => max((int)($contact['stats_email_opened'] ?? 0), (int)($subscriberRow['stats_opened'] ?? 0)),
+            'stats_email_clicked'    => max((int)($contact['stats_email_clicked'] ?? 0), (int)($subscriberRow['stats_clicked'] ?? 0)),
+            'last_email_open_at'     => $contact['last_email_open_at'] ?? ($subscriberRow['last_open_at'] ?? null),
+            'last_email_click_at'    => $contact['last_email_click_at'] ?? ($subscriberRow['last_click_at'] ?? null),
             'last_web_visit_at'      => $contact['last_web_visit_at'] ?? null,
-            'web_pageviews_count'    => (int)($contact['web_pageviews_count'] ?? 0),
+            'web_sessions_count'     => count($webSessionsData['sessions'] ?? []),
+            'web_pageviews_count'    => max((int)($contact['web_pageviews_count'] ?? 0), count($webSessionsData['page_views'] ?? [])),
             'max_scroll_depth'       => (int)($contact['max_scroll_depth'] ?? 0),
-            'active_flow_count'      => (int)($contact['active_flow_count'] ?? count($activeFlowsData['active_flows'])),
+            'active_flow_count'      => max((int)($contact['active_flow_count'] ?? 0), count($activeFlowsData['active_flows'])),
+            'completed_flow_count'   => count($activeFlowsData['flow_history']),
             'active_flow_names'      => $contact['active_flow_names'] ?? null,
             'active_voucher_code'    => $contact['active_voucher_code'] ?? null,
-            'survey_completed_count' => (int)($contact['survey_completed_count'] ?? count($surveysData)),
+            'survey_completed_count' => max((int)($contact['survey_completed_count'] ?? 0), count($surveysData)),
             'zalo_user_id'           => $contact['zalo_user_id'] ?? ($subscriberRow['zalo_user_id'] ?? null),
             'meta_psid'              => $contact['meta_psid'] ?? ($subscriberRow['meta_psid'] ?? null),
             'subscriber_tags'        => $subscriberTags,
@@ -255,12 +283,15 @@ class DomationOmnichannelController
         respond(200, [
             'summary'             => $summary,
             'timeline'            => $timeline,
+            'unified_timeline'    => $timeline,
             'active_flows'        => $activeFlowsData['active_flows'],
+            'completed_flows'     => $activeFlowsData['flow_history'],
             'flow_history'        => $activeFlowsData['flow_history'],
             'available_flows'     => $activeFlowsData['available_flows'],
             'vouchers'            => $vouchersData['vouchers'],
             'available_campaigns' => $vouchersData['available_campaigns'],
             'surveys'             => $surveysData,
+            'survey_responses'    => $surveysData,
             'web_sessions'        => $webSessionsData['sessions'],
             'web_page_views'      => $webSessionsData['page_views'],
             'web_visitors'        => $webSessionsData['visitors'],
@@ -789,7 +820,7 @@ class DomationOmnichannelController
     {
         $contact = $this->getAuthorizedContact($auth, $contactId);
         $subIds  = $this->getSubscriberIdsForContact($contact);
-        respond(200, $this->fetchContactWebSessionsData($contactId, $subIds));
+        respond(200, $this->fetchContactWebSessionsData($contactId, $subIds, $contact));
     }
 
     public function webSessions(array $auth, int $contactId): void
@@ -1128,11 +1159,12 @@ class DomationOmnichannelController
         return $surveys;
     }
 
-    private function fetchContactWebSessionsData(int $contactId, array $subIds): array
+    private function fetchContactWebSessionsData(int $contactId, array $subIds, array $contact = []): array
     {
         $visitors  = [];
         $sessions  = [];
         $pageViews = [];
+        $webEvents = [];
 
         try {
             $conds  = ["wv.contact_id = ?"];
@@ -1142,12 +1174,17 @@ class DomationOmnichannelController
                 $conds[] = "wv.subscriber_id IN ($inSub)";
                 $params  = array_merge($params, $subIds);
             }
+            $emailNorm = DomationContactMatcher::normalizeEmail((string)($contact['email'] ?? ''));
+            if ($emailNorm !== '') {
+                $conds[]  = "LOWER(TRIM(wv.email)) = ?";
+                $params[] = $emailNorm;
+            }
 
             $stmtVis = $this->db->prepare("
                 SELECT *
                 FROM web_visitors wv
                 WHERE (" . implode(' OR ', $conds) . ")
-                ORDER BY COALESCE(wv.last_seen_at, wv.last_visit_at) DESC
+                ORDER BY wv.last_visit_at DESC
                 LIMIT 20
             ");
             $stmtVis->execute($params);
@@ -1191,18 +1228,120 @@ class DomationOmnichannelController
                             LIMIT 100
                         ");
                         $stmtPv->execute($allVisitorKeys);
-                        $pageViews = $stmtPv->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                        $rawPvs = $stmtPv->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                        foreach ($rawPvs as $pv) {
+                            $pv['url']          = $pv['url'] ?? ($pv['page_url'] ?? '');
+                            $pv['page_url']     = $pv['page_url'] ?? $pv['url'];
+                            $pv['title']        = $pv['title'] ?? ($pv['page_title'] ?? '');
+                            $pv['page_title']   = $pv['page_title'] ?? $pv['title'];
+                            $pv['scroll_depth'] = (int)($pv['scroll_depth'] ?? 0);
+                            $pv['time_on_page'] = (int)($pv['time_on_page'] ?? 0);
+                            $pageViews[]        = $pv;
+                        }
                     } catch (\Throwable $ePv) {
+                    }
+
+                    try {
+                        $stmtWe = $this->db->prepare("
+                            SELECT *
+                            FROM web_events
+                            WHERE visitor_id IN ($inVis) AND event_type != 'ping'
+                            ORDER BY created_at DESC
+                            LIMIT 50
+                        ");
+                        $stmtWe->execute($allVisitorKeys);
+                        $webEvents = $stmtWe->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                    } catch (\Throwable $eWe) {
                     }
                 }
             }
         } catch (\Throwable $e) {
         }
 
+        // Attach page_views to sessions so Frontend can expand each session
+        if (!empty($sessions)) {
+            $pvBySession = [];
+            $unassignedPvs = [];
+            foreach ($pageViews as $pv) {
+                $sid = (string)($pv['session_id'] ?? '');
+                if ($sid !== '' && $sid !== '0') {
+                    $pvBySession[$sid][] = $pv;
+                } else {
+                    $unassignedPvs[] = $pv;
+                }
+            }
+            foreach ($sessions as $idx => &$sess) {
+                $sid = (string)($sess['id'] ?? $sess['session_id'] ?? '');
+                $attached = $pvBySession[$sid] ?? [];
+                if ($idx === 0 && empty($attached) && !empty($unassignedPvs)) {
+                    $attached = $unassignedPvs;
+                }
+                $sess['page_views'] = $attached;
+                $sess['pageviews_count'] = max((int)($sess['page_count'] ?? 0), count($attached));
+                $maxScroll = 0;
+                foreach ($attached as $apv) {
+                    $maxScroll = max($maxScroll, (int)($apv['scroll_depth'] ?? 0));
+                }
+                $sess['max_scroll_depth'] = max((int)($sess['max_scroll_depth'] ?? 0), $maxScroll, (int)($contact['max_scroll_depth'] ?? 0));
+                if (empty($sess['landing_page']) && !empty($attached)) {
+                    $lastAttached = end($attached);
+                    $sess['landing_page'] = $lastAttached['url'] ?? ($lastAttached['title'] ?? '');
+                }
+            }
+            unset($sess);
+        } elseif (!empty($visitors) || !empty($pageViews)) {
+            // Synthesize sessions from visitors or pageViews when web_sessions rows are absent
+            $firstVisitor = $visitors[0] ?? [];
+            $maxScroll = (int)($contact['max_scroll_depth'] ?? 0);
+            foreach ($pageViews as $apv) {
+                $maxScroll = max($maxScroll, (int)($apv['scroll_depth'] ?? 0));
+            }
+            $sessions[] = [
+                'id'               => 'vis_' . ($firstVisitor['id'] ?? $contactId),
+                'visitor_id'       => $firstVisitor['id'] ?? null,
+                'started_at'       => $firstVisitor['last_visit_at'] ?? ($pageViews[0]['loaded_at'] ?? ($contact['last_web_visit_at'] ?? null)),
+                'last_active_at'   => $firstVisitor['last_visit_at'] ?? ($contact['last_web_visit_at'] ?? null),
+                'device_type'      => 'desktop',
+                'country'          => $firstVisitor['country'] ?? null,
+                'city'             => $firstVisitor['city'] ?? null,
+                'pageviews_count'  => max(count($pageViews), (int)($firstVisitor['visit_count'] ?? 0), (int)($contact['web_pageviews_count'] ?? 0)),
+                'max_scroll_depth' => $maxScroll,
+                'landing_page'     => $pageViews[0]['url'] ?? ($pageViews[0]['title'] ?? 'Website'),
+                'page_views'       => $pageViews,
+            ];
+        } elseif ((int)($contact['web_pageviews_count'] ?? 0) > 0 || !empty($contact['last_web_visit_at'])) {
+            $pvCount   = max(1, (int)($contact['web_pageviews_count'] ?? 1));
+            $maxScroll = (int)($contact['max_scroll_depth'] ?? 0);
+            $visitTime = $contact['last_web_visit_at'] ?? null;
+            $synthPv   = [
+                'id'           => 'pv_summary_' . $contactId,
+                'url'          => 'Website (Tổng hợp ' . $pvCount . ' lượt xem trang)',
+                'page_url'     => 'Website (Tổng hợp ' . $pvCount . ' lượt xem trang)',
+                'title'        => 'Truy cập & xem nội dung Website (' . $pvCount . ' trang)',
+                'page_title'   => 'Truy cập & xem nội dung Website (' . $pvCount . ' trang)',
+                'scroll_depth' => $maxScroll,
+                'time_on_page' => 0,
+                'loaded_at'    => $visitTime,
+            ];
+            $pageViews[] = $synthPv;
+            $sessions[] = [
+                'id'               => 'sess_summary_' . $contactId,
+                'started_at'       => $visitTime,
+                'last_active_at'   => $visitTime,
+                'device_type'      => 'web',
+                'utm_source'       => 'Direct / Website',
+                'pageviews_count'  => $pvCount,
+                'max_scroll_depth' => $maxScroll,
+                'landing_page'     => 'Truy cập Website (' . $pvCount . ' trang • Cuộn ' . $maxScroll . '%)',
+                'page_views'       => [$synthPv],
+            ];
+        }
+
         return [
             'visitors'   => $visitors,
             'sessions'   => $sessions,
             'page_views' => $pageViews,
+            'web_events' => $webEvents,
         ];
     }
 
@@ -1311,9 +1450,118 @@ class DomationOmnichannelController
         array $surveysData,
         array $vouchersList,
         array $webSessionsData,
-        array $chatMessages
+        array $chatMessages,
+        array $activeFlowsData = [],
+        array $contact = [],
+        ?array $subscriberRow = null
     ): array {
         $events = [];
+        $emailEventsFound = 0;
+        $webEventsFound   = 0;
+
+        $mapActivityRow = static function (array $sa, string $prefix = 'sa_') use (&$emailEventsFound, &$webEventsFound): array {
+            $type      = strtolower(trim((string)($sa['type'] ?? 'activity')));
+            $refName   = trim((string)($sa['reference_name'] ?? ($sa['label'] ?? '')));
+            $rawDetail = (string)($sa['details'] ?? '');
+            $parsedDet = json_decode($rawDetail, true);
+            $detText   = '';
+            if (is_array($parsedDet)) {
+                $detText = trim((string)(
+                    $parsedDet['subject']
+                    ?? $parsedDet['url']
+                    ?? $parsedDet['target_url']
+                    ?? $parsedDet['link']
+                    ?? $parsedDet['campaign_name']
+                    ?? $parsedDet['flow_name']
+                    ?? $parsedDet['voucher_code']
+                    ?? $parsedDet['note']
+                    ?? ''
+                ));
+            } elseif ($rawDetail !== '' && $rawDetail !== '{}') {
+                $detText = trim($rawDetail);
+            }
+
+            $channel = 'flow';
+            $title   = $refName !== '' ? $refName : $type;
+
+            if (in_array($type, ['receive_email', 'email_sent', 'sent'], true)) {
+                $channel = 'email';
+                $title   = 'Đã gửi Email' . ($refName !== '' ? ': ' . $refName : '');
+                $emailEventsFound++;
+            } elseif (in_array($type, ['open_email', 'open'], true)) {
+                $channel = 'email';
+                $title   = 'Mở đọc Email' . ($refName !== '' ? ': ' . $refName : '');
+                $emailEventsFound++;
+            } elseif (in_array($type, ['click_link', 'click'], true)) {
+                $channel = 'email';
+                $title   = 'Click liên kết trong Email' . ($refName !== '' ? ': ' . $refName : '');
+                $emailEventsFound++;
+            } elseif (in_array($type, ['reply_email', 'reply'], true)) {
+                $channel = 'email';
+                $title   = 'Phản hồi Email' . ($refName !== '' ? ': ' . $refName : '');
+                $emailEventsFound++;
+            } elseif (in_array($type, ['bounce', 'bounced'], true)) {
+                $channel = 'email';
+                $title   = 'Email bị trả lại (Bounce)';
+                $emailEventsFound++;
+            } elseif (in_array($type, ['unsubscribe', 'unsubscribed'], true)) {
+                $channel = 'email';
+                $title   = 'Hủy đăng ký nhận Email';
+                $emailEventsFound++;
+            } elseif (in_array($type, ['zns_sent', 'zalo_sent'], true)) {
+                $channel = 'email';
+                $title   = 'Đã gửi tin nhắn Zalo ZNS' . ($refName !== '' ? ': ' . $refName : '');
+                $emailEventsFound++;
+            } elseif (in_array($type, ['click_zns', 'zns_clicked', 'zalo_clicked'], true)) {
+                $channel = 'email';
+                $title   = 'Click liên kết Zalo ZNS' . ($refName !== '' ? ': ' . $refName : '');
+                $emailEventsFound++;
+            } elseif (strpos($type, 'zalo') !== false || strpos($type, 'zns') !== false) {
+                $channel = 'email';
+                $title   = $refName !== '' ? $refName : 'Tương tác Zalo / ZNS';
+                $emailEventsFound++;
+            } elseif (in_array($type, ['enter_flow', 'entered_flow'], true)) {
+                $channel = 'flow';
+                $title   = $refName !== '' ? $refName : 'Tham gia kịch bản Automation';
+            } elseif (in_array($type, ['complete_flow', 'completed_flow'], true)) {
+                $channel = 'flow';
+                $title   = $refName !== '' ? $refName : 'Hoàn tất kịch bản Automation';
+            } elseif (strpos($type, 'flow') !== false) {
+                $channel = 'flow';
+                $title   = $refName !== '' ? $refName : 'Cập nhật kịch bản Automation';
+            } elseif (strpos($type, 'survey') !== false || strpos($type, 'quiz') !== false) {
+                $channel = 'survey';
+                $title   = $refName !== '' ? $refName : 'Hoàn thành Khảo sát / Quiz';
+            } elseif (strpos($type, 'voucher') !== false) {
+                $channel = 'voucher';
+                $title   = $refName !== '' ? $refName : 'Hoạt động mã ưu đãi Voucher';
+            } elseif (in_array($type, ['form_submit', 'submit_form'], true)) {
+                $channel = 'web';
+                $title   = 'Điền biểu mẫu (Form)' . ($refName !== '' ? ': ' . $refName : '');
+                $webEventsFound++;
+            } elseif ($type === 'purchase') {
+                $channel = 'web';
+                $title   = 'Đơn hàng / Giao dịch' . ($refName !== '' ? ': ' . $refName : '');
+                $webEventsFound++;
+            } elseif (strpos($type, 'web') !== false || strpos($type, 'page') !== false) {
+                $channel = 'web';
+                $title   = $refName !== '' ? $refName : 'Tương tác Website';
+                $webEventsFound++;
+            }
+
+            $ts = $sa['created_at'] ?? null;
+            return [
+                'id'          => $prefix . ($sa['id'] ?? uniqid()),
+                'channel'     => $channel,
+                'event_type'  => $type,
+                'title'       => $title,
+                'description' => $detText !== '' ? $detText : ($sa['reference_id'] ?? null),
+                'subtitle'    => $detText !== '' ? $detText : ($sa['reference_id'] ?? null),
+                'details'     => $parsedDet ?: $rawDetail,
+                'occurred_at' => $ts,
+                'created_at'  => $ts,
+            ];
+        };
 
         // 1. Subscriber Activity (`subscriber_activity`)
         try {
@@ -1330,111 +1578,231 @@ class DomationOmnichannelController
                     sa.id,
                     sa.subscriber_id,
                     sa.type,
+                    sa.campaign_id,
+                    sa.flow_id,
                     sa.reference_id,
-                    sa.label,
+                    sa.reference_name,
                     sa.details,
                     sa.created_at
                 FROM subscriber_activity sa
                 WHERE (" . implode(' OR ', $conds) . ")
                 ORDER BY sa.created_at DESC, sa.id DESC
-                LIMIT 100
+                LIMIT 120
             ");
             $stmtSa->execute($params);
             while ($sa = $stmtSa->fetch(PDO::FETCH_ASSOC)) {
-                $type = strtolower((string)($sa['type'] ?? 'activity'));
-                $channel = 'automation';
-                if (in_array($type, ['email_sent', 'sent', 'open', 'click', 'bounce', 'unsubscribe'], true)) {
-                    $channel = 'email';
-                } elseif (strpos($type, 'survey') !== false) {
-                    $channel = 'survey';
-                } elseif (strpos($type, 'voucher') !== false) {
-                    $channel = 'voucher';
-                } elseif (strpos($type, 'form') !== false || strpos($type, 'web') !== false) {
-                    $channel = 'web';
-                } elseif (strpos($type, 'zalo') !== false) {
-                    $channel = 'zalo';
-                } elseif (strpos($type, 'meta') !== false) {
-                    $channel = 'meta';
-                }
-
-                $events[] = [
-                    'id'          => 'sa_' . $sa['id'],
-                    'channel'     => $channel,
-                    'event_type'  => $type,
-                    'title'       => $sa['label'] ?: $type,
-                    'subtitle'    => $sa['reference_id'] ?? null,
-                    'details'     => json_decode((string)($sa['details'] ?? '{}'), true) ?: $sa['details'],
-                    'occurred_at' => $sa['created_at'] ?? null,
-                ];
+                $events[] = $mapActivityRow($sa, 'sa_');
             }
         } catch (\Throwable $eSa) {
         }
 
-        // 2. Website Page Views (`web_page_views`)
+        // 1b. Buffered Activity (`activity_buffer`) not yet flushed by cron
+        if (!empty($subIds)) {
+            try {
+                $inSub = implode(',', array_fill(0, count($subIds), '?'));
+                $stmtBuf = $this->db->prepare("
+                    SELECT
+                        id,
+                        subscriber_id,
+                        type,
+                        campaign_id,
+                        flow_id,
+                        reference_id,
+                        reference_name,
+                        details,
+                        created_at
+                    FROM activity_buffer
+                    WHERE subscriber_id IN ($inSub)
+                    ORDER BY created_at DESC
+                    LIMIT 40
+                ");
+                $stmtBuf->execute($subIds);
+                while ($ab = $stmtBuf->fetch(PDO::FETCH_ASSOC)) {
+                    $events[] = $mapActivityRow($ab, 'ab_');
+                }
+            } catch (\Throwable $eBuf) {
+            }
+        }
+
+        // 2. Website Page Views (`web_page_views`) & Web Events (`web_events`)
         foreach (array_slice($webSessionsData['page_views'] ?? [], 0, 40) as $pv) {
-            $scroll = (int)($pv['scroll_depth'] ?? 0);
+            $scroll     = (int)($pv['scroll_depth'] ?? 0);
             $timeOnPage = (int)($pv['time_on_page'] ?? 0);
+            $pageUrl    = trim((string)($pv['page_url'] ?? ($pv['url'] ?? '')));
+            $pageTitle  = trim((string)($pv['page_title'] ?? ($pv['title'] ?? '')));
+            $ts         = $pv['loaded_at'] ?? null;
+            $descParts  = [];
+            if ($pageUrl !== '') {
+                $descParts[] = $pageUrl;
+            }
+            if ($scroll > 0) {
+                $descParts[] = 'Cuộn ' . $scroll . '%';
+            }
+            if ($timeOnPage > 0) {
+                $descParts[] = $timeOnPage . ' giây';
+            }
+            $descStr = implode(' • ', $descParts);
+            $webEventsFound++;
+
             $events[] = [
                 'id'          => 'pv_' . ($pv['id'] ?? uniqid()),
                 'channel'     => 'web',
                 'event_type'  => 'page_view',
-                'title'       => 'Xem trang: ' . ($pv['page_title'] ?: ($pv['page_url'] ?? 'Website')),
-                'subtitle'    => $pv['page_url'] ?? null,
+                'title'       => 'Xem trang: ' . ($pageTitle !== '' ? $pageTitle : ($pageUrl !== '' ? $pageUrl : 'Website')),
+                'description' => $descStr !== '' ? $descStr : null,
+                'subtitle'    => $descStr !== '' ? $descStr : $pageUrl,
                 'details'     => [
-                    'page_url'     => $pv['page_url'] ?? null,
-                    'page_title'   => $pv['page_title'] ?? null,
+                    'page_url'     => $pageUrl,
+                    'page_title'   => $pageTitle,
                     'scroll_depth' => $scroll,
                     'time_on_page' => $timeOnPage,
                 ],
-                'occurred_at' => $pv['loaded_at'] ?? null,
+                'occurred_at' => $ts,
+                'created_at'  => $ts,
             ];
         }
 
-        // 3. Surveys (`survey_responses`)
+        foreach (array_slice($webSessionsData['web_events'] ?? [], 0, 20) as $we) {
+            $evType = strtolower((string)($we['event_type'] ?? 'event'));
+            if ($evType === 'pageview' || $evType === 'ping') {
+                continue;
+            }
+            $ts = $we['created_at'] ?? null;
+            $webEventsFound++;
+            $events[] = [
+                'id'          => 'we_' . ($we['id'] ?? uniqid()),
+                'channel'     => 'web',
+                'event_type'  => $evType,
+                'title'       => 'Sự kiện Web: ' . ($we['event_name'] ?? $evType),
+                'description' => $we['url'] ?? ($we['page_url'] ?? null),
+                'subtitle'    => $we['url'] ?? ($we['page_url'] ?? null),
+                'details'     => $we,
+                'occurred_at' => $ts,
+                'created_at'  => $ts,
+            ];
+        }
+
+        // 3. Automation Flows (`active_flows` & `flow_history`)
+        $allFlows = array_merge($activeFlowsData['active_flows'] ?? [], $activeFlowsData['flow_history'] ?? []);
+        foreach ($allFlows as $fl) {
+            $flTime = $fl['updated_at'] ?? ($fl['created_at'] ?? null);
+            $isAct  = in_array($fl['status'] ?? '', ['waiting', 'processing', 'paused', 'active'], true);
+            $stepDesc = !empty($fl['step_label']) ? ('Bước: ' . $fl['step_label']) : ('Trạng thái: ' . ($fl['status'] ?? 'active'));
+            $events[] = [
+                'id'          => 'fl_' . ($fl['id'] ?? uniqid()),
+                'channel'     => 'flow',
+                'event_type'  => $isAct ? 'flow_active' : 'flow_completed',
+                'title'       => ($isAct ? 'Đang chạy kịch bản: ' : 'Hoàn tất kịch bản: ') . ($fl['flow_name'] ?: ('Flow #' . ($fl['flow_id'] ?? ''))),
+                'description' => $stepDesc,
+                'subtitle'    => $stepDesc,
+                'details'     => $fl,
+                'occurred_at' => $flTime,
+                'created_at'  => $flTime,
+            ];
+        }
+
+        // 4. Surveys (`survey_responses`)
         foreach ($surveysData as $sr) {
+            $ts = $sr['submitted_at'] ?? ($sr['created_at'] ?? null);
+            $subTxt = isset($sr['score']) && $sr['score'] !== null ? ('Đã nộp khảo sát') : 'Đã gửi câu trả lời khảo sát';
             $events[] = [
                 'id'          => 'sr_' . ($sr['id'] ?? uniqid()),
                 'channel'     => 'survey',
                 'event_type'  => 'survey_response',
                 'title'       => 'Hoàn thành khảo sát: ' . ($sr['survey_title'] ?: ('Khảo sát #' . ($sr['survey_id'] ?? ''))),
-                'subtitle'    => isset($sr['score']) && $sr['score'] !== null ? ('Điểm: ' . $sr['score']) : null,
+                'description' => $subTxt,
+                'subtitle'    => $subTxt,
                 'details'     => [
                     'survey_id'      => $sr['survey_id'] ?? null,
                     'survey_title'   => $sr['survey_title'] ?? null,
-                    'score'          => $sr['score'] ?? null,
                     'answer_details' => $sr['answer_details'] ?? [],
                     'parsed_answers' => $sr['parsed_answers'] ?? [],
                 ],
-                'occurred_at' => $sr['submitted_at'] ?? null,
+                'occurred_at' => $ts,
+                'created_at'  => $ts,
             ];
         }
 
-        // 4. Vouchers (`voucher_codes`)
+        // 5. Vouchers (`voucher_codes`)
         foreach ($vouchersList as $vc) {
-            $vcTime = $vc['used_at'] ?: ($vc['claimed_at'] ?: ($vc['sent_at'] ?: ($vc['created_at'] ?? null)));
+            $vcTime   = $vc['used_at'] ?: ($vc['claimed_at'] ?: ($vc['sent_at'] ?: ($vc['created_at'] ?? null)));
             $vcStatus = strtolower((string)($vc['status'] ?? 'unused'));
+            $campName = $vc['campaign_name'] ?? null;
             $events[] = [
                 'id'          => 'vc_' . ($vc['id'] ?? uniqid()),
                 'channel'     => 'voucher',
                 'event_type'  => $vcStatus === 'used' ? 'voucher_used' : 'voucher_issued',
                 'title'       => ($vcStatus === 'used' ? 'Đã sử dụng Voucher: ' : 'Cấp mã Voucher: ') . ($vc['code'] ?? ''),
-                'subtitle'    => $vc['campaign_name'] ?? null,
+                'description' => $campName,
+                'subtitle'    => $campName,
                 'details'     => $vc,
                 'occurred_at' => $vcTime,
+                'created_at'  => $vcTime,
             ];
         }
 
-        // 5. Chat messages (Zalo, Meta, AI Chatbot)
+        // 6. Chat messages (Zalo, Meta, AI Chatbot)
         foreach (array_slice($chatMessages, 0, 30) as $idx => $cm) {
+            $ts = $cm['occurred_at'] ?? null;
+            $chLabel = strtoupper((string)($cm['channel'] ?? 'CHAT'));
             $events[] = [
                 'id'          => 'chat_' . $idx . '_' . ($cm['raw']['id'] ?? uniqid()),
                 'channel'     => $cm['channel'] ?? 'chat',
                 'event_type'  => ($cm['direction'] ?? 'inbound') === 'inbound' ? 'message_inbound' : 'message_outbound',
                 'title'       => ($cm['sender_name'] ?? 'Tin nhắn') . ': ' . mb_substr((string)($cm['content'] ?? ''), 0, 120),
-                'subtitle'    => strtoupper((string)($cm['channel'] ?? 'CHAT')),
+                'description' => 'Kênh: ' . $chLabel,
+                'subtitle'    => $chLabel,
                 'details'     => $cm,
-                'occurred_at' => $cm['occurred_at'] ?? null,
+                'occurred_at' => $ts,
+                'created_at'  => $ts,
             ];
+        }
+
+        // 7. Historical Aggregate Fallback (if contact/subscriber has recorded Email/Web stats not present as individual rows)
+        $emailSent    = max((int)($contact['stats_email_sent'] ?? 0), (int)($subscriberRow['stats_sent'] ?? 0));
+        $emailOpened  = max((int)($contact['stats_email_opened'] ?? 0), (int)($subscriberRow['stats_opened'] ?? 0));
+        $emailClicked = max((int)($contact['stats_email_clicked'] ?? 0), (int)($subscriberRow['stats_clicked'] ?? 0));
+        $lastOpenAt   = $contact['last_email_open_at'] ?? ($subscriberRow['last_open_at'] ?? ($subscriberRow['updated_at'] ?? null));
+        $lastClickAt  = $contact['last_email_click_at'] ?? ($subscriberRow['last_click_at'] ?? $lastOpenAt);
+        $lastSendAt   = $subscriberRow['last_send_at'] ?? $lastOpenAt;
+
+        if ($emailEventsFound === 0 && ($emailSent > 0 || $emailOpened > 0 || $emailClicked > 0)) {
+            if ($emailClicked > 0) {
+                $events[] = [
+                    'id'          => 'agg_email_click_' . $contactId,
+                    'channel'     => 'email',
+                    'event_type'  => 'click_link',
+                    'title'       => 'Click liên kết trong Email (' . $emailClicked . ' lượt click)',
+                    'description' => 'Ghi nhận tương tác click liên kết từ chiến dịch Email Marketing',
+                    'subtitle'    => 'Click: ' . $emailClicked,
+                    'occurred_at' => $lastClickAt,
+                    'created_at'  => $lastClickAt,
+                ];
+            }
+            if ($emailOpened > 0) {
+                $events[] = [
+                    'id'          => 'agg_email_open_' . $contactId,
+                    'channel'     => 'email',
+                    'event_type'  => 'open_email',
+                    'title'       => 'Mở đọc Email (' . $emailOpened . ' lượt mở)',
+                    'description' => 'Đã gửi ' . $emailSent . ' email • Mở đọc ' . $emailOpened . ' lần' . ($emailClicked > 0 ? (' • Click ' . $emailClicked . ' lần') : ''),
+                    'subtitle'    => 'Mở: ' . $emailOpened,
+                    'occurred_at' => $lastOpenAt,
+                    'created_at'  => $lastOpenAt,
+                ];
+            }
+            if ($emailSent > 0) {
+                $events[] = [
+                    'id'          => 'agg_email_sent_' . $contactId,
+                    'channel'     => 'email',
+                    'event_type'  => 'receive_email',
+                    'title'       => 'Đã gửi Email chăm sóc (' . $emailSent . ' email)',
+                    'description' => 'Tổng hợp lịch sử gửi Email Marketing & ZNS',
+                    'subtitle'    => 'Đã gửi: ' . $emailSent,
+                    'occurred_at' => $lastSendAt,
+                    'created_at'  => $lastSendAt,
+                ];
+            }
         }
 
         // Sort descending by occurred_at

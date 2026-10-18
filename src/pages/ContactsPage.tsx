@@ -1406,6 +1406,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     { id: 'tags', label: 'Phân loại (Tags)', visible: seg !== 'customer' },
     { id: 'program', label: 'Tên chương trình', visible: seg === 'customer' },
     { id: 'last_note', label: 'Nhật ký (gần nhất)', visible: seg !== 'customer' },
+    { id: 'omnichannel_journey', label: 'Hành trình', visible: true },
     { id: 'admission_date', label: 'Ngày nhập học', visible: false },
     { id: 'status', label: 'Trạng thái', visible: true },
     { id: 'contact', label: 'Liên lạc cuối', visible: false },
@@ -1440,9 +1441,15 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
               const def = defaults.find(d => d.id === c.id)!;
               return { id: def.id, label: def.label, visible: Boolean(c.visible) };
             });
-          defaults.forEach(def => {
+          defaults.forEach((def, defIdx) => {
             if (!savedMap.has(def.id)) {
-              merged.push(def);
+              const prevId = defIdx > 0 ? defaults[defIdx - 1].id : null;
+              const prevPos = prevId ? merged.findIndex(m => m.id === prevId) : -1;
+              if (prevPos !== -1) {
+                merged.splice(prevPos + 1, 0, def);
+              } else {
+                merged.push(def);
+              }
             }
           });
           return merged;
@@ -5990,6 +5997,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                         Nhật ký (gần nhất)
                       </th>
                     )}
+                    {visibleColsMap['omnichannel_journey'] && (
+                      <th style={{ width: '190px', maxWidth: '235px', padding: '0.85rem 0.6rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
+                        Hành trình
+                      </th>
+                    )}
                     {visibleColsMap['admission_date'] && (
                       <th style={{ width: '140px', maxWidth: '160px', padding: '0.85rem 0.6rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
                         Ngày nhập học
@@ -6047,11 +6059,12 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                     const hasOmniSignals = Boolean(
                       c.last_web_visit_at ||
                       Number(c.web_pageviews_count || 0) > 0 ||
+                      Number(c.stats_email_sent || 0) > 0 ||
                       Number(c.stats_email_opened || 0) > 0 ||
+                      Number(c.stats_email_clicked || 0) > 0 ||
                       Number(c.active_flow_count || 0) > 0 ||
                       c.active_voucher_code ||
-                      Number(c.survey_completed_count || 0) > 0 ||
-                      Number(c.engagement_score || 0) > 0
+                      Number(c.survey_completed_count || 0) > 0
                     );
                     const openJourney360 = (e: React.MouseEvent) => {
                       e.stopPropagation();
@@ -6116,7 +6129,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                             || '';
                           const isReferred = Boolean(c.partner_id || c.referrer_name || c.referrer_id || c.source === 'ref' || c.source === 'referral' || c.source === 'gioi_thieu' || refName);
                           return (
-                          <td style={{ width: isSale ? '300px' : '290px', maxWidth: isSale ? '360px' : '350px', padding: '0.85rem 0.5rem', borderBottom: '1px solid var(--color-border)' }}>
+                          <td style={{ width: isSale ? '260px' : '250px', maxWidth: isSale ? '320px' : '310px', padding: '0.85rem 0.5rem', borderBottom: '1px solid var(--color-border)' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                               <Avatar name={fullName} src={c.avatar_url || c.avatar || c.photo} size={32} />
                               <div style={{ minWidth: 0, overflow: 'hidden' }}>
@@ -6162,70 +6175,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   <p style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                     {c.company_name} {c.job_title ? `• ${c.job_title}` : ''}
                                   </p>
-                                )}
-                                {hasOmniSignals && (
-                                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
-                                    {(c.last_web_visit_at || Number(c.web_pageviews_count || 0) > 0) && (
-                                      <span
-                                        onClick={openJourney360}
-                                        title="Xem phiên truy cập Web trong Hành trình 360°"
-                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
-                                      >
-                                        <Globe size={9} />
-                                        {c.last_web_visit_at ? `Web: ${formatTimeAgo(c.last_web_visit_at)}` : `Web (${c.web_pageviews_count})`}
-                                      </span>
-                                    )}
-                                    {Number(c.stats_email_opened || 0) > 0 && (
-                                      <span
-                                        onClick={openJourney360}
-                                        title="Xem lịch sử mở & click Email trong Hành trình 360°"
-                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
-                                      >
-                                        <Mail size={9} />
-                                        Mở: {c.stats_email_opened}{Number(c.stats_email_clicked || 0) > 0 ? ` • Click: ${c.stats_email_clicked}` : ''}
-                                      </span>
-                                    )}
-                                    {Number(c.active_flow_count || 0) > 0 && (
-                                      <span
-                                        onClick={openJourney360}
-                                        title={c.active_flow_names ? `Đang chạy Flow: ${c.active_flow_names}` : 'Xem luồng Automation đang chạy'}
-                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
-                                      >
-                                        <GitBranch size={9} />
-                                        Flow ({c.active_flow_count})
-                                      </span>
-                                    )}
-                                    {c.active_voucher_code && (
-                                      <span
-                                        onClick={openJourney360}
-                                        title={`Mã Voucher: ${c.active_voucher_code}`}
-                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
-                                      >
-                                        <Ticket size={9} />
-                                        {c.active_voucher_code}
-                                      </span>
-                                    )}
-                                    {Number(c.survey_completed_count || 0) > 0 && (
-                                      <span
-                                        onClick={openJourney360}
-                                        title="Xem câu trả lời Khảo sát / Quiz"
-                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
-                                      >
-                                        <ClipboardList size={9} />
-                                        KS ({c.survey_completed_count})
-                                      </span>
-                                    )}
-                                    {Number(c.engagement_score || 0) > 0 && (
-                                      <span
-                                        onClick={openJourney360}
-                                        title="Điểm tương tác số Omnichannel"
-                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
-                                      >
-                                        <Flame size={9} />
-                                        +{c.engagement_score} pts
-                                      </span>
-                                    )}
-                                  </div>
                                 )}
                               </div>
                             </div>
@@ -6485,6 +6434,74 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 </div>
                               );
                             })()}
+                          </td>
+                        )}
+
+                        {visibleColsMap['omnichannel_journey'] && (
+                          <td
+                            style={{ width: '190px', maxWidth: '235px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)' }}
+                            onClick={hasOmniSignals ? openJourney360 : undefined}
+                          >
+                            {hasOmniSignals ? (
+                              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                                {(c.last_web_visit_at || Number(c.web_pageviews_count || 0) > 0) && (
+                                  <span
+                                    onClick={openJourney360}
+                                    title="Xem phiên truy cập Web trong Hành trình"
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text, #334155)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.68rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
+                                  >
+                                    <Globe size={10} style={{ color: '#0284c7', flexShrink: 0 }} />
+                                    <span>{c.last_web_visit_at ? `Web: ${formatTimeAgo(c.last_web_visit_at)}` : `Web (${c.web_pageviews_count})`}</span>
+                                  </span>
+                                )}
+                                {(Number(c.stats_email_opened || 0) > 0 || Number(c.stats_email_clicked || 0) > 0 || Number(c.stats_email_sent || 0) > 0) && (
+                                  <span
+                                    onClick={openJourney360}
+                                    title="Xem lịch sử gửi, mở & click Email trong Hành trình"
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text, #334155)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.68rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
+                                  >
+                                    <Mail size={10} style={{ color: '#db2777', flexShrink: 0 }} />
+                                    <span>
+                                      {Number(c.stats_email_opened || 0) > 0
+                                        ? `Mở: ${c.stats_email_opened}${Number(c.stats_email_clicked || 0) > 0 ? ` • Click: ${c.stats_email_clicked}` : ''}`
+                                        : `Đã gửi: ${c.stats_email_sent}`}
+                                    </span>
+                                  </span>
+                                )}
+                                {Number(c.active_flow_count || 0) > 0 && (
+                                  <span
+                                    onClick={openJourney360}
+                                    title={c.active_flow_names ? `Đang chạy Flow: ${c.active_flow_names}` : 'Xem luồng Automation đang chạy'}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text, #334155)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.68rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
+                                  >
+                                    <GitBranch size={10} style={{ color: '#4f46e5', flexShrink: 0 }} />
+                                    <span>Flow ({c.active_flow_count})</span>
+                                  </span>
+                                )}
+                                {c.active_voucher_code && (
+                                  <span
+                                    onClick={openJourney360}
+                                    title={`Mã Voucher: ${c.active_voucher_code}`}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text, #334155)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.68rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
+                                  >
+                                    <Ticket size={10} style={{ color: '#059669', flexShrink: 0 }} />
+                                    <span>{c.active_voucher_code}</span>
+                                  </span>
+                                )}
+                                {Number(c.survey_completed_count || 0) > 0 && (
+                                  <span
+                                    onClick={openJourney360}
+                                    title="Xem câu trả lời Khảo sát / Quiz"
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text, #334155)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.68rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
+                                  >
+                                    <ClipboardList size={10} style={{ color: '#d97706', flexShrink: 0 }} />
+                                    <span>KS ({c.survey_completed_count})</span>
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>
+                            )}
                           </td>
                         )}
 
