@@ -4074,6 +4074,9 @@ export const WorkChatModal: React.FC = () => {
                                   ? {
                                       ...SPECIALIZED_AGENTS[0],
                                       ...rawSpec,
+                                      color: '#BD1D2D',
+                                      badgeColor: '#BD1D2D',
+                                      badgeBg: '#fef2f2',
                                       name: rawSpec.name || msg.sender_name || SPECIALIZED_AGENTS[0].name,
                                       roleTitle: rawSpec.roleTitle || rawSpec.role || (msg as any).sender_title || SPECIALIZED_AGENTS[0].roleTitle,
                                       avatar: rawSpec.avatar || msg.sender_avatar || SPECIALIZED_AGENTS[0].avatar,
@@ -4096,8 +4099,8 @@ export const WorkChatModal: React.FC = () => {
                                     marginLeft: '36px',
                                     padding: '2px 8px 2px 6px',
                                     borderRadius: '999px',
-                                    border: 'none',
-                                    background: matchedSpec.badgeBg || '#f8fafc',
+                                    border: '1px solid rgba(189, 29, 45, 0.16)',
+                                    background: '#fef2f2',
                                     cursor: 'pointer',
                                     fontSize: '0.68rem',
                                     lineHeight: 1.2,
@@ -4105,10 +4108,10 @@ export const WorkChatModal: React.FC = () => {
                                   }}
                                   title="Xem hồ sơ năng lực Trợ lý Chuyên gia AI"
                                 >
-                                  <Sparkles size={10} style={{ color: matchedSpec.color || '#dc2626', flexShrink: 0 }} />
-                                  <span style={{ fontWeight: 750, color: '#0f172a' }}>{specName}</span>
-                                  <span style={{ color: '#94a3b8' }}>•</span>
-                                  <span style={{ fontWeight: 650, color: matchedSpec.color || '#64748b' }}>{specRole}</span>
+                                  <Sparkles size={10} style={{ color: '#BD1D2D', flexShrink: 0 }} />
+                                  <span style={{ fontWeight: 750, color: '#BD1D2D' }}>{specName}</span>
+                                  <span style={{ color: 'rgba(189, 29, 45, 0.45)' }}>•</span>
+                                  <span style={{ fontWeight: 650, color: '#BD1D2D' }}>{specRole}</span>
                                 </button>
                               );
                             }
@@ -5817,7 +5820,7 @@ export const WorkChatModal: React.FC = () => {
                             </div>
                             {collabs.length > 1 ? (
                               <>
-                                <span style={{ fontSize: '0.74rem', color: '#059669', fontWeight: 800 }}>
+                                <span style={{ fontSize: '0.74rem', color: '#BD1D2D', fontWeight: 800 }}>
                                   Hội đồng Multi-Agent:
                                 </span>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
@@ -5835,8 +5838,8 @@ export const WorkChatModal: React.FC = () => {
                                           gap: '4px',
                                           padding: '2px 8px',
                                           borderRadius: '12px',
-                                          background: ag.badgeBg || '#f1f5f9',
-                                          border: 'none',
+                                          background: '#fef2f2',
+                                          border: '1px solid rgba(189, 29, 45, 0.16)',
                                           cursor: 'pointer',
                                           transition: 'all 0.15s ease'
                                         }}
@@ -5849,7 +5852,7 @@ export const WorkChatModal: React.FC = () => {
                                           alt={ag.name}
                                           style={{ width: 14, height: 14, objectFit: 'contain' }}
                                         />
-                                        <span style={{ fontSize: '0.67rem', color: ag.badgeColor || '#334155', fontWeight: 750 }}>
+                                        <span style={{ fontSize: '0.67rem', color: '#BD1D2D', fontWeight: 750 }}>
                                           {ag.name}
                                         </span>
                                       </div>
@@ -5874,7 +5877,7 @@ export const WorkChatModal: React.FC = () => {
                                     borderRadius: '8px',
                                     transition: 'background-color 0.15s ease'
                                   }}
-                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
                                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                   title={`Bấm để xem chi tiết quyền hạn của ${activeAgent.name}`}
                                 >
@@ -5883,7 +5886,7 @@ export const WorkChatModal: React.FC = () => {
                                     height: 22,
                                     borderRadius: '50%',
                                     overflow: 'hidden',
-                                    border: '1.5px solid #94a3b8',
+                                    border: '1.5px solid #BD1D2D',
                                     flexShrink: 0,
                                     background: '#ffffff'
                                   }}>
@@ -5893,7 +5896,7 @@ export const WorkChatModal: React.FC = () => {
                                       style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                                     />
                                   </div>
-                                  <span style={{ fontSize: '0.75rem', color: '#0f172a', fontWeight: 800 }}>
+                                  <span style={{ fontSize: '0.75rem', color: '#BD1D2D', fontWeight: 800 }}>
                                     Giao quyền cho {activeAgent.name}
                                   </span>
                                   <span style={{
@@ -5901,9 +5904,9 @@ export const WorkChatModal: React.FC = () => {
                                     fontWeight: 650,
                                     padding: '1px 6px',
                                     borderRadius: '4px',
-                                    background: activeAgent.badgeBg || '#f1f5f9',
-                                    color: activeAgent.badgeColor || '#475569',
-                                    border: 'none'
+                                    background: '#fef2f2',
+                                    color: '#BD1D2D',
+                                    border: '1px solid rgba(189, 29, 45, 0.16)'
                                   }}>
                                     {activeAgent.badge}
                                   </span>
