@@ -282,8 +282,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           }
         });
 
-        eventSource.onerror = (err) => {
-          console.error("Global SSE connection error, retrying in 5s...", err);
+        eventSource.addEventListener('close', () => {
           if (eventSource) {
             eventSource.close();
           }
@@ -294,7 +293,21 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             if (document.visibilityState === 'visible') {
               connectSSE();
             }
-          }, 5000);
+          }, 15000);
+        });
+
+        eventSource.onerror = () => {
+          if (eventSource) {
+            eventSource.close();
+          }
+          if (reconnectTimeout) {
+            clearTimeout(reconnectTimeout);
+          }
+          reconnectTimeout = setTimeout(() => {
+            if (document.visibilityState === 'visible') {
+              connectSSE();
+            }
+          }, 15000);
         };
       };
 
@@ -546,25 +559,20 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   useEffect(() => {
-    if (user) {
-      console.log('Layout useEffect calling get_settings, user exists:', user);
+    if (user?.id) {
       fetchAPI('get_settings')
         .then(res => {
-          console.log('Layout get_settings response:', res);
           if (res && res.success && res.data) {
             setSysSettings(res.data);
             if (res.data.backend_version) {
-              console.log('Setting backendVersion to:', res.data.backend_version);
               setBackendVersion(res.data.backend_version);
               localStorage.setItem('backend_version', res.data.backend_version);
             }
           }
         })
-        .catch(err => {
-          console.error('Layout get_settings error:', err);
-        });
+        .catch(() => {});
     }
-  }, [user]);
+  }, [user?.id]);
 
 
 

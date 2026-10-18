@@ -11,8 +11,17 @@ param(
     [switch]$SkipBuild = $false,
     [switch]$CloneDatabase = $false,
     [Alias("sync-schema")]
-    [switch]$SyncSchemaOnly = $false
+    [switch]$SyncSchemaOnly = $false,
+    [switch]$ConfirmUnlockStaging = $false
 )
+
+if (-not $ConfirmUnlockStaging) {
+    Write-Host "=========================================================" -ForegroundColor Yellow
+    Write-Host "   [STAGING LOCKED] Môi trường Staging đã được khóa tách biệt!" -ForegroundColor Yellow
+    Write-Host "   Bỏ qua thao tác deploy/sync lên myerp-stagging.ideas.edu.vn." -ForegroundColor Gray
+    Write-Host "=========================================================" -ForegroundColor Yellow
+    exit 0
+}
 
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 

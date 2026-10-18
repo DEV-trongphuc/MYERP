@@ -3883,7 +3883,8 @@ class ChatController {
             ];
             $aiMsgMetadataJson = json_encode($aiMsgMetadata, JSON_UNESCAPED_UNICODE);
 
-            // 7. Insert AI Reply into chat_messages
+            // 7. Insert AI Reply into chat_messages (ensure MySQL connection is alive after long AI call)
+            $this->db = Database::ensureConnected($this->db);
             $this->db->beginTransaction();
 
             $stmtIns = $this->db->prepare("
@@ -4148,7 +4149,7 @@ class ChatController {
             $matchedKeys[] = 'hrm';
         }
         // 9. Sales domain
-        if (preg_match('/(lead|tiềm năng|khách hàng|crm|tư vấn|chốt sale|từ chối|học viên|chăm sóc)/iu', $q)) {
+        if (preg_match('/(lead|leads|\bdata\b|tiềm năng|khách hàng|crm|tư vấn|chốt sale|từ chối|học viên|chăm sóc|pipeline|pipieline|pipe line|phễu|giai đoạn|\bstage\b|phụ trách|chia số|vòng xoay)/iu', $q)) {
             $matchedKeys[] = 'sales';
         }
         // 10. Academic domain
@@ -5238,7 +5239,8 @@ class ChatController {
         // 3. Multi-Domain Keyword Scoring Matrix (Accented + Unaccented)
         $domainKeywords = [
             'sales' => [
-                'lead', 'khach hang', 'hoc vien', 'tu van', 'crm', 'pipeline', 'pheu', 'chia so', 'vong xoay',
+                'lead', 'leads', 'data', 'khach hang', 'hoc vien', 'tu van', 'crm', 'pipeline', 'pipieline', 'pipe line',
+                'giai doan', 'stage', 'phu trach', 'pheu', 'chia so', 'vong xoay',
                 'bu data', 'trung lead', 'cham soc', 'ngam lead', 'stale', 'chot sale', 'chot deal', 'lich hen',
                 'goi lai', 'sale', 'tuyen sinh', 'nguon lead', 'chua coc', 'da coc', 'trang thai lead', 'phan bo',
                 'them data', 'data ca nhan', 'tao data', 'them lead', 'giao data', 'giao lead', 'chuyen lead',
@@ -5345,6 +5347,7 @@ class ChatController {
      */
     private function callGeminiFlashLite(array $conversationHistory, string $systemPrompt, ?array $attachedFile = null, ?callable $onChunk = null, ?array $authContext = null, ?callable $onStep = null, array &$executedAgentSteps = []): ?string {
         try {
+            $this->db = Database::ensureConnected($this->db);
             $stmtKey = $this->db->prepare("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('openrouter_api_key', 'openrouter_model', 'gemini_api_key', 'gemini_model')");
             $stmtKey->execute();
             $settings = $stmtKey->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
@@ -5364,9 +5367,9 @@ class ChatController {
                     // Ignore DB write error
                 }
             }
-            $openRouterModel = trim((string)($settings['openrouter_model'] ?? ($_ENV['OPENROUTER_MODEL'] ?? getenv('OPENROUTER_MODEL') ?: 'nvidia/nemotron-3.5-super-vl:free')));
-            if ($openRouterModel === '') {
-                $openRouterModel = 'nvidia/nemotron-3.5-super-vl:free';
+            $openRouterModel = trim((string)($settings['openrouter_model'] ?? ($_ENV['OPENROUTER_MODEL'] ?? getenv('OPENROUTER_MODEL') ?: 'google/gemma-4-31b-it:free')));
+            if ($openRouterModel === '' || in_array($openRouterModel, ['nvidia/nemotron-3.5-super-vl:free', 'nvidia/nemotron-3.5-lightning:free', 'dots-studio/dots-3-note-preview:free'], true)) {
+                $openRouterModel = 'google/gemma-4-31b-it:free';
             }
 
             $apiKey = trim($settings['gemini_api_key'] ?? '') ?: ($_ENV['GEMINI_API_KEY'] ?? getenv('GEMINI_API_KEY') ?: '');
@@ -5676,7 +5679,12 @@ class ChatController {
                     }
 
                     $t0 = microtime(true);
+                    $this->db = Database::ensureConnected($this->db);
                     $toolResult = AgentToolRegistry::executeTool($this->db, $toolName, $toolArgs, $authContext ?? []);
+                    if (is_array($toolResult) && !empty($toolResult['error']) && (stripos((string)$toolResult['error'], 'gone away') !== false || stripos((string)$toolResult['error'], 'Lost connection') !== false)) {
+                        $this->db = Database::reconnect();
+                        $toolResult = AgentToolRegistry::executeTool($this->db, $toolName, $toolArgs, $authContext ?? []);
+                    }
                     $durationMs = (int)round((microtime(true) - $t0) * 1000);
 
                     if ($ctxUid > 0 && is_array($toolResult)) {
@@ -6043,6 +6051,7 @@ class ChatController {
                     $msgText = preg_replace('/<<<NEXT_BEST_ACTIONS:\s*[\s\S]*?>>>/', '', $msgText);
                     $msgText = preg_replace('/<<<SAVE_MEMORY:\s*[\s\S]*?>>>/', '', $msgText);
                     $msgText = trim((string)preg_replace('/\n{3,}/', "\n\n", $msgText));
+                    $msgText .= "\n[Hệ thống: Báo cáo trên là dữ liệu lịch sử của câu hỏi cũ. Với câu hỏi mới tiếp theo của người dùng, BẮT BUỘC phải gọi công cụ (tool_calls) để truy vấn Database thực tế. Nếu câu hỏi mới KHÔNG nêu giới hạn ngày/thời gian (ví dụ chỉ hỏi theo pipeline/chuyên viên), tuyệt đối KHÔNG tự ý gán lại from_date/to_date của câu hỏi cũ mà phải để trống from_date/to_date để lấy toàn bộ dữ liệu!]";
                 }
 
                 if ($idx === $historyCount - 1 && !empty($attachedFile)) {
@@ -6141,6 +6150,44 @@ class ChatController {
                     $directText = trim(str_replace($fnMatch[0], '', $directText));
                 }
 
+                // Zero-Trust Anti-Hallucination Guard on Turn 1:
+                // If tools are required (!isPureConversational) and the model tried to answer from stale chat history without calling a tool,
+                // force a Turn-1 tool call (`tool_choice = 'required'` + explicit mandate) so it MUST query MySQL!
+                if ($toolTurn === 1 && empty($toolCalls) && !$isPureConversational && !empty($openAiTools)) {
+                    $forcedMessages = $messages;
+                    $forcedMessages[] = [
+                        'role' => 'system',
+                        'content' => 'BẮT BUỘC GỌI CÔNG CỤ (MANDATORY TOOL CALL): Bạn chưa gọi bất kỳ công cụ (tool_calls) nào ở lượt này. Tuyệt đối KHÔNG được tự trả lời dựa trên lịch sử hội thoại cũ. Hãy gọi ngay công cụ phù hợp (ví dụ: query_crm_leads_multitier, query_deposits_and_revenue_multitier, query_finance_multitier_analytics, query_hrm_workforce_and_payroll_multitier, query_tasks_and_projects_multitier, search_contacts...) để lấy dữ liệu thực tế từ MySQL!'
+                    ];
+                    $retryJson = $this->executeOpenRouterRequestWithPool(
+                        $openRouterKey,
+                        $preferredModel,
+                        $forcedMessages,
+                        $openAiTools,
+                        'required'
+                    );
+                    if (is_array($retryJson) && !empty($retryJson['choices'][0]['message'])) {
+                        $retryMsg = $retryJson['choices'][0]['message'];
+                        $retryTools = $retryMsg['tool_calls'] ?? [];
+                        $retryText = $this->stripReasoningTags((string)($retryMsg['content'] ?? ''));
+                        if (empty($retryTools) && preg_match('/<function=([a-zA-Z0-9_]+)>\s*(\{[\s\S]*?\})\s*<\/function>/', $retryText, $fnMatch2)) {
+                            $retryTools = [[
+                                'id' => 'call_' . substr(md5(uniqid('', true)), 0, 8),
+                                'type' => 'function',
+                                'function' => [
+                                    'name' => trim($fnMatch2[1]),
+                                    'arguments' => trim($fnMatch2[2])
+                                ]
+                            ]];
+                            $retryText = trim(str_replace($fnMatch2[0], '', $retryText));
+                        }
+                        if (!empty($retryTools)) {
+                            $toolCalls = $retryTools;
+                            $directText = $retryText;
+                        }
+                    }
+                }
+
                 if (empty($toolCalls)) {
                     if ($directText === '') {
                         return null;
@@ -6207,8 +6254,20 @@ class ChatController {
                         ]);
                     }
 
+                    if ($toolName === 'query_crm_leads_multitier' && (!empty($toolArgs['from_date']) || !empty($toolArgs['to_date']))) {
+                        $qCheckAscii = AgentToolRegistry::removeVietnameseAccents(mb_strtolower($lastUserQuestion, 'UTF-8'));
+                        if (!preg_match('/\b(ngay|tuan|thang|nam|quy|hom|qua|nay|tu|den|thoi gian|trong do|trong so do|o tren|vua roi|gan day|moi nhat|202[0-9])\b|[0-9]{1,2}\/[0-9]{1,2}/u', $qCheckAscii)) {
+                            unset($toolArgs['from_date'], $toolArgs['to_date']);
+                        }
+                    }
+
                     $t0 = microtime(true);
+                    $this->db = Database::ensureConnected($this->db);
                     $toolResult = AgentToolRegistry::executeTool($this->db, $toolName, $toolArgs, $authContext ?? []);
+                    if (is_array($toolResult) && !empty($toolResult['error']) && (stripos((string)$toolResult['error'], 'gone away') !== false || stripos((string)$toolResult['error'], 'Lost connection') !== false)) {
+                        $this->db = Database::reconnect();
+                        $toolResult = AgentToolRegistry::executeTool($this->db, $toolName, $toolArgs, $authContext ?? []);
+                    }
                     $durationMs = (int)round((microtime(true) - $t0) * 1000);
 
                     if ($ctxUid > 0 && is_array($toolResult)) {
@@ -6373,10 +6432,7 @@ class ChatController {
                 }
 
                 if ($hasTerminalActionSuccess || $requiresDisambiguationSynthesis || $toolTurn >= ($maxToolTurns - 1)) {
-                    // Use compact Synthesis System Prompt on Turn 2+ to cut input tokens by ~80% and accelerate TTFB
-                    $synthesisMessages = $messages;
-                    $synthesisMessages[0]['content'] = $this->buildFastSynthesisSystemPrompt($systemPrompt);
-
+                    // Keep 100% of the full $messages (including full $systemPrompt) so all 11 Agents & instructions remain intact
                     $textFinal = '';
                     $alreadyStreamed = false;
 
@@ -6384,7 +6440,7 @@ class ChatController {
                         $streamedText = $this->streamOpenRouterSynthesisWithPool(
                             $openRouterKey,
                             $preferredModel,
-                            $synthesisMessages,
+                            $messages,
                             $onChunk
                         );
                         if ($streamedText !== null && trim($streamedText) !== '') {
@@ -6397,7 +6453,7 @@ class ChatController {
                         $finalResJson = $this->executeOpenRouterRequestWithPool(
                             $openRouterKey,
                             $preferredModel,
-                            $synthesisMessages,
+                            $messages,
                             [],
                             null
                         );
@@ -6438,35 +6494,27 @@ class ChatController {
     }
 
     /**
-     * Build a compact, high-speed Synthesis System Prompt for Turn 2+ after SQL tools have already returned data.
-     * Reduces Turn 2 prompt size from ~18,000 chars to ~1,200 chars while keeping 100% Ground Truth & UI tag rules.
-     */
-    private function buildFastSynthesisSystemPrompt(string $fullSystemPrompt): string {
-        $headerSnippet = mb_substr($fullSystemPrompt, 0, 650, 'UTF-8');
-        return $headerSnippet . "\n\n"
-            . "NHIỆM VỤ TỔNG HỢP KẾT QUẢ TỨC THÌ (SYNTHESIS TURN - NGẮN GỌN, CHÍNH XÁC):\n"
-            . "1. CHÂN LÝ THỰC NGHIỆM 100%: Dùng chính xác tuyệt đối các con số trong kết quả công cụ (`_ground_truth_lock.verified_metrics`, `summary`, `preview_top_15`, `records`). Không tự cộng nhẩm lại hay bịa số liệu.\n"
-            . "2. TRÌNH BÀY CÔ ĐỌNG (TỐI ĐA 250 TỪ VĂN BẢN + 1 BẢNG MARKDOWN): Tóm tắt 3-4 gạch đầu dòng chỉ số chính, sau đó hiển thị 1 bảng Markdown gọn đẹp (kèm link `[#ID Tên](/contacts?id=ID)` nếu là khách hàng/lead) và giữ nguyên link `[📥 Tải file Excel...](/export?...)` nếu có.\n"
-            . "3. THẺ GIAO DIỆN: Giữ nguyên khối `<<<ACTION_PROPOSAL: {...}>>>`, `<<<DYNAMIC_CHART: {...}>>>`, hoặc `<<<CLARIFY_OPTIONS: [...]>>>` nếu công cụ trả về (không lặp lại dữ liệu của biểu đồ thành nhiều bảng phụ). Nếu danh sách > 1 bản ghi, cấm sinh thẻ `<<<ERP_CARD:...>>>` đơn lẻ.\n"
-            . "4. NGÔN NGỮ: 100% Tiếng Việt chuẩn xác (tuyệt đối không lẫn chữ Hán/ngoại ngữ), không dùng emoji trong dòng tiêu đề `###`.";
-    }
-
-    /**
-     * Get ranked OpenRouter `:free` model pool batches.
-     * Batch 0 prioritizes sub-second NVIDIA Nemotron 3.5 Super VL & Nemotron 3 Super 120B (with reasoning disabled).
+     * Get ranked OpenRouter `:free` model pool batches (only verified OpenRouter `:free` models that support tools).
      */
     private function getOpenRouterModelBatches(string $preferredModel): array {
-        $fastPrimaryPool = [
+        $ignoreOverride = [
             'nvidia/nemotron-3.5-super-vl:free',
+            'nvidia/nemotron-3.5-lightning:free',
             'nvidia/nemotron-3-super-120b-a12b:free',
             'dots-studio/dots-3-note-preview:free',
+        ];
+        $fastPrimaryPool = [
             'google/gemma-4-31b-it:free',
+            'qwen/qwen3-coder:free',
+            'openai/gpt-oss-120b:free',
+            'qwen/qwen3-next-80b-a3b-instruct:free',
+            'nvidia/nemotron-3-super-120b-a12b:free',
+            'openrouter/free',
         ];
         if (
             $preferredModel !== '' &&
             strpos($preferredModel, '/') !== false &&
-            $preferredModel !== 'google/gemma-4-31b-it:free' &&
-            $preferredModel !== 'nvidia/nemotron-3.5-lightning:free'
+            !in_array($preferredModel, $ignoreOverride, true)
         ) {
             array_unshift($fastPrimaryPool, $preferredModel);
         }
@@ -6475,7 +6523,7 @@ class ChatController {
     }
 
     /**
-     * Stream OpenRouter Synthesis response in real-time via SSE (`$onChunk`) with `"reasoning": {"enabled": false}`
+     * Stream OpenRouter Synthesis response in real-time via SSE (`$onChunk`) with full token output (`max_tokens: 10000`)
      */
     private function streamOpenRouterSynthesisWithPool(
         string $openRouterKey,
@@ -6491,11 +6539,11 @@ class ChatController {
                 'model' => $primaryInBatch,
                 'models' => $batchModels,
                 'messages' => $messages,
-                'temperature' => 0.15,
-                'max_tokens' => 1600,
-                'top_p' => 0.9,
-                'stream' => true,
+                'temperature' => 0.2,
+                'max_tokens' => 10000,
+                'top_p' => 0.95,
                 'reasoning' => ['enabled' => false],
+                'stream' => true,
             ];
 
             $accumulated = '';
@@ -6513,7 +6561,7 @@ class ChatController {
                 'HTTP-Referer: https://myerp.ideas.edu.vn',
                 'X-Title: MYERP SI IDEAS Multi-Agent'
             ]);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 25);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
             curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 8);
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
 
@@ -6566,9 +6614,7 @@ class ChatController {
     }
 
     /**
-     * Execute OpenRouter Chat Completion across the ranked `:free` model pool.
-     * Uses OpenRouter's native `models` fallback array (up to 3 models per request) across 2 batches,
-     * with `"reasoning": {"enabled": false}` for sub-second tool routing & synthesis (< 800ms).
+     * Execute OpenRouter Chat Completion across the ranked `:free` model pool with full intelligence & 10000 max_tokens.
      */
     private function executeOpenRouterRequestWithPool(
         string $openRouterKey,
@@ -6586,7 +6632,7 @@ class ChatController {
                 'models' => $batchModels,
                 'messages' => $messages,
                 'temperature' => 0.2,
-                'max_tokens' => 4096,
+                'max_tokens' => 10000,
                 'top_p' => 0.95,
                 'reasoning' => ['enabled' => false],
             ];
@@ -6608,8 +6654,8 @@ class ChatController {
                 'HTTP-Referer: https://myerp.ideas.edu.vn',
                 'X-Title: MYERP SI IDEAS Multi-Agent'
             ]);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 25);
-            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 8);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 45);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
 
             $resp = curl_exec($ch);
@@ -6631,7 +6677,7 @@ class ChatController {
     }
 
     /**
-     * Convert Gemini functionDeclarations into OpenAI / OpenRouter `tools` schema
+     * Convert Gemini functionDeclarations into OpenAI / OpenRouter `tools` schema (100% full descriptions, zero truncation)
      */
     private function convertGeminiToolsToOpenRouter(?array $geminiTools): array {
         $declarations = $geminiTools[0]['functionDeclarations'] ?? [];
@@ -6640,9 +6686,6 @@ class ChatController {
             $name = $decl['name'] ?? '';
             if ($name === '') continue;
             $desc = (string)($decl['description'] ?? '');
-            if (mb_strlen($desc, 'UTF-8') > 260) {
-                $desc = mb_substr($desc, 0, 257, 'UTF-8') . '...';
-            }
             $params = $this->normalizeOpenRouterSchemaProperty($decl['parameters'] ?? ['type' => 'OBJECT', 'properties' => []]);
             $openAiTools[] = [
                 'type' => 'function',
@@ -6665,11 +6708,7 @@ class ChatController {
         $out['type'] = $type;
 
         if (!empty($prop['description'])) {
-            $pDesc = (string)$prop['description'];
-            if (mb_strlen($pDesc, 'UTF-8') > 160) {
-                $pDesc = mb_substr($pDesc, 0, 157, 'UTF-8') . '...';
-            }
-            $out['description'] = $pDesc;
+            $out['description'] = (string)$prop['description'];
         }
         if (!empty($prop['enum']) && is_array($prop['enum'])) {
             $out['enum'] = array_values($prop['enum']);

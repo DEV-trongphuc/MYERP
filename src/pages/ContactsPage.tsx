@@ -49,6 +49,59 @@ const cleanInteractionText = (text: string) => {
     .trim();
 };
 
+const normalizeContactTagList = (rawTags: unknown, byIdMap?: Map<string, any>): string[] => {
+  if (!rawTags) return [];
+  const cleanRegex = /^\d+\.\s*(status\s*-\s*)?/i;
+  let list: unknown[] = [];
+  if (typeof rawTags === 'string') {
+    const trimmed = rawTags.trim();
+    if (!trimmed) return [];
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        list = Array.isArray(parsed) ? parsed : trimmed.split(',');
+      } catch {
+        list = trimmed.split(',');
+      }
+    } else {
+      list = trimmed.split(',');
+    }
+  } else if (Array.isArray(rawTags)) {
+    list = rawTags;
+  } else {
+    return [];
+  }
+  const cleaned = list
+    .map((item) => {
+      if (typeof item === 'string') {
+        const s = item.trim();
+        if (/^\d+$/.test(s) && byIdMap?.has(s)) {
+          return String(byIdMap.get(s)?.name || s);
+        }
+        return s;
+      }
+      if (typeof item === 'number') {
+        const idStr = String(item);
+        if (byIdMap?.has(idStr)) {
+          return String(byIdMap.get(idStr)?.name || idStr);
+        }
+        return idStr;
+      }
+      if (item && typeof item === 'object') {
+        const anyItem = item as Record<string, unknown>;
+        if (typeof anyItem.name === 'string') return anyItem.name;
+        if (typeof anyItem.label === 'string') return anyItem.label;
+        if (anyItem.id !== undefined && byIdMap?.has(String(anyItem.id))) {
+          return String(byIdMap.get(String(anyItem.id))?.name || '');
+        }
+      }
+      return '';
+    })
+    .map((s) => s.replace(cleanRegex, '').trim())
+    .filter(Boolean);
+  return Array.from(new Set(cleaned));
+};
+
 const getInteractionTime = (lastInteractionAt: string | null, lastContact: string | null, createdAt: string, distributedAt?: string | null) => {
   const parseTime = (t: string | null | undefined) => {
     if (!t) return 0;
@@ -513,10 +566,7 @@ const ContactsFloatingTooltip = React.memo(({
   const stageInfo = getContactStage(hc, pipelineStages);
   const lastNote = cleanInteractionText(hc.last_interaction || '');
   const initialNote = cleanInteractionText(hc.notes || '');
-  const rawTags = typeof hc.tags === 'string'
-    ? hc.tags.split(',').map((t: string) => t.replace(/^\d+\.\s*(status\s*-\s*)?/i, '').trim()).filter(Boolean)
-    : (Array.isArray(hc.tags) ? hc.tags : []);
-  const uniqueTags = Array.from(new Set(rawTags)) as string[];
+  const uniqueTags = normalizeContactTagList(hc.tags);
   let displayProg = (hc.program || hc.project_name || '').trim();
   if (!displayProg && uniqueTags.length > 0) {
     const progTag = uniqueTags.find((t: string) => {
@@ -1431,6 +1481,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
   const visibleColsMap = useMemo(() => Object.fromEntries(columns.map(c => [c.id, c.visible])), [columns]);
   const dbTagsMap = useMemo(() => new Map(dbTags.map((t: any) => [String(t.name || '').trim().toLowerCase(), t])), [dbTags]);
+  const dbTagsByIdMap = useMemo(() => new Map(dbTags.map((t: any) => [String(t.id || '').trim(), t])), [dbTags]);
 
   useEffect(() => {
     api.get('/tags')
@@ -6296,16 +6347,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                             onMouseLeave={() => setHoveredCell(null)}
                           >
                             {(() => {
-                              const rawTagList = typeof c.tags === 'string' 
-                                ? c.tags.split(',').map((t: string) => t.trim()).filter(Boolean) 
-                                : (Array.isArray(c.tags) ? c.tags : []);
-
-                              const cleanRegex = /^\d+\.\s*(status\s*-\s*)?/i;
-                              const cleanedTags = rawTagList.map((tag: string) => {
-                                return tag.replace(cleanRegex, '').trim();
-                              }).filter(Boolean);
-
-                              const uniqueTags = Array.from(new Set(cleanedTags));
+                              const uniqueTags = normalizeContactTagList(c.tags, dbTagsByIdMap);
 
                               if (uniqueTags.length === 0) return <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>;
                               
@@ -6366,15 +6408,13 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                             {(() => {
                               let displayProg = (c.program || c.project_name || '').trim();
                               if (!displayProg && c.tags) {
-                                const rawTags = typeof c.tags === 'string' 
-                                  ? c.tags.split(',').map((t: string) => t.trim()).filter(Boolean) 
-                                  : (Array.isArray(c.tags) ? c.tags : []);
+                                const rawTags = normalizeContactTagList(c.tags, dbTagsByIdMap);
                                 const progTag = rawTags.find((t: string) => {
                                   const lt = t.toLowerCase();
                                   return lt.includes('mba') || lt.includes('bba') || lt.includes('dba') || lt.includes('msc') || lt.includes('umef') || lt.includes('emba');
                                 });
                                 if (progTag) {
-                                  displayProg = progTag.replace(/^\d+\.\s*(status\s*-\s*)?/i, '').trim();
+                                  displayProg = progTag;
                                 }
                               }
 

@@ -6,9 +6,10 @@ export const TAG_COLORS = [
   '#BD1D2D', '#e11d48', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6'
 ];
 
-export const getTagColor = (tag: string): string => {
+export const getTagColor = (tag: unknown): string => {
+  const s = String(tag ?? '');
   let h = 0;
-  for (let i = 0; i < tag.length; i++) h = (h * 31 + tag.charCodeAt(i)) % TAG_COLORS.length;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % TAG_COLORS.length;
   return TAG_COLORS[Math.abs(h)];
 };
 
@@ -176,14 +177,17 @@ export const TagInput: React.FC<TagInputProps> = ({
 };
 
 export const TagDisplay: React.FC<{ tags: string[]; max?: number }> = ({ tags, max = 3 }) => {
-  const visible = tags.slice(0, max);
-  const more = tags.length - max;
+  const safeTags = Array.isArray(tags)
+    ? tags.map(t => (typeof t === 'object' && t !== null ? String((t as any).name ?? (t as any).label ?? '') : String(t ?? ''))).map(s => s.trim()).filter(Boolean)
+    : [];
+  const visible = safeTags.slice(0, max);
+  const more = safeTags.length - max;
   return (
     <div style={{ display: 'flex', flexWrap: 'nowrap', gap: '0.375rem', alignItems: 'center' }}>
-      {visible.map(tag => {
+      {visible.map((tag, idx) => {
         const color = getTagColor(tag);
         return (
-          <span key={tag} style={{
+          <span key={`${tag}-${idx}`} style={{
             padding: '2px 10px', borderRadius: 'var(--radius-full)',
             background: `${color}12`, color, border: `1px solid ${color}20`,
             fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap',

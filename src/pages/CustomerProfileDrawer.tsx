@@ -4869,9 +4869,25 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         lastLoadedContactIdRef.current = fresh.id;
 
         // Sync tags
-        let parsedTags = [];
+        let parsedTags: string[] = [];
         try {
-          parsedTags = typeof fresh.tags === 'string' ? JSON.parse(fresh.tags) : (fresh.tags || []);
+          const rawParsed = typeof fresh.tags === 'string' ? JSON.parse(fresh.tags) : (fresh.tags || []);
+          const cleanRegex = /^\d+\.\s*(status\s*-\s*)?/i;
+          if (Array.isArray(rawParsed)) {
+            parsedTags = Array.from(new Set(
+              rawParsed
+                .map((t: any) => {
+                  if (typeof t === 'number' || (typeof t === 'string' && /^\d+$/.test(t.trim()))) {
+                    const matched = allTags.find((at: any) => String(at.id) === String(t).trim());
+                    if (matched?.name) return String(matched.name);
+                  }
+                  if (t && typeof t === 'object') return String(t.name ?? t.label ?? '');
+                  return String(t ?? '');
+                })
+                .map((s: string) => s.replace(cleanRegex, '').trim())
+                .filter((s: string) => Boolean(s) && s.toLowerCase() !== 'junk')
+            ));
+          }
         } catch (e) {
           parsedTags = [];
         }
@@ -5324,7 +5340,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       setFormData(normalizedContact);
       setIsPartnerSource(Boolean(normalizedContact.company_id || normalizedContact.source === 'gioi_thieu' || normalizedContact.source === 'ref' || normalizedContact.source === 'referral'));
       const cleanRegex = /^\d+\.\s*(status\s*-\s*)?/i;
-      const cleanedLoadedTags = (normalizedContact.tags || [])
+      const rawContactTags = Array.isArray(normalizedContact.tags) ? normalizedContact.tags : [];
+      const cleanedLoadedTags = rawContactTags
+        .map((tag: any) => {
+          if (typeof tag === 'number' || (typeof tag === 'string' && /^\d+$/.test(tag.trim()))) {
+            const matched = allTags.find((at: any) => String(at.id) === String(tag).trim());
+            if (matched?.name) return String(matched.name);
+          }
+          if (tag && typeof tag === 'object') return String(tag.name ?? tag.label ?? '');
+          return String(tag ?? '');
+        })
         .map((tag: string) => tag.replace(cleanRegex, '').trim())
         .filter((t: string) => Boolean(t) && t.toLowerCase() !== 'junk');
       const uniqueLoadedTags: string[] = Array.from(new Set(cleanedLoadedTags)) as string[];
@@ -11485,7 +11510,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                         <button
                                           key={t.id}
                                           type="button"
-                                          onClick={() => !tags.includes(t.name) && handleUpdateTagsAndPersist([...tags.filter(tg => tg.toLowerCase() !== 'junk'), t.name])}
+                                          onClick={() => !tags.includes(t.name) && handleUpdateTagsAndPersist([...tags.filter(tg => String(tg || '').toLowerCase() !== 'junk'), t.name])}
                                           className="btn ghost sm"
                                           style={{ borderRadius: '10px', fontSize: '0.75rem', padding: '4px 12px', border: '1px dashed var(--color-border)' }}
                                         >

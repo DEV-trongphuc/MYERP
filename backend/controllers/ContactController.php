@@ -4,10 +4,96 @@
 class ContactController {
     private PDO $db;
     private array $stagesCache = [];
+    private array $tagIdMapCache = [];
     private static bool $autoReconciled = false;
 
     public function __construct(PDO $db) { 
         $this->db = $db; 
+    }
+
+    private function getTagIdMap(int $tenantId = 1): array {
+        $tid = max(1, $tenantId);
+        if (!isset($this->tagIdMapCache[$tid])) {
+            try {
+                $stmt = $this->db->prepare("SELECT id, name FROM tags WHERE tenant_id = ? OR tenant_id IS NULL");
+                $stmt->execute([$tid]);
+                $map = [];
+                foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+                    $map[(string)$row['id']] = trim((string)($row['name'] ?? ''));
+                }
+                $this->tagIdMapCache[$tid] = $map;
+            } catch (Throwable $e) {
+                $this->tagIdMapCache[$tid] = [];
+            }
+        }
+        return $this->tagIdMapCache[$tid];
+    }
+
+    private function normalizeContactTags($rawTags, int $tenantId = 1): array {
+        if ($rawTags === null || $rawTags === '') {
+            return [];
+        }
+        if (is_string($rawTags)) {
+            $trimmed = trim($rawTags);
+            if ($trimmed === '') {
+                return [];
+            }
+            $decoded = json_decode($trimmed, true);
+            if (is_array($decoded)) {
+                $list = $decoded;
+            } else {
+                $list = explode(',', $trimmed);
+            }
+        } elseif (is_array($rawTags)) {
+            $list = $rawTags;
+        } else {
+            return [];
+        }
+
+        $tagMap = null;
+        $result = [];
+        foreach ($list as $item) {
+            $strVal = '';
+            if (is_int($item) || is_float($item)) {
+                $idKey = (string)(int)$item;
+                if ($tagMap === null) $tagMap = $this->getTagIdMap($tenantId);
+                $strVal = $tagMap[$idKey] ?? $idKey;
+            } elseif (is_string($item)) {
+                $s = trim($item);
+                if ($s !== '' && ctype_digit($s)) {
+                    if ($tagMap === null) $tagMap = $this->getTagIdMap($tenantId);
+                    $strVal = $tagMap[$s] ?? $s;
+                } else {
+                    $strVal = $s;
+                }
+            } elseif (is_array($item)) {
+                if (!empty($item['name']) && is_string($item['name'])) {
+                    $strVal = trim($item['name']);
+                } elseif (!empty($item['label']) && is_string($item['label'])) {
+                    $strVal = trim($item['label']);
+                } elseif (isset($item['id']) && (is_int($item['id']) || ctype_digit((string)$item['id']))) {
+                    $idKey = (string)$item['id'];
+                    if ($tagMap === null) $tagMap = $this->getTagIdMap($tenantId);
+                    $strVal = $tagMap[$idKey] ?? '';
+                }
+            } elseif (is_object($item)) {
+                $arr = (array)$item;
+                if (!empty($arr['name']) && is_string($arr['name'])) {
+                    $strVal = trim($arr['name']);
+                } elseif (!empty($arr['label']) && is_string($arr['label'])) {
+                    $strVal = trim($arr['label']);
+                } elseif (isset($arr['id']) && (is_int($arr['id']) || ctype_digit((string)$arr['id']))) {
+                    $idKey = (string)$arr['id'];
+                    if ($tagMap === null) $tagMap = $this->getTagIdMap($tenantId);
+                    $strVal = $tagMap[$idKey] ?? '';
+                }
+            }
+            $strVal = trim($strVal);
+            if ($strVal !== '' && !in_array($strVal, $result, true)) {
+                $result[] = $strVal;
+            }
+        }
+        return $result;
     }
 
     public function index(array $auth): void {
@@ -651,7 +737,7 @@ class ContactController {
 
             $grouped = [];
             foreach ($data as &$row) {
-                $row['tags'] = json_decode($row['tags'] ?? '[]');
+                $row['tags'] = $this->normalizeContactTags($row['tags'] ?? '[]', (int)($tid ?: 1));
                 $this->resolveEffectiveStageRow($row, (int)$tid);
                 $sid = (int)($row['stage_id'] ?? 0);
                 if (!isset($grouped[$sid])) {
@@ -807,7 +893,7 @@ class ContactController {
         $this->populateBatchedFinancialStats($data);
         // Parse JSON tags & reconcile effective stage
         foreach ($data as &$row) {
-            $row['tags'] = json_decode($row['tags'] ?? '[]');
+            $row['tags'] = $this->normalizeContactTags($row['tags'] ?? '[]', (int)($tid ?: 1));
             $this->resolveEffectiveStageRow($row, (int)($tid ?: 1));
         }
         unset($row);
@@ -1037,7 +1123,7 @@ class ContactController {
         }
         
         $company_id = $this->resolveCompanyId($auth, $b);
-        $tags = json_encode($b['tags'] ?? []);
+        $tags = json_encode($this->normalizeContactTags($b['tags'] ?? [], (int)($auth['tenant_id'] ?? 1)), JSON_UNESCAPED_UNICODE);
         
         // Blocked Lead Check
         $rawPhone = $b['phone'] ?? null;
@@ -1404,7 +1490,7 @@ class ContactController {
                 $row[$dateCol] = null;
             }
         }
-        $row['tags'] = json_decode($row['tags'] ?? '[]');
+        $row['tags'] = $this->normalizeContactTags($row['tags'] ?? '[]', (int)($auth['tenant_id'] ?? 1));
         // Synchronize project_id <-> program on read so Header & Learning tab always match
         $progTrim = trim((string)($row['program'] ?? ''));
         $projIdVal = !empty($row['project_id']) ? (int)$row['project_id'] : 0;
@@ -1723,7 +1809,7 @@ class ContactController {
                 }
             }
         }
-        if (isset($b['tags'])) { $sets[] = 'tags=?'; $params[] = json_encode($b['tags']); }
+        if (isset($b['tags'])) { $sets[] = 'tags=?'; $params[] = json_encode($this->normalizeContactTags($b['tags'], (int)($auth['tenant_id'] ?? 1)), JSON_UNESCAPED_UNICODE); }
         if (!array_key_exists('last_contact', $b)) {
             $sets[] = 'last_contact=NOW()';
         }
@@ -2075,7 +2161,7 @@ class ContactController {
                     $row[$dateCol] = null;
                 }
             }
-            $row['tags'] = json_decode($row['tags'] ?? '[]');
+            $row['tags'] = $this->normalizeContactTags($row['tags'] ?? '[]', (int)$auth['tenant_id']);
             $this->resolveEffectiveStageRow($row, (int)$auth['tenant_id']);
             $row['custom_fields'] = getCustomFields($this->db, $auth['tenant_id'], $id, 'contact');
             respond(200, $row);
