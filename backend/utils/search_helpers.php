@@ -381,7 +381,7 @@ function applyCrmStageMultiFilter(PDO $db, string $alias, array $input, array &$
     $stageNamesOrSlugs = [];
 
     foreach ($stageTokens as $part) {
-        if (preg_match('/^(\d+)\s*-\s*(\d+)$/', $part, $rm)) {
+        if (preg_match('/^(?:pipeline|pipieline|giai\s*đoạn|giai\s*doan|stage|bước|buoc)?\s*0*(\d{1,2})\s*-\s*0*(\d{1,2})$/iu', $part, $rm)) {
             $minR = (int)$rm[1];
             $maxR = (int)$rm[2];
             if ($minR > 0 && $maxR >= $minR && ($maxR - $minR) <= 50) {
@@ -392,8 +392,8 @@ function applyCrmStageMultiFilter(PDO $db, string $alias, array $input, array &$
                     $stageIds[] = $r;
                 }
             }
-        } elseif (is_numeric($part)) {
-            $n = (int)$part;
+        } elseif (is_numeric($part) || preg_match('/^(?:pipeline|pipieline|giai\s*đoạn|giai\s*doan|stage|bước|buoc)\s*0*(\d{1,2})\b/iu', $part, $mStageNum) || preg_match('/^0*(\d{1,2})\s*[-–]/u', $part, $mStageNum)) {
+            $n = is_numeric($part) ? (int)$part : (int)$mStageNum[1];
             if ($n >= 1 && $n <= 14) {
                 $orderIndexes[] = $n - 1;
             }
