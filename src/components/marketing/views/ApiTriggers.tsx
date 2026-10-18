@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BookOpen, Database, CheckCircle2 } from 'lucide-react';
+import { BookOpen, Database, CheckCircle2, FileText, ShoppingCart, Zap, ShieldCheck } from 'lucide-react';
 import PageHero from '../components/common/PageHero';
 import FormsTab from '../components/triggers/FormsTab';
 import PurchasesTab from '../components/triggers/PurchasesTab';
@@ -93,33 +93,33 @@ const ApiTriggers: React.FC = () => {
                     loading={stats.forms === null}
                     title="Biểu mẫu thu thập"
                     value={stats.forms !== null ? String(stats.forms) : '0'}
-                    icon={<AppIcon name="trigger_form" size={34} />}
-                    color="#06B6D4"
-                    breakdown={<span>Forms Landing Page</span>}
+                    icon={<FileText />}
+                    color="#a31422"
+                    breakdown="Forms Landing Page"
                 />
                 <StatCard
                     loading={stats.purchases === null}
                     title="Đơn hàng Webhook"
                     value={stats.purchases !== null ? String(stats.purchases) : '0'}
-                    icon={<AppIcon name="trigger_purchase" size={34} />}
-                    color="#10b981"
-                    breakdown={<span>Sự kiện mua hàng tự động</span>}
+                    icon={<ShoppingCart />}
+                    color="#3b82f6"
+                    breakdown="Sự kiện mua hàng tự động"
                 />
                 <StatCard
                     loading={stats.customEvents === null}
                     title="Sự kiện Custom"
                     value={stats.customEvents !== null ? String(stats.customEvents) : '0'}
-                    icon={<AppIcon name="trigger_custom" size={34} />}
-                    color="#F59E0B"
-                    breakdown={<span>App & Web Custom Triggers</span>}
+                    icon={<Zap />}
+                    color="#10b981"
+                    breakdown="App & Web Custom Triggers"
                 />
                 <StatCard
                     loading={stats.activeFlows === null}
                     title="Luồng & OTP Active"
                     value={stats.activeFlows !== null ? String(stats.activeFlows) : '0'}
-                    icon={<AppIcon name="trigger_otp" size={34} />}
-                    color="#8b5cf6"
-                    breakdown={<span>Automation Flows đang chạy</span>}
+                    icon={<ShieldCheck />}
+                    color="#f59e0b"
+                    breakdown="Automation Flows đang chạy"
                 />
             </MktStatGrid>
 

@@ -511,20 +511,84 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
     const StatBox = ({ label, value, subValue, icon: Icon, colorClass }: any) => {
         const accentColor = (() => {
             if (colorClass.includes('emerald') || colorClass.includes('green') || colorClass.includes('10b981')) return '#10b981';
-            if (colorClass.includes('rose') || colorClass.includes('pink') || colorClass.includes('ec4899')) return '#ec4899';
-            if (colorClass.includes('blue') || colorClass.includes('indigo')) return '#3b82f6';
-            return '#8b5cf6';
+            if (colorClass.includes('rose') || colorClass.includes('pink') || colorClass.includes('ec4899')) return '#a31422';
+            if (colorClass.includes('blue')) return '#3b82f6';
+            return '#f59e0b';
         })();
 
         return (
-            <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-[14px] md:rounded-[18px] border border-slate-200 dark:border-slate-800 shadow-none hover:border-slate-300 dark:hover:border-slate-700 transition-colors relative overflow-hidden flex items-center justify-between group cursor-pointer">
-                <div className="min-w-0 relative z-10">
-                    <p className="text-[10px] md:text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 leading-none">{label}</p>
-                    <h4 className="text-xl md:text-2xl font-black text-slate-850 dark:text-slate-100 tracking-tight leading-none">{value}</h4>
-                    {subValue && <p className="text-[9px] md:text-[10px] font-bold text-slate-400 dark:text-slate-500 mt-1 md:mt-2 uppercase tracking-tight truncate max-w-[150px] md:max-w-none">{subValue}</p>}
+            <div
+                style={{
+                    minHeight: '140px',
+                    '--stat-accent': accentColor,
+                    '--stat-glow': `${accentColor}26`,
+                } as React.CSSProperties}
+                className="stat-card hover-lift relative overflow-hidden w-full min-w-0 h-full min-h-[140px] flex flex-col justify-between p-5 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[18px] shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all duration-300 cursor-pointer"
+            >
+                <div className="decor-svg" style={{ color: accentColor }}>
+                    <Icon className="w-full h-full" style={{ width: '100%', height: '100%' }} />
                 </div>
-                <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 relative z-10 ml-4" style={{ backgroundColor: `${accentColor}15`, color: accentColor }}>
-                    <Icon className="w-4 h-4" />
+                <div className="relative z-10 flex flex-col justify-between h-full w-full min-w-0">
+                    <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', gap: '8px' }}>
+                            <div
+                                className="stat-label truncate"
+                                style={{
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.05em',
+                                    color: 'var(--color-text-muted)',
+                                }}
+                            >
+                                {label}
+                            </div>
+                            <div
+                                className="stat-icon"
+                                style={{
+                                    width: '32px',
+                                    height: '32px',
+                                    borderRadius: '8px',
+                                    background: `${accentColor}14`,
+                                    color: accentColor,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0,
+                                }}
+                            >
+                                <Icon className="w-4 h-4" />
+                            </div>
+                        </div>
+                        <div className="stat-value tabular-nums truncate">{value}</div>
+                        {subValue && (
+                            <div
+                                style={{
+                                    fontSize: '0.75rem',
+                                    color: 'var(--color-text-muted)',
+                                    marginTop: '4px',
+                                    marginBottom: '8px',
+                                    fontWeight: 600,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '10px',
+                                    flexWrap: 'wrap',
+                                }}
+                            >
+                                <span
+                                    style={{
+                                        width: '6px',
+                                        height: '6px',
+                                        borderRadius: '50%',
+                                        background: accentColor,
+                                        display: 'inline-block',
+                                        flexShrink: 0,
+                                    }}
+                                />
+                                {subValue}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         );

@@ -8,6 +8,9 @@ function loadEnv($path) {
         if (strpos(trim($line), '#') === 0) {
             continue;
         }
+        if (strpos($line, '=') === false) {
+            continue;
+        }
         list($name, $value) = explode('=', $line, 2);
         $name = trim($name);
         $value = trim($value);
@@ -19,6 +22,8 @@ function loadEnv($path) {
     }
 }
 
-// Load .env automatically when included
+// Load .env and .env.local (gitignored) automatically when included
 loadEnv(__DIR__ . '/.env');
+loadEnv(__DIR__ . '/.env.local');
+
 

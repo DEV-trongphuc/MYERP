@@ -40,7 +40,7 @@ export const AddBtn: React.FC<AddBtnProps> = ({ onClick, onDrop, onQuickWait, is
         {onQuickWait && (
           <button
             onClick={(e) => { e.stopPropagation(); onQuickWait(); }}
-            className="w-8 h-8 rounded-full border-2 border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 text-slate-400 hover:border-emerald-400 hover:text-emerald-500 transition-all shadow-md flex items-center justify-center"
+            className="w-8 h-8 rounded-full border-2 border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 text-amber-500 hover:border-amber-400 hover:bg-amber-50 hover:text-amber-600 transition-all shadow-md flex items-center justify-center"
             title="Chèn nhanh Chờ 1 ngày"
           >
             <Clock className="w-4 h-4" />
@@ -66,7 +66,7 @@ export const ErrorConnector = ({ parentId, branch, onQuickFix, isReportMode }: {
       {onQuickFix && (
         <button
           onClick={(e) => { e.stopPropagation(); onQuickFix?.(parentId, branch); }}
-          className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-xl shadow-lg shadow-emerald-200 transition-all flex items-center gap-1.5 ml-1 active:scale-95 shrink-0"
+          className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-xl shadow-lg shadow-amber-200 transition-all flex items-center gap-1.5 ml-1 active:scale-95 shrink-0"
         >
           <Clock className="w-3.5 h-3.5" /> Thêm Chờ
         </button>

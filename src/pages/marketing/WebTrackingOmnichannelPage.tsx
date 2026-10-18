@@ -418,32 +418,32 @@ const WebTracking: React.FC = () => {
                             title="Tổng tên miền"
                             value={websites.length.toLocaleString('vi-VN')}
                             icon={<Globe />}
-                            color="#BD1D2D"
-                            breakdown={<span>Đang kết nối hệ thống</span>}
+                            color="#a31422"
+                            breakdown="Đang kết nối hệ thống"
                         />
                         <StatCard
                             loading={loading}
                             title="Bật AI Livechat"
                             value={websites.filter(w => Boolean(w.ai_enabled)).length.toLocaleString('vi-VN')}
                             icon={<Bot />}
-                            color="#BD1D2D"
-                            breakdown={<span>Tên miền kích hoạt trợ lý AI</span>}
+                            color="#10b981"
+                            breakdown="Tên miền kích hoạt trợ lý AI"
                         />
                         <StatCard
                             loading={loading}
                             title="Tài liệu AI"
                             value={websites.reduce((sum, w) => sum + (Number(w.docs_count ?? w.stats?.docs_count ?? 0) || 0), 0).toLocaleString('vi-VN')}
                             icon={<Sparkles />}
-                            color="#BD1D2D"
-                            breakdown={<span>Nguồn tri thức đã huấn luyện</span>}
+                            color="#3b82f6"
+                            breakdown="Nguồn tri thức đã huấn luyện"
                         />
                         <StatCard
                             loading={loading}
                             title="Hội thoại ghi nhận"
                             value={websites.reduce((sum, w) => sum + (Number(w.queries_count ?? w.stats?.queries_count ?? 0) || 0), 0).toLocaleString('vi-VN')}
                             icon={<MessageSquare />}
-                            color="#BD1D2D"
-                            breakdown={<span>Tổng phiên tương tác trên web</span>}
+                            color="#f59e0b"
+                            breakdown="Tổng phiên tương tác trên web"
                         />
                     </MktStatGrid>
 

@@ -122,10 +122,10 @@ const GeneralTabContent: React.FC<GeneralTabContentProps> = ({ stats, formatDura
             {!stats ? (
                 <div className="space-y-6">
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <StatCard loading title="Unique Visitors" value={0} icon={<Users />} color="#BD1D2D" />
-                        <StatCard loading title="Total Sessions" value={0} icon={<Zap />} color="#BD1D2D" />
-                        <StatCard loading title="Page Views" value={0} icon={<Eye />} color="#BD1D2D" />
-                        <StatCard loading title="Bounce Rate" value={0} icon={<Activity />} color="#BD1D2D" />
+                        <StatCard loading title="Unique Visitors" value={0} icon={<Users />} color="#a31422" />
+                        <StatCard loading title="Total Sessions" value={0} icon={<Zap />} color="#3b82f6" />
+                        <StatCard loading title="Page Views" value={0} icon={<Eye />} color="#10b981" />
+                        <StatCard loading title="Bounce Rate" value={0} icon={<Activity />} color="#f59e0b" />
                     </div>
                     <div className="bg-[var(--color-surface)] p-6 rounded-[var(--radius-lg)] h-[380px] border border-[var(--color-border)] animate-pulse" />
                 </div>
@@ -137,14 +137,14 @@ const GeneralTabContent: React.FC<GeneralTabContentProps> = ({ stats, formatDura
                             title="Unique Visitors"
                             value={(stats.overview.visitors || 0).toLocaleString('vi-VN')}
                             icon={<Users />}
-                            color="#BD1D2D"
+                            color="#a31422"
                             breakdown={<span>Người dùng mới: <b>{(stats.overview.newUsers ?? 0).toLocaleString('vi-VN')}</b></span>}
                         />
                         <StatCard
                             title="Total Sessions"
                             value={(stats.overview.sessions || 0).toLocaleString('vi-VN')}
                             icon={<Zap />}
-                            color="#BD1D2D"
+                            color="#3b82f6"
                             breakdown={
                                 <span className="inline-flex items-center gap-1.5">
                                     <Clock className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />
@@ -156,7 +156,7 @@ const GeneralTabContent: React.FC<GeneralTabContentProps> = ({ stats, formatDura
                             title="Page Views"
                             value={(stats.overview.pageViews || 0).toLocaleString('vi-VN')}
                             icon={<Eye />}
-                            color="#BD1D2D"
+                            color="#10b981"
                             breakdown={
                                 <span>
                                     {stats.overview.sessions > 0
@@ -169,7 +169,7 @@ const GeneralTabContent: React.FC<GeneralTabContentProps> = ({ stats, formatDura
                             title="Bounce Rate"
                             value={`${(stats.overview.bounceRate || 0).toFixed(1)}%`}
                             icon={<Activity />}
-                            color="#BD1D2D"
+                            color="#f59e0b"
                             onClick={() => setIsBounceInfoOpen(true)}
                             breakdown={
                                 <span className="inline-flex items-center gap-1.5">

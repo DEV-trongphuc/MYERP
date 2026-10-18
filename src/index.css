@@ -5347,6 +5347,10 @@ div[role="status"] {
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
 }
+.stat-card[style*="--stat-accent"]:hover {
+  border-color: var(--stat-accent) !important;
+  box-shadow: 0 6px 16px var(--stat-glow, rgba(0, 0, 0, 0.08)) !important;
+}
 .stat-card.total-card:hover {
   box-shadow: 0 6px 16px rgba(163, 20, 34, 0.15) !important;
   border-color: #a31422 !important;

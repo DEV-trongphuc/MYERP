@@ -60,6 +60,7 @@ const AttendancePage = lazy(() => import('./pages/AttendancePage').then(module =
 const TicketsPage = lazy(() => import('./pages/TicketsPage').then(module => ({ default: module.TicketsPage })));
 const DownloadPage = lazy(() => import('./pages/DownloadPage').then(module => ({ default: module.DownloadPage })));
 const AITrainingPage = lazy(() => import('./pages/AITrainingPage').then(module => ({ default: module.AITrainingPage })));
+const QwenAgentLabPage = lazy(() => import('./pages/QwenAgentLabPage').then(module => ({ default: module.QwenAgentLabPage })));
 const HRM = lazy(() => import('./pages/HRM'));
 const MyPayslips = lazy(() => import('./pages/MyPayslips'));
 const Approvals = lazy(() => import('./pages/Approvals'));
@@ -245,6 +246,8 @@ const AppTabs = () => {
         return user?.role === 'sale' ? <SalePortal embedMode={true} activeTabProp="fair-share" key="fair-share" /> : <FairShareAudit key="fair-share" />;
       case '/ai-training':
         return <AITrainingPage key="ai-training" />;
+      case '/qwen-agent-lab':
+        return <QwenAgentLabPage key="qwen-agent-lab" />;
       case '/attendance':
         return <AttendancePage key="attendance" />;
       case '/projects':

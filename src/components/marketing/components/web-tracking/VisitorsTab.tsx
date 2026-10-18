@@ -255,15 +255,15 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                     title="Đang xem (Live)"
                     value={liveCount.toLocaleString('vi-VN')}
                     icon={<Activity />}
-                    color="#BD1D2D"
+                    color="#10b981"
                     onClick={() => setLiveModalOpen(true)}
-                    breakdown={<span>Click để xem luồng trực tiếp</span>}
+                    breakdown="Click để xem luồng trực tiếp"
                 />
                 <StatCard
                     title="Tổng Visitors"
                     value={(pagination?.total || filteredVisitors.length).toLocaleString('vi-VN')}
                     icon={<Users />}
-                    color="#BD1D2D"
+                    color="#a31422"
                     onClick={() => setReturningFilter('all')}
                     breakdown={<span>Trong trang: <b>{visitors.length}</b></span>}
                 />
@@ -271,17 +271,17 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                     title="Khách đã định danh"
                     value={identifiedCount.toLocaleString('vi-VN')}
                     icon={<User />}
-                    color="#BD1D2D"
+                    color="#3b82f6"
                     onClick={() => setReturningFilter('identified')}
-                    breakdown={<span>Có Email / SĐT / Zalo</span>}
+                    breakdown="Có Email / SĐT / Zalo"
                 />
                 <StatCard
                     title="Khách quay lại (2+)"
                     value={returningCount.toLocaleString('vi-VN')}
                     icon={<Repeat />}
-                    color="#BD1D2D"
+                    color="#f59e0b"
                     onClick={() => setReturningFilter('returning')}
-                    breakdown={<span>Từ 2 phiên truy cập trở lên</span>}
+                    breakdown="Từ 2 phiên truy cập trở lên"
                 />
             </div>
 

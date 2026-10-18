@@ -1018,10 +1018,10 @@ const FlowAnalyticsTab: React.FC<{
     const StatItem = ({ label, value, icon: Icon, color, subText, trendText, trendType, onClick }: any) => {
         const hexColor = (() => {
             if (color === 'bg-blue-600') return '#3b82f6';
-            if (color === 'bg-indigo-600') return '#8b5cf6';
+            if (color === 'bg-indigo-600') return '#a31422';
             if (color === 'bg-[#2563eb]') return '#f59e0b';
-            if (color === 'bg-rose-500') return '#ec4899';
-            return '#64748b';
+            if (color === 'bg-rose-500') return '#10b981';
+            return '#a31422';
         })();
 
         const isTrendSuccess = trendType === 'success';
@@ -1029,38 +1029,79 @@ const FlowAnalyticsTab: React.FC<{
         return (
             <div
                 onClick={onClick}
-                className={`bg-[var(--color-surface)] border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-none flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-colors relative overflow-hidden min-h-[145px] group ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
+                style={{
+                    minHeight: '140px',
+                    '--stat-accent': hexColor,
+                    '--stat-glow': `${hexColor}26`,
+                } as React.CSSProperties}
+                className={`stat-card hover-lift relative overflow-hidden w-full min-w-0 h-full min-h-[140px] flex flex-col justify-between p-5 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[18px] shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all duration-300 ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
             >
-                <div className="relative z-10 flex flex-col justify-between h-full w-full">
+                <div className="decor-svg" style={{ color: hexColor }}>
+                    <Icon className="w-full h-full" style={{ width: '100%', height: '100%' }} />
+                </div>
+                <div className="relative z-10 flex flex-col justify-between h-full w-full min-w-0">
                     <div>
-                        <div className="flex items-center justify-between gap-2">
-                            <p className="text-[10px] md:text-xs text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest leading-none">{label}</p>
-                            <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform group-hover:scale-105" style={{ backgroundColor: `${hexColor}15`, color: hexColor }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', gap: '8px' }}>
+                            <div
+                                className="stat-label truncate"
+                                style={{
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.05em',
+                                    color: 'var(--color-text-muted)',
+                                }}
+                            >
+                                {label}
+                            </div>
+                            <div
+                                className="stat-icon"
+                                style={{
+                                    width: '32px',
+                                    height: '32px',
+                                    borderRadius: '8px',
+                                    background: `${hexColor}14`,
+                                    color: hexColor,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0,
+                                }}
+                            >
                                 <Icon className="w-4 h-4" />
                             </div>
                         </div>
-                        <p className="text-xl md:text-2xl font-black text-slate-850 dark:text-slate-100 tracking-tight mt-3 mb-1.5 leading-none">{value}</p>
-                    </div>
-                    <div className="mt-2 space-y-1">
+                        <div className="stat-value tabular-nums truncate">{value}</div>
                         {subText && (
-                            <div className="text-[10px] text-slate-450 dark:text-slate-500 font-bold flex items-center flex-wrap gap-x-2 gap-y-0.5">
+                            <div
+                                style={{
+                                    fontSize: '0.75rem',
+                                    color: 'var(--color-text-muted)',
+                                    marginTop: '4px',
+                                    marginBottom: '8px',
+                                    fontWeight: 600,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '10px',
+                                    flexWrap: 'wrap',
+                                }}
+                            >
                                 {subText}
                             </div>
                         )}
-                        {trendText && (
-                            <div className="text-[11px] font-bold mt-1 flex items-center gap-1.5">
-                                <span className="flex items-center gap-0.5 px-2 py-0.5 rounded-full" style={{ 
-                                    backgroundColor: isTrendSuccess ? 'rgba(16, 185, 129, 0.08)' : 'rgba(244, 63, 94, 0.08)',
-                                    color: isTrendSuccess ? '#10b981' : '#f43f5e'
-                                }}>
-                                    {trendText.includes(':') ? trendText.split(':')[0] : trendText}
-                                </span>
-                                {trendText.includes(':') && (
-                                    <span className="text-slate-400 font-bold dark:text-slate-500">{trendText.split(':')[1]}</span>
-                                )}
-                            </div>
-                        )}
                     </div>
+                    {trendText && (
+                        <div className={`stat-change ${isTrendSuccess ? 'up' : 'down'}`} style={{ marginTop: 'auto', paddingTop: '4px' }}>
+                            <span style={{ fontWeight: 700 }}>
+                                {trendText.includes(':') ? trendText.split(':')[0] : trendText}
+                            </span>
+                            {trendText.includes(':') && (
+                                <span className="stat-desc" style={{ color: 'var(--color-text-light)', marginLeft: '4px', fontWeight: 500 }}>
+                                    {trendText.split(':')[1]}
+                                </span>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         );

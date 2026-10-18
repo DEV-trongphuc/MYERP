@@ -17,6 +17,7 @@ import Input from '../common/Input';
 import Select from '../common/Select';
 import TabTransition from '../common/TabTransition';
 import ConfirmModal from '../common/ConfirmModal';
+import StatCard from '../common/StatCard';
 
 const ZALO_LOGO = `${EXTERNAL_ASSET_BASE}/imgs/zalolog.png`;
 
@@ -763,20 +764,14 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
 // Sub-components
 const HeroStatCard = ({ label, value, icon: Icon, color, decor }: any) => {
     return (
-        <div className="bg-[var(--color-surface)] p-5 md:p-6 rounded-[18px] border border-[var(--color-border-light)] shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-xl)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden min-h-[100px] flex items-center justify-between group cursor-pointer w-full">
-            {decor && (
-                <div className="decor-svg" style={{ color: color }}>
-                    {decor}
-                </div>
-            )}
-            <div className="relative z-10 flex flex-col justify-between h-full">
-                <p className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5 leading-none">{label}</p>
-                <h4 className="text-xl md:text-2xl font-black text-[var(--color-text)] dark:text-slate-100 tracking-tight leading-none">{typeof value === 'number' ? value.toLocaleString() : value}</h4>
-            </div>
-            <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 relative z-10" style={{ backgroundColor: `${color}15`, color: color }}>
-                <Icon className="w-4 h-4" />
-            </div>
-        </div>
+        <StatCard
+            title={label}
+            value={typeof value === 'number' ? value.toLocaleString('vi-VN') : value}
+            icon={<Icon />}
+            color={color}
+            decor={decor}
+            breakdown="Chiến dịch Zalo Broadcast"
+        />
     );
 };
 

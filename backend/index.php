@@ -1899,6 +1899,16 @@ switch ($resource) {
         else respond(404, null, 'Route không tồn tại', false);
         break;
 
+    // QWEN 3.8 27B (GROQ CLOUD — STANDALONE AGENT LAB, ZERO GEMINI)
+    case 'qwen-agent':
+        $auth = requireAuth();
+        $ctrl = new QwenAgentController($db);
+        if ((!$resourceId || $resourceId === 'status') && $method === 'GET') $ctrl->status($auth);
+        elseif ($resourceId === 'chat' && $method === 'POST') $ctrl->chat($auth);
+        elseif ($resourceId === 'settings' && in_array($method, ['POST', 'PUT'], true)) $ctrl->updateSettings($auth);
+        else respond(404, null, 'Route Qwen Agent không tồn tại', false);
+        break;
+
     // CUSTOMER JOURNEY SUMMARY (AI INSIGHTS)
     case 'customer-journey-summary':
         $auth = requireAuth();
