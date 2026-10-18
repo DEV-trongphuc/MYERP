@@ -1480,6 +1480,12 @@ class DomationOmnichannelController
             } elseif ($rawDetail !== '' && $rawDetail !== '{}') {
                 $detText = trim($rawDetail);
             }
+            if ($detText !== '') {
+                $detText = trim((string)preg_replace('/\s*\([+-]?\d+\s*(?:điểm|diem|pts|points)\)/iu', '', $detText));
+            }
+            if ($refName !== '') {
+                $refName = trim((string)preg_replace('/\s*\([+-]?\d+\s*(?:điểm|diem|pts|points)\)/iu', '', $refName));
+            }
 
             $channel = 'flow';
             $title   = $refName !== '' ? $refName : $type;
@@ -1705,16 +1711,17 @@ class DomationOmnichannelController
         foreach ($surveysData as $sr) {
             $ts = $sr['submitted_at'] ?? ($sr['created_at'] ?? null);
             $subTxt = isset($sr['score']) && $sr['score'] !== null ? ('Đã nộp khảo sát') : 'Đã gửi câu trả lời khảo sát';
+            $svTitle = trim((string)($sr['survey_title'] ?? ($sr['title'] ?? '')));
             $events[] = [
                 'id'          => 'sr_' . ($sr['id'] ?? uniqid()),
                 'channel'     => 'survey',
                 'event_type'  => 'survey_response',
-                'title'       => 'Hoàn thành khảo sát: ' . ($sr['survey_title'] ?: ('Khảo sát #' . ($sr['survey_id'] ?? ''))),
+                'title'       => 'Hoàn thành khảo sát: ' . ($svTitle !== '' ? $svTitle : ('Khảo sát #' . ($sr['survey_id'] ?? ''))),
                 'description' => $subTxt,
                 'subtitle'    => $subTxt,
                 'details'     => [
                     'survey_id'      => $sr['survey_id'] ?? null,
-                    'survey_title'   => $sr['survey_title'] ?? null,
+                    'survey_title'   => $svTitle !== '' ? $svTitle : null,
                     'answer_details' => $sr['answer_details'] ?? [],
                     'parsed_answers' => $sr['parsed_answers'] ?? [],
                 ],

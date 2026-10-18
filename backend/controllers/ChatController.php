@@ -5518,7 +5518,7 @@ class ChatController {
                 'contents' => $contents,
                 'generationConfig' => [
                     'temperature' => 0.2,
-                    'maxOutputTokens' => 10000,
+                    'maxOutputTokens' => 15000,
                     'topP' => 0.95
                 ]
             ];
@@ -6523,7 +6523,7 @@ class ChatController {
     }
 
     /**
-     * Stream OpenRouter Synthesis response in real-time via SSE (`$onChunk`) with full token output (`max_tokens: 10000`)
+     * Stream OpenRouter Synthesis response in real-time via SSE (`$onChunk`) with full token output (`max_tokens: 15000`)
      */
     private function streamOpenRouterSynthesisWithPool(
         string $openRouterKey,
@@ -6540,7 +6540,7 @@ class ChatController {
                 'models' => $batchModels,
                 'messages' => $messages,
                 'temperature' => 0.2,
-                'max_tokens' => 10000,
+                'max_tokens' => 15000,
                 'top_p' => 0.95,
                 'reasoning' => ['enabled' => false],
                 'stream' => true,
@@ -6614,7 +6614,7 @@ class ChatController {
     }
 
     /**
-     * Execute OpenRouter Chat Completion across the ranked `:free` model pool with full intelligence & 10000 max_tokens.
+     * Execute OpenRouter Chat Completion across the ranked `:free` model pool with full intelligence & 15000 max_tokens.
      */
     private function executeOpenRouterRequestWithPool(
         string $openRouterKey,
@@ -6632,7 +6632,7 @@ class ChatController {
                 'models' => $batchModels,
                 'messages' => $messages,
                 'temperature' => 0.2,
-                'max_tokens' => 10000,
+                'max_tokens' => 15000,
                 'top_p' => 0.95,
                 'reasoning' => ['enabled' => false],
             ];
