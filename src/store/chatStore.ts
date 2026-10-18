@@ -250,11 +250,10 @@ function replaceOptimisticAndDedupe(list: ChatMessage[], tempId: number, serverM
 
 let cacheSaveTimeout: any = null;
 const persistMessagesToCache = (messagesByConvId: Record<number, ChatMessage[]>) => {
-  // Asynchronous non-blocking write to IndexedDB
-  chatDB.saveAllMessages(messagesByConvId).catch(() => {});
-
   if (cacheSaveTimeout) clearTimeout(cacheSaveTimeout);
   cacheSaveTimeout = setTimeout(() => {
+    // Debounced asynchronous write to IndexedDB & localStorage so streaming/SSE never blocks main thread
+    chatDB.saveAllMessages(messagesByConvId).catch(() => {});
     try {
       const convIds = Object.keys(messagesByConvId).map(Number);
       const pruned: Record<number, ChatMessage[]> = {};
@@ -2230,7 +2229,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             sseSource.close();
             sseSource = null;
           }
-          sseReconnectTimer = setTimeout(connectSSE, 600);
+          if (sseReconnectTimer) clearTimeout(sseReconnectTimer);
+          sseReconnectTimer = setTimeout(() => {
+            if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+              connectSSE();
+            }
+          }, 6000);
         });
 
         es.onerror = () => {
@@ -2239,7 +2243,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             sseSource.close();
             sseSource = null;
           }
-          sseReconnectTimer = setTimeout(connectSSE, 3000);
+          if (sseReconnectTimer) clearTimeout(sseReconnectTimer);
+          sseReconnectTimer = setTimeout(() => {
+            if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+              connectSSE();
+            }
+          }, 8000);
         };
       } catch (e) {
         set({ isRealtimeConnected: false });

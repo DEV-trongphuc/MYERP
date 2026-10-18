@@ -2815,253 +2815,145 @@ switch ($action) {
         break;
 
     case 'get_sse_updates':
-        // SSE runs persistently, disable execution timeout
-        set_time_limit(0);
-
-        // Prevent buffer buffering
+        // Clear any active output buffers (including ob_gzhandler from line 4) so SSE flushes immediately
         if (function_exists('apache_setenv')) {
             @apache_setenv('no-gzip', '1');
         }
         @ini_set('zlib.output_compression', '0');
         @ini_set('implicit_flush', '1');
+        while (ob_get_level() > 0) {
+            @ob_end_clean();
+        }
         ob_implicit_flush(true);
 
-        header('Content-Type: text/event-stream');
-        header('Cache-Control: no-cache');
-        header('Connection: keep-alive');
-        header('X-Accel-Buffering: no'); // Tells Nginx not to buffer output
+        header('Content-Type: text/event-stream; charset=utf-8');
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Pragma: no-cache');
+        header('Connection: close');
+        header('X-Accel-Buffering: no');
+
+        echo "retry: 15000\n";
 
         $isSale = in_array($decodedUser['role'], ['sale', 'sales', 'manager'], true);
         $saleId = $isSale ? ($currentSaleConsultantId ?? 0) : (int) $decodedUser['id'];
 
-        $lastLeadCount = -1;
-        $lastNotifCount = -1;
-        $lastCoopCount = -1;
-        $lastMaxContactId = -1;
-        $lastMaxLeadId = -1;
-
-        $lastCheckedNotifId = -1;
-        $lastCheckedUnreadNotifs = -1;
-        $lastCheckedDistLogId = -1;
-        $lastCheckedCId = -1;
-        $lastCheckedLId = -1;
-        $lastCheckedUnacceptedLeads = -1;
-        $lastCheckedCoopId = -1;
-
-        // Defensive scalar query helper (immune to bool return / disconnection in PHP 8)
-        $safeFetchInt = function($sql) use ($conn) {
-            try {
-                $res = $conn->query($sql);
-                if ($res && $res instanceof mysqli_result) {
-                    $row = $res->fetch_row();
-                    $val = (int)($row[0] ?? 0);
-                    $res->free();
-                    return $val;
-                }
-            } catch (Throwable $e) {}
-            return 0;
-        };
-
-        $maxIterations = 6; // High performance: runs for ~18 seconds to cycle PHP-FPM workers quickly
-        for ($iteration = 0; $iteration < $maxIterations; $iteration++) {
-            // Check connection status: if client disconnected, stop immediately
-            if (connection_aborted()) {
-                break;
-            }
-
-            // High-Speed Fast Index Check on iterations > 0:
-            // Check primary key max values AND unread/unaccepted counts to detect both INSERTs and UPDATEs
-            if ($iteration > 0) {
-                $uidVal = (int) $decodedUser['id'];
-                $quickNotifId = $safeFetchInt("SELECT MAX(id) FROM notifications WHERE user_id = $uidVal");
-                $quickUnreadNotifs = $safeFetchInt("SELECT COUNT(*) FROM notifications WHERE user_id = $uidVal AND is_read = 0");
-                $quickDistLogId = $safeFetchInt("SELECT MAX(id) FROM distribution_logs" . ($isSale ? " WHERE assigned_to = " . (int)$saleId : ""));
-                $quickCId = $safeFetchInt("SELECT MAX(id) FROM contacts");
-                $quickLId = $safeFetchInt("SELECT MAX(id) FROM leads" . ($isSale ? " WHERE assigned_to = " . (int)$saleId : ""));
-                $quickUnacceptedLeads = $safeFetchInt("SELECT COUNT(*) FROM leads WHERE is_accepted = 0" . ($isSale ? " AND assigned_to = " . (int)$saleId : ""));
-                $quickCoopId = $safeFetchInt("SELECT MAX(id) FROM cooperation_slips WHERE status IN ('pending_signatures', 'approved_pending_signatures')");
-
-                if (
-                    $quickNotifId === $lastCheckedNotifId &&
-                    $quickUnreadNotifs === $lastCheckedUnreadNotifs &&
-                    $quickDistLogId === $lastCheckedDistLogId &&
-                    $quickCId === $lastCheckedCId &&
-                    $quickLId === $lastCheckedLId &&
-                    $quickUnacceptedLeads === $lastCheckedUnacceptedLeads &&
-                    $quickCoopId === $lastCheckedCoopId
-                ) {
-                    // Zero database mutation detected; skip 5 heavy subqueries
-                    sleep(3);
-                    continue;
-                }
-
-                $lastCheckedNotifId = $quickNotifId;
-                $lastCheckedUnreadNotifs = $quickUnreadNotifs;
-                $lastCheckedDistLogId = $quickDistLogId;
-                $lastCheckedCId = $quickCId;
-                $lastCheckedLId = $quickLId;
-                $lastCheckedUnacceptedLeads = $quickUnacceptedLeads;
-                $lastCheckedCoopId = $quickCoopId;
-            }
-
-            // 1. Count unaccepted leads
-            $leadCount = 0;
-            if ($isSale) {
-                $sqlLead = "
-                    SELECT COUNT(*) as cnt
-                    FROM distribution_logs dl
-                    INNER JOIN (
-                        SELECT lead_id, MAX(id) as max_id 
-                        FROM distribution_logs 
-                        WHERE status != 'silent' AND assigned_to = ?
-                        GROUP BY lead_id
-                    ) dl_max ON dl.id = dl_max.max_id
-                    JOIN leads l ON dl.lead_id = l.id
-                    WHERE dl.assigned_to = ? AND l.is_accepted = 0
-                ";
-            } else {
-                $sqlLead = "
-                    SELECT COUNT(*) as cnt
-                    FROM distribution_logs dl
-                    INNER JOIN (
-                        SELECT lead_id, MAX(id) as max_id 
-                        FROM distribution_logs 
-                        WHERE status != 'silent'
-                        GROUP BY lead_id, assigned_to
-                    ) dl_max ON dl.id = dl_max.max_id
-                    JOIN leads l ON dl.lead_id = l.id
-                    WHERE l.is_accepted = 0
-                ";
-            }
-            $stmt = $conn->prepare($sqlLead);
-            if ($stmt) {
-                if ($isSale) {
-                    $stmt->bind_param("ii", $saleId, $saleId);
-                }
-                $stmt->execute();
-                $leadCount = (int)($stmt->get_result()->fetch_assoc()['cnt'] ?? 0);
-                $stmt->close();
-            }
-
-            // 1.1 Max contact ID visible to user
-            $maxContactId = 0;
-            if ($isSale && $saleId > 0) {
-                $sqlMaxC = "SELECT MAX(id) as max_id FROM contacts WHERE owner_id = ? OR JSON_CONTAINS(COALESCE(collaborator_ids, '[]'), CAST(? AS CHAR))";
-                $stmtC = $conn->prepare($sqlMaxC);
-                if ($stmtC) {
-                    $uidStr = (string)$saleId;
-                    $stmtC->bind_param("is", $saleId, $uidStr);
-                    $stmtC->execute();
-                    $maxContactId = (int)($stmtC->get_result()->fetch_assoc()['max_id'] ?? 0);
-                    $stmtC->close();
-                }
-            } else {
-                $resMaxC = $conn->query("SELECT MAX(id) as max_id FROM contacts");
-                if ($resMaxC) {
-                    $maxContactId = (int)($resMaxC->fetch_assoc()['max_id'] ?? 0);
-                }
-            }
-
-            // 1.2 Max lead ID
-            $maxLeadId = 0;
-            if ($isSale && $saleId > 0) {
-                $stmtL = $conn->prepare("SELECT MAX(id) as max_id FROM leads WHERE assigned_to = ?");
-                if ($stmtL) {
-                    $stmtL->bind_param("i", $saleId);
-                    $stmtL->execute();
-                    $maxLeadId = (int)($stmtL->get_result()->fetch_assoc()['max_id'] ?? 0);
-                    $stmtL->close();
-                }
-            } else {
-                $resMaxL = $conn->query("SELECT MAX(id) as max_id FROM leads");
-                if ($resMaxL) {
-                    $maxLeadId = (int)($resMaxL->fetch_assoc()['max_id'] ?? 0);
-                }
-            }
-
-            // 2. Count unread notifications
-            $notifCount = 0;
-            $sqlNotif = "SELECT COUNT(*) as cnt FROM notifications WHERE user_id = ? AND is_read = 0";
-            $stmt = $conn->prepare($sqlNotif);
-            if ($stmt) {
-                $stmt->bind_param("i", $decodedUser['id']);
-                $stmt->execute();
-                $notifCount = (int)($stmt->get_result()->fetch_assoc()['cnt'] ?? 0);
-                $stmt->close();
-            }
-
-            // 3. Count pending signature cooperation slips
-            $coopCount = 0;
-            $sqlCoop = "
+        // 1. Count unaccepted leads (single fast pass, zero sleep() to never hold PHP-FPM workers idle)
+        $leadCount = 0;
+        if ($isSale) {
+            $sqlLead = "
                 SELECT COUNT(*) as cnt
-                FROM cooperation_slips cs
-                WHERE (cs.status = 'pending_signatures' OR cs.status = 'approved_pending_signatures')
-                  AND JSON_CONTAINS(JSON_KEYS(COALESCE(cs.shares_json, '{}')), JSON_QUOTE(CAST(? AS CHAR)))
-                  AND NOT JSON_CONTAINS(JSON_KEYS(COALESCE(cs.signatures_json, '{}')), JSON_QUOTE(CAST(? AS CHAR)))
+                FROM distribution_logs dl
+                INNER JOIN (
+                    SELECT lead_id, MAX(id) as max_id 
+                    FROM distribution_logs 
+                    WHERE status != 'silent' AND assigned_to = ?
+                    GROUP BY lead_id
+                ) dl_max ON dl.id = dl_max.max_id
+                JOIN leads l ON dl.lead_id = l.id
+                WHERE dl.assigned_to = ? AND l.is_accepted = 0
             ";
-            $stmt = $conn->prepare($sqlCoop);
-            if ($stmt) {
-                $uidStr = (string)$decodedUser['id'];
-                $stmt->bind_param("ss", $uidStr, $uidStr);
-                $stmt->execute();
-                $coopCount = (int)($stmt->get_result()->fetch_assoc()['cnt'] ?? 0);
-                $stmt->close();
+        } else {
+            $sqlLead = "
+                SELECT COUNT(*) as cnt
+                FROM distribution_logs dl
+                INNER JOIN (
+                    SELECT lead_id, MAX(id) as max_id 
+                    FROM distribution_logs 
+                    WHERE status != 'silent'
+                    GROUP BY lead_id, assigned_to
+                ) dl_max ON dl.id = dl_max.max_id
+                JOIN leads l ON dl.lead_id = l.id
+                WHERE l.is_accepted = 0
+            ";
+        }
+        $stmt = $conn->prepare($sqlLead);
+        if ($stmt) {
+            if ($isSale) {
+                $stmt->bind_param("ii", $saleId, $saleId);
             }
-
-            if ($iteration === 0) {
-                $uidVal = (int) $decodedUser['id'];
-                $lastCheckedNotifId = $safeFetchInt("SELECT MAX(id) FROM notifications WHERE user_id = $uidVal");
-                $lastCheckedUnreadNotifs = $safeFetchInt("SELECT COUNT(*) FROM notifications WHERE user_id = $uidVal AND is_read = 0");
-                $lastCheckedDistLogId = $safeFetchInt("SELECT MAX(id) FROM distribution_logs" . ($isSale ? " WHERE assigned_to = " . (int)$saleId : ""));
-                $lastCheckedCId = $safeFetchInt("SELECT MAX(id) FROM contacts");
-                $lastCheckedLId = $safeFetchInt("SELECT MAX(id) FROM leads" . ($isSale ? " WHERE assigned_to = " . (int)$saleId : ""));
-                $lastCheckedUnacceptedLeads = $safeFetchInt("SELECT COUNT(*) FROM leads WHERE is_accepted = 0" . ($isSale ? " AND assigned_to = " . (int)$saleId : ""));
-                $lastCheckedCoopId = $safeFetchInt("SELECT MAX(id) FROM cooperation_slips WHERE status IN ('pending_signatures', 'approved_pending_signatures')");
-            }
-
-            // Detect changes
-            if (
-                $leadCount !== $lastLeadCount || 
-                $notifCount !== $lastNotifCount || 
-                $coopCount !== $lastCoopCount ||
-                $maxContactId !== $lastMaxContactId ||
-                $maxLeadId !== $lastMaxLeadId
-            ) {
-                $contactChanged = ($lastMaxContactId !== -1 && $maxContactId !== $lastMaxContactId);
-                $leadChanged = ($lastMaxLeadId !== -1 && $maxLeadId !== $lastMaxLeadId);
-
-                $lastLeadCount = $leadCount;
-                $lastNotifCount = $notifCount;
-                $lastCoopCount = $coopCount;
-                $lastMaxContactId = $maxContactId;
-                $lastMaxLeadId = $maxLeadId;
-
-                echo "event: update\n";
-                echo "data: " . json_encode([
-                    'new_leads' => $leadCount,
-                    'unread_notifications' => $notifCount,
-                    'pending_coops' => $coopCount,
-                    'latest_contact_id' => $maxContactId,
-                    'latest_lead_id' => $maxLeadId,
-                    'contact_changed' => $contactChanged,
-                    'lead_changed' => $leadChanged
-                ]) . "\n\n";
-
-                // Flush buffers
-                while (ob_get_level() > 0) {
-                    ob_end_flush();
-                }
-                flush();
-            }
-
-            // Sleep 3 seconds before checking again
-            sleep(3);
+            $stmt->execute();
+            $leadCount = (int)($stmt->get_result()->fetch_assoc()['cnt'] ?? 0);
+            $stmt->close();
         }
 
-        // Output dummy ping before close to keep HTTP connection neat
+        // 1.1 Max contact ID visible to user (SARGable indexed lookup)
+        $maxContactId = 0;
+        if ($isSale && $saleId > 0) {
+            $sqlMaxC = "SELECT MAX(id) as max_id FROM contacts WHERE owner_id = ?";
+            $stmtC = $conn->prepare($sqlMaxC);
+            if ($stmtC) {
+                $stmtC->bind_param("i", $saleId);
+                $stmtC->execute();
+                $maxContactId = (int)($stmtC->get_result()->fetch_assoc()['max_id'] ?? 0);
+                $stmtC->close();
+            }
+        } else {
+            $resMaxC = $conn->query("SELECT MAX(id) as max_id FROM contacts");
+            if ($resMaxC) {
+                $maxContactId = (int)($resMaxC->fetch_assoc()['max_id'] ?? 0);
+            }
+        }
+
+        // 1.2 Max lead ID
+        $maxLeadId = 0;
+        if ($isSale && $saleId > 0) {
+            $stmtL = $conn->prepare("SELECT MAX(id) as max_id FROM leads WHERE assigned_to = ?");
+            if ($stmtL) {
+                $stmtL->bind_param("i", $saleId);
+                $stmtL->execute();
+                $maxLeadId = (int)($stmtL->get_result()->fetch_assoc()['max_id'] ?? 0);
+                $stmtL->close();
+            }
+        } else {
+            $resMaxL = $conn->query("SELECT MAX(id) as max_id FROM leads");
+            if ($resMaxL) {
+                $maxLeadId = (int)($resMaxL->fetch_assoc()['max_id'] ?? 0);
+            }
+        }
+
+        // 2. Count unread notifications
+        $notifCount = 0;
+        $sqlNotif = "SELECT COUNT(*) as cnt FROM notifications WHERE user_id = ? AND is_read = 0";
+        $stmt = $conn->prepare($sqlNotif);
+        if ($stmt) {
+            $stmt->bind_param("i", $decodedUser['id']);
+            $stmt->execute();
+            $notifCount = (int)($stmt->get_result()->fetch_assoc()['cnt'] ?? 0);
+            $stmt->close();
+        }
+
+        // 3. Count pending signature cooperation slips
+        $coopCount = 0;
+        $sqlCoop = "
+            SELECT COUNT(*) as cnt
+            FROM cooperation_slips cs
+            WHERE (cs.status = 'pending_signatures' OR cs.status = 'approved_pending_signatures')
+              AND JSON_CONTAINS(JSON_KEYS(COALESCE(cs.shares_json, '{}')), JSON_QUOTE(CAST(? AS CHAR)))
+              AND NOT JSON_CONTAINS(JSON_KEYS(COALESCE(cs.signatures_json, '{}')), JSON_QUOTE(CAST(? AS CHAR)))
+        ";
+        $stmt = $conn->prepare($sqlCoop);
+        if ($stmt) {
+            $uidStr = (string)$decodedUser['id'];
+            $stmt->bind_param("ss", $uidStr, $uidStr);
+            $stmt->execute();
+            $coopCount = (int)($stmt->get_result()->fetch_assoc()['cnt'] ?? 0);
+            $stmt->close();
+        }
+
+        echo "event: update\n";
+        echo "data: " . json_encode([
+            'new_leads' => $leadCount,
+            'unread_notifications' => $notifCount,
+            'pending_coops' => $coopCount,
+            'latest_contact_id' => $maxContactId,
+            'latest_lead_id' => $maxLeadId,
+            'contact_changed' => false,
+            'lead_changed' => false
+        ]) . "\n\n";
+
         echo "event: close\n";
         echo "data: ok\n\n";
-        flush();
+        @flush();
         exit;
 
     case 'get_sale_portal_data':
