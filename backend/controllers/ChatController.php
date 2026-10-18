@@ -5362,15 +5362,35 @@ class ChatController {
      */
     private function callGeminiFlashLite(array $conversationHistory, string $systemPrompt, ?array $attachedFile = null, ?callable $onChunk = null, ?array $authContext = null, ?callable $onStep = null, array &$executedAgentSteps = []): ?string {
         try {
-            $stmtKey = $this->db->prepare("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('gemini_api_key', 'gemini_model')");
+            $stmtKey = $this->db->prepare("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('openrouter_api_key', 'openrouter_model', 'gemini_api_key', 'gemini_model')");
             $stmtKey->execute();
             $settings = $stmtKey->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
 
+            $envOrKey = trim((string)($_ENV['OPENROUTER_API_KEY'] ?? getenv('OPENROUTER_API_KEY') ?: ''));
+            $dbOrKey = trim((string)($settings['openrouter_api_key'] ?? ''));
+            $openRouterKey = $dbOrKey !== '' ? $dbOrKey : $envOrKey;
+            if ($dbOrKey === '' && $envOrKey !== '') {
+                try {
+                    $stmtSeedOr = $this->db->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value)
+                        VALUES ('openrouter_api_key', ?)
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+                    $stmtSeedOr->execute([$envOrKey]);
+                } catch (\Throwable $eSeed) {
+                    // Ignore DB write error
+                }
+            }
+            $openRouterModel = trim((string)($settings['openrouter_model'] ?? ($_ENV['OPENROUTER_MODEL'] ?? getenv('OPENROUTER_MODEL') ?: 'nvidia/nemotron-3.5-super-vl:free')));
+            if ($openRouterModel === '') {
+                $openRouterModel = 'nvidia/nemotron-3.5-super-vl:free';
+            }
+
             $apiKey = trim($settings['gemini_api_key'] ?? '') ?: ($_ENV['GEMINI_API_KEY'] ?? getenv('GEMINI_API_KEY') ?: '');
             $model = trim($settings['gemini_model'] ?? 'gemini-3.5-flash-lite');
-            if (empty($apiKey)) {
-                error_log("callGeminiFlashLite: gemini_api_key chưa được cấu hình trong system_settings hoặc biến môi trường.");
-                $errorMsg = "Hệ thống chưa được cấu hình Gemini API Key. Vui lòng liên hệ Quản trị viên để thiết lập API Key trong Cài đặt hệ thống.";
+            if (empty($openRouterKey) && empty($apiKey)) {
+                error_log("callGeminiFlashLite: Cả openrouter_api_key và gemini_api_key đều chưa được cấu hình.");
+                $errorMsg = "Hệ thống chưa được cấu hình AI API Key (OpenRouter / Gemini). Vui lòng liên hệ Quản trị viên để thiết lập API Key trong Cài đặt hệ thống.";
                 if (is_callable($onChunk)) {
                     $onChunk($errorMsg);
                 }
@@ -5531,7 +5551,43 @@ class ChatController {
             $isMutationOrProposalIntent = (bool)preg_match('/\b(tao|lap|them|sua|cap nhat|chuyen|chia|bu|duyet|tu choi|xac nhan|chot|giai ngan|xin nghi|nghi phep|giai trinh|doi ca|dat lich|hen goi|ghi chu|note|dinh kem|ban giao|nhap kho|de xuat)\b/u', $lastMsgAscii);
 
             // ==========================================
-            // AUTONOMOUS MULTI-TURN TOOL LOOP (UP TO 6 TURNS + PARALLEL TOOL EXECUTION)
+            // PRIMARY ENGINE: OPENROUTER FREE MULTI-MODEL POOL (WITH FULL TOOL CALLING)
+            // Gemini is kept strictly as a fallback if OpenRouter fails or binary PDF/Audio inlineData is attached
+            // ==========================================
+            $hasUnsupportedInlineBinary = !empty($attachedFile['inlineData']['mimeType'])
+                && strpos((string)$attachedFile['inlineData']['mimeType'], 'image/') !== 0;
+
+            if ($openRouterKey !== '' && !$hasUnsupportedInlineBinary) {
+                $openRouterReply = $this->callOpenRouterFreePrimary(
+                    $conversationHistory,
+                    $systemPrompt,
+                    $attachedFile,
+                    $tools,
+                    $isPureConversational,
+                    $isMutationOrProposalIntent,
+                    $openRouterKey,
+                    $openRouterModel,
+                    $onChunk,
+                    $authContext,
+                    $onStep,
+                    $executedAgentSteps
+                );
+                if ($openRouterReply !== null && trim($openRouterReply) !== '') {
+                    return trim($openRouterReply);
+                }
+                error_log("OpenRouter Free Primary pool unavailable for this turn, falling back to Gemini ({$model})...");
+            }
+
+            if (empty($apiKey)) {
+                $fallbackErr = "Hệ thống AI miễn phí (OpenRouter) hiện đang quá tải tạm thời và chưa có Gemini API Key dự phòng. Vui lòng thử lại sau vài giây.";
+                if (is_callable($onChunk)) {
+                    $onChunk($fallbackErr);
+                }
+                return $fallbackErr;
+            }
+
+            // ==========================================
+            // FALLBACK ENGINE: GEMINI AUTONOMOUS MULTI-TURN TOOL LOOP
             // ==========================================
             $maxToolTurns = 6;
             $toolTurn = 0;
@@ -5958,6 +6014,549 @@ class ChatController {
             error_log("Call Gemini Exception: " . $e->getMessage());
             return null;
         }
+    }
+
+    /**
+     * Primary Engine: Call OpenRouter Free Multi-Model Pool with Full Autonomous Multi-Turn Tool Calling
+     * Automatically fails over across top `:free` tool-capable models (Nemotron 3.5 Super VL 1M, Nemotron 3 Super 120B, Gemma 4 31B IT, Dots 3 Note 512K, Nemotron 3.5 Lightning 1M).
+     * Returns null ONLY if all OpenRouter free models fail, allowing seamless fallback to Gemini.
+     */
+    private function callOpenRouterFreePrimary(
+        array $conversationHistory,
+        string $systemPrompt,
+        ?array $attachedFile,
+        ?array $geminiTools,
+        bool $isPureConversational,
+        bool $isMutationOrProposalIntent,
+        string $openRouterKey,
+        string $preferredModel,
+        ?callable $onChunk = null,
+        ?array $authContext = null,
+        ?callable $onStep = null,
+        array &$executedAgentSteps = []
+    ): ?string {
+        $localSteps = [];
+        try {
+            $isStream = is_callable($onChunk);
+            $messages = [
+                [
+                    'role' => 'system',
+                    'content' => $systemPrompt
+                ]
+            ];
+
+            $historyCount = count($conversationHistory);
+            foreach ($conversationHistory as $idx => $msg) {
+                $isAssistant = ((int)($msg['sender_id'] ?? 0) === 9000001);
+                $role = $isAssistant ? 'assistant' : 'user';
+                $msgText = trim((string)($msg['content'] ?? ''));
+
+                if ($isAssistant && $idx < $historyCount - 1 && $msgText !== '') {
+                    $msgText = preg_replace('/<<<DYNAMIC_CHART:\s*[\s\S]*?>>>/', '[Đã hiển thị biểu đồ trực quan]', $msgText);
+                    $msgText = preg_replace('/<<<ACTION_PROPOSAL:\s*[\s\S]*?>>>/', '[Đã xuất thẻ hành động điền sẵn]', $msgText);
+                    $msgText = preg_replace('/<<<ERP_CARD:\s*[\s\S]*?>>>/', '[Đã hiển thị thẻ hồ sơ ERP]', $msgText);
+                    $msgText = preg_replace('/<<<CLARIFY_OPTIONS:\s*[\s\S]*?>>>/', '', $msgText);
+                    $msgText = preg_replace('/<<<PROACTIVE_INSIGHT:\s*[\s\S]*?>>>/', '', $msgText);
+                    $msgText = preg_replace('/<<<NEXT_BEST_ACTIONS:\s*[\s\S]*?>>>/', '', $msgText);
+                    $msgText = preg_replace('/<<<SAVE_MEMORY:\s*[\s\S]*?>>>/', '', $msgText);
+                    $msgText = trim((string)preg_replace('/\n{3,}/', "\n\n", $msgText));
+                }
+
+                if ($idx === $historyCount - 1 && !empty($attachedFile)) {
+                    if (!empty($attachedFile['extractedText'])) {
+                        $docHeader = "--- [NỘI DUNG TÀI LIỆU ĐÍNH KÈM: " . ($attachedFile['fileName'] ?? 'Tài liệu') . "] ---\n"
+                            . $attachedFile['extractedText'] . "\n--- [HẾT TÀI LIỆU] ---\n\n";
+                        $msgText = $docHeader . $msgText;
+                    }
+                    if (!empty($attachedFile['inlineData']['data']) && strpos((string)($attachedFile['inlineData']['mimeType'] ?? ''), 'image/') === 0) {
+                        $mime = $attachedFile['inlineData']['mimeType'];
+                        $b64 = $attachedFile['inlineData']['data'];
+                        $messages[] = [
+                            'role' => $role,
+                            'content' => [
+                                [
+                                    'type' => 'text',
+                                    'text' => $msgText !== '' ? $msgText : 'Hãy phân tích hình ảnh đính kèm này.'
+                                ],
+                                [
+                                    'type' => 'image_url',
+                                    'image_url' => [
+                                        'url' => "data:{$mime};base64,{$b64}"
+                                    ]
+                                ]
+                            ]
+                        ];
+                        continue;
+                    }
+                }
+
+                if ($msgText === '') {
+                    $msgText = '(Tài liệu đính kèm)';
+                }
+
+                $messages[] = [
+                    'role' => $role,
+                    'content' => $msgText
+                ];
+            }
+
+            if (count($messages) <= 1) {
+                return null;
+            }
+
+            $openAiTools = (!$isPureConversational && !empty($geminiTools))
+                ? $this->convertGeminiToolsToOpenRouter($geminiTools)
+                : [];
+
+            $maxToolTurns = 6;
+            $toolTurn = 0;
+            $collectedExportMarkdowns = [];
+            $collectedStructuredTags = [];
+            $suppressSingleErpCard = false;
+
+            while ($toolTurn < $maxToolTurns) {
+                $toolTurn++;
+
+                $resJson = $this->executeOpenRouterRequestWithPool(
+                    $openRouterKey,
+                    $preferredModel,
+                    $messages,
+                    $openAiTools,
+                    !empty($openAiTools) ? 'auto' : null
+                );
+
+                if (!is_array($resJson) || empty($resJson['choices'][0]['message'])) {
+                    return null;
+                }
+
+                $choiceMsg = $resJson['choices'][0]['message'];
+                $directText = $this->stripReasoningTags((string)($choiceMsg['content'] ?? ''));
+                $toolCalls = $choiceMsg['tool_calls'] ?? [];
+
+                // Fallback parser if a model emitted <function=name>{...}</function> in text
+                if (empty($toolCalls) && preg_match('/<function=([a-zA-Z0-9_]+)>\s*(\{[\s\S]*?\})\s*<\/function>/', $directText, $fnMatch)) {
+                    $toolCalls = [[
+                        'id' => 'call_' . substr(md5(uniqid('', true)), 0, 8),
+                        'type' => 'function',
+                        'function' => [
+                            'name' => trim($fnMatch[1]),
+                            'arguments' => trim($fnMatch[2])
+                        ]
+                    ]];
+                    $directText = trim(str_replace($fnMatch[0], '', $directText));
+                }
+
+                if (empty($toolCalls)) {
+                    if ($directText === '') {
+                        return null;
+                    }
+                    $executedAgentSteps = array_merge($executedAgentSteps, $localSteps);
+                    $finalText = $this->appendMissingDeterministicArtifacts($directText, $collectedExportMarkdowns, $collectedStructuredTags, $suppressSingleErpCard);
+                    if ($isStream && is_callable($onChunk)) {
+                        $onChunk($finalText);
+                    }
+                    return $finalText;
+                }
+
+                // Normalize assistant tool_calls turn
+                $normalizedToolCalls = [];
+                foreach ($toolCalls as $tcIdx => $tc) {
+                    $tcId = !empty($tc['id']) ? (string)$tc['id'] : ('call_' . $toolTurn . '_' . $tcIdx);
+                    $fnName = trim((string)($tc['function']['name'] ?? ''));
+                    $fnArgsRaw = $tc['function']['arguments'] ?? '{}';
+                    if (is_array($fnArgsRaw)) {
+                        $fnArgsRaw = json_encode($fnArgsRaw, JSON_UNESCAPED_UNICODE);
+                    }
+                    $normalizedToolCalls[] = [
+                        'id' => $tcId,
+                        'type' => 'function',
+                        'function' => [
+                            'name' => $fnName,
+                            'arguments' => (string)$fnArgsRaw
+                        ]
+                    ];
+                }
+
+                $messages[] = [
+                    'role' => 'assistant',
+                    'content' => $directText !== '' ? $directText : '',
+                    'tool_calls' => $normalizedToolCalls
+                ];
+
+                $hasTerminalActionSuccess = false;
+                $allToolsInTurnAreTerminalOrReadOnly = true;
+                $requiresDisambiguationSynthesis = false;
+                $ctxUid = (int)($authContext['user_id'] ?? 0);
+                $ctxTid = (int)($authContext['tenant_id'] ?? 1);
+
+                foreach ($normalizedToolCalls as $fcIdx => $tcItem) {
+                    $callId = $tcItem['id'];
+                    $toolName = $tcItem['function']['name'];
+                    $rawArgs = $tcItem['function']['arguments'];
+                    $toolArgs = json_decode($rawArgs, true);
+                    if (!is_array($toolArgs)) {
+                        $toolArgs = [];
+                    }
+
+                    $stepId = "step_{$toolTurn}_{$fcIdx}_" . substr(md5($toolName . microtime(true)), 0, 6);
+                    if (is_callable($onStep)) {
+                        $onStep([
+                            'type' => 'agent_step',
+                            'step' => [
+                                'id' => $stepId,
+                                'turn' => $toolTurn,
+                                'tool_name' => $toolName,
+                                'status' => 'running',
+                                'label' => "Đang thực thi công cụ: {$toolName}"
+                            ]
+                        ]);
+                    }
+
+                    $t0 = microtime(true);
+                    $toolResult = AgentToolRegistry::executeTool($this->db, $toolName, $toolArgs, $authContext ?? []);
+                    $durationMs = (int)round((microtime(true) - $t0) * 1000);
+
+                    if ($ctxUid > 0 && is_array($toolResult)) {
+                        $this->autoRecordEntityFromTool($ctxUid, $ctxTid, $toolName, $toolArgs, $toolResult);
+                    }
+
+                    $isDisambig = is_array($toolResult) && (
+                        !empty($toolResult['requires_disambiguation']) ||
+                        !empty($toolResult['disambiguation_required']) ||
+                        ($toolResult['status'] ?? '') === 'DISAMBIGUATION_REQUIRED' ||
+                        ($toolResult['status'] ?? '') === 'MISSING_INFO_REQUIRED'
+                    );
+                    if ($isDisambig) {
+                        $requiresDisambiguationSynthesis = true;
+                    }
+
+                    if (is_array($toolResult)) {
+                        foreach (['export_link_markdown', 'export_markdown'] as $expField) {
+                            if (!empty($toolResult[$expField]) && is_string($toolResult[$expField])) {
+                                $collectedExportMarkdowns[] = trim($toolResult[$expField]);
+                            }
+                        }
+                        if (!empty($toolResult['dynamic_chart']) && is_array($toolResult['dynamic_chart'])) {
+                            $collectedStructuredTags[] = '<<<DYNAMIC_CHART: ' . json_encode($toolResult['dynamic_chart'], JSON_UNESCAPED_UNICODE) . '>>>';
+                        }
+                        $rowCountReturned = (int)($toolResult['total_matching'] ?? $toolResult['total_processed'] ?? $toolResult['matched_count'] ?? 0);
+                        if ($rowCountReturned > 1 && !$isDisambig) {
+                            $suppressSingleErpCard = true;
+                        }
+                        foreach (['voice_summary_hint', 'instruction_for_ai', 'message', 'proposal_block'] as $strField) {
+                            if (!empty($toolResult[$strField]) && is_string($toolResult[$strField])) {
+                                if (preg_match_all('/<<<(?:DYNAMIC_CHART|ACTION_PROPOSAL|ERP_CARD):\s*[\s\S]*?>>>/', $toolResult[$strField], $tagMatches)) {
+                                    foreach ($tagMatches[0] as $tagBlock) {
+                                        $collectedStructuredTags[] = trim($tagBlock);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    $stepStatus = 'completed';
+                    if ($isDisambig) {
+                        $stepStatus = 'disambiguation';
+                    } elseif (is_array($toolResult) && isset($toolResult['success']) && $toolResult['success'] === false) {
+                        $stepStatus = 'error';
+                    } elseif (is_array($toolResult) && isset($toolResult['total_matching']) && (int)$toolResult['total_matching'] === 0) {
+                        $stepStatus = 'empty';
+                    }
+
+                    $stepEntry = [
+                        'id' => $stepId,
+                        'turn' => $toolTurn,
+                        'tool_name' => $toolName,
+                        'status' => $stepStatus,
+                        'duration_ms' => $durationMs,
+                        'label' => $isDisambig ? "Phát hiện nhiều lựa chọn cần xác nhận ({$toolName})" : "Hoàn tất tra cứu {$toolName} ({$durationMs}ms)"
+                    ];
+                    $localSteps[] = $stepEntry;
+
+                    if (is_callable($onStep)) {
+                        $onStep([
+                            'type' => 'agent_step',
+                            'step' => $stepEntry
+                        ]);
+                    }
+
+                    $compactResult = $this->compactToolResultForModel($toolResult);
+                    if (is_array($compactResult)) {
+                        $lockFacts = [];
+                        foreach (['total_matching', 'total_leads', 'total_Filtered_Records', 'total_records', 'total_expenses_vnd', 'total_deposit_vnd', 'net_cashflow_vnd', 'total_headcount', 'created_count', 'reassigned_count'] as $k) {
+                            if (isset($compactResult[$k])) {
+                                $lockFacts[$k] = $compactResult[$k];
+                            }
+                        }
+                        if (isset($compactResult['summary']) && is_array($compactResult['summary'])) {
+                            foreach (['total_matching', 'total_leads', 'total_deposit_revenue_vnd', 'total_approved_expense_vnd', 'net_operating_cashflow_vnd', 'leads_with_deposit_count', 'active_headcount'] as $sk) {
+                                if (isset($compactResult['summary'][$sk])) {
+                                    $lockFacts[$sk] = $compactResult['summary'][$sk];
+                                }
+                            }
+                        }
+                        $compactResult['_ground_truth_lock'] = [
+                            'mandate' => 'STRICT_DATABASE_GROUND_TRUTH: Bắt buộc dùng chính xác 100% con số từ kết quả SQL này. Tuyệt đối không tự cộng nhẩm lại từ preview_top_15 hay bịa số liệu. Giữ nguyên link [Tải file Excel...](/export?...) và các thẻ <<<DYNAMIC_CHART:...>>> / <<<ACTION_PROPOSAL:...>>>. Không dùng emoji trong tiêu đề ###. Nếu kết quả có > 1 bản ghi, cấm sinh thẻ <<<ERP_CARD:...>>> đơn lẻ dưới bảng.',
+                            'verified_metrics' => $lockFacts
+                        ];
+                    }
+
+                    $messages[] = [
+                        'role' => 'tool',
+                        'tool_call_id' => $callId,
+                        'name' => $toolName,
+                        'content' => json_encode($compactResult, JSON_UNESCAPED_UNICODE)
+                    ];
+
+                    $isActionTerminalTool = in_array($toolName, [
+                        'draft_action_proposal',
+                        'smart_create_or_assign_leads',
+                        'smart_manage_tasks_and_subtasks',
+                        'query_and_manage_projects',
+                        'manage_my_hr_profile_and_requests',
+                        'smart_manage_hrm_and_payroll',
+                        'smart_manage_po_so_and_approvals',
+                        'approve_or_reject_erp_ticket',
+                        'update_task_progress_and_status',
+                        'complete_task_checklist_item',
+                        'quick_log_crm_activity',
+                        'reassign_lead_owner',
+                        'distribute_lead',
+                        'compensate_consultant',
+                        'toggle_consultant_shift',
+                        'manage_lead_round_distribution',
+                        'update_contact_pipeline',
+                        'add_contact_consultation_note',
+                        'attach_files_to_contact',
+                        'update_contact_profile',
+                        'schedule_contact_activity'
+                    ], true);
+
+                    $isReadOnlyAnalyticsTerminalTool = !$isMutationOrProposalIntent && in_array($toolName, [
+                        'query_crm_leads_multitier',
+                        'query_finance_multitier_analytics',
+                        'query_deposits_and_revenue_multitier',
+                        'query_tasks_and_projects_multitier',
+                        'query_and_manage_projects',
+                        'query_deals_and_b2b_multitier',
+                        'query_tickets_and_sla_multitier',
+                        'query_hrm_workforce_and_payroll_multitier',
+                        'query_inventory_and_assets_multitier',
+                        'query_cross_domain_executive_synthesis',
+                        'get_executive_morning_brief',
+                        'get_executive_financial_pulse',
+                        'get_sales_leaderboard',
+                        'filter_expenses_advanced',
+                        'export_crm_leads_advanced',
+                        'analyze_leads_demographics_and_job_titles',
+                        'get_staff_directory_advanced',
+                        'query_company_attendance_and_work_hours',
+                        'get_contact_360_profile',
+                        'get_financial_overview',
+                        'get_my_attendance_summary',
+                        'get_my_payslip',
+                        'get_pending_approvals',
+                        'trace_approval_blocker',
+                        'get_my_tasks',
+                        'get_inventory_health_check',
+                        'get_system_health_status',
+                        'search_ideas_knowledge',
+                        'get_program_details'
+                    ], true);
+
+                    $isTerminalTool = $isActionTerminalTool || $isReadOnlyAnalyticsTerminalTool;
+                    if (!$isTerminalTool) {
+                        $allToolsInTurnAreTerminalOrReadOnly = false;
+                    }
+                    if ($isTerminalTool && !$isDisambig && (!is_array($toolResult) || ($toolResult['success'] ?? true) !== false)) {
+                        $hasTerminalActionSuccess = true;
+                    }
+                }
+
+                if (!$allToolsInTurnAreTerminalOrReadOnly) {
+                    $hasTerminalActionSuccess = false;
+                }
+
+                if ($hasTerminalActionSuccess || $requiresDisambiguationSynthesis || $toolTurn >= ($maxToolTurns - 1)) {
+                    $finalResJson = $this->executeOpenRouterRequestWithPool(
+                        $openRouterKey,
+                        $preferredModel,
+                        $messages,
+                        [],
+                        null
+                    );
+
+                    if (!is_array($finalResJson) || empty($finalResJson['choices'][0]['message'])) {
+                        return null;
+                    }
+
+                    $textFinal = $this->stripReasoningTags((string)($finalResJson['choices'][0]['message']['content'] ?? ''));
+                    if ($textFinal === '') {
+                        return null;
+                    }
+
+                    $executedAgentSteps = array_merge($executedAgentSteps, $localSteps);
+                    $textFinal = $this->appendMissingDeterministicArtifacts($textFinal, $collectedExportMarkdowns, $collectedStructuredTags, $suppressSingleErpCard);
+                    if ($isStream && is_callable($onChunk)) {
+                        $onChunk($textFinal);
+                    }
+                    return trim($textFinal);
+                }
+            }
+
+            return null;
+        } catch (\Throwable $e) {
+            error_log("callOpenRouterFreePrimary Exception: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Execute OpenRouter Chat Completion across the ranked `:free` model pool.
+     * Uses OpenRouter's native `models` fallback array (up to 3 models per request) across 2 batches.
+     */
+    private function executeOpenRouterRequestWithPool(
+        string $openRouterKey,
+        string $preferredModel,
+        array $messages,
+        array $openAiTools = [],
+        ?string $toolChoice = 'auto'
+    ): ?array {
+        $pool = [
+            'nvidia/nemotron-3.5-super-vl:free',
+            'nvidia/nemotron-3-super-120b-a12b:free',
+            'google/gemma-4-31b-it:free',
+            'dots-studio/dots-3-note-preview:free',
+            'nvidia/nemotron-3.5-lightning:free',
+            'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+        ];
+        if ($preferredModel !== '' && strpos($preferredModel, '/') !== false) {
+            array_unshift($pool, $preferredModel);
+        }
+        $pool = array_values(array_unique($pool));
+        $batches = array_chunk($pool, 3);
+
+        foreach ($batches as $batchIdx => $batchModels) {
+            $primaryInBatch = $batchModels[0];
+            $payload = [
+                'model' => $primaryInBatch,
+                'models' => $batchModels,
+                'messages' => $messages,
+                'temperature' => 0.2,
+                'max_tokens' => 4096,
+                'top_p' => 0.95,
+            ];
+
+            if (!empty($openAiTools)) {
+                $payload['tools'] = $openAiTools;
+                if ($toolChoice !== null) {
+                    $payload['tool_choice'] = $toolChoice;
+                }
+            }
+
+            $ch = curl_init('https://openrouter.ai/api/v1/chat/completions');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload, JSON_UNESCAPED_UNICODE));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Authorization: Bearer ' . $openRouterKey,
+                'Content-Type: application/json',
+                'HTTP-Referer: https://myerp.ideas.edu.vn',
+                'X-Title: MYERP SI IDEAS Multi-Agent'
+            ]);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 35);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+
+            $resp = curl_exec($ch);
+            $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlErr = curl_error($ch);
+            curl_close($ch);
+
+            if (!$curlErr && $httpCode === 200 && $resp) {
+                $decoded = json_decode((string)$resp, true);
+                if (is_array($decoded) && !empty($decoded['choices'][0]['message'])) {
+                    return $decoded;
+                }
+            }
+
+            error_log("OpenRouter Batch #{$batchIdx} (" . implode(',', $batchModels) . ") HTTP {$httpCode} CurlErr={$curlErr} Resp=" . substr((string)$resp, 0, 350));
+        }
+
+        return null;
+    }
+
+    /**
+     * Convert Gemini functionDeclarations into OpenAI / OpenRouter `tools` schema
+     */
+    private function convertGeminiToolsToOpenRouter(?array $geminiTools): array {
+        $declarations = $geminiTools[0]['functionDeclarations'] ?? [];
+        $openAiTools = [];
+        foreach ($declarations as $decl) {
+            $name = $decl['name'] ?? '';
+            if ($name === '') continue;
+            $desc = (string)($decl['description'] ?? '');
+            if (mb_strlen($desc, 'UTF-8') > 260) {
+                $desc = mb_substr($desc, 0, 257, 'UTF-8') . '...';
+            }
+            $params = $this->normalizeOpenRouterSchemaProperty($decl['parameters'] ?? ['type' => 'OBJECT', 'properties' => []]);
+            $openAiTools[] = [
+                'type' => 'function',
+                'function' => [
+                    'name' => $name,
+                    'description' => $desc,
+                    'parameters' => $params,
+                ]
+            ];
+        }
+        return $openAiTools;
+    }
+
+    private function normalizeOpenRouterSchemaProperty(array $prop): array {
+        $out = [];
+        $type = strtolower((string)($prop['type'] ?? 'string'));
+        if (!in_array($type, ['object', 'string', 'number', 'integer', 'boolean', 'array'], true)) {
+            $type = 'string';
+        }
+        $out['type'] = $type;
+
+        if (!empty($prop['description'])) {
+            $pDesc = (string)$prop['description'];
+            if (mb_strlen($pDesc, 'UTF-8') > 160) {
+                $pDesc = mb_substr($pDesc, 0, 157, 'UTF-8') . '...';
+            }
+            $out['description'] = $pDesc;
+        }
+        if (!empty($prop['enum']) && is_array($prop['enum'])) {
+            $out['enum'] = array_values($prop['enum']);
+        }
+        if ($type === 'object') {
+            $props = [];
+            if (!empty($prop['properties']) && is_array($prop['properties'])) {
+                foreach ($prop['properties'] as $k => $v) {
+                    if (is_array($v)) {
+                        $props[$k] = $this->normalizeOpenRouterSchemaProperty($v);
+                    }
+                }
+            }
+            $out['properties'] = empty($props) ? (object)[] : $props;
+            if (!empty($prop['required']) && is_array($prop['required'])) {
+                $out['required'] = array_values($prop['required']);
+            }
+        } elseif ($type === 'array') {
+            if (!empty($prop['items']) && is_array($prop['items'])) {
+                $out['items'] = $this->normalizeOpenRouterSchemaProperty($prop['items']);
+            } else {
+                $out['items'] = ['type' => 'string'];
+            }
+        }
+        return $out;
+    }
+
+    private function stripReasoningTags(string $text): string {
+        if ($text === '') return '';
+        $cleaned = preg_replace('/<think>[\s\S]*?<\/think>/i', '', $text);
+        return trim((string)$cleaned);
     }
 
     /**
