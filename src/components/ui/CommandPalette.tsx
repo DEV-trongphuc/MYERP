@@ -190,10 +190,7 @@ export const CommandPalette: React.FC = () => {
       iconName: 'Purchase Order',
       action: () => {
         setOpen(false);
-        navigate('/expenses');
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('open-create-expense-modal'));
-        }, 150);
+        window.dispatchEvent(new CustomEvent('open-expense-create-drawer', { detail: {} }));
       }
     },
     {
@@ -206,7 +203,7 @@ export const CommandPalette: React.FC = () => {
       iconName: 'Sales Order',
       action: () => {
         setOpen(false);
-        navigate('/deposits?action=create');
+        useUIStore.getState().setShowPOS(true);
       }
     },
     {

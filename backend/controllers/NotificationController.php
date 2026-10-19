@@ -16,46 +16,49 @@ class NotificationController {
 
     public function index(array $auth): void {
         $userId = (int)$auth['user_id'];
+        $tenantId = (int)($auth['tenant_id'] ?? 1);
 
-        // Tự động dọn sạch thông báo, chỉ lưu giữ tối đa 200 thông báo gần nhất cho user này
-        require_once __DIR__ . '/../NotificationService.php';
-        NotificationService::pruneUserNotifications($this->db, $userId, 200);
+        // Tự động dọn sạch & gộp thông báo theo xác suất 20% để giảm tải write I/O trên mỗi lần polling
+        if (mt_rand(1, 5) === 1) {
+            require_once __DIR__ . '/../NotificationService.php';
+            NotificationService::pruneUserNotifications($this->db, $userId, 200);
+            $this->consolidateUploadNotifications($userId);
+        }
 
-        // Tự động gộp các thông báo tải tài liệu trùng lặp / liên tiếp cho cùng đối tượng trong 24h
-        $this->consolidateUploadNotifications($userId);
-
-        $stmt = $this->db->prepare("SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 100");
-        $stmt->execute([$auth['user_id']]);
+        $stmt = $this->db->prepare("SELECT * FROM notifications WHERE user_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 100");
+        $stmt->execute([$userId, $tenantId]);
         $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        $unread = $this->db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id=? AND is_read=0");
-        $unread->execute([$auth['user_id']]);
+        $unread = $this->db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND tenant_id = ? AND is_read = 0");
+        $unread->execute([$userId, $tenantId]);
         
         $avatars = [];
         $userList = [];
         try {
-            // Lấy avatar từ bảng users (chứa đầy đủ full_name và avatar_url của tất cả nhân sự)
-            $avatarsStmt = $this->db->query("
-                SELECT full_name AS name, avatar_url AS avatar FROM users
+            // Lấy avatar từ bảng users thuộc cùng tenant
+            $avatarsStmt = $this->db->prepare("
+                SELECT full_name AS name, avatar_url AS avatar
+                FROM users
+                WHERE tenant_id = ? AND avatar_url IS NOT NULL AND avatar_url != ''
             ");
-            if ($avatarsStmt) {
-                foreach ($avatarsStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-                    $uName = trim((string)($row['name'] ?? ''));
-                    $uAvt = trim((string)($row['avatar'] ?? ''));
-                    if (!empty($uName)) {
-                        $avatars[$uName] = $uAvt;
-                        $userList[] = [
-                            'name' => $uName,
-                            'avatar' => $uAvt,
-                            'len' => mb_strlen($uName)
-                        ];
-                    }
+            $avatarsStmt->execute([$tenantId]);
+            foreach ($avatarsStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $uName = trim((string)($row['name'] ?? ''));
+                $uAvt = trim((string)($row['avatar'] ?? ''));
+                $uLen = mb_strlen($uName);
+                if ($uLen >= 4) {
+                    $avatars[$uName] = $uAvt;
+                    $userList[] = [
+                        'name' => $uName,
+                        'avatar' => $uAvt,
+                        'len' => $uLen
+                    ];
                 }
-                // Sắp xếp danh sách tên nhân viên từ dài nhất đến ngắn nhất để match chính xác
-                usort($userList, function($a, $b) {
-                    return $b['len'] - $a['len'];
-                });
             }
+            // Sắp xếp danh sách tên nhân viên từ dài nhất đến ngắn nhất để match chính xác
+            usort($userList, function($a, $b) {
+                return $b['len'] - $a['len'];
+            });
         } catch (\Throwable $e) {}
 
         // Duyệt qua từng thông báo để lấy trực tiếp actor name & avatar
@@ -130,30 +133,34 @@ class NotificationController {
     public function update(array $auth, int $id): void {
         $b = getBody();
         $isRead = isset($b['is_read']) ? (int)$b['is_read'] : 1;
+        $tenantId = (int)($auth['tenant_id'] ?? 1);
         
-        $stmt = $this->db->prepare("UPDATE notifications SET is_read=? WHERE id=? AND user_id=?");
-        $stmt->execute([$isRead, $id, $auth['user_id']]);
+        $stmt = $this->db->prepare("UPDATE notifications SET is_read = ? WHERE id = ? AND user_id = ? AND tenant_id = ?");
+        $stmt->execute([$isRead, $id, $auth['user_id'], $tenantId]);
         
         respond(200, null, 'Cập nhật trạng thái thông báo thành công');
     }
 
     public function markAllRead(array $auth): void {
-        $stmt = $this->db->prepare("UPDATE notifications SET is_read=1 WHERE user_id=?");
-        $stmt->execute([$auth['user_id']]);
+        $tenantId = (int)($auth['tenant_id'] ?? 1);
+        $stmt = $this->db->prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ? AND tenant_id = ?");
+        $stmt->execute([$auth['user_id'], $tenantId]);
         
         respond(200, null, 'Đã đánh dấu tất cả thông báo là đã đọc');
     }
 
     public function destroy(array $auth, int $id): void {
-        $stmt = $this->db->prepare("DELETE FROM notifications WHERE id=? AND user_id=?");
-        $stmt->execute([$id, $auth['user_id']]);
+        $tenantId = (int)($auth['tenant_id'] ?? 1);
+        $stmt = $this->db->prepare("DELETE FROM notifications WHERE id = ? AND user_id = ? AND tenant_id = ?");
+        $stmt->execute([$id, $auth['user_id'], $tenantId]);
         
         respond(200, null, 'Đã xóa thông báo thành công');
     }
 
     public function clearAll(array $auth): void {
-        $stmt = $this->db->prepare("DELETE FROM notifications WHERE user_id=?");
-        $stmt->execute([$auth['user_id']]);
+        $tenantId = (int)($auth['tenant_id'] ?? 1);
+        $stmt = $this->db->prepare("DELETE FROM notifications WHERE user_id = ? AND tenant_id = ?");
+        $stmt->execute([$auth['user_id'], $tenantId]);
         
         respond(200, null, 'Đã xóa tất cả thông báo');
     }
@@ -175,15 +182,18 @@ class NotificationController {
         if ($targetUserId <= 0) {
             respond(400, null, 'Người nhận không hợp lệ', false);
         }
+        if ($targetUserId === (int)$auth['user_id']) {
+            respond(400, null, 'Không thể tự gửi nhắc nhở cho chính mình', false);
+        }
 
         $senderName = $auth['full_name'] ?? $auth['name'] ?? 'Đồng nghiệp';
         $title = "Nhắc nhở phê duyệt: " . $itemTitle;
         $body = "{$senderName} gửi lời nhắc nhở: \"{$message}\"";
         $tenantId = (int)($auth['tenant_id'] ?? 1);
 
-        // Fetch target user info
-        $stmtUser = $this->db->prepare("SELECT id, email, zalo_chat_id, telegram_chat_id, full_name FROM users WHERE id = ? LIMIT 1");
-        $stmtUser->execute([$targetUserId]);
+        // Fetch target user info (scoped by tenant_id)
+        $stmtUser = $this->db->prepare("SELECT id, email, zalo_chat_id, telegram_chat_id, full_name FROM users WHERE id = ? AND tenant_id = ? LIMIT 1");
+        $stmtUser->execute([$targetUserId, $tenantId]);
         $targetUserRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
 
         if ($targetUserRow) {
@@ -196,24 +206,14 @@ class NotificationController {
                     'item_title' => $itemTitle,
                     'item_type' => $itemType,
                     'item_id' => $itemId,
-                    'recipients' => [$targetUserRow]
+                    'recipients' => [$targetUserRow],
+                    'exclude_user_id' => (int)$auth['user_id']
                 ]);
             } catch (\Throwable $e) {
                 error_log("Reminder NotificationService error: " . $e->getMessage());
             }
         } else {
-            // Fallback direct insert if targetUserRow not found in user query
-            $stmt = $this->db->prepare("
-                INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
-                VALUES (?, ?, ?, ?, 'approval', ?)
-            ");
-            $stmt->execute([
-                $targetUserId,
-                $tenantId,
-                $title,
-                $body,
-                "/approvals?open_id={$itemId}&open_type={$itemType}"
-            ]);
+            respond(404, null, 'Không tìm thấy người nhận trong tổ chức', false);
         }
 
         respond(200, null, 'Gửi nhắc nhở thành công');
@@ -419,6 +419,7 @@ class NotificationController {
     }
 
     public function sendTestAttendanceEmail(array $auth): void {
+        requireRole($auth, ['admin', 'superadmin', 'super_admin', 'director', 'hr', 'manager']);
         $b = getBody();
         $email = trim((string)($b['email'] ?? 'phucht@ideas.edu.vn'));
         $name = trim((string)($b['user_name'] ?? $b['name'] ?? 'Huỳnh Trọng Phúc'));

@@ -5,6 +5,7 @@ import { Sparkles } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore';
 import { useAuth } from '../../contexts/AuthContext';
 import { BrandChatIcon } from './BrandChatIcon';
+import { hasOpenDrawerOrModal, subscribeOverlayStack } from '../../utils/overlayStack';
 
 const WorkChatModal = React.lazy(() => import('./WorkChatModal').then(m => ({ default: m.WorkChatModal })));
 
@@ -25,12 +26,57 @@ export const ChatFloatingLauncher: React.FC = () => {
   } = useChatStore();
 
   const [hasOpened, setHasOpened] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 768);
+  const [isOverlayOpen, setIsOverlayOpen] = useState(() => hasOpenDrawerOrModal());
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    const syncOverlayState = () => {
+      setIsOverlayOpen(hasOpenDrawerOrModal());
+    };
+    syncOverlayState();
+    const unsubStack = subscribeOverlayStack(syncOverlayState);
+    let observer: MutationObserver | null = null;
+    if (typeof document !== 'undefined' && document.body) {
+      observer = new MutationObserver(syncOverlayState);
+      observer.observe(document.body, { childList: true });
+    }
+    return () => {
+      unsubStack();
+      observer?.disconnect();
+    };
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     if (isOpen) {
       setHasOpened(true);
     }
   }, [isOpen]);
+
+  // Preload WorkChatModal chunk during browser idle time so auto-pop on new message is 0ms instant
+  useEffect(() => {
+    if (!token || !user) return;
+    const preloadTimer = setTimeout(() => {
+      import('./WorkChatModal').catch(() => {});
+    }, 1200);
+    return () => clearTimeout(preloadTimer);
+  }, [token, user]);
+
+  // Listen for notification deep-link event to open WorkChat directly
+  useEffect(() => {
+    const handleOpenChatEvent = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail || {};
+      const convId = Number(detail.conversationId || detail.id || 0);
+      openChat(convId > 0 ? convId : undefined, 'chats', { maximized: false });
+    };
+    window.addEventListener('myerp:open-chat-conversation', handleOpenChatEvent);
+    return () => window.removeEventListener('myerp:open-chat-conversation', handleOpenChatEvent);
+  }, [openChat]);
 
   // 1. Establish On-Demand Real-time SSE Stream ONLY when Chat Modal is open (< 50ms latency)
   // When chat modal is closed, immediately disconnect SSE to free up PHP-FPM workers for the server
@@ -68,28 +114,28 @@ export const ChatFloatingLauncher: React.FC = () => {
       const isHidden = document.hidden;
       const isIdle = Date.now() - lastActiveTime > 180000; // 3 minutes idle
 
-      let delay = 8000;
+      let delay = 7000;
       if (isHidden) {
-        delay = 45000; // 45s when tab is backgrounded
+        delay = 35000; // 35s when tab is backgrounded
       } else if (isRealtimeConnected) {
         // SSE delivers messages in real-time, so polling is relaxed to a lightweight heartbeat
-        delay = isOpen ? 15000 : 30000;
+        delay = isOpen ? 15000 : 12000;
       } else if (isIdle && !isOpen) {
-        delay = 25000; // 25s when user hasn't interacted in 3 mins
+        delay = 14000; // 14s when user hasn't interacted in 3 mins
       } else if (isOpen) {
         delay = 6000;  // 6s fallback when SSE is offline and modal is open
       }
       timer = setTimeout(runPolling, delay);
     };
 
-    timer = setTimeout(runPolling, isRealtimeConnected ? 15000 : 6000);
+    timer = setTimeout(runPolling, isRealtimeConnected ? 12000 : 6000);
 
     const handleVisibilityChange = () => {
       if (!document.hidden) {
         if (timer) clearTimeout(timer);
         lastActiveTime = Date.now();
         syncDelta();
-        timer = setTimeout(runPolling, isOpen ? 8000 : 15000);
+        timer = setTimeout(runPolling, isOpen ? 6000 : 8000);
       }
     };
 
@@ -125,8 +171,6 @@ export const ChatFloatingLauncher: React.FC = () => {
       </React.Suspense>
     );
   }
-
-  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
 
   const floatingButton = (
     <>
@@ -176,12 +220,14 @@ export const ChatFloatingLauncher: React.FC = () => {
           background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
           color: '#ffffff',
           border: 'none',
-          display: 'flex',
+          display: isMobile && isOverlayOpen ? 'none' : 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           cursor: 'pointer',
           boxShadow: '0 8px 24px rgba(220, 38, 38, 0.45), 0 2px 6px rgba(0, 0, 0, 0.12)',
-          zIndex: 995,
+          zIndex: 10005,
+          opacity: isOverlayOpen && isMobile ? 0 : 1,
+          pointerEvents: isOverlayOpen && isMobile ? 'none' : 'auto',
           transition: 'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
           outline: 'none',
           animation: unreadTotal > 0 ? 'chatBreathingGlow 2.4s ease-in-out infinite' : undefined

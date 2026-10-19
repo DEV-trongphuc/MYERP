@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Plus, Search, Building2, X, Loader2, Pencil, Trash2, Globe, Phone, Mail, MapPin, Users, LayoutGrid, List, Filter, RefreshCw, Download, DollarSign, Briefcase, MoreHorizontal } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar } from '../components/ui/Avatar';
@@ -98,7 +99,10 @@ export const CompaniesPage: React.FC = () => {
     setPage(1);
   }, [debouncedSearch, statusFilter, tierFilter]);
 
+  const location = useLocation();
+
   useEffect(() => {
+    if (!location.pathname.startsWith('/companies')) return;
     const controller = new AbortController();
     const urlParams = new URLSearchParams(window.location.search);
     const targetId = urlParams.get('id') || urlParams.get('company_id') || urlParams.get('open_company_id');
@@ -126,7 +130,7 @@ export const CompaniesPage: React.FC = () => {
       }
     }
     return () => controller.abort();
-  }, [window.location.search]);
+  }, [location.pathname, location.search]);
 
   const openCreate = () => { setEditItem(null); setShowModal(true); };
   const openEdit = (c: any) => { setEditItem(c); setShowModal(true); };

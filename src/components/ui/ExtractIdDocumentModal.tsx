@@ -368,11 +368,11 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
 
   return createPortal(
     <div 
-      className="overlay-backdrop animate-fade"
+      className="overlay-backdrop modal-above-drawer animate-fade"
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: effectiveZIndex + 60,
+        zIndex: Math.min((effectiveZIndex || 2147483625) + 20, 2147483646),
         background: 'rgba(0, 0, 0, 0.78)',
         backdropFilter: 'blur(8px)',
         WebkitBackdropFilter: 'blur(8px)',

@@ -59,6 +59,7 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
         'background', 'backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundPosition', 'backgroundRepeat',
         'borderRadius', 'borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius',
         'border', 'borderWidth', 'borderStyle', 'borderColor',
+        'borderTop', 'borderRight', 'borderBottom', 'borderLeft',
         'borderTopWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderRightWidth',
         'boxShadow'
     ];
@@ -89,11 +90,15 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
             if (css[prop] !== undefined) {
                 // Divider line border should be rendered on the inner element, not the outer wrapper
                 if (block.type === 'divider' && prop.startsWith('border') && prop !== 'borderRadius') return;
+                // Voucher and survey_card apply borderRadius and border to their inner card element
+                if ((block.type === 'voucher' || block.type === 'survey_card') && prop.startsWith('border')) return;
                 decorativeStyles[prop] = css[prop];
             }
         });
-        decorativeStyles.overflow = (css.borderRadius && parseFloat(String(css.borderRadius)) > 0 && !isSelected) ? 'hidden' : 'visible';
-        decorativeStyles.borderRadius = css.borderRadius ? sanitizeRadius(css.borderRadius) : undefined;
+        if (block.type !== 'voucher' && block.type !== 'survey_card') {
+            decorativeStyles.overflow = (css.borderRadius && parseFloat(String(css.borderRadius)) > 0 && !isSelected) ? 'hidden' : 'visible';
+            decorativeStyles.borderRadius = css.borderRadius ? sanitizeRadius(css.borderRadius) : undefined;
+        }
     } else {
         innerPadding.paddingTop = '0px';
         innerPadding.paddingRight = '0px';
@@ -128,7 +133,7 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                 );
 
             case 'button': {
-                const btnBg = block.style.contentBackgroundColor || (block.style as any).buttonBackgroundColor || block.style.backgroundColor || '#BD1D2D';
+                const btnBg = cssAny.contentBackgroundColor || cssAny.buttonBackgroundColor || (css.backgroundImage && css.backgroundImage !== 'none' ? css.backgroundImage : css.backgroundColor) || '#BD1D2D';
                 const containerBg = 'transparent';
                 const btnColor = css.color ?? '#ffffff';
                 const align = css.textAlign ?? 'center';
@@ -143,6 +148,7 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                     <div style={{ width: '100%', display: 'flex', justifyContent: flexJustify, background: containerBg }}>
                         <table
                             border={0} cellPadding={0} cellSpacing={0}
+                            role="presentation"
                             align={align as any}
                             style={{
                                 marginTop: btnMarginTop, marginBottom: btnMarginBottom,
@@ -344,7 +350,7 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                                             }}></div>
                                         )}
                                         <div style={{
-                                            width: '12px', height: '12px', borderRadius: '50%',
+                                            width: '12px', height: '12px', borderRadius: cssAny.timelineDotShape === 'square' ? '3px' : '50%',
                                             backgroundColor: dotColor, border: '2px solid white',
                                             boxShadow: '0 0 0 1px ' + (lineColor || '#e2e8f0'),
                                             margin: '6px auto 0', position: 'relative', zIndex: 1
@@ -404,7 +410,7 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                 const checkColor = cssAny.checkIconColor ?? '#BD1D2D';
                 const checkSize = parseInt(cssAny.checkIconSize ?? '20');
                 const showTitle = cssAny.showCheckListTitle !== false;
-                const checklistIcon = block.style.checkIcon || 'CheckCircle';
+                const checklistIcon = cssAny.checkIcon || block.style.checkIcon || 'CheckCircle';
                 // Support custom image mode
                 const iconMode = cssAny.checkIconMode || 'icon';
                 const customIconUrl = cssAny.checkCustomIconUrl;
@@ -421,7 +427,9 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                 return (
                     <div style={{
                         textAlign: css.textAlign as any ?? 'left',
-                        width: '100%'
+                        width: '100%',
+                        maxWidth: css.maxWidth || '100%',
+                        margin: css.maxWidth ? '0 auto' : undefined
                     }}>
                         {showTitle && (
                             <div style={{ marginBottom: '15px' }}>
@@ -442,7 +450,7 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                                 />
                             </div>
                         )}
-                        <table width="100%" border={0} cellPadding={0} cellSpacing={0}>
+                        <table width="100%" border={0} cellPadding={0} cellSpacing={0} role="presentation" style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
                             <tbody>
                                 {block.items?.map((item, i) => {
                                     const showItemTitle = cssAny.showItemTitle !== false;
@@ -462,7 +470,7 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
 
                                     return (
                                         <tr key={item.id || i}>
-                                            <td width={checkSize + 10} valign={vAlign} style={{ padding: `${finalIconPaddingTop} 0 12px 0` }}>
+                                            <td width={checkSize + 10} valign={vAlign} style={{ width: `${checkSize + 10}px`, padding: `${finalIconPaddingTop} 0 12px 0` }}>
                                                 <div style={{ 
                                                     display: 'flex', 
                                                     alignItems: 'center', 
@@ -485,7 +493,7 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                                                     />
                                                 </div>
                                             </td>
-                                            <td valign={vAlign} style={{ padding: `${textPaddingTop} 0 12px 10px`, fontFamily: itemFontFamily, textAlign: 'left' }}>
+                                            <td valign={vAlign} style={{ padding: `${textPaddingTop} 0 12px 10px`, fontFamily: itemFontFamily, textAlign: 'left', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                                                 {showItemTitle && (
                                                     <RichText
                                                         html={item.title || ''}
@@ -503,7 +511,10 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                                                             fontWeight: 'bold',
                                                             color: itemColor,
                                                             marginBottom: showItemDesc ? '2px' : '0',
-                                                            textAlign: 'left'
+                                                            textAlign: 'left',
+                                                            whiteSpace: 'normal',
+                                                            wordBreak: 'break-word',
+                                                            overflowWrap: 'break-word'
                                                         }}
                                                     />
                                                 )}
@@ -524,7 +535,10 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                                                             fontSize: descSize,
                                                             color: descColor,
                                                             lineHeight: '1.4',
-                                                            textAlign: 'left'
+                                                            textAlign: 'left',
+                                                            whiteSpace: 'normal',
+                                                            wordBreak: 'break-word',
+                                                            overflowWrap: 'break-word'
                                                         }}
                                                     />
                                                 )}
@@ -543,7 +557,7 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                 const gapSocial = parseInt(cssAny.gap || '10') / 2;
                 return (
                     <div style={{ width: '100%', textAlign: alignSocial }}>
-                        <table border={0} cellPadding={0} cellSpacing={0} style={{ display: 'inline-table' }}>
+                        <table border={0} cellPadding={0} cellSpacing={0} role="presentation" style={{ display: 'inline-table' }}>
                             <tbody>
                                 <tr>
                                     {block.socialLinks?.map((l) => {
@@ -881,7 +895,7 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                             </div>
                             <br/>
                             
-                            <a href="#" style={{
+                            <a href={block.url || '#'} onClick={(e) => e.preventDefault()} style={{
                                 display: 'inline-block',
                                 backgroundColor: btnBg,
                                 color: btnText,
@@ -889,11 +903,11 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                                 borderRadius: sanitizeRadius(css.borderRadius ?? '8px'),
                                 textDecoration: 'none',
                                 fontWeight: 'bold',
-                                fontFamily: bodyStyle.fontFamily,
+                                fontFamily: css.fontFamily || bodyStyle.fontFamily,
                                 textTransform: 'uppercase',
                                 fontSize: '14px'
                             }}>
-                                LƯU MÃ NGAY
+                                {cssAny.buttonText || cssAny.voucherButtonText || 'LƯU MÃ NGAY'}
                             </a>
                         </div>
                     </div>
@@ -902,10 +916,11 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
 
             case 'review':
                 return (
-                    <table border={0} cellPadding={0} cellSpacing={0} width={block.style.width || '100%'} style={{ display: 'inline-table', maxWidth: '100%' }}>
+                    <table border={0} cellPadding={0} cellSpacing={0} role="presentation" width={css.width || '100%'} style={{ display: 'inline-table', maxWidth: '100%' }}>
                         <tbody>
                             <tr>
                                 <td style={{
+                                    background: (css.backgroundImage && css.backgroundImage !== 'none') ? css.backgroundImage : (css.backgroundColor ?? 'transparent'),
                                     backgroundColor: css.backgroundColor ?? 'transparent',
                                     borderRadius: sanitizeRadius(css.borderRadius ?? '8px'),
                                     borderTopWidth: css.borderTopWidth ?? '1px',
@@ -951,11 +966,11 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                 );
 
             case 'header': {
-                const globalMenuType = (block.style as any).headerMenuType || 'link';
-                const menuGap = (block.style as any).menuGap || '20px';
-                const logoWidth = (block.style as any).logoWidth || '120px';
-                const btnBg = (block.style as any).buttonBg || '#BD1D2D';
-                const btnColor = (block.style as any).buttonColor || '#ffffff';
+                const globalMenuType = cssAny.headerMenuType || (block.style as any).headerMenuType || 'link';
+                const menuGap = cssAny.menuGap || (block.style as any).menuGap || '20px';
+                const logoWidth = cssAny.logoWidth || (block.style as any).logoWidth || '120px';
+                const btnBg = cssAny.buttonBg || (block.style as any).buttonBg || '#BD1D2D';
+                const btnColor = cssAny.buttonColor || (block.style as any).buttonColor || '#ffffff';
                 const menuItems = block.items || [];
 
                 const onLogoResizeMouseDown = (e: React.MouseEvent) => {
@@ -987,9 +1002,15 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                     <div style={{
                         width: '100%',
                         padding: `${css.paddingTop ?? '15px'} ${css.paddingRight ?? '30px'} ${css.paddingBottom ?? '15px'} ${css.paddingLeft ?? '30px'}`,
+                        background: (css.backgroundImage && css.backgroundImage !== 'none') ? css.backgroundImage : (css.backgroundColor ?? '#ffffff'),
                         backgroundColor: css.backgroundColor ?? '#ffffff',
+                        borderTop: cssAny.borderTop,
+                        borderRight: cssAny.borderRight,
+                        borderBottom: cssAny.borderBottom,
+                        borderLeft: cssAny.borderLeft,
                         borderRadius: sanitizeRadius(css.borderRadius),
-                        overflow: 'visible' // Changed to visible for resize handle
+                        overflow: 'visible', // Changed to visible for resize handle
+                        boxSizing: 'border-box'
                     }}>
                         <div style={{
                             display: 'flex',
@@ -1104,120 +1125,116 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                 );
 
             case 'survey_card': {
-                const s = block.style || {};
-                const accent = s.surveyAccentColor || '#BD1D2D';
-                const cardBg = s.surveyCardBgColor || '#F8FAFC';
-                const borderCol = s.surveyBorderColor || '#BFDBFE';
+                const s = cssAny;
+                const rawAccent = s.surveyAccentColor || '#BD1D2D';
+                // Normalize legacy default blue+baby-blue border to MYERP cohesive style if untouched
+                const isLegacyDefaultBlue = rawAccent.toUpperCase() === '#2563EB' && (s.surveyBorderColor || '').toUpperCase() === '#BFDBFE';
+                const accent = isLegacyDefaultBlue ? '#BD1D2D' : rawAccent;
+                const cardBg = s.surveyCardBgColor || '#FFFFFF';
+                const borderCol = isLegacyDefaultBlue ? '#E2E8F0' : (s.surveyBorderColor || '#E2E8F0');
+                const btnBgColor = s.surveyButtonBgColor || accent;
                 const btnTextColor = s.surveyButtonTextColor || '#FFFFFF';
-                const badgeText = s.surveyBadgeText || 'KHẢO SÁT NHANH';
+                const badgeText = s.surveyBadgeText ?? 'KHẢO SÁT NHANH';
                 const titleText = s.surveyTitle || block.content || 'Khảo sát mức độ hài lòng của bạn';
                 const descText = s.surveyDescription || 'Ý kiến của bạn giúp chúng tôi nâng cao chất lượng dịch vụ mỗi ngày.';
                 const btnText = s.surveyButtonText || 'Tham gia khảo sát ngay →';
-                const radius = sanitizeRadius(s.borderRadius || '14px');
+                const radius = sanitizeRadius(s.borderRadius || '16px');
+                const alignVal = (s.textAlign as any) || 'center';
+                const cardFont = css.fontFamily || bodyStyle.fontFamily || "'Inter', 'Roboto', Arial, sans-serif";
 
                 return (
-                    <table role="presentation" width="100%" cellPadding={0} cellSpacing={0} border={0} style={{ borderCollapse: 'separate' }}>
-                        <tbody>
-                            <tr>
-                                <td
-                                    align={(s.textAlign as any) || 'center'}
-                                    style={{
-                                        backgroundColor: cardBg,
-                                        border: `1.5px solid ${borderCol}`,
-                                        borderRadius: radius,
-                                        padding: '24px',
-                                        textAlign: (s.textAlign as any) || 'center',
-                                    }}
-                                >
-                                    {badgeText && (
-                                        <div
-                                            contentEditable={isSelected}
-                                            suppressContentEditableWarning
-                                            onBlur={(e) => onUpdateBlockStyle?.(block.id, { surveyBadgeText: e.currentTarget.innerText })}
-                                            style={{
-                                                display: 'inline-block',
-                                                backgroundColor: `${accent}18`,
-                                                color: accent,
-                                                fontSize: '11px',
-                                                fontWeight: 800,
-                                                letterSpacing: '0.08em',
-                                                textTransform: 'uppercase',
-                                                padding: '4px 12px',
-                                                borderRadius: '999px',
-                                                marginBottom: '12px',
-                                                outline: 'none',
-                                            }}
-                                        >
-                                            {badgeText}
-                                        </div>
-                                    )}
-                                    <div style={{ margin: '0 0 8px 0' }}>
-                                        <RichText
-                                            html={titleText}
-                                            onChange={(val) => onUpdateBlockStyle?.(block.id, { surveyTitle: val })}
-                                            disabled={!isSelected}
-                                            bodyLinkColor={bodyStyle.linkColor}
-                                            customMergeTags={customMergeTags}
-                                            style={{
-                                                fontSize: '18px',
-                                                fontWeight: 800,
-                                                color: '#0F172A',
-                                                lineHeight: 1.4,
-                                                textAlign: (s.textAlign as any) || 'center',
-                                                fontFamily: css.fontFamily ?? bodyStyle.fontFamily,
-                                            }}
-                                        />
-                                    </div>
-                                    <div style={{ margin: '0 0 18px 0' }}>
-                                        <RichText
-                                            html={descText}
-                                            onChange={(val) => onUpdateBlockStyle?.(block.id, { surveyDescription: val })}
-                                            disabled={!isSelected}
-                                            bodyLinkColor={bodyStyle.linkColor}
-                                            customMergeTags={customMergeTags}
-                                            style={{
-                                                fontSize: '14px',
-                                                color: '#475569',
-                                                lineHeight: 1.6,
-                                                textAlign: (s.textAlign as any) || 'center',
-                                                fontFamily: css.fontFamily ?? bodyStyle.fontFamily,
-                                            }}
-                                        />
-                                    </div>
-                                    <table role="presentation" cellPadding={0} cellSpacing={0} border={0} align={(s.textAlign as any) || 'center'} style={{ margin: s.textAlign === 'left' ? '0' : s.textAlign === 'right' ? '0 0 0 auto' : '0 auto' }}>
-                                        <tbody>
-                                            <tr>
-                                                <td
-                                                    align="center"
-                                                    style={{
-                                                        backgroundColor: accent,
-                                                        borderRadius: '10px',
-                                                        padding: '12px 28px',
-                                                    }}
-                                                >
-                                                    <span
-                                                        contentEditable={isSelected}
-                                                        suppressContentEditableWarning
-                                                        onBlur={(e) => onUpdateBlockStyle?.(block.id, { surveyButtonText: e.currentTarget.innerText })}
-                                                        style={{
-                                                            color: btnTextColor,
-                                                            fontSize: '14px',
-                                                            fontWeight: 700,
-                                                            textDecoration: 'none',
-                                                            display: 'inline-block',
-                                                            outline: 'none',
-                                                        }}
-                                                    >
-                                                        {btnText}
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                    <div
+                        style={{
+                            backgroundColor: cardBg,
+                            border: `1.5px solid ${borderCol}`,
+                            borderTop: `3.5px solid ${accent}`,
+                            borderRadius: radius,
+                            padding: '28px 24px',
+                            textAlign: alignVal,
+                            boxSizing: 'border-box',
+                            fontFamily: cardFont,
+                        }}
+                    >
+                        {badgeText && (
+                            <div
+                                contentEditable={isSelected}
+                                suppressContentEditableWarning
+                                onBlur={(e) => onUpdateBlockStyle?.(block.id, { surveyBadgeText: e.currentTarget.innerText })}
+                                style={{
+                                    display: 'inline-block',
+                                    backgroundColor: `${accent}14`,
+                                    border: `1px solid ${accent}2E`,
+                                    color: accent,
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    fontFamily: cardFont,
+                                    letterSpacing: '0.06em',
+                                    textTransform: 'uppercase',
+                                    padding: '4px 12px',
+                                    borderRadius: '999px',
+                                    marginBottom: '12px',
+                                    outline: 'none',
+                                }}
+                            >
+                                {badgeText}
+                            </div>
+                        )}
+                        <div style={{ margin: '0 0 8px 0' }}>
+                            <RichText
+                                html={titleText}
+                                onChange={(val) => onUpdateBlockStyle?.(block.id, { surveyTitle: val })}
+                                disabled={!isSelected}
+                                bodyLinkColor={bodyStyle.linkColor}
+                                customMergeTags={customMergeTags}
+                                style={{
+                                    fontSize: '19px',
+                                    fontWeight: 700,
+                                    color: '#0F172A',
+                                    lineHeight: 1.35,
+                                    textAlign: alignVal,
+                                    fontFamily: cardFont,
+                                }}
+                            />
+                        </div>
+                        <div style={{ margin: '0 auto 20px auto', maxWidth: '500px' }}>
+                            <RichText
+                                html={descText}
+                                onChange={(val) => onUpdateBlockStyle?.(block.id, { surveyDescription: val })}
+                                disabled={!isSelected}
+                                bodyLinkColor={bodyStyle.linkColor}
+                                customMergeTags={customMergeTags}
+                                style={{
+                                    fontSize: '14px',
+                                    color: '#475569',
+                                    lineHeight: 1.6,
+                                    textAlign: alignVal,
+                                    fontFamily: cardFont,
+                                }}
+                            />
+                        </div>
+                        <div style={{ textAlign: alignVal }}>
+                            <span
+                                contentEditable={isSelected}
+                                suppressContentEditableWarning
+                                onBlur={(e) => onUpdateBlockStyle?.(block.id, { surveyButtonText: e.currentTarget.innerText })}
+                                style={{
+                                    backgroundColor: btnBgColor,
+                                    color: btnTextColor,
+                                    fontSize: '14px',
+                                    fontWeight: 700,
+                                    fontFamily: cardFont,
+                                    padding: '12px 28px',
+                                    borderRadius: '10px',
+                                    textDecoration: 'none',
+                                    display: 'inline-block',
+                                    outline: 'none',
+                                    lineHeight: 1.2,
+                                }}
+                            >
+                                {btnText}
+                            </span>
+                        </div>
+                    </div>
                 );
             }
 
@@ -1242,6 +1259,7 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
     };
 
     const s = block.style || {};
+    const isHiddenInCurrentView = (viewMode === 'mobile' && s.hideOnMobile) || (viewMode === 'desktop' && s.hideOnDesktop);
 
     return (
         <tr
@@ -1265,7 +1283,7 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                     draggingBlockId === block.id 
                         ? 'opacity-30 border-2 border-dashed border-[#BD1D2D] bg-[#BD1D2D]/5' 
                         : ''
-                }`} 
+                } ${isHiddenInCurrentView ? 'opacity-45' : ''}`} 
                 style={wrapperTdStyles}
             >
                 {dragOverId === block.id && dropPosition && <CanvasDropIndicator dropPosition={dropPosition} />}

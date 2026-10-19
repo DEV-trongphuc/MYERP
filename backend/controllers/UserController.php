@@ -7,8 +7,8 @@ class UserController {
 
     public function index(array $auth): void {
         // Allow all authenticated users to retrieve the active user list based on unified accounts.is_active = 1
-        $where = ["a.is_active = 1", "(u.tenant_id = ? OR u.tenant_id IS NULL)"];
-        $params = [(int)($auth['tenant_id'] ?? 1)];
+        $where = ["a.is_active = 1"];
+        $params = [];
         
         $teamOnly = isset($_GET['team_only']) && (string)$_GET['team_only'] === '1';
         if ($teamOnly) {
@@ -32,7 +32,22 @@ class UserController {
             }
         }
 
-        $whereClause = implode(" AND ", $where);
+        $fallbackWhereClause = implode(" AND ", $where);
+        $fallbackParams = $params;
+
+        $joinWhere = $where;
+        $joinParams = $params;
+        $joinWhere[] = "(u.tenant_id = ? OR u.tenant_id IS NULL)";
+        $joinParams[] = (int)($auth['tenant_id'] ?? 1);
+        $joinWhere[] = "(u.is_active = 1 OR u.is_active IS NULL)";
+        try {
+            $uCols = $this->db->query("SHOW COLUMNS FROM users LIKE 'deleted_at'")->fetch();
+            if ($uCols) {
+                $joinWhere[] = "u.deleted_at IS NULL";
+            }
+        } catch (Throwable $eCol) {}
+
+        $whereClause = implode(" AND ", $joinWhere);
         
         try {
             $stmt = $this->db->prepare("
@@ -45,6 +60,7 @@ class UserController {
                     a.role,
                     'active' as status,
                     COALESCE(NULLIF(u.job_title, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(a.address, '$.erp_profile.job_title')), ''), '') as job_title,
+                    COALESCE(u.department, '') as department,
                     COALESCE(u.avatar_url, a.avatar) as avatar_url,
                     COALESCE(u.avatar_url, a.avatar) as avatar,
                     COALESCE(u.signature_url, a.signature_url) as signature_url,
@@ -69,7 +85,7 @@ class UserController {
                 GROUP BY a.id
                 ORDER BY full_name ASC
             ");
-            $stmt->execute($params);
+            $stmt->execute(array_values($joinParams));
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
             $canViewSensitivePii = in_array(strtolower($auth['role'] ?? ''), ['admin', 'super_admin', 'superadmin', 'director', 'hr'], true);
             foreach ($rows as &$r) {
@@ -87,12 +103,12 @@ class UserController {
         } catch (Throwable $e) {
             try {
                 $stmt = $this->db->prepare("
-                    SELECT a.id, a.email, a.name as full_name, a.name, a.role, 'active' as status, a.avatar as avatar_url, a.avatar, a.phone, 1 as is_active, a.created_at, a.team_id
+                    SELECT a.id, a.email, a.name as full_name, a.name, a.role, 'active' as status, '' as department, a.avatar as avatar_url, a.avatar, a.phone, 1 as is_active, a.created_at, a.team_id
                     FROM accounts a
-                    WHERE $whereClause
+                    WHERE $fallbackWhereClause
                     ORDER BY full_name ASC
                 ");
-                $stmt->execute($params);
+                $stmt->execute(array_values($fallbackParams));
                 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
                 foreach ($rows as &$r) {
                     if (isset($r['role']) && $r['role'] === 'sales') {
@@ -117,13 +133,15 @@ class UserController {
         $chk->execute([$b['email'],$auth['tenant_id']]);
         if($chk->fetch()) respond(409,null,'Email đã tồn tại trong hệ thống',false);
         $hash=password_hash($b['password'],PASSWORD_BCRYPT,['cost'=>12]);
+        $rawRole = $b['role'] ?? 'sales';
+        $dbUserRole = ($rawRole === 'sale') ? 'sales' : $rawRole;
         $this->db->prepare("INSERT INTO users (tenant_id,email,password_hash,full_name,role,phone,dob,gender,citizen_id,address,bank_name,bank_account) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
             ->execute([
                 $auth['tenant_id'],
                 $b['email'],
                 $hash,
                 $b['full_name'],
-                $b['role']??'sales',
+                $dbUserRole,
                 $b['phone']??null,
                 $b['dob']??null,
                 $b['gender']??null,
@@ -133,7 +151,7 @@ class UserController {
                 $b['bank_account']??null
             ]);
         $newId = (int)$this->db->lastInsertId();
-        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'CREATE', 'user', $newId, json_encode(['email' => $b['email'], 'role' => $b['role']??'sales']));
+        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'CREATE', 'user', $newId, json_encode(['email' => $b['email'], 'role' => $dbUserRole]));
         $this->show($auth, $newId);
     }
     public function show(array $auth,int $id): void {
@@ -158,7 +176,7 @@ class UserController {
         if (!in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director', 'hr'], true) && (int)$auth['user_id'] !== (int)$id) respond(403, null, 'Không có quyền cập nhật thông tin người khác', false);
         
         $b = getBody();
-        $fields = ['email', 'full_name', 'phone', 'avatar_url', 'signature_url', 'dob', 'gender', 'citizen_id', 'address', 'bank_name', 'bank_account', 'zalo_chat_id', 'telegram_chat_id', 'bio', 'extra_fields_json'];
+        $fields = ['email', 'full_name', 'phone', 'department', 'avatar_url', 'signature_url', 'dob', 'gender', 'citizen_id', 'address', 'bank_name', 'bank_account', 'zalo_chat_id', 'telegram_chat_id', 'bio', 'extra_fields_json'];
         if (in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director', 'hr'], true)) {
             $fields[] = 'role';
             $fields[] = 'is_active';
@@ -187,7 +205,7 @@ class UserController {
         }
 
         // Fetch current user row to check for old avatar and signature
-        $oldUserStmt = $this->db->prepare("SELECT avatar_url, signature_url FROM users WHERE id = ? AND tenant_id = ?");
+        $oldUserStmt = $this->db->prepare("SELECT email, avatar_url, signature_url FROM users WHERE id = ? AND tenant_id = ?");
         $oldUserStmt->execute([$id, $auth['tenant_id']]);
         $oldUser = $oldUserStmt->fetch(PDO::FETCH_ASSOC);
 
@@ -228,7 +246,9 @@ class UserController {
         foreach($fields as $f){
             if(array_key_exists($f,$b)){
                 $val = $b[$f];
-                if (in_array($f, ['dob', 'leave_start', 'leave_end']) && ($val === '' || $val === null || $val === 'null')) {
+                if ($f === 'role') {
+                    $val = ($val === 'sale') ? 'sales' : $val;
+                } else if (in_array($f, ['dob', 'leave_start', 'leave_end']) && ($val === '' || $val === null || $val === 'null')) {
                     $val = null;
                 } else if (in_array($f, ['team_id']) && (empty($val) || $val === 0 || $val === '0' || $val === 'null')) {
                     $val = null;
@@ -242,7 +262,51 @@ class UserController {
         if(!empty($b['password'])){$sets[]='password_hash=?';$params[]=password_hash($b['password'],PASSWORD_BCRYPT,['cost'=>12]);}
         if(!$sets) respond(422,null,'Không có dữ liệu',false);
         $params[]=$id;$params[]=$auth['tenant_id'];
-        $this->db->prepare("UPDATE users SET ".implode(',',$sets)." WHERE id=? AND tenant_id=?")->execute($params);
+        $this->db->prepare("UPDATE users SET ".implode(',',$sets)." WHERE id=? AND tenant_id=?")->execute(array_values($params));
+
+        // Sync matching columns into accounts table so UserController::index() reflects updates immediately
+        try {
+            $accSets = [];
+            $accParams = [];
+            $accMap = [
+                'full_name' => 'name',
+                'email' => 'email',
+                'role' => 'role',
+                'phone' => 'phone',
+                'avatar_url' => 'avatar',
+                'signature_url' => 'signature_url',
+                'team_id' => 'team_id',
+                'dob' => 'dob',
+                'gender' => 'gender',
+                'citizen_id' => 'citizen_id',
+                'address' => 'address',
+                'bank_name' => 'bank_name',
+                'bank_account' => 'bank_account',
+                'is_active' => 'is_active',
+            ];
+            foreach ($accMap as $uKey => $aCol) {
+                if (array_key_exists($uKey, $b) && in_array($uKey, $fields, true)) {
+                    $aVal = $b[$uKey];
+                    if ($uKey === 'role') {
+                        $aVal = ($aVal === 'sales') ? 'sale' : $aVal;
+                    } elseif ($uKey === 'dob' && ($aVal === '' || $aVal === null || $aVal === 'null')) {
+                        $aVal = null;
+                    } elseif ($uKey === 'team_id' && (empty($aVal) || $aVal === 0 || $aVal === '0' || $aVal === 'null')) {
+                        $aVal = null;
+                    }
+                    $accSets[] = "$aCol = ?";
+                    $accParams[] = $aVal;
+                }
+            }
+            if (!empty($accSets)) {
+                $lookupEmail = $oldUser['email'] ?? ($b['email'] ?? '');
+                $accParams[] = $id;
+                $accParams[] = $lookupEmail;
+                $accParams[] = (int)($auth['tenant_id'] ?? 1);
+                $this->db->prepare("UPDATE accounts SET " . implode(', ', $accSets) . " WHERE (id = ? OR (email != '' AND email = ?)) AND (tenant_id = ? OR tenant_id IS NULL)")
+                    ->execute(array_values($accParams));
+            }
+        } catch (\Throwable $eAcc) {}
         
         // Log changes (Masking password)
         $logData = $b;
@@ -255,22 +319,25 @@ class UserController {
         if (!in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director', 'hr'], true)) respond(403, null, 'Quyền admin là bắt buộc', false);
         if($id===$auth['user_id']) respond(403,null,'Không thể xóa tài khoản của chính mình',false);
         try {
-            // Delete user's physical avatar and signature files
-            $oldStmt = $this->db->prepare("SELECT avatar_url, signature_url FROM users WHERE id = ? AND tenant_id = ?");
-            $oldStmt->execute([$id, $auth['tenant_id']]);
-            $oldUser = $oldStmt->fetch(PDO::FETCH_ASSOC);
-            if ($oldUser) {
-                if (!empty($oldUser['avatar_url'])) deleteServerFile($oldUser['avatar_url']);
-                if (!empty($oldUser['signature_url'])) deleteServerFile($oldUser['signature_url']);
+            $hasDeletedAt = false;
+            try {
+                $uCols = $this->db->query("SHOW COLUMNS FROM users LIKE 'deleted_at'")->fetch();
+                if ($uCols) $hasDeletedAt = true;
+            } catch (\Throwable $eCol) {}
+
+            if ($hasDeletedAt) {
+                $this->db->prepare("UPDATE users SET is_active = 0, deleted_at = NOW() WHERE id = ? AND tenant_id = ?")->execute([$id, $auth['tenant_id']]);
+            } else {
+                $this->db->prepare("UPDATE users SET is_active = 0 WHERE id = ? AND tenant_id = ?")->execute([$id, $auth['tenant_id']]);
             }
 
-            $this->db->prepare("DELETE FROM users WHERE id=? AND tenant_id=?")->execute([$id,$auth['tenant_id']]);
+            try {
+                $this->db->prepare("UPDATE accounts SET is_active = 0 WHERE id = ? AND (tenant_id = ? OR tenant_id IS NULL)")->execute([$id, $auth['tenant_id']]);
+            } catch (\Throwable $eAcc) {}
+
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'DELETE', 'user', $id);
             respond(200,null,'Đã xóa người dùng');
         } catch (PDOException $e) {
-            if ($e->getCode() == '23000') {
-                respond(400, null, 'Không thể xóa người dùng này vì họ đang quản lý dữ liệu (liên hệ, hóa đơn, deal). Vui lòng chuyển trạng thái thành "Ngừng hoạt động" thay vì xóa.', false);
-            }
             respond(500, null, 'Lỗi cơ sở dữ liệu: ' . $e->getMessage(), false);
         }
     }

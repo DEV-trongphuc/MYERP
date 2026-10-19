@@ -19,9 +19,9 @@ export const QrImageModal: React.FC<QrImageModalProps> = ({
   qrUrl,
   title = 'Mã VietQR thanh toán',
   subtitle = 'Quét bằng app ngân hàng để chuyển khoản chính xác',
-  zIndex = 2147483647
+  zIndex = 2147483646
 }) => {
-  const effectiveZIndex = zIndex ? Math.min(zIndex, 2147483647) : 2147483647;
+  const effectiveZIndex = zIndex ? Math.min(Math.max(zIndex, 2147483640), 2147483646) : 2147483646;
 
   useEffect(() => {
     if (isOpen && qrUrl) {

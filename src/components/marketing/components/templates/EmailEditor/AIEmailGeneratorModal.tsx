@@ -1,16 +1,19 @@
-// components/templates/EmailEditor/AIEmailGeneratorModal.tsx
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+// src/components/marketing/components/templates/EmailEditor/AIEmailGeneratorModal.tsx
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
     Sparkles, X, RefreshCw, Check, ChevronLeft,
     Wand2, AlertCircle, Monitor, Smartphone,
     Upload, ImagePlus, Trash2, Link2, Plus, ArrowRight,
-    Library, RotateCcw, ToggleLeft, ToggleRight, Eye
+    Library, RotateCcw, Eye, Search, Loader2, CheckSquare,
+    Clock, Star, ClipboardCheck, Quote, ListChecks, Palette, MessageSquare
 } from 'lucide-react';
 import { EmailBlock, EmailBodyStyle } from '../../../types';
 import { compileHTML } from './utils/htmlCompiler';
 import { DEFAULT_BODY_STYLE } from './constants/editorConstants';
 import ImageLibraryModal from './components/Properties/ImageLibraryModal';
 import { api } from '../../../services/storageAdapter';
+import { getMktPortalRoot } from '../../../utils/portalRoot';
 
 interface AIEmailGeneratorModalProps {
     isOpen: boolean;
@@ -20,7 +23,7 @@ interface AIEmailGeneratorModalProps {
     currentBlocks?: EmailBlock[];
     bodyStyle?: EmailBodyStyle;
     templateName?: string;
-    emailId?: string | number;  // reset state khi đổi email
+    emailId?: string | number;
 }
 
 type Step = 'prompt' | 'generating' | 'preview';
@@ -34,56 +37,90 @@ interface ImageItem {
     source: 'upload' | 'url';
 }
 
-/* ─── keyframes ────────────────────────────────────────────────────────── */
-const MODAL_STYLES = `
-@keyframes modalIn {
-    0%   { opacity: 0; transform: scale(0.88) translateY(24px); }
-    60%  { opacity: 1; transform: scale(1.02) translateY(-3px); }
-    100% { opacity: 1; transform: scale(1) translateY(0); }
-}
-@keyframes backdropIn {
-    from { opacity: 0; }
-    to   { opacity: 1; }
-}
-@keyframes slideUp {
-    from { opacity: 0; transform: translateY(10px); }
-    to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes shimmerBar {
-    0%   { background-position: -600px 0; }
-    100% { background-position: 600px 0; }
-}
-@keyframes spin2    { to { transform: rotate(360deg); } }
-@keyframes spin2rev { to { transform: rotate(-360deg); } }
-@keyframes pulseRing {
-    0%, 100% { transform: scale(1);    opacity: 0.5; }
-    50%       { transform: scale(1.2);  opacity: 0; }
-}
-@keyframes dotBounce {
-    0%, 80%, 100% { transform: scaleY(0.4); opacity: 0.3; }
-    40%            { transform: scaleY(1.2); opacity: 1; }
-}
-@keyframes fadeTabIn {
-    from { opacity: 0; transform: translateY(4px); }
-    to   { opacity: 1; transform: translateY(0); }
-}
-`;
+const SMART_PRESETS = [
+    {
+        id: 'scholarship',
+        badge: '🎓 Tuyển sinh & Học bổng',
+        prompt: 'Thiết kế email thông báo Chương trình Tuyển sinh & Quỹ Học bổng Quản trị Kinh doanh Quốc tế (MBA / DBA). Nêu bật 3 lợi ích cốt lõi cho nhà quản lý, lộ trình xét duyệt 3 bước, khối cảm nhận cựu học viên và nút Đăng ký nhận tư vấn.',
+        blocks: ['check_list', 'timeline', 'review'],
+        tone: 'luxury',
+    },
+    {
+        id: 'vip_event',
+        badge: '🎫 Thư mời Hội thảo VIP',
+        prompt: 'Thiết kế thư mời trang trọng tham dự Hội thảo Chuyên đề / Executive Workshop dành cho Lãnh đạo & Quản lý cấp cao. Có banner sự kiện nổi bật, lịch trình 3 phần (Timeline), giá trị nhận được và nút Xác nhận tham dự VIP.',
+        blocks: ['timeline', 'check_list'],
+        tone: 'luxury',
+    },
+    {
+        id: 'flash_offer',
+        badge: '🔥 Ưu đãi Giới hạn',
+        prompt: 'Thiết kế email chương trình Ưu đãi Đặc biệt giới hạn thời gian. Có đồng hồ đếm ngược (Countdown), danh sách đặc quyền ưu đãi (Check-list), cam kết chất lượng và nút Nhận ưu đãi ngay nổi bật.',
+        blocks: ['countdown', 'check_list'],
+        tone: 'persuasive',
+    },
+    {
+        id: 'onboarding',
+        badge: '💌 Chào mừng Học viên mới',
+        prompt: 'Thiết kế email Chào mừng Học viên / Khách hàng mới gia nhập hệ thống. Lời chào ấm áp cá nhân hóa {{first_name}}, 3 bước bắt đầu nhanh chóng (Timeline), danh mục tài liệu hướng dẫn và nút Truy cập cổng thông tin.',
+        blocks: ['timeline', 'check_list'],
+        tone: 'friendly',
+    },
+    {
+        id: 'survey_csat',
+        badge: '📊 Khảo sát Chất lượng',
+        prompt: 'Thiết kế email tri ân khách hàng kết hợp Khảo sát nhanh mức độ hài lòng (Survey Card). Nội dung ngắn gọn, tinh tế, nhấn mạnh giá trị ý kiến đóng góp của học viên và khối thẻ Khảo sát nhanh nổi bật ở trung tâm.',
+        blocks: ['survey_card'],
+        tone: 'friendly',
+    },
+    {
+        id: 'newsletter',
+        badge: '📰 Bản tin Quản trị',
+        prompt: 'Thiết kế Bản tin Tri thức & Xu hướng Quản trị hàng tháng. Bố cục hiện đại gồm 1 tiêu điểm chính, danh sách các góc nhìn chiến lược, 1 câu trích dẫn truyền cảm hứng (Quote) và nút Đọc chi tiết.',
+        blocks: ['quote', 'check_list'],
+        tone: 'professional',
+    },
+];
 
-const S = {
-    btn: (active: boolean): React.CSSProperties => ({
-        flex: 1, padding: '8px 12px', border: 'none', borderRadius: '10px',
-        fontSize: '12px', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
-        background: active ? 'linear-gradient(135deg, #8b5cf6, #2563eb)' : 'transparent',
-        color: active ? '#fff' : '#94a3b8',
-        boxShadow: active ? '0 2px 8px rgba(104,61,242,0.3)' : 'none',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-    }),
-};
+const TONE_OPTIONS = [
+    { id: 'professional', label: 'Chuyên nghiệp' },
+    { id: 'luxury', label: 'Sang trọng VIP' },
+    { id: 'persuasive', label: 'Thuyết phục cao' },
+    { id: 'friendly', label: 'Thân thiện' },
+    { id: 'concise', label: 'Tinh gọn' },
+];
+
+const BRAND_COLORS = [
+    { id: 'auto', label: 'Tự động', hex: '' },
+    { id: '#BD1D2D', label: 'Đỏ IDEAS', hex: '#BD1D2D' },
+    { id: '#1E3A8A', label: 'Xanh Navy', hex: '#1E3A8A' },
+    { id: '#0F766E', label: 'Xanh Ngọc', hex: '#0F766E' },
+    { id: '#B45309', label: 'Vàng Gold', hex: '#B45309' },
+    { id: '#0F172A', label: 'Đen Slate', hex: '#0F172A' },
+];
+
+const COMPONENT_TOGGLES = [
+    { id: 'check_list', label: 'Danh sách Lợi ích ✓', icon: ListChecks },
+    { id: 'timeline', label: 'Lộ trình / Lịch trình', icon: Clock },
+    { id: 'review', label: 'Cảm nhận Học viên', icon: Star },
+    { id: 'survey_card', label: 'Thẻ Khảo sát nhanh', icon: ClipboardCheck },
+    { id: 'countdown', label: 'Đồng hồ Đếm ngược', icon: CheckSquare },
+    { id: 'quote', label: 'Trích dẫn Nổi bật', icon: Quote },
+];
+
+const QUICK_REFINES = [
+    'Cắt gọn văn bản ngắn hơn 30%',
+    'Làm nút bấm CTA nổi bật và thu hút hơn',
+    'Thêm khối Thẻ Khảo sát nhanh (survey_card)',
+    'Thêm khối Cảm nhận Học viên (review)',
+    'Đổi bố cục sang phong cách sang trọng tối giản',
+];
 
 const findFirstImageUrl = (blocks: any[]): string | null => {
     if (!blocks || !Array.isArray(blocks)) return null;
     for (const b of blocks) {
-        if (b.type === 'image' && b.url && b.url.trim() !== '') {
+        if (!b || typeof b !== 'object') continue;
+        if (b.type === 'image' && b.url && typeof b.url === 'string' && b.url.trim() !== '') {
             return b.url;
         }
         if (b.children && Array.isArray(b.children) && b.children.length > 0) {
@@ -95,118 +132,57 @@ const findFirstImageUrl = (blocks: any[]): string | null => {
 };
 
 const ensureAbsoluteUrl = (url: string): string => {
-    if (!url) return '';
+    if (!url || typeof url !== 'string') return '';
     const trimmed = url.trim();
-    if (trimmed.startsWith('data:')) {
-        return trimmed;
-    }
-    if (/^https?:\/\//i.test(trimmed)) {
+    if (trimmed.startsWith('data:') || /^https?:\/\//i.test(trimmed)) {
         return trimmed;
     }
     if (trimmed.startsWith('//')) {
         return `https:${trimmed}`;
     }
-    // Specially handle cPanel paths like uploadss/
-    if (trimmed.includes('uploadss/')) {
-        const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
-        try {
-            const origin = new URL(api.baseUrl).origin;
-            return `${origin}${cleanPath}`;
-        } catch {
-            return `https://automation.ideas.edu.vn${cleanPath}`;
-        }
-    }
     if (trimmed.startsWith('/')) {
-        try {
-            const origin = new URL(api.baseUrl).origin;
-            return `${origin}${trimmed}`;
-        } catch {
-            return `https://automation.ideas.edu.vn${trimmed}`;
-        }
+        return trimmed;
     }
-    if (/^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,5}(:[0-9]{1,5})?(\/.*)?$/i.test(trimmed)) {
-        return `https://${trimmed}`;
-    }
-    try {
-        const base = api.baseUrl.replace(/\/+$/, '');
-        return `${base}/${trimmed}`;
-    } catch {
-        return `https://automation.ideas.edu.vn/${trimmed}`;
-    }
+    return `/${trimmed}`;
 };
 
-const getThumbnailUrl = (t: any, index: number) => {
-    let rawUrl = '';
-    if (t.thumbnail && t.thumbnail.trim() !== '' && !t.thumbnail.includes('placehold.co')) {
-        rawUrl = t.thumbnail;
-    } else if (t.blocks && Array.isArray(t.blocks)) {
+const getThumbnailUrl = (t: any): string => {
+    if (t?.thumbnail && typeof t.thumbnail === 'string' && t.thumbnail.trim() !== '' && !t.thumbnail.includes('placehold.co')) {
+        return ensureAbsoluteUrl(t.thumbnail);
+    }
+    if (t?.blocks && Array.isArray(t.blocks)) {
         const firstImg = findFirstImageUrl(t.blocks);
-        if (firstImg) rawUrl = firstImg;
+        if (firstImg) return ensureAbsoluteUrl(firstImg);
     }
-
-    if (rawUrl) {
-        return ensureAbsoluteUrl(rawUrl);
-    }
-
-    const defaults = [
-        'https://images.unsplash.com/photo-1557200134-90327ee9fafa?w=500&h=300&fit=crop',
-        'https://images.unsplash.com/photo-1513201099705-a9746e1e201f?w=500&h=300&fit=crop',
-        'https://images.unsplash.com/photo-1504711331083-9c895941bf81?w=500&h=300&fit=crop',
-        'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=500&h=300&fit=crop'
-    ];
-    return defaults[index % defaults.length];
+    return '';
 };
 
-const VisualTemplate: React.FC<{ template: any; bodyStyle: any }> = ({ template, bodyStyle }) => {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const [scale, setScale] = useState(0.25);
-
-    const html = template.htmlContent || (template.blocks ? compileHTML(template.blocks, bodyStyle || template.bodyStyle || DEFAULT_BODY_STYLE, template.name) : '');
-
-    useEffect(() => {
-        const updateScale = () => {
-            if (containerRef.current) {
-                setScale(containerRef.current.offsetWidth / 800);
-            }
-        };
-        updateScale();
-        const timer = setTimeout(updateScale, 100);
-        window.addEventListener('resize', updateScale);
-        return () => {
-            clearTimeout(timer);
-            window.removeEventListener('resize', updateScale);
-        };
-    }, []);
-
-    return (
-        <div ref={containerRef} style={{ width: '100%', height: '100%', backgroundColor: '#fff', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'flex-start', justifyContent: 'center' }}>
-            <div style={{
-                position: 'absolute',
-                top: 0,
-                transformOrigin: 'top center',
-                width: '800px',
-                height: '1000px',
-                transform: `scale(${scale})`,
-                pointerEvents: 'none'
-            }}>
-                <iframe
-                    srcDoc={html}
-                    style={{ width: '100%', height: '100%', border: 'none' }}
-                    title="preview"
-                    scrolling="no"
-                />
-            </div>
-        </div>
-    );
+const hasRealBlockObjects = (blocks?: any[]): boolean => {
+    return Boolean(Array.isArray(blocks) && blocks.length > 0 && blocks[0] && typeof blocks[0] === 'object' && blocks[0].type);
 };
+
+// Module cache for reference templates list so reopening modal is 0ms instant
+let cachedRefTemplates: any[] | null = null;
+const fullRefTemplateCache = new Map<string, any>();
 
 const AIEmailGeneratorModal: React.FC<AIEmailGeneratorModalProps> = ({
-    isOpen, onClose, onApply, onSaveSection, currentBlocks, bodyStyle = DEFAULT_BODY_STYLE, templateName = 'Email', emailId
+    isOpen,
+    onClose,
+    onApply,
+    onSaveSection,
+    currentBlocks,
+    bodyStyle = DEFAULT_BODY_STYLE,
+    templateName = 'Email',
+    emailId,
 }) => {
-    const [mode, setMode] = useState<Mode>('redesign');
+    const hasExistingBlocks = hasRealBlockObjects(currentBlocks);
+    const [mode, setMode] = useState<Mode>(hasExistingBlocks ? 'redesign' : 'generate');
     const [step, setStep] = useState<Step>('prompt');
     const [prompt, setPrompt] = useState('');
-    const [improveContent, setImproveContent] = useState(false);
+    const [tone, setTone] = useState<string>('professional');
+    const [brandColor, setBrandColor] = useState<string>('#BD1D2D');
+    const [includeBlocks, setIncludeBlocks] = useState<string[]>(['check_list']);
+    const [improveContent, setImproveContent] = useState(true);
     const [images, setImages] = useState<ImageItem[]>([]);
     const [urlInput, setUrlInput] = useState('');
     const [showUrlInput, setShowUrlInput] = useState(false);
@@ -217,83 +193,107 @@ const AIEmailGeneratorModal: React.FC<AIEmailGeneratorModalProps> = ({
     const [previewTab, setPreviewTab] = useState<PreviewTab>('new');
     const [error, setError] = useState('');
     const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop');
-    const [visible, setVisible] = useState(false);
-    const [templates, setTemplates] = useState<any[]>([]);
+    const [templates, setTemplates] = useState<any[]>(cachedRefTemplates || []);
+    const [refSearch, setRefSearch] = useState('');
     const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
     const [previewingTemplate, setPreviewingTemplate] = useState<any | null>(null);
+    const [loadingPreviewTpl, setLoadingPreviewTpl] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const iframeNewRef = useRef<HTMLIFrameElement>(null);
     const iframeOldRef = useRef<HTMLIFrameElement>(null);
 
     useEffect(() => {
-        if (isOpen) {
-            setTimeout(() => setVisible(true), 10);
-            // Compile old HTML on open if redesign blocks exist
-            if (currentBlocks && currentBlocks.length > 0) {
-                setMode('redesign');
-                setOldHtml(compileHTML(currentBlocks, bodyStyle, templateName));
-            } else {
-                setMode('generate');
-            }
+        if (!isOpen) return;
 
-            // Fetch templates for reference
-            const fetchTemplates = async () => {
-                try {
-                    const res = await api.get('templates');
-                    if (res.success && Array.isArray(res.data)) {
-                        const editorTpls = res.data.filter((t: any) => t.blocks && Array.isArray(t.blocks) && t.blocks.length > 0);
-                        setTemplates(editorTpls);
-                    }
-                } catch (err) {
-                    console.error('Failed to fetch templates for AI reference:', err);
-                }
-            };
-            fetchTemplates();
+        if (hasRealBlockObjects(currentBlocks)) {
+            setMode('redesign');
+            try {
+                setOldHtml(compileHTML(currentBlocks!, bodyStyle, templateName));
+            } catch {
+                setOldHtml('');
+            }
         } else {
-            setVisible(false);
+            setMode('generate');
+            setOldHtml('');
         }
-    }, [isOpen]);
 
-    const handleToggleTemplateSelection = (id: string) => {
-        setSelectedTemplateIds(prev => {
-            if (prev.includes(id)) {
-                return prev.filter(tId => tId !== id);
+        const fetchTemplates = async () => {
+            try {
+                const res = await api.get('templates');
+                if (res.success && Array.isArray(res.data)) {
+                    const editorTpls = res.data.filter((t: any) =>
+                        t && (t.hasBlocks || (Array.isArray(t.blocks) && t.blocks.length > 0))
+                    );
+                    cachedRefTemplates = editorTpls;
+                    setTemplates(editorTpls);
+                }
+            } catch (err) {
+                console.error('Failed to fetch templates for AI reference:', err);
             }
-            if (prev.length >= 3) {
-                return prev;
-            }
-            return [...prev, id];
-        });
-    };
+        };
+        fetchTemplates();
+    }, [isOpen, currentBlocks, bodyStyle, templateName]);
 
     const reset = useCallback(() => {
-        setStep('prompt'); setGeneratedBlocks(null);
-        setPreviewHtml(''); setError(''); setPreviewTab('new');
+        setStep('prompt');
+        setGeneratedBlocks(null);
+        setPreviewHtml('');
+        setError('');
+        setPreviewTab('new');
     }, []);
 
-    // Reset khi chuyển sang email khác (emailId thay đổi)
     const prevEmailIdRef = useRef<string | number | undefined>(undefined);
     useEffect(() => {
         if (emailId !== undefined && prevEmailIdRef.current !== undefined && emailId !== prevEmailIdRef.current) {
             reset();
         }
         prevEmailIdRef.current = emailId;
-    }, [emailId]);
+    }, [emailId, reset]);
 
-    const handleClose = () => {
-        setVisible(false);
-        setTimeout(() => { onClose(); }, 280);
-        // State được giữ nguyên — mở lại sẽ thấy đúng Trạng thái cũ
+    const handleToggleTemplateSelection = (id: string) => {
+        setSelectedTemplateIds(prev => {
+            if (prev.includes(id)) return prev.filter(tId => tId !== id);
+            if (prev.length >= 3) return prev;
+            return [...prev, id];
+        });
     };
 
-    /* ── image handlers ──────────────────────────────────────────────────── */
+    const handleToggleComponentBlock = (blockType: string) => {
+        setIncludeBlocks(prev =>
+            prev.includes(blockType) ? prev.filter(b => b !== blockType) : [...prev, blockType]
+        );
+    };
+
+    const handlePreviewReferenceTemplate = async (t: any) => {
+        const cached = fullRefTemplateCache.get(String(t.id)) || t;
+        setPreviewingTemplate(cached);
+
+        const hasFull = Boolean(cached.htmlContent || hasRealBlockObjects(cached.blocks));
+        if (hasFull || String(t.id).startsWith('sys_')) return;
+
+        setLoadingPreviewTpl(true);
+        try {
+            const res = await api.get(`templates/${t.id}`);
+            if (res.success && res.data) {
+                fullRefTemplateCache.set(String(t.id), res.data);
+                setPreviewingTemplate(res.data);
+            }
+        } catch {
+            // Keep thumbnail fallback
+        } finally {
+            setLoadingPreviewTpl(false);
+        }
+    };
+
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         Array.from(e.target.files || []).forEach(file => {
             const reader = new FileReader();
             reader.onload = ev => setImages(prev => [...prev, {
-                id: crypto.randomUUID(), url: ev.target?.result as string,
-                name: file.name, source: 'upload'
+                id: crypto.randomUUID(),
+                url: ev.target?.result as string,
+                name: file.name,
+                source: 'upload'
             }]);
             reader.readAsDataURL(file);
         });
@@ -303,366 +303,501 @@ const AIEmailGeneratorModal: React.FC<AIEmailGeneratorModalProps> = ({
     const handleAddUrl = () => {
         if (!urlInput.trim()) return;
         setImages(prev => [...prev, {
-            id: crypto.randomUUID(), url: urlInput.trim(),
-            name: urlInput.trim().split('/').pop() || 'Image', source: 'url'
+            id: crypto.randomUUID(),
+            url: urlInput.trim(),
+            name: urlInput.trim().split('/').pop() || 'Image',
+            source: 'url'
         }]);
-        setUrlInput(''); setShowUrlInput(false);
+        setUrlInput('');
+        setShowUrlInput(false);
     };
 
-    /* ── generate ─────────────────────────────────────────────────────────── */
-    const handleGenerate = async (useExisting = false) => {
-        if (!prompt.trim() && mode === 'generate') return;
-        setStep('generating'); setError('');
+    const handleGenerate = async (useExisting = false, customRefinePrompt?: string) => {
+        const effectivePrompt = (customRefinePrompt ?? prompt).trim();
+        if (!effectivePrompt && mode === 'generate' && !useExisting) return;
+        setStep('generating');
+        setError('');
         try {
-            let fullPrompt = prompt.trim();
+            let fullPrompt = effectivePrompt;
             const urlImages = images.filter(i => i.source === 'url');
-            if (urlImages.length) {
-                fullPrompt += `\n\nDanh sách ảnh sử dụng:\n${urlImages.map((u, i) => `${i + 1}. ${u.url}`).join('\n')}`;
-                fullPrompt += '\nĐặt các ảnh này vào block image phù hợp.';
+            if (urlImages.length > 0) {
+                fullPrompt += `\n\nDanh sách hình ảnh sử dụng trong email:\n${urlImages.map((u, i) => `${i + 1}. ${u.url}`).join('\n')}`;
+                fullPrompt += '\nHãy đặt các URL ảnh này vào các block image phù hợp trong bố cục.';
             }
-            const payload: any = {
-                prompt: fullPrompt || 'Redesign email hiện tại đẹp hơn, chuyên nghiệp hơn.',
+
+            const payload: Record<string, any> = {
+                prompt: fullPrompt || 'Thiết kế lại (Redesign) mẫu email hiện tại chuyên nghiệp, hiện đại và thu hút hơn.',
                 improve_content: improveContent,
+                tone,
+                brand_color: brandColor,
+                include_blocks: includeBlocks,
             };
+
             if (selectedTemplateIds.length > 0) {
                 payload.reference_template_ids = selectedTemplateIds;
             }
-            if (useExisting && currentBlocks?.length) {
+            if (useExisting && hasRealBlockObjects(currentBlocks)) {
                 payload.existing_blocks = currentBlocks;
                 payload.body_style = bodyStyle;
+            } else if (step === 'preview' && hasRealBlockObjects(generatedBlocks || undefined)) {
+                payload.existing_blocks = generatedBlocks;
+                payload.body_style = bodyStyle;
             }
+
             const data = await api.post('ai_email_generator', payload);
-            if (data.success && Array.isArray(data.data)) {
+            if (data.success && Array.isArray(data.data) && data.data.length > 0) {
                 setGeneratedBlocks(data.data);
                 setPreviewHtml(compileHTML(data.data, bodyStyle, templateName));
                 setPreviewTab('new');
                 setStep('preview');
             } else {
-                setError(data.message || 'AI không thể tạo email. Thử lại với prompt rõ hơn!');
+                setError(data.message || 'AI chưa tạo được cấu trúc email phù hợp. Vui lòng thử mô tả rõ hơn!');
                 setStep('prompt');
             }
         } catch {
-            setError('Lỗi kết nối server. Vui lòng thử lại.');
+            setError('Lỗi kết nối tới máy chủ AI. Vui lòng thử lại sau giây lát.');
             setStep('prompt');
         }
     };
 
     const handleApply = () => {
-        if (generatedBlocks) { onApply(generatedBlocks); handleClose(); }
+        if (generatedBlocks && generatedBlocks.length > 0) {
+            onApply(generatedBlocks);
+            onClose();
+        }
     };
+
+    const filteredTemplates = useMemo(() => {
+        const q = refSearch.trim().toLowerCase();
+        if (!q) return templates.slice(0, 24);
+        return templates.filter(t => (t.name || '').toLowerCase().includes(q)).slice(0, 24);
+    }, [templates, refSearch]);
+
+    const referencePreviewHtml = useMemo(() => {
+        if (!previewingTemplate) return '';
+        if (previewingTemplate.htmlContent) return previewingTemplate.htmlContent;
+        if (hasRealBlockObjects(previewingTemplate.blocks)) {
+            return compileHTML(
+                previewingTemplate.blocks,
+                previewingTemplate.bodyStyle || bodyStyle || DEFAULT_BODY_STYLE,
+                previewingTemplate.name,
+                { isPreview: true }
+            );
+        }
+        return '';
+    }, [previewingTemplate, bodyStyle]);
 
     if (!isOpen) return null;
 
     const isPreview = step === 'preview';
     const isDesigning = mode === 'redesign';
 
-    /* ── loading text ─────────────────────────────────────────────────────── */
-    const loadingTitle = isDesigning ? 'AI đang thiết kế lại email' : 'AI đang thiết kế email mới';
+    const loadingTitle = isDesigning ? 'AI đang thiết kế lại giao diện Email' : 'AI đang kiến tạo mẫu Email mới';
     const loadingDesc = isDesigning
-        ? (improveContent ? 'Phân tích & cải thiện nội dung, áp dụng layout mới...' : 'Giữ nguyên nội dung, làm đẹp layout & màu sắc...')
-        : 'Phân tích yêu cầu và tạo layout thông minh...';
+        ? (improveContent ? 'Đang tối ưu hóa văn bản, phân bổ bố cục & đồng bộ màu thương hiệu...' : 'Đang giữ nguyên nội dung, nâng cấp bố cục & khoảng cách chuẩn quốc tế...')
+        : 'Đang phân tích yêu cầu, xây dựng cấu trúc Section & tối ưu hiển thị đa thiết bị...';
 
-    return (
-        <>
-            <style>{MODAL_STYLES}</style>
+    const modalNode = (
+        <div
+            className="fixed inset-0 flex items-center justify-center p-3 sm:p-5"
+            style={{ zIndex: 2147483646 }}
+        >
+            {/* App-Standard Dark Blur Backdrop (100% matched with CustomerProfileDrawer) */}
+            <div
+                onClick={onClose}
+                className="fixed inset-0 transition-opacity duration-200"
+                style={{
+                    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                    backdropFilter: 'blur(6px)',
+                    WebkitBackdropFilter: 'blur(6px)',
+                }}
+            />
 
-            {/* Backdrop */}
-            <div onClick={handleClose} style={{
-                position: 'fixed', inset: 0, zIndex: 200000,
-                background: 'rgba(15,23,42,0.5)',
-                backdropFilter: 'blur(10px)',
-                animation: 'backdropIn 0.25s ease forwards',
-            }} />
+            {/* Main Modal Container */}
+            <div
+                onClick={(e) => e.stopPropagation()}
+                className={`relative w-full bg-white rounded-[22px] border border-slate-200 shadow-2xl flex flex-col overflow-hidden transition-all duration-200 ${
+                    isPreview ? 'max-w-[1080px] h-[88vh]' : 'max-w-[820px] max-h-[90vh]'
+                }`}
+            >
+                {/* Top Brand Accent Line */}
+                <div className="h-1 w-full bg-gradient-to-r from-[#BD1D2D] via-rose-500 to-[#BD1D2D] shrink-0" />
 
-            {/* Modal container */}
-            <div style={{
-                position: 'fixed', inset: 0, zIndex: 200001,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                padding: '16px', pointerEvents: 'none',
-            }}>
-                <div style={{
-                    pointerEvents: 'all',
-                    background: '#fff',
-                    borderRadius: '28px',
-                    boxShadow: '0 32px 80px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.04)',
-                    display: 'flex', flexDirection: 'column', overflow: 'hidden',
-                    width: '100%',
-                    maxWidth: isPreview ? '1000px' : '520px',
-                    maxHeight: isPreview ? '90vh' : 'auto',
-                    animation: visible ? 'modalIn 0.42s cubic-bezier(0.34,1.56,0.64,1) forwards' : 'none',
-                    opacity: visible ? 1 : 0,
-                }}>
-                    {/* Shimmer top bar */}
-                    <div style={{
-                        height: '4px', flexShrink: 0,
-                        background: 'linear-gradient(90deg, #8b5cf6, #2563eb, #8b5cf6, #2563eb)',
-                        backgroundSize: '600px 100%',
-                        animation: 'shimmerBar 2.5s linear infinite',
-                    }} />
-
-                    {/* Header */}
-                    <div style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        padding: '18px 24px 14px', borderBottom: '1px solid #f1f5f9', flexShrink: 0,
-                    }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <div style={{
-                                width: '38px', height: '38px', borderRadius: '12px',
-                                background: 'linear-gradient(135deg, #f5f3ff, #ddd6fe)',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                                boxShadow: '0 4px 12px rgba(104,61,242,0.2)',
-                            }}>
-                                <Sparkles style={{ width: 18, height: 18, color: '#2563eb' }} />
-                            </div>
-                            <div>
-                                <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.3px' }}>
-                                    {isPreview ? 'Xem trước & So sánh' : 'AI Email Designer'}
-                                </h2>
-                                <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>
-                                    {step === 'generating' ? loadingDesc : isPreview ? 'So sánh phiên bản cũ và mới trước khi áp dụng' : 'Mô tả email bạn muốn tạo'}
-                                </p>
-                            </div>
+                {/* Modal Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white shrink-0">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-[12px] bg-rose-50 border border-rose-200/80 flex items-center justify-center shrink-0">
+                            <Sparkles className="w-5 h-5 text-[#BD1D2D]" />
                         </div>
-                        <button onClick={handleClose} style={{
-                            width: '32px', height: '32px', border: 'none', borderRadius: '10px',
-                            background: '#f8fafc', cursor: 'pointer', display: 'flex',
-                            alignItems: 'center', justifyContent: 'center',
-                        }}
-                            onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
-                            onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}>
-                            <X style={{ width: 15, height: 15, color: '#64748b' }} />
-                        </button>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-[16px] font-bold text-slate-900 tracking-tight leading-tight">
+                                    {isPreview ? 'Xem trước & Tinh chỉnh Mẫu Email AI' : 'Trợ lý Thiết kế Email AI (SI IDEAS)'}
+                                </h2>
+                                <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider rounded-full bg-rose-50 text-[#BD1D2D] border border-rose-200">
+                                    AI Studio
+                                </span>
+                            </div>
+                            <p className="text-xs text-slate-500 font-medium mt-0.5">
+                                {step === 'generating'
+                                    ? loadingDesc
+                                    : isPreview
+                                        ? 'Kiểm tra hiển thị Desktop / Mobile hoặc yêu cầu AI tinh chỉnh thêm trước khi áp dụng'
+                                        : 'Khởi tạo bố cục Email Marketing chuẩn quốc tế chỉ trong vài giây'}
+                            </p>
+                        </div>
                     </div>
 
-                    {/* ══ PROMPT STEP ════════════════════════════════════════ */}
-                    {step === 'prompt' && (
-                        <div style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: '18px', animation: 'slideUp 0.3s ease', overflowY: 'auto' }}>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="w-8 h-8 rounded-[10px] bg-slate-100 hover:bg-slate-200/80 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors outline-none focus:outline-none cursor-pointer"
+                        title="Đóng"
+                    >
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
 
+                {/* ══ STEP 1: PROMPT & CONFIGURATION ═══════════════════════════════════════ */}
+                {step === 'prompt' && (
+                    <>
+                        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 custom-scrollbar">
                             {error && (
-                                <div style={{ display: 'flex', gap: '10px', padding: '12px 14px', background: '#fff1f2', borderRadius: '12px', border: '1px solid #fecdd3' }}>
-                                    <AlertCircle style={{ width: 15, height: 15, color: '#f43f5e', flexShrink: 0, marginTop: '1px' }} />
-                                    <p style={{ margin: 0, fontSize: '12px', color: '#e11d48', fontWeight: 500 }}>{error}</p>
+                                <div className="flex items-start gap-2.5 p-3.5 rounded-[14px] bg-rose-50 border border-rose-200 text-rose-700">
+                                    <AlertCircle className="w-4 h-4 text-[#BD1D2D] shrink-0 mt-0.5" />
+                                    <p className="text-xs font-semibold leading-relaxed">{error}</p>
                                 </div>
                             )}
 
-                            {/* Mode tabs — only show if there are existing blocks */}
-                            {currentBlocks && currentBlocks.length > 0 && (
-                                <div style={{ display: 'flex', gap: '6px', padding: '4px', background: '#f8fafc', borderRadius: '14px', border: '1px solid #e2e8f0' }}>
-                                    <button style={S.btn(mode === 'redesign')} onClick={() => setMode('redesign')}>
-                                        <RotateCcw style={{ width: 13, height: 13 }} /> Redesign hiện tại
+                            {/* Mode Switcher if Editor already has blocks */}
+                            {hasExistingBlocks && (
+                                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 border border-slate-200/80 rounded-[14px]">
+                                    <button
+                                        type="button"
+                                        onClick={() => setMode('redesign')}
+                                        className={`h-9 rounded-[10px] text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer outline-none focus:outline-none ${
+                                            mode === 'redesign'
+                                                ? 'bg-[#BD1D2D] text-white shadow-xs'
+                                                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                                        }`}
+                                    >
+                                        <RotateCcw className="w-3.5 h-3.5" />
+                                        <span>Làm đẹp & Thiết kế lại mẫu hiện tại</span>
                                     </button>
-                                    <button style={S.btn(mode === 'generate')} onClick={() => setMode('generate')}>
-                                        <Sparkles style={{ width: 13, height: 13 }} /> Tạo mới
+                                    <button
+                                        type="button"
+                                        onClick={() => setMode('generate')}
+                                        className={`h-9 rounded-[10px] text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer outline-none focus:outline-none ${
+                                            mode === 'generate'
+                                                ? 'bg-[#BD1D2D] text-white shadow-xs'
+                                                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                                        }`}
+                                    >
+                                        <Sparkles className="w-3.5 h-3.5" />
+                                        <span>Tạo mẫu Email hoàn toàn mới</span>
                                     </button>
                                 </div>
                             )}
 
-                            {/* ── REDESIGN MODE ── */}
                             {mode === 'redesign' ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-
-                                    {/* Toggle: Cải thiện nội dung */}
-                                    <button onClick={() => setImproveContent(!improveContent)}
-                                        style={{
-                                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                            padding: '14px 16px', borderRadius: '14px', cursor: 'pointer', border: 'none',
-                                            background: improveContent ? 'linear-gradient(135deg, #f5f3ff, #ede9fe)' : '#f8fafc',
-                                            outline: `1.5px solid ${improveContent ? '#ddd6fe' : '#e2e8f0'}`,
-                                            transition: 'all 0.2s',
-                                        }}>
-                                        <div style={{ textAlign: 'left' }}>
-                                            <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: improveContent ? '#5b21b6' : '#374151' }}>
-                                                Cải thiện nội dung
-                                            </p>
-                                            <p style={{ margin: '2px 0 0', fontSize: '11px', color: improveContent ? '#7c3aed' : '#94a3b8' }}>
-                                                {improveContent ? 'AI sẽ viết lại nội dung hay hơn' : 'Giữ nguyên văn bản, chỉ đổi layout & màu sắc'}
-                                            </p>
-                                        </div>
-                                        {improveContent
-                                            ? <ToggleRight style={{ width: 28, height: 28, color: '#2563eb', flexShrink: 0 }} />
-                                            : <ToggleLeft style={{ width: 28, height: 28, color: '#cbd5e1', flexShrink: 0 }} />
-                                        }
-                                    </button>
-
-                                    {/* Optional prompt */}
-                                    <div style={{ padding: '14px 16px', borderRadius: '14px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                                        <p style={{ margin: '0 0 8px', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                                            Gợi ý tùy chỉnh (không bắt buộc)
-                                        </p>
-                                        <textarea value={prompt} onChange={e => setPrompt(e.target.value)}
-                                            placeholder="VD: Làm màu trẻ trung hơn, thêm section đánh giá Khách hàng, dùng font sans-serif..."
-                                            style={{
-                                                width: '100%', height: '80px', border: '1.5px solid #e2e8f0',
-                                                borderRadius: '10px', padding: '10px 12px', fontSize: '13px',
-                                                resize: 'none', outline: 'none', background: '#fff',
-                                                color: '#1e293b', fontFamily: 'inherit', boxSizing: 'border-box',
-                                            }}
-                                            onFocus={e => e.currentTarget.style.borderColor = '#8b5cf6'}
-                                            onBlur={e => e.currentTarget.style.borderColor = '#e2e8f0'}
-                                        />
-                                    </div>
-
-                                    <button onClick={() => handleGenerate(true)} style={{
-                                        height: '50px', border: 'none', borderRadius: '14px', cursor: 'pointer',
-                                        background: 'linear-gradient(135deg, #8b5cf6, #2563eb)',
-                                        color: '#fff', fontSize: '14px', fontWeight: 800, fontFamily: 'inherit',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                                        boxShadow: '0 8px 24px rgba(104,61,242,0.35)', transition: 'transform 0.15s',
-                                    }}
-                                        onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.02)'; }}
-                                        onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}>
-                                        <Wand2 style={{ width: 18, height: 18 }} />
-                                        Xác nhận — AI Redesign ngay
-                                        <ArrowRight style={{ width: 16, height: 16 }} />
-                                    </button>
-                                </div>
-
-                            ) : (
-                                /* ── GENERATE MODE ── */
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                    <div>
-                                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>
-                                            Mô tả email
-                                        </label>
-                                        <textarea value={prompt} onChange={e => setPrompt(e.target.value)}
-                                            placeholder="Mô tả chi tiết email bạn muốn. VD: Email flash sale 48h cho shop thời trang, màu đỏ rượu vang, có 3 sản phẩm bán chạy, CTA mua ngay..."
-                                            rows={4}
-                                            style={{
-                                                width: '100%', border: '1.5px solid #e2e8f0', borderRadius: '14px',
-                                                padding: '12px 14px', fontSize: '13px', resize: 'none', outline: 'none',
-                                                color: '#1e293b', fontFamily: 'inherit', lineHeight: 1.6,
-                                                background: '#f8fafc', boxSizing: 'border-box', transition: 'border-color 0.2s',
-                                            }}
-                                            onFocus={e => e.currentTarget.style.borderColor = '#8b5cf6'}
-                                            onBlur={e => e.currentTarget.style.borderColor = '#e2e8f0'}
-                                            onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleGenerate(false); }}
-                                        />
-                                        <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#cbd5e1', textAlign: 'right' }}>Ctrl+Enter để Generate</p>
-                                    </div>
-
-                                    {/* Reference templates selection (1-3 templates) */}
-                                    {templates.length > 0 && (
-                                        <div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                                <label style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                                                    Chọn mẫu thiết kế tham khảo (Chọn tối đa 3 mẫu)
-                                                </label>
-                                                <span style={{ fontSize: '10px', fontWeight: 700, color: selectedTemplateIds.length > 0 ? '#2563eb' : '#94a3b8' }}>
-                                                    Đã chọn: {selectedTemplateIds.length}/3
-                                                </span>
+                                /* ── REDESIGN MODE ── */
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => setImproveContent(true)}
+                                            className={`p-4 rounded-[14px] border text-left transition-all cursor-pointer outline-none focus:outline-none ${
+                                                improveContent
+                                                    ? 'bg-rose-50/70 border-[#BD1D2D] ring-2 ring-[#BD1D2D]/10'
+                                                    : 'bg-white border-slate-200 hover:border-slate-300'
+                                            }`}
+                                        >
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="text-xs font-bold text-slate-900">Nâng cấp cả Bố cục & Văn bản</span>
+                                                <div className={`w-4 h-4 rounded-full flex items-center justify-center ${improveContent ? 'bg-[#BD1D2D] text-white' : 'border border-slate-300'}`}>
+                                                    {improveContent && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                                                </div>
                                             </div>
-                                            <div style={{ 
-                                                display: 'grid', 
-                                                gridTemplateColumns: 'repeat(2, 1fr)', 
-                                                gap: '12px', 
-                                                maxHeight: '230px', 
-                                                overflowY: 'auto', 
-                                                padding: '8px',
-                                                border: '1.5px solid #e2e8f0', 
-                                                borderRadius: '16px',
-                                                background: '#f8fafc',
-                                                boxSizing: 'border-box'
-                                            }}>
-                                                {templates.map((t, idx) => {
+                                            <p className="text-[11px] text-slate-500 leading-relaxed">
+                                                AI sẽ biên tập lại câu chữ súc tích, chuyên nghiệp hơn và thiết kế lại toàn bộ bố cục.
+                                            </p>
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => setImproveContent(false)}
+                                            className={`p-4 rounded-[14px] border text-left transition-all cursor-pointer outline-none focus:outline-none ${
+                                                !improveContent
+                                                    ? 'bg-rose-50/70 border-[#BD1D2D] ring-2 ring-[#BD1D2D]/10'
+                                                    : 'bg-white border-slate-200 hover:border-slate-300'
+                                            }`}
+                                        >
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="text-xs font-bold text-slate-900">Giữ nguyên Văn bản, chỉ đổi Layout</span>
+                                                <div className={`w-4 h-4 rounded-full flex items-center justify-center ${!improveContent ? 'bg-[#BD1D2D] text-white' : 'border border-slate-300'}`}>
+                                                    {!improveContent && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                                                </div>
+                                            </div>
+                                            <p className="text-[11px] text-slate-500 leading-relaxed">
+                                                Bảo toàn nội dung gốc, chỉ chuẩn hóa khoảng cách, cỡ chữ, màu sắc và nút bấm CTA.
+                                            </p>
+                                        </button>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                                            Yêu cầu tùy chỉnh thêm (Không bắt buộc)
+                                        </label>
+                                        <textarea
+                                            value={prompt}
+                                            onChange={e => setPrompt(e.target.value)}
+                                            placeholder="VD: Đổi sang tông màu Đỏ IDEAS sang trọng, thêm khối Khảo sát nhanh ở cuối, làm nổi bật nút Đăng ký..."
+                                            rows={3}
+                                            className="w-full rounded-[14px] border border-slate-300 bg-slate-50/60 focus:bg-white px-3.5 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#BD1D2D] transition-colors resize-none"
+                                        />
+                                    </div>
+                                </div>
+                            ) : (
+                                /* ── GENERATE NEW EMAIL MODE ── */
+                                <div className="space-y-4">
+                                    {/* 1. Smart Prompt Presets */}
+                                    <div>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                                                <Wand2 className="w-3.5 h-3.5 text-[#BD1D2D]" />
+                                                <span>Gợi ý kịch bản mẫu (1-Click)</span>
+                                            </label>
+                                            <span className="text-[11px] text-slate-400 font-medium">Bấm để điền nhanh nội dung chuẩn</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                            {SMART_PRESETS.map(preset => {
+                                                const isActive = prompt === preset.prompt;
+                                                return (
+                                                    <button
+                                                        key={preset.id}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setPrompt(preset.prompt);
+                                                            setIncludeBlocks(preset.blocks);
+                                                            setTone(preset.tone);
+                                                        }}
+                                                        className={`px-3 py-2 rounded-[11px] border text-left text-xs font-semibold transition-all cursor-pointer outline-none focus:outline-none truncate ${
+                                                            isActive
+                                                                ? 'bg-rose-50 border-[#BD1D2D] text-[#BD1D2D]'
+                                                                : 'bg-slate-50/80 border-slate-200 text-slate-700 hover:bg-white hover:border-slate-300'
+                                                        }`}
+                                                        title={preset.prompt}
+                                                    >
+                                                        {preset.badge}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    {/* 2. Main Prompt Textarea */}
+                                    <div>
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                                                Nội dung & Mục tiêu Email cần tạo <span className="text-[#BD1D2D]">*</span>
+                                            </label>
+                                            <span className="text-[11px] text-slate-400">Nhấn Ctrl + Enter để tạo nhanh</span>
+                                        </div>
+                                        <textarea
+                                            value={prompt}
+                                            onChange={e => setPrompt(e.target.value)}
+                                            placeholder="Mô tả nội dung email bạn muốn tạo. VD: Thiết kế email mời tham dự Hội thảo AI trong Quản trị Doanh nghiệp ngày 25/11 tại TP.HCM, có 3 diễn giả, lịch trình chi tiết và nút Đăng ký..."
+                                            rows={3}
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                                                    handleGenerate(false);
+                                                }
+                                            }}
+                                            className="w-full rounded-[14px] border border-slate-300 bg-slate-50/50 focus:bg-white px-3.5 py-2.5 text-[13px] text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#BD1D2D] transition-colors resize-none leading-relaxed"
+                                        />
+                                    </div>
+
+                                    {/* 3. Tone & Brand Color Row */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3.5 rounded-[14px] bg-slate-50/80 border border-slate-200/90">
+                                        {/* Tone selector */}
+                                        <div>
+                                            <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 mb-2">
+                                                <MessageSquare className="w-3.5 h-3.5 text-slate-500" />
+                                                <span>Giọng văn (Tone of Voice)</span>
+                                            </label>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {TONE_OPTIONS.map(t => (
+                                                    <button
+                                                        key={t.id}
+                                                        type="button"
+                                                        onClick={() => setTone(t.id)}
+                                                        className={`px-2.5 py-1.5 rounded-[8px] text-[11px] font-semibold border transition-all cursor-pointer outline-none focus:outline-none ${
+                                                            tone === t.id
+                                                                ? 'bg-[#BD1D2D] border-[#BD1D2D] text-white'
+                                                                : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                                                        }`}
+                                                    >
+                                                        {t.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Brand color selector */}
+                                        <div>
+                                            <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 mb-2">
+                                                <Palette className="w-3.5 h-3.5 text-slate-500" />
+                                                <span>Tông màu Chủ đạo</span>
+                                            </label>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {BRAND_COLORS.map(c => {
+                                                    const active = brandColor === c.id;
+                                                    return (
+                                                        <button
+                                                            key={c.id}
+                                                            type="button"
+                                                            onClick={() => setBrandColor(c.id)}
+                                                            className={`px-2.5 py-1.5 rounded-[8px] text-[11px] font-semibold border inline-flex items-center gap-1.5 transition-all cursor-pointer outline-none focus:outline-none ${
+                                                                active
+                                                                    ? 'bg-slate-900 border-slate-900 text-white'
+                                                                    : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                                                            }`}
+                                                        >
+                                                            {c.hex && (
+                                                                <span
+                                                                    className="w-3 h-3 rounded-full border border-white/40 shrink-0"
+                                                                    style={{ backgroundColor: c.hex }}
+                                                                />
+                                                            )}
+                                                            <span>{c.label}</span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* 4. Component Blocks to Include */}
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">
+                                            Khối thành phần muốn đưa vào Email (Tùy chọn)
+                                        </label>
+                                        <div className="flex flex-wrap gap-2">
+                                            {COMPONENT_TOGGLES.map(item => {
+                                                const Icon = item.icon;
+                                                const selected = includeBlocks.includes(item.id);
+                                                return (
+                                                    <button
+                                                        key={item.id}
+                                                        type="button"
+                                                        onClick={() => handleToggleComponentBlock(item.id)}
+                                                        className={`h-8 px-3 rounded-[10px] border text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer outline-none focus:outline-none ${
+                                                            selected
+                                                                ? 'bg-rose-50 border-[#BD1D2D] text-[#BD1D2D]'
+                                                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                                        }`}
+                                                    >
+                                                        <Icon className="w-3.5 h-3.5 shrink-0" />
+                                                        <span>{item.label}</span>
+                                                        {selected && <Check className="w-3 h-3 stroke-[2.5] ml-0.5" />}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    {/* 5. Reference Templates Picker (.webp Thumbnails — 0 Iframes!) */}
+                                    {templates.length > 0 && (
+                                        <div className="border border-slate-200 rounded-[16px] p-3.5 bg-slate-50/60">
+                                            <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                                                <div>
+                                                    <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
+                                                        Học theo phong cách mẫu có sẵn (Tối đa 3 mẫu)
+                                                    </label>
+                                                    <p className="text-[11px] text-slate-500">
+                                                        AI sẽ kế thừa bố cục Header, Font chữ, Màu sắc và Footer từ mẫu bạn chọn
+                                                    </p>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="relative">
+                                                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                                                        <input
+                                                            type="text"
+                                                            value={refSearch}
+                                                            onChange={e => setRefSearch(e.target.value)}
+                                                            placeholder="Tìm mẫu tham khảo..."
+                                                            data-no-autofocus="true"
+                                                            className="h-8 pl-8 pr-3 text-xs rounded-[9px] border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#BD1D2D] w-44"
+                                                        />
+                                                    </div>
+                                                    <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                                                        selectedTemplateIds.length > 0
+                                                            ? 'bg-[#BD1D2D] text-white'
+                                                            : 'bg-slate-200/80 text-slate-600'
+                                                    }`}>
+                                                        Đã chọn {selectedTemplateIds.length}/3
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[195px] overflow-y-auto pr-1 custom-scrollbar">
+                                                {filteredTemplates.map((t) => {
                                                     const isSelected = selectedTemplateIds.includes(t.id);
                                                     const isDisabled = !isSelected && selectedTemplateIds.length >= 3;
-                                                    const thumb = getThumbnailUrl(t, idx);
+                                                    const thumb = getThumbnailUrl(t);
                                                     return (
-                                                        <div 
+                                                        <div
                                                             key={t.id}
-                                                            style={{
-                                                                position: 'relative',
-                                                                borderRadius: '12px',
-                                                                overflow: 'hidden',
-                                                                border: `2px solid ${isSelected ? '#2563eb' : '#e2e8f0'}`,
-                                                                boxShadow: isSelected ? '0 4px 12px rgba(104,61,242,0.15)' : 'none',
-                                                                cursor: isDisabled ? 'not-allowed' : 'pointer',
-                                                                opacity: isDisabled ? 0.6 : 1,
-                                                                transition: 'all 0.25s ease',
-                                                                aspectRatio: '16/10',
-                                                                background: '#fff',
-                                                            }}
                                                             onClick={() => {
-                                                                if (!isDisabled) {
-                                                                    handleToggleTemplateSelection(t.id);
-                                                                }
+                                                                if (!isDisabled) handleToggleTemplateSelection(t.id);
                                                             }}
+                                                            className={`group relative rounded-[12px] overflow-hidden border-2 aspect-[16/10] bg-white transition-all ${
+                                                                isSelected
+                                                                    ? 'border-[#BD1D2D] ring-2 ring-[#BD1D2D]/15'
+                                                                    : 'border-slate-200 hover:border-slate-300'
+                                                            } ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                                                         >
-                                                            {/* Live Preview Email Template */}
-                                                            <VisualTemplate template={t} bodyStyle={bodyStyle} />
-                                                            
-                                                            {/* Shadow Overlay */}
-                                                            <div style={{
-                                                                position: 'absolute',
-                                                                inset: 0,
-                                                                background: 'linear-gradient(to top, rgba(15,23,42,0.85) 0%, rgba(15,23,42,0.3) 60%, rgba(15,23,42,0) 100%)',
-                                                                display: 'flex',
-                                                                flexDirection: 'column',
-                                                                justifyContent: 'end',
-                                                                padding: '8px 12px',
-                                                                boxSizing: 'border-box',
-                                                            }}>
-                                                                <p style={{
-                                                                    margin: 0,
-                                                                    fontSize: '11px',
-                                                                    fontWeight: 700,
-                                                                    color: '#fff',
-                                                                    textShadow: '0 1px 2px rgba(0,0,0,0.5)',
-                                                                    overflow: 'hidden',
-                                                                    textOverflow: 'ellipsis',
-                                                                    display: '-webkit-box',
-                                                                    WebkitLineClamp: 2,
-                                                                    WebkitBoxOrient: 'vertical',
-                                                                    lineHeight: '1.3',
-                                                                }}>
+                                                            {thumb ? (
+                                                                <img
+                                                                    src={thumb}
+                                                                    alt={t.name}
+                                                                    loading="lazy"
+                                                                    className="w-full h-full object-cover object-top"
+                                                                />
+                                                            ) : (
+                                                                <div className="w-full h-full bg-slate-100 flex items-center justify-center p-3 text-center">
+                                                                    <span className="text-[11px] font-semibold text-slate-500 line-clamp-2">{t.name}</span>
+                                                                </div>
+                                                            )}
+
+                                                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/90 via-slate-900/50 to-transparent p-2 pt-5">
+                                                                <p className="text-[11px] font-semibold text-white truncate leading-tight">
                                                                     {t.name}
                                                                 </p>
                                                             </div>
 
-                                                            {/* Top Left: Preview Button */}
+                                                            {/* Quick Eye Preview Button */}
                                                             <button
+                                                                type="button"
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
-                                                                    setPreviewingTemplate(t);
+                                                                    handlePreviewReferenceTemplate(t);
                                                                 }}
-                                                                title="Xem trước mẫu"
-                                                                style={{
-                                                                    position: 'absolute',
-                                                                    top: '8px',
-                                                                    left: '8px',
-                                                                    width: '26px',
-                                                                    height: '26px',
-                                                                    borderRadius: '8px',
-                                                                    border: 'none',
-                                                                    background: 'rgba(15,23,42,0.6)',
-                                                                    backdropFilter: 'blur(4px)',
-                                                                    cursor: 'pointer',
-                                                                    display: 'flex',
-                                                                    alignItems: 'center',
-                                                                    justifyContent: 'center',
-                                                                    zIndex: 10,
-                                                                }}
+                                                                title="Xem trước mẫu này"
+                                                                className="absolute top-2 left-2 w-6 h-6 rounded-[7px] bg-slate-900/65 hover:bg-slate-900 text-white flex items-center justify-center transition-colors outline-none focus:outline-none cursor-pointer"
                                                             >
-                                                                <Eye style={{ width: 13, height: 13, color: '#fff' }} />
+                                                                <Eye className="w-3.5 h-3.5" />
                                                             </button>
 
-                                                            {/* Top Right: Selection Badge */}
-                                                            <div style={{
-                                                                position: 'absolute',
-                                                                top: '8px',
-                                                                right: '8px',
-                                                                width: '20px',
-                                                                height: '20px',
-                                                                borderRadius: '50%',
-                                                                background: isSelected ? '#2563eb' : 'rgba(255,255,255,0.8)',
-                                                                border: isSelected ? 'none' : '1px solid #cbd5e1',
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'center',
-                                                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                                                                zIndex: 10,
-                                                            }}>
-                                                                {isSelected && <Check style={{ width: 11, height: 11, color: '#fff', strokeWidth: 3 }} />}
+                                                            {/* Selection Check Badge */}
+                                                            <div
+                                                                className={`absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center transition-colors ${
+                                                                    isSelected
+                                                                        ? 'bg-[#BD1D2D] text-white'
+                                                                        : 'bg-white/90 border border-slate-300 text-transparent'
+                                                                }`}
+                                                            >
+                                                                <Check className="w-3 h-3 stroke-[3]" />
                                                             </div>
                                                         </div>
                                                     );
@@ -671,337 +806,368 @@ const AIEmailGeneratorModal: React.FC<AIEmailGeneratorModalProps> = ({
                                         </div>
                                     )}
 
-                                    {/* Images section */}
-                                    <div>
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                            <label style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                                                Hình ảnh sử dụng
-                                            </label>
-                                            <div style={{ display: 'flex', gap: '6px' }}>
-                                                {[
-                                                    { icon: <Upload style={{ width: 11, height: 11 }} />, label: 'Tải lên', action: () => fileInputRef.current?.click(), amber: true },
-                                                    { icon: <Library style={{ width: 11, height: 11 }} />, label: 'Thư viện', action: () => setShowLibrary(true), amber: false },
-                                                    { icon: <Link2 style={{ width: 11, height: 11 }} />, label: 'URL', action: () => setShowUrlInput(!showUrlInput), amber: false },
-                                                ].map(b => (
-                                                    <button key={b.label} onClick={b.action} style={{
-                                                        display: 'flex', alignItems: 'center', gap: '4px',
-                                                        padding: '5px 9px', borderRadius: '8px', cursor: 'pointer', fontSize: '11px', fontWeight: 700,
-                                                        border: `1.5px solid ${b.amber ? '#ddd6fe' : '#e2e8f0'}`,
-                                                        background: b.amber ? '#f5f3ff' : '#f8fafc',
-                                                        color: b.amber ? '#2563eb' : '#64748b',
-                                                        transition: 'all 0.15s',
-                                                    }}
-                                                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#ddd6fe'; e.currentTarget.style.background = '#f5f3ff'; e.currentTarget.style.color = '#2563eb'; }}
-                                                        onMouseLeave={e => { e.currentTarget.style.borderColor = b.amber ? '#ddd6fe' : '#e2e8f0'; e.currentTarget.style.background = b.amber ? '#f5f3ff' : '#f8fafc'; e.currentTarget.style.color = b.amber ? '#2563eb' : '#64748b'; }}>
-                                                        {b.icon} {b.label}
-                                                    </button>
-                                                ))}
+                                    {/* 6. Optional Images Section */}
+                                    <div className="border border-slate-200 rounded-[14px] p-3.5 bg-white">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <div>
+                                                <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
+                                                    Hình ảnh đính kèm vào Email (Tùy chọn)
+                                                </label>
+                                                <p className="text-[11px] text-slate-400">Chèn ảnh Banner hoặc sản phẩm từ Thư viện / URL</p>
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowLibrary(true)}
+                                                    className="h-7 px-2.5 rounded-[8px] border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-[11px] font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer outline-none focus:outline-none"
+                                                >
+                                                    <Library className="w-3 h-3 text-[#BD1D2D]" />
+                                                    <span>Thư viện ảnh</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowUrlInput(!showUrlInput)}
+                                                    className="h-7 px-2.5 rounded-[8px] border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-[11px] font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer outline-none focus:outline-none"
+                                                >
+                                                    <Link2 className="w-3 h-3" />
+                                                    <span>Dán URL</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => fileInputRef.current?.click()}
+                                                    className="h-7 px-2.5 rounded-[8px] border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-[11px] font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer outline-none focus:outline-none"
+                                                >
+                                                    <Upload className="w-3 h-3" />
+                                                    <span>Tải lên</span>
+                                                </button>
                                             </div>
                                         </div>
 
                                         {showUrlInput && (
-                                            <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', animation: 'slideUp 0.2s ease' }}>
-                                                <input type="url" value={urlInput} onChange={e => setUrlInput(e.target.value)}
+                                            <div className="flex gap-2 mb-2.5">
+                                                <input
+                                                    type="url"
+                                                    value={urlInput}
+                                                    onChange={e => setUrlInput(e.target.value)}
                                                     placeholder="https://example.com/banner.jpg"
-                                                    autoFocus
-                                                    style={{
-                                                        flex: 1, border: '1.5px solid #e2e8f0', borderRadius: '10px',
-                                                        padding: '8px 12px', fontSize: '12px', outline: 'none',
-                                                        color: '#1e293b', fontFamily: 'inherit', background: '#f8fafc',
-                                                    }}
-                                                    onFocus={e => e.currentTarget.style.borderColor = '#8b5cf6'}
-                                                    onBlur={e => e.currentTarget.style.borderColor = '#e2e8f0'}
                                                     onKeyDown={e => { if (e.key === 'Enter') handleAddUrl(); }}
+                                                    className="flex-1 h-8 px-3 rounded-[9px] border border-slate-300 text-xs text-slate-800 focus:outline-none focus:border-[#BD1D2D]"
                                                 />
-                                                <button onClick={handleAddUrl} style={{
-                                                    padding: '8px 14px', border: 'none', borderRadius: '10px',
-                                                    background: 'linear-gradient(135deg, #8b5cf6, #2563eb)',
-                                                    cursor: 'pointer', color: '#fff',
-                                                }}>
-                                                    <Plus style={{ width: 14, height: 14 }} />
+                                                <button
+                                                    type="button"
+                                                    onClick={handleAddUrl}
+                                                    className="h-8 px-3 rounded-[9px] bg-[#BD1D2D] text-white text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                                                >
+                                                    <Plus className="w-3.5 h-3.5" /> Thêm
                                                 </button>
                                             </div>
                                         )}
 
-                                        {images.length > 0 ? (
-                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '8px' }}>
+                                        {images.length > 0 && (
+                                            <div className="grid grid-cols-6 gap-2 mt-2">
                                                 {images.map(img => (
-                                                    <div key={img.id} style={{ position: 'relative', aspectRatio: '1', borderRadius: '10px', overflow: 'hidden', border: '1.5px solid #e2e8f0' }}
-                                                        onMouseEnter={e => { const b = e.currentTarget.querySelector('button') as HTMLElement; if (b) b.style.opacity = '1'; }}
-                                                        onMouseLeave={e => { const b = e.currentTarget.querySelector('button') as HTMLElement; if (b) b.style.opacity = '0'; }}>
-                                                        <img src={img.url} alt={img.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                        <button onClick={() => setImages(prev => prev.filter(i => i.id !== img.id))}
-                                                            style={{ position: 'absolute', inset: 0, border: 'none', background: 'rgba(15,23,42,0.55)', cursor: 'pointer', opacity: 0, transition: 'opacity 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                            <Trash2 style={{ width: 15, height: 15, color: '#fff' }} />
+                                                    <div key={img.id} className="group relative aspect-square rounded-[9px] overflow-hidden border border-slate-200">
+                                                        <img src={img.url} alt={img.name} className="w-full h-full object-cover" />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setImages(prev => prev.filter(i => i.id !== img.id))}
+                                                            className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
+                                                        >
+                                                            <Trash2 className="w-4 h-4 text-white" />
                                                         </button>
                                                     </div>
                                                 ))}
-                                                <button onClick={() => fileInputRef.current?.click()} style={{
-                                                    aspectRatio: '1', border: '1.5px dashed #cbd5e1', borderRadius: '10px',
-                                                    background: '#f8fafc', cursor: 'pointer', display: 'flex', flexDirection: 'column',
-                                                    alignItems: 'center', justifyContent: 'center', gap: '3px',
-                                                }}
-                                                    onMouseEnter={e => e.currentTarget.style.borderColor = '#8b5cf6'}
-                                                    onMouseLeave={e => e.currentTarget.style.borderColor = '#cbd5e1'}>
-                                                    <ImagePlus style={{ width: 15, height: 15, color: '#94a3b8' }} />
-                                                    <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 600 }}>Thêm</span>
-                                                </button>
                                             </div>
-                                        ) : (
-                                            <button onClick={() => fileInputRef.current?.click()} style={{
-                                                width: '100%', padding: '18px', border: '1.5px dashed #cbd5e1', borderRadius: '14px',
-                                                background: '#f8fafc', cursor: 'pointer', display: 'flex', flexDirection: 'column',
-                                                alignItems: 'center', gap: '5px', boxSizing: 'border-box', transition: 'all 0.2s',
-                                            }}
-                                                onMouseEnter={e => { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.background = '#f5f3ff'; }}
-                                                onMouseLeave={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.background = '#f8fafc'; }}>
-                                                <ImagePlus style={{ width: 20, height: 20, color: '#cbd5e1' }} />
-                                                <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 500 }}>Kéo thả hoặc click để chọn ảnh</span>
-                                                <span style={{ fontSize: '10px', color: '#cbd5e1' }}>PNG, JPG, GIF, WebP</span>
-                                            </button>
                                         )}
-                                        <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleFileUpload} style={{ display: 'none' }} />
+                                        <input
+                                            ref={fileInputRef}
+                                            type="file"
+                                            accept="image/*"
+                                            multiple
+                                            onChange={handleFileUpload}
+                                            className="hidden"
+                                        />
                                     </div>
-
-                                    <button onClick={() => handleGenerate(false)} disabled={!prompt.trim()} style={{
-                                        height: '52px', border: 'none', borderRadius: '16px',
-                                        cursor: prompt.trim() ? 'pointer' : 'not-allowed',
-                                        background: prompt.trim() ? 'linear-gradient(135deg, #8b5cf6, #2563eb)' : '#f1f5f9',
-                                        color: prompt.trim() ? '#fff' : '#94a3b8',
-                                        fontSize: '14px', fontWeight: 800, fontFamily: 'inherit',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                                        boxShadow: prompt.trim() ? '0 8px 24px rgba(104,61,242,0.3)' : 'none',
-                                        transition: 'all 0.2s',
-                                    }}
-                                        onMouseEnter={e => { if (prompt.trim()) e.currentTarget.style.transform = 'scale(1.02)'; }}
-                                        onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}>
-                                        <Wand2 style={{ width: 18, height: 18 }} />
-                                        Generate Email với AI
-                                    </button>
                                 </div>
                             )}
                         </div>
-                    )}
 
-                    {/* ══ GENERATING STEP ════════════════════════════════════ */}
-                    {step === 'generating' && (
-                        <div style={{
-                            padding: '48px 40px 52px', display: 'flex', flexDirection: 'column',
-                            alignItems: 'center', gap: '24px', animation: 'slideUp 0.3s ease',
-                        }}>
-                            {/* Spinning rings */}
-                            <div style={{ position: 'relative', width: '96px', height: '96px' }}>
-                                <div style={{ position: 'absolute', inset: '-14px', borderRadius: '50%', border: '2px solid rgba(104,61,242,0.12)', animation: 'pulseRing 2s ease-in-out infinite' }} />
-                                <div style={{ position: 'absolute', inset: '4px', borderRadius: '50%', border: '2.5px solid transparent', borderTopColor: '#2563eb', borderRightColor: 'rgba(139,92,246,0.25)', animation: 'spin2 1.1s linear infinite' }} />
-                                <div style={{ position: 'absolute', inset: '15px', borderRadius: '50%', border: '2px solid transparent', borderBottomColor: '#2563eb', borderLeftColor: 'rgba(104,61,242,0.2)', animation: 'spin2rev 0.75s linear infinite' }} />
-                                <div style={{ position: 'absolute', inset: '26px', borderRadius: '50%', background: 'linear-gradient(135deg, #f5f3ff, #ede9fe)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 16px rgba(104,61,242,0.15)' }}>
-                                    <Sparkles style={{ width: 17, height: 17, color: '#2563eb' }} />
-                                </div>
-                            </div>
+                        {/* Modal Footer */}
+                        <div className="px-6 py-3.5 border-t border-slate-200 bg-slate-50 flex items-center justify-between shrink-0">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="h-9 px-4 rounded-[11px] border border-slate-200 bg-white hover:bg-slate-100 text-xs font-semibold text-slate-600 transition-colors cursor-pointer outline-none focus:outline-none"
+                            >
+                                Hủy bỏ
+                            </button>
 
-                            <div style={{ textAlign: 'center' }}>
-                                <p style={{ margin: '0 0 6px', fontSize: '17px', fontWeight: 800, color: '#0f172a' }}>{loadingTitle}</p>
-                                <p style={{ margin: 0, fontSize: '13px', color: '#94a3b8' }}>{loadingDesc}</p>
-                            </div>
+                            <button
+                                type="button"
+                                onClick={() => handleGenerate(mode === 'redesign')}
+                                disabled={mode === 'generate' && !prompt.trim()}
+                                className={`h-10 px-6 rounded-[12px] text-xs font-bold inline-flex items-center gap-2 transition-all outline-none focus:outline-none ${
+                                    mode === 'redesign' || prompt.trim()
+                                        ? 'bg-[#BD1D2D] hover:bg-[#a61927] text-white shadow-sm cursor-pointer'
+                                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                }`}
+                            >
+                                <Sparkles className="w-4 h-4" />
+                                <span>{mode === 'redesign' ? 'Bắt đầu Thiết kế lại bằng AI' : 'Khởi tạo Mẫu Email với AI'}</span>
+                                <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                    </>
+                )}
 
-                            {/* Bouncing dots */}
-                            <div style={{ display: 'flex', gap: '5px', alignItems: 'center', height: '20px' }}>
-                                {[0, 1, 2, 3, 4].map(i => (
-                                    <div key={i} style={{
-                                        width: i === 2 ? '26px' : '7px', height: '7px', borderRadius: '4px',
-                                        background: i === 2 ? 'linear-gradient(90deg, #8b5cf6, #2563eb)' : '#e2e8f0',
-                                        animation: 'dotBounce 1.2s ease-in-out infinite',
-                                        animationDelay: `${i * 0.12}s`,
-                                    }} />
-                                ))}
-                            </div>
-
-                            {/* Step badges */}
-                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                                {(isDesigning
-                                    ? ['Phân tích email gốc', 'Thiết kế layout mới', 'Áp dụng màu sắc']
-                                    : ['Phân tích prompt', 'Tạo section layout', 'Áp dụng màu sắc']
-                                ).map(t => (
-                                    <span key={t} style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: 700, color: '#64748b', background: '#f1f5f9', border: '1px solid #e2e8f0' }}>{t}</span>
-                                ))}
+                {/* ══ STEP 2: GENERATING STATE ════════════════════════════════════════════ */}
+                {step === 'generating' && (
+                    <div className="px-8 py-16 flex flex-col items-center justify-center text-center gap-5">
+                        <div className="relative w-20 h-20 flex items-center justify-center">
+                            <div className="absolute inset-0 rounded-full border-2 border-rose-100 animate-ping opacity-40" />
+                            <div className="w-16 h-16 rounded-[18px] bg-rose-50 border border-rose-200 flex items-center justify-center">
+                                <Loader2 className="w-8 h-8 text-[#BD1D2D] animate-spin" />
                             </div>
                         </div>
-                    )}
 
-                    {/* ══ PREVIEW STEP ═══════════════════════════════════════ */}
-                    {step === 'preview' && generatedBlocks && (
-                        <div style={{ display: 'flex', flex: 1, overflow: 'hidden', animation: 'slideUp 0.3s ease' }}>
+                        <div>
+                            <h3 className="text-base font-bold text-slate-900">{loadingTitle}</h3>
+                            <p className="text-xs text-slate-500 mt-1 max-w-md">{loadingDesc}</p>
+                        </div>
 
-                            {/* Left sidebar */}
-                            <div style={{
-                                width: '230px', flexShrink: 0, overflowY: 'auto',
-                                borderRight: '1px solid #f1f5f9', padding: '14px',
-                                display: 'flex', flexDirection: 'column', gap: '10px',
-                                background: '#fafafa',
-                            }}>
-                                {/* Success badge */}
-                                <div style={{ padding: '10px 12px', borderRadius: '12px', background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)', border: '1px solid #bbf7d0', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                                    <Check style={{ width: 14, height: 14, color: '#16a34a', flexShrink: 0, marginTop: '1px' }} />
-                                    <div>
-                                        <p style={{ margin: 0, fontSize: '11px', fontWeight: 800, color: '#15803d' }}>Tạo thành công!</p>
-                                        <p style={{ margin: '2px 0 0', fontSize: '10px', color: '#16a34a' }}>{generatedBlocks.length} sections</p>
-                                    </div>
+                        <div className="flex flex-wrap items-center justify-center gap-2 mt-1">
+                            {[
+                                '1. Phân tích ngữ cảnh & thương hiệu',
+                                '2. Dựng cấu trúc Section & CTA',
+                                '3. Tối ưu tương thích Gmail / Outlook',
+                            ].map(label => (
+                                <span
+                                    key={label}
+                                    className="px-3 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200"
+                                >
+                                    {label}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* ══ STEP 3: PREVIEW & QUICK REFINE ══════════════════════════════════════ */}
+                {step === 'preview' && generatedBlocks && (
+                    <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+                        {/* Left Control Sidebar */}
+                        <div className="w-full md:w-[270px] shrink-0 border-b md:border-b-0 md:border-r border-slate-200 bg-slate-50/70 p-4 flex flex-col gap-3.5 overflow-y-auto custom-scrollbar">
+                            <div className="p-3 rounded-[12px] bg-emerald-50 border border-emerald-200 flex items-start gap-2.5">
+                                <div className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+                                    <Check className="w-3 h-3 stroke-[3]" />
                                 </div>
-
-                                {/* Refine */}
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '10px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Tinh chỉnh thêm</label>
-                                    <textarea value={prompt} onChange={e => setPrompt(e.target.value)}
-                                        placeholder="Thay đổi yêu cầu..." rows={4}
-                                        style={{ width: '100%', border: '1.5px solid #e2e8f0', borderRadius: '10px', padding: '8px 10px', fontSize: '11px', resize: 'none', outline: 'none', color: '#1e293b', fontFamily: 'inherit', background: '#fff', boxSizing: 'border-box' }}
-                                        onFocus={e => e.currentTarget.style.borderColor = '#8b5cf6'}
-                                        onBlur={e => e.currentTarget.style.borderColor = '#e2e8f0'}
-                                    />
+                                    <p className="text-xs font-bold text-emerald-900">Đã thiết kế hoàn tất!</p>
+                                    <p className="text-[11px] text-emerald-700 mt-0.5">
+                                        Gồm {generatedBlocks.length} phân đoạn (Sections) chuẩn hiển thị.
+                                    </p>
                                 </div>
+                            </div>
 
-                                <button onClick={() => handleGenerate(mode === 'redesign')} style={{
-                                    height: '34px', border: 'none', borderRadius: '10px', cursor: 'pointer',
-                                    background: 'linear-gradient(135deg, #8b5cf6, #2563eb)', color: '#fff',
-                                    fontSize: '11px', fontWeight: 800, fontFamily: 'inherit',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                                    boxShadow: '0 4px 12px rgba(104,61,242,0.3)',
-                                }}>
-                                    <RefreshCw style={{ width: 11, height: 11 }} /> Generate lại
-                                </button>
-
-                                <button onClick={() => setStep('prompt')} style={{
-                                    height: '30px', border: '1.5px solid #e2e8f0', borderRadius: '10px',
-                                    background: '#fff', cursor: 'pointer', fontSize: '11px', fontWeight: 600,
-                                    color: '#64748b', fontFamily: 'inherit',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
-                                }}>
-                                    <ChevronLeft style={{ width: 11, height: 11 }} /> Quay lại
-                                </button>
-
-                                {/* Structure list */}
-                                <div style={{ paddingTop: '8px', borderTop: '1px solid #f1f5f9' }}>
-                                    <p style={{ margin: '0 0 8px', fontSize: '10px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Cấu trúc</p>
-                                    {generatedBlocks.map((b, i) => (
-                                        <div key={b.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px', group: 'true' } as any}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
-                                                <span style={{ width: '18px', height: '18px', borderRadius: '5px', flexShrink: 0, background: 'linear-gradient(135deg, #8b5cf6, #2563eb)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '8px', fontWeight: 900, color: '#fff' }}>{i + 1}</span>
-                                                <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 500, textTransform: 'capitalize', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.type}</span>
-                                            </div>
-                                            <button
-                                                onClick={() => onSaveSection?.(b)}
-                                                style={{
-                                                    padding: '4px', border: 'none', background: 'transparent', cursor: 'pointer', color: '#cbd5e1',
-                                                    transition: 'all 0.2s', display: 'flex', alignItems: 'center'
-                                                }}
-                                                title="Lưu vào thư viện"
-                                                onMouseEnter={e => e.currentTarget.style.color = '#2563eb'}
-                                                onMouseLeave={e => e.currentTarget.style.color = '#cbd5e1'}
-                                            >
-                                                <Library style={{ width: 12, height: 12 }} />
-                                            </button>
-                                        </div>
+                            {/* 1-Click Quick Refinements */}
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                                    Tinh chỉnh nhanh (1-Click)
+                                </label>
+                                <div className="flex flex-col gap-1.5">
+                                    {QUICK_REFINES.map(chip => (
+                                        <button
+                                            key={chip}
+                                            type="button"
+                                            onClick={() => {
+                                                setPrompt(chip);
+                                                handleGenerate(true, chip);
+                                            }}
+                                            className="px-2.5 py-1.5 rounded-[9px] border border-slate-200 bg-white hover:border-[#BD1D2D] hover:text-[#BD1D2D] text-left text-[11px] font-semibold text-slate-700 transition-colors cursor-pointer outline-none focus:outline-none"
+                                        >
+                                            ✨ {chip}
+                                        </button>
                                     ))}
                                 </div>
                             </div>
 
-                            {/* Preview pane */}
-                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                                {/* Toolbar with compare tabs */}
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid #f1f5f9', flexShrink: 0, background: '#fff', gap: '10px' }}>
+                            {/* Custom Refine Input */}
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                                    Hoặc nhập yêu cầu chỉnh sửa
+                                </label>
+                                <textarea
+                                    value={prompt}
+                                    onChange={e => setPrompt(e.target.value)}
+                                    placeholder="Nhập thay đổi bạn muốn..."
+                                    rows={3}
+                                    className="w-full rounded-[10px] border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#BD1D2D] resize-none"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => handleGenerate(true)}
+                                    className="mt-2 w-full h-9 rounded-[10px] bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer outline-none focus:outline-none"
+                                >
+                                    <RefreshCw className="w-3.5 h-3.5" />
+                                    <span>Tạo lại theo yêu cầu</span>
+                                </button>
+                            </div>
 
-                                    {/* Compare tabs: Mới / Cũ */}
-                                    <div style={{ display: 'flex', gap: '4px', padding: '3px', background: '#f1f5f9', borderRadius: '10px' }}>
-                                        <button onClick={() => setPreviewTab('new')} style={{
-                                            padding: '5px 14px', border: 'none', borderRadius: '7px', cursor: 'pointer', fontSize: '11px', fontWeight: 700,
-                                            background: previewTab === 'new' ? 'linear-gradient(135deg, #8b5cf6, #2563eb)' : 'transparent',
-                                            color: previewTab === 'new' ? '#fff' : '#94a3b8', transition: 'all 0.2s',
-                                            display: 'flex', alignItems: 'center', gap: '5px',
-                                        }}>
-                                            <Sparkles style={{ width: 11, height: 11 }} /> Mới
-                                        </button>
-                                        <button onClick={() => setPreviewTab('old')} disabled={!oldHtml} style={{
-                                            padding: '5px 14px', border: 'none', borderRadius: '7px', cursor: oldHtml ? 'pointer' : 'not-allowed', fontSize: '11px', fontWeight: 700,
-                                            background: previewTab === 'old' ? '#1e293b' : 'transparent',
-                                            color: previewTab === 'old' ? '#fff' : '#94a3b8', transition: 'all 0.2s',
-                                            display: 'flex', alignItems: 'center', gap: '5px',
-                                            opacity: oldHtml ? 1 : 0.4,
-                                        }}>
-                                            <Eye style={{ width: 11, height: 11 }} /> Cũ
-                                        </button>
-                                    </div>
+                            <button
+                                type="button"
+                                onClick={() => setStep('prompt')}
+                                className="h-8 rounded-[10px] border border-slate-200 bg-white hover:bg-slate-100 text-xs font-semibold text-slate-600 flex items-center justify-center gap-1 transition-colors cursor-pointer outline-none focus:outline-none"
+                            >
+                                <ChevronLeft className="w-3.5 h-3.5" />
+                                <span>Quay lại cấu hình</span>
+                            </button>
 
-                                    {/* Viewport toggle */}
-                                    <div style={{ display: 'flex', gap: '2px', padding: '3px', background: '#f1f5f9', borderRadius: '10px' }}>
-                                        {(['desktop', 'mobile'] as const).map(v => (
-                                            <button key={v} onClick={() => setViewMode(v)} style={{
-                                                padding: '5px 10px', border: 'none', borderRadius: '7px', cursor: 'pointer',
-                                                background: viewMode === v ? 'linear-gradient(135deg, #8b5cf6, #2563eb)' : 'transparent',
-                                                color: viewMode === v ? '#fff' : '#94a3b8', transition: 'all 0.2s',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            }}>
-                                                {v === 'desktop' ? <Monitor style={{ width: 13, height: 13 }} /> : <Smartphone style={{ width: 13, height: 13 }} />}
-                                            </button>
-                                        ))}
-                                    </div>
-
-                                    {/* Apply button */}
-                                    <button onClick={handleApply} style={{
-                                        height: '34px', padding: '0 18px', border: 'none', borderRadius: '10px', cursor: 'pointer',
-                                        background: 'linear-gradient(135deg, #8b5cf6, #2563eb)',
-                                        color: '#fff', fontSize: '12px', fontWeight: 800, fontFamily: 'inherit',
-                                        display: 'flex', alignItems: 'center', gap: '6px',
-                                        boxShadow: '0 4px 16px rgba(104,61,242,0.35)', transition: 'transform 0.15s', marginLeft: 'auto',
-                                    }}
-                                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.04)'}
-                                        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
-                                        <Check style={{ width: 13, height: 13 }} />
-                                        Áp dụng vào Builder
-                                    </button>
-                                </div>
-
-                                {/* Tỷ lệ banner */}
-                                {previewTab === 'old' && (
-                                    <div style={{ padding: '6px 16px', background: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                                        <Eye style={{ width: 12, height: 12, color: '#94a3b8' }} />
-                                        <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>Xem email gốc — chưa được chỉnh sửa</span>
-                                    </div>
-                                )}
-                                {previewTab === 'new' && (
-                                    <div style={{ padding: '6px 16px', background: 'linear-gradient(90deg, #f5f3ff, #fff)', display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0, borderBottom: '1px solid #ddd6fe' }}>
-                                        <Sparkles style={{ width: 12, height: 12, color: '#2563eb' }} />
-                                        <span style={{ fontSize: '11px', color: '#5b21b6', fontWeight: 600 }}>Phiên bản mới — AI đã thiết kế</span>
-                                    </div>
-                                )}
-
-                                {/* Iframe */}
-                                <div style={{ flex: 1, overflowY: 'auto', background: '#f1f5f9', padding: '20px', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
-                                    <div style={{
-                                        background: '#fff', borderRadius: '14px', overflow: 'hidden',
-                                        width: viewMode === 'mobile' ? '375px' : '100%',
-                                        maxWidth: '640px',
-                                        boxShadow: '0 8px 32px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)',
-                                        transition: 'width 0.3s ease',
-                                        animation: 'fadeTabIn 0.25s ease',
-                                    }}>
-                                        {previewTab === 'new' ? (
-                                            <iframe ref={iframeNewRef} srcDoc={previewHtml} title="Preview mới"
-                                                style={{ width: '100%', border: 'none', minHeight: '480px', display: 'block' }}
-                                                sandbox="allow-same-origin"
-                                                onLoad={() => { const f = iframeNewRef.current; if (f?.contentDocument) f.style.height = f.contentDocument.documentElement.scrollHeight + 'px'; }}
-                                            />
-                                        ) : (
-                                            <iframe ref={iframeOldRef} srcDoc={oldHtml} title="Preview cũ"
-                                                style={{ width: '100%', border: 'none', minHeight: '480px', display: 'block' }}
-                                                sandbox="allow-same-origin"
-                                                onLoad={() => { const f = iframeOldRef.current; if (f?.contentDocument) f.style.height = f.contentDocument.documentElement.scrollHeight + 'px'; }}
-                                            />
-                                        )}
-                                    </div>
+                            {/* Section Structure */}
+                            <div className="pt-2 border-t border-slate-200">
+                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                                    Cấu trúc các khối ({generatedBlocks.length})
+                                </p>
+                                <div className="space-y-1">
+                                    {generatedBlocks.map((b, i) => (
+                                        <div
+                                            key={b.id || i}
+                                            className="flex items-center justify-between px-2.5 py-1.5 rounded-[8px] bg-white border border-slate-200/80 text-xs"
+                                        >
+                                            <div className="flex items-center gap-2 truncate">
+                                                <span className="w-4 h-4 rounded bg-rose-50 text-[#BD1D2D] text-[10px] font-bold flex items-center justify-center shrink-0">
+                                                    {i + 1}
+                                                </span>
+                                                <span className="text-[11px] font-semibold text-slate-700 capitalize truncate">
+                                                    {b.type}
+                                                </span>
+                                            </div>
+                                            {onSaveSection && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onSaveSection(b)}
+                                                    title="Lưu Section này vào thư viện"
+                                                    className="text-slate-400 hover:text-[#BD1D2D] p-0.5 cursor-pointer"
+                                                >
+                                                    <Library className="w-3.5 h-3.5" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         </div>
-                    )}
-                </div>
+
+                        {/* Right Live Preview Canvas */}
+                        <div className="flex-1 flex flex-col overflow-hidden bg-slate-100">
+                            {/* Preview Toolbar */}
+                            <div className="px-4 py-2.5 bg-white border-b border-slate-200 flex items-center justify-between gap-3 shrink-0">
+                                <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-[10px] border border-slate-200/70">
+                                    <button
+                                        type="button"
+                                        onClick={() => setPreviewTab('new')}
+                                        className={`h-7 px-3 rounded-[7px] text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer outline-none focus:outline-none ${
+                                            previewTab === 'new'
+                                                ? 'bg-[#BD1D2D] text-white'
+                                                : 'text-slate-600 hover:text-slate-900'
+                                        }`}
+                                    >
+                                        <Sparkles className="w-3 h-3" />
+                                        <span>Phiên bản AI mới</span>
+                                    </button>
+                                    {oldHtml && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setPreviewTab('old')}
+                                            className={`h-7 px-3 rounded-[7px] text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer outline-none focus:outline-none ${
+                                                previewTab === 'old'
+                                                    ? 'bg-slate-800 text-white'
+                                                    : 'text-slate-600 hover:text-slate-900'
+                                            }`}
+                                        >
+                                            <Eye className="w-3 h-3" />
+                                            <span>Phiên bản trước</span>
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-[10px] border border-slate-200/70">
+                                    <button
+                                        type="button"
+                                        onClick={() => setViewMode('desktop')}
+                                        className={`h-7 px-2.5 rounded-[7px] text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer outline-none focus:outline-none ${
+                                            viewMode === 'desktop' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500'
+                                        }`}
+                                        title="Xem giao diện Máy tính"
+                                    >
+                                        <Monitor className="w-3.5 h-3.5" />
+                                        <span className="hidden sm:inline">Desktop</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setViewMode('mobile')}
+                                        className={`h-7 px-2.5 rounded-[7px] text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer outline-none focus:outline-none ${
+                                            viewMode === 'mobile' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500'
+                                        }`}
+                                        title="Xem giao diện Điện thoại"
+                                    >
+                                        <Smartphone className="w-3.5 h-3.5" />
+                                        <span className="hidden sm:inline">Mobile</span>
+                                    </button>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={handleApply}
+                                    className="h-9 px-5 rounded-[11px] bg-[#BD1D2D] hover:bg-[#a61927] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer outline-none focus:outline-none ml-auto"
+                                >
+                                    <Check className="w-4 h-4 stroke-[2.5]" />
+                                    <span>Áp dụng vào Trình thiết kế</span>
+                                </button>
+                            </div>
+
+                            {/* Preview Iframe Container */}
+                            <div className="flex-1 overflow-y-auto p-5 flex justify-center items-start custom-scrollbar">
+                                <div
+                                    className="bg-white rounded-[16px] border border-slate-200/90 shadow-sm overflow-hidden transition-all duration-200"
+                                    style={{
+                                        width: viewMode === 'mobile' ? '375px' : '100%',
+                                        maxWidth: '640px',
+                                    }}
+                                >
+                                    {previewTab === 'new' ? (
+                                        <iframe
+                                            ref={iframeNewRef}
+                                            srcDoc={previewHtml}
+                                            title="Preview Email AI"
+                                            className="w-full border-0 min-h-[500px] block"
+                                            sandbox="allow-same-origin"
+                                            onLoad={() => {
+                                                const f = iframeNewRef.current;
+                                                if (f?.contentDocument) {
+                                                    f.style.height = Math.max(500, f.contentDocument.documentElement.scrollHeight) + 'px';
+                                                }
+                                            }}
+                                        />
+                                    ) : (
+                                        <iframe
+                                            ref={iframeOldRef}
+                                            srcDoc={oldHtml}
+                                            title="Preview Email Gốc"
+                                            className="w-full border-0 min-h-[500px] block"
+                                            sandbox="allow-same-origin"
+                                            onLoad={() => {
+                                                const f = iframeOldRef.current;
+                                                if (f?.contentDocument) {
+                                                    f.style.height = Math.max(500, f.contentDocument.documentElement.scrollHeight) + 'px';
+                                                }
+                                            }}
+                                        />
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Image Library Modal */}
@@ -1009,101 +1175,93 @@ const AIEmailGeneratorModal: React.FC<AIEmailGeneratorModalProps> = ({
                 isOpen={showLibrary}
                 onClose={() => setShowLibrary(false)}
                 onSelect={(url) => {
-                    setImages(prev => [...prev, { id: crypto.randomUUID(), url, name: url.split('/').pop() || 'Image', source: 'url' }]);
+                    setImages(prev => [...prev, {
+                        id: crypto.randomUUID(),
+                        url,
+                        name: url.split('/').pop() || 'Image',
+                        source: 'url'
+                    }]);
                     setShowLibrary(false);
                 }}
             />
 
-            {/* Template Live Preview Dialog */}
+            {/* Reference Template Live Preview Dialog */}
             {previewingTemplate && (
-                <div style={{
-                    position: 'fixed',
-                    inset: 0,
-                    zIndex: 200002,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '24px',
-                    boxSizing: 'border-box',
-                }}>
-                    {/* Dark backdrop */}
-                    <div 
+                <div
+                    className="fixed inset-0 flex items-center justify-center p-4"
+                    style={{ zIndex: 2147483647 }}
+                >
+                    <div
                         onClick={() => setPreviewingTemplate(null)}
+                        className="fixed inset-0"
                         style={{
-                            position: 'absolute',
-                            inset: 0,
-                            background: 'rgba(15,23,42,0.6)',
-                            backdropFilter: 'blur(4px)',
-                            animation: 'backdropIn 0.2s ease forwards',
-                        }} 
+                            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                            backdropFilter: 'blur(6px)',
+                            WebkitBackdropFilter: 'blur(6px)',
+                        }}
                     />
-                    
-                    {/* Preview box */}
-                    <div style={{
-                        position: 'relative',
-                        width: '100%',
-                        maxWidth: '680px',
-                        height: '80vh',
-                        background: '#fff',
-                        borderRadius: '24px',
-                        boxShadow: '0 24px 64px rgba(0,0,0,0.25)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        overflow: 'hidden',
-                        animation: 'modalIn 0.3s cubic-bezier(0.34,1.56,0.64,1) forwards',
-                    }}>
-                        {/* Header */}
-                        <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            padding: '16px 20px',
-                            borderBottom: '1px solid #f1f5f9',
-                        }}>
+                    <div
+                        onClick={e => e.stopPropagation()}
+                        className="relative w-full max-w-[680px] h-[82vh] bg-white rounded-[20px] border border-slate-200 shadow-2xl flex flex-col overflow-hidden"
+                    >
+                        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200 bg-white shrink-0">
                             <div>
-                                <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: '#0f172a' }}>
-                                    Xem trước mẫu: {previewingTemplate.name}
+                                <h3 className="text-sm font-bold text-slate-900">
+                                    Xem trước mẫu tham khảo: {previewingTemplate.name}
                                 </h3>
-                                <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#64748b' }}>
-                                    Mẫu thiết kế tham khảo cho AI
+                                <p className="text-[11px] text-slate-500">
+                                    Mẫu thiết kế tham khảo cấu trúc cho AI
                                 </p>
                             </div>
-                            <button 
-                                onClick={() => setPreviewingTemplate(null)}
-                                style={{
-                                    width: '28px',
-                                    height: '28px',
-                                    borderRadius: '8px',
-                                    border: 'none',
-                                    background: '#f8fafc',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                }}
-                            >
-                                <X style={{ width: 14, height: 14, color: '#64748b' }} />
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        handleToggleTemplateSelection(previewingTemplate.id);
+                                        setPreviewingTemplate(null);
+                                    }}
+                                    className="h-8 px-3 rounded-[9px] bg-[#BD1D2D] text-white text-xs font-bold cursor-pointer"
+                                >
+                                    {selectedTemplateIds.includes(previewingTemplate.id) ? 'Bỏ chọn mẫu này' : 'Chọn làm mẫu tham khảo'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setPreviewingTemplate(null)}
+                                    className="w-8 h-8 rounded-[9px] bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center cursor-pointer"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
                         </div>
 
-                        {/* Iframe View */}
-                        <div style={{ flex: 1, background: '#f1f5f9', position: 'relative' }}>
-                            <iframe
-                                title="Template Preview"
-                                srcDoc={compileHTML(previewingTemplate.blocks, bodyStyle, previewingTemplate.name, { isPreview: true })}
-                                style={{
-                                    width: '100%',
-                                    height: '100%',
-                                    border: 'none',
-                                    background: '#fff',
-                                }}
-                            />
+                        <div className="flex-1 bg-slate-100 relative overflow-y-auto">
+                            {loadingPreviewTpl ? (
+                                <div className="p-6 space-y-4">
+                                    <div className="h-44 rounded-[14px] bg-slate-200/80 animate-pulse" />
+                                    <div className="h-6 w-2/3 rounded bg-slate-200/80 animate-pulse" />
+                                    <div className="h-24 rounded-[14px] bg-slate-200/80 animate-pulse" />
+                                </div>
+                            ) : referencePreviewHtml ? (
+                                <iframe
+                                    title="Reference Template Preview"
+                                    srcDoc={referencePreviewHtml}
+                                    className="w-full h-full border-0 bg-white"
+                                />
+                            ) : getThumbnailUrl(previewingTemplate) ? (
+                                <img
+                                    src={getThumbnailUrl(previewingTemplate)}
+                                    alt={previewingTemplate.name}
+                                    className="w-full h-auto object-contain"
+                                />
+                            ) : null}
                         </div>
                     </div>
                 </div>
             )}
-        </>
+        </div>
     );
+
+    return typeof document !== 'undefined' ? createPortal(modalNode, getMktPortalRoot()) : modalNode;
 };
 
 export default AIEmailGeneratorModal;

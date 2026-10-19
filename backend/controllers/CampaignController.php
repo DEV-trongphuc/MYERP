@@ -88,14 +88,15 @@ class CampaignController {
     }
 
     public function show(array $auth, int $id): void {
+        $tenantId = $auth['tenant_id'] ?? 1;
         $stmt = $this->db->prepare("
             SELECT mc.*, 
                    (SELECT name FROM projects WHERE id = mc.project_id) as project_name, 
                    (SELECT code FROM projects WHERE id = mc.project_id) as project_code 
             FROM marketing_campaigns mc 
-            WHERE mc.id = ?
+            WHERE mc.id = ? AND mc.tenant_id = ?
         ");
-        $stmt->execute([$id]);
+        $stmt->execute([$id, $tenantId]);
         $campaign = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$campaign) {
@@ -201,7 +202,7 @@ class CampaignController {
         $tenantId = $auth['tenant_id'] ?? 1;
         $userId = $auth['user_id'] ?? $auth['id'] ?? 1;
         
-        $stmtCheck = $this->db->prepare("SELECT created_by, manager_ids, user_ids, project_id FROM marketing_campaigns WHERE id = ? AND tenant_id = ?");
+        $stmtCheck = $this->db->prepare("SELECT * FROM marketing_campaigns WHERE id = ? AND tenant_id = ?");
         $stmtCheck->execute([$id, $tenantId]);
         $camp = $stmtCheck->fetch(PDO::FETCH_ASSOC);
         if (!$camp) {
@@ -257,21 +258,21 @@ class CampaignController {
             }
         }
         $b = getBody();
-        $name = trim($b['name'] ?? '');
-        $description = trim($b['description'] ?? '');
-        $status = trim($b['status'] ?? 'active');
-        $start_date = !empty($b['start_date']) ? $b['start_date'] : null;
-        $end_date = !empty($b['end_date']) ? $b['end_date'] : null;
-        $project_id = isset($b['project_id']) && $b['project_id'] !== '' ? (int)$b['project_id'] : null;
-        $project_ids = trim($b['project_ids'] ?? '');
-        $user_ids = trim($b['user_ids'] ?? '');
-        $manager_ids = trim($b['manager_ids'] ?? '');
-        $document_ids = trim($b['document_ids'] ?? '');
-        $folder_path = trim($b['folder_path'] ?? '');
-        $reference_url = trim($b['reference_url'] ?? '');
-        $subjects_json = trim($b['subjects_json'] ?? '');
-        $thesis_milestones_json = trim($b['thesis_milestones_json'] ?? '');
-        $reminders_json = trim($b['reminders_json'] ?? '');
+        $name = array_key_exists('name', $b) ? trim((string)$b['name']) : trim((string)($camp['name'] ?? ''));
+        $description = array_key_exists('description', $b) ? trim((string)$b['description']) : ($camp['description'] ?? '');
+        $status = array_key_exists('status', $b) ? trim((string)$b['status']) : ($camp['status'] ?? 'active');
+        $start_date = array_key_exists('start_date', $b) ? (!empty($b['start_date']) ? $b['start_date'] : null) : ($camp['start_date'] ?? null);
+        $end_date = array_key_exists('end_date', $b) ? (!empty($b['end_date']) ? $b['end_date'] : null) : ($camp['end_date'] ?? null);
+        $project_id = array_key_exists('project_id', $b) ? ($b['project_id'] !== '' && $b['project_id'] !== null ? (int)$b['project_id'] : null) : ($camp['project_id'] ?? null);
+        $project_ids = array_key_exists('project_ids', $b) ? trim((string)$b['project_ids']) : ($camp['project_ids'] ?? '');
+        $user_ids = array_key_exists('user_ids', $b) ? trim((string)$b['user_ids']) : ($camp['user_ids'] ?? '');
+        $manager_ids = array_key_exists('manager_ids', $b) ? trim((string)$b['manager_ids']) : ($camp['manager_ids'] ?? '');
+        $document_ids = array_key_exists('document_ids', $b) ? trim((string)$b['document_ids']) : ($camp['document_ids'] ?? '');
+        $folder_path = array_key_exists('folder_path', $b) ? trim((string)$b['folder_path']) : ($camp['folder_path'] ?? '');
+        $reference_url = array_key_exists('reference_url', $b) ? trim((string)$b['reference_url']) : ($camp['reference_url'] ?? '');
+        $subjects_json = array_key_exists('subjects_json', $b) ? trim((string)$b['subjects_json']) : ($camp['subjects_json'] ?? '');
+        $thesis_milestones_json = array_key_exists('thesis_milestones_json', $b) ? trim((string)$b['thesis_milestones_json']) : ($camp['thesis_milestones_json'] ?? '');
+        $reminders_json = array_key_exists('reminders_json', $b) ? trim((string)$b['reminders_json']) : ($camp['reminders_json'] ?? '');
 
         if (empty($name)) {
             respond(422, null, 'Tên chiến dịch không được để trống', false);
@@ -303,6 +304,15 @@ class CampaignController {
             WHERE id = ? AND tenant_id = ?
         ");
         $stmt->execute([$name, $description, $subjects_json ?: null, $thesis_milestones_json ?: null, $reminders_json ?: null, $status, $start_date, $end_date, $project_id, $project_ids, $user_ids, $manager_ids, $document_ids, $folder_path, $reference_url, $id, $tenantId]);
+
+        if (isset($b['budget']) || isset($b['expected_budget'])) {
+            $budgetVal = (float)($b['expected_budget'] ?? $b['budget'] ?? 0);
+            if (array_key_exists('expected_budget', $camp)) {
+                $this->db->prepare("UPDATE marketing_campaigns SET expected_budget = ? WHERE id = ? AND tenant_id = ?")->execute([$budgetVal, $id, $tenantId]);
+            } elseif (array_key_exists('budget', $camp)) {
+                $this->db->prepare("UPDATE marketing_campaigns SET budget = ? WHERE id = ? AND tenant_id = ?")->execute([$budgetVal, $id, $tenantId]);
+            }
+        }
 
         $this->propagateCampaignRoster($project_id ?: $project_ids, $user_ids);
 
@@ -406,7 +416,7 @@ class CampaignController {
         if (is_numeric($projectIdOrStr)) {
             $pids[] = (int)$projectIdOrStr;
         } else {
-            $pNames = array_filter(array_map('trim', explode(',', $projectIdOrStr)));
+            $pNames = array_values(array_filter(array_map('trim', explode(',', $projectIdOrStr))));
             if (!empty($pNames)) {
                 $inClause = implode(',', array_fill(0, count($pNames), '?'));
                 $stmtProj = $this->db->prepare("SELECT id FROM projects WHERE name IN ($inClause)");
@@ -551,7 +561,7 @@ class CampaignController {
                 $title = "Bạn có phản hồi mới trong thảo luận chiến dịch";
                 $bodyText = ($auth['full_name'] ?? 'Đồng nghiệp') . " đã trả lời bình luận của bạn trong chiến dịch";
                 $type = "info";
-                $link = "/projects?sub=campaigns&id=" . $campaignId . "&tab=comments&highlight_comment_id=" . $newId;
+                $link = "/projects?sub=campaigns&campaign_id=" . $campaignId . "&id=" . $campaignId . "&tab=comments&highlight_comment_id=" . $newId;
 
                 $insertNotif = $this->db->prepare("
                     INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
@@ -596,7 +606,7 @@ class CampaignController {
                     "Bạn được nhắc tên trong chiến dịch " . $campaignName,
                     $auth['full_name'] . ' đã nhắc tên bạn trong bình luận chiến dịch ' . $campaignName . ': "' . $preview . '"',
                     'campaign_comment_mention',
-                    "/projects?sub=campaigns&id=" . $campaignId . "&tab=comments&highlight_comment_id=" . $newId
+                    "/projects?sub=campaigns&campaign_id=" . $campaignId . "&id=" . $campaignId . "&tab=comments&highlight_comment_id=" . $newId
                 ]);
 
                 if (!empty($userRow['email'])) {
@@ -646,12 +656,12 @@ class CampaignController {
         // Count manual contacts without leads linked
         $stmtL4 = $this->db->prepare("
             SELECT COUNT(*) 
-            FROM contacts 
-            WHERE campaign_id = ? 
-              AND (person_id IS NULL OR person_id NOT IN (
-                  SELECT person_id FROM leads WHERE campaign_id = ? AND person_id IS NOT NULL
-                  UNION
-                  SELECT person_id FROM leads WHERE campaign_name = ? AND person_id IS NOT NULL
+            FROM contacts c
+            WHERE c.campaign_id = ? 
+              AND (c.person_id IS NULL OR NOT EXISTS (
+                  SELECT 1 FROM leads l
+                  WHERE l.person_id = c.person_id
+                    AND (l.campaign_id = ? OR l.campaign_name = ?)
               ))
         ");
         $stmtL4->execute([$campaignId, $campaignIdStr, $campName]);

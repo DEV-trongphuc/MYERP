@@ -701,7 +701,7 @@ if ($method === 'POST' && $route === 'delete_unsubscribed') {
         //   2. Left orphaned rows in activity/lists/tags/flow_states tables
         // New: chunked DELETE (500 rows), cascading cleanup of all dependent tables
         $pdo->beginTransaction();
-        $chunks = array_chunk(array_unique($subIds), 500);
+        $chunks = array_chunk(array_values(array_unique($subIds)), 500);
         $deleted = 0;
         foreach ($chunks as $chunk) {
             $ph = implode(',', array_fill(0, count($chunk), '?'));

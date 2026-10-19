@@ -234,12 +234,13 @@ export const SignaturePadModal: React.FC<SignaturePadModalProps> = ({
 
   return createPortal(
     <div 
+      className="modal-backdrop modal-above-drawer"
       style={{
         position: 'fixed',
         inset: 0,
         backgroundColor: 'rgba(0, 0, 0, 0.65)',
         backdropFilter: 'blur(5px)',
-        zIndex: 10000000,
+        zIndex: 2147483645,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

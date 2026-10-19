@@ -183,6 +183,8 @@ class CheckInController {
             }
         }
 
+        $fromParam = $_GET['from'] ?? $_GET['date_from'] ?? $_GET['start_date'] ?? '';
+        $toParam = $_GET['to'] ?? $_GET['date_to'] ?? $_GET['end_date'] ?? '';
         if (isset($_GET['month']) && !empty($_GET['month'])) {
             $year = (int)($_GET['year'] ?? date('Y'));
             $month = (int)$_GET['month'];
@@ -191,10 +193,16 @@ class CheckInController {
             $sql .= " AND c.check_in_date BETWEEN ? AND ?";
             $params[] = $startOfMonth;
             $params[] = $endOfMonth;
-        } elseif (isset($_GET['from']) && !empty($_GET['from']) && isset($_GET['to']) && !empty($_GET['to'])) {
+        } elseif (!empty($fromParam) && !empty($toParam)) {
             $sql .= " AND c.check_in_date BETWEEN ? AND ?";
-            $params[] = $_GET['from'];
-            $params[] = $_GET['to'];
+            $params[] = $fromParam;
+            $params[] = $toParam;
+        } elseif (!empty($fromParam)) {
+            $sql .= " AND c.check_in_date >= ?";
+            $params[] = $fromParam;
+        } elseif (!empty($toParam)) {
+            $sql .= " AND c.check_in_date <= ?";
+            $params[] = $toParam;
         } elseif (isset($_GET['date']) && !empty($_GET['date']) && $_GET['date'] !== 'all') {
             $sql .= " AND c.check_in_date = ?";
             $params[] = $_GET['date'];
@@ -444,8 +452,8 @@ class CheckInController {
     public function store(array $auth): void {
         self::healPollutedCheckIns($this->db);
         $b = getBody();
-        $selfieUrl = trim($b['selfie_url'] ?? '');
-        $reason = trim($b['reason'] ?? '');
+        $selfieUrl = trim($b['selfie_url'] ?? $b['photo_url'] ?? '');
+        $reason = trim($b['reason'] ?? $b['note'] ?? '');
         $today = trim($b['check_in_date'] ?? date('Y-m-d'));
         $currentTime = trim($b['check_in_time'] ?? date('H:i:s'));
         $action = trim($b['action'] ?? ''); // 'checkin' or 'checkout' or auto-detect
@@ -664,7 +672,9 @@ class CheckInController {
                 $updateOut = $this->db->prepare("UPDATE check_ins SET check_out_time = ?, checkout_selfie_url = ?, early_minutes = ?, check_out_status = ?, checkout_latitude = ?, checkout_longitude = ?, checkout_location_address = ? WHERE id = ?");
                 $updateOut->execute([$outTimeStr, $coSelfie ?: null, $earlyMinutes, $checkOutStatus, $coLat ?: null, $coLng ?: null, $coAddr ?: null, $existingRow['id']]);
             } catch (\Throwable $ex) {
-                try { $this->db->exec("ALTER TABLE check_ins ADD COLUMN checkout_selfie_url TEXT NULL AFTER check_out_time"); } catch (\Throwable $e2) {}
+                if (!$this->db->inTransaction()) {
+                    try { $this->db->exec("ALTER TABLE check_ins ADD COLUMN checkout_selfie_url TEXT NULL AFTER check_out_time"); } catch (\Throwable $e2) {}
+                }
                 $updateOut = $this->db->prepare("UPDATE check_ins SET check_out_time = ?, checkout_selfie_url = ?, early_minutes = ?, check_out_status = ?, checkout_latitude = ?, checkout_longitude = ?, checkout_location_address = ? WHERE id = ?");
                 $updateOut->execute([$outTimeStr, $coSelfie ?: null, $earlyMinutes, $checkOutStatus, $coLat ?: null, $coLng ?: null, $coAddr ?: null, $existingRow['id']]);
             }
@@ -857,7 +867,10 @@ class CheckInController {
                 'date' => $today,
                 'time' => $currentTime,
                 'reason' => $reason,
-                'approver_id' => $approverId
+                'ref_id' => $updId,
+                'approver_id' => $approverId,
+                'submitter_id' => (int)$auth['user_id'],
+                'exclude_user_id' => (int)$auth['user_id']
             ]);
 
             respond(200, [
@@ -872,7 +885,7 @@ class CheckInController {
             return;
         }
 
-        $addr = trim($b['location_address'] ?? '');
+        $addr = trim($b['location_address'] ?? $b['address'] ?? '');
         if (empty($addr) && !empty($lat) && !empty($lng)) {
             $addr = $lat . ', ' . $lng;
         }
@@ -886,15 +899,17 @@ class CheckInController {
             $insert->execute([$auth['user_id'], $today, $inTimeStr, $lateMinutes, $selfieUrl ?: null, $status, $reason ?: null, $lat ?: null, $lng ?: null, $addr ?: null]);
         } catch (\Throwable $e) {
             // Auto-heal check_ins table if columns are missing in DB schema
-            try { $this->db->exec("ALTER TABLE check_ins ADD COLUMN late_minutes INT DEFAULT 0 AFTER check_in_time"); } catch (\Throwable $ex) {}
-            try { $this->db->exec("ALTER TABLE check_ins ADD COLUMN selfie_url TEXT NULL AFTER late_minutes"); } catch (\Throwable $ex) {}
-            try { $this->db->exec("ALTER TABLE check_ins ADD COLUMN reason TEXT NULL AFTER status"); } catch (\Throwable $ex) {}
-            try { $this->db->exec("ALTER TABLE check_ins ADD COLUMN latitude VARCHAR(50) NULL AFTER selfie_url"); } catch (\Throwable $ex) {}
-            try { $this->db->exec("ALTER TABLE check_ins ADD COLUMN longitude VARCHAR(50) NULL AFTER latitude"); } catch (\Throwable $ex) {}
-            try { $this->db->exec("ALTER TABLE check_ins ADD COLUMN location_address VARCHAR(500) NULL AFTER longitude"); } catch (\Throwable $ex) {}
-            try { $this->db->exec("ALTER TABLE check_ins ADD COLUMN checkout_latitude VARCHAR(50) NULL"); } catch (\Throwable $ex) {}
-            try { $this->db->exec("ALTER TABLE check_ins ADD COLUMN checkout_longitude VARCHAR(50) NULL"); } catch (\Throwable $ex) {}
-            try { $this->db->exec("ALTER TABLE check_ins ADD COLUMN checkout_location_address VARCHAR(500) NULL"); } catch (\Throwable $ex) {}
+            if (!$this->db->inTransaction()) {
+                try { $this->db->exec("ALTER TABLE check_ins ADD COLUMN late_minutes INT DEFAULT 0 AFTER check_in_time"); } catch (\Throwable $ex) {}
+                try { $this->db->exec("ALTER TABLE check_ins ADD COLUMN selfie_url TEXT NULL AFTER late_minutes"); } catch (\Throwable $ex) {}
+                try { $this->db->exec("ALTER TABLE check_ins ADD COLUMN reason TEXT NULL AFTER status"); } catch (\Throwable $ex) {}
+                try { $this->db->exec("ALTER TABLE check_ins ADD COLUMN latitude VARCHAR(50) NULL AFTER selfie_url"); } catch (\Throwable $ex) {}
+                try { $this->db->exec("ALTER TABLE check_ins ADD COLUMN longitude VARCHAR(50) NULL AFTER latitude"); } catch (\Throwable $ex) {}
+                try { $this->db->exec("ALTER TABLE check_ins ADD COLUMN location_address VARCHAR(500) NULL AFTER longitude"); } catch (\Throwable $ex) {}
+                try { $this->db->exec("ALTER TABLE check_ins ADD COLUMN checkout_latitude VARCHAR(50) NULL"); } catch (\Throwable $ex) {}
+                try { $this->db->exec("ALTER TABLE check_ins ADD COLUMN checkout_longitude VARCHAR(50) NULL"); } catch (\Throwable $ex) {}
+                try { $this->db->exec("ALTER TABLE check_ins ADD COLUMN checkout_location_address VARCHAR(500) NULL"); } catch (\Throwable $ex) {}
+            }
             
             $insert = $this->db->prepare("
                 INSERT INTO check_ins (user_id, check_in_date, check_in_time, late_minutes, selfie_url, status, reason, latitude, longitude, location_address)
@@ -940,7 +955,11 @@ class CheckInController {
                 'team_id' => $uDetails ? $uDetails['team_id'] : null,
                 'date' => $today,
                 'time' => $currentTime,
-                'reason' => $reason
+                'reason' => $reason,
+                'ref_id' => $newId,
+                'approver_id' => $approverId,
+                'submitter_id' => (int)$auth['user_id'],
+                'exclude_user_id' => (int)$auth['user_id']
             ]);
         }
 
@@ -963,15 +982,8 @@ class CheckInController {
         requireRole($auth, ['admin', 'superadmin', 'super_admin', 'director', 'assistant', 'manager', 'hr']);
         $b = getBody();
         $status = trim($b['status'] ?? '');
-        $reason = trim($b['reason'] ?? ''); // Optionally update reason or note
-
-        if (!in_array($status, ['approved', 'rejected', 'pending_approval'], true)) {
-            respond(422, null, 'Trạng thái phê duyệt không hợp lệ', false);
-        }
-
-        if ($status === 'rejected' && empty($reason)) {
-            respond(422, null, 'Vui lòng cung cấp lý do từ chối yêu cầu chấm công', false);
-        }
+        $reason = trim($b['reason'] ?? $b['note'] ?? ''); // Optionally update reason or note
+        $rawCheckTime = trim($b['check_in_time'] ?? $b['check_time'] ?? '');
 
         // Fetch check-in record to make sure it belongs to the same tenant
         $stmtCheck = $this->db->prepare("
@@ -989,6 +1001,18 @@ class CheckInController {
 
         if ((int)$row['tenant_id'] !== (int)$auth['tenant_id']) {
             respond(403, null, 'Bạn không có quyền thao tác trên dữ liệu này', false);
+        }
+
+        if ($status === '') {
+            $status = $row['status'] ?: 'approved';
+        }
+
+        if (!in_array($status, ['approved', 'rejected', 'pending_approval'], true)) {
+            respond(422, null, 'Trạng thái phê duyệt không hợp lệ', false);
+        }
+
+        if ($status === 'rejected' && empty($reason)) {
+            respond(422, null, 'Vui lòng cung cấp lý do từ chối yêu cầu chấm công', false);
         }
 
         if ($auth['role'] === 'manager') {
@@ -1012,7 +1036,12 @@ class CheckInController {
             }
         }
 
-
+        if ($rawCheckTime !== '') {
+            $newInTime = (strpos($rawCheckTime, ' ') !== false) ? $rawCheckTime : (($row['check_in_date'] ?? date('Y-m-d')) . ' ' . $rawCheckTime);
+            try {
+                $this->db->prepare("UPDATE check_ins SET check_in_time = ? WHERE id = ?")->execute([$newInTime, $id]);
+            } catch (\Throwable $eTime) {}
+        }
 
         // Update status and admin_note, keeping original Sale reason intact
         $adminNote = (!empty($reason) && trim($reason) !== '') ? trim($reason) : null;
@@ -1728,7 +1757,6 @@ class CheckInController {
                 try {
                     require_once __DIR__ . '/../NotificationService.php';
                     $userName = $auth['full_name'] ?? 'Nhân viên';
-                    $targetUid = $approverId ?: $userId;
                     $daysCount = count($details);
                     $isSingleDay = ($daysCount === 1);
                     $firstDate = $details[0]['date'] ?? $details[0]['check_in_date'] ?? '';
@@ -1743,24 +1771,14 @@ class CheckInController {
 
                     $tenantId = (int)($auth['tenant_id'] ?? 1);
 
-                    NotificationService::send($this->db, $tenantId, 'ATTENDANCE_UPDATE', [
-                        'user_id' => $targetUid,
-                        'user_name' => $userName,
-                        'reason' => $notifReason,
-                        'ref_id' => $requestId,
-                        'is_bulk' => true,
-                        'is_single_day' => $isSingleDay,
-                        'single_date' => $singleDateStr,
-                        'days_count' => $daysCount,
-                        'month_period' => $month
-                    ]);
-
-                    // Notify approver 2 if present
-                    if (!empty($approverId2) && (int)$approverId2 !== (int)$userId && (int)$approverId2 !== (int)$targetUid) {
+                    if (!$isSelfApproved) {
                         NotificationService::send($this->db, $tenantId, 'ATTENDANCE_UPDATE', [
-                            'user_id' => $approverId2,
+                            'approver_id' => $approverId ? (int)$approverId : 0,
+                            'user_id' => $approverId ? (int)$approverId : 0,
+                            'submitter_id' => (int)$userId,
+                            'exclude_user_id' => (int)$userId,
                             'user_name' => $userName,
-                            'reason' => $notifReason . " (Người duyệt cấp 2)",
+                            'reason' => $notifReason,
                             'ref_id' => $requestId,
                             'is_bulk' => true,
                             'is_single_day' => $isSingleDay,
@@ -1768,24 +1786,39 @@ class CheckInController {
                             'days_count' => $daysCount,
                             'month_period' => $month
                         ]);
+
+                        // Notify approver 2 if present
+                        if (!empty($approverId2) && (int)$approverId2 !== (int)$userId && (int)$approverId2 !== (int)$approverId) {
+                            NotificationService::send($this->db, $tenantId, 'ATTENDANCE_UPDATE', [
+                                'approver_id' => (int)$approverId2,
+                                'user_id' => (int)$approverId2,
+                                'submitter_id' => (int)$userId,
+                                'exclude_user_id' => (int)$userId,
+                                'user_name' => $userName,
+                                'reason' => $notifReason . " (Người duyệt cấp 2)",
+                                'ref_id' => $requestId,
+                                'is_bulk' => true,
+                                'is_single_day' => $isSingleDay,
+                                'single_date' => $singleDateStr,
+                                'days_count' => $daysCount,
+                                'month_period' => $month
+                            ]);
+                        }
                     }
 
-                    // Notify related persons
+                    // Notify related persons with informational watcher notification
                     if (!empty($relArr)) {
-                        foreach ($relArr as $relUid) {
-                            $relUid = (int)$relUid;
-                            if ($relUid > 0 && $relUid !== (int)$userId && $relUid !== (int)$targetUid) {
-                                NotificationService::send($this->db, $tenantId, 'ATTENDANCE_UPDATE', [
-                                    'user_id' => $relUid,
-                                    'user_name' => $userName,
-                                    'reason' => $notifReason . " (Bạn được gắn là Người liên quan)",
-                                    'ref_id' => $requestId,
-                                    'is_bulk' => true,
-                                    'is_single_day' => $isSingleDay,
-                                    'single_date' => $singleDateStr,
-                                    'days_count' => $daysCount,
-                                    'month_period' => $month
-                                ]);
+                        $wTitle = "📌 Bạn được gắn theo dõi đề xuất bổ sung công";
+                        $wBody = "{$userName} vừa gửi {$notifReason} và gắn bạn làm người liên quan.";
+                        $wLink = "/approvals?tab=attendance&open_id={$requestId}&open_type=attendance_bulk";
+                        $stmtWatch = $this->db->prepare("
+                            INSERT INTO notifications (user_id, tenant_id, title, body, type, link, is_read, created_at)
+                            VALUES (?, ?, ?, ?, 'attendance', ?, 0, NOW())
+                        ");
+                        foreach (array_unique(array_map('intval', $relArr)) as $relUid) {
+                            if ($relUid > 0 && $relUid !== (int)$userId && $relUid !== (int)$approverId && $relUid !== (int)$approverId2) {
+                                $stmtWatch->execute([$relUid, $tenantId, $wTitle, $wBody, $wLink]);
+                                NotificationService::pruneUserNotifications($this->db, $relUid, 200);
                             }
                         }
                     }
@@ -1995,7 +2028,7 @@ class CheckInController {
             $this->db->commit();
 
             // Send notification if transitioning from draft/rejected to pending_manager
-            if (!$isDraft && in_array($oldStatus, ['draft', 'rejected'], true) && !$isSelfApproved && $approverId) {
+            if (!$isDraft && in_array($oldStatus, ['draft', 'rejected'], true) && !$isSelfApproved && (!$approverId || (int)$approverId !== (int)$userId)) {
                 try {
                     require_once __DIR__ . '/../NotificationService.php';
                     $userName = $req['full_name'] ?? $auth['full_name'] ?? 'Nhân viên';
@@ -2009,7 +2042,10 @@ class CheckInController {
                         : "Đề xuất cập nhật công chu kỳ tháng $month ($daysCount ngày)";
 
                     NotificationService::send($this->db, (int)$auth['tenant_id'], 'ATTENDANCE_UPDATE', [
-                        'user_id' => $approverId,
+                        'approver_id' => $approverId ? (int)$approverId : 0,
+                        'user_id' => $approverId ? (int)$approverId : 0,
+                        'submitter_id' => (int)$targetUserId,
+                        'exclude_user_id' => (int)$userId,
                         'user_name' => $userName,
                         'reason' => $notifReason,
                         'ref_id' => $id,
@@ -2701,6 +2737,10 @@ class CheckInController {
         $tid = (int)($auth['tenant_id'] ?? 1);
         $today = date('Y-m-d');
         $reqMonth = trim((string)($_GET['month'] ?? $_GET['month_year'] ?? ''));
+        if (is_numeric($reqMonth) && (int)$reqMonth >= 1 && (int)$reqMonth <= 12) {
+            $reqYear = (int)($_GET['year'] ?? date('Y'));
+            $reqMonth = sprintf('%04d-%02d', $reqYear, (int)$reqMonth);
+        }
         $month = (preg_match('/^\d{4}-\d{2}$/', $reqMonth)) ? $reqMonth : date('Y-m');
         $targetUserId = !empty($_GET['user_id']) ? (int)$_GET['user_id'] : (int)($auth['user_id'] ?? $auth['id'] ?? 0);
 

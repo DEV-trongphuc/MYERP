@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar } from '../components/ui/Avatar';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
 import { useUIStore } from '../store/uiStore';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Pagination } from '../components/ui/Pagination';
 import api from '../api/axios';
 const CustomerProfileDrawer = lazy(() => import('./CustomerProfileDrawer').then(module => ({ default: module.CustomerProfileDrawer })));
@@ -214,7 +214,10 @@ export const ActivitiesPage: React.FC = () => {
     };
   }, [fetchActivities]);
 
+  const location = useLocation();
+
   useEffect(() => {
+    if (!location.pathname.startsWith('/activities')) return;
     const urlParams = new URLSearchParams(window.location.search);
     const targetId = urlParams.get('id') || urlParams.get('activity_id');
     if (targetId) {
@@ -235,7 +238,7 @@ export const ActivitiesPage: React.FC = () => {
         });
       }
     }
-  }, [window.location.search]);
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     setPage(1);

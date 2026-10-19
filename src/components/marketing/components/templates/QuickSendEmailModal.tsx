@@ -302,6 +302,7 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
             isOpen={isOpen}
             onClose={onClose}
             size="2xl"
+            zIndex={2147483645}
             isDarkTheme={isDarkTheme}
             title={
                 <div className="flex items-center gap-3">

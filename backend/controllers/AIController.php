@@ -104,13 +104,20 @@ class AIController {
         $convRate = $totalContacts > 0 ? round(($convertedContacts / $totalContacts) * 100, 1) : 0.0;
 
         // 2. Real monthly revenue collected
-        $stmtRev = $this->db->prepare("
-            SELECT COALESCE(SUM(amount), 0) as m_revenue 
-            FROM deposits 
-            WHERE tenant_id = ? AND status = 'confirmed' AND DATE_FORMAT(created_at, '%Y-%m') = ?
-        ");
-        $stmtRev->execute([$tid, $curMonth]);
-        $monthlyRevenue = (float)$stmtRev->fetchColumn();
+        $monthlyRevenue = 0.0;
+        try {
+            $stmtRev = $this->db->prepare("
+                SELECT COALESCE(SUM(d.price), 0) as m_revenue 
+                FROM deposits d
+                LEFT JOIN contacts c ON d.contact_id = c.id
+                LEFT JOIN projects p ON d.project_id = p.id
+                WHERE (c.tenant_id = ? OR p.tenant_id = ?) AND d.status IN ('approved', 'confirmed') AND DATE_FORMAT(d.created_at, '%Y-%m') = ?
+            ");
+            $stmtRev->execute([$tid, $tid, $curMonth]);
+            $monthlyRevenue = (float)$stmtRev->fetchColumn();
+        } catch (\Throwable $eRev) {
+            $monthlyRevenue = 0.0;
+        }
 
         // 3. Top performing products / courses
         $stmtTop = $this->db->prepare("
@@ -638,38 +645,40 @@ class AIController {
         static $checked = false;
         if ($checked) return;
         try {
-            $this->db->exec("
-                CREATE TABLE IF NOT EXISTS ai_knowledge_base (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    tenant_id INT NOT NULL DEFAULT 1,
-                    title VARCHAR(255) NOT NULL,
-                    content LONGTEXT NOT NULL,
-                    category VARCHAR(100) NOT NULL DEFAULT 'general',
-                    status VARCHAR(50) NOT NULL DEFAULT 'indexed',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    INDEX idx_tenant_cat (tenant_id, category)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-            ");
+            if (!$this->db->inTransaction()) {
+                $this->db->exec("
+                    CREATE TABLE IF NOT EXISTS ai_knowledge_base (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        tenant_id INT NOT NULL DEFAULT 1,
+                        title VARCHAR(255) NOT NULL,
+                        content LONGTEXT NOT NULL,
+                        category VARCHAR(100) NOT NULL DEFAULT 'general',
+                        status VARCHAR(50) NOT NULL DEFAULT 'indexed',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        INDEX idx_tenant_cat (tenant_id, category)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                ");
 
-            $this->db->exec("
-                CREATE TABLE IF NOT EXISTS customer_ai_insights (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    tenant_id INT NOT NULL DEFAULT 1,
-                    contact_id INT NOT NULL,
-                    summary TEXT NOT NULL,
-                    key_needs_json LONGTEXT NULL,
-                    financial_status TEXT NULL,
-                    potential_level VARCHAR(50) NOT NULL DEFAULT 'Trung bình',
-                    potential_score INT NOT NULL DEFAULT 50,
-                    next_best_actions_json LONGTEXT NULL,
-                    metrics_json LONGTEXT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                    UNIQUE KEY uk_tenant_contact (tenant_id, contact_id),
-                    INDEX idx_contact (contact_id)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-            ");
-            $checked = true;
+                $this->db->exec("
+                    CREATE TABLE IF NOT EXISTS customer_ai_insights (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        tenant_id INT NOT NULL DEFAULT 1,
+                        contact_id INT NOT NULL,
+                        summary TEXT NOT NULL,
+                        key_needs_json LONGTEXT NULL,
+                        financial_status TEXT NULL,
+                        potential_level VARCHAR(50) NOT NULL DEFAULT 'Trung bình',
+                        potential_score INT NOT NULL DEFAULT 50,
+                        next_best_actions_json LONGTEXT NULL,
+                        metrics_json LONGTEXT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        UNIQUE KEY uk_tenant_contact (tenant_id, contact_id),
+                        INDEX idx_contact (contact_id)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                ");
+                $checked = true;
+            }
         } catch (\Throwable $e) {
             error_log("Ensure AI Knowledge Error: " . $e->getMessage());
         }

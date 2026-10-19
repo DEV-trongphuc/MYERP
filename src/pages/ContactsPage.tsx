@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { Plus, Search, Phone, PhoneOff, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Upload, ChevronDown, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, UserPlus, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, ChevronLeft, GraduationCap, SlidersHorizontal, RotateCcw, Sparkles, BarChart3, MessageSquare, Globe, GitBranch, Ticket, ClipboardList, Flame } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -737,6 +737,13 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     );
   }, [user]);
   const navigate = useNavigate();
+  const location = useLocation();
+  const isActiveInstance = useMemo(() => {
+    const p = location.pathname;
+    return defaultSegment === 'customer'
+      ? p.startsWith('/students')
+      : (p.startsWith('/contacts') || p.startsWith('/data'));
+  }, [location.pathname, defaultSegment]);
   const isManagerOrAbove = useMemo(() => isManagement(user) || isExecutive(user), [user]);
   const [activeMainTab, setActiveMainTab] = useState<'list' | 'performance'>('list');
   const { addToast, showConfirm, closeConfirm } = useUIStore();
@@ -774,13 +781,14 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   });
 
   useEffect(() => {
+    if (!isActiveInstance) return;
     const tab = searchParams.get('tab');
     if (tab === 'chinh_thuc' || tab === 'le_phi' || tab === 'nop_ho_so') {
       setStudentSubTab(tab);
     } else {
       setStudentSubTab('chinh_thuc');
     }
-  }, [searchParams]);
+  }, [searchParams, isActiveInstance]);
 
   const [studentCounts, setStudentCounts] = useState<{ nop_ho_so?: number; le_phi?: number; chinh_thuc?: number }>({});
   const fetchStudentCounts = async () => {
@@ -806,13 +814,14 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   });
 
   useEffect(() => {
+    if (!isActiveInstance) return;
     const q = searchParams.get('search') || searchParams.get('q');
     if (q !== null && q !== undefined && q !== search) {
       setSearch(q);
     }
-  }, [searchParams]);
+  }, [searchParams, isActiveInstance]);
 
-  const openContactId = searchParams.get('open_contact_id') || searchParams.get('id');
+  const openContactId = isActiveInstance ? (searchParams.get('open_contact_id') || searchParams.get('id')) : null;
   const drawerFetchAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -824,6 +833,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   }, []);
 
   useEffect(() => {
+    if (!isActiveInstance) return;
     if (openContactId) {
       const cid = Number(openContactId);
       if (cid) {
@@ -850,11 +860,16 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
         });
       }
     }
-  }, [openContactId]);
+  }, [openContactId, isActiveInstance]);
 
   // Global event listener for instant drawer opening when notification or chat link is clicked
   useEffect(() => {
     const handleOpenContactDrawer = (e: any) => {
+      const p = window.location.pathname;
+      const isCurrentActive = defaultSegment === 'customer'
+        ? p.startsWith('/students')
+        : (p.startsWith('/contacts') || p.startsWith('/data'));
+      if (!isCurrentActive) return;
       const cid = Number(e.detail?.id || e.detail?.contactId);
       if (cid && !isNaN(cid) && cid > 0) {
         if (drawerFetchAbortRef.current) {
@@ -880,7 +895,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       window.removeEventListener('open-contact-drawer', handleOpenContactDrawer);
       window.removeEventListener('open-global-customer', handleOpenContactDrawer);
     };
-  }, []);
+  }, [defaultSegment]);
 
   const isUserAcademic = isAcademic(user);
   const [segment, setSegment] = useState(() => {
@@ -1324,6 +1339,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   }, [activeFilters, filterUncontacted, validCustomRulesCount]);
 
   useEffect(() => {
+    if (!isActiveInstance) return;
     const statusParam = searchParams.get('status');
     const uncontactedParam = searchParams.get('uncontacted');
     if (statusParam === 'not_contacted' || uncontactedParam === '1' || uncontactedParam === 'true') {
@@ -1359,7 +1375,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       newParams.delete('campaign_id');
       setSearchParams(newParams, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, isActiveInstance]);
 
   useEffect(() => {
     if (showCreateModal && user) {
@@ -1558,16 +1574,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
       if (activeFilters.status) {
         params.stages = activeFilters.status;
-        if (/^\d+(,\d+)*$/.test(activeFilters.status)) {
-          params.stage_id = activeFilters.status;
-          if (activeFilters.stageOp) params.stage_op = activeFilters.stageOp;
-        } else {
-          params.status = activeFilters.status;
-          params.stage = activeFilters.status;
-          if (activeFilters.stageOp) {
-            params.status_op = activeFilters.stageOp;
-            params.stage_op = activeFilters.stageOp;
-          }
+        params.stage_id = activeFilters.status;
+        if (activeFilters.stageOp) {
+          params.stage_op = activeFilters.stageOp;
+          params.status_op = activeFilters.stageOp;
         }
       }
 
@@ -1950,12 +1960,21 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     setFilterAdmissionPreset(preset);
     setFilterAdmissionFrom(from);
     setFilterAdmissionTo(to);
+    setFilterFromDate('');
+    setFilterToDate('');
+    setFilterBeforeDate('');
+    setFilterAfterDate('');
     setActiveFilters(prev => ({
       ...prev,
       admissionPreset: preset,
       admissionFrom: from,
       admissionTo: to,
-      admissionActive: true
+      admissionActive: true,
+      fromDate: '',
+      toDate: '',
+      beforeDate: '',
+      afterDate: '',
+      dateActive: false
     }));
     setShowAdmissionPopover(false);
     setShowTimelinePopover(false);
@@ -1967,12 +1986,21 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       return;
     }
     setFilterAdmissionPreset('custom');
+    setFilterFromDate('');
+    setFilterToDate('');
+    setFilterBeforeDate('');
+    setFilterAfterDate('');
     setActiveFilters(prev => ({
       ...prev,
       admissionPreset: 'custom',
       admissionFrom: filterAdmissionFrom,
       admissionTo: filterAdmissionTo,
-      admissionActive: true
+      admissionActive: true,
+      fromDate: '',
+      toDate: '',
+      beforeDate: '',
+      afterDate: '',
+      dateActive: false
     }));
     setShowAdmissionPopover(false);
     setShowTimelinePopover(false);
@@ -2022,6 +2050,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     setFilterFromDate(from);
     setFilterToDate(to);
     setDateFilterType('range');
+    setFilterAdmissionPreset('');
+    setFilterAdmissionFrom('');
+    setFilterAdmissionTo('');
     setActiveFilters(prev => ({
       ...prev,
       dateField: filterDateField as any,
@@ -2030,7 +2061,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       toDate: to,
       beforeDate: '',
       afterDate: '',
-      dateActive: true
+      dateActive: true,
+      admissionPreset: '',
+      admissionFrom: '',
+      admissionTo: '',
+      admissionActive: false
     }));
     setShowTimelinePopover(false);
   };
@@ -2041,6 +2076,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       setShowTimelinePopover(false);
       return;
     }
+    setFilterAdmissionPreset('');
+    setFilterAdmissionFrom('');
+    setFilterAdmissionTo('');
     setActiveFilters(prev => ({
       ...prev,
       dateField: filterDateField as any,
@@ -2049,7 +2087,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       toDate: filterToDate,
       beforeDate: '',
       afterDate: '',
-      dateActive: true
+      dateActive: true,
+      admissionPreset: '',
+      admissionFrom: '',
+      admissionTo: '',
+      admissionActive: false
     }));
     setShowTimelinePopover(false);
   };
@@ -2388,15 +2430,87 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     return () => window.removeEventListener('keydown', handleEscape);
   }, [showCreateModal, creating]);
 
+  useEffect(() => {
+    if (showAdvancedFilters) {
+      setFilterStatus(activeFilters.status);
+      setFilterStageOp(activeFilters.stageOp || 'in');
+      setFilterLeadStatus(activeFilters.leadStatus);
+      setFilterLeadStatusOp(activeFilters.leadStatusOp || 'in');
+      setFilterShowLost(activeFilters.showLost);
+      setFilterSource(activeFilters.source);
+      setFilterDataType(activeFilters.dataType);
+      setFilterOwnerId(activeFilters.ownerId);
+      setFilterTeamId(activeFilters.teamId);
+      setFilterProjectId(activeFilters.projectId);
+      setFilterCampaignId(activeFilters.campaignId);
+      setFilterTag(activeFilters.tag);
+      setFilterInteractionStatus(activeFilters.interactionStatus);
+      setFilterStaleDays(activeFilters.staleDays);
+      setFilterInteractedWithinDays(activeFilters.interactedWithinDays);
+      setFilterInteractionType(activeFilters.interactionType);
+      setFilterMinCallCount(activeFilters.minCallCount);
+      setFilterMaxCallCount(activeFilters.maxCallCount);
+      setFilterNoteKeyword(activeFilters.noteKeyword);
+      setFilterGender(activeFilters.gender);
+      setFilterCity(activeFilters.city);
+      setFilterAgeMin(activeFilters.ageMin);
+      setFilterAgeMax(activeFilters.ageMax);
+      setFilterJobTitle(activeFilters.jobTitle);
+      setFilterCompany(activeFilters.company);
+      setFilterFinancialStatus(activeFilters.financialStatus);
+      setFilterMinDeposit(activeFilters.minDeposit);
+      setFilterMaxDeposit(activeFilters.maxDeposit);
+      setFilterStudyStatus(activeFilters.studyStatus);
+      setFilterStudentCode(activeFilters.studentCode);
+      setFilterExpectedIntake(activeFilters.expectedIntake);
+      setFilterEngagementStatus(activeFilters.engagementStatus);
+      setFilterAutomationFlow(activeFilters.automationFlow);
+      setFilterVoucherStatus(activeFilters.voucherStatus);
+      setFilterMinEngagementScore(activeFilters.minEngagementScore);
+      setFilterMaxEngagementScore(activeFilters.maxEngagementScore);
+      setCustomRules((activeFilters.customRules || []).map(r => ({ ...r })));
+      setCustomRulesLogic(activeFilters.customRulesLogic || 'AND');
+      setFilterDateField(activeFilters.dateField);
+      setDateFilterType(activeFilters.dateType);
+      setFilterFromDate(activeFilters.fromDate);
+      setFilterToDate(activeFilters.toDate);
+      setFilterBeforeDate(activeFilters.beforeDate);
+      setFilterAfterDate(activeFilters.afterDate);
+      setFilterAdmissionPreset(activeFilters.admissionPreset);
+      setFilterAdmissionFrom(activeFilters.admissionFrom);
+      setFilterAdmissionTo(activeFilters.admissionTo);
+      setFilterMultiProgram(activeFilters.multiProgram);
+    }
+  }, [showAdvancedFilters]);
+
   const paged = useMemo(() => {
-    if (segment === 'tiem_nang' && !debouncedSearch && quickPipelineStage === 'all' && !activeFilters.status) {
+    const hasAcademicFilter = Boolean(
+      activeFilters.admissionActive ||
+      (activeFilters.dateActive && activeFilters.dateField === 'admission_date') ||
+      activeFilters.studyStatus ||
+      activeFilters.studentCode ||
+      activeFilters.expectedIntake
+    );
+    if (segment === 'tiem_nang' && !debouncedSearch && quickPipelineStage === 'all' && !activeFilters.status && !hasAcademicFilter) {
       return contacts.filter(c => {
         const isEnrolled = c.stage_id === 44 || c.pipeline_status === 'enrolled' || c.status === 'customer' || c.stage_name === '14 – Enrolled' || c.stage_name === 'Học viên';
         return !isEnrolled;
       });
     }
     return contacts;
-  }, [contacts, segment, debouncedSearch, quickPipelineStage, activeFilters.status]);
+  }, [
+    contacts,
+    segment,
+    debouncedSearch,
+    quickPipelineStage,
+    activeFilters.status,
+    activeFilters.admissionActive,
+    activeFilters.dateActive,
+    activeFilters.dateField,
+    activeFilters.studyStatus,
+    activeFilters.studentCode,
+    activeFilters.expectedIntake
+  ]);
 
   const toggleSelect = (id: number) => setSelected(p => { 
     const n = new Set(p); 
@@ -2566,14 +2680,22 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
         }
         try {
           const contactIds = Array.from(selected);
+          let successCount = 0;
           for (const cid of contactIds) {
             try {
               await api.post(`/contacts/${cid}/tags`, { name: cleanTag });
-            } catch {}
+              successCount++;
+            } catch (tagErr) {
+              console.error(`Error tagging contact ${cid}:`, tagErr);
+            }
           }
-          addToast(`Đã gắn tag "${cleanTag}" cho ${contactIds.length} liên hệ`, 'success');
-          setSelected(new Set());
-          fetchData(true);
+          if (successCount > 0) {
+            addToast(`Đã gắn tag "${cleanTag}" cho ${successCount} liên hệ`, 'success');
+            setSelected(new Set());
+            fetchData(true);
+          } else {
+            addToast('Không thể gắn tag cho các liên hệ đã chọn', 'error');
+          }
         } catch (err: any) {
           addToast('Lỗi khi gắn tag: ' + err.message, 'error');
         }
@@ -4520,9 +4642,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
           {showAdvancedFilters && (
-            <div style={{ position: 'fixed', inset: 0, zIndex: 2147483640, display: 'flex', justifyContent: 'flex-end', overflow: 'hidden' }}>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 2147483625, display: 'flex', justifyContent: 'flex-end', overflow: 'hidden' }}>
               {/* Backdrop */}
               <motion.div
+                className="drawer-backdrop"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -4530,39 +4653,43 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                 style={{
                   position: 'fixed',
                   inset: 0,
-                  background: 'rgba(15, 23, 42, 0.55)',
-                  backdropFilter: 'blur(3px)',
-                  zIndex: 2147483639
+                  background: 'rgba(0, 0, 0, 0.6)',
+                  backdropFilter: 'blur(6px)',
+                  WebkitBackdropFilter: 'blur(6px)',
+                  zIndex: 2147483620
                 }}
               />
 
               {/* Drawer Panel */}
               <motion.div
+                className="drawer-panel"
                 initial={{ x: '100%' }}
                 animate={{ x: 0 }}
                 exit={{ x: '100%' }}
-                transition={{ type: 'spring', damping: 26, stiffness: 260 }}
+                transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] }}
                 style={{
                   position: 'relative',
                   width: '100%',
-                  maxWidth: '580px',
+                  maxWidth: isMobile ? '100vw' : 'min(92vw, 580px)',
                   height: '100%',
                   background: 'var(--color-surface, #ffffff)',
                   boxShadow: '-8px 0 36px rgba(0, 0, 0, 0.28)',
                   display: 'flex',
                   flexDirection: 'column',
-                  zIndex: 2147483640,
+                  zIndex: 2147483625,
                   overflow: 'hidden'
                 }}
               >
               {/* Drawer Header */}
               <div style={{
-                padding: '1.25rem 1.5rem',
+                padding: isMobile ? '1rem' : '1.25rem 1.5rem',
+                paddingTop: isMobile ? 'max(1rem, env(safe-area-inset-top, 0px))' : '1.25rem',
                 borderBottom: '1px solid var(--color-border)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                background: 'var(--color-surface)'
+                background: 'var(--color-surface)',
+                gap: '8px'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div style={{
@@ -4644,88 +4771,30 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   border: '1px solid var(--color-border-light)'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
-                    <GraduationCap size={16} color="var(--color-text, #0f172a)" /> Học vụ & Mốc thời gian
-                  </div>
-
-                  {/* Khoảng ngày nhập học */}
-                  <div style={{ marginBottom: '1rem' }}>
-                    <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '6px' }}>Khoảng ngày nhập học</label>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', marginBottom: '8px' }}>
-                      {[
-                        { id: 'this_month', label: 'Tháng này' },
-                        { id: 'next_month', label: 'Tháng sau' },
-                        { id: 'this_quarter', label: 'Quý này' },
-                        { id: 'this_year', label: 'Năm nay' }
-                      ].map(p => {
-                        const isSelected = filterAdmissionPreset === p.id;
-                        return (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => {
-                              if (isSelected) {
-                                setFilterAdmissionPreset('');
-                                setFilterAdmissionFrom('');
-                                setFilterAdmissionTo('');
-                              } else {
-                                const { from, to } = getAdmissionPresetRange(p.id);
-                                setFilterAdmissionPreset(p.id);
-                                setFilterAdmissionFrom(from);
-                                setFilterAdmissionTo(to);
-                              }
-                            }}
-                            style={{
-                              padding: '6px 4px',
-                              fontSize: '0.72rem',
-                              fontWeight: isSelected ? 700 : 500,
-                              borderRadius: '6px',
-                              border: isSelected ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
-                              background: 'var(--color-surface, #ffffff)',
-                              color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            {p.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                      <div>
-                        <label style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>Từ ngày</label>
-                        <input
-                          type="date"
-                          className="form-input"
-                          value={filterAdmissionFrom}
-                          onChange={e => {
-                            setFilterAdmissionFrom(e.target.value);
-                            setFilterAdmissionPreset('custom');
-                          }}
-                          style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
-                        />
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>Đến ngày</label>
-                        <input
-                          type="date"
-                          className="form-input"
-                          value={filterAdmissionTo}
-                          onChange={e => {
-                            setFilterAdmissionTo(e.target.value);
-                            setFilterAdmissionPreset('custom');
-                          }}
-                          style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
-                        />
-                      </div>
-                    </div>
+                    <GraduationCap size={16} color="var(--color-text, #0f172a)" /> Mốc thời gian & Học vụ
                   </div>
 
                   {/* Khoảng ngày tạo / cập nhật / tương tác / cọc / hẹn gọi / sinh nhật */}
                   <div style={{ marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid var(--color-border-light)' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '0.875rem' }}>
                       <div>
-                        <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Lọc theo ngày</label>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>Lọc theo ngày</label>
+                          {(filterFromDate || filterToDate || filterBeforeDate || filterAfterDate) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFilterFromDate('');
+                                setFilterToDate('');
+                                setFilterBeforeDate('');
+                                setFilterAfterDate('');
+                              }}
+                              style={{ fontSize: '0.7rem', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}
+                            >
+                              Xóa
+                            </button>
+                          )}
+                        </div>
                         <CustomSelect
                           value={filterDateField}
                           onChange={v => setFilterDateField(v as any)}
@@ -4824,6 +4893,95 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                         <input type="date" className="form-input" value={filterAfterDate} onChange={e => setFilterAfterDate(e.target.value)} style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }} />
                       </div>
                     )}
+                  </div>
+
+                  {/* Khoảng ngày nhập học */}
+                  <div style={{ marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid var(--color-border-light)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>Khoảng ngày nhập học</label>
+                      {(filterAdmissionFrom || filterAdmissionTo || filterAdmissionPreset) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFilterAdmissionPreset('');
+                            setFilterAdmissionFrom('');
+                            setFilterAdmissionTo('');
+                          }}
+                          style={{ fontSize: '0.7rem', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}
+                        >
+                          Xóa chọn
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', marginBottom: '8px' }}>
+                      {[
+                        { id: 'this_month', label: 'Tháng này' },
+                        { id: 'next_month', label: 'Tháng sau' },
+                        { id: 'this_quarter', label: 'Quý này' },
+                        { id: 'this_year', label: 'Năm nay' }
+                      ].map(p => {
+                        const isSelected = filterAdmissionPreset === p.id;
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) {
+                                setFilterAdmissionPreset('');
+                                setFilterAdmissionFrom('');
+                                setFilterAdmissionTo('');
+                              } else {
+                                const { from, to } = getAdmissionPresetRange(p.id);
+                                setFilterAdmissionPreset(p.id);
+                                setFilterAdmissionFrom(from);
+                                setFilterAdmissionTo(to);
+                              }
+                            }}
+                            style={{
+                              padding: '6px 4px',
+                              fontSize: '0.72rem',
+                              fontWeight: isSelected ? 700 : 500,
+                              borderRadius: '6px',
+                              border: isSelected ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                              background: 'var(--color-surface, #ffffff)',
+                              color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {p.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <div>
+                        <label style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>Từ ngày</label>
+                        <input
+                          type="date"
+                          className="form-input"
+                          value={filterAdmissionFrom}
+                          onChange={e => {
+                            setFilterAdmissionFrom(e.target.value);
+                            setFilterAdmissionPreset('custom');
+                          }}
+                          style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>Đến ngày</label>
+                        <input
+                          type="date"
+                          className="form-input"
+                          value={filterAdmissionTo}
+                          onChange={e => {
+                            setFilterAdmissionTo(e.target.value);
+                            setFilterAdmissionPreset('custom');
+                          }}
+                          style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   {/* Lọc đa chương trình */}
@@ -5773,15 +5931,19 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
               </div>
 
               {/* Drawer Footer */}
-              <div style={{
-                padding: '1rem 1.5rem',
-                borderTop: '1px solid var(--color-border)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                background: 'var(--color-surface)',
-                gap: '0.75rem'
-              }}>
+              <div
+                className="drawer-footer"
+                style={{
+                  padding: isMobile ? '0.875rem 1rem calc(0.875rem + env(safe-area-inset-bottom, 0px))' : '1rem 1.5rem',
+                  borderTop: '1px solid var(--color-border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: 'var(--color-surface)',
+                  gap: '0.75rem',
+                  flexWrap: 'wrap'
+                }}
+              >
                 <button
                   type="button"
                   className="btn outline"
@@ -5830,9 +5992,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       <AnimatePresence>
         {isMultiSelectMode && selected.size > 0 && (
           <motion.div initial={{ opacity:0, y:-10 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0 }}
-            style={{ position:'sticky', top:68, zIndex:100, marginBottom:'0.75rem', padding:'0.75rem 1.25rem', background:'var(--color-primary)', borderRadius:'var(--radius-xl)', display:'flex', alignItems:'center', gap:'0.75rem', boxShadow:'0 8px 24px rgba(163, 20, 34,0.3)' }}>
-            <span style={{ color:'white', fontWeight:700, fontSize:'0.875rem' }}>{selected.size} đã chọn</span>
-            <div style={{ flex:1 }}/>
+            style={{ position:'sticky', top: isMobile ? 56 : 68, zIndex:100, marginBottom:'0.75rem', padding: isMobile ? '0.625rem 0.875rem' : '0.75rem 1.25rem', background:'var(--color-primary)', borderRadius:'var(--radius-xl)', display:'flex', alignItems:'center', flexWrap:'wrap', gap: isMobile ? '0.5rem' : '0.75rem', boxShadow:'0 8px 24px rgba(163, 20, 34,0.3)' }}>
+            <span style={{ color:'white', fontWeight:700, fontSize:'0.875rem', whiteSpace:'nowrap' }}>{selected.size} đã chọn</span>
+            <div style={{ flex:1, minWidth: isMobile ? '8px' : '24px' }}/>
             {[
               { label:'Gửi Email', action:bulkEmail },
               { label:'Marketing / Flow', action: () => setCrmBulkMarketingModal({ isOpen: true, mode: 'list' }) },
@@ -5843,17 +6005,17 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
               ] : [])
             ].map(b=>(
               <button key={b.label} onClick={b.action}
-                style={{ padding:'0.375rem 0.875rem', background:'rgba(255,255,255,0.18)', border:'1px solid rgba(255,255,255,0.3)', borderRadius:'var(--radius-lg)', color:'white', fontWeight:600, fontSize:'0.8125rem', cursor:'pointer' }}>
+                style={{ padding:'0.375rem 0.875rem', background:'rgba(255,255,255,0.18)', border:'1px solid rgba(255,255,255,0.3)', borderRadius:'var(--radius-lg)', color:'white', fontWeight:600, fontSize:'0.8125rem', cursor:'pointer', whiteSpace:'nowrap' }}>
                 {b.label}
               </button>
             ))}
             {!['viewer'].includes(user?.role || '') && (
               <button onClick={bulkDelete}
-                style={{ padding:'0.375rem 0.875rem', background:'rgba(239,68,68,0.8)', border:'none', borderRadius:'var(--radius-lg)', color:'white', fontWeight:700, fontSize:'0.8125rem', cursor:'pointer' }}>
+                style={{ padding:'0.375rem 0.875rem', background:'rgba(239,68,68,0.8)', border:'none', borderRadius:'var(--radius-lg)', color:'white', fontWeight:700, fontSize:'0.8125rem', cursor:'pointer', whiteSpace:'nowrap' }}>
                 Xóa
               </button>
             )}
-            <button onClick={() => setSelected(new Set())} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.7)', cursor:'pointer' }}><X size={16}/></button>
+            <button onClick={() => setSelected(new Set())} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.7)', cursor:'pointer', display:'flex', alignItems:'center' }}><X size={16}/></button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -6448,9 +6610,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   <span
                                     onClick={openJourney360}
                                     title="Xem phiên truy cập Web trong Hành trình"
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text, #334155)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.68rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, #f1f5f9)', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, #e2e8f0)', fontSize: '0.68rem', fontWeight: 500, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
                                   >
-                                    <Globe size={10} style={{ color: '#0284c7', flexShrink: 0 }} />
+                                    <Globe size={10} style={{ color: 'currentColor', opacity: 0.75, flexShrink: 0 }} />
                                     <span>{c.last_web_visit_at ? `Web: ${formatTimeAgo(c.last_web_visit_at)}` : `Web (${c.web_pageviews_count})`}</span>
                                   </span>
                                 )}
@@ -6458,9 +6620,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   <span
                                     onClick={openJourney360}
                                     title="Xem lịch sử gửi, mở & click Email trong Hành trình"
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text, #334155)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.68rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, #f1f5f9)', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, #e2e8f0)', fontSize: '0.68rem', fontWeight: 500, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
                                   >
-                                    <Mail size={10} style={{ color: '#db2777', flexShrink: 0 }} />
+                                    <Mail size={10} style={{ color: 'currentColor', opacity: 0.75, flexShrink: 0 }} />
                                     <span>
                                       {Number(c.stats_email_opened || 0) > 0
                                         ? `Mở: ${c.stats_email_opened}${Number(c.stats_email_clicked || 0) > 0 ? ` • Click: ${c.stats_email_clicked}` : ''}`
@@ -6472,9 +6634,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   <span
                                     onClick={openJourney360}
                                     title={c.active_flow_names ? `Đang chạy Flow: ${c.active_flow_names}` : 'Xem luồng Automation đang chạy'}
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text, #334155)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.68rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, #f1f5f9)', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, #e2e8f0)', fontSize: '0.68rem', fontWeight: 500, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
                                   >
-                                    <GitBranch size={10} style={{ color: '#4f46e5', flexShrink: 0 }} />
+                                    <GitBranch size={10} style={{ color: 'currentColor', opacity: 0.75, flexShrink: 0 }} />
                                     <span>Flow ({c.active_flow_count})</span>
                                   </span>
                                 )}
@@ -6482,9 +6644,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   <span
                                     onClick={openJourney360}
                                     title={`Mã Voucher: ${c.active_voucher_code}`}
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text, #334155)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.68rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, #f1f5f9)', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, #e2e8f0)', fontSize: '0.68rem', fontWeight: 500, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
                                   >
-                                    <Ticket size={10} style={{ color: '#059669', flexShrink: 0 }} />
+                                    <Ticket size={10} style={{ color: 'currentColor', opacity: 0.75, flexShrink: 0 }} />
                                     <span>{c.active_voucher_code}</span>
                                   </span>
                                 )}
@@ -6492,9 +6654,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   <span
                                     onClick={openJourney360}
                                     title="Xem câu trả lời Khảo sát / Quiz"
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text, #334155)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.68rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, #f1f5f9)', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, #e2e8f0)', fontSize: '0.68rem', fontWeight: 500, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
                                   >
-                                    <ClipboardList size={10} style={{ color: '#d97706', flexShrink: 0 }} />
+                                    <ClipboardList size={10} style={{ color: 'currentColor', opacity: 0.75, flexShrink: 0 }} />
                                     <span>KS ({c.survey_completed_count})</span>
                                   </span>
                                 )}
@@ -7198,54 +7360,54 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   {(c.last_web_visit_at || Number(c.web_pageviews_count || 0) > 0) && (
                                     <span
                                       onClick={openJourney360}
-                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, #f1f5f9)', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, #e2e8f0)', fontSize: '0.6rem', fontWeight: 500, cursor: 'pointer', lineHeight: 1.2 }}
                                     >
-                                      <Globe size={9} />
+                                      <Globe size={9} style={{ color: 'currentColor', opacity: 0.75 }} />
                                       {c.last_web_visit_at ? `Web: ${formatTimeAgo(c.last_web_visit_at)}` : `Web (${c.web_pageviews_count})`}
                                     </span>
                                   )}
                                   {Number(c.stats_email_opened || 0) > 0 && (
                                     <span
                                       onClick={openJourney360}
-                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, #f1f5f9)', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, #e2e8f0)', fontSize: '0.6rem', fontWeight: 500, cursor: 'pointer', lineHeight: 1.2 }}
                                     >
-                                      <Mail size={9} />
+                                      <Mail size={9} style={{ color: 'currentColor', opacity: 0.75 }} />
                                       Mở: {c.stats_email_opened}
                                     </span>
                                   )}
                                   {Number(c.active_flow_count || 0) > 0 && (
                                     <span
                                       onClick={openJourney360}
-                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, #f1f5f9)', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, #e2e8f0)', fontSize: '0.6rem', fontWeight: 500, cursor: 'pointer', lineHeight: 1.2 }}
                                     >
-                                      <GitBranch size={9} />
+                                      <GitBranch size={9} style={{ color: 'currentColor', opacity: 0.75 }} />
                                       Flow ({c.active_flow_count})
                                     </span>
                                   )}
                                   {c.active_voucher_code && (
                                     <span
                                       onClick={openJourney360}
-                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, #f1f5f9)', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, #e2e8f0)', fontSize: '0.6rem', fontWeight: 500, cursor: 'pointer', lineHeight: 1.2 }}
                                     >
-                                      <Ticket size={9} />
+                                      <Ticket size={9} style={{ color: 'currentColor', opacity: 0.75 }} />
                                       {c.active_voucher_code}
                                     </span>
                                   )}
                                   {Number(c.survey_completed_count || 0) > 0 && (
                                     <span
                                       onClick={openJourney360}
-                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, #f1f5f9)', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, #e2e8f0)', fontSize: '0.6rem', fontWeight: 500, cursor: 'pointer', lineHeight: 1.2 }}
                                     >
-                                      <ClipboardList size={9} />
+                                      <ClipboardList size={9} style={{ color: 'currentColor', opacity: 0.75 }} />
                                       KS ({c.survey_completed_count})
                                     </span>
                                   )}
                                   {Number(c.engagement_score || 0) > 0 && (
                                     <span
                                       onClick={openJourney360}
-                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, #f1f5f9)', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, #e2e8f0)', fontSize: '0.6rem', fontWeight: 500, cursor: 'pointer', lineHeight: 1.2 }}
                                     >
-                                      <Flame size={9} />
+                                      <Flame size={9} style={{ color: 'currentColor', opacity: 0.75 }} />
                                       +{c.engagement_score} pts
                                     </span>
                                   )}

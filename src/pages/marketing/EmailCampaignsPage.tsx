@@ -337,11 +337,13 @@ const Campaigns: React.FC = () => {
 
     // Deep-link via navigation state or query params (open a campaign report / open wizard with preselected list or contacts)
     useEffect(() => {
+        if (!location.pathname.startsWith('/marketing/campaigns')) return;
         const navState = (location as any).state;
         const params = new URLSearchParams(location.search);
         const queryListId = params.get('list_id') || navState?.listId;
         const crmContactsParam = params.get('crm_contacts');
         const preselectedContacts = navState?.preselectedCrmContacts;
+        const isCreateParam = params.get('create') === '1' || params.get('action') === 'create';
 
         if (navState?.openCampaignId && campaigns.length > 0) {
             const targetCamp = campaigns.find(c => c.id === navState.openCampaignId);
@@ -349,7 +351,7 @@ const Campaigns: React.FC = () => {
                 openDetail(targetCamp);
                 window.history.replaceState({}, document.title);
             }
-        } else if (navState?.openWizard || queryListId || crmContactsParam || (Array.isArray(preselectedContacts) && preselectedContacts.length > 0)) {
+        } else if (navState?.openWizard || isCreateParam || queryListId || crmContactsParam || (Array.isArray(preselectedContacts) && preselectedContacts.length > 0)) {
             const individualIds = Array.isArray(preselectedContacts) && preselectedContacts.length > 0
                 ? preselectedContacts.map((c: any) => String(c.domation_subscriber_id || c.subscriber_id || c.id)).filter(Boolean)
                 : (crmContactsParam ? crmContactsParam.split(',').map(s => s.trim()).filter(Boolean) : []);

@@ -455,10 +455,21 @@ class ExportController {
                 if (!empty($srcList)) {
                     $srcOrs = [];
                     foreach ($srcList as $sItem) {
-                        $srcOrs[] = "(t.source LIKE ? OR t.utm_source LIKE ? OR t.platform LIKE ?)";
+                        $srcColParts = ["t.source LIKE ?"];
                         $params[] = '%' . $sItem . '%';
-                        $params[] = '%' . $sItem . '%';
-                        $params[] = '%' . $sItem . '%';
+                        if (isset($contactSchemaCols['source_detail'])) {
+                            $srcColParts[] = "t.source_detail LIKE ?";
+                            $params[] = '%' . $sItem . '%';
+                        }
+                        if (isset($contactSchemaCols['utm_source'])) {
+                            $srcColParts[] = "t.utm_source LIKE ?";
+                            $params[] = '%' . $sItem . '%';
+                        }
+                        if (isset($contactSchemaCols['platform'])) {
+                            $srcColParts[] = "t.platform LIKE ?";
+                            $params[] = '%' . $sItem . '%';
+                        }
+                        $srcOrs[] = '(' . implode(' OR ', $srcColParts) . ')';
                     }
                     $where[] = "(" . implode(' OR ', $srcOrs) . ")";
                 }
@@ -687,7 +698,7 @@ class ExportController {
             if ($uncontacted && $interactionStatus === '') {
                 $interactionStatus = 'uncontacted';
             }
-            if ($interactionStatus === 'has_activity' || $interactionStatus === 'contacted') {
+            if ($interactionStatus === 'has_activity' || $interactionStatus === 'contacted' || $interactionStatus === 'interacted') {
                 $where[] = "(
                     (t.last_contact IS NOT NULL AND t.last_contact != '')
                     OR EXISTS (SELECT 1 FROM activities act_f WHERE (act_f.contact_id = t.id OR (act_f.related_id = t.id AND act_f.related_type IN ('contact', 'lead'))) AND act_f.deleted_at IS NULL)
@@ -702,7 +713,7 @@ class ExportController {
                           AND n_f.body NOT LIKE '[Tái phân bổ]%'
                     )
                 )";
-            } elseif ($interactionStatus === 'no_activity' || $interactionStatus === 'uncontacted') {
+            } elseif ($interactionStatus === 'no_activity' || $interactionStatus === 'uncontacted' || $interactionStatus === 'never') {
                 $where[] = "(
                     (t.last_contact IS NULL OR t.last_contact = '')
                     AND NOT EXISTS (SELECT 1 FROM activities act_f WHERE (act_f.contact_id = t.id OR (act_f.related_id = t.id AND act_f.related_type IN ('contact', 'lead'))) AND act_f.deleted_at IS NULL)
@@ -1101,8 +1112,7 @@ class ExportController {
                 $params[] = (int)$campaignId;
             }
             if ($sourceParam !== '' && $sourceParam !== 'all') {
-                $where[] = '(t.source = ? OR c.source = ?)';
-                $params[] = $sourceParam;
+                $where[] = 'c.source = ?';
                 $params[] = $sourceParam;
             }
             if ($companyId !== '' && $companyId !== 'all') {
@@ -1135,25 +1145,16 @@ class ExportController {
                     $sOrs = [];
                     foreach ($statusList as $st) {
                         if ($st === 'won') {
-                            $sOrs[] = "(t.status = 'won' OR ps.is_won = 1)";
+                            $sOrs[] = "COALESCE(ps.is_won, 0) = 1";
                         } elseif ($st === 'lost') {
-                            $sOrs[] = "(t.status = 'lost' OR ps.is_lost = 1)";
+                            $sOrs[] = "COALESCE(ps.is_lost, 0) = 1";
                         } elseif ($st === 'open') {
-                            $sOrs[] = "(COALESCE(t.status, 'open') = 'open' AND COALESCE(ps.is_won, 0) = 0 AND COALESCE(ps.is_lost, 0) = 0)";
-                        } else {
-                            $sOrs[] = "t.status = ?";
-                            $params[] = $st;
+                            $sOrs[] = "(COALESCE(ps.is_won, 0) = 0 AND COALESCE(ps.is_lost, 0) = 0)";
                         }
                     }
-                    $where[] = '(' . implode(' OR ', $sOrs) . ')';
-                }
-            }
-            if ($prioritiesParam !== '' && $prioritiesParam !== 'all') {
-                $prList = array_filter(array_map('trim', explode(',', $prioritiesParam)));
-                if (!empty($prList)) {
-                    $ph = implode(',', array_fill(0, count($prList), '?'));
-                    $where[] = "t.priority IN ({$ph})";
-                    foreach ($prList as $pr) $params[] = $pr;
+                    if (!empty($sOrs)) {
+                        $where[] = '(' . implode(' OR ', $sOrs) . ')';
+                    }
                 }
             }
             if ($minValue > 0) {
@@ -1220,7 +1221,7 @@ class ExportController {
             $search = trim((string)($_GET['search'] ?? $_GET['search_query'] ?? ''));
             $categoriesPar = trim((string)($_GET['category'] ?? $_GET['categories'] ?? ''));
             if ($search !== '') {
-                $where[] = '(t.name LIKE ? OR t.sku LIKE ? OR t.description LIKE ?)';
+                $where[] = '(t.name LIKE ? OR t.sku LIKE ? OR t.category LIKE ?)';
                 $params[] = "%$search%";
                 $params[] = "%$search%";
                 $params[] = "%$search%";
@@ -2280,8 +2281,7 @@ class ExportController {
             if (!empty($srcList)) {
                 $srcOrs = [];
                 foreach ($srcList as $sItem) {
-                    $srcOrs[] = "(c.source LIKE ? OR c.utm_source LIKE ?)";
-                    $params[] = '%' . $sItem . '%';
+                    $srcOrs[] = "c.source LIKE ?";
                     $params[] = '%' . $sItem . '%';
                 }
                 $where[] = "(" . implode(' OR ', $srcOrs) . ")";
@@ -2786,7 +2786,7 @@ class ExportController {
             if (!empty($catList)) {
                 $catOrs = [];
                 foreach ($catList as $cItem) {
-                    $catOrs[] = "t.category LIKE ?";
+                    $catOrs[] = "t.subject LIKE ?";
                     $params[] = '%' . $cItem . '%';
                 }
                 $where[] = "(" . implode(' OR ', $catOrs) . ")";
@@ -2855,7 +2855,7 @@ class ExportController {
             array_push($params, $like, $like, $like, $like);
         }
 
-        $sql = "SELECT t.id, t.subject, t.category, t.priority, t.status, t.customer_name, t.created_at,
+        $sql = "SELECT t.id, t.subject, '' AS category, t.priority, t.status, t.customer_name, t.created_at,
                        COALESCE(u_ass.full_name, 'Chưa phân công') as assignee_name,
                        COALESCE(u_cr.full_name, 'Hệ thống') as creator_name
                 FROM tickets t
@@ -3019,7 +3019,7 @@ class ExportController {
                 FROM users u
                 LEFT JOIN hrm_profiles hp ON hp.user_id = u.id
                 LEFT JOIN teams tm ON u.team_id = tm.id
-                LEFT JOIN monthly_payslips mp ON (mp.user_id = u.id AND mp.tenant_id = u.tenant_id AND mp.month_year = ?)
+                LEFT JOIN monthly_payslips mp ON (mp.user_id = u.id AND mp.month_year = ?)
                 WHERE " . implode(' AND ', $where) . "
                 ORDER BY u.id ASC";
 
@@ -3184,7 +3184,7 @@ class ExportController {
             'Ghi chú'
         ]);
 
-        $where = ['po.tenant_id = ?'];
+        $where = ['po.tenant_id = ?', 'po.deleted_at IS NULL'];
         $params = [$tid];
 
         $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo'], true);
@@ -3338,7 +3338,7 @@ class ExportController {
             'Ghi chú'
         ]);
 
-        $where = ['so.tenant_id = ?'];
+        $where = ['so.tenant_id = ?', 'so.deleted_at IS NULL'];
         $params = [$tid];
 
         $isFinAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'accountant', 'ke_toan', 'sale_admin', 'saleadmin'], true);
@@ -3596,7 +3596,7 @@ class ExportController {
             'Ngày tạo'
         ]);
 
-        $where = ['q.tenant_id = ?'];
+        $where = ['q.tenant_id = ?', 'q.deleted_at IS NULL'];
         $params = [$tid];
 
         $isAdminOrMgr = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'accountant', 'ke_toan', 'sale_admin', 'saleadmin', 'manager', 'truong_phong', 'leader', 'team_lead'], true);
@@ -3829,7 +3829,7 @@ class ExportController {
             }
         }
         if ($deductionMonth !== '') {
-            $where[] = 'a.deduction_month = ?';
+            $where[] = "DATE_FORMAT(a.request_date, '%Y-%m') = ?";
             $params[] = $deductionMonth;
         }
         if ($targetUserId > 0) {
@@ -3842,7 +3842,7 @@ class ExportController {
             array_push($params, $like, $like, $like);
         }
 
-        $sql = "SELECT a.id, a.amount, a.deduction_month, a.reason, a.status, a.created_at,
+        $sql = "SELECT a.id, a.amount, DATE_FORMAT(a.request_date, '%Y-%m') AS deduction_month, a.reason, a.status, a.created_at,
                        u.full_name, u.department,
                        COALESCE(app1.full_name, '') as approver_name_1,
                        COALESCE(app2.full_name, '') as approver_name_2

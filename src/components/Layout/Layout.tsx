@@ -13,6 +13,7 @@ import { useUIStore } from '../../store/uiStore';
 import { AlertToast } from '../ui/AlertToast';
 import { StatRowSkeleton } from '../ui/Skeleton';
 import { WorkspaceStickyPomodoro } from '../WorkspaceStickyPomodoro';
+import { pushOverlay } from '../../utils/overlayStack';
 
 const QuickAddLeadModal = React.lazy(() => import('../QuickAddLeadModal').then(m => ({ default: m.QuickAddLeadModal })));
 const ProfileModal = React.lazy(() => import('../ProfileModal').then(m => ({ default: m.ProfileModal })));
@@ -67,6 +68,17 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   });
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    if (!isMobileSidebarOpen) return;
+    return pushOverlay('mobile-sidebar-drawer', () => setIsMobileSidebarOpen(false), 11000);
+  }, [isMobileSidebarOpen]);
+
+  useEffect(() => {
+    const handleCloseMobileSidebar = () => setIsMobileSidebarOpen(false);
+    window.addEventListener('close-mobile-sidebar', handleCloseMobileSidebar);
+    return () => window.removeEventListener('close-mobile-sidebar', handleCloseMobileSidebar);
+  }, []);
 
   useEffect(() => {
     const handleResize = () => {
@@ -780,11 +792,15 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           zIndex: 11000,
           background: 'rgba(22, 29, 49, 0.96)',
           backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
           display: 'flex',
           flexDirection: 'column',
-          padding: '1.5rem',
+          padding: '1.25rem',
+          paddingTop: 'max(1.25rem, env(safe-area-inset-top, 0px))',
+          paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))',
           color: '#dadada',
-          overflowY: 'auto'
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch'
         }}>
           {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexShrink: 0 }}>

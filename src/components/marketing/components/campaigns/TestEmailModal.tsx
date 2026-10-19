@@ -1,13 +1,14 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
     Mail, Send, Smartphone, Search, Users, CheckSquare, Square, AtSign,
-    Building2, UserCheck, AlertCircle, ShieldCheck, Check, User
+    Building2, UserCheck, AlertCircle, ShieldCheck, Check, User, ChevronDown, X
 } from 'lucide-react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
 import { api } from '../../services/storageAdapter';
 import { useSettings, parseVerifiedSenderEmails } from '../contexts/SettingsContext';
 import erpApi from '../../../../api/axios';
+import { Avatar } from '../../../ui/Avatar';
 import toast from 'react-hot-toast';
 
 interface TestEmailModalProps {
@@ -52,12 +53,19 @@ const TestEmailModal: React.FC<TestEmailModalProps> = ({
 
     // Verified Sender state
     const [verifiedSenders, setVerifiedSenders] = useState<string[]>(contextSenderEmails);
+    const normalizeSenderName = (val?: string | null) => {
+        const s = String(val || '').trim();
+        if (!s || /^viện\s+quốc\s+tế\s+ideas$/i.test(s)) return 'IDEAS';
+        return s;
+    };
     const [selectedSenderEmail, setSelectedSenderEmail] = useState<string>(
         defaultSenderEmail || contextSenderEmails[0] || 'tuyensinh@ideas.edu.vn'
     );
     const [senderName, setSenderName] = useState<string>(
-        defaultSenderName || settings?.senderName || 'Viện Quốc Tế IDEAS'
+        normalizeSenderName(defaultSenderName || settings?.senderName)
     );
+    const [isSenderDropdownOpen, setIsSenderDropdownOpen] = useState(false);
+    const senderDropdownRef = useRef<HTMLDivElement>(null);
 
     // Multi-recipient Email state
     const [candidates, setCandidates] = useState<RecipientOption[]>([]);
@@ -67,6 +75,18 @@ const TestEmailModal: React.FC<TestEmailModalProps> = ({
     const [searchQuery, setSearchQuery] = useState('');
     const [sourceFilter, setSourceFilter] = useState<'all' | 'employee' | 'subscriber'>('all');
     const [loading, setLoading] = useState(false);
+
+    // Close sender dropdown when clicking outside
+    useEffect(() => {
+        if (!isSenderDropdownOpen) return;
+        const handleClickOutside = (e: MouseEvent) => {
+            if (senderDropdownRef.current && !senderDropdownRef.current.contains(e.target as Node)) {
+                setIsSenderDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isSenderDropdownOpen]);
 
     // Sync verified senders from context & API on open
     useEffect(() => {
@@ -97,14 +117,15 @@ const TestEmailModal: React.FC<TestEmailModalProps> = ({
                         return finalSenders[0];
                     });
                 }
-                const resolvedName =
+                const resolvedName = normalizeSenderName(
                     defaultSenderName ||
                     payload?.default_sender_name ||
                     payload?.smtp_from_name ||
                     payload?.ses_sender_name ||
                     settings?.senderName ||
-                    'Viện Quốc Tế IDEAS';
-                setSenderName((prev) => prev || resolvedName);
+                    'IDEAS'
+                );
+                setSenderName((prev) => (!prev || /^viện\s+quốc\s+tế\s+ideas$/i.test(prev) ? resolvedName : prev));
             })
             .catch(() => {
                 if (cancelled) return;
@@ -147,13 +168,14 @@ const TestEmailModal: React.FC<TestEmailModalProps> = ({
                         if (u.status && String(u.status).toLowerCase() === 'inactive') return;
                         const name = u.full_name || u.name || u.username || email.split('@')[0];
                         const badge = u.position || u.job_title || u.department_name || u.department || u.role_name || u.role || 'Nhân sự';
+                        const avatarUrl = u.avatar_url || u.avatar || u.profile_picture || undefined;
                         map.set(email, {
                             id: `emp_${u.id || email}`,
                             name,
                             email,
                             badge: String(badge),
                             source: 'employee',
-                            avatar: u.avatar || u.avatar_url || undefined
+                            avatar: avatarUrl ? String(avatarUrl) : undefined
                         });
                     });
                 }
@@ -168,12 +190,14 @@ const TestEmailModal: React.FC<TestEmailModalProps> = ({
                         const email = String(s.email || '').trim().toLowerCase();
                         if (!email || !EMAIL_REGEX.test(email) || map.has(email)) return;
                         const fullName = [s.first_name, s.last_name].filter(Boolean).join(' ').trim() || s.full_name || s.name || email.split('@')[0];
+                        const subAvatar = s.avatar_url || s.avatar || undefined;
                         map.set(email, {
                             id: `sub_${s.id || email}`,
                             name: fullName,
                             email,
                             badge: s.job_title || s.company_name || 'Khách hàng',
-                            source: 'subscriber'
+                            source: 'subscriber',
+                            avatar: subAvatar ? String(subAvatar) : undefined
                         });
                     });
                 }
@@ -205,6 +229,19 @@ const TestEmailModal: React.FC<TestEmailModalProps> = ({
             );
         });
     }, [candidates, searchQuery, sourceFilter]);
+
+    // Selected recipient objects for quick preview chips
+    const selectedRecipientObjects = useMemo(() => {
+        const byEmail = new Map<string, RecipientOption>();
+        candidates.forEach(c => byEmail.set(c.email.toLowerCase(), c));
+        return selectedEmails.map(em => byEmail.get(em.toLowerCase()) || {
+            id: em,
+            name: em.split('@')[0],
+            email: em,
+            badge: 'Email',
+            source: 'employee' as const
+        });
+    }, [candidates, selectedEmails]);
 
     // Parse custom textarea emails
     const { validCustomEmails, invalidCustomTokens } = useMemo(() => {
@@ -372,7 +409,7 @@ const TestEmailModal: React.FC<TestEmailModalProps> = ({
             {isZns ? (
                 <div className="space-y-6">
                     <div className="flex flex-col items-center text-center space-y-3">
-                        <div className="w-16 h-16 rounded-[14px] flex items-center justify-center bg-blue-50 text-blue-500">
+                        <div className="w-16 h-16 rounded-[14px] flex items-center justify-center bg-[#BD1D2D]/10 text-[#BD1D2D]">
                             <Smartphone className="w-8 h-8" />
                         </div>
                         <div>
@@ -414,95 +451,137 @@ const TestEmailModal: React.FC<TestEmailModalProps> = ({
                         </div>
                     </div>
 
-                    {/* Section 1: Verified Sender Email Picker */}
+                    {/* Section 1: Sleek Custom Dropdown for Verified Sender Email + From Name */}
                     <div className="p-3.5 rounded-[14px] bg-slate-50/80 border border-slate-200 space-y-3">
                         <div className="flex items-center justify-between gap-2">
                             <label className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                                1. Chọn Email Gửi Đi (Đã xác minh trong App)
+                                1. Cấu hình Email Gửi Đi (Đã xác minh trong App)
                             </label>
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                                 <Check className="w-3 h-3 stroke-[2.5]" />
-                                Verified SES / SMTP
+                                Verified SES / SMTP ({verifiedSenders.length})
                             </span>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {verifiedSenders.map((email, idx) => {
-                                const isSelected = selectedSenderEmail.toLowerCase() === email.toLowerCase();
-                                return (
-                                    <button
-                                        key={email}
-                                        type="button"
-                                        onClick={() => setSelectedSenderEmail(email)}
-                                        className={`px-3 py-2.5 rounded-xl border text-left transition-all flex items-center justify-between gap-2 cursor-pointer ${
-                                            isSelected
-                                                ? 'border-[#BD1D2D] bg-rose-50/70 shadow-xs ring-2 ring-[#BD1D2D]/15'
-                                                : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-                                        }`}
-                                    >
-                                        <div className="flex items-center gap-2.5 min-w-0">
-                                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                                                isSelected ? 'bg-[#BD1D2D] text-white' : 'bg-slate-100 text-slate-500'
-                                            }`}>
-                                                <Mail className="w-3.5 h-3.5" />
-                                            </div>
-                                            <div className="min-w-0">
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className={`text-xs font-bold truncate ${isSelected ? 'text-[#BD1D2D]' : 'text-slate-700'}`}>
-                                                        {email}
-                                                    </span>
-                                                    {idx === 0 && (
-                                                        <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 shrink-0">
-                                                            Mặc định
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <span className="text-[10px] text-emerald-600 font-semibold block">
-                                                    Đã xác minh tên miền
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${
-                                            isSelected ? 'bg-[#BD1D2D] text-white' : 'border border-slate-300'
-                                        }`}>
-                                            {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                                        </div>
-                                    </button>
-                                );
-                            })}
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                            <div>
-                                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {/* Custom Styled Sender Email Dropdown */}
+                            <div className="relative" ref={senderDropdownRef}>
+                                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1">
                                     <AtSign className="w-3 h-3 text-[#BD1D2D]" />
-                                    Địa chỉ Email người gửi đang chọn
+                                    Địa chỉ Email gửi đi
                                 </label>
-                                <select
-                                    value={selectedSenderEmail}
-                                    onChange={(e) => setSelectedSenderEmail(e.target.value)}
-                                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#BD1D2D]/15 focus:border-[#BD1D2D] transition-all"
+                                <button
+                                    type="button"
+                                    onClick={() => setIsSenderDropdownOpen(prev => !prev)}
+                                    className={`w-full h-11 px-3 bg-white border rounded-xl text-left flex items-center justify-between gap-2 transition-all cursor-pointer outline-none focus:outline-none ${
+                                        isSenderDropdownOpen
+                                            ? 'border-[#BD1D2D] ring-2 ring-[#BD1D2D]/15 shadow-xs'
+                                            : 'border-slate-200 hover:border-slate-300 shadow-2xs'
+                                    }`}
                                 >
-                                    {verifiedSenders.map((em) => (
-                                        <option key={em} value={em}>
-                                            {em} (Đã xác minh)
-                                        </option>
-                                    ))}
-                                </select>
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <div className="w-7 h-7 rounded-lg bg-[#BD1D2D]/10 text-[#BD1D2D] flex items-center justify-center shrink-0">
+                                            <Mail className="w-3.5 h-3.5" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <div className="text-xs font-bold text-slate-800 truncate leading-tight">
+                                                {selectedSenderEmail}
+                                            </div>
+                                            <div className="text-[10px] font-semibold text-emerald-600 flex items-center gap-1 leading-tight mt-0.5">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                                                Đã xác minh tên miền
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <ChevronDown
+                                        className={`w-4 h-4 text-slate-400 shrink-0 transition-transform duration-200 ${
+                                            isSenderDropdownOpen ? 'rotate-180 text-[#BD1D2D]' : ''
+                                        }`}
+                                    />
+                                </button>
+
+                                {isSenderDropdownOpen && (
+                                    <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150 max-h-64 overflow-y-auto custom-scrollbar">
+                                        <div className="px-2.5 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                                            <span>Chọn địa chỉ gửi đi</span>
+                                            <span className="text-emerald-600">{verifiedSenders.length} khả dụng</span>
+                                        </div>
+                                        <div className="space-y-1">
+                                            {verifiedSenders.map((email, idx) => {
+                                                const isSelected = selectedSenderEmail.toLowerCase() === email.toLowerCase();
+                                                return (
+                                                    <button
+                                                        key={email}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setSelectedSenderEmail(email);
+                                                            setIsSenderDropdownOpen(false);
+                                                        }}
+                                                        className={`w-full px-2.5 py-2 rounded-xl text-left transition-all flex items-center justify-between gap-2 cursor-pointer outline-none focus:outline-none ${
+                                                            isSelected
+                                                                ? 'bg-rose-50/90 border border-[#BD1D2D]/30'
+                                                                : 'hover:bg-slate-50 border border-transparent'
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-center gap-2.5 min-w-0">
+                                                            <div
+                                                                className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                                                                    isSelected ? 'bg-[#BD1D2D] text-white' : 'bg-slate-100 text-slate-500'
+                                                                }`}
+                                                            >
+                                                                <Mail className="w-3.5 h-3.5" />
+                                                            </div>
+                                                            <div className="min-w-0">
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <span
+                                                                        className={`text-xs font-bold truncate ${
+                                                                            isSelected ? 'text-[#BD1D2D]' : 'text-slate-800'
+                                                                        }`}
+                                                                    >
+                                                                        {email}
+                                                                    </span>
+                                                                    {idx === 0 && (
+                                                                        <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 shrink-0">
+                                                                            Mặc định
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <span className="text-[10px] text-emerald-600 font-semibold block">
+                                                                    Đã xác minh SES / SMTP
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <div
+                                                            className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${
+                                                                isSelected ? 'bg-[#BD1D2D] text-white' : 'border border-slate-300'
+                                                            }`}
+                                                        >
+                                                            {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
+
+                            {/* Sender Display Name */}
                             <div>
-                                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1">
+                                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1">
                                     <User className="w-3 h-3 text-[#BD1D2D]" />
                                     Tên hiển thị người gửi (From Name)
                                 </label>
-                                <input
-                                    type="text"
-                                    value={senderName}
-                                    onChange={(e) => setSenderName(e.target.value)}
-                                    placeholder="VD: Viện Quốc Tế IDEAS"
-                                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#BD1D2D]/15 focus:border-[#BD1D2D] transition-all"
-                                />
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        value={senderName}
+                                        onChange={(e) => setSenderName(e.target.value)}
+                                        placeholder="VD: IDEAS"
+                                        className="w-full h-11 px-3.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#BD1D2D]/15 focus:border-[#BD1D2D] transition-all shadow-2xs"
+                                    />
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -518,7 +597,7 @@ const TestEmailModal: React.FC<TestEmailModalProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => setSourceFilter('all')}
-                                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                                         sourceFilter === 'all'
                                             ? 'bg-slate-800 text-white shadow-xs'
                                             : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -529,7 +608,7 @@ const TestEmailModal: React.FC<TestEmailModalProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => setSourceFilter('employee')}
-                                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 ${
+                                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
                                         sourceFilter === 'employee'
                                             ? 'bg-[#BD1D2D] text-white shadow-xs'
                                             : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -542,9 +621,9 @@ const TestEmailModal: React.FC<TestEmailModalProps> = ({
                                     <button
                                         type="button"
                                         onClick={() => setSourceFilter('subscriber')}
-                                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 ${
+                                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
                                             sourceFilter === 'subscriber'
-                                                ? 'bg-indigo-600 text-white shadow-xs'
+                                                ? 'bg-slate-800 text-white shadow-xs'
                                                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                         }`}
                                     >
@@ -564,14 +643,23 @@ const TestEmailModal: React.FC<TestEmailModalProps> = ({
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     placeholder="Tìm theo tên nhân sự, email, chức vụ, phòng ban..."
-                                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#BD1D2D]/15 focus:border-[#BD1D2D] transition-all"
+                                    className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#BD1D2D]/15 focus:border-[#BD1D2D] transition-all"
                                 />
+                                {searchQuery && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setSearchQuery('')}
+                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                                    >
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                )}
                             </div>
                             <button
                                 type="button"
                                 onClick={handleToggleAllFiltered}
                                 disabled={filteredCandidates.length === 0}
-                                className="px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 flex items-center gap-1.5 shrink-0 disabled:opacity-40 transition-all"
+                                className="px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 flex items-center gap-1.5 shrink-0 disabled:opacity-40 transition-all cursor-pointer"
                             >
                                 {allFilteredSelected ? (
                                     <>
@@ -587,12 +675,34 @@ const TestEmailModal: React.FC<TestEmailModalProps> = ({
                             </button>
                         </div>
 
-                        {/* Candidate List */}
-                        <div className="border border-slate-200 rounded-[14px] bg-slate-50/50 max-h-44 overflow-y-auto divide-y divide-slate-100">
+                        {/* Selected Recipients Chips */}
+                        {selectedRecipientObjects.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1.5 max-h-16 overflow-y-auto p-2 rounded-xl bg-slate-50 border border-slate-200/80 custom-scrollbar">
+                                {selectedRecipientObjects.map(rec => (
+                                    <span
+                                        key={rec.email}
+                                        className="inline-flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-full bg-white border border-slate-200 text-[11px] font-semibold text-slate-800 shadow-2xs"
+                                    >
+                                        <Avatar name={rec.name} src={rec.avatar} size={18} />
+                                        <span className="truncate max-w-[140px]">{rec.name}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleCandidateEmail(rec.email)}
+                                            className="text-slate-400 hover:text-[#BD1D2D] cursor-pointer outline-none"
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Candidate List with Real & Multi-Color Avatars */}
+                        <div className="border border-slate-200 rounded-[14px] bg-white max-h-56 overflow-y-auto divide-y divide-slate-100 custom-scrollbar">
                             {loadingCandidates ? (
                                 <div className="p-3 space-y-2">
-                                    {[1, 2, 3].map((i) => (
-                                        <div key={i} className="h-10 rounded-xl bg-slate-200/70 animate-pulse" />
+                                    {[1, 2, 3, 4].map((i) => (
+                                        <div key={i} className="h-11 rounded-xl bg-slate-200/70 animate-pulse" />
                                     ))}
                                 </div>
                             ) : filteredCandidates.length === 0 ? (
@@ -602,12 +712,6 @@ const TestEmailModal: React.FC<TestEmailModalProps> = ({
                             ) : (
                                 filteredCandidates.map((item) => {
                                     const isChecked = selectedEmails.includes(item.email.toLowerCase());
-                                    const initials = item.name
-                                        .split(' ')
-                                        .filter(Boolean)
-                                        .slice(-2)
-                                        .map(part => part[0]?.toUpperCase() || '')
-                                        .join('') || 'U';
 
                                     return (
                                         <div
@@ -622,17 +726,13 @@ const TestEmailModal: React.FC<TestEmailModalProps> = ({
                                                     type="checkbox"
                                                     checked={isChecked}
                                                     onChange={() => {}}
-                                                    className="w-4 h-4 rounded border-slate-300 text-[#BD1D2D] focus:ring-[#BD1D2D] pointer-events-none shrink-0"
+                                                    className="w-4 h-4 rounded border-slate-300 text-[#BD1D2D] focus:ring-[#BD1D2D] pointer-events-none shrink-0 accent-[#BD1D2D]"
                                                 />
-                                                <div
-                                                    className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-black shrink-0 ${
-                                                        item.source === 'employee'
-                                                            ? 'bg-rose-100 text-[#BD1D2D]'
-                                                            : 'bg-indigo-100 text-indigo-700'
-                                                    }`}
-                                                >
-                                                    {initials}
-                                                </div>
+                                                <Avatar
+                                                    name={item.name}
+                                                    src={item.avatar}
+                                                    size={34}
+                                                />
                                                 <div className="min-w-0">
                                                     <div className="flex items-center gap-2">
                                                         <span className="text-xs font-bold text-slate-800 truncate">
@@ -642,7 +742,7 @@ const TestEmailModal: React.FC<TestEmailModalProps> = ({
                                                             className={`px-2 py-0.5 rounded-md text-[10px] font-bold shrink-0 ${
                                                                 item.source === 'employee'
                                                                     ? 'bg-slate-100 text-slate-600'
-                                                                    : 'bg-indigo-50 text-indigo-600'
+                                                                    : 'bg-rose-50 text-[#BD1D2D]'
                                                             }`}
                                                         >
                                                             {item.badge}
@@ -678,7 +778,7 @@ const TestEmailModal: React.FC<TestEmailModalProps> = ({
                             value={customEmailsText}
                             onChange={(e) => setCustomEmailsText(e.target.value)}
                             placeholder="Nhập hoặc dán nhiều địa chỉ email, phân cách bằng dấu phẩy (,), chấm phẩy (;), khoảng trắng hoặc xuống dòng..."
-                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-[14px] text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#BD1D2D]/15 focus:border-[#BD1D2D] transition-all placeholder:text-slate-400 leading-relaxed resize-y"
+                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-[14px] text-xs font-semibold text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#BD1D2D]/15 focus:border-[#BD1D2D] transition-all placeholder:text-slate-400 leading-relaxed resize-y"
                         />
                         {invalidCustomTokens.length > 0 && (
                             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200/70">

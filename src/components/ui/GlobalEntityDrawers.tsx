@@ -13,6 +13,7 @@ const ExpenseQuickViewDrawer = lazy(() => import('../ExpenseQuickViewDrawer').th
 const ExpenseCreateDrawer = lazy(() => import('../ExpenseCreateDrawer').then(module => ({ default: module.ExpenseCreateDrawer })));
 const ApprovalDetailDrawer = lazy(() => import('../../pages/Approvals').then(module => ({ default: module.ApprovalDetailDrawer })));
 const DepositDetailDrawer = lazy(() => import('../DepositDetailDrawer').then(module => ({ default: module.DepositDetailDrawer })));
+const CompanyDrawer = lazy(() => import('../../pages/CompanyDrawer').then(module => ({ default: module.CompanyDrawer })));
 
 export const GlobalEntityDrawers: React.FC = () => {
   const navigate = useNavigate();
@@ -29,6 +30,7 @@ export const GlobalEntityDrawers: React.FC = () => {
   const [fullTask, setFullTask] = useState<any>(null);
   const [expenseCreateOpen, setExpenseCreateOpen] = useState(false);
   const [expenseCreateEditItem, setExpenseCreateEditItem] = useState<any>(null);
+  const [companyDrawerEntity, setCompanyDrawerEntity] = useState<any>(null);
   const approvalActionInFlightRef = useRef(false);
 
   // Deep link URL listener: Auto-open drawer when navigating with query parameters or direct entity path (e.g. /contact/123)
@@ -89,8 +91,9 @@ export const GlobalEntityDrawers: React.FC = () => {
       }
     }
 
-    // 5. Deposits: DepositsPage.tsx (/deposits) handles its own local drawer when WorkChat is closed
-    if (path.startsWith('/deposits') && !isWorkChatOpen) {
+    // 5. Deposits: DepositsPage.tsx (/deposits, /sales-orders, /cash-flow) handles its own local drawer when WorkChat is closed
+    const isLocalDepositPage = path.startsWith('/deposits') || path.startsWith('/sales-orders') || path.startsWith('/cash-flow');
+    if (isLocalDepositPage && !isWorkChatOpen) {
       if (depositDrawer.isOpen && (params.get('open_id') || params.get('id') || params.get('deposit_id'))) {
         closeDepositDrawer();
       }
@@ -217,9 +220,20 @@ export const GlobalEntityDrawers: React.FC = () => {
 
     const handleOpenExpenseCreate = (e: Event) => {
       const custom = e as CustomEvent;
-      if (custom.detail) {
-        setExpenseCreateEditItem(custom.detail);
-        setExpenseCreateOpen(true);
+      setExpenseCreateEditItem(custom?.detail?.id ? custom.detail : null);
+      setExpenseCreateOpen(true);
+    };
+
+    const handleOpenCompany = (e: Event) => {
+      const custom = e as CustomEvent;
+      const cid = Number(custom?.detail?.id || custom?.detail?.companyId);
+      if (cid) {
+        api.get(`/companies/${cid}`).then(res => {
+          const data = res.data?.data || res.data;
+          if (data && data.id) {
+            setCompanyDrawerEntity(data);
+          }
+        }).catch(() => {});
       }
     };
 
@@ -241,6 +255,8 @@ export const GlobalEntityDrawers: React.FC = () => {
         openApprovalDrawer({ id: Number(entityId), type: rawType === 'workflow' || rawType === 'approval' ? (d.sub_type || 'leave') : rawType, ...d });
       } else if (['deposit', 'so', 'sales_order'].includes(rawType)) {
         openDepositDrawer(d.deposit || Number(entityId));
+      } else if (['company', 'partner'].includes(rawType)) {
+        handleOpenCompany({ detail: { id: Number(entityId) } } as any);
       }
     };
 
@@ -250,8 +266,10 @@ export const GlobalEntityDrawers: React.FC = () => {
     window.addEventListener('open-expense-drawer', handleOpenExpense);
     window.addEventListener('open-global-expense', handleOpenExpense);
     window.addEventListener('open-expense-create-drawer', handleOpenExpenseCreate);
+    window.addEventListener('open-create-expense-modal', handleOpenExpenseCreate);
     window.addEventListener('open-global-approval', handleOpenApproval);
     window.addEventListener('open-deposit-drawer', handleOpenDeposit);
+    window.addEventListener('open-company-drawer', handleOpenCompany);
     window.addEventListener('open-entity-drawer', handleOpenEntityDrawer);
 
     // Global click listener for .entity-mention and .mention
@@ -296,8 +314,10 @@ export const GlobalEntityDrawers: React.FC = () => {
       window.removeEventListener('open-expense-drawer', handleOpenExpense);
       window.removeEventListener('open-global-expense', handleOpenExpense);
       window.removeEventListener('open-expense-create-drawer', handleOpenExpenseCreate);
+      window.removeEventListener('open-create-expense-modal', handleOpenExpenseCreate);
       window.removeEventListener('open-global-approval', handleOpenApproval);
       window.removeEventListener('open-deposit-drawer', handleOpenDeposit);
+      window.removeEventListener('open-company-drawer', handleOpenCompany);
       window.removeEventListener('open-entity-drawer', handleOpenEntityDrawer);
     };
   }, [openCustomerDrawer, openTaskDrawer, openExpenseDrawer, openApprovalDrawer, openDepositDrawer, navigate]);
@@ -423,7 +443,7 @@ export const GlobalEntityDrawers: React.FC = () => {
             onClose={handleCloseCustomerDrawer}
             contact={fullContact}
             initialTab={customerDrawer.initialTab || 'info'}
-            zIndex={2147483620}
+            zIndex={2147483638}
           />
         </Suspense>
       )}
@@ -434,7 +454,7 @@ export const GlobalEntityDrawers: React.FC = () => {
             isOpen={taskDrawer.isOpen}
             onClose={handleCloseTaskDrawer}
             task={fullTask}
-            zIndex={2147483640}
+            zIndex={2147483632}
             onUpdate={(updatedTask?: any) => {
               if (updatedTask) {
                 setFullTask((prev: any) => prev ? { ...prev, ...updatedTask } : updatedTask);
@@ -458,7 +478,7 @@ export const GlobalEntityDrawers: React.FC = () => {
             expenseId={expenseDrawer.expenseId}
             onClose={handleCloseExpenseDrawer}
             user={currentUser}
-            zIndex={2147483620}
+            zIndex={2147483632}
           />
         </Suspense>
       )}
@@ -480,7 +500,7 @@ export const GlobalEntityDrawers: React.FC = () => {
               window.dispatchEvent(new CustomEvent('refresh-pending-counts'));
               window.dispatchEvent(new CustomEvent('erp-action-completed', { detail: { actionType: 'expense' } }));
             }}
-            zIndex={2147483620}
+            zIndex={2147483632}
           />
         </Suspense>
       )}
@@ -497,14 +517,16 @@ export const GlobalEntityDrawers: React.FC = () => {
               approvalActionInFlightRef.current = true;
               const itemType = String(it.type || '').toLowerCase();
               try {
-                if (itemType === 'leave' || itemType === 'wfh' || itemType === 'ot' || itemType === 'late_early') {
+                if (itemType === 'leave' || itemType === 'wfh' || itemType === 'ot' || itemType === 'late_early' || itemType === 'remote_work' || itemType === 'overtime') {
                   await api.put('/hrm/leaves/' + it.id + '/status', { status: 'approved' });
                 } else if (itemType === 'advance') {
                   await api.put('/hrm/advances/' + it.id + '/status', { status: 'approved' });
+                } else if (itemType === 'po' || itemType === 'purchase_order') {
+                  await api.post('/purchase-orders/' + it.id + '/approve');
                 } else if (itemType === 'checkin') {
-                  await api.post('/attendance/check-ins/' + it.id + '/approve');
+                  await api.put('/check-ins/' + it.id, { status: 'approved' });
                 } else if (itemType === 'attendance_bulk') {
-                  await api.post('/attendance/bulk-requests/' + it.id + '/approve');
+                  await api.post('/check-ins/' + it.id + '/bulk-approve', { action: 'approve' });
                 } else {
                   await api.post('/expenses/' + it.id + '/approve');
                 }
@@ -519,18 +541,22 @@ export const GlobalEntityDrawers: React.FC = () => {
             }}
             onReject={async (it) => {
               if (approvalActionInFlightRef.current) return;
-              const reason = window.prompt('Nhập lý do từ chối:') || '';
+              const rawReason = window.prompt('Nhập lý do từ chối:');
+              if (rawReason === null) return;
+              const reason = rawReason.trim();
               approvalActionInFlightRef.current = true;
               const itemType = String(it.type || '').toLowerCase();
               try {
-                if (itemType === 'leave' || itemType === 'wfh' || itemType === 'ot' || itemType === 'late_early') {
+                if (itemType === 'leave' || itemType === 'wfh' || itemType === 'ot' || itemType === 'late_early' || itemType === 'remote_work' || itemType === 'overtime') {
                   await api.put('/hrm/leaves/' + it.id + '/status', { status: 'rejected', reject_reason: reason });
                 } else if (itemType === 'advance') {
                   await api.put('/hrm/advances/' + it.id + '/status', { status: 'rejected', reject_reason: reason });
+                } else if (itemType === 'po' || itemType === 'purchase_order') {
+                  await api.post('/purchase-orders/' + it.id + '/reject', { reason });
                 } else if (itemType === 'checkin') {
-                  await api.post('/attendance/check-ins/' + it.id + '/reject', { reason });
+                  await api.put('/check-ins/' + it.id, { status: 'rejected', notes: reason });
                 } else if (itemType === 'attendance_bulk') {
-                  await api.post('/attendance/bulk-requests/' + it.id + '/reject', { reason });
+                  await api.post('/check-ins/' + it.id + '/bulk-approve', { action: 'reject', reason });
                 } else {
                   await api.post('/expenses/' + it.id + '/reject', { reason });
                 }
@@ -560,7 +586,7 @@ export const GlobalEntityDrawers: React.FC = () => {
                 navigate(`/approvals?open_id=${it.id}&open_type=${it.type}&action=duplicate`);
               }
             }}
-            zIndex={2147483620}
+            zIndex={2147483632}
           />
         </Suspense>
       )}
@@ -576,7 +602,28 @@ export const GlobalEntityDrawers: React.FC = () => {
               window.dispatchEvent(new CustomEvent('refresh-deposits'));
               window.dispatchEvent(new CustomEvent('erp-action-completed', { detail: { actionType: 'deposit' } }));
             }}
-            zIndex={2147483620}
+            zIndex={2147483632}
+          />
+        </Suspense>
+      )}
+
+      {companyDrawerEntity && (
+        <Suspense fallback={null}>
+          <CompanyDrawer
+            isOpen={Boolean(companyDrawerEntity)}
+            onClose={() => setCompanyDrawerEntity(null)}
+            entity={companyDrawerEntity}
+            onSave={async (formData: any) => {
+              try {
+                if (companyDrawerEntity?.id) {
+                  await api.put(`/companies/${companyDrawerEntity.id}`, formData);
+                  toast.success('Đã cập nhật đại lý/đối tác');
+                }
+                setCompanyDrawerEntity(null);
+              } catch (err: any) {
+                toast.error(err?.response?.data?.message || 'Lỗi khi lưu đại lý/đối tác');
+              }
+            }}
           />
         </Suspense>
       )}

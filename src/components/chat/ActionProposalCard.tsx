@@ -516,8 +516,8 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
         }
 
         case 'asset_handover': {
-          navigate('/hrm?tab=assets');
-          toast.success('Đã mở phân hệ Tài sản (HRM Assets) để lập biên bản bàn giao!');
+          navigate('/hrm?tab=profiles');
+          toast.success('Đã mở Hồ sơ Nhân sự & Tài sản (HRM) để lập biên bản bàn giao!');
           break;
         }
 
@@ -526,10 +526,10 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
         case 'voucher_issue':
         case 'sync_match_only': {
           const targetTab = proposal.action_type === 'automation_flow'
-            ? '/marketing?tab=flows'
+            ? '/marketing/flows'
             : proposal.action_type === 'voucher_issue'
-            ? '/marketing?tab=vouchers'
-            : '/marketing';
+            ? '/marketing/vouchers'
+            : '/marketing/campaigns';
           navigate(targetTab);
           toast.success('Đã mở phân hệ Marketing Automation & Đa kênh!');
           break;

@@ -7,7 +7,7 @@
   max-width: 100vw;
   background: var(--color-bg);
   box-shadow: -10px 0 30px rgba(0, 0, 0, 0.15);
-  z-index: 10600;
+  z-index: 2147483625;
   display: flex;
   flex-direction: column;
   will-change: transform, opacity;

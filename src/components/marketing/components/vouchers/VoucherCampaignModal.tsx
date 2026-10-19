@@ -578,8 +578,8 @@ const VoucherCampaignModal: React.FC<VoucherCampaignModalProps> = ({ isOpen, onC
 
             {showPicker && createPortal(
                 <>
-                    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[110000]" onClick={() => setShowPicker(false)}></div>
-                    <div className="bg-white rounded-[18px] border border-slate-200 shadow-2xl animate-in fade-in zoom-in-95 duration-200 fixed inset-4 md:inset-12 lg:inset-20 z-[110001] overflow-hidden flex flex-col max-w-6xl mx-auto my-auto max-h-[90vh]">
+                    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[2147483646]" style={{ zIndex: 2147483646 }} onClick={() => setShowPicker(false)}></div>
+                    <div className="bg-white rounded-[18px] border border-slate-200 shadow-2xl animate-in fade-in zoom-in-95 duration-200 fixed inset-4 md:inset-12 lg:inset-20 z-[2147483647] overflow-hidden flex flex-col max-w-6xl mx-auto my-auto max-h-[90vh]" style={{ zIndex: 2147483647 }}>
                         <div className="p-5 border-b border-slate-100 flex justify-between items-center shrink-0">
                             <h3 className="font-bold text-slate-800 text-lg">Chọn mẫu Email</h3>
                             <button onClick={() => setShowPicker(false)} className="p-2 hover:bg-slate-100 text-slate-500 rounded-full transition-colors"><X className="w-5 h-5" /></button>

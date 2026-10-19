@@ -5,11 +5,12 @@ AddHandler application/x-httpd-alt-php81 .php
   RewriteEngine On
   RewriteBase /
 
-  # 1. RESTful API Routing: /api/<action> -> backend/api.php?action=<action>
+  # 1. RESTful API Routing: /api/<action> -> backend/api.php?action=$1
   RewriteRule ^api/(.*)$ backend/api.php?action=$1 [QSA,L]
 
-  # 1b. Uploads Alias: /uploads/* -> backend/uploads/*
+  # 1b. Uploads Alias: /uploads/* -> backend/uploads/* and /uploadss/* -> backend/uploadss/*
   RewriteRule ^uploads/(.*)$ backend/uploads/$1 [L]
+  RewriteRule ^uploadss/(.*)$ backend/uploadss/$1 [L]
 
   # 2. Do not rewrite if the request is for backend directory
   RewriteRule ^backend/ - [L]
@@ -19,7 +20,11 @@ AddHandler application/x-httpd-alt-php81 .php
   RewriteCond %{REQUEST_FILENAME} -d
   RewriteRule ^ - [L]
 
-  # 4. Fallback all other routes to index.html for React SPA
+  # 3b. Return clean 404 for missing static assets so browser/PWA never receives index.html as text/html for a JS/CSS chunk
+  RewriteRule ^assets/ - [R=404,L]
+
+  # 4. Fallback all other routes to index.html for React SPA (excluding static assets)
+  RewriteCond %{REQUEST_URI} !\.(png|jpe?g|gif|webp|svg|ico|css|js|woff2?|ttf|eot|map|mp4|webm|xlsx?|docx?|pdf)$ [NC]
   RewriteRule ^ index.html [L]
 </IfModule>
 
@@ -34,7 +39,7 @@ AddHandler application/x-httpd-alt-php81 .php
   ExpiresByType application/javascript "access plus 1 week"
 </IfModule>
 
-# Never cache version.json, sw.js, manifest.json, and index.html
+# Never cache version.json and index.html
 <IfModule mod_headers.c>
   <FilesMatch "^(version\.json|sw\.js|manifest\.json|index\.html)$">
     Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"

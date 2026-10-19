@@ -74,8 +74,8 @@ class FinanceController
         $contactId = $_GET['contact_id'] ?? '';
         $companyId = $_GET['company_id'] ?? '';
         $supplierId = $_GET['supplier_id'] ?? '';
-        $from = $_GET['from'] ?? '';
-        $to = $_GET['to'] ?? '';
+        $from = $_GET['from'] ?? $_GET['from_date'] ?? '';
+        $to = $_GET['to'] ?? $_GET['to_date'] ?? '';
         $where = ['i.tenant_id=?', 'i.deleted_at IS NULL'];
         $params = [$tid];
         if ($contactId) {
@@ -372,8 +372,10 @@ class FinanceController
             logActivity($this->db, $tid, $uid, 'CREATE', 'invoice', (int) $invId, json_encode(['invoice_number' => $data['invoice_number'], 'total' => $data['total']]));
 
             $this->showInvoice($auth, $invId);
-        } catch (Exception $e) {
-            $this->db->rollBack();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             respond(500, null, $e->getMessage(), false);
         }
     }
@@ -496,8 +498,10 @@ class FinanceController
             $this->db->commit();
             $this->syncInvoiceContact($auth['tenant_id'], $id);
             $this->showInvoice($auth, $id);
-        } catch (Exception $e) {
-            $this->db->rollBack();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             respond(500, null, $e->getMessage(), false);
         }
     }
@@ -569,8 +573,10 @@ class FinanceController
         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'DELETE', 'invoice', $id);
         $this->db->commit();
         respond(200, null, 'Đã xóa hóa đơn');
-        } catch (Exception $e) {
-            $this->db->rollBack();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             respond(500, null, 'Lỗi hệ thống: ' . $e->getMessage(), false);
         }
     }
@@ -643,9 +649,10 @@ class FinanceController
             $this->db->commit();
             $this->syncInvoiceContact($auth['tenant_id'], $id);
             respond(200, null, 'Hóa đơn đã được thanh toán và tồn kho đã được cập nhật');
-        } catch (Exception $e) {
-            if ($this->db->inTransaction())
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
                 $this->db->rollBack();
+            }
             respond(500, null, 'Lỗi hệ thống: ' . $e->getMessage(), false);
         }
     }
@@ -660,8 +667,8 @@ class FinanceController
         $offset = ($page - 1) * $limit;
         $status = $_GET['status'] ?? '';
         $category = $_GET['category'] ?? '';
-        $from = $_GET['from'] ?? '';
-        $to = $_GET['to'] ?? '';
+        $from = $_GET['from'] ?? $_GET['from_date'] ?? '';
+        $to = $_GET['to'] ?? $_GET['to_date'] ?? '';
         $companyId = $_GET['company_id'] ?? '';
         $where = ['e.tenant_id=?', 'e.deleted_at IS NULL'];
         $params = [$tid];
@@ -1161,6 +1168,13 @@ class FinanceController
             }
         }
 
+        $imageUrl = $data['image_url'] ?? null;
+        if (empty($imageUrl) && !empty($data['attachments'])) {
+            $firstAtt = is_array($data['attachments']) ? ($data['attachments'][0] ?? null) : $data['attachments'];
+            $imageUrl = is_array($firstAtt) ? ($firstAtt['url'] ?? $firstAtt['file_url'] ?? json_encode($firstAtt)) : (string)$firstAtt;
+        }
+        $data['image_url'] = $imageUrl;
+
         $this->db->beginTransaction();
         try {
             $stmt = $this->db->prepare("
@@ -1183,12 +1197,12 @@ class FinanceController
                 $expenseDate,
                 $dueDate,
                 $statusVal,
-                $data['notes'] ?? null,
+                $data['notes'] ?? $data['note'] ?? null,
                 $itemsJson,
                 $data['vendor_name'] ?? null,
                 $data['has_vat_invoice'] ?? 0,
                 $data['is_vat_inclusive'] ?? 0,
-                $data['image_url'] ?? null,
+                $imageUrl,
                 $approver_id,
                 $approver_id_2,
                 $approver_id_3,
@@ -1248,11 +1262,13 @@ class FinanceController
 
             if ($statusVal !== 'draft' && $statusVal === 'pending') {
                 require_once __DIR__ . '/../NotificationService.php';
-                if ($approver_id && $approver_id !== (int)$auth['user_id']) {
+                if (!$approver_id || (int)$approver_id !== (int)$auth['user_id']) {
                     NotificationService::send($this->db, $auth['tenant_id'], 'EXPENSE_REQUEST', [
-                        'approver_id' => $approver_id,
-                        'user_id' => $approver_id,
-                        'target_user_id' => $approver_id,
+                        'approver_id' => $approver_id ? (int)$approver_id : 0,
+                        'target_user_id' => $approver_id ? (int)$approver_id : 0,
+                        'user_id' => (int)$auth['user_id'],
+                        'submitter_id' => (int)$auth['user_id'],
+                        'exclude_user_id' => (int)$auth['user_id'],
                         'user_name' => $auth['full_name'],
                         'title' => $data['title'],
                         'amount' => $totalAmount,
@@ -1287,7 +1303,7 @@ class FinanceController
             }
 
             $this->showExpense($auth, $expId);
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             if ($this->db->inTransaction()) {
                 $this->db->rollBack();
             }
@@ -1299,6 +1315,13 @@ class FinanceController
     {
         if ($auth['role'] === 'viewer') respond(403, null, 'Bạn không có quyền cập nhật chi phí', false);
         $data = getBody();
+        if (!array_key_exists('image_url', $data) && !empty($data['attachments'])) {
+            $firstAtt = is_array($data['attachments']) ? ($data['attachments'][0] ?? null) : $data['attachments'];
+            $data['image_url'] = is_array($firstAtt) ? ($firstAtt['url'] ?? $firstAtt['file_url'] ?? json_encode($firstAtt)) : (string)$firstAtt;
+        }
+        if (!array_key_exists('notes', $data) && array_key_exists('note', $data)) {
+            $data['notes'] = $data['note'];
+        }
         $isAdminOrFinance = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'accountant'], true);
         $fields = [
             'title',
@@ -1620,12 +1643,14 @@ class FinanceController
 
             $this->db->commit();
 
-            if ($isTransitionToPending && $newApprover1 && $newApprover1 !== (int)$auth['user_id']) {
+            if ($isTransitionToPending && (!$newApprover1 || (int)$newApprover1 !== (int)$auth['user_id'])) {
                 require_once __DIR__ . '/../NotificationService.php';
                 NotificationService::send($this->db, $auth['tenant_id'], 'EXPENSE_REQUEST', [
-                    'approver_id' => $newApprover1,
-                    'user_id' => $newApprover1,
-                    'target_user_id' => $newApprover1,
+                    'approver_id' => $newApprover1 ? (int)$newApprover1 : 0,
+                    'target_user_id' => $newApprover1 ? (int)$newApprover1 : 0,
+                    'user_id' => (int)($row['created_by'] ?? $auth['user_id']),
+                    'submitter_id' => (int)($row['created_by'] ?? $auth['user_id']),
+                    'exclude_user_id' => (int)$auth['user_id'],
                     'user_name' => $auth['full_name'] ?? 'Nhân viên',
                     'title' => $data['title'] ?? $row['title'] ?? '',
                     'amount' => $currentTotal,
@@ -1635,7 +1660,7 @@ class FinanceController
             }
 
             $this->showExpense($auth, $id);
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             if ($this->db->inTransaction())
                 $this->db->rollBack();
             respond(422, null, $e->getMessage(), false);
@@ -1990,8 +2015,10 @@ class FinanceController
 
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], $statusInput === 'rejected' ? 'REJECT' : 'APPROVE', 'expense', $id, json_encode(['status' => $nextStatus, 'reject_reason' => $rejectReason]));
             respond(200, null, $statusInput === 'rejected' ? 'Đã từ chối chi phí' : 'Đã cập nhật trạng thái');
-        } catch (Exception $e) {
-            $this->db->rollBack();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             respond(500, null, 'Lỗi khi duyệt chi phí: ' . $e->getMessage(), false);
         }
     }
@@ -2446,7 +2473,7 @@ class FinanceController
 
             // Return updated expense
             $this->showExpense($auth, $id);
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             if ($this->db->inTransaction()) {
                 $this->db->rollBack();
             }

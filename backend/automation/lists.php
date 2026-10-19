@@ -419,7 +419,7 @@ switch ($method) {
                     $existingStmt = $pdo->prepare("SELECT subscriber_id FROM subscriber_lists WHERE list_id = ? AND workspace_id = ?");
                     $existingStmt->execute([$targetListId, $workspace_id]);
                     $existingSubIds = $existingStmt->fetchAll(PDO::FETCH_COLUMN);
-                    $newSubIds = array_diff($subscriberIds, $existingSubIds);
+                    $newSubIds = array_values(array_diff($subscriberIds, $existingSubIds));
 
                     // Bulk Insert unique subscribers into target list
                     if (!empty($newSubIds)) {
@@ -455,9 +455,8 @@ switch ($method) {
                     $deletedLists = 0;
                     // Delete source lists if requested
                     if ($deleteSourceLists) {
-                        $sourceListIds = array_filter($listIds, fn($id) => $id !== $targetListId);
+                        $sourceListIds = array_values(array_filter($listIds, fn($id) => $id !== $targetListId));
                         if (count($sourceListIds) > 0) {
-                            $sourceListIds = array_values($sourceListIds);
                             $deletePlaceholders = implode(',', array_fill(0, count($sourceListIds), '?'));
                             $pdo->prepare("DELETE FROM subscriber_lists WHERE list_id IN ($deletePlaceholders) AND workspace_id = ?")->execute(array_merge($sourceListIds, [$workspace_id]));
                             $pdo->prepare("DELETE FROM lists WHERE id IN ($deletePlaceholders) AND workspace_id = ?")->execute(array_merge($sourceListIds, [$workspace_id]));

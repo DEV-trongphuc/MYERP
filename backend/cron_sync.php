@@ -1893,7 +1893,7 @@ foreach ($connections as $connItem) {
                     if ($crmCheckResult['isDuplicate'] && !empty($connItem['sync_saleperson'])) {
                         $ownerId = $crmCheckResult['assignedTo'];
                         if (!empty($ownerId) && (empty($assignedToId) || (int)$ownerId === (int)$assignedToId)) {
-                            static $consultantCache = [];
+                            $consultantCache = $consultantCache ?? [];
                             if (!isset($consultantCache[$ownerId])) {
                                 $stmtC = $conn->prepare("SELECT name, email, status FROM consultants WHERE id = ?");
                                 $stmtC->bind_param("i", $ownerId);
@@ -1959,7 +1959,7 @@ foreach ($connections as $connItem) {
                         continue;
                     }
                     
-                    static $consultantCache = [];
+                    $consultantCache = $consultantCache ?? [];
                     if (!isset($consultantCache[$assignedTo])) {
                         $stmtC = $conn->prepare("SELECT name, email, status FROM consultants WHERE id = ?");
                         $stmtC->bind_param("i", $assignedTo);
@@ -4378,6 +4378,14 @@ if (!defined('DIAG_TOKEN')) {
         $prunedCount = NotificationService::pruneAllUsersNotifications($pdo, 200);
         if ($prunedCount > 0) {
             logSync("Auto-pruned $prunedCount excess notifications across users (capped at max 200/user).");
+        }
+
+        // --- Chạy Cronjob AI Agent Chủ Động (Proactive Role-Based AI Briefings vào hộp chat SI IDEAS) ---
+        try {
+            require_once __DIR__ . '/cron_ai_proactive_agent.php';
+            runProactiveAiAgentBriefings($conn, $pdo);
+        } catch (\Throwable $proactiveAiEx) {
+            logSync("Error running proactive AI Agent briefings in cron_sync: " . $proactiveAiEx->getMessage());
         }
     } catch (Exception $pruneEx) {
         logSync("Error pruning notifications in cron_sync: " . $pruneEx->getMessage());

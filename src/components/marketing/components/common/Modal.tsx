@@ -42,16 +42,30 @@ const Modal: React.FC<ModalProps> = ({
   const modalContentRef = useRef<HTMLDivElement>(null);
   const reactId = useId();
   const modalId = useMemo(() => `mkt_modal_${reactId.replace(/:/g, '')}`, [reactId]);
+  const wasOpenRef = useRef(false);
+  const openedOverDrawerRef = useRef(false);
 
-  const resolvedZIndex = zIndex
-    ? (zIndex < 2147483000 ? 2147483643 : Math.min(zIndex, 2147483647))
-    : 2147483642;
+  if (isOpen && !wasOpenRef.current) {
+    wasOpenRef.current = true;
+    openedOverDrawerRef.current = typeof document !== 'undefined' && Boolean(
+      document.querySelector('.drawer-backdrop, .drawer-sheet, .drawer-panel, [class*="CustomerProfileDrawer"], [class*="EntityDrawer"]')
+    );
+  } else if (!isOpen && wasOpenRef.current) {
+    wasOpenRef.current = false;
+    openedOverDrawerRef.current = false;
+  }
+
+  const resolvedZIndex = (() => {
+    if (zIndex) {
+      return Math.min(Math.max(zIndex, 2147483640), 2147483646);
+    }
+    return 2147483645;
+  })();
 
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
-      const priority = resolvedZIndex > 2147483642 ? 2010 : 2000;
-      const unregister = pushOverlay(modalId, onClose, priority);
+      const unregister = pushOverlay(modalId, onClose, resolvedZIndex);
       autoFocusFirstInput(modalContentRef.current);
       return () => {
         document.body.style.overflow = 'unset';
@@ -87,7 +101,8 @@ const Modal: React.FC<ModalProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.16, ease: 'easeOut' }}
-            className="absolute inset-0 bg-black/50 backdrop-blur-[4px]"
+            className="modal-backdrop absolute inset-0 z-0 bg-black/60 backdrop-blur-[6px]"
+            style={{ zIndex: 0, background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
             onClick={onClose}
           />
 
@@ -98,8 +113,9 @@ const Modal: React.FC<ModalProps> = ({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 6 }}
             transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] as any }}
+            style={{ zIndex: 10 }}
             className={`
-              relative w-full flex flex-col overflow-hidden border border-[var(--color-border)]
+              relative z-10 w-full flex flex-col overflow-hidden border border-[var(--color-border)]
               bg-[var(--color-surface)] text-[var(--color-text)] shadow-[var(--shadow-xl)]
               ${sizeClasses[size as keyof typeof sizeClasses] || sizeClasses.md}
               ${className || ''}
@@ -153,4 +169,3 @@ const Modal: React.FC<ModalProps> = ({
 };
 
 export default Modal;
-

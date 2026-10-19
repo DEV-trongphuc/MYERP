@@ -86,12 +86,15 @@ $baseAction = !empty($segments) ? explode('&', $segments[0])[0] : '';
 if (in_array($baseAction, [
     'auth',
     'projects',
+    'classes',
     'tasks',
     'deposits',
     'cooperation',
     'cooperation-slips',
     'capi',
     'check-ins',
+    'check_ins',
+    'attendance',
     'cloud-files',
     'file-categories',
     'tickets',
@@ -112,8 +115,11 @@ if (in_array($baseAction, [
     'expenses',
     'products',
     'posts',
+    'comments',
     'feed',
     'contacts',
+    'contact_presence_ping',
+    'contact_presence_leave',
     'companies',
     'deals',
     'activities',
@@ -131,6 +137,8 @@ if (in_array($baseAction, [
     'crons',
     'presence',
     'upload',
+    'download-file',
+    'assets',
     'teams',
     'dashboard',
     'notifications',
@@ -2206,8 +2214,15 @@ switch ($action) {
             }
 
             if (!empty($leadIds)) {
+                try {
+                    $chkCol = $conn->query("SHOW COLUMNS FROM leads LIKE 'deleted_at'");
+                    if ($chkCol && $chkCol->num_rows === 0) {
+                        $conn->query("ALTER TABLE leads ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL");
+                    }
+                } catch (\Throwable $eCol) {}
+
                 $placeholders = implode(',', array_fill(0, count($leadIds), '?'));
-                $stmt = $conn->prepare("DELETE FROM leads WHERE id IN ($placeholders) AND (source = 'Excel Import' OR note LIKE '%Nhap du lieu cu%')");
+                $stmt = $conn->prepare("UPDATE leads SET deleted_at = NOW() WHERE id IN ($placeholders) AND (source = 'Excel Import' OR note LIKE '%Nhap du lieu cu%')");
                 $types = str_repeat('i', count($leadIds));
                 $stmt->bind_param($types, ...$leadIds);
                 $stmt->execute();

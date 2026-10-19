@@ -1977,11 +1977,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const handleSave = useCallback(async () => {
     // Only send fields that ContactController accepts
     const allowedFields = [
-      'company_id', 'company_name', 'owner_id', 'full_name', 'email', 'phone',
+      'company_id', 'company_name', 'company', 'owner_id', 'full_name', 'email', 'phone',
       'mobile', 'phone2', 'job_title', 'department', 'source', 'status', 'notes',
-      'birthday', 'address', 'city', 'ward', 'expected_revenue', 'win_probability', 'last_contact', 'created_at',
-      'gender', 'zalo_link', 'fb_link', 'customer_type', 'industry', 'budget_range', 'project_id', 'campaign_id', 'ttl1_completed', 'ttl1_data',
-      'stage_id', 'pipeline_status', 'temperature', 'suggested_temperature', 'collaborator_ids', 'citizen_id', 'passport',
+      'birthday', 'dob', 'address', 'city', 'district', 'ward', 'expected_revenue', 'win_probability', 'last_contact', 'created_at',
+      'gender', 'zalo_link', 'zalo_phone', 'fb_link', 'facebook_link', 'customer_type', 'industry', 'budget_range', 'budget',
+      'demand_type', 'property_type', 'bedroom_count', 'preferred_location', 'tax_code',
+      'project_id', 'campaign_id', 'ttl1_completed', 'ttl1_data',
+      'stage_id', 'pipeline_status', 'lead_status', 'temperature', 'lead_temperature', 'suggested_temperature',
+      'next_action', 'next_followup_date', 'expected_decision_date', 'expected_intake',
+      'nurture_reason', 'lost_reason', 'lost_stage_id', 'not_lead_proposed',
+      'collaborator_ids', 'citizen_id', 'passport',
       'utm_campaign', 'utm_medium', 'utm_content', 'utm_term', 'platform', 'form_name',
       'program', 'admission_date', 'student_id', 'study_status'
     ];
@@ -5519,33 +5524,22 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     }
   }, [projectsList]);
 
-  // Bidirectional auto-resolution between program, project_id, and campaign_id on data load
+  // Auto-resolution from program to project_id and campaign_id on data load (never invent program when program is empty)
   useEffect(() => {
     let nextProjectId = formData.project_id ? Number(formData.project_id) : null;
-    let nextProgram = String(formData.program || '').trim();
+    const nextProgram = String(formData.program || '').trim();
     let nextCampaignId = formData.campaign_id ? Number(formData.campaign_id) : null;
     let changed = false;
 
-    if (nextCampaignId && !nextProjectId && allowedCampaigns.length > 0) {
-      const camp = allowedCampaigns.find(c => Number(c.id) === nextCampaignId);
-      if (camp && camp.project_id) {
-        nextProjectId = Number(camp.project_id);
-        changed = true;
-      }
-    }
-
-    if (nextProgram && !nextProjectId && projectsList.length > 0) {
+    if (nextProgram && projectsList.length > 0) {
       const matchedProj = findMatchingProjectByProgram(nextProgram, projectsList);
-      if (matchedProj && matchedProj.id) {
+      if (matchedProj && matchedProj.id && Number(matchedProj.id) !== nextProjectId) {
         nextProjectId = Number(matchedProj.id);
         changed = true;
       }
-    } else if (nextProjectId && !nextProgram && projectsList.length > 0) {
-      const matchedProj = projectsList.find(p => Number(p.id) === nextProjectId);
-      if (matchedProj && matchedProj.name) {
-        nextProgram = String(matchedProj.name).trim();
-        changed = true;
-      }
+    } else if (!nextProgram && nextProjectId) {
+      nextProjectId = null;
+      changed = true;
     }
 
     if (nextProjectId && !nextCampaignId && allowedCampaigns.length > 0) {
@@ -5560,13 +5554,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       setFormData((prev: any) => ({
         ...prev,
         project_id: nextProjectId,
-        program: nextProgram || prev.program,
         campaign_id: nextCampaignId
       }));
       setBaseData((prev: any) => ({
         ...prev,
-        project_id: prev.project_id || nextProjectId,
-        program: prev.program || nextProgram,
+        project_id: nextProjectId,
         campaign_id: prev.campaign_id || nextCampaignId
       }));
     }
@@ -7551,7 +7543,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     </div>
   );
 
-  const effectiveZIndex = zIndex || 2147483620;
+  const effectiveZIndex = zIndex || 2147483625;
 
   return createPortal(
     <>
@@ -7569,13 +7561,14 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                 position: 'fixed',
                 inset: 0,
                 zIndex: effectiveZIndex - 5,
-                background: 'rgba(0, 0, 0, 0.45)',
-                backdropFilter: 'blur(8px)',
-                WebkitBackdropFilter: 'blur(8px)'
-              }}
+                '--drawer-backdrop-z': effectiveZIndex - 5,
+                background: 'rgba(0, 0, 0, 0.6)',
+                backdropFilter: 'blur(6px)',
+                WebkitBackdropFilter: 'blur(6px)'
+              } as React.CSSProperties}
             />
             <motion.div
-              className={styles.drawer}
+              className={`${styles.drawer} drawer-panel`}
               {...drawerMotionProps}
               onAnimationComplete={() => {
                 if (!isClosing) {
@@ -7593,11 +7586,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                 overflow: 'hidden',
                 boxShadow: isMobileOrTablet ? 'none' : '-10px 0 30px rgba(0,0,0,0.15)',
                 zIndex: effectiveZIndex,
+                '--drawer-panel-z': effectiveZIndex,
                 display: 'flex',
                 flexDirection: 'column',
                 position: 'fixed',
                 background: 'var(--color-bg)'
-              }}
+              } as React.CSSProperties}
             >
               <AnimatePresence>
                 {showAvatarModal && (
@@ -10641,7 +10635,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               value={formData.address || ''}
                               onChange={addr => setFormData((prev: any) => ({ ...prev, address: addr }))}
                               placeholder="Chọn địa chỉ liên hệ..."
-                              zIndex={effectiveZIndex + 50}
+                              zIndex={Math.min(effectiveZIndex + 20, 2147483646)}
                             />
                           </div>
 
@@ -15555,7 +15549,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             display: 'flex', 
                             alignItems: 'center', 
                             justifyContent: 'center', 
-                            zIndex: effectiveZIndex + 50, 
+                            zIndex: Math.min(effectiveZIndex + 21, 2147483646), 
                             background: 'rgba(0, 0, 0, 0.94)',
                             backdropFilter: 'blur(16px)',
                             WebkitBackdropFilter: 'blur(16px)',
@@ -16068,7 +16062,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       <CrmSendTemplateEmailModal
         isOpen={showSendTemplateEmailModal}
         onClose={() => setShowSendTemplateEmailModal(false)}
-        zIndex={effectiveZIndex + 25}
+        zIndex={Math.min(effectiveZIndex + 20, 2147483645)}
         contacts={[{
           ...contact,
           ...formData,
@@ -16088,7 +16082,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         isOpen={showBulkMarketingModal.isOpen}
         onClose={() => setShowBulkMarketingModal(prev => ({ ...prev, isOpen: false }))}
         initialMode={showBulkMarketingModal.mode}
-        zIndex={effectiveZIndex + 25}
+        zIndex={Math.min(effectiveZIndex + 20, 2147483645)}
         contactIds={[Number(effectiveContactId || contact?.id || 0)].filter(Boolean)}
         contacts={[{
           ...contact,
@@ -16456,10 +16450,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           ];
 
           return (
-            <div style={{ position: 'fixed', inset: 0, zIndex: effectiveZIndex + 15, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: isMobileOrTablet ? '0.75rem' : '1.5rem' }}>
+            <div style={{ position: 'fixed', inset: 0, zIndex: Math.min(effectiveZIndex + 20, 2147483646), display: 'flex', alignItems: 'center', justifyContent: 'center', padding: isMobileOrTablet ? '0.75rem' : '1.5rem' }}>
               <motion.div
+                className="overlay-backdrop"
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                style={{ position: 'absolute', inset: 0, background: 'rgba(0, 0, 0, 0.7)', backdropFilter: 'blur(4px)' }}
+                style={{ position: 'absolute', inset: 0, zIndex: 1, background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
                 onClick={() => setPipelineModal({ ...pipelineModal, isOpen: false })}
               />
               <motion.div
@@ -16476,7 +16471,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   display: 'flex',
                   flexDirection: 'column',
                   overflow: 'visible',
-                  zIndex: 2
+                  zIndex: 10
                 }}
               >
                 {/* Header */}
@@ -17167,15 +17162,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
       <AnimatePresence>
         {requiredDocsUploadModal.isOpen && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: effectiveZIndex + 15, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'fixed', inset: 0, zIndex: Math.min(effectiveZIndex + 20, 2147483646), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <motion.div
+              className="overlay-backdrop"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              style={{ position: 'absolute', inset: 0, background: 'rgba(0, 0, 0, 0.82)', backdropFilter: 'blur(4px)' }}
+              style={{ position: 'absolute', inset: 0, zIndex: 1, background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
               onClick={() => setRequiredDocsUploadModal(prev => ({ ...prev, isOpen: false }))}
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              style={{ position: 'relative', background: 'var(--color-surface)', width: '95%', maxWidth: '500px', borderRadius: 'var(--radius-md)', padding: '1.5rem', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}
+              style={{ position: 'relative', zIndex: 10, background: 'var(--color-surface)', width: '95%', maxWidth: '500px', borderRadius: 'var(--radius-md)', padding: '1.5rem', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem', color: 'var(--color-danger)' }}>
                 <ShieldAlert size={20} />
@@ -17449,7 +17445,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
       {/* Signature Modal */}
       {isSignModalOpen && coopSlip && createPortal(
-        <div style={{ position: 'fixed', inset: 0, zIndex: effectiveZIndex + 15, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(4px)', padding: '1rem' }} onClick={() => setIsSignModalOpen(false)}>
+        <div className="overlay-backdrop" style={{ position: 'fixed', inset: 0, zIndex: effectiveZIndex + 15, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', padding: '1rem' }} onClick={() => setIsSignModalOpen(false)}>
           <div className="card animate-fade" style={{ maxWidth: '800px', width: '100%', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-border)', paddingBottom: '0.5rem' }}>
               <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text)' }}>Đọc tài liệu &amp; Ký xác nhận điện tử</h2>
@@ -18045,7 +18041,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
       {/* Quick View Expense Modal */}
       {viewExpense && createPortal(
-        <div className="overlay-backdrop" onClick={() => setViewExpense(null)} style={{ zIndex: effectiveZIndex + 15, position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+        <div className="overlay-backdrop" onClick={() => setViewExpense(null)} style={{ zIndex: effectiveZIndex + 15, position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
           <motion.div 
             className="modal-sheet shadow-2xl"
             initial={{ opacity: 0, scale: 0.96, y: 20 }} 
@@ -18353,7 +18349,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       )}
 
       {rejectingExpense && createPortal(
-          <div style={{ position: 'fixed', inset: 0, zIndex: effectiveZIndex + 16, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', padding: '1rem' }} onClick={() => setRejectingExpense(null)}>
+          <div className="overlay-backdrop" style={{ position: 'fixed', inset: 0, zIndex: effectiveZIndex + 16, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', padding: '1rem' }} onClick={() => setRejectingExpense(null)}>
           <motion.div 
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -18415,7 +18411,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       {showMobilePipelineSelector && (
         <div 
           className="overlay-backdrop" 
-          style={{ zIndex: effectiveZIndex + 15, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0, 0, 0, 0.65)', backdropFilter: 'blur(4px)' }} 
+          style={{ zIndex: effectiveZIndex + 15, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }} 
           onClick={() => setShowMobilePipelineSelector(false)}
         >
           <motion.div
@@ -19115,7 +19111,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         <ReportDataModal
           isOpen={showReportDataModal}
           onClose={() => setShowReportDataModal(false)}
-          zIndex={effectiveZIndex + 30}
+          zIndex={Math.min(effectiveZIndex + 20, 2147483645)}
           contact={{
             ...contact,
             ...formData,
@@ -19143,7 +19139,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           onClose={() => setShowAcademicEmailModal(false)}
           title="Gửi Email Tiếp nhận học viên & Hướng dẫn học tập"
           width="780px"
-          zIndex={effectiveZIndex + 25}
+          zIndex={Math.min(effectiveZIndex + 20, 2147483645)}
         >
           <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.125rem' }}>
             {/* Header banner info */}
@@ -19434,7 +19430,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           onClose={() => !isSubmittingStudyStatus && setStudyStatusModal(prev => ({ ...prev, isOpen: false }))}
           title="Chuyển trạng thái học tập của học viên"
           width="560px"
-          zIndex={effectiveZIndex + 25}
+          zIndex={Math.min(effectiveZIndex + 20, 2147483645)}
         >
           <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {/* Transition Badge Header */}

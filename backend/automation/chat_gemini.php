@@ -53,6 +53,14 @@ function generateResponse($contents, $systemInst, $apiKey, $model = 'gemini-3.5-
         if ($httpCode === 200)
             break;
 
+        // Automatic fallback if a preview/alias model ID returns 404 on v1beta
+        if ($httpCode === 404 && $model !== 'gemini-2.5-flash') {
+            $model = 'gemini-2.5-flash';
+            $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key=" . $apiKey;
+            $retryCount++;
+            continue;
+        }
+
         // Exponential Backoff for 429 (Too Many Requests) or 503 (Service Unavailable)
         if ($httpCode === 429 || $httpCode === 503) {
             $retryCount++;

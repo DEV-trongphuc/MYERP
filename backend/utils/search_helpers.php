@@ -379,8 +379,14 @@ function applyCrmStageMultiFilter(PDO $db, string $alias, array $input, array &$
     $stageIds = [];
     $orderIndexes = [];
     $stageNamesOrSlugs = [];
+    $hasUncontactedToken = false;
 
     foreach ($stageTokens as $part) {
+        $lowPart = strtolower(trim((string)$part));
+        if (in_array($lowPart, ['not_contacted', 'uncontacted', 'chua_lien_he', 'no_activity'], true)) {
+            $hasUncontactedToken = true;
+            continue;
+        }
         if (preg_match('/^(?:pipeline|pipieline|giai\s*đoạn|giai\s*doan|stage|bước|buoc)?\s*0*(\d{1,2})\s*-\s*0*(\d{1,2})$/iu', $part, $rm)) {
             $minR = (int)$rm[1];
             $maxR = (int)$rm[2];
@@ -407,8 +413,29 @@ function applyCrmStageMultiFilter(PDO $db, string $alias, array $input, array &$
     $orderIndexes = array_values(array_unique($orderIndexes));
     $stageNamesOrSlugs = array_values(array_unique($stageNamesOrSlugs));
 
+    $uncontactedSql = "(
+        ({$a}last_contact IS NULL OR {$a}last_contact = '')
+        AND NOT EXISTS (SELECT 1 FROM activities act_nc1 WHERE act_nc1.contact_id = {$a}id AND act_nc1.deleted_at IS NULL)
+        AND NOT EXISTS (SELECT 1 FROM activities act_nc2 WHERE act_nc2.related_type IN ('contact', 'lead') AND act_nc2.related_id = {$a}id AND act_nc2.deleted_at IS NULL)
+        AND NOT EXISTS (
+            SELECT 1 FROM notes n_nc
+            WHERE n_nc.entity_type = 'contact' AND n_nc.entity_id = {$a}id
+              AND n_nc.body NOT LIKE '[Tự động]%'
+              AND n_nc.body NOT LIKE '[Phân bổ]%'
+              AND n_nc.body NOT LIKE '[Giao data]%'
+              AND n_nc.body NOT LIKE '[Auto]%'
+              AND n_nc.body NOT LIKE '[Import]%'
+              AND n_nc.body NOT LIKE '[Tái phân bổ]%'
+              AND n_nc.body NOT LIKE 'Tái phân bổ%'
+              AND n_nc.body NOT LIKE 'Giao lại%'
+        )
+    )";
+
     if ($stageOp === 'not_in') {
         $notConds = [];
+        if ($hasUncontactedToken) {
+            $notConds[] = "NOT {$uncontactedSql}";
+        }
         if (!empty($stageIds)) {
             $ph = implode(',', array_fill(0, count($stageIds), '?'));
             $notConds[] = "({$a}stage_id NOT IN ($ph) OR {$a}stage_id IS NULL)";
@@ -422,13 +449,13 @@ function applyCrmStageMultiFilter(PDO $db, string $alias, array $input, array &$
         }
         if (!empty($orderIndexes)) {
             $phOrd = implode(',', array_fill(0, count($orderIndexes), '?'));
-            $notConds[] = "({$a}stage_id NOT IN (SELECT ps_ni.id FROM pipeline_stages ps_ni WHERE ps_ni.order_index IN ($phOrd)) OR {$a}stage_id IS NULL)";
+            $notConds[] = "({$a}stage_id IS NULL OR NOT EXISTS (SELECT 1 FROM pipeline_stages ps_ni WHERE ps_ni.id = {$a}stage_id AND ps_ni.order_index IN ($phOrd)))";
             foreach ($orderIndexes as $oi) {
                 $params[] = (int)$oi;
             }
         }
         foreach ($stageNamesOrSlugs as $sn) {
-            $notConds[] = "(({$a}pipeline_status IS NULL OR {$a}pipeline_status NOT LIKE ?) AND ({$a}stage_id IS NULL OR {$a}stage_id NOT IN (SELECT ps_ns.id FROM pipeline_stages ps_ns WHERE ps_ns.system_slug = ? OR ps_ns.name LIKE ?)))";
+            $notConds[] = "(({$a}pipeline_status IS NULL OR {$a}pipeline_status NOT LIKE ?) AND ({$a}stage_id IS NULL OR NOT EXISTS (SELECT 1 FROM pipeline_stages ps_ns WHERE ps_ns.id = {$a}stage_id AND (ps_ns.system_slug = ? OR ps_ns.name LIKE ?))))";
             $params[] = '%' . $sn . '%';
             $params[] = $sn;
             $params[] = '%' . $sn . '%';
@@ -438,6 +465,9 @@ function applyCrmStageMultiFilter(PDO $db, string $alias, array $input, array &$
         }
     } else {
         $orConds = [];
+        if ($hasUncontactedToken) {
+            $orConds[] = $uncontactedSql;
+        }
         if (!empty($stageIds)) {
             $ph = implode(',', array_fill(0, count($stageIds), '?'));
             $orConds[] = "{$a}stage_id IN ($ph)";
@@ -517,7 +547,19 @@ function applyCrmDateRangeFilter(PDO $db, string $alias, array $input, array &$w
                 $where[] = "EXISTS (SELECT 1 FROM deposits dep_d WHERE dep_d.contact_id = {$a}id AND dep_d.status NOT IN ('cancelled', 'rejected') AND dep_d.created_at <= ?)";
                 $params[] = $toDt;
             }
-        } elseif ($dateField === 'admission_date' || $dateField === 'expected_decision_date') {
+        } elseif ($dateField === 'admission_date') {
+            $col = isset($contactCols['admission_date']) ? 'admission_date' : 'created_at';
+            if ($fromDateOnly !== '') {
+                $fromMonthStart = substr($fromDateOnly, 0, 7) . '-01';
+                $where[] = "({$a}{$col} >= ? OR (DAY({$a}{$col}) = 1 AND {$a}{$col} >= ?))";
+                $params[] = $fromDateOnly;
+                $params[] = $fromMonthStart;
+            }
+            if ($toDateOnly !== '') {
+                $where[] = "{$a}{$col} <= ?";
+                $params[] = $toDateOnly;
+            }
+        } elseif ($dateField === 'expected_decision_date') {
             $col = isset($contactCols[$dateField]) ? $dateField : 'created_at';
             if ($fromDateOnly !== '') {
                 $where[] = "{$a}{$col} >= ?";
@@ -553,8 +595,11 @@ function applyCrmDateRangeFilter(PDO $db, string $alias, array $input, array &$w
     $admissionFrom = trim((string)($input['admission_from'] ?? ''));
     $admissionTo   = trim((string)($input['admission_to'] ?? ''));
     if ($admissionFrom !== '') {
-        $where[] = "{$a}admission_date >= ?";
-        $params[] = substr($admissionFrom, 0, 10);
+        $admFromDate = substr($admissionFrom, 0, 10);
+        $admFromMonthStart = substr($admFromDate, 0, 7) . '-01';
+        $where[] = "({$a}admission_date >= ? OR (DAY({$a}admission_date) = 1 AND {$a}admission_date >= ?))";
+        $params[] = $admFromDate;
+        $params[] = $admFromMonthStart;
     }
     if ($admissionTo !== '') {
         $where[] = "{$a}admission_date <= ?";
@@ -576,6 +621,7 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
     $trimmedAlias = trim($alias);
     $a = $trimmedAlias === '' ? '' : (str_ends_with($trimmedAlias, '.') ? $trimmedAlias : $trimmedAlias . '.');
     $contactCols = getCrmTableColumnsCache($db, 'contacts');
+    $hasCollabCol = isset($contactCols['collaborator_ids']);
 
     // =========================================================================
     // 1. MULTI-OWNER, COLLABORATOR, CREATOR & TEAM
@@ -628,20 +674,25 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
             foreach ($numericOwnerIds as $oid) {
                 $params[] = (int)$oid;
             }
-            foreach ($numericOwnerIds as $oid) {
-                $ownerOrClauses[] = "FIND_IN_SET(?, COALESCE({$a}collaborator_ids, '')) > 0";
-                $params[] = (string)(int)$oid;
+            if ($hasCollabCol) {
+                foreach ($numericOwnerIds as $oid) {
+                    $ownerOrClauses[] = "FIND_IN_SET(?, COALESCE({$a}collaborator_ids, '')) > 0";
+                    $params[] = (string)(int)$oid;
+                }
             }
         }
 
         foreach ($fuzzyFallbackTokens as $fTok) {
             $regexPat = buildVietnameseWordRegex($fTok);
+            $ownMatchSql = $hasCollabCol
+                ? "(u_own.id = {$a}owner_id OR FIND_IN_SET(u_own.id, COALESCE({$a}collaborator_ids, '')) > 0)"
+                : "u_own.id = {$a}owner_id";
             if ($regexPat !== '') {
-                $ownerOrClauses[] = "EXISTS (SELECT 1 FROM users u_own WHERE (u_own.id = {$a}owner_id OR FIND_IN_SET(u_own.id, COALESCE({$a}collaborator_ids, '')) > 0) AND (u_own.full_name REGEXP ? OR u_own.email LIKE ?))";
+                $ownerOrClauses[] = "EXISTS (SELECT 1 FROM users u_own WHERE {$ownMatchSql} AND (u_own.full_name REGEXP ? OR u_own.email LIKE ?))";
                 $params[] = $regexPat;
                 $params[] = '%' . $fTok . '%';
             } else {
-                $ownerOrClauses[] = "EXISTS (SELECT 1 FROM users u_own WHERE (u_own.id = {$a}owner_id OR FIND_IN_SET(u_own.id, COALESCE({$a}collaborator_ids, '')) > 0) AND (u_own.full_name LIKE ? OR u_own.email LIKE ?))";
+                $ownerOrClauses[] = "EXISTS (SELECT 1 FROM users u_own WHERE {$ownMatchSql} AND (u_own.full_name LIKE ? OR u_own.email LIKE ?))";
                 $params[] = '%' . $fTok . '%';
                 $params[] = '%' . $fTok . '%';
             }
@@ -661,7 +712,7 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
         parseCrmMultiFilterValues($input['collaborator_id'] ?? null),
         parseCrmMultiFilterValues($input['collaborators'] ?? null)
     )));
-    if (!empty($collabTokens)) {
+    if (!empty($collabTokens) && $hasCollabCol) {
         $collabIds = [];
         foreach ($collabTokens as $ct) {
             if (is_numeric($ct) && (int)$ct > 0) {
@@ -871,22 +922,46 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
         }
     } elseif (!empty($intTypes) && !in_array('all', $intTypes, true)) {
         $itOrs = [];
-        $phActTypes = implode(',', array_fill(0, count($intTypes), '?'));
-        $itOrs[] = "EXISTS (
-            SELECT 1 FROM activities act_it1
-            WHERE act_it1.contact_id = {$a}id AND act_it1.deleted_at IS NULL
-              AND act_it1.type IN ($phActTypes)
-        )";
-        foreach ($intTypes as $at) {
-            $params[] = $at;
+        $standardActTypes = array_values(array_diff($intTypes, ['overdue_task', 'upcoming_task']));
+        if (!empty($standardActTypes)) {
+            $phActTypes = implode(',', array_fill(0, count($standardActTypes), '?'));
+            $itOrs[] = "EXISTS (
+                SELECT 1 FROM activities act_it1
+                WHERE act_it1.contact_id = {$a}id AND act_it1.deleted_at IS NULL
+                  AND act_it1.type IN ($phActTypes)
+            )";
+            foreach ($standardActTypes as $at) {
+                $params[] = $at;
+            }
+            $itOrs[] = "EXISTS (
+                SELECT 1 FROM activities act_it2
+                WHERE act_it2.related_type IN ('contact', 'lead') AND act_it2.related_id = {$a}id AND act_it2.deleted_at IS NULL
+                  AND act_it2.type IN ($phActTypes)
+            )";
+            foreach ($standardActTypes as $at) {
+                $params[] = $at;
+            }
         }
-        $itOrs[] = "EXISTS (
-            SELECT 1 FROM activities act_it2
-            WHERE act_it2.related_type IN ('contact', 'lead') AND act_it2.related_id = {$a}id AND act_it2.deleted_at IS NULL
-              AND act_it2.type IN ($phActTypes)
-        )";
-        foreach ($intTypes as $at) {
-            $params[] = $at;
+        if (in_array('overdue_task', $intTypes, true)) {
+            $itOrs[] = "EXISTS (
+                SELECT 1 FROM activities act_ot
+                WHERE (act_ot.contact_id = {$a}id OR (act_ot.related_type IN ('contact', 'lead') AND act_ot.related_id = {$a}id))
+                  AND act_ot.deleted_at IS NULL
+                  AND act_ot.type = 'task'
+                  AND COALESCE(act_ot.status, 'pending') NOT IN ('completed', 'done', 'cancelled')
+                  AND COALESCE(act_ot.due_date, act_ot.created_at) < NOW()
+            )";
+        }
+        if (in_array('upcoming_task', $intTypes, true)) {
+            $itOrs[] = "EXISTS (
+                SELECT 1 FROM activities act_ut
+                WHERE (act_ut.contact_id = {$a}id OR (act_ut.related_type IN ('contact', 'lead') AND act_ut.related_id = {$a}id))
+                  AND act_ut.deleted_at IS NULL
+                  AND act_ut.type = 'task'
+                  AND COALESCE(act_ut.status, 'pending') NOT IN ('completed', 'done', 'cancelled')
+                  AND act_ut.due_date IS NOT NULL
+                  AND act_ut.due_date >= NOW()
+            )";
         }
         if (array_intersect(['note', 'zalo', 'chat'], $intTypes)) {
             $itOrs[] = "EXISTS (
@@ -900,7 +975,9 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
                   AND n_it.body NOT LIKE '[Tái phân bổ]%'
             )";
         }
-        $where[] = '(' . implode(' OR ', $itOrs) . ')';
+        if (!empty($itOrs)) {
+            $where[] = '(' . implode(' OR ', $itOrs) . ')';
+        }
     }
 
     // Interaction status (`interaction_status` / `activity_status` / `uncontacted`)
@@ -908,7 +985,7 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
     if ($intStatus === '' && !empty($input['uncontacted']) && in_array(strtolower((string)$input['uncontacted']), ['1', 'true', 'yes'], true)) {
         $intStatus = 'uncontacted';
     }
-    if (in_array($intStatus, ['uncontacted', 'no_activity', 'not_contacted'], true)) {
+    if (in_array($intStatus, ['uncontacted', 'no_activity', 'not_contacted', 'never'], true)) {
         $where[] = "(
             ({$a}last_contact IS NULL OR {$a}last_contact = '')
             AND NOT EXISTS (
@@ -932,7 +1009,7 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
                   AND n_un.body NOT LIKE 'Giao lại%'
             )
         )";
-    } elseif (in_array($intStatus, ['contacted', 'has_activity'], true)) {
+    } elseif (in_array($intStatus, ['contacted', 'has_activity', 'interacted'], true)) {
         $where[] = "(
             ({$a}last_contact IS NOT NULL AND {$a}last_contact != '')
             OR EXISTS (
@@ -992,17 +1069,38 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
     // Note / Activity / Reason keyword (`note_keyword`)
     $noteKeywords = parseCrmMultiFilterValues($input['note_keyword'] ?? null);
     if (!empty($noteKeywords)) {
+        $actCols = getCrmTableColumnsCache($db, 'activities');
+        $hasNurtureReason = isset($contactCols['nurture_reason']);
+        $hasActDesc = isset($actCols['description']);
+        $hasActBody = isset($actCols['body']);
         $nkOrs = [];
         foreach ($noteKeywords as $nkw) {
             $kwLike = '%' . $nkw . '%';
-            $nkOrs[] = "(
-                {$a}notes LIKE ?
-                OR {$a}lost_reason LIKE ?
-                OR {$a}nurture_reason LIKE ?
-                OR EXISTS (SELECT 1 FROM notes n_kw WHERE n_kw.entity_type = 'contact' AND n_kw.entity_id = {$a}id AND n_kw.body LIKE ?)
-                OR EXISTS (SELECT 1 FROM activities act_kw WHERE act_kw.contact_id = {$a}id AND act_kw.deleted_at IS NULL AND (act_kw.subject LIKE ? OR act_kw.body LIKE ?))
-            )";
-            array_push($params, $kwLike, $kwLike, $kwLike, $kwLike, $kwLike, $kwLike);
+            $subParts = [
+                "{$a}notes LIKE ?",
+                "{$a}lost_reason LIKE ?"
+            ];
+            $params[] = $kwLike;
+            $params[] = $kwLike;
+            if ($hasNurtureReason) {
+                $subParts[] = "{$a}nurture_reason LIKE ?";
+                $params[] = $kwLike;
+            }
+            $subParts[] = "EXISTS (SELECT 1 FROM notes n_kw WHERE n_kw.entity_type = 'contact' AND n_kw.entity_id = {$a}id AND n_kw.body LIKE ?)";
+            $params[] = $kwLike;
+
+            $actTextConds = ["act_kw.subject LIKE ?"];
+            $params[] = $kwLike;
+            if ($hasActDesc) {
+                $actTextConds[] = "act_kw.description LIKE ?";
+                $params[] = $kwLike;
+            }
+            if ($hasActBody) {
+                $actTextConds[] = "act_kw.body LIKE ?";
+                $params[] = $kwLike;
+            }
+            $subParts[] = "EXISTS (SELECT 1 FROM activities act_kw WHERE (act_kw.contact_id = {$a}id OR (act_kw.related_type IN ('contact', 'lead') AND act_kw.related_id = {$a}id)) AND act_kw.deleted_at IS NULL AND (" . implode(' OR ', $actTextConds) . "))";
+            $nkOrs[] = '(' . implode(' OR ', $subParts) . ')';
         }
         $where[] = '(' . implode(' OR ', $nkOrs) . ')';
     }
@@ -1082,6 +1180,14 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
     }
 
     // Cities / Branches (`cities`, `city`, `branches_or_cities`)
+    $citySearchCols = array_values(array_filter(
+        ['city', 'district', 'ward', 'address'],
+        fn($c) => isset($contactCols[$c])
+    ));
+    if (empty($citySearchCols)) {
+        $citySearchCols = ['city', 'address'];
+    }
+
     $cityTokens = array_values(array_unique(array_merge(
         parseCrmMultiFilterValues($input['cities'] ?? null),
         parseCrmMultiFilterValues($input['city'] ?? null),
@@ -1097,7 +1203,7 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
             }
             $lowUnacc = strtolower(trim($unacc));
             if (in_array($lowUnacc, ['hcm', 'tphcm', 'tp.hcm', 'tp hcm', 'ho chi minh', 'sai gon', 'saigon'], true)) {
-                $variants = array_merge($variants, ['Hồ Chí Minh', 'Ho Chi Minh', 'HCM', 'Sài Gòn']);
+                $variants = array_merge($variants, ['Hồ Chí Minh', 'Ho Chi Minh', 'HCM', 'Sài Gòn', 'TP.HCM']);
             } elseif (in_array($lowUnacc, ['hn', 'ha noi', 'hanoi', 'tp ha noi'], true)) {
                 $variants = array_merge($variants, ['Hà Nội', 'Ha Noi']);
             } elseif (in_array($lowUnacc, ['dn', 'da nang', 'danang'], true)) {
@@ -1105,8 +1211,12 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
             }
             foreach (array_unique($variants) as $vCity) {
                 $likeC = '%' . $vCity . '%';
-                $cityOrs[] = "({$a}city LIKE ? OR {$a}district LIKE ? OR {$a}ward LIKE ? OR {$a}address LIKE ?)";
-                array_push($params, $likeC, $likeC, $likeC, $likeC);
+                $colParts = [];
+                foreach ($citySearchCols as $csc) {
+                    $colParts[] = "{$a}{$csc} LIKE ?";
+                    $params[] = $likeC;
+                }
+                $cityOrs[] = '(' . implode(' OR ', $colParts) . ')';
             }
         }
         if (!empty($cityOrs)) {
@@ -1115,6 +1225,13 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
     }
 
     // Districts (`districts` / `district`)
+    $distSearchCols = array_values(array_filter(
+        ['district', 'ward', 'address', 'city'],
+        fn($c) => isset($contactCols[$c])
+    ));
+    if (empty($distSearchCols)) {
+        $distSearchCols = ['address', 'city'];
+    }
     $districtTokens = array_values(array_unique(array_merge(
         parseCrmMultiFilterValues($input['districts'] ?? null),
         parseCrmMultiFilterValues($input['district'] ?? null)
@@ -1125,11 +1242,17 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
             $variants = array_unique([$dTok, removeVietnameseAccents($dTok)]);
             foreach ($variants as $vDist) {
                 $likeD = '%' . $vDist . '%';
-                $distOrs[] = "({$a}district LIKE ? OR {$a}ward LIKE ? OR {$a}address LIKE ?)";
-                array_push($params, $likeD, $likeD, $likeD);
+                $colParts = [];
+                foreach ($distSearchCols as $dsc) {
+                    $colParts[] = "{$a}{$dsc} LIKE ?";
+                    $params[] = $likeD;
+                }
+                $distOrs[] = '(' . implode(' OR ', $colParts) . ')';
             }
         }
-        $where[] = '(' . implode(' OR ', $distOrs) . ')';
+        if (!empty($distOrs)) {
+            $where[] = '(' . implode(' OR ', $distOrs) . ')';
+        }
     }
 
     // B2B & Professional (`job_titles`, `companies`, `industries`, `departments`, `education_or_degree`)
@@ -1139,9 +1262,17 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
     )));
     if (!empty($jobTokens)) {
         $jtOrs = [];
+        $hasPositionCol = isset($contactCols['position']);
         foreach ($jobTokens as $jt) {
-            $jtOrs[] = "{$a}job_title LIKE ?";
-            $params[] = '%' . $jt . '%';
+            $likeJt = '%' . $jt . '%';
+            if ($hasPositionCol) {
+                $jtOrs[] = "({$a}job_title LIKE ? OR {$a}position LIKE ?)";
+                $params[] = $likeJt;
+                $params[] = $likeJt;
+            } else {
+                $jtOrs[] = "{$a}job_title LIKE ?";
+                $params[] = $likeJt;
+            }
         }
         $where[] = '(' . implode(' OR ', $jtOrs) . ')';
     }
@@ -1153,14 +1284,26 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
     )));
     if (!empty($compTokens)) {
         $cpOrs = [];
+        $hasCompanyNameCol = isset($contactCols['company_name']);
+        $hasCompanyCol = isset($contactCols['company']);
         foreach ($compTokens as $cp) {
             if (is_numeric($cp) && (int)$cp > 0) {
                 $cpOrs[] = "{$a}company_id = ?";
                 $params[] = (int)$cp;
             } else {
-                $cpOrs[] = "({$a}company LIKE ? OR EXISTS (SELECT 1 FROM companies comp_f WHERE comp_f.id = {$a}company_id AND comp_f.name LIKE ?))";
-                $params[] = '%' . $cp . '%';
-                $params[] = '%' . $cp . '%';
+                $likeCp = '%' . $cp . '%';
+                $subCp = [];
+                if ($hasCompanyNameCol) {
+                    $subCp[] = "{$a}company_name LIKE ?";
+                    $params[] = $likeCp;
+                }
+                if ($hasCompanyCol) {
+                    $subCp[] = "{$a}company LIKE ?";
+                    $params[] = $likeCp;
+                }
+                $subCp[] = "EXISTS (SELECT 1 FROM companies comp_f WHERE comp_f.id = {$a}company_id AND comp_f.name LIKE ?)";
+                $params[] = $likeCp;
+                $cpOrs[] = '(' . implode(' OR ', $subCp) . ')';
             }
         }
         $where[] = '(' . implode(' OR ', $cpOrs) . ')';
@@ -1172,9 +1315,17 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
     )));
     if (!empty($indTokens)) {
         $indOrs = [];
+        $hasIndustryCol = isset($contactCols['industry']);
         foreach ($indTokens as $ind) {
-            $indOrs[] = "{$a}industry LIKE ?";
-            $params[] = '%' . $ind . '%';
+            $likeInd = '%' . $ind . '%';
+            if ($hasIndustryCol) {
+                $indOrs[] = "{$a}industry LIKE ?";
+                $params[] = $likeInd;
+            } else {
+                $indOrs[] = "({$a}job_title LIKE ? OR {$a}notes LIKE ?)";
+                $params[] = $likeInd;
+                $params[] = $likeInd;
+            }
         }
         $where[] = '(' . implode(' OR ', $indOrs) . ')';
     }
@@ -1185,9 +1336,16 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
     )));
     if (!empty($deptTokens)) {
         $dpOrs = [];
+        $hasDeptCol = isset($contactCols['department']);
         foreach ($deptTokens as $dp) {
-            $dpOrs[] = "{$a}department LIKE ?";
-            $params[] = '%' . $dp . '%';
+            $likeDp = '%' . $dp . '%';
+            if ($hasDeptCol) {
+                $dpOrs[] = "{$a}department LIKE ?";
+                $params[] = $likeDp;
+            } else {
+                $dpOrs[] = "({$a}job_title LIKE ? OR {$a}position LIKE ? OR {$a}notes LIKE ?)";
+                array_push($params, $likeDp, $likeDp, $likeDp);
+            }
         }
         $where[] = '(' . implode(' OR ', $dpOrs) . ')';
     }
@@ -1212,11 +1370,12 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
     // =========================================================================
     // 5. ACADEMIC, MARKETING, LEAD QUALITY & FINANCIAL FILTERS
     // =========================================================================
-    // Programs / Project (`programs`, `program`, `project_id`)
+    // Programs / Project (`programs`, `program`, `project_id`, `projects`)
     $progTokens = array_values(array_unique(array_merge(
         parseCrmMultiFilterValues($input['programs'] ?? null),
         parseCrmMultiFilterValues($input['program'] ?? null),
-        parseCrmMultiFilterValues($input['project_id'] ?? null)
+        parseCrmMultiFilterValues($input['project_id'] ?? null),
+        parseCrmMultiFilterValues($input['projects'] ?? null)
     )));
     if (!empty($progTokens)) {
         $progOrs = [];
@@ -1243,43 +1402,104 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
     if (!empty($campTokens)) {
         $lscaCols = getCrmTableColumnsCache($db, 'lms_student_campaign_allocations');
         $lscaContactCol = isset($lscaCols['contact_id']) ? 'contact_id' : (isset($lscaCols['student_id']) ? 'student_id' : null);
+        $hasSourceDetail = isset($contactCols['source_detail']);
+        $hasUtmCampaign = isset($contactCols['utm_campaign']);
+        $hasUtmSource = isset($contactCols['utm_source']);
+        $hasCampaignIdCol = isset($contactCols['campaign_id']);
 
         $campOrs = [];
         foreach ($campTokens as $ctk) {
             if (is_numeric($ctk) && (int)$ctk > 0) {
-                if ($lscaContactCol !== null) {
+                if ($lscaContactCol !== null && $hasCampaignIdCol) {
                     $campOrs[] = "({$a}campaign_id = ? OR EXISTS (SELECT 1 FROM lms_student_campaign_allocations lsca WHERE lsca.{$lscaContactCol} = {$a}id AND lsca.campaign_id = ?))";
                     $params[] = (int)$ctk;
                     $params[] = (int)$ctk;
-                } else {
+                } elseif ($hasCampaignIdCol) {
                     $campOrs[] = "{$a}campaign_id = ?";
+                    $params[] = (int)$ctk;
+                } elseif ($lscaContactCol !== null) {
+                    $campOrs[] = "EXISTS (SELECT 1 FROM lms_student_campaign_allocations lsca WHERE lsca.{$lscaContactCol} = {$a}id AND lsca.campaign_id = ?)";
                     $params[] = (int)$ctk;
                 }
             } else {
                 $likeCamp = '%' . $ctk . '%';
-                if ($lscaContactCol !== null) {
-                    $campOrs[] = "({$a}utm_campaign LIKE ? OR {$a}utm_source LIKE ? OR {$a}platform LIKE ? OR {$a}form_name LIKE ? OR {$a}campaign_id IN (SELECT mc_f.id FROM marketing_campaigns mc_f WHERE mc_f.name LIKE ?) OR EXISTS (SELECT 1 FROM lms_student_campaign_allocations lsca JOIN marketing_campaigns mc_l ON lsca.campaign_id = mc_l.id WHERE lsca.{$lscaContactCol} = {$a}id AND mc_l.name LIKE ?))";
-                    array_push($params, $likeCamp, $likeCamp, $likeCamp, $likeCamp, $likeCamp, $likeCamp);
-                } else {
-                    $campOrs[] = "({$a}utm_campaign LIKE ? OR {$a}utm_source LIKE ? OR {$a}platform LIKE ? OR {$a}form_name LIKE ? OR {$a}campaign_id IN (SELECT mc_f.id FROM marketing_campaigns mc_f WHERE mc_f.name LIKE ?))";
-                    array_push($params, $likeCamp, $likeCamp, $likeCamp, $likeCamp, $likeCamp);
+                $campParts = [];
+                if ($hasUtmCampaign) {
+                    $campParts[] = "{$a}utm_campaign LIKE ?";
+                    $params[] = $likeCamp;
                 }
+                if ($hasUtmSource) {
+                    $campParts[] = "{$a}utm_source LIKE ?";
+                    $params[] = $likeCamp;
+                }
+                if ($hasCampaignIdCol) {
+                    $campParts[] = "{$a}campaign_id IN (SELECT mc_f.id FROM marketing_campaigns mc_f WHERE mc_f.name LIKE ?)";
+                    $params[] = $likeCamp;
+                }
+                if ($hasSourceDetail) {
+                    $campParts[] = "{$a}source_detail LIKE ?";
+                    $params[] = $likeCamp;
+                }
+                if ($lscaContactCol !== null) {
+                    $campParts[] = "EXISTS (SELECT 1 FROM lms_student_campaign_allocations lsca JOIN marketing_campaigns mc_l ON lsca.campaign_id = mc_l.id WHERE lsca.{$lscaContactCol} = {$a}id AND mc_l.name LIKE ?)";
+                    $params[] = $likeCamp;
+                }
+                if (empty($campParts)) {
+                    $campParts[] = "{$a}source LIKE ?";
+                    $params[] = $likeCamp;
+                }
+                $campOrs[] = '(' . implode(' OR ', $campParts) . ')';
             }
         }
-        $where[] = '(' . implode(' OR ', $campOrs) . ')';
+        if (!empty($campOrs)) {
+            $where[] = '(' . implode(' OR ', $campOrs) . ')';
+        }
     }
 
-    // Sources (`sources` / `source`)
+    // Sources (`sources` / `source` / `source_type`)
     $srcTokens = array_values(array_unique(array_merge(
         parseCrmMultiFilterValues($input['sources'] ?? null),
-        parseCrmMultiFilterValues($input['source'] ?? null)
+        parseCrmMultiFilterValues($input['source'] ?? null),
+        parseCrmMultiFilterValues($input['source_type'] ?? null)
     )));
     if (!empty($srcTokens)) {
         $srcOrs = [];
+        $hasSourceDetail = isset($contactCols['source_detail']);
+        $hasUtmSource = isset($contactCols['utm_source']);
         foreach ($srcTokens as $st) {
-            $likeSrc = '%' . $st . '%';
-            $srcOrs[] = "({$a}source LIKE ? OR {$a}utm_source LIKE ? OR {$a}platform LIKE ?)";
-            array_push($params, $likeSrc, $likeSrc, $likeSrc);
+            $stLow = mb_strtolower(trim($st), 'UTF-8');
+            $expandedSrcs = [$st];
+            if ($stLow === 'facebook' || $stLow === 'facebook ads') {
+                $expandedSrcs = array_merge($expandedSrcs, ['Facebook Ads', 'Facebook', 'fb', 'Social Media']);
+            } elseif ($stLow === 'google' || $stLow === 'google ads') {
+                $expandedSrcs = array_merge($expandedSrcs, ['Google Ads', 'Google', 'gg']);
+            } elseif ($stLow === 'tiktok') {
+                $expandedSrcs = array_merge($expandedSrcs, ['TikTok', 'Tiktok Ads']);
+            } elseif ($stLow === 'zalo') {
+                $expandedSrcs = array_merge($expandedSrcs, ['Zalo', 'Zalo OA']);
+            } elseif ($stLow === 'ca_nhan') {
+                $expandedSrcs = array_merge($expandedSrcs, ['ca_nhan', 'Nhân viên kinh doanh tự tìm kiếm']);
+            } elseif ($stLow === 'gioi_thieu') {
+                $expandedSrcs = array_merge($expandedSrcs, ['gioi_thieu', 'Referral', 'ref', 'Giới thiệu']);
+            } elseif ($stLow === 'hoi_thao') {
+                $expandedSrcs = array_merge($expandedSrcs, ['hoi_thao', 'Hội thảo', 'Sự kiện', 'Event', 'Workshop']);
+            } elseif ($stLow === 'website') {
+                $expandedSrcs = array_merge($expandedSrcs, ['Website', 'Web', 'Landing Page']);
+            }
+            foreach (array_unique($expandedSrcs) as $eSrc) {
+                $likeSrc = '%' . $eSrc . '%';
+                $srcColParts = ["{$a}source LIKE ?"];
+                $params[] = $likeSrc;
+                if ($hasSourceDetail) {
+                    $srcColParts[] = "{$a}source_detail LIKE ?";
+                    $params[] = $likeSrc;
+                }
+                if ($hasUtmSource) {
+                    $srcColParts[] = "{$a}utm_source LIKE ?";
+                    $params[] = $likeSrc;
+                }
+                $srcOrs[] = count($srcColParts) > 1 ? '(' . implode(' OR ', $srcColParts) . ')' : $srcColParts[0];
+            }
         }
         $where[] = '(' . implode(' OR ', $srcOrs) . ')';
     }
@@ -1365,30 +1585,39 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
         parseCrmMultiFilterValues($input['study_statuses'] ?? null)
     )));
     if (!empty($studyTokens) && isset($contactCols['study_status'])) {
-        $expandedStatuses = [];
+        $studyOrClauses = [];
+        $nonStudyingStatuses = [];
+        $includesStudying = false;
         foreach ($studyTokens as $stTok) {
             $sLow = mb_strtolower(trim($stTok), 'UTF-8');
             if (in_array($sLow, ['studying', 'dang_hoc', 'đang học', 'active'], true)) {
-                $expandedStatuses = array_merge($expandedStatuses, ['studying', 'dang_hoc', 'đang học']);
+                $includesStudying = true;
             } elseif (in_array($sLow, ['completed', 'graduated', 'hoan_thanh', 'hoàn thành', 'tot_nghiep', 'tốt nghiệp'], true)) {
-                $expandedStatuses = array_merge($expandedStatuses, ['completed', 'graduated', 'hoan_thanh', 'hoàn thành', 'tot_nghiep', 'tốt nghiệp']);
+                $nonStudyingStatuses = array_merge($nonStudyingStatuses, ['completed', 'graduated', 'hoan_thanh', 'hoàn thành', 'tot_nghiep', 'tốt nghiệp']);
             } elseif (in_array($sLow, ['reserved', 'deferred', 'bao_luu', 'bảo lưu'], true)) {
-                $expandedStatuses = array_merge($expandedStatuses, ['reserved', 'deferred', 'bao_luu', 'bảo lưu']);
+                $nonStudyingStatuses = array_merge($nonStudyingStatuses, ['reserved', 'deferred', 'bao_luu', 'bảo lưu']);
             } elseif (in_array($sLow, ['suspended', 'tam_ngung', 'tạm ngưng', 'pause'], true)) {
-                $expandedStatuses = array_merge($expandedStatuses, ['suspended', 'tam_ngung', 'tạm ngưng']);
+                $nonStudyingStatuses = array_merge($nonStudyingStatuses, ['suspended', 'tam_ngung', 'tạm ngưng']);
             } elseif (in_array($sLow, ['dropped', 'bo_hoc', 'bỏ học', 'nghi_hoc', 'nghỉ học'], true)) {
-                $expandedStatuses = array_merge($expandedStatuses, ['dropped', 'bo_hoc', 'bỏ học', 'nghi_hoc', 'nghỉ học']);
+                $nonStudyingStatuses = array_merge($nonStudyingStatuses, ['dropped', 'bo_hoc', 'bỏ học', 'nghi_hoc', 'nghỉ học']);
             } else {
-                $expandedStatuses[] = $sLow;
+                $nonStudyingStatuses[] = $sLow;
             }
         }
-        $expandedStatuses = array_values(array_unique($expandedStatuses));
-        if (!empty($expandedStatuses)) {
-            $phSt = implode(',', array_fill(0, count($expandedStatuses), '?'));
-            $where[] = "LOWER(TRIM(COALESCE({$a}study_status, ''))) IN ($phSt)";
-            foreach ($expandedStatuses as $es) {
+        if ($includesStudying) {
+            // Note: contacts.study_status has DEFAULT 'studying', so require actual enrollment/student indicators for 'studying'
+            $studyOrClauses[] = "(LOWER(TRIM(COALESCE({$a}study_status, 'studying'))) IN ('studying', 'dang_hoc', 'đang học', '') AND ({$a}status = 'customer' OR {$a}stage_id = 44 OR {$a}pipeline_status IN ('enrolled', 'hoc_vien', 'won') OR ({$a}student_id IS NOT NULL AND TRIM({$a}student_id) != '') OR {$a}admission_date IS NOT NULL))";
+        }
+        $nonStudyingStatuses = array_values(array_unique($nonStudyingStatuses));
+        if (!empty($nonStudyingStatuses)) {
+            $phSt = implode(',', array_fill(0, count($nonStudyingStatuses), '?'));
+            $studyOrClauses[] = "LOWER(TRIM(COALESCE({$a}study_status, ''))) IN ($phSt)";
+            foreach ($nonStudyingStatuses as $es) {
                 $params[] = $es;
             }
+        }
+        if (!empty($studyOrClauses)) {
+            $where[] = '(' . implode(' OR ', $studyOrClauses) . ')';
         }
     }
 
@@ -1411,11 +1640,28 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
         parseCrmMultiFilterValues($input['expected_intake'] ?? null),
         parseCrmMultiFilterValues($input['expected_intakes'] ?? null)
     )));
-    if (!empty($intakeTokens) && isset($contactCols['expected_intake'])) {
+    if (!empty($intakeTokens)) {
         $inOrs = [];
+        $hasExpectedIntakeCol = isset($contactCols['expected_intake']);
+        $hasAdmissionDateCol = isset($contactCols['admission_date']);
         foreach ($intakeTokens as $itk) {
-            $inOrs[] = "{$a}expected_intake LIKE ?";
-            $params[] = '%' . $itk . '%';
+            $likeItk = '%' . $itk . '%';
+            $itkParts = [];
+            if ($hasExpectedIntakeCol) {
+                $itkParts[] = "{$a}expected_intake LIKE ?";
+                $params[] = $likeItk;
+            }
+            if ($hasAdmissionDateCol) {
+                $itkParts[] = "DATE_FORMAT({$a}admission_date, '%m/%Y') LIKE ?";
+                $itkParts[] = "DATE_FORMAT({$a}admission_date, '%c/%Y') LIKE ?";
+                $itkParts[] = "DATE_FORMAT({$a}admission_date, '%Y-%m') LIKE ?";
+                $itkParts[] = "CAST({$a}admission_date AS CHAR) LIKE ?";
+                array_push($params, $likeItk, $likeItk, $likeItk, $likeItk);
+            }
+            $itkParts[] = "{$a}program LIKE ?";
+            $itkParts[] = "{$a}notes LIKE ?";
+            array_push($params, $likeItk, $likeItk);
+            $inOrs[] = '(' . implode(' OR ', $itkParts) . ')';
         }
         $where[] = '(' . implode(' OR ', $inOrs) . ')';
     }
@@ -1450,12 +1696,17 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
         $degreeExistsSql = "EXISTS (SELECT 1 FROM cloud_files cf_dg WHERE cf_dg.contact_id = {$a}id AND (LOWER(cf_dg.name) REGEXP 'bằng|bang|degree|diploma|bảng điểm|bang diem|transcript|học bạ|hoc ba' OR LOWER(COALESCE(cf_dg.category, '')) REGEXP 'bằng|bang|degree|academic|hoc_tap|học tập'))";
         $transExistsSql  = "EXISTS (SELECT 1 FROM cloud_files cf_tr WHERE cf_tr.contact_id = {$a}id AND (LOWER(cf_tr.name) REGEXP 'dịch|dich|translation|notar|công chứng|cong chung' OR LOWER(COALESCE(cf_tr.category, '')) REGEXP 'dịch|dich|translation'))";
         $contractExistsSql = "EXISTS (SELECT 1 FROM cloud_files cf_ct WHERE cf_ct.contact_id = {$a}id AND (LOWER(cf_ct.name) REGEXP 'hợp đồng|hop dong|contract|application|đơn nhập học|don nhap hoc|offer' OR LOWER(COALESCE(cf_ct.category, '')) REGEXP 'hợp đồng|hop dong|contract|đơn hàng|don hang'))";
+        $idCardField = isset($contactCols['id_card']) ? 'id_card' : (isset($contactCols['citizen_id']) ? 'citizen_id' : null);
 
         $docOrs = [];
         foreach ($docTokens as $dtk) {
             $dLow = strtolower(trim($dtk));
             if ($dLow === 'id_card' || $dLow === 'cccd') {
-                $docOrs[] = "(NOT {$idCardExistsSql} AND ({$a}citizen_id IS NULL OR TRIM({$a}citizen_id) = ''))";
+                if ($idCardField !== null) {
+                    $docOrs[] = "(NOT {$idCardExistsSql} AND ({$a}{$idCardField} IS NULL OR TRIM({$a}{$idCardField}) = ''))";
+                } else {
+                    $docOrs[] = "NOT {$idCardExistsSql}";
+                }
             } elseif ($dLow === 'degree' || $dLow === 'bang_cap') {
                 $docOrs[] = "NOT {$degreeExistsSql}";
             } elseif ($dLow === 'translation' || $dLow === 'ban_dich') {
@@ -1479,6 +1730,7 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
         parseCrmMultiFilterValues($input['deposit_status'] ?? null)
     )));
     if (!empty($finTokens)) {
+        $dmCols = getCrmTableColumnsCache($db, 'deposit_milestones');
         $finOrs = [];
         foreach ($finTokens as $ft) {
             $fLow = strtolower(trim($ft));
@@ -1495,9 +1747,13 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
             } elseif ($fLow === 'high_value_deposit') {
                 $finOrs[] = "EXISTS (SELECT 1 FROM deposits dep_f WHERE dep_f.contact_id = {$a}id AND dep_f.price >= 10000000 AND dep_f.status NOT IN ('cancelled', 'rejected'))";
             } elseif ($fLow === 'overdue_milestone') {
-                $finOrs[] = "EXISTS (SELECT 1 FROM deposits dep_om JOIN deposit_milestones dm_om ON dm_om.deposit_id = dep_om.id WHERE dep_om.contact_id = {$a}id AND dep_om.status NOT IN ('cancelled', 'rejected') AND dm_om.status NOT IN ('paid', 'approved', 'completed', 'cancelled', 'rejected') AND dm_om.expected_pay_date IS NOT NULL AND dm_om.expected_pay_date < CURDATE())";
+                if (!empty($dmCols)) {
+                    $finOrs[] = "EXISTS (SELECT 1 FROM deposits dep_om JOIN deposit_milestones dm_om ON dm_om.deposit_id = dep_om.id WHERE dep_om.contact_id = {$a}id AND dep_om.status NOT IN ('cancelled', 'rejected') AND dm_om.status NOT IN ('paid', 'approved', 'completed', 'cancelled', 'rejected') AND dm_om.expected_pay_date IS NOT NULL AND dm_om.expected_pay_date < CURDATE())";
+                } else {
+                    $finOrs[] = "EXISTS (SELECT 1 FROM deposits dep_om WHERE dep_om.contact_id = {$a}id AND dep_om.status = 'pending' AND dep_om.created_at < DATE_SUB(NOW(), INTERVAL 7 DAY))";
+                }
             } elseif ($fLow === 'has_revenue') {
-                $finOrs[] = "(EXISTS (SELECT 1 FROM deposits dep_rv WHERE dep_rv.contact_id = {$a}id AND dep_rv.status IN ('approved', 'completed') AND dep_rv.price > 0) OR EXISTS (SELECT 1 FROM invoices inv_rv WHERE inv_rv.contact_id = {$a}id AND inv_rv.deleted_at IS NULL AND inv_rv.status IN ('paid', 'partially_paid') AND inv_rv.amount_paid > 0))";
+                $finOrs[] = "(EXISTS (SELECT 1 FROM deposits dep_rv WHERE dep_rv.contact_id = {$a}id AND dep_rv.status IN ('approved', 'completed') AND dep_rv.price > 0) OR EXISTS (SELECT 1 FROM invoices inv_rv WHERE inv_rv.contact_id = {$a}id AND inv_rv.deleted_at IS NULL AND inv_rv.status IN ('paid', 'partially_paid') AND inv_rv.total > 0))";
             } elseif ($fLow === 'has_commission') {
                 $finOrs[] = "EXISTS (SELECT 1 FROM deposits dep_cm WHERE dep_cm.contact_id = {$a}id AND dep_cm.status NOT IN ('cancelled', 'rejected') AND COALESCE(dep_cm.expected_commission, 0) > 0)";
             }
@@ -1532,6 +1788,78 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
         applyCrmDateRangeFilter($db, $alias, $input, $where, $params);
     }
 
+    // Optional Data Type Filter (`data_type`: 'distributed' | 'personal' | 'error_ticket')
+    if (empty($input['_defer_data_type_filter']) && !empty($input['data_type'])) {
+        $dtVal = strtolower(trim((string)$input['data_type']));
+        $errorCondSql = "(
+            EXISTS (SELECT 1 FROM tickets tk_dt WHERE tk_dt.contact_id = {$a}id AND tk_dt.status IN ('open', 'in_progress'))
+            OR EXISTS (
+                SELECT 1 FROM data_reports dr_dt
+                JOIN leads l_dt ON dr_dt.lead_id = l_dt.id
+                WHERE {$a}phone IS NOT NULL AND {$a}phone != '' AND l_dt.phone = {$a}phone AND dr_dt.status IN ('pending', 'approved')
+            )
+        )";
+        $personalCondSql = "(
+            COALESCE({$a}source, '') IN ('ca_nhan', 'gioi_thieu', 'databank', 'referral', 'ref')
+            OR COALESCE({$a}source, '') LIKE 'ca_nhan%'
+            OR COALESCE({$a}source, '') = 'Nhân viên kinh doanh tự tìm kiếm'
+            OR ({$a}created_by IS NOT NULL AND {$a}owner_id IS NOT NULL AND {$a}created_by = {$a}owner_id AND {$a}created_by NOT IN (1, 100009))
+        )";
+        if ($dtVal === 'error_ticket') {
+            $where[] = $errorCondSql;
+        } elseif ($dtVal === 'personal') {
+            $where[] = "NOT {$errorCondSql}";
+            $where[] = $personalCondSql;
+        } elseif ($dtVal === 'distributed') {
+            $where[] = "NOT {$errorCondSql}";
+            $where[] = "NOT {$personalCondSql}";
+        }
+    }
+
+    // Optional Lead Status Filter (`lead_status` + `lead_status_op`)
+    if (empty($input['_defer_lead_status_filter']) && !empty($input['lead_status'])) {
+        $lsTokens = parseCrmMultiFilterValues($input['lead_status']);
+        $lsOp = strtolower(trim((string)($input['lead_status_op'] ?? 'in')));
+        if (!empty($lsTokens)) {
+            if (count($lsTokens) === 1 && strtolower($lsTokens[0]) === 'active') {
+                if ($lsOp === 'not_in') {
+                    $where[] = "({$a}lead_status IN ('lost', 'nurture'))";
+                } else {
+                    $where[] = "({$a}lead_status = 'active' OR {$a}lead_status IS NULL OR {$a}lead_status = '')";
+                }
+            } else {
+                $phLs = implode(',', array_fill(0, count($lsTokens), '?'));
+                if ($lsOp === 'not_in') {
+                    $where[] = "({$a}lead_status NOT IN ($phLs) OR {$a}lead_status IS NULL)";
+                } else {
+                    $where[] = "{$a}lead_status IN ($phLs)";
+                }
+                foreach ($lsTokens as $lst) {
+                    $params[] = $lst;
+                }
+            }
+        }
+    }
+
+    // Optional Multi-Program Filter (`multi_program`) — Fast O(N) materialized lookup (avoids MySQL O(N^2) dependent subquery inside OR)
+    if (empty($input['_defer_multi_program_filter']) && !empty($input['multi_program']) && in_array(strtolower(trim((string)$input['multi_program'])), ['1', 'true', 'yes'], true)) {
+        $mpTenantId = isset($input['tenant_id']) && (int)$input['tenant_id'] > 0 ? (int)$input['tenant_id'] : 1;
+        $mpIds = getCrmMultiProgramContactIds($db, $mpTenantId);
+        if (!empty($mpIds)) {
+            $where[] = "{$a}id IN (" . implode(',', array_map('intval', $mpIds)) . ")";
+        } else {
+            $where[] = "1 = 0";
+        }
+    }
+
+    // Optional Omnichannel & Automation 360° Filter (`engagement_status`, `automation_flow`, `voucher_status`, etc.)
+    if (empty($input['_skip_omnichannel_filter'])) {
+        $omniSubClause = buildContactOmnichannelFilterClause($db, rtrim($alias, '.'), $input, $params);
+        if ($omniSubClause !== '') {
+            $where[] = $omniSubClause;
+        }
+    }
+
     // =========================================================================
     // 6. DYNAMIC SCHEMA RULE BUILDER (`custom_rules` + `custom_rules_logic` = 'AND'|'OR')
     // =========================================================================
@@ -1540,16 +1868,16 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
         $rules = is_string($rawRules) ? (json_decode($rawRules, true) ?: []) : (is_array($rawRules) ? $rawRules : []);
         if (!empty($rules) && is_array($rules)) {
             $whitelistedColumns = [
-                'id', 'person_id', 'full_name', 'phone', 'mobile', 'phone2', 'zalo_phone', 'email',
-                'gender', 'birthday', 'dob', 'citizen_id', 'passport', 'address', 'ward', 'district',
-                'city', 'preferred_location', 'company_id', 'company', 'job_title', 'department',
+                'id', 'person_id', 'name', 'full_name', 'phone', 'mobile', 'phone2', 'zalo_phone', 'email',
+                'gender', 'birthday', 'dob', 'id_card', 'citizen_id', 'passport', 'address', 'ward', 'district',
+                'city', 'preferred_location', 'company_id', 'company_name', 'company', 'job_title', 'position', 'department',
                 'industry', 'tax_code', 'customer_type', 'owner_id', 'collaborator_ids', 'created_by',
                 'status', 'stage_id', 'pipeline_status', 'lead_status', 'temperature', 'lead_temperature',
                 'lead_score', 'win_probability', 'ttl1_completed', 'next_action', 'next_followup_date',
                 'expected_decision_date', 'nurture_reason', 'lost_reason', 'project_id', 'program',
-                'major', 'expected_intake', 'admission_date', 'student_id', 'study_status', 'source',
+                'major', 'expected_intake', 'admission_date', 'student_id', 'study_status', 'source', 'source_detail',
                 'campaign_id', 'platform', 'form_name', 'utm_source', 'utm_campaign', 'utm_medium',
-                'utm_content', 'utm_term', 'tags', 'notes', 'expected_revenue', 'budget', 'budget_range',
+                'utm_content', 'utm_term', 'tags', 'notes', 'expected_revenue', 'actual_revenue', 'discount_amount', 'budget', 'budget_range',
                 'total_spent', 'order_count', 'last_order_at', 'last_contact', 'created_at', 'updated_at',
                 'domation_subscriber_id', 'marketing_status', 'engagement_score',
                 'stats_email_sent', 'stats_email_opened', 'stats_email_clicked',
@@ -1667,14 +1995,57 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
 
                 // Resolve expression for computed/virtual vs physical columns
                 if (!isset($contactCols[$field])) {
-                    if ($field === 'total_spent') {
+                    if ($field === 'full_name' && isset($contactCols['name'])) {
+                        $colExpr = "{$a}name";
+                    } elseif (in_array($field, ['citizen_id', 'id_card', 'passport'], true)) {
+                        if (isset($contactCols['id_card'])) {
+                            $colExpr = "{$a}id_card";
+                        } elseif (isset($contactCols['citizen_id'])) {
+                            $colExpr = "{$a}citizen_id";
+                        } else {
+                            $colExpr = "{$a}notes";
+                        }
+                    } elseif (in_array($field, ['company', 'company_name'], true)) {
+                        if (isset($contactCols['company_name'])) {
+                            $colExpr = "{$a}company_name";
+                        } elseif (isset($contactCols['company'])) {
+                            $colExpr = "{$a}company";
+                        } else {
+                            $colExpr = "(SELECT comp_r.name FROM companies comp_r WHERE comp_r.id = {$a}company_id LIMIT 1)";
+                        }
+                    } elseif ($field === 'dob' && isset($contactCols['birthday'])) {
+                        $colExpr = "{$a}birthday";
+                    } elseif ($field === 'birthday' && isset($contactCols['dob'])) {
+                        $colExpr = "{$a}dob";
+                    } elseif (in_array($field, ['ward', 'district', 'preferred_location'], true)) {
+                        $colExpr = "CONCAT_WS(' ', {$a}address, {$a}city)";
+                    } elseif (in_array($field, ['platform', 'form_name', 'utm_source', 'utm_campaign', 'utm_medium', 'utm_content', 'utm_term'], true)) {
+                        $platCols = ["{$a}source"];
+                        if (isset($contactCols['source_detail'])) $platCols[] = "{$a}source_detail";
+                        if (isset($contactCols['utm_source'])) $platCols[] = "{$a}utm_source";
+                        if (isset($contactCols['utm_campaign'])) $platCols[] = "{$a}utm_campaign";
+                        if (isset($contactCols['utm_medium'])) $platCols[] = "{$a}utm_medium";
+                        $colExpr = count($platCols) > 1 ? "CONCAT_WS(' ', " . implode(', ', $platCols) . ")" : $platCols[0];
+                    } elseif (in_array($field, ['department', 'industry', 'tax_code', 'customer_type'], true)) {
+                        $colExpr = "CONCAT_WS(' ', {$a}job_title, {$a}notes)";
+                    } elseif (in_array($field, ['major', 'expected_intake'], true)) {
+                        $colExpr = "CONCAT_WS(' ', {$a}program, {$a}notes)";
+                    } elseif ($field === 'nurture_reason') {
+                        $colExpr = "CONCAT_WS(' ', {$a}lost_reason, {$a}notes)";
+                    } elseif (in_array($field, ['mobile', 'phone2', 'zalo_phone'], true)) {
+                        $colExpr = "{$a}phone";
+                    } elseif ($field === 'budget' || $field === 'budget_range') {
+                        $colExpr = "{$a}expected_revenue";
+                    } elseif ($field === 'total_spent') {
                         $colExpr = "(SELECT COALESCE(SUM(dep_ts.price), 0) FROM deposits dep_ts WHERE dep_ts.contact_id = {$a}id AND dep_ts.status IN ('approved', 'completed'))";
                     } elseif ($field === 'order_count') {
                         $colExpr = "(SELECT COUNT(*) FROM deposits dep_oc WHERE dep_oc.contact_id = {$a}id AND dep_oc.status NOT IN ('cancelled', 'rejected'))";
                     } elseif ($field === 'last_order_at') {
                         $colExpr = "(SELECT MAX(dep_lo.created_at) FROM deposits dep_lo WHERE dep_lo.contact_id = {$a}id AND dep_lo.status NOT IN ('cancelled', 'rejected'))";
+                    } elseif (isset($contactCols['custom_fields'])) {
+                        $colExpr = "JSON_UNQUOTE(JSON_EXTRACT({$a}custom_fields, '$.{$field}'))";
                     } else {
-                        continue;
+                        $colExpr = "{$a}notes";
                     }
                 } else {
                     $colExpr = "{$a}{$field}";
@@ -1775,7 +2146,42 @@ function buildContactOmnichannelFilterClause(PDO $db, string $alias, array $para
         $a = 'contacts';
     }
 
+    $subCols = getCrmTableColumnsCache($db, 'subscribers');
+    $sfsCols = getCrmTableColumnsCache($db, 'subscriber_flow_states');
+    $vcCols  = getCrmTableColumnsCache($db, 'voucher_codes');
+    $srCols  = getCrmTableColumnsCache($db, 'survey_responses');
+
     $clauses = [];
+
+    // 0. Unified `engagement_status` from ContactsPage Card 5B
+    $engagementStatus = strtolower(trim((string)($paramsInput['engagement_status'] ?? '')));
+    if ($engagementStatus === 'email_opened') {
+        if (!empty($subCols)) {
+            $clauses[] = "({$a}.stats_email_opened > 0 OR EXISTS (SELECT 1 FROM subscribers s_eo WHERE s_eo.contact_id = {$a}.id AND COALESCE(s_eo.stats_opened, 0) > 0))";
+        } else {
+            $clauses[] = "{$a}.stats_email_opened > 0";
+        }
+    } elseif ($engagementStatus === 'email_clicked') {
+        if (!empty($subCols)) {
+            $clauses[] = "({$a}.stats_email_clicked > 0 OR EXISTS (SELECT 1 FROM subscribers s_ec WHERE s_ec.contact_id = {$a}.id AND COALESCE(s_ec.stats_clicked, 0) > 0))";
+        } else {
+            $clauses[] = "{$a}.stats_email_clicked > 0";
+        }
+    } elseif ($engagementStatus === 'web_visited_7d') {
+        $clauses[] = "{$a}.last_web_visit_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)";
+    } elseif ($engagementStatus === 'survey_completed') {
+        if (!empty($subCols) && !empty($srCols)) {
+            $clauses[] = "({$a}.survey_completed_count > 0 OR EXISTS (SELECT 1 FROM subscribers s_sv JOIN survey_responses sr_sv ON sr_sv.subscriber_id = s_sv.id WHERE s_sv.contact_id = {$a}.id))";
+        } else {
+            $clauses[] = "{$a}.survey_completed_count > 0";
+        }
+    } elseif ($engagementStatus === 'voucher_issued') {
+        if (!empty($vcCols) && isset($vcCols['contact_id'])) {
+            $clauses[] = "(({$a}.active_voucher_code IS NOT NULL AND {$a}.active_voucher_code != '') OR EXISTS (SELECT 1 FROM voucher_codes dv WHERE dv.contact_id = {$a}.id))";
+        } else {
+            $clauses[] = "({$a}.active_voucher_code IS NOT NULL AND {$a}.active_voucher_code != '')";
+        }
+    }
 
     // 1. Engagement Score & Tier (`engagement_level`, `min_engagement_score`, `max_engagement_score`)
     $engagementLevel = strtolower(trim((string)($paramsInput['engagement_level'] ?? '')));
@@ -1828,38 +2234,72 @@ function buildContactOmnichannelFilterClause(PDO $db, string $alias, array $para
         $clauses[] = "COALESCE({$a}.web_pageviews_count, 0) = 0";
     }
 
-    // 4. Automation Flow Filter (`automation_flow_filter`)
-    $flowFilter = trim((string)($paramsInput['automation_flow_filter'] ?? ''));
+    // 4. Automation Flow Filter (`automation_flow` / `automation_flow_filter`)
+    $flowFilter = trim((string)($paramsInput['automation_flow'] ?? ($paramsInput['automation_flow_filter'] ?? '')));
     if ($flowFilter !== '' && strtolower($flowFilter) !== 'all') {
         $flowFilterLower = strtolower($flowFilter);
-        if ($flowFilterLower === 'in_active_flow') {
-            $clauses[] = "{$a}.active_flow_count > 0";
-        } elseif ($flowFilterLower === 'not_in_flow') {
-            $clauses[] = "COALESCE({$a}.active_flow_count, 0) = 0";
+        if (in_array($flowFilterLower, ['in_active_flow', 'active_any'], true)) {
+            if (!empty($subCols) && !empty($sfsCols)) {
+                $clauses[] = "({$a}.active_flow_count > 0 OR EXISTS (SELECT 1 FROM subscribers s_af JOIN subscriber_flow_states dfe ON dfe.subscriber_id = s_af.id WHERE s_af.contact_id = {$a}.id AND dfe.status IN ('active','waiting','processing')))";
+            } else {
+                $clauses[] = "{$a}.active_flow_count > 0";
+            }
+        } elseif ($flowFilterLower === 'completed_any') {
+            if (!empty($subCols) && !empty($sfsCols)) {
+                $clauses[] = "EXISTS (SELECT 1 FROM subscribers s_cf JOIN subscriber_flow_states dfe ON dfe.subscriber_id = s_cf.id WHERE s_cf.contact_id = {$a}.id AND dfe.status IN ('completed','finished','done'))";
+            } else {
+                $clauses[] = "{$a}.active_flow_count > 0";
+            }
+        } elseif (in_array($flowFilterLower, ['not_in_flow', 'none'], true)) {
+            if (!empty($subCols) && !empty($sfsCols)) {
+                $clauses[] = "(COALESCE({$a}.active_flow_count, 0) = 0 AND NOT EXISTS (SELECT 1 FROM subscribers s_nf JOIN subscriber_flow_states dfe ON dfe.subscriber_id = s_nf.id WHERE s_nf.contact_id = {$a}.id))";
+            } else {
+                $clauses[] = "COALESCE({$a}.active_flow_count, 0) = 0";
+            }
         } else {
-            $clauses[] = "({$a}.active_flow_names LIKE ? OR EXISTS (SELECT 1 FROM subscriber_flow_states dfe JOIN flows df ON df.id = dfe.flow_id WHERE dfe.contact_id = {$a}.id AND dfe.status IN ('active','waiting','processing') AND (df.name LIKE ? OR CAST(df.id AS CHAR) = ?)))";
+            $clauses[] = "{$a}.active_flow_names LIKE ?";
             $outParams[] = '%' . $flowFilter . '%';
-            $outParams[] = '%' . $flowFilter . '%';
-            $outParams[] = $flowFilter;
         }
     }
 
-    // 5. Voucher Filter (`voucher_filter`)
-    $voucherFilter = trim((string)($paramsInput['voucher_filter'] ?? ''));
+    // 5. Voucher Filter (`voucher_status` / `voucher_filter`)
+    $voucherFilter = trim((string)($paramsInput['voucher_status'] ?? ($paramsInput['voucher_filter'] ?? '')));
     if ($voucherFilter !== '' && strtolower($voucherFilter) !== 'all') {
         $voucherFilterLower = strtolower($voucherFilter);
-        if ($voucherFilterLower === 'has_active_voucher') {
-            $clauses[] = "({$a}.active_voucher_code IS NOT NULL AND {$a}.active_voucher_code != '')";
-        } elseif ($voucherFilterLower === 'used_voucher') {
-            $clauses[] = "EXISTS (SELECT 1 FROM voucher_codes dv WHERE dv.contact_id = {$a}.id AND dv.status = 'used')";
+        $hasVcContactId = !empty($vcCols) && isset($vcCols['contact_id']);
+        if (in_array($voucherFilterLower, ['has_active_voucher', 'has_active'], true)) {
+            if ($hasVcContactId) {
+                $clauses[] = "(({$a}.active_voucher_code IS NOT NULL AND {$a}.active_voucher_code != '') OR EXISTS (SELECT 1 FROM voucher_codes dv WHERE dv.contact_id = {$a}.id AND dv.status IN ('unused','available','active')))";
+            } else {
+                $clauses[] = "({$a}.active_voucher_code IS NOT NULL AND {$a}.active_voucher_code != '')";
+            }
+        } elseif (in_array($voucherFilterLower, ['used_voucher', 'redeemed'], true)) {
+            if ($hasVcContactId) {
+                $clauses[] = "EXISTS (SELECT 1 FROM voucher_codes dv WHERE dv.contact_id = {$a}.id AND dv.status IN ('used','redeemed'))";
+            } else {
+                $clauses[] = "1 = 0";
+            }
         } elseif ($voucherFilterLower === 'expired_unredeemed') {
-            $clauses[] = "EXISTS (SELECT 1 FROM voucher_codes dv WHERE dv.contact_id = {$a}.id AND dv.status IN ('unused','available','active') AND dv.expires_at < NOW())";
-        } elseif ($voucherFilterLower === 'no_voucher') {
-            $clauses[] = "(({$a}.active_voucher_code IS NULL OR {$a}.active_voucher_code = '') AND NOT EXISTS (SELECT 1 FROM voucher_codes dv WHERE dv.contact_id = {$a}.id))";
+            if ($hasVcContactId) {
+                $clauses[] = "EXISTS (SELECT 1 FROM voucher_codes dv WHERE dv.contact_id = {$a}.id AND dv.status IN ('unused','available','active') AND dv.expires_at < NOW())";
+            } else {
+                $clauses[] = "1 = 0";
+            }
+        } elseif (in_array($voucherFilterLower, ['no_voucher', 'none'], true)) {
+            if ($hasVcContactId) {
+                $clauses[] = "(({$a}.active_voucher_code IS NULL OR {$a}.active_voucher_code = '') AND NOT EXISTS (SELECT 1 FROM voucher_codes dv WHERE dv.contact_id = {$a}.id))";
+            } else {
+                $clauses[] = "({$a}.active_voucher_code IS NULL OR {$a}.active_voucher_code = '')";
+            }
         } else {
-            $clauses[] = "({$a}.active_voucher_code LIKE ? OR EXISTS (SELECT 1 FROM voucher_codes dv WHERE dv.contact_id = {$a}.id AND dv.code LIKE ?))";
-            $outParams[] = '%' . $voucherFilter . '%';
-            $outParams[] = '%' . $voucherFilter . '%';
+            if ($hasVcContactId) {
+                $clauses[] = "({$a}.active_voucher_code LIKE ? OR EXISTS (SELECT 1 FROM voucher_codes dv WHERE dv.contact_id = {$a}.id AND dv.code LIKE ?))";
+                $outParams[] = '%' . $voucherFilter . '%';
+                $outParams[] = '%' . $voucherFilter . '%';
+            } else {
+                $clauses[] = "{$a}.active_voucher_code LIKE ?";
+                $outParams[] = '%' . $voucherFilter . '%';
+            }
         }
     }
 
@@ -1897,4 +2337,65 @@ function buildContactOmnichannelFilterClause(PDO $db, string $alias, array $para
 
     return '(' . implode(' AND ', $clauses) . ')';
 }
+
+/**
+ * Materialize multi-program / multi-pipeline contact IDs in O(N) time with request-level caching.
+ * Avoids MySQL's O(N^2) dependent subquery execution when `IN (SELECT ... GROUP BY ...)` is placed inside an `OR` clause.
+ */
+function getCrmMultiProgramContactIds(PDO $db, int $tenantId = 1): array {
+    static $cache = [];
+    if (isset($cache[$tenantId])) {
+        return $cache[$tenantId];
+    }
+    $ids = [];
+    try {
+        $st1 = $db->prepare("SELECT id, duplicate_with_id FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND duplicate_with_id > 0");
+        $st1->execute([$tenantId]);
+        while ($r = $st1->fetch(PDO::FETCH_ASSOC)) {
+            $ids[(int)$r['id']] = true;
+            $ids[(int)$r['duplicate_with_id']] = true;
+        }
+
+        $st2 = $db->prepare("
+            SELECT c.id
+            FROM contacts c
+            JOIN (
+                SELECT person_id
+                FROM contacts
+                WHERE tenant_id = ? AND deleted_at IS NULL AND person_id > 0
+                GROUP BY person_id
+                HAVING COUNT(DISTINCT COALESCE(NULLIF(TRIM(program), ''), '__empty__')) >= 2
+                    OR COUNT(DISTINCT stage_id) >= 2
+            ) mp_p ON c.person_id = mp_p.person_id
+            WHERE c.tenant_id = ? AND c.deleted_at IS NULL
+        ");
+        $st2->execute([$tenantId, $tenantId]);
+        foreach ($st2->fetchAll(PDO::FETCH_COLUMN) as $cid) {
+            $ids[(int)$cid] = true;
+        }
+
+        $st3 = $db->prepare("
+            SELECT c.id
+            FROM contacts c
+            JOIN (
+                SELECT phone
+                FROM contacts
+                WHERE tenant_id = ? AND deleted_at IS NULL AND phone != '' AND phone IS NOT NULL
+                GROUP BY phone
+                HAVING COUNT(DISTINCT COALESCE(NULLIF(TRIM(program), ''), '__empty__')) >= 2
+                    OR COUNT(DISTINCT stage_id) >= 2
+            ) mp_ph ON c.phone = mp_ph.phone
+            WHERE c.tenant_id = ? AND c.deleted_at IS NULL
+        ");
+        $st3->execute([$tenantId, $tenantId]);
+        foreach ($st3->fetchAll(PDO::FETCH_COLUMN) as $cid) {
+            $ids[(int)$cid] = true;
+        }
+    } catch (\Throwable $e) {
+        // Fallback safe empty
+    }
+    $cache[$tenantId] = array_keys($ids);
+    return $cache[$tenantId];
+}
+
 

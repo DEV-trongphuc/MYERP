@@ -37,10 +37,14 @@ class ChatController {
      * Self-healing DB migrations for chat system
      */
     private function ensureChatTablesExist(): void {
+        if ($this->db->inTransaction()) {
+            return;
+        }
         try {
-            // 1. Conversations table
-            $this->db->exec("
-                CREATE TABLE IF NOT EXISTS chat_conversations (
+            if (!$this->db->inTransaction()) {
+                // 1. Conversations table
+                $this->db->exec("
+                    CREATE TABLE IF NOT EXISTS chat_conversations (
                     id BIGINT AUTO_INCREMENT PRIMARY KEY,
                     tenant_id INT NOT NULL DEFAULT 1,
                     type ENUM('direct', 'group') NOT NULL DEFAULT 'direct',
@@ -189,6 +193,7 @@ class ChatController {
                     WHERE created_by = 9000001 OR title IN ('AI IDEAS', 'IDEAS AI', 'IDEAS SI')
                 ");
             } catch (\Throwable $e) {}
+            }
         } catch (\Throwable $e) {
             error_log("Ensure Chat Tables Error: " . $e->getMessage());
         }
@@ -761,9 +766,9 @@ class ChatController {
         $uid = (int)($auth['user_id'] ?? 0);
         $body = getBody();
 
-        $conversationId = (int)($body['conversation_id'] ?? 0);
+        $conversationId = (int)($body['conversation_id'] ?? $_POST['conversation_id'] ?? $_GET['conversation_id'] ?? 0);
         $messageType = $body['message_type'] ?? 'text';
-        $content = trim($body['content'] ?? '');
+        $content = trim($body['content'] ?? $body['message'] ?? $body['text'] ?? '');
         $metadata = !empty($body['metadata']) ? (is_array($body['metadata']) ? $body['metadata'] : json_decode($body['metadata'], true)) : null;
         $replyToId = !empty($body['reply_to_id']) ? (int)$body['reply_to_id'] : null;
 
@@ -1188,7 +1193,7 @@ class ChatController {
         $tid = (int)($auth['tenant_id'] ?? 1);
         $uid = (int)($auth['user_id'] ?? 0);
         $body = getBody();
-        $reactionType = trim($body['reaction_type'] ?? 'like');
+        $reactionType = trim($body['reaction_type'] ?? $body['reaction'] ?? 'like');
 
         if (!in_array($reactionType, ['like', 'love', 'haha', 'wow', 'sad', 'angry', 'fire', 'clap'], true)) {
             $reactionType = 'like';
@@ -1634,9 +1639,18 @@ class ChatController {
             } catch (Exception $eAttDel) {
                 // Ignore vault delete failure
             }
-            $this->db->prepare("DELETE FROM chat_messages WHERE conversation_id = ?")->execute([$convId]);
+            $this->db->prepare("UPDATE chat_messages SET is_deleted = 1, deleted_at = NOW() WHERE conversation_id = ? AND deleted_at IS NULL")->execute([$convId]);
             $this->db->prepare("DELETE FROM chat_participants WHERE conversation_id = ?")->execute([$convId]);
-            $this->db->prepare("DELETE FROM chat_conversations WHERE id = ?")->execute([$convId]);
+            try {
+                $cCols = $this->db->query("SHOW COLUMNS FROM chat_conversations LIKE 'deleted_at'")->fetch();
+                if ($cCols) {
+                    $this->db->prepare("UPDATE chat_conversations SET deleted_at = NOW() WHERE id = ?")->execute([$convId]);
+                } else {
+                    $this->db->prepare("DELETE FROM chat_conversations WHERE id = ?")->execute([$convId]);
+                }
+            } catch (\Throwable $eConv) {
+                $this->db->prepare("DELETE FROM chat_conversations WHERE id = ?")->execute([$convId]);
+            }
 
             respond(200, [
                 'success' => true,
@@ -1720,15 +1734,12 @@ class ChatController {
                 }
             }
 
-            // 3. Delete database records (reactions, vault items, and messages)
+            // 3. Soft-delete database records (vault items and messages)
             $this->db->beginTransaction();
-            try {
-                $this->db->prepare("DELETE r FROM chat_message_reactions r INNER JOIN chat_messages m ON r.message_id = m.id WHERE m.conversation_id = ?")->execute([$convId]);
-            } catch (\Throwable $eR) {}
             try {
                 $this->db->prepare("DELETE FROM chat_attachments_vault WHERE conversation_id = ?")->execute([$convId]);
             } catch (\Throwable $eV) {}
-            $this->db->prepare("DELETE FROM chat_messages WHERE conversation_id = ?")->execute([$convId]);
+            $this->db->prepare("UPDATE chat_messages SET is_deleted = 1, deleted_at = NOW() WHERE conversation_id = ? AND deleted_at IS NULL")->execute([$convId]);
 
             // 4. If conversation has bot (9000001), insert the fresh IDEAS SI greeting
             $stmtCheckBot = $this->db->prepare("SELECT 1 FROM chat_participants WHERE conversation_id = ? AND user_id = 9000001 LIMIT 1");
@@ -2514,12 +2525,14 @@ class ChatController {
                 $params[] = $category;
             }
 
-            $sql = "SELECT v.id, v.message_id, v.uploader_id, v.uploader_id AS sender_id, 
+            $sql = "SELECT v.id, v.tenant_id, v.conversation_id, v.message_id, v.uploader_id, v.uploader_id AS sender_id, 
                            COALESCE(u.full_name, 'Đồng nghiệp') AS sender_name,
                            v.category, v.file_name, v.file_url, v.file_size, v.mime_type, v.created_at
                     FROM chat_attachments_vault v
+                    LEFT JOIN chat_messages m ON v.message_id = m.id
                     LEFT JOIN users u ON v.uploader_id = u.id
                     WHERE " . implode(' AND ', $where) . "
+                      AND (m.id IS NULL OR m.deleted_at IS NULL)
                     ORDER BY v.created_at DESC, v.id DESC LIMIT $limit";
 
             $stmt = $this->db->prepare($sql);
@@ -3572,12 +3585,47 @@ class ChatController {
                 $ragContextStr .= "--- [HẾT KIẾN THỨC HUẤN LUYỆN] ---\n";
             }
 
-            // 3. Dynamic Ambient Context Snapshot (Instant 360-degree awareness without hardcoded keywords)
-            $ambientSnapshotStr = $this->getAmbientUserStateSnapshot($senderId, $tid, $userRole);
+            // 2b. Fetch last 8 messages early to extract 2-Tier Conversational Working Memory before routing
+            $stmtHistory = $this->db->prepare("
+                SELECT id, sender_id, message_type, content, metadata, created_at
+                FROM chat_messages
+                WHERE conversation_id = ? AND deleted_at IS NULL
+                ORDER BY id DESC
+                LIMIT 8
+            ");
+            $stmtHistory->execute([$conversationId]);
+            $history = array_reverse($stmtHistory->fetchAll(PDO::FETCH_ASSOC) ?: []);
+            $prevWorkingMemory = $this->extractLatestWorkingMemoryFromHistory($history);
+
+            // 2c. Resolve Multi-Agent Swarm & Carry over Working Memory domain/tool on follow-ups
+            $swarmInfo = $this->resolveCollaboratingAgents($userMessage);
+            $matchedSwarmDomains = [];
+            foreach ($swarmInfo['collaborators'] ?? [] as $collabAgent) {
+                $cid = $collabAgent['id'] ?? '';
+                if ($cid !== '' && $cid !== 'master') {
+                    $matchedSwarmDomains[] = $cid;
+                }
+            }
+            $matchedSwarmDomains = array_values(array_unique($matchedSwarmDomains));
+            $isFollowUpQuery = $this->isFollowUpOrDrillDownQuery($userMessage, $prevWorkingMemory);
+            if ($isFollowUpQuery && !empty($prevWorkingMemory['domain']) && $prevWorkingMemory['domain'] !== 'master' && $prevWorkingMemory['domain'] !== 'general') {
+                if (empty($matchedSwarmDomains)) {
+                    $matchedSwarmDomains = [$prevWorkingMemory['domain']];
+                } elseif (!in_array($prevWorkingMemory['domain'], $matchedSwarmDomains, true)) {
+                    $matchedSwarmDomains[] = $prevWorkingMemory['domain'];
+                }
+            }
+
+            // 3. Dynamic Context Snapshot (Only run heavy Ambient Snapshot & Operational Risks on overview/brief/general queries)
+            $isOverviewOrGeneralQuery = empty($matchedSwarmDomains)
+                || in_array('executive_bi', $matchedSwarmDomains, true)
+                || (bool)preg_match('/(tổng quan|toàn cảnh|morning brief|tóm tắt sáng|rủi ro|cảnh báo|khẩn cấp|hôm nay có gì|việc của tôi|tình hình chung)/iu', $userMessage);
+            $ambientSnapshotStr = $isOverviewOrGeneralQuery ? $this->getAmbientUserStateSnapshot($senderId, $tid, $userRole) : "";
             $erpLookupStr = $this->executeSmartErpLookup($userMessage, $senderId, $tid, $userRole);
             $userMemoriesStr = $this->loadUserMemories($senderId, $tid);
             $recentEntityStr = $this->loadRecentEntityContext($senderId, $tid);
-            $operationalRisksStr = $this->detectProactiveOperationalRisks($senderId, $tid, $userRole);
+            $operationalRisksStr = $isOverviewOrGeneralQuery ? $this->detectProactiveOperationalRisks($senderId, $tid, $userRole) : "";
+            $workingMemoryStr = $this->formatWorkingMemoryPromptBlock($prevWorkingMemory);
 
             // 3b. Screen & Active Drawer Awareness (Trực giác nhận biết màn hình & hồ sơ đang mở)
             $screenContextStr = "";
@@ -3801,7 +3849,8 @@ class ChatController {
                     . "  - Kế hoạch/Nội dung Marketing: Đánh giá Hook, Insight học viên, gợi ý A/B test ad copy cho các khóa EMBA, MBA, MSc AI, DBA.\n\n";
             }
 
-            $systemPrompt .= $ragContextStr
+            $systemPrompt .= $workingMemoryStr
+                . $ragContextStr
                 . $ambientSnapshotStr
                 . $screenContextStr
                 . $erpLookupStr
@@ -3810,18 +3859,7 @@ class ChatController {
                 . $operationalRisksStr
                 . $pronounAnchorStr;
 
-            // 5. Fetch last 6 messages from this conversation for context
-            $stmtHistory = $this->db->prepare("
-                SELECT id, sender_id, message_type, content, metadata, created_at
-                FROM chat_messages
-                WHERE conversation_id = ? AND deleted_at IS NULL
-                ORDER BY id DESC
-                LIMIT 6
-            ");
-            $stmtHistory->execute([$conversationId]);
-            $history = array_reverse($stmtHistory->fetchAll(PDO::FETCH_ASSOC) ?: []);
-
-            // 6. Call Gemini 3.5 Flash Lite with Autonomous Tool Calling & Dynamic State
+            // 6. Call Gemini 3.5 Flash Lite with Autonomous Tool Calling & Dynamic Working Memory State
             $authContext = [
                 'user_id' => $senderId,
                 'tenant_id' => $tid,
@@ -3836,7 +3874,15 @@ class ChatController {
                 'conversation_id' => $conversationId,
                 'user_msg_id' => $userMsgId,
                 'metadata' => $metadata,
-                'attached_file' => $attachedFile
+                'attached_file' => $attachedFile,
+                'pre_routing' => [
+                    'primary_domain' => $matchedSwarmDomains[0] ?? null,
+                    'matched_domains' => $matchedSwarmDomains,
+                    'is_follow_up' => $isFollowUpQuery,
+                    'last_tool' => $prevWorkingMemory['last_tool'] ?? null,
+                    'applied_filters' => $prevWorkingMemory['applied_filters'] ?? []
+                ],
+                'working_memory' => $prevWorkingMemory
             ];
             $executedAgentSteps = [];
             $aiReplyText = $this->callGeminiFlashLite($history, $systemPrompt, $attachedFile, $onChunk, $authContext, $onStep, $executedAgentSteps);
@@ -3868,8 +3914,15 @@ class ChatController {
                 $aiReplyText = trim(str_replace($memMatch[0], '', $aiReplyText));
             }
 
-            $swarmInfo = $this->resolveCollaboratingAgents($userMessage);
             $activeAgent = $swarmInfo['primaryAgent'] ?? $this->resolveActiveSpecializedAgent($userMessage);
+            $resolvedDomainForMemory = $matchedSwarmDomains[0] ?? ($activeAgent['id'] ?? ($prevWorkingMemory['domain'] ?? 'general'));
+            $newWorkingMemory = $this->extractWorkingMemoryFromSteps($executedAgentSteps, (string)$resolvedDomainForMemory, $userMessage, $prevWorkingMemory);
+            // Strip internal working_state from persisted agent_steps to keep metadata clean
+            $cleanPersistedSteps = array_map(function ($st) {
+                unset($st['working_state']);
+                return $st;
+            }, $executedAgentSteps);
+
             $aiMsgMetadata = [
                 'specialist' => [
                     'id' => $activeAgent['id'] ?? 'orchestrator',
@@ -3879,7 +3932,8 @@ class ChatController {
                 ],
                 'collaborating_agents' => $swarmInfo['collaborators'] ?? [],
                 'is_multi_agent' => (bool)($swarmInfo['is_multi_agent'] ?? false),
-                'agent_steps' => $executedAgentSteps
+                'agent_steps' => $cleanPersistedSteps,
+                'working_memory' => $newWorkingMemory
             ];
             $aiMsgMetadataJson = json_encode($aiMsgMetadata, JSON_UNESCAPED_UNICODE);
 
@@ -5265,6 +5319,7 @@ class ChatController {
         $userPrompt = "Yêu cầu cần phân loại: \"" . mb_substr($trimmed, 0, 500) . "\"" . $contextHint;
 
         // 1. Primary AI Micro-Router on Groq Cloud LPU (`openai/gpt-oss-20b` independent quota bucket -> `$groqModel` `qwen/qwen3.8-27b`)
+        /* [COMMENTED OUT FREE MODEL - USE GEMINI 3.5 FLASH LITE AS PRIMARY]
         if ($groqKey !== '') {
             $routerModels = array_values(array_unique(['openai/gpt-oss-20b', $groqModel, 'openai/gpt-oss-120b']));
             foreach ($routerModels as $rm) {
@@ -5322,8 +5377,9 @@ class ChatController {
                 }
             }
         }
+        */
 
-        // 2. Fallback to Gemini Flash Lite Micro-Router
+        // 2. Gemini 3.5 Flash Lite Micro-Router
         if ($apiKey !== '') {
             $payload = [
                 'systemInstruction' => [
@@ -5383,8 +5439,8 @@ class ChatController {
     }
 
     /**
-     * Call AI Engine (Groq Cloud `qwen/qwen3.8-27b` Primary + Gemini 3.5 Flash Lite Fallback)
-     * Supports Autonomous Two-Way Tool Loop (Function Calling) with Zero-Trust RBAC
+     * Call AI Engine (Gemini 3.5 Flash Lite Primary Engine; Free Groq/Qwen models commented out)
+     * Supports Autonomous Two-Way Tool Loop (Function Calling) with Zero-Trust RBAC & 2-Tier Working Memory
      */
     private function callGeminiFlashLite(array $conversationHistory, string $systemPrompt, ?array $attachedFile = null, ?callable $onChunk = null, ?array $authContext = null, ?callable $onStep = null, array &$executedAgentSteps = []): ?string {
         try {
@@ -5393,6 +5449,9 @@ class ChatController {
             $stmtKey->execute();
             $settings = $stmtKey->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
 
+            $groqKey = '';
+            $groqModel = 'qwen/qwen3.8-27b';
+            /* [COMMENTED OUT FREE MODEL - USE GEMINI 3.5 FLASH LITE AS PRIMARY]
             $envGroqKey = trim((string)($_ENV['GROQ_API_KEY'] ?? getenv('GROQ_API_KEY') ?: ''));
             $dbGroqKey = trim((string)($settings['groq_api_key'] ?? ''));
             $groqKey = $dbGroqKey !== '' ? $dbGroqKey : $envGroqKey;
@@ -5412,12 +5471,14 @@ class ChatController {
             if ($groqModel === '' || !in_array($groqModel, ['qwen/qwen3.8-27b', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'], true)) {
                 $groqModel = 'qwen/qwen3.8-27b';
             }
+            */
 
             $apiKey = trim($settings['gemini_api_key'] ?? '') ?: ($_ENV['GEMINI_API_KEY'] ?? getenv('GEMINI_API_KEY') ?: '');
-            $model = trim($settings['gemini_model'] ?? 'gemini-3.5-flash-lite');
-            if (empty($groqKey) && empty($apiKey)) {
-                error_log("callGeminiFlashLite: Cả groq_api_key và gemini_api_key đều chưa được cấu hình.");
-                $errorMsg = "Hệ thống chưa được cấu hình AI API Key (Groq / Gemini). Vui lòng liên hệ Quản trị viên để thiết lập API Key trong Cài đặt hệ thống.";
+            $envGeminiModel = trim((string)($_ENV['GEMINI_MODEL'] ?? getenv('GEMINI_MODEL') ?: 'gemini-3.5-flash-lite'));
+            $model = trim($settings['gemini_model'] ?? '') ?: $envGeminiModel;
+            if (empty($apiKey)) {
+                error_log("callGeminiFlashLite: gemini_api_key chưa được cấu hình.");
+                $errorMsg = "Hệ thống chưa được cấu hình Gemini API Key. Vui lòng liên hệ Quản trị viên để thiết lập API Key trong Cài đặt hệ thống.";
                 if (is_callable($onChunk)) {
                     $onChunk($errorMsg);
                 }
@@ -5446,18 +5507,10 @@ class ChatController {
 
                 $msgText = trim($msg['content'] ?? '');
 
-                // Historical Context Compaction: For previous assistant messages,
-                // replace giant UI widget JSON blocks (charts, action proposals, next best actions, memories)
-                // with compact summaries to save thousands of tokens on every chat turn!
-                if ($role === 'model' && $idx < $historyCount - 1 && !empty($msgText)) {
-                    $msgText = preg_replace('/<<<DYNAMIC_CHART:\s*[\s\S]*?>>>/', '[Đã hiển thị biểu đồ trực quan]', $msgText);
-                    $msgText = preg_replace('/<<<ACTION_PROPOSAL:\s*[\s\S]*?>>>/', '[Đã xuất thẻ hành động điền sẵn]', $msgText);
-                    $msgText = preg_replace('/<<<ERP_CARD:\s*[\s\S]*?>>>/', '[Đã hiển thị thẻ hồ sơ ERP]', $msgText);
-                    $msgText = preg_replace('/<<<CLARIFY_OPTIONS:\s*[\s\S]*?>>>/', '', $msgText);
-                    $msgText = preg_replace('/<<<PROACTIVE_INSIGHT:\s*[\s\S]*?>>>/', '', $msgText);
-                    $msgText = preg_replace('/<<<NEXT_BEST_ACTIONS:\s*[\s\S]*?>>>/', '', $msgText);
-                    $msgText = preg_replace('/<<<SAVE_MEMORY:\s*[\s\S]*?>>>/', '', $msgText);
-                    $msgText = trim(preg_replace('/\n{3,}/', "\n\n", $msgText));
+                // Historical Context Compaction: For previous messages, strip giant UI widget JSON blocks,
+                // compress large markdown tables, and append compact working_memory state if present
+                if ($idx < $historyCount - 1 && !empty($msgText)) {
+                    $msgText = $this->compactHistoryMessageForPrompt($msgText, isset($msg['metadata']) ? (string)$msg['metadata'] : null, $role);
                 }
 
                 if (!empty($msgText)) {
@@ -5510,37 +5563,65 @@ class ChatController {
                 }
             }
 
-            // 1. Run AI Semantic Micro-Router (ZERO REGEX / 100% LLM INTENT & TOOL PARSER)
+            // 1. Gated Routing: Reuse deterministic Swarm + Working Memory routing if already resolved;
+            // only invoke AI Micro-Router HTTP call when query domain is ambiguous/general
             $explicitAgentId = $authContext['metadata']['active_agent_id'] ?? null;
+            $preRouting = is_array($authContext['pre_routing'] ?? null) ? $authContext['pre_routing'] : [];
+            $preMatchedDomains = is_array($preRouting['matched_domains'] ?? null) ? $preRouting['matched_domains'] : [];
             $tools = null;
             $groqScopedTools = null;
             $isPureConversational = false;
             $isMutationOrProposalIntent = false;
 
             $currentContext = $authContext['metadata']['current_context'] ?? null;
-            $routeDecision = $this->routeQueryWithAiMicroRouter(
-                $lastMsgText,
-                $apiKey,
-                $model,
-                $currentContext,
-                $groqKey,
-                $groqModel
-            );
-            $intentType = $routeDecision['intent_type'] ?? 'database_action';
-            $primaryDomain = (!empty($explicitAgentId) && isset($agentToolMap[$explicitAgentId]))
-                ? $explicitAgentId
-                : ($routeDecision['primary_domain'] ?? null);
-            $matchedDomains = is_array($routeDecision['matched_domains'] ?? null) ? $routeDecision['matched_domains'] : [];
-            if (!empty($explicitAgentId) && !in_array($explicitAgentId, $matchedDomains, true)) {
-                array_unshift($matchedDomains, $explicitAgentId);
+            if (!empty($explicitAgentId) && isset($agentToolMap[$explicitAgentId])) {
+                $intentType = 'database_action';
+                $primaryDomain = $explicitAgentId;
+                $matchedDomains = array_values(array_unique(array_merge([$explicitAgentId], $preMatchedDomains)));
+                $aiSelectedTools = !empty($preRouting['last_tool']) ? [(string)$preRouting['last_tool']] : [];
+                $isMultiDomain = count($matchedDomains) > 1;
+                $requiresTools = true;
+                $isMutationOrProposalIntent = (bool)preg_match('/(tạo|thêm|sửa|cập nhật|xóa|giao|chuyển|chia|bù|duyệt|từ chối|đặt lịch|ghi chú|đề xuất|xuất file|tải file|export)/iu', $lastMsgText);
+            } elseif (!empty($preMatchedDomains)) {
+                $intentType = count($preMatchedDomains) > 1 ? 'cross_domain' : 'database_action';
+                $primaryDomain = $preRouting['primary_domain'] ?? $preMatchedDomains[0];
+                $matchedDomains = $preMatchedDomains;
+                $aiSelectedTools = !empty($preRouting['last_tool']) ? [(string)$preRouting['last_tool']] : [];
+                $isMultiDomain = count($matchedDomains) > 1;
+                $requiresTools = true;
+                $isMutationOrProposalIntent = (bool)preg_match('/(tạo|thêm|sửa|cập nhật|xóa|giao|chuyển|chia|bù|duyệt|từ chối|đặt lịch|ghi chú|đề xuất|xuất file|tải file|export)/iu', $lastMsgText);
+            } elseif (mb_strlen(trim($lastMsgText), 'UTF-8') <= 15 && preg_match('/^(xin chào|chào|hi|hello|alo|ok|cảm ơn|thanks|dạ|vâng|tốt quá|tuyệt vời)[!.\s]*$/iu', trim($lastMsgText))) {
+                $intentType = 'conversational';
+                $primaryDomain = 'none';
+                $matchedDomains = [];
+                $aiSelectedTools = [];
+                $isMultiDomain = false;
+                $requiresTools = false;
+                $isMutationOrProposalIntent = false;
+            } else {
+                $routeDecision = $this->routeQueryWithAiMicroRouter(
+                    $lastMsgText,
+                    $apiKey,
+                    $model,
+                    $currentContext,
+                    $groqKey,
+                    $groqModel
+                );
+                $intentType = $routeDecision['intent_type'] ?? 'database_action';
+                $primaryDomain = $routeDecision['primary_domain'] ?? null;
+                $matchedDomains = is_array($routeDecision['matched_domains'] ?? null) ? $routeDecision['matched_domains'] : [];
+                $aiSelectedTools = is_array($routeDecision['selected_tools'] ?? null) ? $routeDecision['selected_tools'] : [];
+                $isMultiDomain = (bool)($routeDecision['is_multi_domain'] ?? false);
+                $requiresTools = (bool)($routeDecision['requires_tools'] ?? true);
+                $isMutationOrProposalIntent = (bool)($routeDecision['is_mutation_or_proposal'] ?? false);
             }
-            $aiSelectedTools = is_array($routeDecision['selected_tools'] ?? null) ? $routeDecision['selected_tools'] : [];
-            $isMultiDomain = (bool)($routeDecision['is_multi_domain'] ?? false);
-            $requiresTools = (bool)($routeDecision['requires_tools'] ?? true);
-            $isMutationOrProposalIntent = (bool)($routeDecision['is_mutation_or_proposal'] ?? false);
 
             if (!empty($explicitAgentId) && isset($agentToolMap[$explicitAgentId])) {
-                $tools = AgentToolRegistry::getGeminiToolsDeclaration($agentToolMap[$explicitAgentId]);
+                $scopedToolNames = $agentToolMap[$explicitAgentId];
+                if (!empty($aiSelectedTools)) {
+                    $scopedToolNames = array_values(array_unique(array_merge($scopedToolNames, $aiSelectedTools)));
+                }
+                $tools = AgentToolRegistry::getGeminiToolsDeclaration($scopedToolNames);
             } elseif ($intentType === 'conversational' || !$requiresTools) {
                 $isPureConversational = ($intentType === 'conversational');
                 $tools = null;
@@ -5551,6 +5632,9 @@ class ChatController {
                         if (isset($agentToolMap[$dom])) {
                             $scopedToolNames = array_merge($scopedToolNames, $agentToolMap[$dom]);
                         }
+                    }
+                    if (!empty($aiSelectedTools)) {
+                        $scopedToolNames = array_merge($scopedToolNames, $aiSelectedTools);
                     }
                     $scopedToolNames[] = 'query_cross_domain_executive_synthesis';
                     $scopedToolNames = array_values(array_unique($scopedToolNames));
@@ -5565,68 +5649,27 @@ class ChatController {
                         $scopedToolNames = array_merge($scopedToolNames, $agentToolMap[$dom]);
                     }
                 }
+                if (!empty($aiSelectedTools)) {
+                    $scopedToolNames = array_merge($scopedToolNames, $aiSelectedTools);
+                }
                 $scopedToolNames = array_values(array_unique($scopedToolNames));
                 $tools = AgentToolRegistry::getGeminiToolsDeclaration($scopedToolNames);
             } else {
                 $tools = AgentToolRegistry::getGeminiToolsDeclaration(null);
             }
 
-            // Build precision AI-selected tool declarations for Groq `qwen/qwen3.8-27b` (100% AI-chosen via $routeDecision['selected_tools'])
-            if (!$isPureConversational && !empty($tools)) {
-                $domainAnchorMap = [
-                    'sales' => ['query_crm_leads_multitier', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced'],
-                    'finance' => ['query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'filter_expenses_advanced', 'get_financial_overview'],
-                    'hrm' => ['query_hrm_workforce_and_payroll_multitier', 'query_company_attendance_and_work_hours', 'get_company_leave_and_absence', 'get_staff_directory_advanced', 'get_my_payslip'],
-                    'tasks' => ['query_tasks_and_projects_multitier', 'get_my_tasks', 'smart_manage_tasks_and_subtasks', 'query_and_manage_projects'],
-                    'academic' => ['get_academic_students_filter', 'get_program_details', 'get_academic_schedule_and_intakes', 'query_crm_leads_multitier'],
-                    'records_legal' => ['check_student_admission_records', 'get_academic_students_filter', 'get_contact_360_profile'],
-                    'assets_inventory' => ['query_inventory_and_assets_multitier', 'get_inventory_health_check', 'get_inventory_and_asset_status'],
-                    'b2b_partner' => ['query_deals_and_b2b_multitier', 'get_b2b_partner_and_contract_summary'],
-                    'marketing_campaigns' => ['query_omnichannel_journey_and_automation_analytics', 'get_lead_digital_footprint_360', 'smart_manage_automation_flows_and_campaigns', 'get_campaign_marketing_stats'],
-                    'executive_bi' => ['query_cross_domain_executive_synthesis', 'get_executive_morning_brief', 'get_executive_financial_pulse', 'get_sales_leaderboard', 'query_crm_leads_multitier'],
-                    'system_it' => ['query_tickets_and_sla_multitier', 'get_ticket_status_and_sla_breaches', 'get_system_health_status'],
-                ];
-                $groqToolNames = [];
-                foreach ($aiSelectedTools as $stName) {
-                    if (is_string($stName) && trim($stName) !== '') {
-                        $groqToolNames[] = trim($stName);
-                    }
-                }
-                if ($isMutationOrProposalIntent) {
-                    $groqToolNames[] = 'draft_action_proposal';
-                }
-                $anchorDom = (!empty($primaryDomain) && isset($domainAnchorMap[$primaryDomain])) ? $primaryDomain : 'executive_bi';
-                foreach ($domainAnchorMap[$anchorDom] as $ancTool) {
-                    $groqToolNames[] = $ancTool;
-                }
-                foreach ($matchedDomains as $mDom) {
-                    if (isset($domainAnchorMap[$mDom])) {
-                        $groqToolNames[] = $domainAnchorMap[$mDom][0];
-                    }
-                }
-                $groqToolNames = array_slice(array_values(array_unique($groqToolNames)), 0, 3);
-                $allDeclsForGroq = AgentToolRegistry::getGeminiToolsDeclaration(null)[0]['functionDeclarations'] ?? [];
-                $declByName = [];
-                foreach ($allDeclsForGroq as $dItem) {
-                    if (!empty($dItem['name'])) {
-                        $declByName[$dItem['name']] = $dItem;
-                    }
-                }
-                $strictGroqDecls = [];
-                foreach ($groqToolNames as $gName) {
-                    if (isset($declByName[$gName])) {
-                        $strictGroqDecls[] = $declByName[$gName];
-                    }
-                }
-                $groqScopedTools = !empty($strictGroqDecls)
-                    ? [['functionDeclarations' => $strictGroqDecls]]
-                    : $tools;
-            }
+            // Build Dynamic Domain-Scoped System Prompt for Turn 1 (saves ~60% system prompt tokens while keeping 100% domain rules & working memory)
+            $turn1SystemPrompt = $this->buildGroqFocusedSystemPrompt(
+                $systemPrompt,
+                (string)($primaryDomain && $primaryDomain !== 'none' ? $primaryDomain : 'executive_bi'),
+                $matchedDomains,
+                false
+            );
 
             $payload = [
                 'systemInstruction' => [
                     'parts' => [
-                        ['text' => $systemPrompt]
+                        ['text' => $turn1SystemPrompt]
                     ]
                 ],
                 'contents' => $contents,
@@ -5646,10 +5689,7 @@ class ChatController {
                 ];
             }
 
-            // ==========================================
-            // PRIMARY ENGINE: GROQ CLOUD `qwen/qwen3.8-27b` (WITH FULL AUTONOMOUS TOOL CALLING)
-            // Gemini is kept strictly as a fallback if Groq fails or binary PDF/Audio inlineData is attached
-            // ==========================================
+            /* [COMMENTED OUT FREE MODEL - USE GEMINI 3.5 FLASH LITE AS PRIMARY]
             $hasUnsupportedInlineBinary = !empty($attachedFile['inlineData']['mimeType'])
                 && strpos((string)$attachedFile['inlineData']['mimeType'], 'image/') !== 0;
 
@@ -5675,17 +5715,10 @@ class ChatController {
                 }
                 error_log("Groq Qwen 3.8 27B primary pool unavailable for this turn, falling back to Gemini ({$model})...");
             }
-
-            if (empty($apiKey)) {
-                $fallbackErr = "Hệ thống AI (Groq Qwen 3.8 27B) hiện đang quá tải tạm thời và chưa có Gemini API Key dự phòng. Vui lòng thử lại sau vài giây.";
-                if (is_callable($onChunk)) {
-                    $onChunk($fallbackErr);
-                }
-                return $fallbackErr;
-            }
+            */
 
             // ==========================================
-            // FALLBACK ENGINE: GEMINI AUTONOMOUS MULTI-TURN TOOL LOOP
+            // PRIMARY ENGINE: GEMINI 3.5 FLASH LITE AUTONOMOUS MULTI-TURN TOOL LOOP
             // ==========================================
             $maxToolTurns = 6;
             $toolTurn = 0;
@@ -5847,7 +5880,7 @@ class ChatController {
                         $stepStatus = 'empty';
                     }
 
-                    $stepEntry = [
+                    $sseStepEntry = [
                         'id' => $stepId,
                         'turn' => $toolTurn,
                         'tool_name' => $toolName,
@@ -5855,16 +5888,24 @@ class ChatController {
                         'duration_ms' => $durationMs,
                         'label' => $isDisambig ? "Phát hiện nhiều lựa chọn cần xác nhận ({$toolName})" : "Hoàn tất tra cứu {$toolName} ({$durationMs}ms)"
                     ];
-                    $executedAgentSteps[] = $stepEntry;
 
                     if (is_callable($onStep)) {
                         $onStep([
                             'type' => 'agent_step',
-                            'step' => $stepEntry
+                            'step' => $sseStepEntry
                         ]);
                     }
 
                     $compactResult = $this->compactToolResultForModel($toolResult);
+                    $stepEntry = $sseStepEntry;
+                    $stepEntry['args'] = is_array($toolArgs) ? $toolArgs : [];
+                    $stepEntry['working_state'] = $this->buildStepWorkingState(
+                        $toolName,
+                        is_array($toolArgs) ? $toolArgs : [],
+                        is_array($compactResult) ? $compactResult : []
+                    );
+                    $executedAgentSteps[] = $stepEntry;
+
                     if (is_array($compactResult)) {
                         $lockFacts = [];
                         foreach (['total_matching', 'total_leads', 'total_Filtered_Records', 'total_records', 'total_expenses_vnd', 'total_deposit_vnd', 'net_cashflow_vnd', 'total_headcount', 'created_count', 'reassigned_count'] as $k) {
@@ -5978,6 +6019,28 @@ class ChatController {
                 // 2) A tool returned requires_disambiguation (so the AI asks the clarifying question right away), OR
                 // 3) We reached the max turns limit ($maxToolTurns - 1)
                 if ($hasTerminalActionSuccess || $requiresDisambiguationSynthesis || $toolTurn >= ($maxToolTurns - 1)) {
+                    // Turn-2 Synthesis Token Optimization: Slim systemInstruction to synthesis rules & scope tools to called functions only
+                    $synthesisPrompt = $this->buildGroqFocusedSystemPrompt(
+                        $systemPrompt,
+                        (string)($primaryDomain && $primaryDomain !== 'none' ? $primaryDomain : 'executive_bi'),
+                        $matchedDomains,
+                        true
+                    );
+                    $payload['systemInstruction'] = [
+                        'parts' => [
+                            ['text' => $synthesisPrompt]
+                        ]
+                    ];
+                    $calledToolNames = array_values(array_unique(array_filter(array_map(fn($st) => $st['tool_name'] ?? '', $executedAgentSteps))));
+                    if (!empty($calledToolNames) && !empty($payload['tools'][0]['functionDeclarations'])) {
+                        $slimDecls = array_values(array_filter(
+                            $payload['tools'][0]['functionDeclarations'],
+                            fn($d) => in_array($d['name'] ?? '', $calledToolNames, true)
+                        ));
+                        if (!empty($slimDecls)) {
+                            $payload['tools'] = [['functionDeclarations' => $slimDecls]];
+                        }
+                    }
                     $payload['toolConfig'] = [
                         'functionCallingConfig' => [
                             'mode' => 'NONE'
@@ -6588,9 +6651,9 @@ class ChatController {
     }
 
     /**
-     * Build a focused, high-intelligence System Prompt for Groq `qwen/qwen3.8-27b`
-     * Preserves 100% of Persona, Salutation, RBAC, Dynamic Runtime Context (RAG, Screen Awareness, Ambient Snapshot, ERP Lookup, Memories, Risks),
-     * Active Domain Tool Rules, and Smart UI Tags while fitting comfortably within Groq's 7,000 ITPM budget.
+     * Build a focused, high-intelligence Domain-Scoped System Prompt (Turn 1) & Synthesis System Prompt (Turn 2)
+     * Preserves 100% of Persona, Salutation, RBAC, 2-Tier Working Memory, Dynamic Runtime Context (RAG, Screen Awareness, Ambient Snapshot, ERP Lookup, Memories, Risks),
+     * Active Domain Tool Rules, and Smart UI Tags while cutting redundant cross-domain prompt bloat by ~60-70%.
      */
     private function buildGroqFocusedSystemPrompt(
         string $fullSystemPrompt,
@@ -6608,6 +6671,7 @@ class ChatController {
         $dynamicTail = '';
         $dynamicMarkers = [
             'NĂNG LỰC PHÂN TÍCH TÀI LIỆU & FILE ĐÍNH KÈM',
+            '--- [BỘ NHỚ LÀM VIỆC PHIÊN TRƯỚC (WORKING MEMORY)] ---',
             '--- [KIẾN THỨC TỪ HUẤN LUYỆN AI DOANH NGHIỆP] ---',
             '--- [BỨC TRANH TOÀN CẢNH HỆ THỐNG',
             '--- [TRỰC GIÁC MÀN HÌNH & HỒ SƠ ĐANG MỞ',
@@ -6626,19 +6690,20 @@ class ChatController {
         }
         if ($earliestPos !== null) {
             $dynamicTail = trim(substr($fullSystemPrompt, $earliestPos));
-            if (mb_strlen($dynamicTail, 'UTF-8') > 2600) {
-                $dynamicTail = mb_substr($dynamicTail, 0, 2600, 'UTF-8') . "\n--- [HẾT BỐI CẢNH ĐỘNG] ---";
+            if (mb_strlen($dynamicTail, 'UTF-8') > 4500) {
+                $dynamicTail = mb_substr($dynamicTail, 0, 4500, 'UTF-8') . "\n--- [HẾT BỐI CẢNH ĐỘNG] ---";
             }
         }
 
         if ($isSynthesisTurn) {
             return $coreHeader . "\n\n"
                 . "QUY CHUẨN TỔNG HỢP BÁO CÁO ĐIỀU HÀNH & SMART UI TAGS (BẮT BUỘC 100%):\n"
-                . "1. CHÂN LÝ DỮ LIỆU SQL (`STRICT_DATABASE_GROUND_TRUTH`): Dùng chính xác 100% con số từ kết quả công cụ SQL vừa thực thi (`total_matching`, `summary`, `_ground_truth_lock`). Tuyệt đối không tự cộng nhẩm lại từ danh sách xem trước hay bịa số liệu.\n"
-                . "2. KHÔNG DÙNG EMOJI TRONG TIÊU ĐỀ `###`: Trình bày chuẩn Enterprise SaaS trang trọng, dùng BẢNG MARKDOWN rõ ràng.\n"
-                . "3. BẢNG DANH SÁCH LEAD / HỌC VIÊN CRM: Dùng đúng các cột `| ID | HỌ VÀ TÊN | SĐT | CHƯƠNG TRÌNH | GIAI ĐOẠN | SALE PHỤ TRÁCH | TIỀN CỌC |`, cột HỌ VÀ TÊN gắn link `[Tên](/contacts?id=ID)`. Giữ nguyên link tải Excel `[Bấm vào đây để tải danh sách (File Excel/CSV)](/export?...)`.\n"
-                . "4. QUY TẮC THẺ ĐƠN LẺ (`<<<ERP_CARD:...>>>`): Nếu kết quả có > 1 bản ghi (`total_matching > 1`), CẤM sinh thẻ `<<<ERP_CARD:...>>>` đơn lẻ dưới bảng. Chỉ sinh `<<<ERP_CARD:...>>>` khi tra cứu đích danh 1 đối tượng duy nhất (`total_matching = 1`).\n"
-                . "5. GỢI Ý BƯỚC TIẾP THEO CUỐI BÀI: Chỉ giữ `<<<ACTION_PROPOSAL: {...}>>>` nếu công cụ trả về thẻ đề xuất thực thi; KHÔNG tự chế `<<<ACTION_PROPOSAL:...>>>` cho câu hỏi thống kê/tra cứu. Luôn kết thúc bằng `<<<NEXT_BEST_ACTIONS: [\"Gợi ý 1\", \"Gợi ý 2\", \"Gợi ý 3\"]>>>`.\n"
+                . "1. CHÂN LÝ DỮ LIỆU SQL (`STRICT_DATABASE_GROUND_TRUTH`): Dùng chính xác 100% con số từ kết quả công cụ SQL vừa thực thi (`total_matching`, `financial_summary`, `period_comparison`, `facets`, `summary`, `_ground_truth_lock`). Tuyệt đối không tự cộng nhẩm lại từ danh sách xem trước hay bịa số liệu.\n"
+                . "2. KHUNG PHẢN HỒI ĐIỀU HÀNH 5 PHẦN: (a) Tổng quan chỉ số cốt lõi (nếu có `period_comparison` thì nêu rõ biến động % so với kỳ trước); (b) Bảng Markdown bóc tách đa chiều (`facets`: Chương trình / Nguồn / Sale / Giai đoạn kèm số lượng cọc & tỷ lệ chuyển đổi %); (c) Chẩn đoán điểm sáng & điểm nghẽn (lead chưa liên hệ `uncontacted_count`, kênh CPL/CAC/ROAS); (d) Giữ nguyên thẻ `<<<DYNAMIC_CHART: {...}>>>`; (e) Bảng danh sách mẫu & Link tải Excel.\n"
+                . "3. KHÔNG DÙNG EMOJI TRONG TIÊU ĐỀ `###`: Trình bày chuẩn Enterprise SaaS trang trọng, dùng BẢNG MARKDOWN rõ ràng.\n"
+                . "4. BẢNG DANH SÁCH LEAD / HỌC VIÊN CRM: Dùng đúng các cột `| ID | HỌ VÀ TÊN | SĐT | CHƯƠNG TRÌNH | GIAI ĐOẠN | SALE PHỤ TRÁCH | TIỀN CỌC |`, cột HỌ VÀ TÊN gắn link `[Tên](/contacts?id=ID)`. Giữ nguyên link tải Excel `[Bấm vào đây để tải danh sách (File Excel/CSV)](/export?...)`.\n"
+                . "5. QUY TẮC THẺ ĐƠN LẺ (`<<<ERP_CARD:...>>>`) & HỎI LẠI (`CLARIFY_OPTIONS`): Nếu kết quả có > 1 bản ghi (`total_matching > 1`), CẤM sinh thẻ `<<<ERP_CARD:...>>>` đơn lẻ dưới bảng. Chỉ sinh `<<<ERP_CARD:...>>>` khi tra cứu đích danh 1 đối tượng duy nhất (`total_matching = 1`). Khi `requires_disambiguation: true`, liệt kê bảng ứng viên và giữ nguyên `<<<CLARIFY_OPTIONS: [...]>>>`.\n"
+                . "6. GỢI Ý BƯỚC TIẾP THEO CUỐI BÀI: Chỉ giữ `<<<ACTION_PROPOSAL: {...}>>>` nếu công cụ trả về thẻ đề xuất thực thi; KHÔNG tự chế `<<<ACTION_PROPOSAL:...>>>` cho câu hỏi thống kê/tra cứu. Luôn kết thúc bằng `<<<NEXT_BEST_ACTIONS: [\"Gợi ý 1\", \"Gợi ý 2\", \"Gợi ý 3\"]>>>`.\n"
                 . ($dynamicTail !== '' ? "\n" . $dynamicTail : '');
         }
 
@@ -6656,10 +6721,11 @@ class ChatController {
                 case 'academic':
                 case 'records_legal':
                     $domainRules[] = "• QUY TẮC CRM LEADS, HỌC VIÊN & TUYỂN SINH (Mốc thời gian chuẩn: Hôm nay='{$todayYmd}', 7 ngày qua: from_date='{$last7Ymd}' & to_date='{$todayYmd}', 30 ngày qua: from_date='{$last30Ymd}' & to_date='{$todayYmd}', Tháng này: from_date='{$monthStartYmd}' & to_date='{$todayYmd}'):\n"
-                        . "  - Khi lọc/tra cứu/thống kê lead hoặc học viên theo bất kỳ điều kiện nào (tư vấn viên `owners`, chương trình `programs`, giai đoạn `stages` + `stage_op`, nguồn `sources`, địa bàn `branches_or_cities`, đặt cọc `financial_filter`, tương tác `interacted_within_days`/`min_call_count`/`note_keyword`, giới tính/tuổi/chức vụ, thiếu hồ sơ `missing_document`): BẮT BUỘC gọi `query_crm_leads_multitier` (truyền `record_type='all'` khi tìm data của tư vấn viên).\n"
+                        . "  - Khi lọc/tra cứu/thống kê lead hoặc học viên theo bất kỳ điều kiện nào (tư vấn viên `owners`, đội nhóm `teams`, chương trình `programs`, giai đoạn `stages` + `stage_op`, nguồn `sources`, địa bàn `branches_or_cities`, đặt cọc `financial_filter`, tương tác `interacted_within_days`/`min_call_count`/`note_keyword`, giới tính/tuổi/chức vụ, thiếu hồ sơ `missing_document`, hoặc so sánh kỳ trước `compare_previous_period=true`): BẮT BUỘC gọi `query_crm_leads_multitier` (truyền `record_type='all'` khi tìm data của tư vấn viên).\n"
+                        . "  - KẾ THỪA BỘ NHỚ LÀM VIỆC (`WORKING MEMORY`): Khi người dùng hỏi tiếp nối ('còn theo nguồn?', 'so với tháng trước?', 'lọc riêng MBA', 'ai phụ trách nhiều nhất?', 'trong số đó ai đã cọc?'), hãy kế thừa các bộ lọc đang áp dụng trong mục `[BỘ NHỚ LÀM VIỆC PHIÊN TRƯỚC]` bên dưới (như `from_date`, `to_date`, `programs`, `owners`) và bật `compare_previous_period=true` nếu người dùng hỏi so sánh với kỳ trước.\n"
                         . "  - QUAN TRỌNG VỀ NGÀY THÁNG: Khi hỏi lead có/tạo trong N ngày qua (vd: 7 ngày qua, 30 ngày qua, hôm nay), BẮT BUỘC truyền `from_date` và `to_date` (kèm `date_field='created_at'`). TUYỆT ĐỐI KHÔNG truyền `stale_days` trừ khi người dùng hỏi rõ 'lead bỏ quên / chưa chăm sóc trên N ngày'!\n"
                         . "  - Khi tra cứu 1 khách hàng/học viên cụ thể hoặc xem lịch sử ghi chú chăm sóc: Gọi `get_contact_360_profile` (mặc định trích xuất TOP 3 tương tác gần nhất).\n"
-                        . "  - Khi thêm data cá nhân, tạo lead mới hoặc phân bổ/chuyển giao lead cho đồng nghiệp: Gọi `smart_create_or_assign_leads` hoặc `reassign_lead_owner`.\n"
+                        . "  - Khi thêm data cá nhân, tạo lead mới hoặc phân bổ/chuyển giao lead cho đồng nghiệp: Gọi `smart_create_or_assign_leads` hoặc `reassign_lead_owner`. Khi điều phối vòng chia số/bù data: Gọi `manage_lead_round_distribution`.\n"
                         . "  - Khi hỏi nhân khẩu học/chức vụ/ngành nghề: Gọi `analyze_leads_demographics_and_job_titles`.";
                     break;
                 case 'finance':
@@ -6690,7 +6756,7 @@ class ChatController {
                     break;
                 default:
                     $domainRules[] = "• QUY TẮC ĐIỀU HÀNH TỔNG HỢP (EXECUTIVE BI & CROSS-DOMAIN):\n"
-                        . "  - Khi hỏi bức tranh tổng thể, doanh thu - chi phí - dòng tiền ròng, tóm tắt đầu ngày, bảng xếp hạng Sale: Gọi `query_cross_domain_executive_synthesis`, `get_executive_morning_brief`, `get_executive_financial_pulse` hoặc `get_sales_leaderboard`.\n"
+                        . "  - Khi hỏi bức tranh tổng thể, doanh thu - chi phí - dòng tiền ròng, CPL/CAC/ROAS, Top Sales, tóm tắt đầu ngày: Gọi `query_cross_domain_executive_synthesis`, `get_executive_morning_brief`, `get_executive_financial_pulse` hoặc `get_sales_leaderboard`.\n"
                         . "  - Khi hỏi tồn kho/tài sản: Gọi `query_inventory_and_assets_multitier`. Khi hỏi B2B/Deals: Gọi `query_deals_and_b2b_multitier`. Khi hỏi Ticket/SLA: Gọi `query_tickets_and_sla_multitier`.";
                     break;
             }
@@ -6701,11 +6767,273 @@ class ChatController {
         return $coreHeader . "\n\n"
             . $domainBlock . "\n\n"
             . "QUY TẮC TRÌNH BÀY & SMART UI TAGS:\n"
+            . "• Từ lóng: 'củ'/'chai' = Triệu VNĐ ('5 củ' = 5.000.000 VNĐ); 'lead mồ côi' = `owners='unassigned'`; 'lead ngâm' = `stale_days`.\n"
             . "• Không dùng từ '(Zero-Trust)'. Không dùng emoji trong tiêu đề `###`. Dùng BẢNG MARKDOWN khi có >= 2 đối tượng.\n"
             . "• Khi trùng tên nhiều hồ sơ (`disambiguation_required: true`), không tự đoán mò mà liệt kê bảng so sánh và giữ nguyên `<<<CLARIFY_OPTIONS: [...]>>>`.\n"
             . "• Chỉ sinh `<<<ERP_CARD: {...}>>>` khi kết quả có ĐÚNG 1 hồ sơ (`total_matching = 1`); cấm sinh thẻ đơn lẻ dưới bảng nhiều dòng.\n"
             . "• Giữ nguyên link tải `[Bấm vào đây để tải danh sách (File Excel/CSV)](/export?...)`, và luôn kết thúc bằng `<<<NEXT_BEST_ACTIONS: [\"Gợi ý 1\", \"Gợi ý 2\", \"Gợi ý 3\"]>>>`.\n"
             . ($dynamicTail !== '' ? "\n" . $dynamicTail : '');
+    }
+
+    /**
+     * Extract the most recent Working Memory object from the conversation history
+     */
+    private function extractLatestWorkingMemoryFromHistory(array $history): array {
+        for ($i = count($history) - 1; $i >= 0; $i--) {
+            $msg = $history[$i];
+            if ((int)($msg['sender_id'] ?? 0) !== 9000001) {
+                continue;
+            }
+            $metaRaw = $msg['metadata'] ?? null;
+            $meta = is_string($metaRaw) ? (json_decode($metaRaw, true) ?: []) : (is_array($metaRaw) ? $metaRaw : []);
+            if (!empty($meta['working_memory']) && is_array($meta['working_memory'])) {
+                return $meta['working_memory'];
+            }
+            if (!empty($meta['agent_steps']) && is_array($meta['agent_steps'])) {
+                $lastStep = end($meta['agent_steps']);
+                if (is_array($lastStep) && !empty($lastStep['tool_name'])) {
+                    return [
+                        'domain' => $meta['specialist']['id'] ?? 'general',
+                        'last_tool' => $lastStep['tool_name'],
+                        'applied_filters' => is_array($lastStep['args'] ?? null) ? $lastStep['args'] : [],
+                        'key_metrics' => [],
+                        'top_facets' => [],
+                        'entity_anchors' => [],
+                        'export_url' => ''
+                    ];
+                }
+            }
+        }
+        return [];
+    }
+
+    /**
+     * Detect whether the user query is a conversational follow-up, drill-down, comparison, or filter refinement
+     */
+    private function isFollowUpOrDrillDownQuery(string $query, array $prevWorkingMemory): bool {
+        if (empty($prevWorkingMemory) || empty($prevWorkingMemory['last_tool'])) {
+            return false;
+        }
+        $q = mb_strtolower(trim($query), 'UTF-8');
+        if ($q === '') {
+            return false;
+        }
+        if (mb_strlen($q, 'UTF-8') <= 48 && preg_match('/^(còn|thế còn|vậy còn|vậy|thế|sao|tại sao|vì sao|chi tiết|bóc tách|phân tích sâu|so với|so sánh|trong số đó|nhóm đó|danh sách đó|ở trên|vừa rồi|nãy|tiếp|lọc thêm|chỉ lấy|riêng|tải file|xuất file|xuất excel|tải excel)/iu', $q)) {
+            return true;
+        }
+        if (preg_match('/(so với kỳ trước|so với tháng trước|so với tuần trước|cùng kỳ|tăng hay giảm|trong số đó|nhóm vừa lọc|danh sách trên|theo nguồn thì sao|theo sale thì sao|theo chương trình thì sao|theo giai đoạn thì sao|ai cao nhất|ai nhiều nhất|kênh nào tốt nhất)/iu', $q)) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Format the Working Memory block for injection into the System Prompt
+     */
+    private function formatWorkingMemoryPromptBlock(array $wm): string {
+        if (empty($wm) || (empty($wm['last_tool']) && empty($wm['key_metrics']))) {
+            return "";
+        }
+        $lines = ["\n--- [BỘ NHỚ LÀM VIỆC PHIÊN TRƯỚC (WORKING MEMORY)] ---"];
+        $lines[] = "• Phân hệ đang làm việc: " . ($wm['domain'] ?? 'general') . " | Công cụ gần nhất: " . ($wm['last_tool'] ?? 'none');
+        if (!empty($wm['applied_filters']) && is_array($wm['applied_filters'])) {
+            $lines[] = "• Bộ lọc đang áp dụng (Active Filters): " . json_encode($wm['applied_filters'], JSON_UNESCAPED_UNICODE);
+        }
+        if (!empty($wm['key_metrics']) && is_array($wm['key_metrics'])) {
+            $lines[] = "• Số liệu Ground-Truth đã xác thực ở lượt trước: " . json_encode($wm['key_metrics'], JSON_UNESCAPED_UNICODE);
+        }
+        if (!empty($wm['top_facets']) && is_array($wm['top_facets'])) {
+            $lines[] = "• Bóc tách Facets chính ở lượt trước: " . json_encode($wm['top_facets'], JSON_UNESCAPED_UNICODE);
+        }
+        if (!empty($wm['entity_anchors']) && is_array($wm['entity_anchors'])) {
+            $lines[] = "• Các thực thể tiêu biểu vừa hiển thị: " . json_encode($wm['entity_anchors'], JSON_UNESCAPED_UNICODE);
+        }
+        if (!empty($wm['export_url'])) {
+            $lines[] = "• Link xuất Excel lượt trước: " . $wm['export_url'];
+        }
+        $lines[] = "• CHỈ DẪN LIÊN KẾT MẠCH HỘI THOẠI: Nếu người dùng hỏi tiếp nối/đào sâu ('còn theo nguồn?', 'lọc riêng MBA', 'so với tháng trước?', 'trong số đó bao nhiêu người đã cọc?'), hãy KẾ THỪA các điều kiện lọc trong `Active Filters` ở trên khi gọi công cụ (và truyền `compare_previous_period=true` nếu hỏi so sánh kỳ trước). Nếu câu hỏi chỉ yêu cầu giải thích hoặc đọc góc nhìn đã có sẵn đầy đủ trong `Facets chính` hoặc `Số liệu Ground-Truth` ở trên, hãy dùng chính xác con số đó để phân tích.";
+        $lines[] = "--- [HẾT BỘ NHỚ LÀM VIỆC PHIÊN TRƯỚC] ---\n";
+        return implode("\n", $lines);
+    }
+
+    /**
+     * Build a compact structured working state snapshot from a single tool execution
+     */
+    private function buildStepWorkingState(string $toolName, array $args, array $compactResult): array {
+        $cleanFilters = [];
+        foreach ($args as $k => $v) {
+            if ($v !== null && $v !== '' && $v !== 'all' && $v !== []) {
+                $cleanFilters[$k] = $v;
+            }
+        }
+
+        $metrics = [];
+        foreach (['total_matching', 'total_leads', 'total_records', 'created_count', 'reassigned_count'] as $mk) {
+            if (isset($compactResult[$mk])) {
+                $metrics[$mk] = $compactResult[$mk];
+            }
+        }
+        foreach (['financial_summary', 'period_comparison', 'crm_and_funnel', 'revenue_and_deposits', 'expenses_and_cashflow', 'summary', 'deal_summary', 'ticket_summary', 'inventory_summary'] as $groupKey) {
+            if (!empty($compactResult[$groupKey]) && is_array($compactResult[$groupKey])) {
+                $metrics[$groupKey] = $compactResult[$groupKey];
+            }
+        }
+
+        $topFacets = [];
+        if (!empty($compactResult['facets']) && is_array($compactResult['facets'])) {
+            foreach ($compactResult['facets'] as $fName => $fList) {
+                if (is_array($fList) && !empty($fList)) {
+                    $topFacets[$fName] = array_slice($fList, 0, 5);
+                }
+            }
+        }
+        if (!empty($compactResult['top_sales_performers']) && is_array($compactResult['top_sales_performers'])) {
+            $topFacets['top_sales_performers'] = array_slice($compactResult['top_sales_performers'], 0, 5);
+        }
+
+        $entityAnchors = [];
+        foreach (['preview_leads', 'candidates', 'sample_deals', 'sample_tickets', 'sample_products'] as $listKey) {
+            if (!empty($compactResult[$listKey]) && is_array($compactResult[$listKey])) {
+                foreach (array_slice($compactResult[$listKey], 0, 6) as $row) {
+                    if (is_array($row) && (!empty($row['id']) || !empty($row['full_name']) || !empty($row['name']))) {
+                        $entityAnchors[] = array_filter([
+                            'id' => $row['id'] ?? null,
+                            'name' => $row['full_name'] ?? ($row['name'] ?? ($row['title'] ?? null)),
+                            'program' => $row['program'] ?? null,
+                            'stage' => $row['stage'] ?? ($row['status'] ?? null),
+                            'owner' => $row['owner_name'] ?? ($row['sale_name'] ?? null)
+                        ]);
+                    }
+                }
+                if (!empty($entityAnchors)) {
+                    break;
+                }
+            }
+        }
+
+        return [
+            'tool_name' => $toolName,
+            'applied_filters' => $cleanFilters,
+            'key_metrics' => $metrics,
+            'top_facets' => $topFacets,
+            'entity_anchors' => $entityAnchors,
+            'export_url' => (string)($compactResult['export_url'] ?? '')
+        ];
+    }
+
+    /**
+     * Extract the new 2-Tier Working Memory object after executing agent steps in the current turn
+     */
+    private function extractWorkingMemoryFromSteps(array $agentSteps, string $domain, string $cleanPrompt, array $prevWorkingMemory = []): array {
+        if (empty($agentSteps)) {
+            if (!empty($prevWorkingMemory)) {
+                $prevWorkingMemory['last_user_query'] = mb_substr(trim($cleanPrompt), 0, 200, 'UTF-8');
+                $prevWorkingMemory['updated_at'] = date('Y-m-d H:i:s');
+                return $prevWorkingMemory;
+            }
+            return [];
+        }
+
+        $primaryState = null;
+        for ($i = count($agentSteps) - 1; $i >= 0; $i--) {
+            $st = $agentSteps[$i];
+            if (!empty($st['working_state']) && is_array($st['working_state'])) {
+                $primaryState = $st['working_state'];
+                break;
+            }
+        }
+
+        if (!$primaryState) {
+            $lastStep = end($agentSteps);
+            return [
+                'domain' => $domain,
+                'last_tool' => $lastStep['tool_name'] ?? 'none',
+                'applied_filters' => is_array($lastStep['args'] ?? null) ? $lastStep['args'] : [],
+                'key_metrics' => [],
+                'top_facets' => [],
+                'entity_anchors' => [],
+                'export_url' => '',
+                'last_user_query' => mb_substr(trim($cleanPrompt), 0, 200, 'UTF-8'),
+                'updated_at' => date('Y-m-d H:i:s')
+            ];
+        }
+
+        return [
+            'domain' => $domain,
+            'last_tool' => $primaryState['tool_name'] ?? 'none',
+            'applied_filters' => $primaryState['applied_filters'] ?? [],
+            'key_metrics' => $primaryState['key_metrics'] ?? [],
+            'top_facets' => $primaryState['top_facets'] ?? [],
+            'entity_anchors' => $primaryState['entity_anchors'] ?? [],
+            'export_url' => $primaryState['export_url'] ?? '',
+            'last_user_query' => mb_substr(trim($cleanPrompt), 0, 200, 'UTF-8'),
+            'updated_at' => date('Y-m-d H:i:s')
+        ];
+    }
+
+    /**
+     * Compact historical conversation messages to prevent context bloat while preserving working memory facts
+     */
+    private function compactHistoryMessageForPrompt(string $rawMsg, ?string $metaJson, string $role = 'model'): string {
+        $msgText = trim($rawMsg);
+        if ($msgText === '') {
+            return '';
+        }
+
+        if ($role === 'model') {
+            $msgText = preg_replace('/<<<DYNAMIC_CHART:\s*[\s\S]*?>>>/', '[Đã hiển thị biểu đồ trực quan]', $msgText);
+            $msgText = preg_replace('/<<<ACTION_PROPOSAL:\s*[\s\S]*?>>>/', '[Đã xuất thẻ hành động điền sẵn]', $msgText);
+            $msgText = preg_replace('/<<<ERP_CARD:\s*[\s\S]*?>>>/', '[Đã hiển thị thẻ hồ sơ ERP]', $msgText);
+            $msgText = preg_replace('/<<<CLARIFY_OPTIONS:\s*[\s\S]*?>>>/', '', $msgText);
+            $msgText = preg_replace('/<<<PROACTIVE_INSIGHT:\s*[\s\S]*?>>>/', '', $msgText);
+            $msgText = preg_replace('/<<<NEXT_BEST_ACTIONS:\s*[\s\S]*?>>>/', '', $msgText);
+            $msgText = preg_replace('/<<<SAVE_MEMORY:\s*[\s\S]*?>>>/', '', $msgText);
+
+            // Compress markdown tables with > 7 lines down to header + top 4 rows
+            $lines = explode("\n", (string)$msgText);
+            $compactedLines = [];
+            $tableLineCount = 0;
+            $skippedTableRows = 0;
+            foreach ($lines as $ln) {
+                $trimLn = trim($ln);
+                if (str_starts_with($trimLn, '|') && str_ends_with($trimLn, '|')) {
+                    $tableLineCount++;
+                    if ($tableLineCount <= 6) {
+                        $compactedLines[] = $ln;
+                    } else {
+                        $skippedTableRows++;
+                    }
+                } else {
+                    if ($skippedTableRows > 0) {
+                        $compactedLines[] = "| ... | *(Đã rút gọn {$skippedTableRows} dòng lịch sử)* |";
+                        $skippedTableRows = 0;
+                    }
+                    $tableLineCount = 0;
+                    $compactedLines[] = $ln;
+                }
+            }
+            if ($skippedTableRows > 0) {
+                $compactedLines[] = "| ... | *(Đã rút gọn {$skippedTableRows} dòng lịch sử)* |";
+            }
+            $msgText = trim((string)preg_replace('/\n{3,}/', "\n\n", implode("\n", $compactedLines)));
+
+            if (mb_strlen($msgText, 'UTF-8') > 900) {
+                $msgText = mb_substr($msgText, 0, 900, 'UTF-8') . '... [Đã nén lịch sử trả lời]';
+            }
+
+            if ($metaJson !== null && $metaJson !== '') {
+                $meta = json_decode($metaJson, true);
+                if (is_array($meta) && !empty($meta['working_memory']['last_tool'])) {
+                    $wm = $meta['working_memory'];
+                    $filtersCompact = !empty($wm['applied_filters']) ? json_encode($wm['applied_filters'], JSON_UNESCAPED_UNICODE) : '{}';
+                    $msgText .= "\n[Bộ nhớ lượt này: tool={$wm['last_tool']}, filters={$filtersCompact}]";
+                }
+            }
+        } elseif (mb_strlen($msgText, 'UTF-8') > 600) {
+            $msgText = mb_substr($msgText, 0, 600, 'UTF-8') . '...';
+        }
+
+        return $msgText;
     }
 
     /**
@@ -7149,5 +7477,32 @@ class ChatController {
             respond(500, null, 'Lỗi lấy nhật ký kiểm định: ' . $e->getMessage(), false);
         }
     }
+
+    /**
+     * Trigger Role/Level/Position-Tailored Proactive AI Briefing into SI IDEAS Chat
+     */
+    public function triggerProactiveBriefing(array $auth): void {
+        try {
+            require_once __DIR__ . '/../cron_ai_proactive_agent.php';
+            $b = getBody();
+            $slot = $b['slot'] ?? $_GET['slot'] ?? 'morning';
+            if (!in_array($slot, ['morning', 'midday', 'eod'], true)) {
+                $slot = 'morning';
+            }
+            $isAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'super_admin', 'superadmin', 'director'], true);
+            $targetUserId = ($isAdmin && isset($b['user_id'])) ? (int)$b['user_id'] : (int)($auth['user_id'] ?? 0);
+            $force = isset($b['force']) ? (bool)$b['force'] : true;
+
+            $result = runProactiveAiAgentBriefings(null, $this->db, [
+                'force' => $force,
+                'slot' => $slot,
+                'target_user_id' => $targetUserId
+            ]);
+            respond(200, $result, 'Đã gửi bản tin Trợ lý AI chủ động vào hộp chat SI IDEAS', true);
+        } catch (\Throwable $e) {
+            respond(500, null, 'Lỗi kích hoạt bản tin AI chủ động: ' . $e->getMessage(), false);
+        }
+    }
 }
+
 

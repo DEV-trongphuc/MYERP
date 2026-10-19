@@ -154,12 +154,12 @@ export const NoteDetailModal: React.FC<NoteDetailModalProps> = ({
   title = 'Ghi chú / Mục đích sử dụng',
   itemName,
   notes = '',
-  zIndex = 2147483647
+  zIndex = 2147483646
 }) => {
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const [copiedAll, setCopiedAll] = useState(false);
 
-  const effectiveZIndex = zIndex ? Math.min(zIndex, 2147483647) : 2147483647;
+  const effectiveZIndex = zIndex ? Math.min(Math.max(zIndex, 2147483640), 2147483646) : 2147483646;
 
   useEffect(() => {
     if (isOpen) {

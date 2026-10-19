@@ -46,6 +46,26 @@ class NotificationService {
     }
 
     /**
+     * Map runtime eventType aliases to canonical matrix keys stored in NotificationSettingsModal
+     */
+    private static function resolveMatrixKey(string $eventType): string {
+        $aliasMap = [
+            'NEW_LEAD' => 'LEAD_NEW',
+            'HRM_LEAVE_REQUEST' => 'LEAVE_REQUEST',
+            'HRM_OVERTIME_REQUEST' => 'LEAVE_REQUEST',
+            'HRM_OVERTIME_STATUS' => 'HRM_LEAVE_APPROVAL',
+            'HRM_ADVANCE_STATUS' => 'HRM_ADVANCE_APPROVAL',
+            'COOP_SLIP_REJECTED' => 'COOP_SLIP_APPROVED',
+            'PO_REJECTED' => 'PO_APPROVED',
+            'SO_REJECTED' => 'SO_APPROVED',
+            'EXPENSE_RELATED' => 'EXPENSE_REQUEST',
+            'EXPENSE_APPROVED' => 'EXPENSE_APPROVAL',
+            'EXPENSE_REJECTED' => 'EXPENSE_APPROVAL',
+        ];
+        return $aliasMap[$eventType] ?? $eventType;
+    }
+
+    /**
      * Dọn sạch thông báo cho một user cụ thể, chỉ giữ lại tối đa $maxKeep thông báo mới nhất (mặc định 200).
      * Tự động xóa tất cả các thông báo cũ hơn thứ hạng 200 để tối ưu dung lượng DB & tốc độ query.
      */
@@ -173,17 +193,17 @@ class NotificationService {
             }
 
             // Helper lambda to check if a specific channel is enabled for a user for this eventType
-            $isChannelEnabled = function(int $userId, string $channel) use ($userConfigs, $eventType): bool {
+            $matrixKey = self::resolveMatrixKey($eventType);
+            $isChannelEnabled = function(int $userId, string $channel) use ($userConfigs, $eventType, $matrixKey): bool {
+                $evtCfg = $userConfigs[$userId][$eventType] ?? $userConfigs[$userId][$matrixKey] ?? null;
                 if ($channel === 'bell') {
-                    if (!isset($userConfigs[$userId][$eventType])) return true;
-                    $evtCfg = $userConfigs[$userId][$eventType];
+                    if (!$evtCfg) return true;
                     if (isset($evtCfg['master']) && !$evtCfg['master']) return false;
                     return !isset($evtCfg['bell']) || (bool)$evtCfg['bell'];
                 }
-                if (!isset($userConfigs[$userId][$eventType])) {
+                if (!$evtCfg) {
                     return true; // Default behavior: Enabled
                 }
-                $evtCfg = $userConfigs[$userId][$eventType];
                 if (isset($evtCfg['master']) && !$evtCfg['master']) {
                     return false; // Master switch OFF for this event
                 }
@@ -270,20 +290,17 @@ class NotificationService {
                         require_once __DIR__ . '/zalo_bot.php';
 
                         $zaloChatIds = [];
-                        // 1. Group Admin Zalo: TUYỆT ĐỐI CHỈ gửi tới group Zalo các sự kiện liên quan đến Lead / Data
+                        // 1. Group Admin Zalo: Gửi tới group Zalo các sự kiện Broadcast toàn hệ thống hoặc sự kiện Lead / Data
                         $isLeadEvent = in_array($eventType, ['LEAD_ASSIGNMENT', 'LEAD_NEW', 'NEW_LEAD', 'LEAD_REASSIGN', 'LEAD_HANDOVER_NEW_SALE', 'LEAD_RECALL', 'TICKET_LEAD', 'TICKET_NEW', 'TICKET_APPROVED', 'TICKET_REJECTED'], true);
-                        if (!empty($zaloGroupChatId) && $isAdminBroadcastEvent && $isLeadEvent) {
+                        if (!empty($zaloGroupChatId) && ($isAdminBroadcastEvent || $isLeadEvent)) {
                             $zaloChatIds[] = $zaloGroupChatId;
                         }
 
-                        // 2. Personal Zalo: Gửi cho Sale khi có Lead tới / Giao Lead / Bàn giao / SO mới
-                        $isPersonalAllowed = in_array($eventType, ['LEAD_ASSIGNMENT', 'LEAD_NEW', 'NEW_LEAD', 'LEAD_REASSIGN', 'LEAD_HANDOVER_NEW_SALE', 'SO_CREATED_FOR_SALE'], true);
-                        if ($isPersonalAllowed && (!$zaloOnlyGroup || !$isAdminBroadcastEvent)) {
+                        // 2. Personal Zalo: Gửi cho từng người nhận có zalo_chat_id và bật kênh Zalo trong cài đặt
+                        if (!$zaloOnlyGroup || !$isAdminBroadcastEvent) {
                             foreach ($recipients as $rec) {
                                 $rId = (int)($rec['id'] ?? 0);
-                                $role = strtolower((string)($rec['role'] ?? ''));
-                                $isSale = in_array($role, ['sale', 'sales'], true) || !empty($rec['is_consultant']);
-                                if ($isSale && !empty($rec['zalo_chat_id']) && $isChannelEnabled($rId, 'zalo')) {
+                                if (!empty($rec['zalo_chat_id']) && $isChannelEnabled($rId, 'zalo')) {
                                     $zaloChatIds[] = trim($rec['zalo_chat_id']);
                                 }
                             }
@@ -403,7 +420,7 @@ class NotificationService {
                 ];
 
             case 'ATTENDANCE_UPDATE':
-                $isBulk = !empty($payload['is_bulk']);
+                $isBulk = !empty($payload['is_bulk']) || (($payload['request_type'] ?? '') === 'bulk');
                 $isSingleDay = !empty($payload['is_single_day']) || ((int)($payload['days_count'] ?? 0) === 1);
                 $singleDate = !empty($payload['single_date']) ? $payload['single_date'] : $today;
                 $targetUid = (int)($payload['user_id'] ?? $payload['approver_id'] ?? 0);
@@ -414,9 +431,14 @@ class NotificationService {
                 } else {
                     $recipients = self::getAdminsAndManagers($db, $tenantId, $payload['team_id'] ?? null);
                 }
-                $bulkLink = $isBulk && !empty($payload['ref_id']) 
-                    ? "/approvals?open_id=" . $payload['ref_id'] . "&open_type=attendance_bulk" 
-                    : "/attendance?view=calendar&date=" . $today;
+                $attRefId = $payload['ref_id'] ?? $payload['id'] ?? '';
+                if ($isBulk && !empty($attRefId)) {
+                    $bulkLink = "/approvals?tab=attendance&open_id=" . $attRefId . "&open_type=attendance_bulk";
+                } elseif (!empty($attRefId)) {
+                    $bulkLink = "/approvals?tab=attendance&open_id=" . $attRefId . "&open_type=checkin";
+                } else {
+                    $bulkLink = "/approvals?tab=attendance";
+                }
 
                 if ($isSingleDay) {
                     $title = "Phiếu giải trình cập nhật công - NV $userName";
@@ -909,7 +931,7 @@ class NotificationService {
                 $hasCost = $amt > 0;
                 $amountText = $hasCost ? number_format($amt, 0, ',', '.') . 'đ' : '';
                 $costSuffix = $hasCost ? " (" . $amountText . ")" : "";
-                $refId = $payload['ref_id'] ?? $payload['id'] ?? '';
+                $refId = $payload['ref_id'] ?? $payload['expense_id'] ?? $payload['id'] ?? '';
                 $procCode = !empty($payload['code']) ? $payload['code'] : (!empty($refId) ? "#EXP-" . $refId : '');
                 $codePrefix = !empty($procCode) ? "[$procCode] " : "";
 
@@ -918,7 +940,7 @@ class NotificationService {
                     'title' => "{$codePrefix}Yêu cầu phê duyệt chi phí / đề xuất" . $costSuffix,
                     'body' => "{$codePrefix}Nhân viên " . $userName . " vừa gửi đề xuất: " . $titleText . $costSuffix,
                     'type' => "expense",
-                    'link' => "/approvals?open_id=" . $refId . "&open_type=expense",
+                    'link' => "/approvals?tab=expenses&open_id=" . $refId . "&open_type=expense",
                     'zalo_msg' => "📋 [ YÊU CẦU PHÊ DUYỆT ĐỀ XUẤT ]\n\n"
                         . (!empty($procCode) ? "  • Mã quy trình: $procCode\n" : "")
                         . "Nhân viên $userName vừa tạo đề xuất mới:\n"
@@ -957,7 +979,7 @@ class NotificationService {
                 $hasCost = $amt > 0;
                 $amountText = $hasCost ? number_format($amt, 0, ',', '.') . 'đ' : '';
                 $costSuffix = $hasCost ? " (" . $amountText . ")" : "";
-                $refId = $payload['ref_id'] ?? $payload['id'] ?? '';
+                $refId = $payload['ref_id'] ?? $payload['expense_id'] ?? $payload['id'] ?? '';
                 $procCode = !empty($payload['code']) ? $payload['code'] : (!empty($refId) ? "#EXP-" . $refId : '');
                 $codePrefix = !empty($procCode) ? "[$procCode] " : "";
 
@@ -966,7 +988,7 @@ class NotificationService {
                     'title' => "{$codePrefix}Bạn được thêm vào người liên quan đề xuất" . $costSuffix,
                     'body' => "{$codePrefix}Nhân viên " . $userName . " đã thêm bạn là người liên quan trong đề xuất: " . $titleText . $costSuffix,
                     'type' => "expense",
-                    'link' => "/approvals?open_id=" . $refId . "&open_type=expense",
+                    'link' => "/approvals?tab=expenses&open_id=" . $refId . "&open_type=expense",
                     'zalo_msg' => "📋 [ NGƯỜI LIÊN QUAN ĐỀ XUẤT ]\n\n"
                         . (!empty($procCode) ? "  • Mã quy trình: $procCode\n" : "")
                         . "Nhân viên $userName đã thêm bạn là người liên quan trong đề xuất:\n"
@@ -993,7 +1015,8 @@ class NotificationService {
 
             case 'EXPENSE_APPROVED':
             case 'EXPENSE_REJECTED':
-                $isApproved = ($eventType === 'EXPENSE_APPROVED');
+            case 'EXPENSE_APPROVAL':
+                $isApproved = ($eventType === 'EXPENSE_APPROVED' || (($payload['status'] ?? '') === 'approved'));
                 $targetUserId = (int)($payload['target_user_id'] ?? $payload['user_id'] ?? 0);
                 $recipients = [];
                 if ($targetUserId > 0) {
@@ -1014,7 +1037,7 @@ class NotificationService {
                 $statusTextLower = $isApproved ? ($isComplete ? 'phê duyệt hoàn tất (đủ các cấp)' : "phê duyệt Cấp $currentLvl") : "từ chối" . ($currentLvl > 0 ? " ở Cấp $currentLvl" : "");
                 $rejectReason = $payload['reject_reason'] ?? $payload['reason'] ?? '';
                 $approverName = !empty($payload['approver_name']) ? trim($payload['approver_name']) : 'Người phê duyệt';
-                $refId = $payload['ref_id'] ?? $payload['id'] ?? '';
+                $refId = $payload['ref_id'] ?? $payload['expense_id'] ?? $payload['id'] ?? '';
                 $procCode = !empty($payload['code']) ? $payload['code'] : (!empty($refId) ? "#EXP-" . $refId : '');
                 $codePrefix = !empty($procCode) ? "[$procCode] " : "";
 
@@ -1033,7 +1056,7 @@ class NotificationService {
                     'title' => $notifTitle,
                     'body' => $notifBody,
                     'type' => "expense",
-                    'link' => "/approvals?open_id=" . $refId . "&open_type=expense",
+                    'link' => "/approvals?tab=my_requests&open_id=" . $refId . "&open_type=expense",
                     'zalo_msg' => ($isApproved ? "✅" : "❌") . " [ ĐỀ XUẤT $statusText ]\n\n"
                         . (!empty($procCode) ? "  • Mã quy trình: $procCode\n" : "")
                         . "$approverName đã $statusTextLower đề xuất của bạn:\n"
@@ -1060,7 +1083,7 @@ class NotificationService {
 
             case 'TICKET_NEW':
                 $recipients = self::getAdminsAndManagers($db, $tenantId);
-                $ticketId = $payload['ticket_id'] ?? '0';
+                $ticketId = $payload['ticket_id'] ?? $payload['id'] ?? $payload['ref_id'] ?? '0';
                 $subjectText = $payload['subject'] ?? 'Hỗ trợ';
                 $priorityText = $payload['priority'] ?? 'medium';
                 return [
@@ -1068,7 +1091,7 @@ class NotificationService {
                     'title' => "Yêu cầu hỗ trợ mới (Ticket #$ticketId)",
                     'body' => "Có yêu cầu hỗ trợ mới từ $userName: $subjectText",
                     'type' => "ticket_assignment",
-                    'link' => !empty($payload['ticket_id']) ? '/tickets?id=' . $payload['ticket_id'] : '/tickets',
+                    'link' => !empty($ticketId) ? '/support-tickets?id=' . $ticketId : '/support-tickets',
                     'zalo_msg' => "🎫 [ TICKET HỖ TRỢ MỚI ]\n\n"
                         . "Có yêu cầu hỗ trợ mới từ $userName:\n"
                         . "  • Ticket: #$ticketId\n"
@@ -1098,13 +1121,13 @@ class NotificationService {
                     $submitterId = (int)($payload['user_id'] ?? 0);
                     $recipients = self::getApproversForEvent($db, $tenantId, 'cooperation', $submitterId);
                 }
-                $slipId = $payload['slip_id'] ?? '0';
+                $slipId = $payload['slip_id'] ?? $payload['id'] ?? $payload['ref_id'] ?? '0';
                 return [
                     'recipients' => $recipients,
                     'title' => "Yêu cầu phê duyệt phiếu hợp tác",
                     'body' => "Phiếu hợp tác #" . $slipId . " đã thu thập đủ chữ ký và đang chờ phê duyệt",
                     'type' => "cooperation",
-                    'link' => !empty($payload['slip_id']) ? '/cooperations?id=' . $payload['slip_id'] : '/cooperations',
+                    'link' => !empty($slipId) ? '/cooperation-slips?id=' . $slipId : '/cooperation-slips',
                     'zalo_msg' => "✍️ [ YÊU CẦU PHÊ DUYỆT PHIẾU HỢP TÁC ]\n\n"
                         . "Phiếu hợp tác chia sẻ hoa hồng #$slipId đã thu thập đầy đủ chữ ký của các thành viên.\n"
                         . "  • Mã phiếu: #$slipId\n"
@@ -1129,7 +1152,7 @@ class NotificationService {
                     $submitterId = (int)($payload['user_id'] ?? 0);
                     $recipients = self::getApproversForEvent($db, $tenantId, 'deposit', $submitterId);
                 }
-                $depId = $payload['deposit_id'] ?? '0';
+                $depId = $payload['deposit_id'] ?? $payload['id'] ?? '0';
                 $customerName = $payload['customer_name'] ?? 'Khách hàng';
                 $depAmount = number_format((float)($payload['amount'] ?? 0), 0, ',', '.') . 'đ';
                 return [
@@ -1137,7 +1160,7 @@ class NotificationService {
                     'title' => "Yêu cầu duyệt Sale Order mới",
                     'body' => "Nhân viên " . $userName . " vừa tạo Sale Order cho khách hàng " . $customerName . " (" . $depAmount . ")",
                     'type' => "deposit",
-                    'link' => !empty($payload['deposit_id']) ? '/deposits?open_id=' . $payload['deposit_id'] : '/deposits',
+                    'link' => !empty($depId) ? '/deposits?open_id=' . $depId : '/deposits',
                     'zalo_msg' => "🏠 [ YÊU CẦU DUYỆT SALE ORDER MỚI ]\n\n"
                         . "Nhân viên $userName vừa tạo yêu cầu Sale Order mới:\n"
                         . "  • Mã Sale Order: #$depId\n"
@@ -1162,13 +1185,13 @@ class NotificationService {
                 $recipients = self::getRecipientById($db, $payload['user_id'] ?? 0);
                 $customerName = $payload['customer_name'] ?? 'Khách hàng';
                 $statusText = $payload['status_text'] ?? 'được cập nhật';
-                $depId = $payload['deposit_id'] ?? '0';
+                $depId = $payload['deposit_id'] ?? $payload['id'] ?? '0';
                 return [
                     'recipients' => $recipients,
                     'title' => "Cập nhật Sale Order #$depId",
                     'body' => "Sale Order cho khách hàng $customerName đã $statusText",
                     'type' => "deposit",
-                    'link' => !empty($payload['deposit_id']) ? '/deposits?open_id=' . $payload['deposit_id'] : '/deposits',
+                    'link' => !empty($depId) ? '/deposits?open_id=' . $depId : '/deposits',
                     'zalo_msg' => "💳 [ CẬP NHẬT SALE ORDER ]\n\n"
                         . "Sale Order #$depId (KH $customerName) đã $statusText.\n"
                         . (!empty($reason) ? "  • Ghi chú: \"$reason\"\n" : "")
@@ -1229,8 +1252,8 @@ class NotificationService {
                 } else {
                     $recipients = self::getAdminsAndManagers($db, $tenantId);
                 }
-                $soId = $payload['so_id'] ?? '0';
-                $soNumber = $payload['so_number'] ?? "#SO-$soId";
+                $soId = (int)($payload['so_id'] ?? $payload['id'] ?? $payload['ref_id'] ?? 0);
+                $soNumber = $payload['so_number'] ?? $payload['order_number'] ?? "#SO-$soId";
                 $creatorName = $payload['creator_name'] ?? $userName;
                 $soTotal = !empty($payload['total']) ? number_format((float)$payload['total'], 0, ',', '.') . 'đ' : '';
                 return [
@@ -1238,7 +1261,7 @@ class NotificationService {
                     'title' => "Đơn bán hàng mới cần duyệt ($soNumber)",
                     'body' => "Nhân viên $creatorName vừa tạo Đơn bán hàng $soNumber" . ($soTotal ? " ($soTotal)" : "") . " đang chờ phê duyệt",
                     'type' => "sales_order",
-                    'link' => "/sales-orders",
+                    'link' => $soId > 0 ? "/sales-orders?open_id=" . $soId : "/sales-orders",
                     'zalo_msg' => "📦 [ ĐƠN BÁN HÀNG CHỜ PHÊ DUYỆT ]\n\n"
                         . "Nhân viên $creatorName vừa tạo đơn bán hàng:\n"
                         . "  • Mã SO: $soNumber\n"
@@ -1264,8 +1287,8 @@ class NotificationService {
                 $isApproved = ($eventType === 'SO_APPROVED');
                 $targetUserId = (int)($payload['target_user_id'] ?? $payload['creator_id'] ?? 0);
                 $recipients = $targetUserId > 0 ? self::getRecipientById($db, $targetUserId) : [];
-                $soId = $payload['so_id'] ?? '0';
-                $soNumber = $payload['so_number'] ?? "#SO-$soId";
+                $soId = (int)($payload['so_id'] ?? $payload['id'] ?? $payload['ref_id'] ?? 0);
+                $soNumber = $payload['so_number'] ?? $payload['order_number'] ?? "#SO-$soId";
                 $approverName = $payload['approver_name'] ?? 'Quản lý';
                 $soReason = $payload['reason'] ?? '';
                 $statusWord = $isApproved ? 'phê duyệt' : 'từ chối';
@@ -1275,7 +1298,7 @@ class NotificationService {
                     'title' => "Đơn bán hàng $soNumber đã được $statusWord",
                     'body' => "$approverName đã $statusWord Đơn bán hàng $soNumber của bạn" . (!$isApproved && !empty($soReason) ? ". Lý do: $soReason" : ""),
                     'type' => "sales_order",
-                    'link' => "/sales-orders",
+                    'link' => $soId > 0 ? "/sales-orders?open_id=" . $soId : "/sales-orders",
                     'zalo_msg' => "$statusIcon [ ĐƠN BÁN HÀNG " . ($isApproved ? "ĐÃ PHÊ DUYỆT" : "BỊ TỪ CHỐI") . " ]\n\n"
                         . "$approverName đã $statusWord đơn bán hàng của bạn:\n"
                         . "  • Mã SO: $soNumber\n"
@@ -1447,7 +1470,7 @@ class NotificationService {
                         'title' => "✍️ Yêu cầu ký xác nhận Phiếu hợp tác",
                         'body' => "Bạn nhận được yêu cầu ký xác nhận Phiếu hợp tác #$slipId cho khách hàng $custName.",
                         'type' => "cooperation",
-                        'link' => !empty($payload['link']) ? $payload['link'] : "/cooperations?id=" . $slipId,
+                        'link' => !empty($payload['link']) ? $payload['link'] : "/cooperation-slips?id=" . $slipId,
                         'zalo_msg' => "✍️ [ YÊU CẦU KÝ XÁC NHẬN PHIẾU HỢP TÁC ]\n\n"
                             . "Một phiếu hợp tác chia sẻ hoa hồng mới (#$slipId) đã được tạo cho khách hàng: $custName.\n"
                             . "Vui lòng truy cập CRM để xem chi tiết và ký xác nhận.",
@@ -1832,6 +1855,7 @@ class NotificationService {
                 ];
 
             case 'HRM_LEAVE_REQUEST':
+            case 'HRM_OVERTIME_REQUEST':
                 $targetApproverId = (int)($payload['approver_id'] ?? $payload['target_user_id'] ?? 0);
                 if ($targetApproverId === 0 && !empty($payload['user_id']) && !empty($payload['submitter_id']) && (int)$payload['user_id'] !== (int)$payload['submitter_id']) {
                     $targetApproverId = (int)$payload['user_id'];
@@ -1842,7 +1866,7 @@ class NotificationService {
                     $submitterId = (int)($payload['submitter_id'] ?? $payload['user_id'] ?? 0);
                     $recipients = self::getApproversForEvent($db, $tenantId, 'leave', $submitterId);
                 }
-                $leaveType = $payload['leave_type_text'] ?? 'Nghỉ phép';
+                $leaveType = $payload['leave_type_text'] ?? ($eventType === 'HRM_OVERTIME_REQUEST' ? 'Tăng ca' : 'Nghỉ phép');
                 $leaveDays = $payload['total_days'] ?? 1;
                 $leavePeriod = ($payload['start_date'] ?? '') . ' -> ' . ($payload['end_date'] ?? '');
 
@@ -1852,9 +1876,10 @@ class NotificationService {
                 $cleanReason = trim($cleanReason);
                 $reasonDisplay = $cleanReason !== '' ? $cleanReason : 'Không có';
                 
-                $isWFH = strpos(mb_strtolower($leaveType), 'làm việc từ xa') !== false || strpos(mb_strtolower($leaveType), 'remote') !== false;
-                $isOT = strpos(mb_strtolower($leaveType), 'tăng ca') !== false || strpos(mb_strtolower($leaveType), 'overtime') !== false;
-                $isLateEarly = strpos(mb_strtolower($leaveType), 'đi trễ') !== false || strpos(mb_strtolower($leaveType), 'về sớm') !== false;
+                $leaveTypeLower = function_exists('mb_strtolower') ? mb_strtolower($leaveType, 'UTF-8') : strtolower($leaveType);
+                $isWFH = strpos($leaveTypeLower, 'làm việc từ xa') !== false || strpos($leaveTypeLower, 'remote') !== false;
+                $isOT = $eventType === 'HRM_OVERTIME_REQUEST' || strpos($leaveTypeLower, 'tăng ca') !== false || strpos($leaveTypeLower, 'overtime') !== false;
+                $isLateEarly = strpos($leaveTypeLower, 'đi trễ') !== false || strpos($leaveTypeLower, 'về sớm') !== false;
                 
                 $actionName = $isWFH ? "đăng ký Làm việc từ xa (WFH)" : ($isOT ? "đăng ký Tăng ca (OT)" : ($isLateEarly ? "đăng ký Đi trễ/Về sớm" : "đơn xin nghỉ $leaveType"));
                 $headerTitle = $isWFH ? "ĐĂNG KÝ LÀM VIỆC TỪ XA" : ($isOT ? "ĐĂNG KÝ TĂNG CA" : ($isLateEarly ? "ĐĂNG KÝ ĐI TRỄ/VỀ SỚM" : "YÊU CẦU DUYỆT NGHỈ PHÉP"));
@@ -1862,13 +1887,14 @@ class NotificationService {
                 $refId = $payload['ref_id'] ?? $payload['id'] ?? '';
                 $procCode = !empty($payload['code']) ? $payload['code'] : (!empty($refId) ? "#LV-" . $refId : '');
                 $codePrefix = !empty($procCode) ? "[$procCode] " : "";
+                $targetTab = $isOT ? 'overtime' : 'leave';
 
                 return [
                     'recipients' => $recipients,
                     'title' => "{$codePrefix}Yêu cầu phê duyệt ($leaveType)",
                     'body' => "{$codePrefix}Nhân viên $userName vừa gửi $actionName từ $leavePeriod ($leaveDays ngày/giờ). Lý do: \"$reasonDisplay\"",
                     'type' => "leave",
-                    'link' => "/approvals?open_id=" . $refId . "&open_type=leave",
+                    'link' => "/approvals?tab={$targetTab}&open_id=" . $refId . "&open_type=leave",
                     'zalo_msg' => "$icon [ $headerTitle MỚI ]\n\n"
                         . (!empty($procCode) ? "  • Mã quy trình: $procCode\n" : "")
                         . "Nhân viên: $userName\n"
@@ -1889,15 +1915,17 @@ class NotificationService {
                 ];
 
             case 'HRM_LEAVE_APPROVAL':
+            case 'HRM_OVERTIME_STATUS':
                 $recipients = self::getRecipientById($db, $payload['user_id'] ?? 0);
-                $leaveType = $payload['leave_type_text'] ?? 'Nghỉ phép';
+                $leaveType = $payload['leave_type_text'] ?? ($eventType === 'HRM_OVERTIME_STATUS' ? 'Tăng ca' : 'Nghỉ phép');
                 $statusText = $payload['status_text'] ?? 'được cập nhật';
                 $leavePeriod = ($payload['start_date'] ?? '') . ' -> ' . ($payload['end_date'] ?? '');
                 $approverName = !empty($payload['approver_name']) ? trim($payload['approver_name']) : 'Người phê duyệt';
                 
-                $isWFH = strpos(mb_strtolower($leaveType), 'làm việc từ xa') !== false || strpos(mb_strtolower($leaveType), 'remote') !== false;
-                $isOT = strpos(mb_strtolower($leaveType), 'tăng ca') !== false || strpos(mb_strtolower($leaveType), 'overtime') !== false;
-                $isLateEarly = strpos(mb_strtolower($leaveType), 'đi trễ') !== false || strpos(mb_strtolower($leaveType), 'về sớm') !== false;
+                $leaveTypeLower = function_exists('mb_strtolower') ? mb_strtolower($leaveType, 'UTF-8') : strtolower($leaveType);
+                $isWFH = strpos($leaveTypeLower, 'làm việc từ xa') !== false || strpos($leaveTypeLower, 'remote') !== false;
+                $isOT = $eventType === 'HRM_OVERTIME_STATUS' || strpos($leaveTypeLower, 'tăng ca') !== false || strpos($leaveTypeLower, 'overtime') !== false;
+                $isLateEarly = strpos($leaveTypeLower, 'đi trễ') !== false || strpos($leaveTypeLower, 'về sớm') !== false;
                 $isLeave = !$isWFH && !$isOT && !$isLateEarly;
                 
                 $actionName = $isWFH ? "Đăng ký Làm việc từ xa (WFH)" : ($isOT ? "Đăng ký Tăng ca (OT)" : ($isLateEarly ? "Đăng ký Đi trễ/Về sớm" : "Đơn xin nghỉ $leaveType"));
@@ -1920,7 +1948,7 @@ class NotificationService {
                     'title' => "{$codePrefix}Kết quả duyệt: $leaveType",
                     'body' => "{$codePrefix}$approverName đã $statusText $actionName ($leavePeriod) của bạn." . (!empty($reason) ? " Ghi chú: \"$reason\"" : "") . $balanceStr,
                     'type' => "leave",
-                    'link' => "/approvals?open_id=" . $refId . "&open_type=leave&open_status=" . ($payload['status'] ?? ''),
+                    'link' => "/approvals?tab=my_requests&open_id=" . $refId . "&open_type=leave&open_status=" . ($payload['status'] ?? ''),
                     'zalo_msg' => "$icon [ $headerTitle ]\n\n"
                         . (!empty($procCode) ? "  • Mã quy trình: $procCode\n" : "")
                         . "$approverName đã $statusText $actionName ($leavePeriod) của bạn.\n"
@@ -1959,7 +1987,7 @@ class NotificationService {
                     'title' => "{$codePrefix}Yêu cầu tạm ứng lương mới",
                     'body' => "{$codePrefix}Nhân viên $userName đề xuất tạm ứng số tiền $amountText. Lý do: \"$reason\"",
                     'type' => "expense",
-                    'link' => "/approvals?open_id=" . $refId . "&open_type=advance",
+                    'link' => "/approvals?tab=advance&open_id=" . $refId . "&open_type=advance",
                     'zalo_msg' => "💸 [ YÊU CẦU TẠM ỨNG LƯƠNG MỚI ]\n\n"
                         . (!empty($procCode) ? "  • Mã quy trình: $procCode\n" : "")
                         . "Nhân viên: $userName\n"
@@ -1980,6 +2008,7 @@ class NotificationService {
                 ];
 
             case 'HRM_ADVANCE_APPROVAL':
+            case 'HRM_ADVANCE_STATUS':
                 $recipients = self::getRecipientById($db, $payload['user_id'] ?? 0);
                 $amountText = number_format((float)($payload['amount'] ?? 0), 0, ',', '.') . 'đ';
                 $statusText = $payload['status_text'] ?? 'được cập nhật';
@@ -1995,7 +2024,7 @@ class NotificationService {
                     'title' => "{$codePrefix}Kết quả duyệt tạm ứng lương",
                     'body' => "{$codePrefix}$approverName đã $statusText đề xuất tạm ứng $amountText của bạn." . (!empty($reason) ? " Ghi chú: \"$reason\"" : ""),
                     'type' => "expense",
-                    'link' => "/approvals?open_id=" . $refId . "&open_type=advance&open_status=" . ($payload['status'] ?? ''),
+                    'link' => "/approvals?tab=my_requests&open_id=" . $refId . "&open_type=advance&open_status=" . ($payload['status'] ?? ''),
                     'zalo_msg' => "$icon [ KẾT QUẢ DUYỆT TẠM ỨNG LƯƠNG ]\n\n"
                         . (!empty($procCode) ? "  • Mã quy trình: $procCode\n" : "")
                         . "$approverName đã $statusText đề xuất tạm ứng $amountText của bạn.\n"
@@ -2285,7 +2314,7 @@ class NotificationService {
                     'title' => "[$procCode] " . ($isApproved ? "Phiếu hợp tác $procCode đã được duyệt" : "Phiếu hợp tác $procCode bị từ chối"),
                     'body' => "[$procCode] $approverName đã $statusText Phiếu hợp tác $procCode của bạn." . (!empty($reason) ? " Lý do: \"$reason\"" : ""),
                     'type' => "approval",
-                    'link' => $slipId > 0 ? "/cooperations?id=" . $slipId : "/cooperations",
+                    'link' => $slipId > 0 ? "/cooperation-slips?id=" . $slipId : "/cooperation-slips",
                     'zalo_msg' => "$icon [ PHIẾU HỢP TÁC $procCode ]\n\n  • Mã quy trình: $procCode\n$approverName đã $statusText Phiếu hợp tác $procCode.\n" . (!empty($reason) ? "Lý do: \"$reason\"\n" : ""),
                     'tg_msg' => "$icon <b>[ PHIẾU HỢP TÁC <code>$procCode</code> ]</b>\n\n  • Mã quy trình: <code>$procCode</code>\n<b>$approverName</b> đã <b>$statusText</b> Phiếu hợp tác $procCode.\n" . (!empty($reason) ? "Lý do: <i>\"" . htmlspecialchars($reason) . "\"</i>\n" : ""),
                     'email_subject' => "[IDEAS] [$procCode] $approverName đã $statusText Phiếu hợp tác $procCode",
@@ -2440,12 +2469,12 @@ class NotificationService {
                                 if (is_numeric(trim($cid))) $leaderIds[] = (int)trim($cid);
                             }
                         }
-                        $leaderIds = array_unique(array_filter($leaderIds));
+                        $leaderIds = array_values(array_unique(array_filter($leaderIds)));
                         
                         if (!empty($leaderIds)) {
                             $inPlace = implode(',', array_fill(0, count($leaderIds), '?'));
                             $stmtL = $db->prepare("SELECT id, email, zalo_chat_id, telegram_chat_id, full_name FROM users WHERE id IN ($inPlace) AND is_active = 1");
-                            $stmtL->execute(array_values($leaderIds));
+                            $stmtL->execute($leaderIds);
                             $teamApprovers = $stmtL->fetchAll(PDO::FETCH_ASSOC) ?: [];
                             if (!empty($teamApprovers)) {
                                 return $teamApprovers;

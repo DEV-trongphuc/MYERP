@@ -1056,6 +1056,7 @@ const Flows: React.FC = () => {
     const [prefillFlowName, setPrefillFlowName] = useState<string | undefined>();
 
     useEffect(() => {
+        if (!location.pathname.startsWith('/marketing/flows')) return;
         // Handle HashRouter query params (e.g. #/flows?action=create)
         let searchPart = location.search;
         if (!searchPart && location.hash.includes('?')) {
@@ -1104,7 +1105,7 @@ const Flows: React.FC = () => {
                 navigate('/marketing/flows', { replace: true, state: {} });
             }
         }
-    }, [location.search, location.hash, location.state]); // More specific dependencies
+    }, [location.pathname, location.search, location.hash, location.state]); // More specific dependencies
 
 
     const filteredFlows = useMemo(() => {

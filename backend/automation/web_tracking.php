@@ -54,7 +54,7 @@ if ($method === 'GET' && $action === 'visitor_journey' && !empty($_GET['visitor_
             $merged = [];
             try {
                 $stmtAct = $pdo->prepare("
-                    SELECT zsa.activity_type, zsa.title, zsa.description, zsa.created_at
+                    SELECT zsa.*
                     FROM zalo_subscriber_activity zsa
                     INNER JOIN zalo_subscribers zs ON zs.id = zsa.subscriber_id
                     WHERE zs.zalo_user_id = ?
@@ -63,11 +63,11 @@ if ($method === 'GET' && $action === 'visitor_journey' && !empty($_GET['visitor_
                 $stmtAct->execute([$zaloUid]);
                 foreach ($stmtAct->fetchAll(PDO::FETCH_ASSOC) as $act) {
                     $merged[] = [
-                        'type' => $act['activity_type'] ?: 'event',
-                        'title' => $act['title'] ?: 'Hoạt động Zalo',
+                        'type' => ($act['activity_type'] ?? ($act['type'] ?? '')) ?: 'event',
+                        'title' => ($act['title'] ?? ($act['reference_name'] ?? '')) ?: 'Hoạt động Zalo',
                         'url' => '',
-                        'details' => $act['description'] ?? '',
-                        'time' => $act['created_at'],
+                        'details' => $act['description'] ?? ($act['details'] ?? ''),
+                        'time' => $act['created_at'] ?? null,
                     ];
                 }
             } catch (Exception $e) {
@@ -356,7 +356,7 @@ if ($method === 'GET' && $action === 'stats') {
 
         // --- SELF-HEALING SCHEMA (Guarded Once) ---
         $hasEntranceCol = true;
-        if (function_exists('domationEnsureSchemaOnce')) {
+        if (function_exists('domationEnsureSchemaOnce') && !$pdo->inTransaction()) {
             domationEnsureSchemaOnce('web_page_views_schema_v2', function () use ($pdo) {
                 $checkCols = $pdo->query("SHOW COLUMNS FROM web_page_views LIKE 'is_entrance'");
                 if ($checkCols && $checkCols->rowCount() === 0) {
@@ -730,7 +730,7 @@ if ($method === 'GET' && $action === 'visitors') {
                 $timeline = [];
                 try {
                     $stmtAct = $pdo->prepare("
-                        SELECT zsa.id, zsa.activity_type, zsa.title, zsa.description, zsa.created_at
+                        SELECT zsa.*
                         FROM zalo_subscriber_activity zsa
                         INNER JOIN zalo_subscribers zs ON zs.id = zsa.subscriber_id
                         WHERE zs.zalo_user_id = ?
@@ -739,14 +739,14 @@ if ($method === 'GET' && $action === 'visitors') {
                     $stmtAct->execute([$zaloUid]);
                     foreach ($stmtAct->fetchAll(PDO::FETCH_ASSOC) as $act) {
                         $timeline[] = [
-                            'type' => $act['activity_type'] ?: 'event',
-                            'id' => $act['id'],
+                            'type' => ($act['activity_type'] ?? ($act['type'] ?? '')) ?: 'event',
+                            'id' => $act['id'] ?? null,
                             'url_hash' => null,
                             'url' => '',
-                            'target' => $act['title'] ?: 'Hoạt động Zalo',
-                            'page_title' => $act['description'] ?? '',
+                            'target' => ($act['title'] ?? ($act['reference_name'] ?? '')) ?: 'Hoạt động Zalo',
+                            'page_title' => $act['description'] ?? ($act['details'] ?? ''),
                             'meta' => null,
-                            'time' => $act['created_at'],
+                            'time' => $act['created_at'] ?? null,
                         ];
                     }
                 } catch (Exception $e) {

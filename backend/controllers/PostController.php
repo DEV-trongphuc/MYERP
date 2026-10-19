@@ -10,7 +10,7 @@ class PostController {
 
     private function ensureAudienceColumnsExist(): void {
         static $checked = false;
-        if ($checked) return;
+        if ($checked || $this->db->inTransaction()) return;
         try {
             $cols = $this->db->query("SHOW COLUMNS FROM `enterprise_posts` LIKE 'target_user_ids'")->fetchAll();
             if (empty($cols)) {
@@ -556,7 +556,7 @@ class PostController {
         unset($post['attachments_json'], $post['tags_json'], $post['link_metadata_json']);
 
         // Hydrate target and excluded user entities
-        $allUids = array_unique(array_merge($targetUids, $excludedUids));
+        $allUids = array_values(array_unique(array_merge($targetUids, $excludedUids)));
         $post['target_users'] = [];
         $post['excluded_users'] = [];
         if (!empty($allUids)) {
@@ -906,6 +906,10 @@ class PostController {
         $comment = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$comment) {
+            if (class_exists('HRMController')) {
+                (new HRMController($this->db))->deleteHrmComment($auth, $id);
+                return;
+            }
             respond(404, null, 'Bình luận không tồn tại', false);
         }
 

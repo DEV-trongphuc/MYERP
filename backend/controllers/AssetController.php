@@ -3,9 +3,22 @@
 
 class AssetController {
     private PDO $db;
+    private static bool $schemaChecked = false;
 
     public function __construct(PDO $db) {
         $this->db = $db;
+        if (!self::$schemaChecked && !$this->db->inTransaction()) {
+            self::$schemaChecked = true;
+            try {
+                $tbl = $this->db->query("SHOW TABLES LIKE 'company_assets'")->fetchAll();
+                if (!empty($tbl)) {
+                    $col = $this->db->query("SHOW COLUMNS FROM company_assets LIKE 'tenant_id'")->fetchAll();
+                    if (empty($col)) {
+                        $this->db->exec("ALTER TABLE company_assets ADD COLUMN tenant_id INT NOT NULL DEFAULT 1 AFTER id");
+                    }
+                }
+            } catch (\Throwable $e) {}
+        }
     }
 
     public function index(array $auth): void {
@@ -63,11 +76,11 @@ class AssetController {
         $tid = (int)($auth['tenant_id'] ?? 0);
         $body = getBody();
         $name = trim($body['asset_name'] ?? $body['name'] ?? 'Thiết bị làm việc');
-        $code = trim($body['asset_code'] ?? $body['code'] ?? 'TS-' . time());
+        $code = trim($body['asset_code'] ?? $body['code'] ?? $body['serial_number'] ?? 'TS-' . time());
         $status = trim($body['status'] ?? 'assigned');
         $givenDate = !empty($body['given_date']) ? $body['given_date'] : date('Y-m-d');
         $userId = (int)($body['user_id'] ?? $body['employee_id'] ?? $auth['user_id']);
-        $note = trim($body['condition_note'] ?? $body['notes'] ?? '');
+        $note = trim($body['condition_note'] ?? $body['notes'] ?? $body['note'] ?? '');
 
         // Verify target employee belongs to current tenant
         $stmtUser = $this->db->prepare("SELECT id FROM users WHERE id = ? AND tenant_id = ?");
@@ -102,17 +115,17 @@ class AssetController {
             $updates[] = "asset_name = ?";
             $params[] = trim($body['asset_name'] ?? $body['name']);
         }
-        if (isset($body['asset_code']) || isset($body['code'])) {
+        if (isset($body['asset_code']) || isset($body['code']) || isset($body['serial_number'])) {
             $updates[] = "asset_code = ?";
-            $params[] = trim($body['asset_code'] ?? $body['code']);
+            $params[] = trim($body['asset_code'] ?? $body['code'] ?? $body['serial_number']);
         }
         if (isset($body['status'])) {
             $updates[] = "status = ?";
             $params[] = trim($body['status']);
         }
-        if (isset($body['condition_note']) || isset($body['notes'])) {
+        if (isset($body['condition_note']) || isset($body['notes']) || isset($body['note'])) {
             $updates[] = "condition_note = ?";
-            $params[] = trim($body['condition_note'] ?? $body['notes']);
+            $params[] = trim($body['condition_note'] ?? $body['notes'] ?? $body['note']);
         }
         if (isset($body['user_id']) || isset($body['employee_id'])) {
             $newUid = (int)($body['user_id'] ?? $body['employee_id']);
@@ -123,6 +136,10 @@ class AssetController {
             }
             $updates[] = "user_id = ?";
             $params[] = $newUid;
+        }
+        if (empty($updates) && (isset($body['price']) || isset($body['purchase_price']) || isset($body['value']))) {
+            $updates[] = "condition_note = ?";
+            $params[] = trim(($asset['condition_note'] ?? '') . ' [Giá trị: ' . ($body['price'] ?? $body['purchase_price'] ?? $body['value']) . ']');
         }
 
         if (empty($updates)) respond(422, null, 'Không có thông tin cần cập nhật', false);

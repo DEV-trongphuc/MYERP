@@ -95,8 +95,9 @@ export const CrmSendTemplateEmailModal: React.FC<CrmSendTemplateEmailModalProps>
   onClose,
   contacts,
   onSuccess,
-  zIndex = 2200,
+  zIndex = 2147483645,
 }) => {
+  const effectiveZIndex = Math.min(Math.max(zIndex || 2147483645, 2147483640), 2147483646);
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
   const currentUserId = Number(currentUser?.id || 0);
@@ -130,8 +131,8 @@ export const CrmSendTemplateEmailModal: React.FC<CrmSendTemplateEmailModalProps>
   // ESC overlay support
   useEffect(() => {
     if (!isOpen) return;
-    return pushOverlay('crm-send-template-email-modal', onClose, 180);
-  }, [isOpen, onClose]);
+    return pushOverlay('crm-send-template-email-modal', onClose, effectiveZIndex);
+  }, [isOpen, onClose, effectiveZIndex]);
 
   // Close tag dropdowns on click outside
   useEffect(() => {
@@ -152,7 +153,8 @@ export const CrmSendTemplateEmailModal: React.FC<CrmSendTemplateEmailModalProps>
   useEffect(() => {
     if (!isOpen) return;
     refreshSettings?.();
-    const defaultSender = currentUser?.full_name || currentUser?.name || defaultAppSenderName || 'Viện Quốc Tế IDEAS';
+    const normalizedAppSender = defaultAppSenderName === 'Viện Quốc Tế IDEAS' ? 'IDEAS' : defaultAppSenderName;
+    const defaultSender = normalizedAppSender || currentUser?.full_name || currentUser?.name || 'IDEAS';
     setSenderName(defaultSender);
     setSenderEmail((prev) => prev || verifiedSenders[0] || 'tuyensinh@ideas.edu.vn');
     setPreviewContactIdx(0);
@@ -444,9 +446,10 @@ export const CrmSendTemplateEmailModal: React.FC<CrmSendTemplateEmailModalProps>
   if (!isOpen) return null;
 
   return createPortal(
+    <div className="mkt-scope">
     <div
-      className="fixed inset-0 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs"
-      style={{ zIndex }}
+      className="modal-backdrop modal-above-drawer fixed inset-0 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-[6px]"
+      style={{ zIndex: effectiveZIndex, background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
       onClick={onClose}
     >
       <div
@@ -858,6 +861,7 @@ export const CrmSendTemplateEmailModal: React.FC<CrmSendTemplateEmailModalProps>
           </div>
         </div>
       </div>
+    </div>
     </div>,
     document.body
   );
@@ -870,8 +874,9 @@ export const CrmBulkMarketingModal: React.FC<CrmBulkMarketingModalProps> = ({
   contacts = [],
   initialMode = 'list',
   onSuccess,
-  zIndex = 2200,
+  zIndex = 2147483645,
 }) => {
+  const effectiveZIndex = Math.min(Math.max(zIndex || 2147483645, 2147483640), 2147483646);
   const [mode, setMode] = useState<'list' | 'flow'>(initialMode);
   const [lists, setLists] = useState<any[]>([]);
   const [flows, setFlows] = useState<any[]>([]);
@@ -896,8 +901,8 @@ export const CrmBulkMarketingModal: React.FC<CrmBulkMarketingModalProps> = ({
   // ESC overlay support
   useEffect(() => {
     if (!isOpen) return;
-    return pushOverlay('crm-bulk-marketing-modal', onClose, 180);
-  }, [isOpen, onClose]);
+    return pushOverlay('crm-bulk-marketing-modal', onClose, effectiveZIndex);
+  }, [isOpen, onClose, effectiveZIndex]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -1015,9 +1020,10 @@ export const CrmBulkMarketingModal: React.FC<CrmBulkMarketingModalProps> = ({
   if (!isOpen) return null;
 
   return createPortal(
+    <div className="mkt-scope">
     <div
-      className="fixed inset-0 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
-      style={{ zIndex }}
+      className="modal-backdrop modal-above-drawer fixed inset-0 flex items-center justify-center p-4 bg-black/60 backdrop-blur-[6px]"
+      style={{ zIndex: effectiveZIndex, background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
       onClick={onClose}
     >
       <div
@@ -1190,6 +1196,7 @@ export const CrmBulkMarketingModal: React.FC<CrmBulkMarketingModalProps> = ({
           </button>
         </div>
       </div>
+    </div>
     </div>,
     document.body
   );
@@ -1203,6 +1210,7 @@ export interface CrmFilterToStaticListModalProps {
   totalMatchingCount: number;
   activeFilterSummary?: string[];
   onSuccess?: (res: any) => void;
+  zIndex?: number;
 }
 
 export const CrmFilterToStaticListModal: React.FC<CrmFilterToStaticListModalProps> = ({
@@ -1212,8 +1220,10 @@ export const CrmFilterToStaticListModal: React.FC<CrmFilterToStaticListModalProp
   selectedContactIds = [],
   totalMatchingCount,
   activeFilterSummary = [],
-  onSuccess
+  onSuccess,
+  zIndex = 2147483645
 }) => {
+  const effectiveZIndex = Math.min(Math.max(zIndex || 2147483645, 2147483640), 2147483646);
   const navigate = useNavigate();
   const [scope, setScope] = useState<'all_filtered' | 'selected'>('all_filtered');
   const [destinationMode, setDestinationMode] = useState<'new' | 'existing'>('new');
@@ -1235,8 +1245,8 @@ export const CrmFilterToStaticListModal: React.FC<CrmFilterToStaticListModalProp
 
   useEffect(() => {
     if (!isOpen) return;
-    return pushOverlay('crm-filter-to-static-list-modal', onClose, 180);
-  }, [isOpen, onClose]);
+    return pushOverlay('crm-filter-to-static-list-modal', onClose, effectiveZIndex);
+  }, [isOpen, onClose, effectiveZIndex]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -1330,8 +1340,10 @@ export const CrmFilterToStaticListModal: React.FC<CrmFilterToStaticListModalProp
   };
 
   return createPortal(
+    <div className="mkt-scope">
     <div
-      className="fixed inset-0 z-[10500] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4"
+      className="modal-backdrop modal-above-drawer fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-[6px] p-4"
+      style={{ zIndex: effectiveZIndex, background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
       onClick={() => !isSubmitting && onClose()}
     >
       <div
@@ -1657,6 +1669,7 @@ export const CrmFilterToStaticListModal: React.FC<CrmFilterToStaticListModalProp
           )}
         </div>
       </div>
+    </div>
     </div>,
     document.body
   );

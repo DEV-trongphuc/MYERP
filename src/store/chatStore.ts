@@ -75,6 +75,26 @@ let isSyncDeltaInProgress = false;
 let lastSyncDeltaTime = 0;
 const markReadDebounceTimers: Record<number, any> = {};
 
+const AUTO_OPEN_MSG_ID_KEY = 'myerp_last_auto_open_msg_id';
+let lastAutoOpenedMsgId = (() => {
+  try {
+    return Number(sessionStorage.getItem(AUTO_OPEN_MSG_ID_KEY) || localStorage.getItem(AUTO_OPEN_MSG_ID_KEY) || 0);
+  } catch {
+    return 0;
+  }
+})();
+
+const recordAutoOpenedMsgId = (msgId: number) => {
+  const idNum = Number(msgId || 0);
+  if (idNum > lastAutoOpenedMsgId) {
+    lastAutoOpenedMsgId = idNum;
+    try {
+      sessionStorage.setItem(AUTO_OPEN_MSG_ID_KEY, String(lastAutoOpenedMsgId));
+      localStorage.setItem(AUTO_OPEN_MSG_ID_KEY, String(lastAutoOpenedMsgId));
+    } catch {}
+  }
+};
+
 const isMediaOrLinkMsg = (msg: any): boolean => {
   if (!msg) return false;
   if (['image', 'file'].includes(msg.message_type)) return true;
@@ -544,6 +564,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const current = get();
       if (current.isOpen && current.isMaximized && !current.activeConversationId && current.conversations.length > 0) {
         current.selectConversation(current.conversations[0].id);
+      } else if (!current.isOpen && Array.isArray(list) && list.length > 0) {
+        const maxMsgIdInList = list.reduce((max, c) => Math.max(max, Number(c.last_msg_id || 0)), 0);
+        const unreadNewConvs = list
+          .filter((c) => Number(c.unread_count || 0) > 0 && Number(c.last_msg_id || 0) > lastAutoOpenedMsgId)
+          .sort((a, b) => Number(b.last_msg_id || 0) - Number(a.last_msg_id || 0));
+
+        if (unreadNewConvs.length > 0) {
+          const targetConv = unreadNewConvs[0];
+          recordAutoOpenedMsgId(maxMsgIdInList);
+          playChatNotificationSound();
+          get().openChat(Number(targetConv.id), 'chats', { maximized: false });
+        } else if (maxMsgIdInList > lastAutoOpenedMsgId) {
+          recordAutoOpenedMsgId(maxMsgIdInList);
+        }
       }
     } catch (err) {
       set({ loadingConversations: false });
@@ -1881,11 +1915,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         });
 
         if (hasNewFromOther) {
+          recordAutoOpenedMsgId(getLastPositiveMessageId(incoming));
           playChatNotificationSound();
+          if (!get().isOpen) {
+            get().openChat(activeConversationId, 'chats', { maximized: false });
+          }
         }
 
-        // Mark as read immediately since user is actively in this conversation
-        get().markConversationAsRead(activeConversationId);
+        // Mark as read immediately ONLY when chat window is actually open and user is viewing this conversation
+        if (get().isOpen) {
+          get().markConversationAsRead(activeConversationId);
+        }
 
         // If any incoming message has media or link, refresh vault
         if (incoming.some(isMediaOrLinkMsg)) {
@@ -1958,31 +1998,52 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         });
       }
 
-      // 2. Process incoming unread messages across all conversations (Toast & Chime)
+      // 2. Process incoming unread messages across all conversations (Auto-Pop Chat Window + Toast & Chime)
       if (Array.isArray(data.recent_incoming) && data.recent_incoming.length > 0) {
         let anyToastFired = false;
+        let autoOpenedConvId = 0;
+
         data.recent_incoming.forEach((msg: any) => {
-          const isViewingThisConv = isOpen && activeConversationId === msg.conversation_id;
+          const msgIdNum = Number(msg.id || 0);
+          const convIdNum = Number(msg.conversation_id || 0);
+          const currentState = get();
+          const isViewingThisConv = currentState.isOpen && currentState.activeConversationId === convIdNum;
+
           if (!isViewingThisConv) {
             anyToastFired = true;
-            showChatNotificationToast({
-              messageId: msg.id,
-              conversationId: msg.conversation_id,
-              senderName: msg.sender_name || 'Đồng nghiệp',
-              senderAvatar: msg.sender_avatar,
-              conversationTitle: msg.conversation_title,
-              content: msg.content,
-              messageType: msg.message_type,
-              onOpenConversation: (cId) => {
-                get().openChat();
-                get().selectConversation(cId);
+
+            if (msgIdNum > lastAutoOpenedMsgId) {
+              recordAutoOpenedMsgId(msgIdNum);
+              if (!currentState.isOpen && !autoOpenedConvId && convIdNum > 0) {
+                autoOpenedConvId = convIdNum;
               }
-            });
+            }
+
+            if (currentState.isOpen && currentState.activeConversationId && currentState.activeConversationId !== convIdNum) {
+              showChatNotificationToast({
+                messageId: msg.id,
+                conversationId: convIdNum,
+                senderName: msg.sender_name || 'Đồng nghiệp',
+                senderAvatar: msg.sender_avatar,
+                conversationTitle: msg.conversation_title,
+                content: msg.content,
+                messageType: msg.message_type,
+                onOpenConversation: (cId) => {
+                  get().openChat();
+                  get().selectConversation(cId);
+                }
+              });
+            }
           }
         });
 
-        // If messages arrived in other conversations, refresh conversation list to show fresh previews
-        if (anyToastFired) {
+        if (autoOpenedConvId > 0) {
+          playChatNotificationSound();
+          get().openChat(autoOpenedConvId, 'chats', { maximized: false });
+        } else if (get().isOpen && !get().activeConversationId && data.recent_incoming[0]?.conversation_id) {
+          playChatNotificationSound();
+          get().selectConversation(Number(data.recent_incoming[0].conversation_id));
+        } else if (anyToastFired) {
           get().fetchConversations();
         }
       }
@@ -2183,29 +2244,43 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               };
             });
 
+            let sseAutoOpenConvId = 0;
             incoming.forEach((msg: any) => {
-              const isViewing = isOpen && activeConversationId === msg.conversation_id;
+              const msgIdNum = Number(msg.id || 0);
+              const convIdNum = Number(msg.conversation_id || 0);
+              if (msgIdNum > lastAutoOpenedMsgId) {
+                recordAutoOpenedMsgId(msgIdNum);
+              }
+              const currentState = get();
+              const isViewing = currentState.isOpen && currentState.activeConversationId === convIdNum;
               if (isViewing) {
-                get().markConversationAsRead(msg.conversation_id);
-              } else {
+                get().markConversationAsRead(convIdNum);
+              } else if (!msg.is_mine) {
                 needsConvRefresh = true;
-                showChatNotificationToast({
-                  messageId: msg.id,
-                  conversationId: msg.conversation_id,
-                  senderName: msg.sender_name || 'Đồng nghiệp',
-                  senderAvatar: msg.sender_avatar,
-                  conversationTitle: msg.conversation_title,
-                  content: msg.content,
-                  messageType: msg.message_type,
-                  onOpenConversation: (cId) => {
-                    get().openChat();
-                    get().selectConversation(cId);
-                  }
-                });
+                if (!currentState.isOpen && !sseAutoOpenConvId && convIdNum > 0) {
+                  sseAutoOpenConvId = convIdNum;
+                } else {
+                  showChatNotificationToast({
+                    messageId: msg.id,
+                    conversationId: convIdNum,
+                    senderName: msg.sender_name || 'Đồng nghiệp',
+                    senderAvatar: msg.sender_avatar,
+                    conversationTitle: msg.conversation_title,
+                    content: msg.content,
+                    messageType: msg.message_type,
+                    onOpenConversation: (cId) => {
+                      get().openChat();
+                      get().selectConversation(cId);
+                    }
+                  });
+                }
               }
             });
 
-            if (hasNewInActive) {
+            if (sseAutoOpenConvId > 0) {
+              playChatNotificationSound();
+              get().openChat(sseAutoOpenConvId, 'chats', { maximized: false });
+            } else if (hasNewInActive) {
               playChatNotificationSound();
               if (activeConversationId && incoming.some(isMediaOrLinkMsg)) {
                 get().fetchVault(activeConversationId, 'all');

@@ -9,7 +9,7 @@ $method = $_SERVER['REQUEST_METHOD'];
 $path = isset($_GET['id']) ? $_GET['id'] : null;
 
 // Self-healing indexes & attribution columns check (run once per server temp lifecycle)
-domationEnsureSchemaOnce('templates_indexes_v5', function () use ($pdo) {
+domationEnsureSchemaOnce('templates_indexes_v6', function () use ($pdo) {
     try {
         $chk = $pdo->query("SHOW INDEX FROM templates WHERE Key_name = 'idx_templates_ws_updated'");
         if ($chk && $chk->rowCount() === 0) {
@@ -36,7 +36,7 @@ domationEnsureSchemaOnce('templates_indexes_v5', function () use ($pdo) {
                 @$pdo->exec("ALTER TABLE templates ADD COLUMN access_config TEXT NULL");
             }
         }
-        // Backfill created_by from body_style JSON creator name/email so "Của tôi" matches 100% accurately
+        // Backfill created_by from body_style JSON creator name/email while strictly preserving updated_at
         @$pdo->exec("
             UPDATE templates t
             JOIN users u ON (
@@ -48,11 +48,92 @@ domationEnsureSchemaOnce('templates_indexes_v5', function () use ($pdo) {
                  AND JSON_UNQUOTE(JSON_EXTRACT(t.body_style, '$.creator.name')) != ''
                  AND LOWER(TRIM(JSON_UNQUOTE(JSON_EXTRACT(t.body_style, '$.creator.name')))) = LOWER(TRIM(u.full_name)))
             )
-            SET t.created_by = u.id
+            SET t.created_by = u.id,
+                t.updated_at = t.updated_at
             WHERE t.created_by IS NULL AND t.body_style IS NOT NULL AND t.body_style != ''
         ");
     } catch (Throwable $e) {}
 });
+
+/**
+ * Lightweight auto-sync of newly created/updated templates & template_groups
+ * from DOMATION (`vhvxoigh_mail_auto`) into MYERP when both DBs reside on the same MySQL instance.
+ */
+function syncFromLegacyDomationDb(PDO $pdo, int $workspace_id): void
+{
+    $dbName = defined('DB_NAME') ? (string)DB_NAME : 'myerp';
+    if ($dbName === 'vhvxoigh_mail_auto') {
+        return;
+    }
+    $stampFile = rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . 'myerp_dom_tpl_sync_' . md5($dbName . '_' . $workspace_id) . '.stamp';
+    if (@is_file($stampFile)) {
+        $mtime = @filemtime($stampFile);
+        if ($mtime && (time() - $mtime) < 30) {
+            return;
+        }
+    }
+    @touch($stampFile);
+
+    try {
+        // Sync new or renamed template_groups from vhvxoigh_mail_auto
+        @$pdo->exec("
+            INSERT INTO template_groups (id, workspace_id, name, created_at)
+            SELECT d.id, COALESCE(d.workspace_id, 1), d.name, d.created_at
+            FROM `vhvxoigh_mail_auto`.`template_groups` d
+            LEFT JOIN template_groups g ON g.id = d.id
+            WHERE g.id IS NULL OR g.name != d.name
+            ON DUPLICATE KEY UPDATE
+                name = VALUES(name),
+                workspace_id = VALUES(workspace_id)
+        ");
+
+        // Sync newly created or updated templates from vhvxoigh_mail_auto
+        $affected = @$pdo->exec("
+            INSERT INTO templates
+                (id, workspace_id, name, thumbnail, category, group_id, blocks, body_style, html_content, visibility, created_at, updated_at)
+            SELECT
+                d.id, COALESCE(d.workspace_id, 1), d.name, d.thumbnail, d.category, d.group_id,
+                d.blocks, d.body_style, d.html_content, 'shared', d.created_at, d.updated_at
+            FROM `vhvxoigh_mail_auto`.`templates` d
+            LEFT JOIN templates t ON t.id = d.id
+            WHERE t.id IS NULL OR d.updated_at > t.updated_at
+            ON DUPLICATE KEY UPDATE
+                name = VALUES(name),
+                thumbnail = CASE
+                    WHEN templates.thumbnail LIKE '/uploads/template_thumbs/%' AND (VALUES(thumbnail) IS NULL OR VALUES(thumbnail) = '' OR VALUES(thumbnail) NOT LIKE '/uploads/template_thumbs/%')
+                    THEN templates.thumbnail
+                    ELSE COALESCE(NULLIF(VALUES(thumbnail), ''), templates.thumbnail)
+                END,
+                category = VALUES(category),
+                group_id = VALUES(group_id),
+                blocks = VALUES(blocks),
+                body_style = VALUES(body_style),
+                html_content = VALUES(html_content),
+                updated_at = VALUES(updated_at)
+        ");
+
+        if ($affected && $affected > 0) {
+            @$pdo->exec("
+                UPDATE templates t
+                JOIN users u ON (
+                    (JSON_UNQUOTE(JSON_EXTRACT(t.body_style, '$.creator.email')) IS NOT NULL
+                     AND JSON_UNQUOTE(JSON_EXTRACT(t.body_style, '$.creator.email')) != ''
+                     AND LOWER(TRIM(JSON_UNQUOTE(JSON_EXTRACT(t.body_style, '$.creator.email')))) = LOWER(TRIM(u.email)))
+                    OR
+                    (JSON_UNQUOTE(JSON_EXTRACT(t.body_style, '$.creator.name')) IS NOT NULL
+                     AND JSON_UNQUOTE(JSON_EXTRACT(t.body_style, '$.creator.name')) != ''
+                     AND LOWER(TRIM(JSON_UNQUOTE(JSON_EXTRACT(t.body_style, '$.creator.name')))) = LOWER(TRIM(u.full_name)))
+                )
+                SET t.created_by = u.id,
+                    t.updated_at = t.updated_at
+                WHERE t.created_by IS NULL AND t.body_style IS NOT NULL AND t.body_style != ''
+            ");
+            invalidateTemplateCache($workspace_id);
+        }
+    } catch (Throwable $e) {
+        // Ignore silently if vhvxoigh_mail_auto is not present on this MySQL instance
+    }
+}
 
 function formatTemplate($row, $includeBlocks = true)
 {
@@ -167,6 +248,12 @@ function invalidateTemplateCache($workspace_id)
         "templates_list_v4_{$workspace_id}",
         "templates_list_v5_{$workspace_id}_light",
         "templates_list_v5_{$workspace_id}_full",
+        "templates_list_v6_{$workspace_id}_light",
+        "templates_list_v6_{$workspace_id}_full",
+        "templates_list_v7_{$workspace_id}_light",
+        "templates_list_v7_{$workspace_id}_full",
+        "templates_list_v8_{$workspace_id}_light",
+        "templates_list_v8_{$workspace_id}_full",
     ];
     foreach ($keys as $k) {
         if (function_exists('apcu_delete')) {
@@ -308,6 +395,88 @@ function getTemplateUsage($id, $pdo, $workspace_id)
     return $usage;
 }
 
+function getTemplateThumbsDir(): string {
+    $baseUploads = realpath(__DIR__ . '/../../uploads');
+    if (!$baseUploads) {
+        $baseUploads = __DIR__ . '/../../uploads';
+    }
+    $dir = rtrim($baseUploads, '/\\') . '/template_thumbs';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0755, true);
+    }
+    return $dir;
+}
+
+function saveTemplateWebpThumbnail(string $id, string $thumbnailInput, string $existingThumb = ''): string {
+    $safeId = preg_replace('/[^a-zA-Z0-9_-]/', '_', $id);
+    if (!$safeId) return $thumbnailInput ?: $existingThumb;
+
+    $dir = getTemplateThumbsDir();
+    $filePath = $dir . "/tpl_{$safeId}.webp";
+    $trimmed = trim($thumbnailInput);
+
+    // 1. Client sent base64 data URL (data:image/webp;base64,... or png/jpeg)
+    if (strpos($trimmed, 'data:image/') === 0) {
+        $commaPos = strpos($trimmed, ',');
+        if ($commaPos !== false) {
+            $b64 = substr($trimmed, $commaPos + 1);
+            $raw = base64_decode($b64, true);
+            if ($raw !== false && strlen($raw) > 64) {
+                $saved = false;
+                if (strpos($trimmed, 'data:image/webp') === 0) {
+                    $saved = (@file_put_contents($filePath, $raw) !== false);
+                } elseif (function_exists('imagecreatefromstring') && function_exists('imagewebp')) {
+                    $im = @imagecreatefromstring($raw);
+                    if ($im !== false) {
+                        imagepalettetotruecolor($im);
+                        imagealphablending($im, true);
+                        imagesavealpha($im, true);
+                        $saved = @imagewebp($im, $filePath, 84);
+                        imagedestroy($im);
+                    }
+                }
+                if (!$saved) {
+                    $saved = (@file_put_contents($filePath, $raw) !== false);
+                }
+                if ($saved) {
+                    return "/uploads/template_thumbs/tpl_{$safeId}.webp?v=" . time();
+                }
+            }
+        }
+    }
+
+    // 2. Duplicating from another template's local WebP thumbnail
+    if ($trimmed !== '' && strpos($trimmed, '/uploads/template_thumbs/') !== false) {
+        $cleanPath = parse_url($trimmed, PHP_URL_PATH) ?: '';
+        $srcBase = basename($cleanPath);
+        if ($srcBase && preg_match('/^tpl_[a-zA-Z0-9_-]+\.webp$/', $srcBase)) {
+            $srcFile = $dir . '/' . $srcBase;
+            if (is_file($srcFile)) {
+                if (realpath($srcFile) !== realpath($filePath)) {
+                    @copy($srcFile, $filePath);
+                }
+                if (is_file($filePath)) {
+                    return "/uploads/template_thumbs/tpl_{$safeId}.webp?v=" . time();
+                }
+            }
+        }
+    }
+
+    // 3. Existing WebP file on disk for this template ID
+    if (is_file($filePath) && filesize($filePath) > 64) {
+        $mtime = @filemtime($filePath) ?: time();
+        return "/uploads/template_thumbs/tpl_{$safeId}.webp?v=" . $mtime;
+    }
+
+    if ($trimmed !== '' && strpos($trimmed, 'placehold.co') === false && strpos($trimmed, 'data:') !== 0) {
+        return $trimmed;
+    }
+    if ($existingThumb !== '' && strpos($existingThumb, 'placehold.co') === false && strpos($existingThumb, 'data:') !== 0) {
+        return $existingThumb;
+    }
+    return '';
+}
+
 $currentUserId = !empty($GLOBALS['current_admin_id']) ? (int)$GLOBALS['current_admin_id'] : null;
 $currentRole = strtolower($GLOBALS['domation_auth']['role'] ?? '');
 $isAdminRole = in_array($currentRole, ['admin', 'superadmin', 'super_admin', 'director', 'marketing', 'manager'], true) || !empty($_SESSION['is_admin']);
@@ -316,16 +485,52 @@ try {
     switch ($method) {
         case 'GET':
             if (session_id()) session_write_close();
+
+            // Lightweight CORS image proxy for client-side WebP thumbnail canvas capture
+            if (!empty($_GET['proxy_img'])) {
+                $imgUrl = trim((string)$_GET['proxy_img']);
+                if (!preg_match('#^https?://#i', $imgUrl)) {
+                    http_response_code(400);
+                    exit;
+                }
+                $ch = curl_init($imgUrl);
+                curl_setopt_array($ch, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_MAXREDIRS => 3,
+                    CURLOPT_TIMEOUT => 4,
+                    CURLOPT_CONNECTTIMEOUT => 2,
+                    CURLOPT_SSL_VERIFYPEER => false,
+                    CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) MYERP-ThumbProxy/1.0',
+                ]);
+                $body = curl_exec($ch);
+                $contentType = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+                $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+
+                if ($body !== false && $httpCode >= 200 && $httpCode < 300 && stripos($contentType, 'image/') === 0) {
+                    header('Access-Control-Allow-Origin: *');
+                    header('Content-Type: ' . $contentType);
+                    header('Cache-Control: public, max-age=86400');
+                    echo $body;
+                    exit;
+                }
+                http_response_code(404);
+                exit;
+            }
+
             if (isset($_GET['action']) && $_GET['action'] === 'check_usage' && $path) {
                 $usage = getTemplateUsage($path, $pdo, $workspace_id);
                 jsonResponse(true, ['in_use' => !empty($usage), 'details' => $usage]);
                 return;
             }
 
+            syncFromLegacyDomationDb($pdo, (int)$workspace_id);
+
             $wsClause = ($workspace_id === 1) ? "(t.workspace_id = ? OR t.workspace_id IS NULL)" : "t.workspace_id = ?";
 
             if ($path) {
-                // Single template: ALWAYS return complete blocks and styles for Editor
+                // Single template: ALWAYS return complete blocks, html_content and styles for Preview / Editor
                 $stmt = $pdo->prepare("
                     SELECT t.*,
                            u_creator.id AS creator_id, u_creator.full_name AS creator_name, u_creator.email AS creator_email,
@@ -340,7 +545,7 @@ try {
             } else {
                 // Ultra-fast list query with APCu + file cache fallback
                 $full = isset($_GET['full']) && $_GET['full'] === '1';
-                $cacheKey = "templates_list_v5_{$workspace_id}" . ($full ? "_full" : "_light");
+                $cacheKey = "templates_list_v8_{$workspace_id}" . ($full ? "_full" : "_light");
 
                 $fetchList = function() use ($pdo, $workspace_id, $full, $wsClause) {
                     if ($full) {
@@ -357,10 +562,12 @@ try {
                         $tpls = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         return array_map(fn($row) => formatTemplate($row, true), $tpls);
                     } else {
-                        // High-performance query: skip heavy blocks column in list payload
+                        // High-performance query: skip heavy blocks AND skip html_content when WebP thumbnail is available
                         $stmt = $pdo->prepare("
                             SELECT t.id, t.workspace_id, t.name, t.thumbnail, t.category, t.group_id,
-                                   t.body_style, t.html_content, t.created_at, t.updated_at,
+                                   t.body_style,
+                                   (CASE WHEN t.thumbnail IS NOT NULL AND t.thumbnail != '' AND t.thumbnail NOT LIKE '%placehold.co%' THEN '' ELSE t.html_content END) AS html_content,
+                                   t.created_at, t.updated_at,
                                    t.created_by, t.updated_by, t.visibility, t.access_config,
                                    u_creator.id AS creator_id, u_creator.full_name AS creator_name, u_creator.email AS creator_email,
                                    u_creator.avatar_url AS creator_avatar, u_creator.role AS creator_role,
@@ -406,13 +613,15 @@ try {
             $accessConfigObj['visibility'] = $visibility;
             $accessConfigJson = json_encode($accessConfigObj, JSON_UNESCAPED_UNICODE);
 
+            $savedThumbUrl = saveTemplateWebpThumbnail((string)$id, (string)($data['thumbnail'] ?? ''), '');
+
             $sql = "INSERT INTO templates (workspace_id, id, name, thumbnail, category, group_id, blocks, body_style, html_content, created_by, updated_by, visibility, access_config, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
             $stmt = $pdo->prepare($sql);
             $stmt->execute([
                 $workspace_id,
                 $id,
                 $data['name'] ?? 'Mẫu mới',
-                $data['thumbnail'] ?? '',
+                $savedThumbUrl,
                 $data['category'] ?? 'custom',
                 $groupId,
                 $blocks,
@@ -426,6 +635,7 @@ try {
 
             invalidateTemplateCache($workspace_id);
             $data['id'] = $id;
+            $data['thumbnail'] = $savedThumbUrl;
             $data['created_by'] = $currentUserId;
             $data['updated_by'] = $currentUserId;
             $data['visibility'] = $visibility;
@@ -453,7 +663,7 @@ try {
                 $placeholders = implode(',', array_fill(0, count($ids), '?'));
                 $sql = "UPDATE templates SET group_id = ?, updated_by = ?, updated_at = NOW() WHERE id IN ($placeholders) AND workspace_id = ?";
                 $stmt = $pdo->prepare($sql);
-                $stmt->execute(array_merge([$newGroupId, $currentUserId], $ids, [$workspace_id]));
+                $stmt->execute(array_merge([$newGroupId, $currentUserId], array_values($ids), [$workspace_id]));
 
                 invalidateTemplateCache($workspace_id);
                 jsonResponse(true, null, 'Đã di chuyển ' . count($ids) . ' mẫu vào nhóm');
@@ -464,7 +674,7 @@ try {
                 jsonResponse(false, null, 'Thiếu ID mẫu email');
 
             $wsClausePut = ($workspace_id === 1) ? "(workspace_id = ? OR workspace_id IS NULL)" : "workspace_id = ?";
-            $stmtChk = $pdo->prepare("SELECT id, created_by, visibility, access_config, body_style FROM templates WHERE id = ? AND {$wsClausePut}");
+            $stmtChk = $pdo->prepare("SELECT id, thumbnail, created_by, visibility, access_config, body_style FROM templates WHERE id = ? AND {$wsClausePut}");
             $stmtChk->execute([$path, $workspace_id]);
             $existing = $stmtChk->fetch(PDO::FETCH_ASSOC);
 
@@ -540,11 +750,18 @@ try {
                 $accessConfigJson = json_encode($accessConfigObj, JSON_UNESCAPED_UNICODE);
             }
 
+            // Save / replace WebP thumbnail on every template save
+            $savedThumbUrl = saveTemplateWebpThumbnail(
+                (string)$path,
+                (string)($data['thumbnail'] ?? ''),
+                (string)($existing['thumbnail'] ?? '')
+            );
+
             $sql = "UPDATE templates SET name=?, thumbnail=?, category=?, group_id=?, blocks=?, body_style=?, html_content=?, updated_by=?, visibility=?, access_config=?, updated_at=NOW() WHERE id=? AND {$wsClausePut}";
             $stmt = $pdo->prepare($sql);
             $stmt->execute([
                 $data['name'] ?? '',
-                $data['thumbnail'] ?? '',
+                $savedThumbUrl,
                 $data['category'] ?? 'custom',
                 $groupId,
                 $blocks,
@@ -558,6 +775,7 @@ try {
             ]);
 
             invalidateTemplateCache($workspace_id);
+            $data['thumbnail'] = $savedThumbUrl;
             $data['updated_by'] = $currentUserId;
             $data['visibility'] = $visibility;
             $data['accessConfig'] = $accessConfigObj;
@@ -575,6 +793,7 @@ try {
             $inUseCount = 0;
             $deletedCount = 0;
             $errors = [];
+            $thumbsDir = getTemplateThumbsDir();
 
             foreach ($ids as $id) {
                 $stmtChk = $pdo->prepare("SELECT id, name, created_by FROM templates WHERE id = ? AND {$wsClauseDel}");
@@ -604,8 +823,13 @@ try {
 
                 $stmt = $pdo->prepare("DELETE FROM templates WHERE id = ? AND {$wsClauseDel}");
                 $stmt->execute([$id, $workspace_id]);
-                if ($stmt->rowCount() > 0)
+                if ($stmt->rowCount() > 0) {
                     $deletedCount++;
+                    $safeDelId = preg_replace('/[^a-zA-Z0-9_-]/', '_', (string)$id);
+                    if ($safeDelId && is_file($thumbsDir . "/tpl_{$safeDelId}.webp")) {
+                        @unlink($thumbsDir . "/tpl_{$safeDelId}.webp");
+                    }
+                }
             }
 
             if ($deletedCount > 0) {

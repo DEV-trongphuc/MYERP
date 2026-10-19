@@ -154,7 +154,8 @@ class LeadDistributionController {
                 'contact_id' => $contactId,
                 'customer_name' => $lead['full_name'] ?? 'Khách hàng',
                 'phone' => $lead['phone'] ?? '',
-                'actor_name' => $auth['name'] ?? $auth['full_name'] ?? 'Quản trị viên'
+                'actor_name' => $auth['name'] ?? $auth['full_name'] ?? 'Quản trị viên',
+                'exclude_user_id' => (int)$auth['user_id']
             ]);
         } catch (\Throwable $notifEx) {
             error_log("AssignLead Notification Error: " . $notifEx->getMessage());
@@ -231,10 +232,10 @@ class LeadDistributionController {
 
     private function saveSetting(string $key, string $val, int $tid): void {
         $stmt = $this->db->prepare("
-            INSERT INTO system_settings (setting_key, setting_value, tenant_id)
-            VALUES (?, ?, ?)
+            INSERT INTO system_settings (setting_key, setting_value)
+            VALUES (?, ?)
             ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
         ");
-        $stmt->execute([$key, $val, $tid]);
+        $stmt->execute([$key, $val]);
     }
 }

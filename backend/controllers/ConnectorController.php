@@ -41,8 +41,13 @@ class ConnectorController {
         $tid = $auth['tenant_id'];
         $body = getBody();
         $name = trim($body['name'] ?? 'Google Sheet Connector');
-        $type = trim($body['type'] ?? 'google_sheet'); // google_sheet, webhook, zapier
-        $config = $body['config'] ?? [];
+        $type = trim($body['type'] ?? $body['provider'] ?? 'google_sheet'); // google_sheet, webhook, zapier
+        $config = is_array($body['config'] ?? null) ? $body['config'] : [];
+        foreach (['sheet_id', 'branch_id', 'column_mapping', 'webhook_url', 'api_key'] as $cfgKey) {
+            if (isset($body[$cfgKey]) && !isset($config[$cfgKey])) {
+                $config[$cfgKey] = $body[$cfgKey];
+            }
+        }
 
         $stmt = $this->db->prepare("
             INSERT INTO integration_connectors (tenant_id, name, type, config_json, status, created_at, updated_at)
@@ -51,7 +56,7 @@ class ConnectorController {
         $stmt->execute([$tid, $name, $type, json_encode($config)]);
         $id = (int)$this->db->lastInsertId();
 
-        respond(201, ['id' => $id, 'name' => $name, 'type' => $type, 'status' => 'active'], 'Tạo connector thành công');
+        respond(201, ['id' => $id, 'name' => $name, 'type' => $type, 'provider' => $type, 'config' => $config, 'status' => 'active'], 'Tạo connector thành công');
     }
 
     public function update(array $auth, int $id): void {
@@ -65,13 +70,23 @@ class ConnectorController {
             $updates[] = "name = ?";
             $params[] = trim($body['name']);
         }
+        if (isset($body['type']) || isset($body['provider'])) {
+            $updates[] = "type = ?";
+            $params[] = trim($body['type'] ?? $body['provider']);
+        }
         if (isset($body['status'])) {
             $updates[] = "status = ?";
             $params[] = trim($body['status']);
         }
-        if (isset($body['config'])) {
+        if (isset($body['config']) || isset($body['column_mapping']) || isset($body['sheet_id']) || isset($body['branch_id'])) {
+            $cfg = is_array($body['config'] ?? null) ? $body['config'] : [];
+            foreach (['sheet_id', 'branch_id', 'column_mapping', 'webhook_url', 'api_key'] as $cfgKey) {
+                if (isset($body[$cfgKey]) && !isset($cfg[$cfgKey])) {
+                    $cfg[$cfgKey] = $body[$cfgKey];
+                }
+            }
             $updates[] = "config_json = ?";
-            $params[] = json_encode($body['config']);
+            $params[] = json_encode($cfg);
         }
 
         if (empty($updates)) respond(422, null, 'Không có thông tin cần cập nhật', false);
@@ -115,21 +130,23 @@ class ConnectorController {
         static $checked = false;
         if ($checked) return;
         try {
-            $this->db->exec("
-                CREATE TABLE IF NOT EXISTS integration_connectors (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    tenant_id INT NOT NULL DEFAULT 1,
-                    name VARCHAR(255) NOT NULL,
-                    type VARCHAR(50) NOT NULL DEFAULT 'google_sheet',
-                    config_json TEXT NULL,
-                    status VARCHAR(50) NOT NULL DEFAULT 'active',
-                    last_sync_at TIMESTAMP NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                    INDEX idx_tenant_type (tenant_id, type)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-            ");
-            $checked = true;
+            if (!$this->db->inTransaction()) {
+                $this->db->exec("
+                    CREATE TABLE IF NOT EXISTS integration_connectors (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        tenant_id INT NOT NULL DEFAULT 1,
+                        name VARCHAR(255) NOT NULL,
+                        type VARCHAR(50) NOT NULL DEFAULT 'google_sheet',
+                        config_json TEXT NULL,
+                        status VARCHAR(50) NOT NULL DEFAULT 'active',
+                        last_sync_at TIMESTAMP NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        INDEX idx_tenant_type (tenant_id, type)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                ");
+                $checked = true;
+            }
         } catch (\Throwable $e) {
             error_log("Ensure Connectors Error: " . $e->getMessage());
         }

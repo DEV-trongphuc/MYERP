@@ -396,6 +396,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
     window.addEventListener('approval-updated', debouncedFetch);
     window.addEventListener('approval-created', debouncedFetch);
     window.addEventListener('refresh-approvals', debouncedFetch);
+    window.addEventListener('refresh-pending-counts', debouncedFetch);
     window.addEventListener('approval-badge-updated', handleApprovalBadgeUpdated);
     window.addEventListener('student-badge-updated', handleStudentBadgeUpdated);
     window.addEventListener('lead-added', debouncedFetch);
@@ -415,6 +416,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
       window.removeEventListener('approval-updated', debouncedFetch);
       window.removeEventListener('approval-created', debouncedFetch);
       window.removeEventListener('refresh-approvals', debouncedFetch);
+      window.removeEventListener('refresh-pending-counts', debouncedFetch);
       window.removeEventListener('approval-badge-updated', handleApprovalBadgeUpdated);
       window.removeEventListener('student-badge-updated', handleStudentBadgeUpdated);
       window.removeEventListener('lead-added', debouncedFetch);
@@ -604,6 +606,8 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
     visibleGroups.splice(newTongQuanIdx + 1, 0, quyTrinhGroup);
   }
 
+  const effectiveCollapsed = isCollapsed && !isMobileOpen;
+
   return (
     <>
       {isMobileOpen && (
@@ -617,7 +621,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         style={{
-          width: isCollapsed ? 60 : 220,
+          width: effectiveCollapsed ? 60 : 220,
           background: 'radial-gradient(ellipse at 15% 0%, rgba(189, 29, 45, 0.08) 0%, transparent 50%), linear-gradient(180deg, #100d0e 0%, #0b090a 40%, #070708 100%)',
           color: '#e2e8f0',
           display: 'flex',
@@ -627,7 +631,8 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
           position: 'relative',
           zIndex: 50,
           borderRight: '1px solid rgba(255, 255, 255, 0.06)',
-          boxShadow: '4px 0 24px rgba(0, 0, 0, 0.35)'
+          boxShadow: '4px 0 24px rgba(0, 0, 0, 0.35)',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)'
         }}
       >
         {/* Logo Area */}
@@ -639,11 +644,11 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
             height: 72,
             display: 'flex',
             alignItems: 'center',
-            padding: isCollapsed ? '12px 0 0 0' : '12px 1rem 0 1rem',
+            padding: effectiveCollapsed ? '12px 0 0 0' : '12px 1rem 0 1rem',
             gap: '0.75rem',
             borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
             flexShrink: 0,
-            justifyContent: isCollapsed ? 'center' : 'flex-start',
+            justifyContent: effectiveCollapsed ? 'center' : 'flex-start',
             overflow: 'hidden',
             cursor: 'pointer',
             transition: 'background-color 0.2s ease'
@@ -667,7 +672,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
               alt="logo" />
           </div>
 
-          {!isCollapsed && (
+          {!effectiveCollapsed && (
             <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1 }}>
               <span style={{ fontSize: '1.2rem', fontWeight: 900, whiteSpace: 'nowrap', color: '#ffffff', letterSpacing: '-0.03em', lineHeight: 1.05 }}>
                 MYERP
@@ -689,8 +694,8 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
 
         {/* Quick Action Button */}
         {['admin', 'superadmin', 'super_admin', 'director', 'sale', 'sales', 'marketing'].includes(String(user?.role || '').toLowerCase()) && (
-          <div style={{ padding: isCollapsed ? '0.5rem 0.25rem' : '0.875rem 0.75rem', display: 'flex', justifyContent: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.06)' }}>
-            {isCollapsed ? (
+          <div style={{ padding: effectiveCollapsed ? '0.5rem 0.25rem' : '0.875rem 0.75rem', display: 'flex', justifyContent: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.06)' }}>
+            {effectiveCollapsed ? (
               <button
                 onClick={() => {
                   window.dispatchEvent(new CustomEvent('open-quick-add-lead'));
@@ -760,7 +765,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
             e.currentTarget.style.transform = 'translateY(-50%) scale(1)';
           }}
         >
-          <ChevronLeft size={14} style={{ transform: isCollapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s' }} />
+          <ChevronLeft size={14} style={{ transform: effectiveCollapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s' }} />
         </button>
 
         {/* Nav */}
@@ -778,8 +783,8 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
           <div style={{ position: 'relative', padding: '1rem 0', display: 'flex', flexDirection: 'column' }}>
 
             {visibleGroups.map((group, groupIdx) => (
-              <div key={groupIdx} style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginBottom: isCollapsed ? '0.375rem' : '0.875rem' }}>
-                {!isCollapsed && (
+              <div key={groupIdx} style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginBottom: effectiveCollapsed ? '0.375rem' : '0.875rem' }}>
+                {!effectiveCollapsed && (
                   <span style={{
                     fontSize: '0.65rem',
                     fontWeight: 800,
@@ -827,7 +832,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                       id={isActive ? 'sidebar-active-item' : undefined}
                       data-active={isActive ? 'true' : 'false'}
                       className={() => `sidebar-nav-item ${isActive ? 'active' : ''}`}
-                      title={isCollapsed ? displayName : undefined}
+                      title={effectiveCollapsed ? displayName : undefined}
                       onMouseEnter={() => prefetchRoute(effectiveHref)}
                       onTouchStart={() => prefetchRoute(effectiveHref)}
                       onFocus={() => prefetchRoute(effectiveHref)}
@@ -841,8 +846,8 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                       }}
                       style={{
                         display: 'flex', alignItems: 'center', gap: '0.75rem',
-                        padding: isCollapsed ? '0.5rem 0' : '0.45rem 1rem',
-                        justifyContent: isCollapsed ? 'center' : 'flex-start',
+                        padding: effectiveCollapsed ? '0.5rem 0' : '0.45rem 1rem',
+                        justifyContent: effectiveCollapsed ? 'center' : 'flex-start',
                         color: isActive ? '#ffffff' : 'rgba(255, 255, 255, 0.65)',
                         textDecoration: 'none', fontSize: '0.825rem',
                         fontWeight: isActive ? 700 : 500, transition: 'all 0.2s ease',
@@ -872,7 +877,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                             flexShrink: 0, transition: 'all 0.2s', position: 'relative'
                           }}>
                             <AppIcon name={iconKey || name} size={26} />
-                            {isCollapsed && badgeCount > 0 && (
+                            {effectiveCollapsed && badgeCount > 0 && (
                               <div style={{
                                 position: 'absolute', top: 0, right: 0, width: 8, height: 8,
                                 borderRadius: '50%', background: badgeKey === 'gatekeeper' ? '#f59e0b' : '#ef4444',
@@ -881,7 +886,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                             )}
                           </div>
 
-                          {!isCollapsed && (
+                          {!effectiveCollapsed && (
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1 }}>
                               <span>{displayName}</span>
                               {badgeCount > 0 && (

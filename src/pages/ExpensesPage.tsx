@@ -101,6 +101,7 @@ export const ExpensesPage: React.FC = () => {
   }, [search]);
 
   useEffect(() => {
+    if (!location.pathname.startsWith('/expenses')) return;
     const s = searchParams.get('status');
     if (s) {
       setStatusFilter(s);
@@ -110,8 +111,9 @@ export const ExpensesPage: React.FC = () => {
       nextParams.delete('status');
       setSearchParams(nextParams, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [location.pathname, searchParams, setSearchParams]);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [total, setTotal] = useState(0);
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
@@ -146,7 +148,7 @@ export const ExpensesPage: React.FC = () => {
     try {
       const params: any = { 
         page, 
-        limit: PAGE_SIZE, 
+        limit: pageSize, 
         from: dateRange.from, 
         to: dateRange.to, 
         status: statusFilter,
@@ -178,7 +180,7 @@ export const ExpensesPage: React.FC = () => {
         setLoading(false);
       }
     }
-  }, [page, dateRange, statusFilter, catFilter, creatorFilter, debouncedSearch, addToast]);
+  }, [page, pageSize, dateRange, statusFilter, catFilter, creatorFilter, debouncedSearch, addToast]);
 
   // Reset page to 1 whenever any filter or search query changes
   useEffect(() => {
@@ -188,12 +190,12 @@ export const ExpensesPage: React.FC = () => {
   // Auto fallback to last available page if current page becomes empty after deletions
   useEffect(() => {
     if (total > 0 && page > 1) {
-      const maxPage = Math.ceil(total / PAGE_SIZE);
+      const maxPage = Math.ceil(total / pageSize);
       if (page > maxPage) {
         setPage(maxPage);
       }
     }
-  }, [total, page]);
+  }, [total, page, pageSize]);
 
   // Fetch users & contacts for dropdowns
   useEffect(() => {
@@ -1394,7 +1396,7 @@ export const ExpensesPage: React.FC = () => {
             </tbody>
           </table>
         </div>
-        <Pagination total={total} page={page} pageSize={PAGE_SIZE} onChange={setPage} showSizeChanger onPageSizeChange={() => setPage(1)} />
+        <Pagination total={total} page={page} pageSize={pageSize} onChange={setPage} showSizeChanger onPageSizeChange={(newSize) => { setPageSize(newSize); setPage(1); }} />
       </div>
 
       {/* Add/Edit Drawer */}

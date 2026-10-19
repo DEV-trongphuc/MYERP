@@ -14,6 +14,7 @@ import SearchBox from '../../components/marketing/components/common/SearchBox';
 import Pagination from '../../components/marketing/components/common/Pagination';
 // @ts-ignore: `compileHTML` is a named export from `htmlCompiler`
 import { compileHTML } from '../../components/marketing/components/templates/EmailEditor/utils/htmlCompiler';
+import { captureEmailTopWebp } from '../../components/marketing/components/templates/EmailEditor/utils/thumbnailCapture';
 import { DEFAULT_BODY_STYLE } from '../../components/marketing/components/templates/EmailEditor/constants/editorConstants';
 import { ensureUniqueIds } from '../../components/marketing/components/templates/EmailEditor/utils/blockUtils';
 import toast from 'react-hot-toast';
@@ -39,9 +40,10 @@ import TemplateAccessModal, {
     preloadAccessDirectory
 } from '../../components/marketing/components/templates/TemplateAccessModal';
 
-// [PERF] Lazy-load secondary modals & drawers
-const AIEmailModal = lazy(() => import('../../components/marketing/components/templates/EmailEditor/AIEmailGeneratorModal'));
-const ImageLibraryModal = lazy(() => import('../../components/marketing/components/templates/EmailEditor/components/Properties/ImageLibraryModal'));
+import AIEmailModal from '../../components/marketing/components/templates/EmailEditor/AIEmailGeneratorModal';
+import ImageLibraryModal, { preloadImageLibrary } from '../../components/marketing/components/templates/EmailEditor/components/Properties/ImageLibraryModal';
+
+// [PERF] Lazy-load secondary drawers
 const EmailPreviewDrawer = lazy(() => import('../../components/marketing/components/flows/config/EmailPreviewDrawer'));
 
 const PAGE_SIZE = 12;
@@ -225,10 +227,20 @@ const TemplateCard: React.FC<TemplateCardProps> = memo(({
         (template.blocks && template.blocks.length > 0)
     );
     const customTargetCount = countAccessTargets(template.accessConfig || (template.bodyStyle as any)?.accessConfig);
+    const [thumbBroken, setThumbBroken] = useState(false);
+
+    useEffect(() => {
+        setThumbBroken(false);
+    }, [template.thumbnail]);
+
+    const hasValidThumb = Boolean(
+        template.thumbnail &&
+        !template.thumbnail.includes('placehold.co') &&
+        !thumbBroken
+    );
 
     return (
         <div
-            onMouseEnter={() => onPrefetch(template)}
             className={`bg-[var(--color-surface)] rounded-[18px] border overflow-hidden group transition-all duration-200 flex flex-col h-[340px] relative shadow-[var(--shadow-xs)] hover:shadow-md ${
                 isSelected
                     ? 'border-[var(--color-primary)] ring-2 ring-[var(--color-primary-light)]'
@@ -257,8 +269,15 @@ const TemplateCard: React.FC<TemplateCardProps> = memo(({
                 onClick={() => onPreview(template)}
             >
                 <div className="w-full h-full bg-white dark:bg-slate-900 flex items-center justify-center group-hover:scale-[1.03] transition-transform duration-500 ease-out overflow-hidden relative">
-                    {template.thumbnail && !template.thumbnail.includes('placehold.co') ? (
-                        <img src={template.thumbnail} alt={template.name} className="w-full h-full object-cover object-top" loading="lazy" />
+                    {hasValidThumb ? (
+                        <img
+                            src={template.thumbnail}
+                            alt={template.name}
+                            className="w-full h-full object-cover object-top"
+                            loading="lazy"
+                            decoding="async"
+                            onError={() => setThumbBroken(true)}
+                        />
                     ) : (
                         <VisualTemplate template={template} index={index} />
                     )}
@@ -605,6 +624,7 @@ const Templates: React.FC = () => {
 
         // Defer secondary forms merge-tags fetch so it never competes with template list rendering
         const timer = setTimeout(() => {
+            preloadImageLibrary();
             if (cachedMergeTags !== null) return;
             api.get<any[]>('forms').then(res => {
                 if (res.success && Array.isArray(res.data)) {
@@ -671,6 +691,22 @@ const Templates: React.FC = () => {
                 visibility: resolvedVisibility,
             };
 
+            let resolvedThumb = data.thumbnail || '';
+            if (!resolvedThumb || resolvedThumb.includes('placehold.co')) {
+                try {
+                    const htmlForThumb = data.htmlContent || editingTemplate?.htmlContent || '';
+                    const blocksForThumb = (data.blocks || editingTemplate?.blocks || []) as EmailBlock[];
+                    resolvedThumb = await captureEmailTopWebp(
+                        htmlForThumb,
+                        blocksForThumb,
+                        (data.bodyStyle || editingTemplate?.bodyStyle || DEFAULT_BODY_STYLE) as any,
+                        data.name || editingTemplate?.name || 'Mẫu Email'
+                    );
+                } catch {
+                    resolvedThumb = editingTemplate?.thumbnail || '';
+                }
+            }
+
             if (isExisting && editingTemplate) {
                 const existingCreator = (editingTemplate as any).creator || (editingTemplate.bodyStyle as any)?.creator || creatorInfo;
                 const updatedBodyStyle = {
@@ -682,6 +718,7 @@ const Templates: React.FC = () => {
                 res = await api.put(`templates/${editingTemplate.id}`, {
                     ...editingTemplate,
                     ...data,
+                    thumbnail: resolvedThumb || editingTemplate.thumbnail || '',
                     visibility: resolvedVisibility,
                     accessConfig: resolvedAccessConfig,
                     creator: existingCreator,
@@ -693,7 +730,9 @@ const Templates: React.FC = () => {
                     logAction('Cập nhật mẫu email', `Mẫu: ${data.name || editingTemplate.name}`);
                     const updatedTpl = {
                         ...editingTemplate,
+                        ...data,
                         ...res.data,
+                        thumbnail: (res.data as any)?.thumbnail || resolvedThumb || editingTemplate.thumbnail || '',
                         visibility: resolvedVisibility,
                         accessConfig: resolvedAccessConfig,
                         creator: existingCreator,
@@ -718,7 +757,7 @@ const Templates: React.FC = () => {
                     creator: creatorInfo,
                     bodyStyle: updatedBodyStyle,
                     category: data.category || 'promotional',
-                    thumbnail: data.thumbnail || 'https://placehold.co/600x400/f1f5f9/94a3b8?text=Email+Template',
+                    thumbnail: resolvedThumb || '',
                     lastModified: new Date().toISOString()
                 } as any);
                 if (res.success) {
@@ -726,6 +765,7 @@ const Templates: React.FC = () => {
                     logAction('Tạo mẫu email mới', `Mẫu: ${data.name}`);
                     const newTemplateWithDate = {
                         ...res.data,
+                        thumbnail: (res.data as any)?.thumbnail || resolvedThumb || '',
                         visibility: resolvedVisibility,
                         accessConfig: resolvedAccessConfig,
                         created_by: creatorInfo.id,
@@ -926,7 +966,34 @@ const Templates: React.FC = () => {
         }
     }, 'tạo nhóm');
 
-    // [PERF] Instant 0ms Editor Open — never block on loading toast!
+    // [PERF] Lazy Full-Email Load on Preview ("Xem chi tiết")
+    const handleOpenPreview = useCallback(async (template: Template) => {
+        const cachedFull = fullTemplateBlocksCache.get(template.id) || template;
+        setPreviewTemplate(cachedFull);
+
+        if (template.id.startsWith('sys_')) {
+            return;
+        }
+        const hasFullData = Boolean(
+            cachedFull.htmlContent ||
+            (cachedFull.blocks && cachedFull.blocks.length > 0 && typeof cachedFull.blocks[0] === 'object')
+        );
+        if (hasFullData) {
+            return;
+        }
+
+        try {
+            const res = await api.get<Template>(`templates/${template.id}`);
+            if (res.success && res.data) {
+                fullTemplateBlocksCache.set(template.id, res.data);
+                setPreviewTemplate(prev => (prev && prev.id === template.id ? res.data : prev));
+            }
+        } catch {
+            // Keep preview open
+        }
+    }, []);
+
+    // [PERF] Instant 0ms Editor Open — fetch full email only when clicking Edit!
     const handleStartEdit = useCallback(async (template: Template) => {
         if (!template.id.startsWith('sys_') && !canModifyTemplate(template)) {
             adminGuard(() => {})();
@@ -939,11 +1006,14 @@ const Templates: React.FC = () => {
         if (template.id.startsWith('sys_')) {
             return;
         }
-        if (cachedFull.blocks && cachedFull.blocks.length > 0 && typeof cachedFull.blocks[0] === 'object') {
+        const hasRealBlocks = Boolean(
+            cachedFull.blocks && cachedFull.blocks.length > 0 && typeof cachedFull.blocks[0] === 'object'
+        );
+        if (hasRealBlocks && cachedFull.htmlContent) {
             return;
         }
 
-        // Fetch full blocks in background while editor is already mounted
+        // Fetch full blocks & htmlContent in background while editor is already mounted
         try {
             const res = await api.get<Template>(`templates/${template.id}`);
             if (res.success && res.data) {
@@ -960,7 +1030,11 @@ const Templates: React.FC = () => {
         duplicatingRef.current = true;
         try {
             let fullTpl = fullTemplateBlocksCache.get(tpl.id) || tpl;
-            if (!tpl.id.startsWith('sys_') && (!fullTpl.blocks || fullTpl.blocks.length === 0 || typeof fullTpl.blocks[0] !== 'object')) {
+            const hasFullData = Boolean(
+                fullTpl.htmlContent &&
+                ((! (fullTpl as any).hasBlocks) || (fullTpl.blocks && fullTpl.blocks.length > 0 && typeof fullTpl.blocks[0] === 'object'))
+            );
+            if (!tpl.id.startsWith('sys_') && !hasFullData) {
                 const res = await api.get<Template>(`templates/${tpl.id}`);
                 if (res.success && res.data) {
                     fullTpl = res.data;
@@ -1099,7 +1173,14 @@ const Templates: React.FC = () => {
         if (sortBy === 'name_desc') {
             return [...list].sort((a, b) => (b.name || '').localeCompare(a.name || '', 'vi'));
         }
-        return list;
+        return [...list].sort((a, b) => {
+            const aSys = a.id.startsWith('sys_') ? 1 : 0;
+            const bSys = b.id.startsWith('sys_') ? 1 : 0;
+            if (aSys !== bSys) return aSys - bSys;
+            const aTime = Date.parse(String(a.lastModified || (a as any).updated_at || a.created_at || a.createdAt || '')) || 0;
+            const bTime = Date.parse(String(b.lastModified || (b as any).updated_at || b.created_at || b.createdAt || '')) || 0;
+            return bTime - aTime;
+        });
     }, [allMergedTemplates, filterGroupId, debouncedSearch, sortBy, isMyOwnTemplate]);
 
     const totalPages = Math.max(1, Math.ceil(filteredTemplates.length / PAGE_SIZE));
@@ -1205,7 +1286,8 @@ const Templates: React.FC = () => {
                                 label: 'Tạo bằng AI',
                                 icon: Sparkles,
                                 onClick: () => { setAiModalMounted(true); setIsAIModalOpen(true); },
-                                primary: false
+                                primary: false,
+                                customClass: '!bg-rose-50 !text-[#BD1D2D] !border-rose-200/90 hover:!bg-[#BD1D2D] hover:!text-white hover:!border-[#BD1D2D] font-bold transition-all'
                             },
                             {
                                 label: 'Thiết kế mới',
@@ -1593,7 +1675,7 @@ const Templates: React.FC = () => {
                                         isOwn={isMyOwnTemplate(template)}
                                         groupName={getGroupName(template.groupId)}
                                         onToggleSelect={toggleSelect}
-                                        onPreview={setPreviewTemplate}
+                                        onPreview={handleOpenPreview}
                                         onEdit={handleStartEdit}
                                         onDuplicate={handleDuplicate}
                                         onDelete={(id) => setDeleteConfirm({ isOpen: true, ids: [id], type: 'template' })}

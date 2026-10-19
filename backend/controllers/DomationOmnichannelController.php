@@ -74,16 +74,30 @@ class DomationOmnichannelController
     /**
      * Find all linked subscriber IDs for a contact (Match-Only).
      */
-    private function getSubscriberIdsForContact(array $contact): array
+    private function getSubscriberIdsForContact(int|array $contact): array
     {
-        $contactId = (int)$contact['id'];
+        if (is_int($contact)) {
+            $contactId = $contact;
+            $contact = ['id' => $contactId];
+            try {
+                $stmtC = $this->db->prepare("SELECT id, email, phone, mobile, phone2, zalo_phone, domation_subscriber_id FROM contacts WHERE id = ? AND deleted_at IS NULL LIMIT 1");
+                $stmtC->execute([$contactId]);
+                $fetched = $stmtC->fetch(PDO::FETCH_ASSOC);
+                if ($fetched) {
+                    $contact = $fetched;
+                }
+            } catch (\Throwable $eC) {
+            }
+        } else {
+            $contactId = (int)($contact['id'] ?? 0);
+        }
         $subIds = [];
         if (!empty($contact['domation_subscriber_id'])) {
             $subIds[] = (string)$contact['domation_subscriber_id'];
         }
         try {
             $emailNorm = DomationContactMatcher::normalizeEmail((string)($contact['email'] ?? ''));
-            $rawPhone  = (string)($contact['phone'] ?: ($contact['mobile'] ?: ($contact['phone2'] ?? '')));
+            $rawPhone  = (string)(($contact['phone'] ?? '') ?: (($contact['mobile'] ?? '') ?: ($contact['phone2'] ?? '')));
             $phone9    = DomationContactMatcher::normalizePhone9($rawPhone);
 
             $conds  = ["contact_id = ?"];
@@ -1092,23 +1106,14 @@ class DomationOmnichannelController
             if (!empty($subIds)) {
                 $inSub   = implode(',', array_fill(0, count($subIds), '?'));
                 $conds[] = "sr.subscriber_id IN ($inSub)";
-                $params  = array_merge($params, $subIds);
+                $params  = array_merge($params, array_values($subIds));
             }
 
             $stmt = $this->db->prepare("
                 SELECT
-                    sr.id,
-                    sr.survey_id,
-                    sr.subscriber_id,
-                    sr.contact_id,
-                    sr.respondent_name,
-                    sr.respondent_email,
-                    sr.respondent_phone,
-                    sr.answers,
-                    sr.score,
-                    sr.submitted_at,
-                    s.title AS survey_title,
-                    s.description AS survey_description
+                    sr.*,
+                    s.name AS survey_title,
+                    sr.submitted_at AS created_at
                 FROM survey_responses sr
                 LEFT JOIN surveys s ON s.id = sr.survey_id
                 WHERE (" . implode(' OR ', $conds) . ")
@@ -1119,34 +1124,34 @@ class DomationOmnichannelController
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
             if (!empty($rows)) {
-                $respIds = array_map(static fn($r) => (int)$r['id'], $rows);
-                $inResp  = implode(',', array_fill(0, count($respIds), '?'));
+                $respIds = array_values(array_unique(array_filter(array_map(static fn($r) => (string)($r['id'] ?? ''), $rows), static fn($v) => $v !== '')));
 
                 $detailsByResp = [];
-                try {
-                    $stmtDet = $this->db->prepare("
-                        SELECT
-                            sad.response_id,
-                            sad.question_id,
-                            sad.answer_value,
-                            sq.question_text,
-                            sq.question_type
-                        FROM survey_answer_details sad
-                        LEFT JOIN survey_questions sq ON sq.id = sad.question_id
-                        WHERE sad.response_id IN ($inResp)
-                        ORDER BY sad.id ASC
-                    ");
-                    $stmtDet->execute($respIds);
-                    while ($dRow = $stmtDet->fetch(PDO::FETCH_ASSOC)) {
-                        $rid = (int)$dRow['response_id'];
-                        $detailsByResp[$rid][] = $dRow;
+                if (!empty($respIds)) {
+                    $inResp = implode(',', array_fill(0, count($respIds), '?'));
+                    try {
+                        $stmtDet = $this->db->prepare("
+                            SELECT
+                                sad.*,
+                                sq.label AS question_text,
+                                sq.type AS question_type
+                            FROM survey_answer_details sad
+                            LEFT JOIN survey_questions sq ON sq.id = sad.question_id
+                            WHERE sad.response_id IN ($inResp)
+                            ORDER BY sad.id ASC
+                        ");
+                        $stmtDet->execute($respIds);
+                        while ($dRow = $stmtDet->fetch(PDO::FETCH_ASSOC)) {
+                            $rid = (string)($dRow['response_id'] ?? '');
+                            $detailsByResp[$rid][] = $dRow;
+                        }
+                    } catch (\Throwable $eDet) {
                     }
-                } catch (\Throwable $eDet) {
                 }
 
                 foreach ($rows as &$r) {
-                    $rid = (int)$r['id'];
-                    $r['parsed_answers'] = json_decode((string)($r['answers'] ?? '{}'), true) ?: [];
+                    $rid = (string)($r['id'] ?? '');
+                    $r['parsed_answers'] = json_decode((string)($r['answers_json'] ?? $r['answers'] ?? '[]'), true) ?: [];
                     $r['answer_details'] = $detailsByResp[$rid] ?? [];
                 }
                 unset($r);

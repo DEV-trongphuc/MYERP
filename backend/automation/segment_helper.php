@@ -11,15 +11,17 @@
 // We still CREATE TABLE IF NOT EXISTS on each boot so new installations work.
 if (isset($pdo) && function_exists('domationEnsureSchemaOnce')) {
     domationEnsureSchemaOnce('segment_exclusions_schema', function () use ($pdo) {
-        $pdo->exec("CREATE TABLE IF NOT EXISTS segment_exclusions (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            workspace_id INT DEFAULT 1,
-            segment_id VARCHAR(50) NOT NULL,
-            subscriber_id CHAR(36) NOT NULL,
-            excluded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE KEY unique_exclusion (workspace_id, segment_id, subscriber_id),
-            INDEX idx_seg_exclusions_seg (workspace_id, segment_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        if (!$pdo->inTransaction()) {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS segment_exclusions (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                workspace_id INT DEFAULT 1,
+                segment_id VARCHAR(50) NOT NULL,
+                subscriber_id CHAR(36) NOT NULL,
+                excluded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY unique_exclusion (workspace_id, segment_id, subscriber_id),
+                INDEX idx_seg_exclusions_seg (workspace_id, segment_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        }
     });
 }
 
@@ -482,9 +484,22 @@ function buildSegmentWhereClause($criteriaJson, $workspaceId, $segmentId = null)
                 } else if ($field === 'crm_branch_id' || $field === 'branch_id') {
                     if (is_numeric($val) && (int)$val > 0) {
                         $isNeg = in_array($op, ['is_not', 'not_contains', 'not_equals'], true);
-                        $sqlBr = "EXISTS (SELECT 1 FROM contacts c_br JOIN users u_br ON u_br.id = c_br.owner_id WHERE c_br.id = s.contact_id AND c_br.deleted_at IS NULL AND u_br.branch_id = ?)";
-                        $condSqls[] = $isNeg ? "NOT $sqlBr" : $sqlBr;
-                        $allParams[] = (int)$val;
+                        $uColsBr = getCrmTableColumnsCache($pdo, 'users');
+                        $cColsBr = getCrmTableColumnsCache($pdo, 'contacts');
+                        if (isset($cColsBr['branch_id'])) {
+                            $sqlBr = "EXISTS (SELECT 1 FROM contacts c_br WHERE c_br.id = s.contact_id AND c_br.deleted_at IS NULL AND c_br.branch_id = ?)";
+                            $condSqls[] = $isNeg ? "NOT $sqlBr" : $sqlBr;
+                            $allParams[] = (int)$val;
+                        } elseif (isset($uColsBr['branch_id'])) {
+                            $sqlBr = "EXISTS (SELECT 1 FROM contacts c_br JOIN users u_br ON u_br.id = c_br.owner_id WHERE c_br.id = s.contact_id AND c_br.deleted_at IS NULL AND u_br.branch_id = ?)";
+                            $condSqls[] = $isNeg ? "NOT $sqlBr" : $sqlBr;
+                            $allParams[] = (int)$val;
+                        } else {
+                            $sqlBr = "EXISTS (SELECT 1 FROM contacts c_br LEFT JOIN users u_br ON u_br.id = c_br.owner_id WHERE c_br.id = s.contact_id AND c_br.deleted_at IS NULL AND (c_br.company_id = ? OR u_br.team_id = ?))";
+                            $condSqls[] = $isNeg ? "NOT $sqlBr" : $sqlBr;
+                            $allParams[] = (int)$val;
+                            $allParams[] = (int)$val;
+                        }
                         continue;
                     } else {
                         $colName = "COALESCE(NULLIF(s.city, ''), (SELECT c.city FROM contacts c WHERE c.id = s.contact_id AND c.deleted_at IS NULL LIMIT 1))";
@@ -639,7 +654,7 @@ function buildSegmentWhereClause($criteriaJson, $workspaceId, $segmentId = null)
                             SELECT 1 FROM invoices inv
                             WHERE inv.contact_id = s.contact_id AND inv.deleted_at IS NULL
                               AND inv.status NOT IN ('paid', 'cancelled')
-                              AND (inv.status = 'overdue' OR (inv.due_date IS NOT NULL AND inv.due_date < CURDATE() AND COALESCE(inv.total, 0) > COALESCE(inv.amount_paid, 0)))
+                              AND (inv.status = 'overdue' OR (inv.due_date IS NOT NULL AND inv.due_date < CURDATE() AND COALESCE(inv.total, 0) > 0))
                         )";
                     }
                     $overdueSql = !empty($overdueParts) ? '(' . implode(' OR ', $overdueParts) . ')' : '1=0';
@@ -662,7 +677,7 @@ function buildSegmentWhereClause($criteriaJson, $workspaceId, $segmentId = null)
                             SELECT 1 FROM invoices inv
                             WHERE inv.contact_id = s.contact_id AND inv.deleted_at IS NULL
                               AND inv.status IN ('unpaid', 'partial', 'partially_paid', 'overdue', 'pending', 'sent')
-                              AND COALESCE(inv.total, 0) > COALESCE(inv.amount_paid, 0)
+                              AND COALESCE(inv.total, 0) > 0
                         )";
                     }
                     $hasDebtSql = '(' . implode(' OR ', $debtParts) . ')';

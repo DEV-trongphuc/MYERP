@@ -271,7 +271,7 @@ class DomationContactMatcher
 
             // Propagate to meta_subscribers & meta_conversations (by subscriber_id / psid / email / phone)
             try {
-                if (!self::tableHasColumn($db, 'meta_subscribers', 'subscriber_id')) {
+                if (!$db->inTransaction() && !self::tableHasColumn($db, 'meta_subscribers', 'subscriber_id')) {
                     try {
                         $db->exec("ALTER TABLE `meta_subscribers` ADD COLUMN `subscriber_id` CHAR(36) NULL DEFAULT NULL");
                     } catch (\Throwable $eAlterMs) {
@@ -1100,7 +1100,7 @@ class DomationContactMatcher
 
             // Propagate & match meta_subscribers and meta_conversations
             try {
-                if (!self::tableHasColumn($db, 'meta_subscribers', 'subscriber_id')) {
+                if (!$db->inTransaction() && !self::tableHasColumn($db, 'meta_subscribers', 'subscriber_id')) {
                     try {
                         $db->exec("ALTER TABLE `meta_subscribers` ADD COLUMN `subscriber_id` CHAR(36) NULL DEFAULT NULL");
                     } catch (\Throwable $eAlterMs) {
@@ -2162,6 +2162,26 @@ class DomationContactMatcher
             self::syncSubscriberTagsToContact($db, $subscriberId, $contactId, $workspaceId);
         } catch (\Throwable $e) {
             error_log("[DomationContactMatcher::syncSubscriberToContactProfile] " . $e->getMessage());
+        }
+    }
+
+    private static function tableHasColumn(PDO $db, string $table, string $column): bool
+    {
+        static $colCache = [];
+        $key = $table . '.' . $column;
+        if (array_key_exists($key, $colCache)) {
+            return $colCache[$key];
+        }
+        try {
+            $safeTable = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
+            $stmt = $db->prepare("SHOW COLUMNS FROM `{$safeTable}` LIKE ?");
+            $stmt->execute([$column]);
+            $exists = (bool)$stmt->fetch();
+            $colCache[$key] = $exists;
+            return $exists;
+        } catch (\Throwable $e) {
+            $colCache[$key] = false;
+            return false;
         }
     }
 }

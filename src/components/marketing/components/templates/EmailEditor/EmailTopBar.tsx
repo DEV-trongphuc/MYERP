@@ -1,8 +1,9 @@
 import * as React from 'react';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ChevronLeft, Undo2, Redo2, Layout, Code, Monitor, Smartphone, Eye, Save,
-  Loader2, Send, FolderOpen, ShieldCheck, Pencil, Users, Lock, Globe, ChevronDown
+  Loader2, Send, FolderOpen, ShieldCheck, Pencil, Users, Lock, Globe, Sparkles, X, Check, FileText
 } from 'lucide-react';
 import Button from '../../common/Button';
 import Select from '../../common/Select';
@@ -33,6 +34,7 @@ interface EmailTopBarProps {
   onPreview: () => void;
   onSendTest: (email: string) => Promise<void>;
   onOpenTestModal?: () => void;
+  onOpenAIModal?: () => void;
   onValidate: () => void;
   validationIssueCount?: number;
   showValidation?: boolean;
@@ -47,7 +49,7 @@ interface EmailTopBarProps {
 
 const EmailTopBar: React.FC<EmailTopBarProps> = ({
   name, setName, groupId, setGroupId, groups, editorMode, setEditorMode, viewMode, setViewMode,
-  canUndo, canRedo, onUndo, onRedo, onSave, onCancel, onPreview, onSendTest, onOpenTestModal,
+  canUndo, canRedo, onUndo, onRedo, onSave, onCancel, onPreview, onSendTest, onOpenTestModal, onOpenAIModal,
   onValidate, validationIssueCount, showValidation, isDirty = false,
   visibility = 'shared', setVisibility, accessConfig, setAccessConfig, canSetShared = true
 }) => {
@@ -56,6 +58,27 @@ const EmailTopBar: React.FC<EmailTopBarProps> = ({
   const [showTestInput, setShowTestInput] = useState(false);
   const [testEmail, setTestEmail] = useState('');
   const [isAccessModalOpen, setIsAccessModalOpen] = useState(false);
+  const [isNameModalOpen, setIsNameModalOpen] = useState(false);
+  const [draftName, setDraftName] = useState(name);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isNameModalOpen) {
+      setDraftName(name);
+      setTimeout(() => {
+        nameInputRef.current?.focus();
+        nameInputRef.current?.select();
+      }, 40);
+    }
+  }, [isNameModalOpen, name]);
+
+  const handleConfirmNameModal = () => {
+    const trimmed = draftName.trim();
+    if (trimmed) {
+      setName(trimmed);
+    }
+    setIsNameModalOpen(false);
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -99,8 +122,13 @@ const EmailTopBar: React.FC<EmailTopBarProps> = ({
           <ChevronLeft className="w-5 h-5" />
         </button>
         <div className="flex flex-col">
-          {/* Name row with save-state dot + pencil hint */}
-          <div className="group/name relative flex items-center gap-1.5">
+          {/* Name row with save-state dot + click to open spacious Rename Modal */}
+          <button
+            type="button"
+            onClick={() => setIsNameModalOpen(true)}
+            title={`Nhấn để đổi tên mẫu: ${name || 'Chưa đặt tên'}`}
+            className="group/name relative flex items-center gap-2 h-8 px-2.5 -ml-1 rounded-[10px] hover:bg-slate-100/90 border border-transparent hover:border-slate-200 transition-all outline-none focus:outline-none cursor-pointer text-left"
+          >
             {/* Save-state indicator dot */}
             <span
               title={isDirty ? 'Có thay đổi chưa lưu' : 'Đã lưu'}
@@ -112,13 +140,13 @@ const EmailTopBar: React.FC<EmailTopBarProps> = ({
                   : '0 0 6px 1px rgba(16, 185, 129, 0.3)'
               }}
             />
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="h-9 text-sm font-semibold text-slate-800 outline-none focus:outline-none bg-transparent hover:bg-slate-50 focus:bg-slate-100 px-2.5 rounded-[12px] transition-all border border-transparent hover:border-slate-200 focus:border-[var(--color-primary)] truncate max-w-[150px] sm:max-w-[220px] flex items-center"
-            />
-            <Pencil className="w-3 h-3 text-slate-300 opacity-0 group-hover/name:opacity-100 transition-opacity duration-200 pointer-events-none shrink-0" />
-          </div>
+            <span className="text-sm font-bold text-slate-800 group-hover/name:text-[var(--color-primary)] truncate max-w-[160px] sm:max-w-[230px] transition-colors">
+              {name || 'Mẫu thiết kế chưa đặt tên'}
+            </span>
+            <span className="w-5 h-5 rounded-md bg-slate-100 group-hover/name:bg-[var(--color-primary)]/10 text-slate-400 group-hover/name:text-[var(--color-primary)] flex items-center justify-center transition-colors shrink-0">
+              <Pencil className="w-3 h-3" />
+            </span>
+          </button>
           <p className="text-[10px] text-slate-400 font-black px-2 uppercase tracking-wider leading-none mt-0.5">
             {editorMode === 'code' ? 'HTML Editor' : 'Drag & Drop Builder'}
           </p>
@@ -142,39 +170,40 @@ const EmailTopBar: React.FC<EmailTopBarProps> = ({
           />
         </div>
 
-        {/* Sleek Access / Sharing Trigger Button */}
+        {/* Sleek Icon-Only Access / Sharing Trigger Button */}
         {(setVisibility || setAccessConfig) && (
-          <div className="hidden lg:flex items-center">
+          <div className="hidden sm:flex items-center">
             <button
               type="button"
               onMouseEnter={() => preloadAccessDirectory()}
               onClick={() => setIsAccessModalOpen(true)}
-              title="Phân quyền & Chia sẻ mẫu thiết kế"
-              className={`h-9 px-3 rounded-[12px] border text-xs font-semibold inline-flex items-center gap-1.5 transition-all shadow-2xs outline-none focus:outline-none cursor-pointer ${
+              title={
                 currentMode === 'personal'
-                  ? 'bg-amber-50/70 border-amber-200 text-amber-800 hover:bg-amber-100/70'
+                  ? 'Phân quyền: Riêng tư (Chỉ mình tôi)'
                   : currentMode === 'custom'
-                    ? 'bg-rose-50/70 border-rose-200 text-[#BD1D2D] hover:bg-rose-100/70'
-                    : 'bg-emerald-50/70 border-emerald-200 text-emerald-800 hover:bg-emerald-100/70'
+                    ? `Phân quyền: Giới hạn (${totalSelectedTargets} đối tượng)`
+                    : 'Phân quyền: Công khai (Toàn công ty)'
+              }
+              className={`relative h-9 w-9 rounded-[12px] border flex items-center justify-center transition-all shadow-2xs outline-none focus:outline-none cursor-pointer ${
+                currentMode === 'personal'
+                  ? 'bg-amber-50/80 border-amber-200 text-amber-700 hover:bg-amber-100/80'
+                  : currentMode === 'custom'
+                    ? 'bg-rose-50/80 border-rose-200 text-[#BD1D2D] hover:bg-rose-100/80'
+                    : 'bg-emerald-50/80 border-emerald-200 text-emerald-700 hover:bg-emerald-100/80'
               }`}
             >
               {currentMode === 'personal' ? (
-                <>
-                  <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                  <span>Riêng tư</span>
-                </>
+                <Lock className="w-4 h-4 text-amber-600 shrink-0" />
               ) : currentMode === 'custom' ? (
-                <>
-                  <Users className="w-3.5 h-3.5 text-[var(--color-primary)] shrink-0" />
-                  <span>Giới hạn ({totalSelectedTargets})</span>
-                </>
+                <Users className="w-4 h-4 text-[var(--color-primary)] shrink-0" />
               ) : (
-                <>
-                  <Globe className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span>Công khai</span>
-                </>
+                <Globe className="w-4 h-4 text-emerald-600 shrink-0" />
               )}
-              <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
+              {currentMode === 'custom' && totalSelectedTargets > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] px-1 rounded-full bg-[#BD1D2D] text-white text-[9px] font-black flex items-center justify-center shadow-2xs">
+                  {totalSelectedTargets}
+                </span>
+              )}
             </button>
           </div>
         )}
@@ -253,8 +282,20 @@ const EmailTopBar: React.FC<EmailTopBarProps> = ({
         </div>
       </div>
 
-      {/* RIGHT: Validate + Test + Preview + Save */}
+      {/* RIGHT: AI + Validate + Test + Preview + Save */}
       <div className="flex items-center gap-2.5">
+        {editorMode === 'visual' && onOpenAIModal && (
+          <button
+            type="button"
+            onClick={onOpenAIModal}
+            title="Thiết kế & Tinh chỉnh Email bằng AI"
+            className="flex items-center gap-1.5 h-9 px-3.5 rounded-[12px] border border-rose-200/90 bg-rose-50/80 text-[#BD1D2D] hover:bg-[#BD1D2D] hover:text-white hover:border-[#BD1D2D] text-xs font-bold transition-all shadow-2xs outline-none focus:outline-none cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">Tạo bằng AI</span>
+          </button>
+        )}
+
         {editorMode === 'visual' && (
           <div className="relative">
             <button
@@ -360,8 +401,120 @@ const EmailTopBar: React.FC<EmailTopBarProps> = ({
           if (setAccessConfig) setAccessConfig(nextCfg);
         }}
       />
+
+      {/* Spacious Template Name & Category Modal */}
+      {isNameModalOpen && createPortal(
+        <div
+          className="fixed inset-0 z-[2147483647] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={() => setIsNameModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg bg-white rounded-[20px] border border-slate-200 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-6 py-4 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#BD1D2D]/10 text-[#BD1D2D] flex items-center justify-center shrink-0">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-800 leading-tight">
+                    Đặt tên Mẫu Thiết Kế Email
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Đặt tên rõ ràng để dễ dàng tìm kiếm và chọn khi tạo chiến dịch
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsNameModalOpen(false)}
+                className="w-8 h-8 rounded-lg hover:bg-slate-200/70 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-colors outline-none focus:outline-none cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-2">
+                  Tên mẫu thiết kế <span className="text-[#BD1D2D]">*</span>
+                </label>
+                <input
+                  ref={nameInputRef}
+                  type="text"
+                  value={draftName}
+                  onChange={(e) => setDraftName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleConfirmNameModal();
+                    } else if (e.key === 'Escape') {
+                      setIsNameModalOpen(false);
+                    }
+                  }}
+                  placeholder="Nhập tên mẫu thiết kế email..."
+                  spellCheck={false}
+                  className="w-full px-4 py-3.5 text-base font-bold text-slate-900 bg-slate-50/70 focus:bg-white border-2 border-slate-200 focus:border-[#BD1D2D] rounded-[14px] outline-none focus:ring-4 focus:ring-[#BD1D2D]/10 transition-all"
+                />
+                <div className="flex items-center justify-between mt-1.5 px-1">
+                  <span className="text-[11px] text-slate-400 font-medium">
+                    Nhấn <strong className="text-slate-600">Enter</strong> để xác nhận nhanh
+                  </span>
+                  <span className="text-[11px] font-bold text-slate-400">
+                    {draftName.trim().length} ký tự
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-2">
+                  Nhóm / Danh mục lưu trữ
+                </label>
+                <Select
+                  options={[
+                    { value: '', label: 'Chưa phân loại' },
+                    ...groups.map(g => ({ value: g.id, label: g.name }))
+                  ]}
+                  value={groupId}
+                  onChange={setGroupId}
+                  variant="outline"
+                  size="md"
+                  searchable
+                  icon={FolderOpen}
+                  placeholder="Chọn nhóm..."
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setIsNameModalOpen(false)}
+                className="h-10 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-xs font-bold text-slate-700 transition-colors outline-none focus:outline-none cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmNameModal}
+                disabled={!draftName.trim()}
+                className="h-10 px-5 rounded-xl bg-[#BD1D2D] hover:brightness-95 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs outline-none focus:outline-none cursor-pointer"
+              >
+                <Check className="w-4 h-4 stroke-[2.5]" />
+                <span>Lưu tên mẫu</span>
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };
 
 export default EmailTopBar;
+

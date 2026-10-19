@@ -443,24 +443,26 @@ if (!function_exists('flushActivityLogBuffer')) {
             // Fallback: Create table if missing
             if (strpos($e->getMessage(), "doesn't exist") !== false) {
                 try {
-                    $pdo->exec("CREATE TABLE IF NOT EXISTS activity_buffer (
-                        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                        subscriber_id char(36) NOT NULL,
-                        workspace_id INT DEFAULT 1,
-                        type VARCHAR(50) NOT NULL,
-                        details TEXT,
-                        reference_id VARCHAR(100),
-                        flow_id VARCHAR(50),
-                        campaign_id VARCHAR(50),
-                        extra_data JSON,
-                        processed TINYINT(1) DEFAULT 0,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        INDEX idx_processed (processed),
-                        INDEX idx_workspace_id (workspace_id)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+                    if (!$pdo->inTransaction()) {
+                        $pdo->exec("CREATE TABLE IF NOT EXISTS activity_buffer (
+                            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                            subscriber_id char(36) NOT NULL,
+                            workspace_id INT DEFAULT 1,
+                            type VARCHAR(50) NOT NULL,
+                            details TEXT,
+                            reference_id VARCHAR(100),
+                            flow_id VARCHAR(50),
+                            campaign_id VARCHAR(50),
+                            extra_data JSON,
+                            processed TINYINT(1) DEFAULT 0,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            INDEX idx_processed (processed),
+                            INDEX idx_workspace_id (workspace_id)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
 
-                    $sql = "INSERT INTO activity_buffer (subscriber_id, type, workspace_id, details, reference_id, flow_id, campaign_id, extra_data) VALUES " . implode(',', $binds);
-                    $pdo->prepare($sql)->execute($vals);
+                        $sql = "INSERT INTO activity_buffer (subscriber_id, type, workspace_id, details, reference_id, flow_id, campaign_id, extra_data) VALUES " . implode(',', $binds);
+                        $pdo->prepare($sql)->execute($vals);
+                    }
                 } catch (Exception $ex) {
                     // ignore
                 }

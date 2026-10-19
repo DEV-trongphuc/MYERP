@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
+import { useLocation } from 'react-router-dom';
 import { Plus, Search, Filter, LifeBuoy, AlertCircle, Clock, X, Save, MoreHorizontal, FileText, Loader2 } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 const TicketDrawer = lazy(() => import('./TicketDrawer').then(module => ({ default: module.TicketDrawer })));
@@ -173,7 +174,10 @@ export const TicketsPage: React.FC = () => {
     fetchRelatedData();
   }, []);
 
+  const location = useLocation();
+
   useEffect(() => {
+    if (!location.pathname.startsWith('/tickets')) return;
     const urlParams = new URLSearchParams(window.location.search);
     const targetId = urlParams.get('open_id') || urlParams.get('id') || urlParams.get('ticket_id');
     if (targetId) {
@@ -246,7 +250,7 @@ export const TicketsPage: React.FC = () => {
       const cleanUrl = window.location.pathname + (newParams.toString() ? '?' + newParams.toString() : '');
       window.history.replaceState({}, '', cleanUrl);
     }
-  }, [window.location.search]);
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {

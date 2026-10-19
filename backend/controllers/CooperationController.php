@@ -3,12 +3,23 @@
 
 class CooperationController {
     private PDO $db;
+    private static bool $schemaChecked = false;
 
     public function __construct(PDO $db) {
         $this->db = $db;
+        if (!self::$schemaChecked && !$this->db->inTransaction()) {
+            self::$schemaChecked = true;
+            try {
+                $col = $this->db->query("SHOW COLUMNS FROM cooperation_slips LIKE 'deleted_at'")->fetch();
+                if (!$col) {
+                    $this->db->exec("ALTER TABLE cooperation_slips ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL");
+                }
+            } catch (\Throwable $e) {
+            }
+        }
     }
 
-    private function notifyShareholders(int $slipId, array $shares, string $subject, string $title, string $content): void {
+    private function notifyShareholders(int $slipId, array $shares, string $subject, string $title, string $content, int $excludeUserId = 0): void {
         require_once __DIR__ . '/../mailer.php';
 
         // Fetch slip and contact info to enrich notifications with customer details
@@ -40,22 +51,18 @@ class CooperationController {
         if ($slip['owner_id']) {
             $uids[] = (int)$slip['owner_id'];
         }
-        $uids = array_unique($uids);
+        $uids = array_unique(array_filter($uids));
         if (empty($uids)) return;
 
         require_once __DIR__ . '/../NotificationService.php';
 
         foreach ($uids as $uid) {
-            // Notify individual shareholder via targeted email & in-app event
-            $stmtUser = $this->db->prepare("SELECT email FROM users WHERE id = ?");
-            $stmtUser->execute([$uid]);
-            $uRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
-            if ($uRow && !empty($uRow['email']) && function_exists('sendEmailNotification')) {
-                sendEmailNotification($uRow['email'], $enrichedSubject, $title, $enrichedContent);
+            if ($excludeUserId > 0 && (int)$uid === $excludeUserId) {
+                continue;
             }
-
             NotificationService::send($this->db, $tenantId, 'COOP_INVITATION', [
                 'user_id' => $uid,
+                'exclude_user_id' => $excludeUserId,
                 'slip_id' => $slipId,
                 'customer_name' => $customerName,
                 'email_subject' => $enrichedSubject,
@@ -72,9 +79,10 @@ class CooperationController {
 
         // Fetch slip details
         $stmtSlip = $this->db->prepare("
-            SELECT cs.created_by, c.owner_id, cs.shares_json, c.tenant_id
+            SELECT cs.created_by, c.owner_id, cs.shares_json, COALESCE(c.tenant_id, u_cr.tenant_id, 1) AS tenant_id
             FROM cooperation_slips cs
-            JOIN contacts c ON cs.contact_id = c.id
+            LEFT JOIN contacts c ON cs.contact_id = c.id
+            LEFT JOIN users u_cr ON cs.created_by = u_cr.id
             WHERE cs.id = ?
         ");
         $stmtSlip->execute([$id]);
@@ -98,7 +106,7 @@ class CooperationController {
             foreach ($shares as $u => $p) {
                 $uidsToCheck[] = (int)$u;
             }
-            $uidsToCheck = array_unique(array_filter($uidsToCheck));
+            $uidsToCheck = array_values(array_unique(array_filter($uidsToCheck)));
             if (!empty($uidsToCheck)) {
                 $inUids = implode(',', array_fill(0, count($uidsToCheck), '?'));
                 $stmtTeamCheck = $this->db->prepare("
@@ -210,7 +218,7 @@ class CooperationController {
             }
         }
 
-        $contactIds = array_unique(array_filter(array_column($slips, 'contact_id')));
+        $contactIds = array_values(array_unique(array_filter(array_column($slips, 'contact_id'))));
         $docsByContact = [];
         $milestonesByContact = [];
 
@@ -524,7 +532,7 @@ class CooperationController {
                             "Tỷ lệ hoa hồng hoặc số tiền hoa hồng trong Phiếu hợp tác #" . $id . " đã được điều chỉnh trực tiếp bởi Quản trị viên <strong>" . htmlspecialchars($auth['full_name']) . "</strong>.<br/>" .
                             (!empty($reason) ? "<strong>Ghi chú:</strong> <em>" . htmlspecialchars($reason) . "</em>.<br/>" : "") .
                             "Vui lòng truy cập hệ thống để kiểm tra tỷ lệ phân chia mới.";
-            $this->notifyShareholders($id, $shares, $emailSubject, $emailTitle, $emailContent);
+            $this->notifyShareholders($id, $shares, $emailSubject, $emailTitle, $emailContent, (int)$auth['user_id']);
         } elseif ($newStatus === 'pending_manager_approval') {
             $stmtUser = $this->db->prepare("SELECT full_name FROM users WHERE id = ?");
             $stmtUser->execute([$auth['user_id']]);
@@ -535,6 +543,7 @@ class CooperationController {
             NotificationService::send($this->db, $auth['tenant_id'], 'COOPERATION_PENDING_APPROVAL', [
                 'slip_id' => $id,
                 'user_name' => $userName,
+                'exclude_user_id' => (int)$auth['user_id'],
                 'reason' => "Yêu cầu thay đổi tỷ lệ hoa hồng cho Phiếu hợp tác #$id. Lý do: $reason"
             ]);
         } else {
@@ -545,7 +554,7 @@ class CooperationController {
                             "Tỷ lệ hoa hồng trong Phiếu hợp tác #" . $id . " đã được cập nhật bởi <strong>" . htmlspecialchars($auth['full_name']) . "</strong>.<br/>" .
                             "Lý do: <em>" . htmlspecialchars($reason) . "</em>.<br/>" .
                             "Vui lòng truy cập hệ thống để ký xác nhận lại.";
-            $this->notifyShareholders($id, $shares, $emailSubject, $emailTitle, $emailContent);
+            $this->notifyShareholders($id, $shares, $emailSubject, $emailTitle, $emailContent, (int)$auth['user_id']);
         }
 
         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'UPDATE_COOPERATION_SHARES', 'cooperation_slip', $id, "Cập nhật/Yêu cầu thay đổi tỷ lệ hoa hồng phiên bản " . ($slip['version'] + 1) . ". Lý do: $reason");
@@ -676,7 +685,7 @@ class CooperationController {
             $signatures = json_decode($slip['signatures_json'], true) ?: [];
             $body = getBody();
             
-            $sigImg = $body['signature_img'] ?? null;
+            $sigImg = $body['signature_img'] ?? $body['signature_url'] ?? $body['signature_data'] ?? null;
             if ($sigImg && strpos($sigImg, 'data:image') === 0) {
                 try {
                     $sigDir = UPLOAD_DIR . "/signatures";
@@ -750,16 +759,27 @@ class CooperationController {
         // Email notifications based on signature status (after commit)
         if ($allSigned) {
             if ($status === 'approved') {
-                $emailSubject = "[IDEAS] Phiếu hợp tác #" . $id . " đã được phê duyệt và ký kết thành công";
-                $emailTitle = "PHÊ DUYỆT PHIẾU HỢP TÁC";
-                $emailContent = "Chào các thành viên,<br/><br/>" .
-                                "Phiếu hợp tác chia sẻ hoa hồng #" . $id . " đã được thu thập đầy đủ chữ ký và chính thức phê duyệt thành công.<br/>" .
-                                "Vui lòng truy cập hệ thống để xem chi tiết.";
-                $this->notifyShareholders($id, $shares, $emailSubject, $emailTitle, $emailContent);
+                try {
+                    require_once __DIR__ . '/../NotificationService.php';
+                    $uids = array_map('intval', array_keys($shares));
+                    if (!empty($slip['created_by'])) $uids[] = (int)$slip['created_by'];
+                    $uids = array_unique(array_filter($uids));
+                    foreach ($uids as $targetUid) {
+                        if ($targetUid > 0 && $targetUid !== (int)$auth['user_id']) {
+                            NotificationService::send($this->db, $auth['tenant_id'], 'COOP_SLIP_APPROVED', [
+                                'target_user_id' => $targetUid,
+                                'exclude_user_id' => (int)$auth['user_id'],
+                                'slip_id' => $id,
+                                'approver_name' => $auth['full_name'] ?? 'Hệ thống'
+                            ]);
+                        }
+                    }
+                } catch (\Throwable $e) {}
             } else { // pending_manager_approval
                 require_once __DIR__ . '/../NotificationService.php';
                 NotificationService::send($this->db, $auth['tenant_id'], 'COOPERATION_PENDING_APPROVAL', [
                     'slip_id' => $id,
+                    'exclude_user_id' => (int)$auth['user_id'],
                     'reason' => "Phiếu hợp tác #$id đã được ký đủ và chờ phê duyệt cuối."
                 ]);
             }
@@ -777,7 +797,7 @@ class CooperationController {
                 $emailContent = "Chào bạn,<br/><br/>" .
                                 "Bạn có một yêu cầu ký xác nhận cho Phiếu hợp tác chia sẻ hoa hồng #" . $id . " chưa hoàn thành.<br/>" .
                                 "Vui lòng đăng nhập hệ thống IDEAS CRM và truy cập mục <strong>Phiếu hợp tác</strong> để ký xác nhận sớm nhất.";
-                $this->notifyShareholders($id, $remainingShares, $emailSubject, $emailTitle, $emailContent);
+                $this->notifyShareholders($id, $remainingShares, $emailSubject, $emailTitle, $emailContent, (int)$auth['user_id']);
             }
         }
 
@@ -791,7 +811,7 @@ class CooperationController {
         $this->db->beginTransaction();
         try {
             $stmtSlip = $this->db->prepare("
-                SELECT cs.*, c.tenant_id, c.project_id
+                SELECT cs.*, c.tenant_id, c.project_id, c.owner_id
                 FROM cooperation_slips cs
                 JOIN contacts c ON cs.contact_id = c.id
                 WHERE cs.id = ? AND c.tenant_id = ?
@@ -830,26 +850,19 @@ class CooperationController {
 
             $this->db->commit();
 
-            // Email shareholders about approval
+            // Dispatch COOP_SLIP_APPROVED to shareholders, creator & owner (excluding current approver)
             $shares = json_decode($slip['shares_json'], true) ?: [];
-            $emailSubject = "[IDEAS] Phiếu hợp tác #" . $id . " đã được phê duyệt thành công";
-            $emailTitle = "PHÊ DUYỆT PHIẾU HỢP TÁC";
-            $approverName = !empty($auth['full_name']) ? $auth['full_name'] : (!empty($auth['name']) ? $auth['name'] : 'Ban Quản Trị');
-            $emailContent = "Chào các thành viên,<br/><br/>" .
-                            "Phiếu hợp tác chia sẻ hoa hồng #" . $id . " đã được phê duyệt thành công bởi <strong>" . htmlspecialchars($approverName) . "</strong>.<br/>" .
-                            "Vui lòng truy cập hệ thống để xem chi tiết.";
-            $this->notifyShareholders($id, $shares, $emailSubject, $emailTitle, $emailContent);
-
-            // In-app notifications to shareholders & creator
             try {
                 require_once __DIR__ . '/../NotificationService.php';
                 $uids = array_map('intval', array_keys($shares));
                 if (!empty($slip['created_by'])) $uids[] = (int)$slip['created_by'];
-                $uids = array_unique($uids);
+                if (!empty($slip['owner_id'])) $uids[] = (int)$slip['owner_id'];
+                $uids = array_unique(array_filter($uids));
                 foreach ($uids as $targetUid) {
                     if ($targetUid > 0 && $targetUid !== (int)$auth['user_id']) {
                         NotificationService::send($this->db, $auth['tenant_id'], 'COOP_SLIP_APPROVED', [
                             'target_user_id' => $targetUid,
+                            'exclude_user_id' => (int)$auth['user_id'],
                             'slip_id' => $id,
                             'approver_name' => $auth['full_name'] ?? 'Ban Quản Trị'
                         ]);
@@ -861,7 +874,7 @@ class CooperationController {
 
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'APPROVE_COOPERATION_SLIP', 'cooperation_slip', $id, "Duyệt phiếu hợp tác hoa hồng ID: $id");
             respond(200, null, 'Phê duyệt phiếu hợp tác hoa hồng thành công');
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             if ($this->db->inTransaction()) {
                 $this->db->rollBack();
             }
@@ -876,7 +889,7 @@ class CooperationController {
         $this->db->beginTransaction();
         try {
             $stmtSlip = $this->db->prepare("
-                SELECT cs.*, c.tenant_id 
+                SELECT cs.*, c.tenant_id, c.owner_id
                 FROM cooperation_slips cs
                 JOIN contacts c ON cs.contact_id = c.id
                 WHERE cs.id = ? AND c.tenant_id = ?
@@ -918,25 +931,18 @@ class CooperationController {
             respond(500, null, 'Lỗi khi từ chối phiếu hợp tác: ' . $e->getMessage(), false);
         }
 
-        // Email shareholders about dispute/rejection (after commit)
-        $emailSubject = "[IDEAS] Từ chối / Khiếu nại Phiếu hợp tác #" . $id;
-        $emailTitle = "KHIẾU NẠI PHIẾU HỢP TÁC";
-        $emailContent = "Chào các thành viên,<br/><br/>" .
-                        "Phiếu hợp tác chia sẻ hoa hồng #" . $id . " đã bị từ chối / gửi phản hồi khiếu nại bởi <strong>" . htmlspecialchars($auth['full_name']) . "</strong>.<br/>" .
-                        "Lý do: <em>" . htmlspecialchars($details) . "</em>.<br/>" .
-                        "Vui lòng truy cập hệ thống IDEAS CRM để xem chi tiết và cập nhật lại.";
-        $this->notifyShareholders($id, $shares, $emailSubject, $emailTitle, $emailContent);
-
-        // In-app notifications to shareholders & creator
+        // Dispatch COOP_SLIP_REJECTED to shareholders, creator & owner (excluding current actor)
         try {
             require_once __DIR__ . '/../NotificationService.php';
             $uids = array_map('intval', array_keys($shares));
             if (!empty($slip['created_by'])) $uids[] = (int)$slip['created_by'];
-            $uids = array_unique($uids);
+            if (!empty($slip['owner_id'])) $uids[] = (int)$slip['owner_id'];
+            $uids = array_unique(array_filter($uids));
             foreach ($uids as $targetUid) {
                 if ($targetUid > 0 && $targetUid !== (int)$auth['user_id']) {
                     NotificationService::send($this->db, $auth['tenant_id'], 'COOP_SLIP_REJECTED', [
                         'target_user_id' => $targetUid,
+                        'exclude_user_id' => (int)$auth['user_id'],
                         'slip_id' => $id,
                         'reason' => $details,
                         'approver_name' => $auth['full_name'] ?? 'Người phản hồi'
@@ -1104,7 +1110,7 @@ class CooperationController {
         $emailContent = "Chào các thành viên,<br/><br/>" .
                         "Một phiếu hợp tác chia sẻ hoa hồng mới (#" . $slipId . ") đã được khởi tạo trên hệ thống cho khách hàng <strong>" . htmlspecialchars($custFullName) . "</strong>.<br/>" .
                         "Vui lòng đăng nhập hệ thống IDEAS CRM và truy cập mục <strong>Phiếu hợp tác</strong> để xem chi tiết và ký xác nhận.";
-        $this->notifyShareholders($slipId, $shares, $emailSubject, $emailTitle, $emailContent);
+        $this->notifyShareholders($slipId, $shares, $emailSubject, $emailTitle, $emailContent, (int)$auth['user_id']);
 
         respond(201, ['id' => (int)$slipId], 'Khởi tạo phiếu hợp tác thành công');
     }
@@ -1715,10 +1721,11 @@ class CooperationController {
         try {
             // Fetch slip details
             $stmt = $this->db->prepare("
-                SELECT cs.*, c.full_name as customer_name, c.tenant_id
+                SELECT cs.*, c.full_name as customer_name, COALESCE(c.tenant_id, u_cr.tenant_id, 1) as tenant_id
                 FROM cooperation_slips cs
-                JOIN contacts c ON cs.contact_id = c.id
-                WHERE cs.id = ? AND c.tenant_id = ?
+                LEFT JOIN contacts c ON cs.contact_id = c.id
+                LEFT JOIN users u_cr ON cs.created_by = u_cr.id
+                WHERE cs.id = ? AND COALESCE(c.tenant_id, u_cr.tenant_id, 1) = ?
                 FOR UPDATE
             ");
             $stmt->execute([$id, $auth['tenant_id']]);
@@ -1836,7 +1843,7 @@ class CooperationController {
                 respond(200, null, 'Từ chối yêu cầu chỉnh sửa tỷ lệ thành công');
             }
 
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             if ($this->db->inTransaction()) {
                 $this->db->rollBack();
             }
@@ -1851,12 +1858,12 @@ class CooperationController {
         $stmt = $this->db->prepare("
             SELECT cs.*, c.full_name as contact_name, c.phone as contact_phone, u.full_name as creator_name
             FROM cooperation_slips cs
-            INNER JOIN contacts c ON cs.contact_id = c.id AND c.tenant_id = ? AND c.deleted_at IS NULL
+            LEFT JOIN contacts c ON cs.contact_id = c.id AND c.deleted_at IS NULL
             LEFT JOIN users u ON cs.created_by = u.id
-            WHERE cs.id = ?
+            WHERE cs.id = ? AND COALESCE(c.tenant_id, u.tenant_id, 1) = ?
             LIMIT 1
         ");
-        $stmt->execute([$auth['tenant_id'], $id]);
+        $stmt->execute([$id, $auth['tenant_id']]);
         $slip = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$slip) {
             respond(404, null, 'Không tìm thấy phiếu hợp tác', false);
@@ -1869,6 +1876,9 @@ class CooperationController {
             respond(403, null, 'Bạn không có quyền cập nhật phiếu hợp tác này', false);
         }
         $b = getBody();
+        if (!isset($b['dispute_details']) && (isset($b['note']) || isset($b['notes']))) {
+            $b['dispute_details'] = $b['note'] ?? $b['notes'];
+        }
         $updates = [];
         $params = [];
         // Restrict to non-sensitive metadata fields; shares/signatures/status must go through dedicated workflow methods
@@ -1878,17 +1888,30 @@ class CooperationController {
                 $params[] = is_array($b[$field]) ? json_encode($b[$field], JSON_UNESCAPED_UNICODE) : $b[$field];
             }
         }
-        if (empty($updates)) {
+        $hasCommissionUpdate = isset($b['commission_amount']) || isset($b['expected_commission']);
+        if ($hasCommissionUpdate) {
+            $commAmt = (float)($b['commission_amount'] ?? $b['expected_commission'] ?? 0);
+            $stmtDep = $this->db->prepare("SELECT deposit_slip_id FROM cooperation_slips WHERE id = ?");
+            $stmtDep->execute([$id]);
+            $depId = (int)($stmtDep->fetchColumn() ?: 0);
+            if ($depId > 0) {
+                $this->db->prepare("UPDATE deposits SET expected_commission = ? WHERE id = ?")->execute([$commAmt, $depId]);
+            }
+        }
+        if (empty($updates) && !$hasCommissionUpdate) {
             respond(422, null, 'Không có thông tin cần cập nhật', false);
         }
-        $params[] = $id;
-        $params[] = $auth['tenant_id'];
-        $this->db->prepare("
-            UPDATE cooperation_slips cs
-            JOIN contacts c ON cs.contact_id = c.id
-            SET " . implode(', ', array_map(fn($u) => "cs.$u", $updates)) . ", cs.updated_at = NOW()
-            WHERE cs.id = ? AND c.tenant_id = ?
-        ")->execute($params);
+        if (!empty($updates)) {
+            $params[] = $id;
+            $params[] = $auth['tenant_id'];
+            $this->db->prepare("
+                UPDATE cooperation_slips cs
+                LEFT JOIN contacts c ON cs.contact_id = c.id
+                LEFT JOIN users u_cr ON cs.created_by = u_cr.id
+                SET " . implode(', ', array_map(fn($u) => "cs.$u", $updates)) . ", cs.updated_at = NOW()
+                WHERE cs.id = ? AND COALESCE(c.tenant_id, u_cr.tenant_id, 1) = ?
+            ")->execute($params);
+        }
         respond(200, ['id' => $id], 'Cập nhật phiếu hợp tác thành công');
     }
 }

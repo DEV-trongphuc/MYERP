@@ -295,6 +295,7 @@ const CanvasRow: React.FC<CanvasRowProps> = (props) => {
                                                 <React.Fragment key={col.id}>
                                                     <div style={{
                                                         width: `${colPct}%`,
+                                                        minWidth: 0,
                                                         flexShrink: 0,
                                                         flexGrow: 0,
                                                         position: 'relative',

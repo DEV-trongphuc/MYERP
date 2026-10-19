@@ -15,11 +15,15 @@ interface LibraryFile {
     name: string;
     uniqueName: string;
     url: string;
+    thumbUrl?: string;
     path: string;
     size: number;
     type: string;
     modified_at: number;
 }
+
+let cachedLibraryFiles: LibraryFile[] | null = null;
+let cachedLibraryFilesTs = 0;
 
 interface FileLibraryModalProps {
     isOpen: boolean;
@@ -91,8 +95,8 @@ const FileLibraryModal: React.FC<FileLibraryModalProps> = ({
         }
     })();
     const activeDark = isDarkTheme ?? isDark;
-    const [files, setFiles]         = useState<LibraryFile[]>([]);
-    const [loading, setLoading]     = useState(false);
+    const [files, setFiles]         = useState<LibraryFile[]>(() => cachedLibraryFiles || []);
+    const [loading, setLoading]     = useState(() => !cachedLibraryFiles);
     const [search, setSearch]       = useState('');
     const [filter, setFilter]       = useState<FilterType>('all');
     const [selected, setSelected]   = useState<Set<string>>(new Set());
@@ -112,15 +116,26 @@ const FileLibraryModal: React.FC<FileLibraryModalProps> = ({
     const [renameSaving, setRenameSaving] = useState(false);
     const renameInputRef = useRef<HTMLInputElement>(null);
 
-    const fetchFiles = useCallback(async () => {
-        setLoading(true);
+    const fetchFiles = useCallback(async (force = false) => {
+        if (!force && cachedLibraryFiles && Date.now() - cachedLibraryFilesTs < 20000) {
+            setFiles(cachedLibraryFiles);
+            setLoading(false);
+            return;
+        }
+        if (!cachedLibraryFiles) setLoading(true);
         setError('');
         try {
             const res = await api.get<LibraryFile[]>('upload?route=library');
-            if (res.success) setFiles(res.data || []);
-            else setError('Không thể tải thư viện file.');
+            if (res.success) {
+                const list = res.data || [];
+                cachedLibraryFiles = list;
+                cachedLibraryFilesTs = Date.now();
+                setFiles(list);
+            } else if (!cachedLibraryFiles) {
+                setError('Không thể tải thư viện file.');
+            }
         } catch {
-            setError('Lỗi kết nối.');
+            if (!cachedLibraryFiles) setError('Lỗi kết nối.');
         } finally {
             setLoading(false);
         }
@@ -132,7 +147,11 @@ const FileLibraryModal: React.FC<FileLibraryModalProps> = ({
             setSearch('');
             setFilter('all');
             setPage(1);
-            fetchFiles();
+            if (cachedLibraryFiles) {
+                setFiles(cachedLibraryFiles);
+                setLoading(false);
+            }
+            fetchFiles(false);
         }
     }, [isOpen, fetchFiles]);
 
@@ -189,7 +208,11 @@ const FileLibraryModal: React.FC<FileLibraryModalProps> = ({
         try {
             const res = await api.get<{ deleted: string }>(`upload?route=delete&file=${encodeURIComponent(uniqueName)}`);
             if (res.success) {
-                setFiles(prev => prev.filter(f => f.uniqueName !== uniqueName));
+                setFiles(prev => {
+                    const next = prev.filter(f => f.uniqueName !== uniqueName);
+                    cachedLibraryFiles = next;
+                    return next;
+                });
                 setSelected(prev => { const n = new Set(prev); n.delete(uniqueName); return n; });
             } else {
                 setDeleteError(uniqueName);
@@ -224,16 +247,20 @@ const FileLibraryModal: React.FC<FileLibraryModalProps> = ({
         }
         setRenameSaving(true);
         try {
-            const res = await api.post<{ uniqueName: string; name: string; url: string }>(
+            const res = await api.post<{ uniqueName: string; name: string; url: string; thumbUrl?: string }>(
                 'upload?route=rename',
                 JSON.stringify({ uniqueName, newName: trimmed })
             );
             if (res.success && res.data) {
-                setFiles(prev => prev.map(f =>
-                    f.uniqueName === uniqueName
-                        ? { ...f, name: res.data!.name, uniqueName: res.data!.uniqueName, url: res.data!.url }
-                        : f
-                ));
+                setFiles(prev => {
+                    const next = prev.map(f =>
+                        f.uniqueName === uniqueName
+                            ? { ...f, name: res.data!.name, uniqueName: res.data!.uniqueName, url: res.data!.url, thumbUrl: res.data!.thumbUrl || f.thumbUrl || res.data!.url }
+                            : f
+                    );
+                    cachedLibraryFiles = next;
+                    return next;
+                });
                 toast.success('Đã đổi tên');
             } else {
                 toast.error('Đổi tên thất bại');
@@ -248,28 +275,27 @@ const FileLibraryModal: React.FC<FileLibraryModalProps> = ({
 
     const handleBulkDelete = async () => {
         const toDelete = Array.from(selected);
+        if (toDelete.length === 0) return;
         setBulkDeleting(true);
         setBulkDeleteError('');
-        let failed = 0;
-        for (const uniqueName of toDelete) {
-            try {
-                const res = await api.get<{ deleted: string }>(`upload?route=delete&file=${encodeURIComponent(uniqueName)}`);
-                if (res.success) {
-                    setFiles(prev => prev.filter(f => f.uniqueName !== uniqueName));
-                    setSelected(prev => { const n = new Set(prev); n.delete(uniqueName); return n; });
-                } else {
-                    failed++;
-                }
-            } catch {
-                failed++;
+        try {
+            const res = await api.post<any>('upload?route=bulk_delete', { files: toDelete });
+            if (res.success) {
+                const deletedSet = new Set<string>(Array.isArray(res.data?.deleted) ? res.data.deleted : toDelete);
+                setFiles(prev => {
+                    const next = prev.filter(f => !deletedSet.has(f.uniqueName));
+                    cachedLibraryFiles = next;
+                    return next;
+                });
+                setSelected(new Set());
+                setBulkDeleteConfirm(false);
+            } else {
+                setBulkDeleteError(res.message || 'Xóa thất bại.');
             }
-        }
-        setBulkDeleting(false);
-        setBulkDeleteConfirm(false);
-        if (failed > 0) {
-            setBulkDeleteError(`Xóa thất bại ${failed} file.`);
-        } else {
-            setSelected(new Set());
+        } catch {
+            setBulkDeleteError('Lỗi kết nối.');
+        } finally {
+            setBulkDeleting(false);
         }
     };
 
@@ -300,7 +326,7 @@ const FileLibraryModal: React.FC<FileLibraryModalProps> = ({
                     </div>
                     <div className="flex items-center gap-2">
                         <button
-                            onClick={fetchFiles}
+                            onClick={() => fetchFiles(true)}
                             disabled={loading}
                             className={`p-2 rounded-xl transition-all duration-200 ${activeDark ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'} hover:scale-105 active:scale-95`}
                             title="Tải lại"
@@ -366,7 +392,7 @@ const FileLibraryModal: React.FC<FileLibraryModalProps> = ({
                             <div className="flex flex-col items-center gap-3 text-rose-500">
                                 <AlertCircle className="w-8 h-8" />
                                 <p className="text-xs font-medium">{error}</p>
-                                <button onClick={fetchFiles} className="text-xs text-blue-600 underline">Thử lại</button>
+                                <button onClick={() => fetchFiles(true)} className="text-xs text-blue-600 underline">Thử lại</button>
                             </div>
                         </div>
                     ) : filtered.length === 0 ? (
@@ -405,11 +431,19 @@ const FileLibraryModal: React.FC<FileLibraryModalProps> = ({
                                         <div className={`aspect-square relative overflow-hidden ${activeDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
                                             {isImage ? (
                                                 <img
-                                                    src={file.url}
+                                                    src={file.thumbUrl || file.url}
                                                     alt={file.name}
                                                     className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                                                     loading="lazy"
-                                                    onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                    decoding="async"
+                                                    onError={e => {
+                                                        const el = e.target as HTMLImageElement;
+                                                        if (file.url && el.src !== file.url) {
+                                                            el.src = file.url;
+                                                        } else {
+                                                            el.style.display = 'none';
+                                                        }
+                                                    }}
                                                 />
                                             ) : (
                                                 <div className={`w-full h-full flex items-center justify-center border-b ${activeDark ? 'border-slate-850' : 'border-slate-100'} ${iconBg(file.type, activeDark)}`}>

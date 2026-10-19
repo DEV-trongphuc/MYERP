@@ -1207,7 +1207,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
               alignItems: 'center',
               justifyContent: 'center',
               padding: '1.5rem',
-              zIndex: 10500
+              zIndex: 2147483646
             }}
           >
             <motion.div
@@ -1366,9 +1366,9 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
+            transition={{ duration: 0.22 }}
             style={{
-              zIndex: 10500,
+              zIndex: 2147483620,
               background: 'rgba(0,0,0,0.45)',
               backdropFilter: 'blur(8px)',
               position: 'fixed',
@@ -1389,7 +1389,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
               bottom: 0,
               left: window.innerWidth <= 768 ? 0 : 'var(--sidebar-width, 220px)',
               right: 0,
-              zIndex: 10600,
+              zIndex: 2147483625,
               backgroundColor: 'var(--color-surface)',
               boxShadow: '-10px 0 30px rgba(0, 0, 0, 0.15)',
               display: 'flex',
@@ -4752,7 +4752,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
       {/* Detailed Permission Modal */}
       <AnimatePresence>
         {isPermissionModalOpen && (
-          <div style={{
+          <div className="modal-backdrop modal-above-drawer" style={{
             position: 'fixed',
             top: 0,
             left: 0,
@@ -4763,7 +4763,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 99999,
+            zIndex: 2147483645,
             padding: '1.5rem'
           }}>
             <motion.div
@@ -5286,7 +5286,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
       {/* Delete Confirmation Modal */}
       <AnimatePresence>
         {isDeleteConfirmOpen && (
-          <div style={{
+          <div className="modal-backdrop modal-above-drawer" style={{
             position: 'fixed',
             top: 0,
             left: 0,
@@ -5297,7 +5297,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 999999,
+            zIndex: 2147483646,
             padding: '1.5rem'
           }}>
             <motion.div
@@ -5473,13 +5473,14 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
 
       {previewImage && (
         <div 
+          className="modal-backdrop modal-above-drawer"
           style={{ 
             position: 'fixed',
             inset: 0,
             display: 'flex', 
             alignItems: 'center', 
             justifyContent: 'center', 
-            zIndex: 1000500, 
+            zIndex: 2147483646, 
             background: 'rgba(0,0,0,0.85)',
             padding: '24px'
           }} 

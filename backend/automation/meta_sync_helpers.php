@@ -14,18 +14,20 @@ function syncMetaToMain($pdo, $metaSubId, $workspaceId = null)
         require_once __DIR__ . '/../utils/DomationContactMatcher.php';
 
         // Ensure meta_subscribers has subscriber_id and contact_id columns
-        try {
-            $msCols = $pdo->query("SHOW COLUMNS FROM `meta_subscribers`")->fetchAll(PDO::FETCH_COLUMN);
-            if (!in_array('subscriber_id', $msCols, true)) {
-                $pdo->exec("ALTER TABLE `meta_subscribers` ADD COLUMN `subscriber_id` CHAR(36) NULL DEFAULT NULL");
+        if (!$pdo->inTransaction()) {
+            try {
+                $msCols = $pdo->query("SHOW COLUMNS FROM `meta_subscribers`")->fetchAll(PDO::FETCH_COLUMN);
+                if (!in_array('subscriber_id', $msCols, true)) {
+                    $pdo->exec("ALTER TABLE `meta_subscribers` ADD COLUMN `subscriber_id` CHAR(36) NULL DEFAULT NULL");
+                }
+                if (!in_array('contact_id', $msCols, true)) {
+                    $pdo->exec("ALTER TABLE `meta_subscribers` ADD COLUMN `contact_id` INT NULL DEFAULT NULL");
+                }
+                if (!in_array('workspace_id', $msCols, true)) {
+                    $pdo->exec("ALTER TABLE `meta_subscribers` ADD COLUMN `workspace_id` INT NULL DEFAULT 1");
+                }
+            } catch (\Throwable $eCol) {
             }
-            if (!in_array('contact_id', $msCols, true)) {
-                $pdo->exec("ALTER TABLE `meta_subscribers` ADD COLUMN `contact_id` INT NULL DEFAULT NULL");
-            }
-            if (!in_array('workspace_id', $msCols, true)) {
-                $pdo->exec("ALTER TABLE `meta_subscribers` ADD COLUMN `workspace_id` INT NULL DEFAULT 1");
-            }
-        } catch (\Throwable $eCol) {
         }
 
         // 1. Fetch Meta Subscriber Info

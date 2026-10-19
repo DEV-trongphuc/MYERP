@@ -5,9 +5,10 @@ import { AlignLeft, AlignCenter, AlignRight, AlignJustify, AlignVerticalJustifyS
 interface AlignmentControlProps {
     values: { textAlign?: string; verticalAlign?: string; };
     onChange: (updates: { textAlign?: string; verticalAlign?: string; }) => void;
+    showVertical?: boolean;
 }
 
-const AlignmentControl: React.FC<AlignmentControlProps> = ({ values, onChange }) => (
+const AlignmentControl: React.FC<AlignmentControlProps> = ({ values, onChange, showVertical = false }) => (
     <div className="space-y-2">
         <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Căn chỉnh</label>
         <div className="flex bg-slate-100 p-1 rounded-lg">
@@ -24,19 +25,21 @@ const AlignmentControl: React.FC<AlignmentControlProps> = ({ values, onChange })
                 </button>
             ))}
         </div>
-        <div className="flex bg-slate-100 p-1 rounded-lg mt-2">
-            {['top', 'middle', 'bottom'].map((align) => (
-                <button
-                    key={align}
-                    onClick={() => onChange({ verticalAlign: align })}
-                    className={`flex-1 py-1.5 rounded-md flex items-center justify-center transition-all ${values.verticalAlign === align ? 'bg-white shadow text-amber-600' : 'text-slate-400 hover:text-slate-600'}`}
-                >
-                    {align === 'top' && <AlignVerticalJustifyStart className="w-3.5 h-3.5" />}
-                    {align === 'middle' && <AlignVerticalJustifyCenter className="w-3.5 h-3.5" />}
-                    {align === 'bottom' && <AlignVerticalJustifyEnd className="w-3.5 h-3.5" />}
-                </button>
-            ))}
-        </div>
+        {showVertical && (
+            <div className="flex bg-slate-100 p-1 rounded-lg mt-2">
+                {['top', 'middle', 'bottom'].map((align) => (
+                    <button
+                        key={align}
+                        onClick={() => onChange({ verticalAlign: align })}
+                        className={`flex-1 py-1.5 rounded-md flex items-center justify-center transition-all ${values.verticalAlign === align ? 'bg-white shadow text-amber-600' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                        {align === 'top' && <AlignVerticalJustifyStart className="w-3.5 h-3.5" />}
+                        {align === 'middle' && <AlignVerticalJustifyCenter className="w-3.5 h-3.5" />}
+                        {align === 'bottom' && <AlignVerticalJustifyEnd className="w-3.5 h-3.5" />}
+                    </button>
+                ))}
+            </div>
+        )}
     </div>
 );
 

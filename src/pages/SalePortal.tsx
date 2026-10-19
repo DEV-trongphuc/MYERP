@@ -2298,8 +2298,23 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const lastHandledTaskSearchRef = useRef<string>('');
   const inFlightTaskFetchIdRef = useRef<number | null>(null);
 
+  // Helper to check if this SalePortal instance corresponds to the currently visible route in AppTabs
+  const isThisSalePortalInstanceActive = useCallback(() => {
+    const p = window.location.pathname;
+    if (activeTabProp === 'calendar') return p === '/calendar' || p === '/personal-calendar';
+    if (activeTabProp === 'schedule') return p === '/account';
+    if (activeTabProp === 'tickets') return p === '/tickets';
+    if (activeTabProp === 'fair-share') return p === '/fair-share';
+    if (activeTabProp === 'workspace') return p === '/workspace' || p === '/' || p === '/sale-portal';
+    if (activeTabProp === 'dashboard') return p === '/';
+    return p === '/' || p === '/workspace' || p === '/sale-portal';
+  }, [activeTabProp]);
+
+  const canSwitchToWorkspaceTab = !activeTabProp || activeTabProp === 'workspace' || activeTabProp === 'dashboard';
+
   // Deep-linking URL listener for task_id / open_task_id & global event 'open-task-drawer'
   useEffect(() => {
+    if (!isThisSalePortalInstanceActive()) return;
     const currentSearch = loc?.search || window.location.search;
     const params = new URLSearchParams(currentSearch);
     const targetTaskId = params.get('task_id') || params.get('open_task_id') || params.get('highlight_activity_id');
@@ -2319,7 +2334,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
         if (found) {
           handleSelectTask({ ...found, highlightCommentId, subtaskId });
-          if (activeTab !== 'workspace') {
+          if (canSwitchToWorkspaceTab && activeTab !== 'workspace') {
             setActiveTab('workspace');
           }
         } else if (inFlightTaskFetchIdRef.current !== numId) {
@@ -2330,7 +2345,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               if (res.data && res.data.success && res.data.data) {
                 const task = res.data.data;
                 handleSelectTask({ ...task, highlightCommentId, subtaskId });
-                if (activeTab !== 'workspace') {
+                if (canSwitchToWorkspaceTab && activeTab !== 'workspace') {
                   setActiveTab('workspace');
                 }
                 const isClient = task.related_type && ['contact', 'deal', 'company'].includes(task.related_type);
@@ -2359,6 +2374,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     }
 
     const handleOpenTaskEvent = (e: Event) => {
+      if (!isThisSalePortalInstanceActive()) return;
       const customEvent = e as CustomEvent;
       const detail = customEvent.detail;
       useUIStore.getState().closeTaskDrawer();
@@ -2368,7 +2384,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
           highlightCommentId: detail.highlightCommentId || detail.task.highlightCommentId,
           subtaskId: detail.subtaskId || detail.task.subtaskId
         });
-        if (activeTab !== 'workspace') setActiveTab('workspace');
+        if (canSwitchToWorkspaceTab && activeTab !== 'workspace') setActiveTab('workspace');
       } else if (detail?.taskId || detail?.id) {
         const numId = Number(detail.taskId || detail.id);
         if (!numId || inFlightTaskFetchIdRef.current === numId) return;
@@ -2381,7 +2397,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 highlightCommentId: detail.highlightCommentId,
                 subtaskId: detail.subtaskId
               });
-              if (activeTab !== 'workspace') setActiveTab('workspace');
+              if (canSwitchToWorkspaceTab && activeTab !== 'workspace') setActiveTab('workspace');
             }
           })
           .catch(err => console.error("Error opening task via event:", err))
@@ -2397,7 +2413,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     return () => {
       window.removeEventListener('open-task-drawer', handleOpenTaskEvent);
     };
-  }, [loc?.search, wsTasks, portalTasks, activeTab, handleSelectTask]);
+  }, [loc?.pathname, loc?.search, wsTasks, portalTasks, activeTab, handleSelectTask, isThisSalePortalInstanceActive, canSwitchToWorkspaceTab]);
 
   const serializeDescriptionAndChecklist = (pureDesc: string, items: Array<{ text: string; checked: boolean }>) => {
     let result = pureDesc.trim();
@@ -12552,7 +12568,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
           flexShrink: 0,
           gap: '1rem'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
             <div style={{ display: 'flex', background: 'var(--color-bg)', borderRadius: '8px', border: '1px solid var(--color-border)', padding: '2px', alignItems: 'center' }}>
               <button
                 type="button"
@@ -12616,7 +12632,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               }
               
               return (
-                <div style={{ minWidth: '220px' }}>
+                <div style={{ minWidth: isMobile ? '100%' : '220px', flex: isMobile ? '1 1 100%' : '0 0 auto' }}>
                   <CustomSelect
                     options={[
                       { value: 'all', label: t('Tất cả nhân viên') },

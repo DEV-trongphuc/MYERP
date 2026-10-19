@@ -39,9 +39,10 @@ const CanvasSection: React.FC<CanvasSectionProps> = (props) => {
     } = props;
 
     const css = buildCss(section.style, viewMode, bodyStyle.fontFamily, 'section');
-    const innerBg = section.style.contentBackgroundColor || 'transparent';
+    const innerBg = (css as any).contentBackgroundColor || section.style.contentBackgroundColor || 'transparent';
     const isSelected = selectedBlockId === section.id;
     const isThisDragging = draggingBlockId === section.id;
+    const isHiddenInCurrentView = (viewMode === 'mobile' && section.style?.hideOnMobile) || (viewMode === 'desktop' && section.style?.hideOnDesktop);
 
     // Overlay Logic
     const overlayColor = section.style.overlayColor;
@@ -74,7 +75,7 @@ const CanvasSection: React.FC<CanvasSectionProps> = (props) => {
     return (
         <div
             key={section.id} id={`block-${section.id}`}
-            className={`transition-all duration-200 ${isThisDragging ? 'opacity-35 border-2 border-dashed border-[#BD1D2D]/60 bg-[#BD1D2D]/5' : ''}`}
+            className={`transition-all duration-200 ${isThisDragging ? 'opacity-35 border-2 border-dashed border-[#BD1D2D]/60 bg-[#BD1D2D]/5' : ''} ${isHiddenInCurrentView ? 'opacity-45' : ''}`}
             style={{
                 position: 'relative',
                 width: '100%',
@@ -105,6 +106,10 @@ const CanvasSection: React.FC<CanvasSectionProps> = (props) => {
                     backgroundSize: css.backgroundSize,
                     backgroundPosition: css.backgroundPosition,
                     backgroundRepeat: css.backgroundRepeat,
+                    borderTop: (css as any).borderTop,
+                    borderRight: (css as any).borderRight,
+                    borderBottom: (css as any).borderBottom,
+                    borderLeft: (css as any).borderLeft,
                     borderRadius: sanitizeRadius(css.borderRadius),
                     overflow: css.borderRadius ? 'hidden' : 'visible',
                     margin: '0 auto',

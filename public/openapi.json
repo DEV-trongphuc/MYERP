@@ -958,28 +958,32 @@
                         "id": 5012,
                         "full_name": "Trần Thị Mai Phương",
                         "phone": "0987654321",
+                        "mobile": "0912345678",
                         "email": "maiphuong.tran@gmail.com",
                         "gender": "female",
+                        "program": "MBA ISTEC",
+                        "project_id": 2,
                         "stage_id": 3,
-                        "stage_name": "Đã Hẹn Tư Vấn Trực Tiếp",
-                        "source": "facebook_ads",
-                        "branch_id": 2,
-                        "branch_name": "Cơ sở Tân Bình - TP.HCM",
-                        "assigned_to": 1042,
-                        "assigned_to_name": "Nguyễn Thị Lan",
+                        "stage_name": "03 – Đã kết nối (Connected)",
+                        "pipeline_status": "connected",
+                        "lead_status": "active",
+                        "lead_temperature": "hot",
+                        "lead_score": 85,
+                        "source": "Messenger – AI Agent",
+                        "city": "TP. Hồ Chí Minh",
+                        "owner_id": 1042,
+                        "owner_name": "Nguyễn Thị Lan",
                         "tags": [
-                          "bba_international",
-                          "hot_lead"
+                          "MBA-2026",
+                          "Hot Lead"
                         ],
                         "created_at": "2026-10-06 14:20:10"
                       }
                     ],
-                    "pagination": {
-                      "current_page": 1,
-                      "per_page": 25,
-                      "total_items": 1420,
-                      "total_pages": 57
-                    }
+                    "total": 1420,
+                    "page": 1,
+                    "limit": 20,
+                    "total_pages": 71
                   },
                   "message": "Truy vấn danh sách khách hàng thành công"
                 }
@@ -1035,7 +1039,7 @@
       "post": {
         "operationId": "contacts-create",
         "summary": "Tạo Mới Khách Hàng / Học Viên Tiềm Năng (Lead Inbound)",
-        "description": "Thêm mới hồ sơ khách hàng vào cơ sở dữ liệu. Tự động kiểm tra trùng số điện thoại (Anti-Duplicate Check) và kích hoạt phân luồng chia lead nếu không chỉ định tư vấn viên.",
+        "description": "Thêm mới hồ sơ khách hàng / học viên tiềm năng (Lead) vào cơ sở dữ liệu CRM. Tự động chuẩn hóa & kiểm tra trùng số điện thoại (Anti-Duplicate Check), đồng bộ hai chiều giữa `program` và `project_id`, đồng bộ `stage_id` và `pipeline_status`, hỗ trợ đầy đủ các trường thông tin tư vấn tuyển sinh và phản hồi toàn bộ đối tượng hồ sơ sau khi khởi tạo.",
         "tags": [
           "02. Quản Lý Khách Hàng, Học Viên & Lead 360 (Contacts CRM)"
         ],
@@ -1054,11 +1058,46 @@
                   "success": true,
                   "data": {
                     "id": 5013,
-                    "full_name": "Lê Hoàng Nam",
-                    "phone": "0934567890",
-                    "status": "new",
-                    "assigned_to": 1042,
-                    "created_at": "2026-10-08 09:12:00"
+                    "full_name": "Nguyễn Minh Tuấn",
+                    "phone": "0987654321",
+                    "mobile": "0912345678",
+                    "phone2": "0912345678",
+                    "email": "minhtuan@example.com",
+                    "program": "MBA ISTEC",
+                    "project_id": 2,
+                    "owner_id": 12,
+                    "owner_name": "Nguyễn Thị Lan",
+                    "stage_id": 1,
+                    "stage_name": "01 – New Lead",
+                    "pipeline_status": "new_lead",
+                    "lead_status": "active",
+                    "lead_temperature": "hot",
+                    "lead_score": 85,
+                    "source": "Messenger – AI Agent",
+                    "job_title": "Trưởng phòng Kinh doanh",
+                    "company": "Công ty TNHH Giải pháp Số Việt",
+                    "industry": "Công nghệ thông tin",
+                    "customer_type": "Cá nhân",
+                    "budget_range": "200–300 triệu",
+                    "expected_intake": "Tháng 3/2027",
+                    "admission_date": "2027-03-15",
+                    "gender": "male",
+                    "dob": "1990-08-20",
+                    "address": "120 Nguyễn Đình Chiểu",
+                    "ward": "Phường Võ Thị Sáu",
+                    "district": "Quận 3",
+                    "city": "TP. Hồ Chí Minh",
+                    "zalo_phone": "0987654321",
+                    "fb_link": "https://facebook.com/minhtuan.nguyen",
+                    "notes": "Quan tâm lịch học cuối tuần chương trình MBA quốc tế, cần tư vấn chi tiết lộ trình và học bổng.",
+                    "tags": [
+                      "MBA-2026",
+                      "Vấn đề thời gian"
+                    ],
+                    "activity_count": 1,
+                    "custom_fields": {},
+                    "created_at": "2026-10-08 09:12:00",
+                    "updated_at": "2026-10-08 09:12:00"
                   },
                   "message": "Tạo khách hàng mới thành công"
                 }
@@ -1123,7 +1162,15 @@
                   },
                   "phone": {
                     "type": "string",
-                    "description": "Số điện thoại liên hệ chính (chuẩn hóa 10 số, kiểm tra chống trùng lặp)"
+                    "description": "Số điện thoại chính (tự động chuẩn hóa, kiểm tra chống trùng lặp)"
+                  },
+                  "mobile": {
+                    "type": "string",
+                    "description": "Số điện thoại phụ / số thứ 2 (tự động đồng bộ với phone2)"
+                  },
+                  "phone2": {
+                    "type": "string",
+                    "description": "Số điện thoại phụ / số thứ 2 (bí danh đồng bộ với mobile)"
                   },
                   "email": {
                     "type": "string",
@@ -1131,7 +1178,7 @@
                   },
                   "program": {
                     "type": "string",
-                    "description": "Chương trình đào tạo quan tâm (VD: Thạc sĩ Quản trị Kinh doanh)"
+                    "description": "Chương trình đào tạo quan tâm (VD: \"MBA ISTEC\", \"DBA\") — tự động đồng bộ project_id"
                   },
                   "project_id": {
                     "type": "integer",
@@ -1139,31 +1186,137 @@
                   },
                   "owner_id": {
                     "type": "integer",
-                    "description": "ID nhân viên Sale phụ trách (nếu bỏ trống sẽ tự động gán người tạo)"
+                    "description": "ID nhân sự Sale phụ trách"
                   },
                   "stage_id": {
                     "type": "integer",
-                    "description": "ID giai đoạn phễu ban đầu (mặc định Stage 1 - New Lead)"
+                    "description": "ID giai đoạn phễu (mặc định Stage đầu tiên - New Lead)"
+                  },
+                  "pipeline_status": {
+                    "type": "string",
+                    "description": "Mã slug giai đoạn phễu (VD: \"new_lead\", \"connected\", \"needed\")"
+                  },
+                  "lead_status": {
+                    "type": "string",
+                    "description": "Trạng thái chăm sóc (\"active\", \"nurture\", \"lost\")",
+                    "enum": [
+                      "active",
+                      "nurture",
+                      "lost"
+                    ]
+                  },
+                  "lead_temperature": {
+                    "type": "string",
+                    "description": "Nhiệt độ Lead (\"hot\", \"warm\", \"cold\", \"neutral\")",
+                    "enum": [
+                      "hot",
+                      "warm",
+                      "cold",
+                      "neutral"
+                    ]
+                  },
+                  "temperature": {
+                    "type": "string",
+                    "description": "Nhiệt độ Lead (bí danh đồng bộ với lead_temperature: \"hot\", \"warm\", \"cold\", \"neutral\")",
+                    "enum": [
+                      "hot",
+                      "warm",
+                      "cold",
+                      "neutral"
+                    ]
+                  },
+                  "lead_score": {
+                    "type": "integer",
+                    "description": "Điểm đánh giá tiềm năng Lead (0–100)"
                   },
                   "source": {
                     "type": "string",
-                    "description": "Nguồn khách hàng (VD: Facebook Ads, Website, Zalo, Hotline)"
+                    "description": "Nguồn khách hàng (VD: \"Messenger – AI Agent\", \"Facebook Ads\", \"Website IDEAS\")"
                   },
-                  "city": {
+                  "job_title": {
                     "type": "string",
-                    "description": "Tỉnh / Thành phố sinh sống"
+                    "description": "Chức danh / Vị trí công việc"
                   },
-                  "notes": {
+                  "company": {
                     "type": "string",
-                    "description": "Ghi chú ban đầu về nhu cầu tư vấn của khách hàng"
+                    "description": "Tên công ty / Đơn vị công tác"
+                  },
+                  "industry": {
+                    "type": "string",
+                    "description": "Ngành nghề / Lĩnh vực hoạt động"
+                  },
+                  "customer_type": {
+                    "type": "string",
+                    "description": "Phân loại khách hàng (VD: \"Doanh nghiệp\", \"Cá nhân\")"
+                  },
+                  "budget_range": {
+                    "type": "string",
+                    "description": "Khoảng ngân sách dự kiến (VD: \"200–300 triệu\")"
+                  },
+                  "expected_intake": {
+                    "type": "string",
+                    "description": "Thời gian dự kiến nhập học (VD: \"Tháng 3/2027\")"
                   },
                   "admission_date": {
                     "type": "string",
                     "description": "Ngày dự kiến nhập học (YYYY-MM-DD)"
                   },
+                  "gender": {
+                    "type": "string",
+                    "description": "Giới tính (\"male\", \"female\", \"other\")",
+                    "enum": [
+                      "male",
+                      "female",
+                      "other"
+                    ]
+                  },
+                  "dob": {
+                    "type": "string",
+                    "description": "Ngày sinh (YYYY-MM-DD)"
+                  },
+                  "birthday": {
+                    "type": "string",
+                    "description": "Ngày sinh (YYYY-MM-DD, bí danh đồng bộ với dob)"
+                  },
+                  "address": {
+                    "type": "string",
+                    "description": "Địa chỉ liên hệ"
+                  },
+                  "city": {
+                    "type": "string",
+                    "description": "Tỉnh / Thành phố"
+                  },
+                  "district": {
+                    "type": "string",
+                    "description": "Quận / Huyện"
+                  },
+                  "ward": {
+                    "type": "string",
+                    "description": "Phường / Xã"
+                  },
+                  "zalo_phone": {
+                    "type": "string",
+                    "description": "Số điện thoại Zalo"
+                  },
+                  "fb_link": {
+                    "type": "string",
+                    "description": "Đường dẫn Facebook cá nhân"
+                  },
+                  "facebook_link": {
+                    "type": "string",
+                    "description": "Đường dẫn Facebook cá nhân (bí danh đồng bộ với fb_link)"
+                  },
+                  "notes": {
+                    "type": "string",
+                    "description": "Ghi chú tổng quan / Tóm tắt nhu cầu tư vấn"
+                  },
                   "tags": {
                     "type": "array",
-                    "description": "Mảng các nhãn phân loại khách hàng (VD: [\"VIP\", \"Học bổng\"])"
+                    "description": "Mảng các nhãn phân loại (VD: [\"MBA-2026\", \"Vấn đề thời gian\"])"
+                  },
+                  "custom_fields": {
+                    "type": "object",
+                    "description": "Các trường tùy biến mở rộng"
                   }
                 },
                 "required": [
@@ -1174,18 +1327,38 @@
               "example": {
                 "full_name": "Nguyễn Minh Tuấn",
                 "phone": "0987654321",
+                "mobile": "0912345678",
                 "email": "minhtuan@example.com",
-                "program": "Thạc sĩ Quản trị Kinh doanh (MBA)",
+                "program": "MBA ISTEC",
                 "project_id": 2,
                 "owner_id": 12,
-                "source": "Facebook Ads",
+                "stage_id": 1,
+                "pipeline_status": "new_lead",
+                "lead_status": "active",
+                "lead_temperature": "hot",
+                "lead_score": 85,
+                "source": "Messenger – AI Agent",
+                "job_title": "Trưởng phòng Kinh doanh",
+                "company": "Công ty TNHH Giải pháp Số Việt",
+                "industry": "Công nghệ thông tin",
+                "customer_type": "Cá nhân",
+                "budget_range": "200–300 triệu",
+                "expected_intake": "Tháng 3/2027",
+                "admission_date": "2027-03-15",
+                "gender": "male",
+                "dob": "1990-08-20",
+                "address": "120 Nguyễn Đình Chiểu",
+                "ward": "Phường Võ Thị Sáu",
+                "district": "Quận 3",
                 "city": "TP. Hồ Chí Minh",
-                "notes": "Quan tâm lịch học cuối tuần tại cơ sở Quận 3",
-                "admission_date": "2026-11-15",
+                "zalo_phone": "0987654321",
+                "fb_link": "https://facebook.com/minhtuan.nguyen",
+                "notes": "Quan tâm lịch học cuối tuần chương trình MBA quốc tế, cần tư vấn chi tiết lộ trình và học bổng.",
                 "tags": [
                   "MBA-2026",
-                  "Tư vấn gấp"
-                ]
+                  "Vấn đề thời gian"
+                ],
+                "custom_fields": {}
               }
             }
           }
@@ -1196,7 +1369,7 @@
       "get": {
         "operationId": "contacts-detail",
         "summary": "Truy Vấn Chi Tiết Hồ Sơ Khách Hàng 360 Độ",
-        "description": "Lấy thông tin chi tiết toàn diện của một khách hàng: thông tin cá nhân, lịch sử cuộc gọi/ghi chú, cơ hội bán hàng (deals), báo giá, đơn hàng và các phiếu thu/chi liên quan.",
+        "description": "Lấy thông tin chi tiết toàn diện của một khách hàng / học viên: thông tin cá nhân, công việc, chương trình đào tạo quan tâm, giai đoạn phễu (stage_id / pipeline_status), nhiệt độ Lead, điểm đánh giá, số lượng tương tác (activity_count), nhãn phân loại (tags) và trường tùy biến (custom_fields).",
         "tags": [
           "02. Quản Lý Khách Hàng, Học Viên & Lead 360 (Contacts CRM)"
         ],
@@ -1227,18 +1400,45 @@
                     "id": 5012,
                     "full_name": "Trần Thị Mai Phương",
                     "phone": "0987654321",
+                    "mobile": "0912345678",
+                    "phone2": "0912345678",
                     "email": "maiphuong.tran@gmail.com",
-                    "address": "123 Cộng Hòa, Phường 12, Quận Tân Bình, TP.HCM",
-                    "birth_date": "2006-05-18",
-                    "guardian_name": "Trần Văn Hùng (Bố)",
-                    "guardian_phone": "0912345678",
-                    "stage_name": "Đã Hẹn Tư Vấn Trực Tiếp",
-                    "source": "facebook_ads",
-                    "deals_count": 1,
-                    "quotes_count": 2,
-                    "total_deposited": 5000000,
-                    "assigned_to_name": "Nguyễn Thị Lan",
-                    "created_at": "2026-10-06 14:20:10"
+                    "gender": "female",
+                    "dob": "1992-05-18",
+                    "birthday": "1992-05-18",
+                    "job_title": "Giám đốc Nhân sự (HRD)",
+                    "company": "Công ty Cổ phần Đầu tư Minh Phát",
+                    "industry": "Bất động sản & Xây dựng",
+                    "customer_type": "Cá nhân",
+                    "budget_range": "200–300 triệu",
+                    "expected_intake": "Tháng 3/2027",
+                    "admission_date": "2027-03-15",
+                    "program": "MBA ISTEC",
+                    "project_id": 2,
+                    "stage_id": 3,
+                    "stage_name": "03 – Đã kết nối (Connected)",
+                    "pipeline_status": "connected",
+                    "lead_status": "active",
+                    "lead_temperature": "hot",
+                    "lead_score": 85,
+                    "source": "Messenger – AI Agent",
+                    "owner_id": 1042,
+                    "owner_name": "Nguyễn Thị Lan",
+                    "address": "123 Cộng Hòa",
+                    "ward": "Phường 12",
+                    "district": "Quận Tân Bình",
+                    "city": "TP. Hồ Chí Minh",
+                    "zalo_phone": "0987654321",
+                    "fb_link": "https://facebook.com/maiphuong.tran",
+                    "tags": [
+                      "MBA-2026",
+                      "Hot Lead"
+                    ],
+                    "notes": "Học viên đang làm quản lý cấp trung, quan tâm chương trình Thạc sĩ Quản trị Kinh doanh quốc tế học cuối tuần.",
+                    "activity_count": 4,
+                    "custom_fields": {},
+                    "created_at": "2026-10-06 14:20:10",
+                    "updated_at": "2026-10-08 09:15:00"
                   },
                   "message": "Truy vấn chi tiết khách hàng thành công"
                 }
@@ -1294,7 +1494,7 @@
       "put": {
         "operationId": "contacts-update",
         "summary": "Cập Nhật Hồ Sơ Thông Tin Khách Hàng",
-        "description": "Chỉnh sửa thông tin cá nhân, địa chỉ, số điện thoại phụ huynh, hoặc cập nhật giai đoạn chăm sóc của khách hàng.",
+        "description": "Chỉnh sửa thông tin cá nhân, công việc, địa chỉ, chương trình đào tạo quan tâm, ngân sách dự kiến, nhiệt độ Lead hoặc cập nhật giai đoạn chăm sóc của khách hàng / học viên.",
         "tags": [
           "02. Quản Lý Khách Hàng, Học Viên & Lead 360 (Contacts CRM)"
         ],
@@ -1323,6 +1523,44 @@
                   "success": true,
                   "data": {
                     "id": 5012,
+                    "full_name": "Trần Thị Mai Phương",
+                    "phone": "0987654321",
+                    "mobile": "0912345678",
+                    "phone2": "0912345678",
+                    "email": "maiphuong.tran@gmail.com",
+                    "program": "MBA ISTEC",
+                    "project_id": 2,
+                    "owner_id": 1042,
+                    "owner_name": "Nguyễn Thị Lan",
+                    "stage_id": 4,
+                    "stage_name": "04 – Có nhu cầu (Needed)",
+                    "pipeline_status": "needed",
+                    "lead_status": "active",
+                    "lead_temperature": "hot",
+                    "lead_score": 90,
+                    "source": "Messenger – AI Agent",
+                    "job_title": "Giám đốc Nhân sự (HRD)",
+                    "company": "Công ty Cổ phần Đầu tư Minh Phát",
+                    "industry": "Bất động sản & Xây dựng",
+                    "customer_type": "Cá nhân",
+                    "budget_range": "200–300 triệu",
+                    "expected_intake": "Tháng 3/2027",
+                    "admission_date": "2027-03-15",
+                    "gender": "female",
+                    "dob": "1992-05-18",
+                    "address": "456 Lê Văn Sỹ",
+                    "ward": "Phường 14",
+                    "district": "Quận 3",
+                    "city": "TP. Hồ Chí Minh",
+                    "zalo_phone": "0987654321",
+                    "fb_link": "https://facebook.com/maiphuong.tran",
+                    "notes": "Đã tư vấn chuyên sâu lộ trình MBA ISTEC, học viên dự kiến đăng ký đợt nhập học tháng 3/2027.",
+                    "tags": [
+                      "MBA-2026",
+                      "Hot Lead"
+                    ],
+                    "custom_fields": {},
+                    "created_at": "2026-10-06 14:20:10",
                     "updated_at": "2026-10-08 09:13:00"
                   },
                   "message": "Cập nhật thông tin khách hàng thành công"
@@ -1384,30 +1622,201 @@
                 "properties": {
                   "full_name": {
                     "type": "string",
-                    "description": "Họ và tên cập nhật"
+                    "description": "Họ và tên đầy đủ của khách hàng / học viên"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "description": "Số điện thoại chính (tự động chuẩn hóa, kiểm tra chống trùng lặp)"
+                  },
+                  "mobile": {
+                    "type": "string",
+                    "description": "Số điện thoại phụ / số thứ 2 (tự động đồng bộ với phone2)"
+                  },
+                  "phone2": {
+                    "type": "string",
+                    "description": "Số điện thoại phụ / số thứ 2 (bí danh đồng bộ với mobile)"
                   },
                   "email": {
                     "type": "string",
-                    "description": "Địa chỉ email mới"
+                    "description": "Địa chỉ email liên hệ"
                   },
-                  "address": {
+                  "program": {
                     "type": "string",
-                    "description": "Địa chỉ thường trú"
+                    "description": "Chương trình đào tạo quan tâm (VD: \"MBA ISTEC\", \"DBA\") — tự động đồng bộ project_id"
+                  },
+                  "project_id": {
+                    "type": "integer",
+                    "description": "ID dự án / chương trình đào tạo"
+                  },
+                  "owner_id": {
+                    "type": "integer",
+                    "description": "ID nhân sự Sale phụ trách"
                   },
                   "stage_id": {
                     "type": "integer",
-                    "description": "ID giai đoạn chăm sóc mới"
+                    "description": "ID giai đoạn phễu chăm sóc mới"
                   },
-                  "guardian_phone": {
+                  "pipeline_status": {
                     "type": "string",
-                    "description": "Số điện thoại phụ huynh"
+                    "description": "Mã slug giai đoạn phễu (VD: \"new_lead\", \"connected\", \"needed\")"
+                  },
+                  "lead_status": {
+                    "type": "string",
+                    "description": "Trạng thái chăm sóc (\"active\", \"nurture\", \"lost\")",
+                    "enum": [
+                      "active",
+                      "nurture",
+                      "lost"
+                    ]
+                  },
+                  "lead_temperature": {
+                    "type": "string",
+                    "description": "Nhiệt độ Lead (\"hot\", \"warm\", \"cold\", \"neutral\")",
+                    "enum": [
+                      "hot",
+                      "warm",
+                      "cold",
+                      "neutral"
+                    ]
+                  },
+                  "temperature": {
+                    "type": "string",
+                    "description": "Nhiệt độ Lead (bí danh đồng bộ với lead_temperature: \"hot\", \"warm\", \"cold\", \"neutral\")",
+                    "enum": [
+                      "hot",
+                      "warm",
+                      "cold",
+                      "neutral"
+                    ]
+                  },
+                  "lead_score": {
+                    "type": "integer",
+                    "description": "Điểm đánh giá tiềm năng Lead (0–100)"
+                  },
+                  "source": {
+                    "type": "string",
+                    "description": "Nguồn khách hàng (VD: \"Messenger – AI Agent\", \"Facebook Ads\", \"Website IDEAS\")"
+                  },
+                  "job_title": {
+                    "type": "string",
+                    "description": "Chức danh / Vị trí công việc"
+                  },
+                  "company": {
+                    "type": "string",
+                    "description": "Tên công ty / Đơn vị công tác"
+                  },
+                  "industry": {
+                    "type": "string",
+                    "description": "Ngành nghề / Lĩnh vực hoạt động"
+                  },
+                  "customer_type": {
+                    "type": "string",
+                    "description": "Phân loại khách hàng (VD: \"Doanh nghiệp\", \"Cá nhân\")"
+                  },
+                  "budget_range": {
+                    "type": "string",
+                    "description": "Khoảng ngân sách dự kiến (VD: \"200–300 triệu\")"
+                  },
+                  "expected_intake": {
+                    "type": "string",
+                    "description": "Thời gian dự kiến nhập học (VD: \"Tháng 3/2027\")"
+                  },
+                  "admission_date": {
+                    "type": "string",
+                    "description": "Ngày dự kiến nhập học (YYYY-MM-DD)"
+                  },
+                  "gender": {
+                    "type": "string",
+                    "description": "Giới tính (\"male\", \"female\", \"other\")",
+                    "enum": [
+                      "male",
+                      "female",
+                      "other"
+                    ]
+                  },
+                  "dob": {
+                    "type": "string",
+                    "description": "Ngày sinh (YYYY-MM-DD)"
+                  },
+                  "birthday": {
+                    "type": "string",
+                    "description": "Ngày sinh (YYYY-MM-DD, bí danh đồng bộ với dob)"
+                  },
+                  "address": {
+                    "type": "string",
+                    "description": "Địa chỉ liên hệ"
+                  },
+                  "city": {
+                    "type": "string",
+                    "description": "Tỉnh / Thành phố"
+                  },
+                  "district": {
+                    "type": "string",
+                    "description": "Quận / Huyện"
+                  },
+                  "ward": {
+                    "type": "string",
+                    "description": "Phường / Xã"
+                  },
+                  "zalo_phone": {
+                    "type": "string",
+                    "description": "Số điện thoại Zalo"
+                  },
+                  "fb_link": {
+                    "type": "string",
+                    "description": "Đường dẫn Facebook cá nhân"
+                  },
+                  "facebook_link": {
+                    "type": "string",
+                    "description": "Đường dẫn Facebook cá nhân (bí danh đồng bộ với fb_link)"
+                  },
+                  "notes": {
+                    "type": "string",
+                    "description": "Ghi chú tổng quan / Tóm tắt nhu cầu tư vấn"
+                  },
+                  "tags": {
+                    "type": "array",
+                    "description": "Mảng các nhãn phân loại (VD: [\"MBA-2026\", \"Vấn đề thời gian\"])"
+                  },
+                  "custom_fields": {
+                    "type": "object",
+                    "description": "Các trường tùy biến mở rộng"
                   }
                 }
               },
               "example": {
-                "address": "456 Lê Văn Sỹ, Phường 10, Quận Phú Nhuận, TP.HCM",
+                "full_name": "Trần Thị Mai Phương",
+                "phone": "0987654321",
+                "mobile": "0912345678",
+                "email": "maiphuong.tran@gmail.com",
+                "program": "MBA ISTEC",
+                "project_id": 2,
                 "stage_id": 4,
-                "guardian_phone": "0988776655"
+                "pipeline_status": "needed",
+                "lead_status": "active",
+                "lead_temperature": "hot",
+                "lead_score": 90,
+                "job_title": "Giám đốc Nhân sự (HRD)",
+                "company": "Công ty Cổ phần Đầu tư Minh Phát",
+                "industry": "Bất động sản & Xây dựng",
+                "customer_type": "Cá nhân",
+                "budget_range": "200–300 triệu",
+                "expected_intake": "Tháng 3/2027",
+                "admission_date": "2027-03-15",
+                "gender": "female",
+                "dob": "1992-05-18",
+                "address": "456 Lê Văn Sỹ",
+                "ward": "Phường 14",
+                "district": "Quận 3",
+                "city": "TP. Hồ Chí Minh",
+                "zalo_phone": "0987654321",
+                "fb_link": "https://facebook.com/maiphuong.tran",
+                "notes": "Đã tư vấn chuyên sâu lộ trình MBA ISTEC, học viên dự kiến đăng ký đợt nhập học tháng 3/2027.",
+                "tags": [
+                  "MBA-2026",
+                  "Hot Lead"
+                ],
+                "custom_fields": {}
               }
             }
           }
@@ -1416,7 +1825,7 @@
       "delete": {
         "operationId": "contacts-delete",
         "summary": "Xóa Khách Hàng / Di Chuyển Vào Thùng Rác (Soft Delete)",
-        "description": "Đưa hồ sơ khách hàng vào trạng thái lưu trữ/thùng rác. Dữ liệu lịch sử giao dịch và tài chính vẫn được bảo toàn nguyên vẹn trong hệ thống.",
+        "description": "Đưa hồ sơ khách hàng vào trạng thái lưu trữ/thùng rác. Quy tắc nghiệp vụ (Business Rule): Toàn bộ dữ liệu Lead/Contact áp dụng cơ chế Xóa mềm 100% (Soft Delete - cập nhật `deleted_at = NOW()`). Lịch sử ghi chú (`notes`), tương tác (`activities`), cơ hội (`deals`) và dữ liệu gốc của Lead được bảo toàn nguyên vẹn trong hệ thống, đảm bảo không bao giờ gây lỗi xung đột khóa ngoại (HTTP 500) ngay cả khi Lead đã phát sinh nhiều thông tin chăm sóc.",
         "tags": [
           "02. Quản Lý Khách Hàng, Học Viên & Lead 360 (Contacts CRM)"
         ],
@@ -1444,10 +1853,10 @@
                 "example": {
                   "success": true,
                   "data": {
-                    "id": 5012,
-                    "deleted_at": "2026-10-08 09:14:00"
+                    "has_remaining": false,
+                    "remaining_id": null
                   },
-                  "message": "Hồ sơ khách hàng đã được chuyển vào thùng rác thành công"
+                  "message": "Đã xóa liên hệ thành công (chuyển vào thùng rác)."
                 }
               }
             }
@@ -1588,7 +1997,7 @@
       "post": {
         "operationId": "contacts-assign",
         "summary": "Điều Phối / Bàn Giao Khách Hàng Cho Tư Vấn Viên",
-        "description": "Chuyển giao quyền chăm sóc khách hàng cho tư vấn viên mới. Hệ thống sẽ gửi thông báo tức thì đến tài khoản được chỉ định.",
+        "description": "Chuyển giao quyền chăm sóc khách hàng cho tư vấn viên mới (chấp nhận cả `owner_id`, `assigned_to`, `user_id` hoặc `consultant_id`). Hệ thống sẽ tự động ghi nhận lịch sử bàn giao và gửi thông báo tức thì đến tài khoản được chỉ định.",
         "tags": [
           "02. Quản Lý Khách Hàng, Học Viên & Lead 360 (Contacts CRM)"
         ],
@@ -1617,7 +2026,9 @@
                   "success": true,
                   "data": {
                     "id": 5012,
+                    "owner_id": 1055,
                     "assigned_to": 1055,
+                    "owner_name": "Vũ Hoàng Minh",
                     "assigned_to_name": "Vũ Hoàng Minh"
                   },
                   "message": "Bàn giao khách hàng thành công"
@@ -1677,20 +2088,30 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "owner_id": {
+                    "type": "integer",
+                    "description": "ID nhân sự Sale nhận bàn giao (tương đương assigned_to / user_id / consultant_id)"
+                  },
                   "assigned_to": {
                     "type": "integer",
-                    "description": "ID nhân viên tư vấn nhận bàn giao"
+                    "description": "ID nhân viên tư vấn nhận bàn giao (bí danh tương đương với owner_id, user_id, consultant_id)"
+                  },
+                  "user_id": {
+                    "type": "integer",
+                    "description": "Bí danh (alias) của owner_id / assigned_to — ID tài khoản nhân sự nhận bàn giao"
+                  },
+                  "consultant_id": {
+                    "type": "integer",
+                    "description": "Bí danh (alias) của owner_id / assigned_to — ID tư vấn viên nhận bàn giao"
                   },
                   "reason": {
                     "type": "string",
                     "description": "Lý do bàn giao (vd: đổi cơ sở, phụ trách khu vực mới)"
                   }
-                },
-                "required": [
-                  "assigned_to"
-                ]
+                }
               },
               "example": {
+                "owner_id": 1055,
                 "assigned_to": 1055,
                 "reason": "Chuyển giao cơ sở Tân Bình sang cơ sở Quận 1"
               }
@@ -1702,8 +2123,8 @@
     "/api/v1/contacts/bulk-delete": {
       "post": {
         "operationId": "contacts-bulk-delete",
-        "summary": "Xóa Hàng Loạt Khách Hàng (Bulk Delete)",
-        "description": "Thực hiện xóa hàng loạt danh sách khách hàng không tiềm năng hoặc rác theo mảng ID.",
+        "summary": "Xóa Hàng Loạt Khách Hàng (Bulk Soft Delete)",
+        "description": "Thực hiện xóa mềm hàng loạt danh sách khách hàng theo mảng ID. Quy tắc nghiệp vụ (Business Rule): Toàn bộ dữ liệu Lead/Contact áp dụng cơ chế Xóa mềm 100% (Soft Delete - cập nhật `deleted_at = NOW()`). Lịch sử ghi chú (`notes`), tương tác (`activities`), cơ hội (`deals`) và dữ liệu gốc của Lead được bảo toàn nguyên vẹn trong hệ thống, đảm bảo không bao giờ gây lỗi xung đột khóa ngoại (HTTP 500) ngay cả khi Lead đã phát sinh nhiều thông tin chăm sóc.",
         "tags": [
           "02. Quản Lý Khách Hàng, Học Viên & Lead 360 (Contacts CRM)"
         ],
@@ -1728,7 +2149,7 @@
                       5017
                     ]
                   },
-                  "message": "Đã xóa thành công 3 hồ sơ khách hàng"
+                  "message": "Đã xóa thành công 3 hồ sơ khách hàng (chuyển vào thùng rác)"
                 }
               }
             }
@@ -1776,7 +2197,7 @@
                 "properties": {
                   "ids": {
                     "type": "array",
-                    "description": "Mảng danh sách các ID khách hàng cần xóa"
+                    "description": "Mảng danh sách các ID khách hàng cần xóa mềm (chuyển vào thùng rác)"
                   }
                 },
                 "required": [

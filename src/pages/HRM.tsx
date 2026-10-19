@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useLocation } from 'react-router-dom';
 import { fetchAPI } from '../utils/api';
 import { 
   Users, Calendar, CreditCard, DollarSign, Check, X, ShieldAlert,
@@ -25,6 +26,7 @@ import type { ApprovalItem } from './Approvals';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { useUIStore } from '../store/uiStore';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
+import { pushOverlay } from '../utils/overlayStack';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#6366f1', '#14b8a6', '#f97316', '#64748b'];
 
@@ -137,7 +139,19 @@ export default function HRM() {
     }
   };
 
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'profiles' | 'leaves' | 'advances' | 'payroll'>('dashboard');
+
+  useEffect(() => {
+    if (!location.pathname.startsWith('/hrm')) return;
+    const params = new URLSearchParams(location.search);
+    const tabParam = params.get('tab');
+    if (tabParam === 'assets' || tabParam === 'profiles') {
+      setActiveTab('profiles');
+    } else if (tabParam === 'dashboard' || tabParam === 'leaves' || tabParam === 'advances' || tabParam === 'payroll') {
+      setActiveTab(tabParam);
+    }
+  }, [location.pathname, location.search]);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [leaves, setLeaves] = useState<any[]>([]);
   const [advances, setAdvances] = useState<any[]>([]);
@@ -720,6 +734,21 @@ export default function HRM() {
   const [searchTerm, setSearchTerm] = useState('');
   const [dashboardShifts, setDashboardShifts] = useState<any[]>([]);
   const [dashboardLeaves, setDashboardLeaves] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (viewMode !== 'detail') return;
+    return pushOverlay('hrm-payroll-detail-drawer', () => setViewMode('archive'), 2147483625);
+  }, [viewMode]);
+
+  useEffect(() => {
+    if (!selectedUser) return;
+    return pushOverlay('hrm-edit-profile-modal', () => setSelectedUser(null), 2147483645);
+  }, [selectedUser]);
+
+  useEffect(() => {
+    if (!isNewPeriodModalOpen) return;
+    return pushOverlay('hrm-new-period-modal', () => setIsNewPeriodModalOpen(false), 2147483645);
+  }, [isNewPeriodModalOpen]);
 
   useEffect(() => {
     loadData();
@@ -2362,7 +2391,7 @@ export default function HRM() {
             {viewMode === 'archive' ? (
               <div>
                 {/* Archive Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '1.5rem' }}>
                   <div>
                     <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>{t('Lịch sử & Danh sách kỳ lương')}</h3>
                     <p style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)', marginTop: 2 }}>{t('Quản lý, theo dõi các kỳ tính lương, chốt số và lưu trữ hồ sơ lương công ty.')}</p>
@@ -2374,7 +2403,7 @@ export default function HRM() {
                       setIsNewPeriodModalOpen(true);
                     }}
                     className="btn primary"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}
                   >
                     <Plus size={16} />
                     {t('Tính lương Kỳ mới')}
@@ -2456,8 +2485,8 @@ export default function HRM() {
 
             {/* Calculate New Period Modal / Drawer */}
             {isNewPeriodModalOpen && createPortal(
-              <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999999 }}>
-                <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '2rem', width: 450, maxWidth: '90%', zIndex: 10000000 }}>
+              <div className="modal-backdrop modal-above-drawer" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2147483645, padding: '12px' }}>
+                <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '1.5rem', width: 450, maxWidth: 'calc(100vw - 24px)', zIndex: 2147483646 }}>
                   <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.25rem' }}>
                     {t('Khởi tạo kỳ tính lương mới')}
                   </h3>
@@ -2546,8 +2575,8 @@ export default function HRM() {
 
       {/* Edit Profile Dialog */}
       {selectedUser && createPortal(
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999999 }}>
-          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '2rem', width: 500, maxWidth: '90%', zIndex: 100000000 }}>
+        <div className="modal-backdrop modal-above-drawer" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2147483645 }}>
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '2rem', width: 500, maxWidth: '90%', zIndex: 2147483646 }}>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.5rem' }}>
               {t('Thiết lập Hồ sơ Nhân sự')}: <span style={{ color: 'var(--color-primary)' }}>{selectedUser.full_name}</span>
             </h3>
@@ -2766,24 +2795,25 @@ export default function HRM() {
           <div 
             className="drawer-backdrop" 
             onClick={() => setViewMode('archive')}
-            style={{ zIndex: 99999999, '--drawer-backdrop-z': 99999999 } as any}
+            style={{ zIndex: 2147483620, '--drawer-backdrop-z': 2147483620 } as any}
           />
 
           {/* Full Drawer Sheet Container */}
-          <div className="drawer-sheet" style={{
+          <div className="drawer-sheet drawer-panel" style={{
             position: 'fixed',
             top: 0,
             left: 0,
             right: 0,
             bottom: 0,
             background: 'var(--color-bg)',
-            zIndex: 100000000,
+            zIndex: 2147483625,
+            '--drawer-panel-z': 2147483625,
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
             boxShadow: 'var(--shadow-2xl)',
             animation: 'slideInRight 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
-          }}>
+          } as any}>
             {/* Detail View Drawer Header */}
             <div style={{
               padding: '1rem 1.5rem',

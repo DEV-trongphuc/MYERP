@@ -5121,34 +5121,45 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     };
 
     return (
-      <div style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(15, 23, 42, 0.3)',
-        backdropFilter: 'blur(4px)',
-        zIndex: 9999,
-        display: 'flex',
-        justifyContent: 'flex-end',
-        animation: 'fadeIn 0.2s ease-out'
-      }} onClick={() => setShowLeaveDrawer(false)}>
-        <div style={{
-          width: '520px',
-          maxWidth: '90vw',
-          height: '100vh',
-          backgroundColor: 'var(--color-surface)',
-          boxShadow: '-10px 0 30px rgba(0,0,0,0.15)',
+      <div
+        className="drawer-backdrop"
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.35)',
+          backdropFilter: 'blur(4px)',
+          zIndex: 2147483620,
           display: 'flex',
-          flexDirection: 'column',
-          animation: 'slideInRight 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
-          position: 'relative'
-        }} onClick={e => e.stopPropagation()}>
+          justifyContent: 'flex-end',
+          animation: 'fadeIn 0.22s cubic-bezier(0.25, 0.1, 0.25, 1)'
+        }}
+        onClick={() => setShowLeaveDrawer(false)}
+      >
+        <div
+          className="drawer-panel"
+          style={{
+            width: isMobile ? '100vw' : '520px',
+            maxWidth: isMobile ? '100vw' : '90vw',
+            height: '100dvh',
+            backgroundColor: 'var(--color-surface)',
+            boxShadow: '-10px 0 30px rgba(0,0,0,0.15)',
+            display: 'flex',
+            flexDirection: 'column',
+            zIndex: 2147483625,
+            animation: 'slideInRight 0.22s cubic-bezier(0.25, 0.1, 0.25, 1)',
+            position: 'relative',
+            paddingBottom: 'env(safe-area-inset-bottom, 0px)'
+          }}
+          onClick={e => e.stopPropagation()}
+        >
           
           {/* Header */}
           <div style={{
             padding: '1.25rem 1.5rem',
+            paddingTop: isMobile ? 'max(1rem, env(safe-area-inset-top, 0px))' : '1.25rem',
             borderBottom: '1px solid var(--color-border-light)',
             display: 'flex',
             justifyContent: 'space-between',
@@ -5169,8 +5180,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 border: 'none',
                 cursor: 'pointer',
                 color: 'var(--color-text-light)',
-                padding: '4px',
-                borderRadius: '4px'
+                padding: '6px',
+                borderRadius: '6px'
               }}
             >
               <X size={20} />
@@ -5183,7 +5194,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
             padding: '0.5rem 1rem',
             backgroundColor: 'var(--color-background-light)',
             borderBottom: '1px solid var(--color-border-light)',
-            gap: '8px'
+            gap: '8px',
+            overflowX: 'auto'
           }}>
             {[
               { id: 'pending', label: t('Chờ duyệt') },

@@ -65,17 +65,32 @@ export const CustomModal: React.FC<CustomModalProps> = ({
   const modalContentRef = useRef<HTMLDivElement>(null);
   const reactId = useId();
   const modalId = useMemo(() => `modal_${reactId.replace(/:/g, '')}`, [reactId]);
+  const wasOpenRef = useRef(false);
+  const openedOverDrawerRef = useRef(false);
+
+  if (isOpen && !wasOpenRef.current) {
+    wasOpenRef.current = true;
+    openedOverDrawerRef.current = typeof document !== 'undefined' && Boolean(
+      document.querySelector('.drawer-backdrop, .drawer-sheet, .drawer-panel, [class*="CustomerProfileDrawer"], [class*="EntityDrawer"]')
+    );
+  } else if (!isOpen && wasOpenRef.current) {
+    wasOpenRef.current = false;
+    openedOverDrawerRef.current = false;
+  }
+
+  const resolvedZIndex = zIndex
+    ? Math.min(Math.max(zIndex, 2147483640), 2147483646)
+    : 2147483645;
 
   // Safe body scroll lock with reference count and LIFO Escape key handling
   useEffect(() => {
     if (isOpen) {
       lockBodyScroll();
-      const resolvedZ = zIndex ? Math.min(zIndex, 2147483647) : 2147483642;
       const unregister = pushOverlay(modalId, () => {
         if (!disableClose) {
           onClose();
         }
-      }, resolvedZ);
+      }, resolvedZIndex);
 
       autoFocusFirstInput(modalContentRef.current);
 
@@ -84,7 +99,7 @@ export const CustomModal: React.FC<CustomModalProps> = ({
         unregister();
       };
     }
-  }, [isOpen, onClose, disableClose, zIndex, modalId]);
+  }, [isOpen, onClose, disableClose, resolvedZIndex, modalId]);
 
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -158,8 +173,6 @@ export const CustomModal: React.FC<CustomModalProps> = ({
 
   const overlayClass = `${styles.overlay} ${fullScreenOnMobile ? styles.fullscreenOverlay : ''} ${centeredOnMobile ? styles.centeredMobileOverlay : ''}`;
   const modalClass = `${styles.modal} ${fullScreenOnMobile ? styles.fullScreenMobile : ''} ${centeredOnMobile ? styles.centeredMobileModal : ''} ${modalClassName || ''}`;
-
-  const resolvedZIndex = zIndex ? Math.min(zIndex, 2147483647) : 2147483642;
 
   const modalContent = (
     <AnimatePresence>

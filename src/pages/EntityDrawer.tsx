@@ -97,13 +97,13 @@ export const EntityDrawer: React.FC<EntityDrawerProps> = ({ isOpen, onClose, ent
             transition={{ duration: 0.2, ease: 'easeOut' }}
             style={{
               zIndex: 1000,
-              background: 'rgba(0,0,0,0.45)',
-              backdropFilter: 'blur(8px)',
+              background: 'rgba(0, 0, 0, 0.6)',
+              backdropFilter: 'blur(6px)',
+              WebkitBackdropFilter: 'blur(6px)',
               position: 'fixed',
               inset: 0,
               cursor: 'pointer',
-              willChange: 'opacity',
-              transform: 'translate3d(0, 0, 0)'
+              willChange: 'opacity'
             }}
           />
           <motion.div
@@ -608,7 +608,7 @@ export const EntityDrawer: React.FC<EntityDrawerProps> = ({ isOpen, onClose, ent
             animate={{ opacity: 1 }} 
             exit={{ opacity: 0 }}
             onClick={() => setHelpModal(null)}
-            style={{ zIndex: 1100, background: 'rgba(0, 0, 0, 0.82)', backdropFilter: 'blur(4px)' }}
+            style={{ zIndex: 1100, background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }} 

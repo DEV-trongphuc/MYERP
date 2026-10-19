@@ -302,12 +302,12 @@ function processTrainingBuffer($pdo, $propertyId, $apiKey, $batch, &$processedDo
     if (empty($batch))
         return 0;
     $texts = array_column($batch, 'metadata_text');
-    $batchDocIds = array_unique(array_column($batch, 'doc_id'));
+    $batchDocIds = array_values(array_unique(array_column($batch, 'doc_id')));
 
     // Heartbeat: Update status to show we are calling Gemini
     $ePlaceholders = str_repeat('?,', count($batchDocIds) - 1) . '?';
     $pdo->prepare("UPDATE domation_ai_training_docs SET error_message = 'Đang tạo vector (Embedding) cho " . count($batch) . " đoạn văn...' WHERE id IN ($ePlaceholders)")
-        ->execute(array_values($batchDocIds));
+        ->execute($batchDocIds);
 
     // [FIX] Retry tối đa 3 lần khi gặp 429 Rate Limit từ Gemini
     $maxRetries = 3;

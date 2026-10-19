@@ -1832,7 +1832,7 @@ export default function CooperationSlipsPage() {
 
       {/* Signature Modal */}
       {isSignModalOpen && signingSlip && createPortal(
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(4px)', padding: '1rem' }}>
+        <div className="overlay-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 9999999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', padding: '1rem' }}>
           <div className="card animate-fade" style={{ maxWidth: '800px', width: '100%', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-border)', paddingBottom: '0.5rem' }}>
               <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Đọc tài liệu &amp; Ký xác nhận điện tử</h2>
@@ -2168,7 +2168,7 @@ export default function CooperationSlipsPage() {
 
       {/* Approval Details Modal */}
       {approvalSlip && createPortal(
-        <div style={{ position: 'fixed', inset: 0, zIndex: 2000000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(10px)', padding: '1.5rem' }}>
+        <div className="overlay-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 2000000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', padding: '1.5rem' }}>
           <div className="card animate-fade" style={{ maxWidth: '640px', width: '100%', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', maxHeight: '90vh', overflowY: 'auto', borderRadius: '24px', border: '1px solid rgba(255, 255, 255, 0.5)', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.15)', background: 'var(--color-surface)', position: 'relative' }}>
             
             {/* Close Button Top Right */}
@@ -2450,7 +2450,7 @@ export default function CooperationSlipsPage() {
 
       {/* Custom Confirm Modal */}
       {customConfirm.isOpen && createPortal(
-        <div style={{ position: 'fixed', inset: 0, zIndex: 2000000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(4px)', padding: '1rem' }}>
+        <div className="overlay-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 2000000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', padding: '1rem' }}>
           <div className="card animate-fade" style={{ maxWidth: '400px', width: '100%', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)' }}>{customConfirm.title}</h3>
             <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>{customConfirm.message}</p>
@@ -2480,7 +2480,7 @@ export default function CooperationSlipsPage() {
 
       {/* Custom Prompt Modal */}
       {customPrompt.isOpen && createPortal(
-        <div style={{ position: 'fixed', inset: 0, zIndex: 2000000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(4px)', padding: '1rem' }}>
+        <div className="overlay-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 2000000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', padding: '1rem' }}>
           <div className="card animate-fade" style={{ maxWidth: '440px', width: '100%', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)' }}>{customPrompt.title}</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -2528,7 +2528,7 @@ export default function CooperationSlipsPage() {
       {/* Yêu cầu chỉnh sửa tỷ lệ hoa hồng Modal */}
       {/* Yêu cầu chỉnh sửa tỷ lệ hoa hồng Modal */}
       {requestAdjustmentSlip && createPortal(
-        <div style={{ position: 'fixed', inset: 0, zIndex: 2000000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.65)', backdropFilter: 'blur(5px)', padding: window.innerWidth <= 768 ? '0.75rem 0.75rem 80px 0.75rem' : '1rem' }}>
+        <div className="overlay-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 2000000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', padding: window.innerWidth <= 768 ? '0.75rem 0.75rem 80px 0.75rem' : '1rem' }}>
           <div className="card animate-fade" style={{ maxWidth: '540px', width: '100%', padding: window.innerWidth <= 768 ? '1.25rem' : '2rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', maxHeight: window.innerWidth <= 768 ? '72vh' : '88vh', overflowY: 'auto', borderRadius: '24px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', border: '1px solid var(--color-border)', boxSizing: 'border-box' }}>
             
             {/* Header */}
@@ -2693,7 +2693,7 @@ export default function CooperationSlipsPage() {
 
       {/* Xử lý yêu cầu chỉnh sửa từ Sale Modal (dành cho Admin/Manager) */}
       {showHandleRequestModal && selectedSlipForHandleRequest && createPortal(
-        <div style={{ position: 'fixed', inset: 0, zIndex: 2000000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(4px)', padding: '1rem' }}>
+        <div className="overlay-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 2000000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', padding: '1rem' }}>
           <div className="card animate-fade" style={{ maxWidth: '500px', width: '100%', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>Xử lý yêu cầu chỉnh sửa tỷ lệ</h3>
             
@@ -2832,7 +2832,7 @@ export default function CooperationSlipsPage() {
 
       {/* Configuration Modal */}
       {isUpdateOpen && createPortal(
-        <div style={{ position: 'fixed', inset: 0, zIndex: 2000000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.65)', backdropFilter: 'blur(5px)', padding: '1rem' }}>
+        <div className="overlay-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 2000000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', padding: '1rem' }}>
           <div className="card" style={{ maxWidth: '560px', width: '100%', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', maxHeight: '92vh', overflowY: 'auto', borderRadius: '24px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', border: '1px solid var(--color-border)', animation: 'scaleUp 0.2s ease-out', overflow: 'visible' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '0.75rem' }}>
               <div>

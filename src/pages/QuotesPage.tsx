@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   FileText, Plus, Search, Download, CheckCircle2, Clock, AlertCircle,
   Eye, Trash2, Printer, X, Loader2, ArrowUpRight, ArrowDownRight, TrendingUp, DollarSign,
@@ -133,7 +134,10 @@ export const QuotesPage: React.FC = () => {
     setShowEditor(true);
   };
 
+  const location = useLocation();
+
   useEffect(() => {
+    if (!location.pathname.startsWith('/quotes')) return;
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('create') === '1' || sessionStorage.getItem('pending_quote_draft')) {
       let initialQuote: any = null;
@@ -157,7 +161,7 @@ export const QuotesPage: React.FC = () => {
         window.history.replaceState({}, '', cleanUrl);
       }
     }
-  }, []);
+  }, [location.pathname, location.search]);
 
   const handleDelete = (id: number) => {
     showConfirm({

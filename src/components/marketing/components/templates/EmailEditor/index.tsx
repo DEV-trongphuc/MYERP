@@ -19,6 +19,7 @@ const AIEmailGeneratorModal = React.lazy(() => import('./AIEmailGeneratorModal')
 // Import constants and utilities
 import { DEFAULT_BODY_STYLE, DEFAULT_BLOCKS } from './constants/editorConstants';
 import { compileHTML } from './utils/htmlCompiler';
+import { captureEmailTopWebp } from './utils/thumbnailCapture';
 import { createBlock, insertDeep, deleteBlockDeep, duplicateBlockDeep, ensureUniqueIds } from './utils/blockUtils'; // Import necessary block utils
 import { API_BASE_URL } from '../../../utils/config';
 import { api } from '../../../services/storageAdapter';
@@ -380,23 +381,62 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
     const [isTestModalOpen, setIsTestModalOpen] = useState(false);
     const isDirty = historyIndex !== savedHistoryIndex || hasUncommittedChanges;
 
-    // Sync real blocks if template opened instantaneously with placeholder [true] and full blocks arrive in background
-    const syncedRealBlocksRef = useRef<boolean>(hasInitialBlockObjects);
+    // Sync real blocks or raw HTML if template opened instantaneously from lightweight thumbnail list and full payload arrives
+    const syncedRealBlocksRef = useRef<boolean>(hasInitialBlockObjects || Boolean(template?.htmlContent));
     useEffect(() => {
         const nowHasRealBlocks = Boolean(
             template?.blocks && template.blocks.length > 0 && typeof template.blocks[0] === 'object'
         );
-        if (nowHasRealBlocks && !syncedRealBlocksRef.current && historyIndex === 0 && !hasUncommittedChanges) {
-            const unique = ensureUniqueIds(template!.blocks);
-            syncedRealBlocksRef.current = true;
-            setBlocks(unique);
-            setHistory([unique]);
-            setHistoryIndex(0);
-            setSavedHistoryIndex(0);
-            if (template?.bodyStyle) setBodyStyle(template.bodyStyle);
-            if (template?.htmlContent) setCustomHtml(template.htmlContent);
+        if (!syncedRealBlocksRef.current && historyIndex === 0 && !hasUncommittedChanges) {
+            if (nowHasRealBlocks) {
+                const unique = ensureUniqueIds(template!.blocks);
+                syncedRealBlocksRef.current = true;
+                setBlocks(unique);
+                setHistory([unique]);
+                setHistoryIndex(0);
+                setSavedHistoryIndex(0);
+                if (template?.bodyStyle) setBodyStyle(template.bodyStyle);
+                if (template?.htmlContent) setCustomHtml(template.htmlContent);
+            } else if (template?.htmlContent) {
+                syncedRealBlocksRef.current = true;
+                setCustomHtml(template.htmlContent);
+                setEditorMode('code');
+                if (template?.bodyStyle) setBodyStyle(template.bodyStyle);
+            }
         }
     }, [template, historyIndex, hasUncommittedChanges]);
+
+    useEffect(() => {
+        if (!template?.id || template.id.startsWith('sys_') || syncedRealBlocksRef.current) return;
+        let cancelled = false;
+        api.get<Template>(`templates/${template.id}`)
+            .then(res => {
+                if (cancelled || syncedRealBlocksRef.current) return;
+                if (res.success && res.data) {
+                    const full = res.data;
+                    const fullHasBlocks = Boolean(full.blocks && full.blocks.length > 0 && typeof full.blocks[0] === 'object');
+                    if (fullHasBlocks) {
+                        const unique = ensureUniqueIds(full.blocks);
+                        syncedRealBlocksRef.current = true;
+                        setBlocks(unique);
+                        setHistory([unique]);
+                        setHistoryIndex(0);
+                        setSavedHistoryIndex(0);
+                        if (full.bodyStyle) setBodyStyle(full.bodyStyle);
+                        if (full.htmlContent) setCustomHtml(full.htmlContent);
+                    } else if (full.htmlContent) {
+                        syncedRealBlocksRef.current = true;
+                        setCustomHtml(full.htmlContent);
+                        setEditorMode('code');
+                        if (full.bodyStyle) setBodyStyle(full.bodyStyle);
+                    }
+                }
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, [template?.id]);
 
     const [savedSections, setSavedSections] = useState<{ id: string, name: string, data: EmailBlock }[]>([]);
     const [saveSectionModal, setSaveSectionModal] = useState<{ isOpen: boolean, block: EmailBlock | null, name: string }>({ isOpen: false, block: null, name: '' });
@@ -593,13 +633,19 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
         }
     }, [history, historyIndex]);
 
-    const handleSaveData = useCallback(() => {
+    const handleSaveData = useCallback(async () => {
         const finalHtml = editorMode === 'code' ? customHtml : compileHTML(blocks, bodyStyle, name);
         const effectiveVisibility: TemplateVisibilityMode = (!canSetShared && visibility === 'shared') ? 'personal' : visibility;
         const finalAccessConfig: TemplateAccessConfig = {
             ...accessConfig,
             visibility: effectiveVisibility,
         };
+        let capturedThumb = '';
+        try {
+            capturedThumb = await captureEmailTopWebp(finalHtml, editorMode === 'code' ? [] : blocks, bodyStyle, name);
+        } catch {
+            capturedThumb = '';
+        }
         onSave({
             name,
             groupId,
@@ -612,7 +658,7 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
                 accessConfig: finalAccessConfig,
             } as any,
             htmlContent: finalHtml,
-            thumbnail: ''
+            thumbnail: capturedThumb || template?.thumbnail || ''
         });
         if (historyDebounceRef.current) {
             clearTimeout(historyDebounceRef.current);
@@ -621,7 +667,7 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
         setHasUncommittedChanges(false);
         setSavedHistoryIndex(historyIndex);
         setTimeout(() => silentScan(), 0);
-    }, [editorMode, customHtml, blocks, bodyStyle, name, groupId, visibility, accessConfig, canSetShared, historyIndex, onSave, silentScan]);
+    }, [editorMode, customHtml, blocks, bodyStyle, name, groupId, visibility, accessConfig, canSetShared, historyIndex, onSave, silentScan, template?.thumbnail]);
 
     // Keyboard Shortcuts: Ctrl+Z (Undo), Ctrl+Y/Ctrl+Shift+Z (Redo), Ctrl+S (Save)
     useEffect(() => {
@@ -763,6 +809,7 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
                 onPreview={() => { const win = window.open(); win?.document.write(editorMode === 'code' ? customHtml : compileHTML(blocks, bodyStyle, name, { isPreview: true })); }}
                 onSendTest={(email) => handleSendTest(email)}
                 onOpenTestModal={() => setIsTestModalOpen(true)}
+                onOpenAIModal={() => setShowAIModal(true)}
                 onValidate={runValidation}
                 validationIssueCount={validationIssues?.length}
                 showValidation={showValidation}
@@ -812,20 +859,21 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
                     {/* Floating AI Button — góc dưới phải canvas */}
                     {editorMode === 'visual' && (
                         <button
+                            type="button"
                             onClick={() => setShowAIModal(true)}
-                            title="AI Generate Email"
-                            className="group transition-all duration-300 hover:scale-110 active:scale-95"
+                            title="Thiết kế & Tinh chỉnh Email bằng AI"
+                            className="group transition-all duration-200 hover:scale-105 active:scale-95 outline-none focus:outline-none"
                             style={{
                                 position: 'absolute',
                                 bottom: '24px',
                                 right: '24px',
                                 zIndex: 99,
-                                width: '52px',
-                                height: '52px',
-                                borderRadius: '50%',
-                                background: 'linear-gradient(135deg, #2563eb, #561dd0)',
-                                boxShadow: '0 8px 28px rgba(104,61,242,0.45), 0 2px 8px rgba(0,0,0,0.15)',
-                                border: 'none',
+                                width: '48px',
+                                height: '48px',
+                                borderRadius: '16px',
+                                background: 'linear-gradient(135deg, #BD1D2D, #991B1B)',
+                                boxShadow: '0 8px 24px rgba(189,29,45,0.35), 0 2px 6px rgba(0,0,0,0.12)',
+                                border: '1px solid rgba(255,255,255,0.2)',
                                 cursor: 'pointer',
                                 display: 'flex',
                                 alignItems: 'center',
@@ -835,13 +883,11 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
                             <Sparkles className="w-5 h-5 text-white" />
                             {/* Tooltip */}
                             <span
-                                className="absolute right-full mr-3 px-3 py-1.5 rounded-xl text-xs font-bold text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 -translate-x-1 group-hover:translate-x-0"
-                                style={{ background: 'linear-gradient(135deg, #2563eb, #561dd0)', boxShadow: '0 4px 14px rgba(104,61,242,0.35)' }}
+                                className="absolute right-full mr-3 px-3 py-1.5 rounded-[10px] text-xs font-bold text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 -translate-x-1 group-hover:translate-x-0"
+                                style={{ background: '#0f172a', boxShadow: '0 4px 12px rgba(15,23,42,0.25)' }}
                             >
-                                AI Generate
+                                Tạo & Chỉnh sửa bằng AI
                             </span>
-                            {/* Pulse ring */}
-                            <span className="absolute inset-0 rounded-full animate-ping" style={{ background: 'rgba(104,61,242,0.2)', animationDuration: '2s' }} />
                         </button>
                     )}
                 </div>
@@ -938,13 +984,13 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
                     }
                 >
                     <div className="space-y-6">
-                        <div className="p-4 bg-blue-50 border border-blue-100 rounded-[14px] flex gap-4 items-center">
-                            <div className="p-3 bg-white rounded-[14px] shadow-sm text-blue-600">
+                        <div className="p-4 bg-[#BD1D2D]/5 border border-[#BD1D2D]/15 rounded-[14px] flex gap-4 items-center">
+                            <div className="p-3 bg-white rounded-[14px] shadow-sm text-[#BD1D2D]">
                                 <Box className="w-6 h-6" />
                             </div>
                             <div>
-                                <p className="text-sm font-bold text-blue-900">Reusable Block</p>
-                                <p className="text-[11px] text-blue-700 leading-tight mt-0.5">Lưu lại block này vào thư viện để tái sử dụng nhanh chóng cho các email khác.</p>
+                                <p className="text-sm font-bold text-slate-900">Reusable Block</p>
+                                <p className="text-[11px] text-slate-600 leading-tight mt-0.5">Lưu lại block này vào thư viện để tái sử dụng nhanh chóng cho các email khác.</p>
                             </div>
                         </div>
                         <Input

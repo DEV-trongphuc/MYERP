@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Command, Activity, Sun, Moon, Keyboard, ChevronDown, User, AlertTriangle, LogOut, Menu, LayoutGrid, LayoutDashboard, Users, Building2, Clock, Truck, Boxes, Receipt, Settings, CheckCircle2, Fingerprint, Bell, MessageSquare, Info, Trash2, Check, Eye, EyeOff, CheckSquare, FileText, ArrowLeft, ShieldAlert, Laptop, RefreshCw, Code } from 'lucide-react';
+import { Search, Command, Activity, Sun, Moon, Keyboard, ChevronDown, User, AlertTriangle, LogOut, Menu, LayoutGrid, LayoutDashboard, Users, Building2, Clock, Truck, Boxes, Receipt, Settings, CheckCircle2, Fingerprint, Bell, MessageSquare, Info, Trash2, Check, Eye, EyeOff, CheckSquare, FileText, ArrowLeft, ShieldAlert, Laptop, RefreshCw, Code, Star, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getUserDisplayRoleOrTitle, isAcademic } from '../../utils/roleUtils';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
@@ -827,8 +827,17 @@ export const Header = ({
       const urlObj = new URL(targetLink, window.location.origin);
 
       // Normalize legacy / backend routes while preserving 100% of query params:
-      if (urlObj.pathname.startsWith('/support-tickets')) {
-        urlObj.pathname = '/tickets';
+      if (urlObj.pathname.startsWith('/tickets')) {
+        const isSupportTicket =
+          notif.type === 'support_ticket' ||
+          notif.type === 'ticket_assignment' ||
+          /ticket hỗ trợ|phiếu hỗ trợ|yêu cầu hỗ trợ/i.test(String(notif.title || ''));
+        if (isSupportTicket) {
+          urlObj.pathname = '/support-tickets';
+          targetLink = urlObj.pathname + urlObj.search;
+        }
+      } else if (urlObj.pathname.startsWith('/cooperations')) {
+        urlObj.pathname = '/cooperation-slips';
         targetLink = urlObj.pathname + urlObj.search;
       } else if (urlObj.pathname === '/marketing-tasks') {
         urlObj.pathname = '/projects';
@@ -842,6 +851,14 @@ export const Header = ({
         urlObj.searchParams.set('tab', 'purchase_orders');
         if (poId) urlObj.searchParams.set('open_id', poId);
         targetLink = urlObj.pathname + '?' + urlObj.searchParams.toString();
+      }
+
+      if (urlObj.pathname.startsWith('/chat')) {
+        const convId = urlObj.searchParams.get('conversation_id') || urlObj.searchParams.get('id');
+        window.dispatchEvent(new CustomEvent('myerp:open-chat-conversation', {
+          detail: { conversationId: convId ? (Number(convId) || convId) : undefined }
+        }));
+        return;
       }
 
       // Clean all existing global drawers before routing
@@ -923,7 +940,23 @@ export const Header = ({
 
       if (urlObj.pathname.startsWith('/approvals') || urlObj.pathname.startsWith('/expenses')) {
         const openId = urlObj.searchParams.get('open_id') || urlObj.searchParams.get('id') || urlObj.searchParams.get('expense_id');
-        const openType = urlObj.searchParams.get('open_type') || (notif.type === 'leave' ? 'leave' : 'expense');
+        const tabParam = (urlObj.searchParams.get('tab') || '').toLowerCase();
+        const tabTypeMap: Record<string, string> = {
+          leave: 'leave',
+          overtime: 'leave',
+          advance: 'advance',
+          advances: 'advance',
+          attendance: 'attendance_bulk',
+          kpi: 'kpi',
+          expenses: 'expense',
+          expense: 'expense',
+          po: 'po'
+        };
+        const openType =
+          urlObj.searchParams.get('open_type') ||
+          urlObj.searchParams.get('type') ||
+          tabTypeMap[tabParam] ||
+          (notif.type === 'leave' ? 'leave' : notif.type === 'attendance_update' ? 'attendance_bulk' : 'expense');
         const openStatus = urlObj.searchParams.get('open_status');
         const highlightCommentId = urlObj.searchParams.get('highlight_comment_id') || urlObj.searchParams.get('comment_id');
         const numOpenId = Number(openId);
@@ -940,14 +973,14 @@ export const Header = ({
 
         if (openId && !isNaN(numOpenId) && numOpenId > 0) {
           if (urlObj.pathname.startsWith('/approvals') && window.location.pathname.startsWith('/approvals')) {
-            window.dispatchEvent(new CustomEvent('open-approval-drawer', {
-              detail: {
-                id: numOpenId,
-                type: openType,
-                status: openStatus || undefined,
-                highlight_comment_id: highlightCommentId || undefined
-              }
-            }));
+            const evtDetail = {
+              id: numOpenId,
+              type: openType,
+              status: openStatus || undefined,
+              highlight_comment_id: highlightCommentId || undefined
+            };
+            window.dispatchEvent(new CustomEvent('open-approval-drawer', { detail: evtDetail }));
+            window.dispatchEvent(new CustomEvent('open-approval-item', { detail: evtDetail }));
           } else if (urlObj.pathname.startsWith('/expenses') && window.location.pathname.startsWith('/expenses')) {
             window.dispatchEvent(new CustomEvent('open-expense-drawer', {
               detail: {
@@ -1523,6 +1556,70 @@ export const Header = ({
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isAppLauncherOpen, setIsAppLauncherOpen] = useState(false);
   const [launcherSearch, setLauncherSearch] = useState('');
+  const [launcherTopTab, setLauncherTopTab] = useState<'favorites' | 'recent'>('favorites');
+  const [isCustomizingLauncher, setIsCustomizingLauncher] = useState(false);
+  const favStorageKey = `myerp_launcher_favs_${user?.id || 'default'}`;
+  const recentStorageKey = `myerp_launcher_recent_${user?.id || 'default'}`;
+
+  const [favoriteShortcutNames, setFavoriteShortcutNames] = useState<string[] | null>(() => {
+    try {
+      const raw = localStorage.getItem(`myerp_launcher_favs_${user?.id || 'default'}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.filter((x): x is string => typeof x === 'string');
+      }
+    } catch {}
+    return null;
+  });
+
+  const [recentVisitedNames, setRecentVisitedNames] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(`myerp_launcher_recent_${user?.id || 'default'}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.filter((x): x is string => typeof x === 'string');
+      }
+    } catch {}
+    return [];
+  });
+
+  // Sync user-scoped storage when user.id resolves
+  useEffect(() => {
+    try {
+      const rawFav = localStorage.getItem(favStorageKey);
+      if (rawFav) {
+        const parsed = JSON.parse(rawFav);
+        if (Array.isArray(parsed)) setFavoriteShortcutNames(parsed.filter((x): x is string => typeof x === 'string'));
+      }
+      const rawRec = localStorage.getItem(recentStorageKey);
+      if (rawRec) {
+        const parsed = JSON.parse(rawRec);
+        if (Array.isArray(parsed)) setRecentVisitedNames(parsed.filter((x): x is string => typeof x === 'string'));
+      }
+    } catch {}
+  }, [favStorageKey, recentStorageKey]);
+
+  const recordLauncherVisit = (itemName: string) => {
+    if (!itemName) return;
+    setRecentVisitedNames(prev => {
+      const next = [itemName, ...(Array.isArray(prev) ? prev : []).filter(n => n !== itemName)].slice(0, 14);
+      try {
+        localStorage.setItem(recentStorageKey, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  // Automatically record page visits when navigating across routes
+  useEffect(() => {
+    if (!location.pathname) return;
+    const allItems = SIDEBAR_GROUPS.flatMap(g => g.items);
+    const matched = allItems.find((it: any) => it.href === location.pathname);
+    if (matched?.name) {
+      recordLauncherVisit(matched.name);
+    }
+  }, [location.pathname, recentStorageKey]);
+
   const [activeCategory, setActiveCategory] = useState('Tất cả');
   const [searchQuery, setSearchQuery] = useState('');
   const [leadResults, setLeadResults] = useState<any[]>([]);
@@ -1682,9 +1779,11 @@ export const Header = ({
         {/* Search trigger */}
         <button 
           onClick={handleOpenSearch}
+          title={t("Tìm kiếm toàn hệ thống...")}
           style={{
             display: 'flex',
             alignItems: 'center',
+            justifyContent: isMobile ? 'center' : 'flex-start',
             gap: '0.5rem',
             background: isWs
               ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.06) 100%)'
@@ -1693,39 +1792,45 @@ export const Header = ({
               ? '1px solid rgba(255, 255, 255, 0.28)'
               : '1px solid var(--color-border)',
             borderRadius: 9999,
-            padding: '0.4rem 0.875rem',
+            padding: isMobile ? '0' : '0.4rem 0.875rem',
             color: isWs ? '#ffffff' : 'var(--color-text-light)',
             fontSize: '0.875rem',
             cursor: 'pointer',
             transition: 'all 0.2s ease',
-            width: 320,
+            width: isMobile ? 36 : 320,
+            height: isMobile ? 36 : undefined,
             maxWidth: '100%',
+            flexShrink: 0,
             backdropFilter: isWs ? 'blur(10px)' : 'none',
             WebkitBackdropFilter: isWs ? 'blur(10px)' : 'none',
             boxShadow: isWs ? '0 2px 10px rgba(0, 0, 0, 0.25)' : 'none',
             textShadow: isWs ? '0 1px 3px rgba(0, 0, 0, 0.8)' : 'none'
           }} 
-          className="responsive-search-box responsive-hide-mobile"
+          className="responsive-search-box"
         >
-          <Search size={16} style={{ color: isWs ? '#ffffff' : 'currentColor', filter: isWs ? 'drop-shadow(0 1px 2px rgba(0,0,0,0.6))' : 'none' }} />
-          <span className="responsive-hide-mobile" style={{ color: isWs ? '#ffffff' : 'inherit', textShadow: isWs ? '0 1px 3px rgba(0, 0, 0, 0.8)' : 'none', fontWeight: isWs ? 500 : 400 }}>
-            {t("Tìm kiếm toàn hệ thống...")}
-          </span>
-          <span className="responsive-hide-mobile" style={{
-            marginLeft: 'auto',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2,
-            background: isWs ? 'rgba(255, 255, 255, 0.18)' : 'var(--color-border)',
-            border: isWs ? '1px solid rgba(255, 255, 255, 0.25)' : 'none',
-            color: isWs ? '#ffffff' : 'var(--color-text-muted)',
-            textShadow: isWs ? '0 1px 2px rgba(0, 0, 0, 0.8)' : 'none',
-            padding: '1px 6px',
-            borderRadius: 4,
-            fontSize: '0.7rem'
-          }}>
-            <Command size={12} />K
-          </span>
+          <Search size={16} style={{ color: isWs ? '#ffffff' : 'currentColor', filter: isWs ? 'drop-shadow(0 1px 2px rgba(0,0,0,0.6))' : 'none', flexShrink: 0 }} />
+          {!isMobile && (
+            <span style={{ color: isWs ? '#ffffff' : 'inherit', textShadow: isWs ? '0 1px 3px rgba(0, 0, 0, 0.8)' : 'none', fontWeight: isWs ? 500 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {t("Tìm kiếm toàn hệ thống...")}
+            </span>
+          )}
+          {!isMobile && (
+            <span className="responsive-hide-mobile" style={{
+              marginLeft: 'auto',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              background: isWs ? 'rgba(255, 255, 255, 0.18)' : 'var(--color-border)',
+              border: isWs ? '1px solid rgba(255, 255, 255, 0.25)' : 'none',
+              color: isWs ? '#ffffff' : 'var(--color-text-muted)',
+              textShadow: isWs ? '0 1px 2px rgba(0, 0, 0, 0.8)' : 'none',
+              padding: '1px 6px',
+              borderRadius: 4,
+              fontSize: '0.7rem'
+            }}>
+              <Command size={12} />K
+            </span>
+          )}
         </button>
 
         {/* Keyboard Shortcuts Trigger Button */}
@@ -2575,6 +2680,8 @@ export const Header = ({
             value={launcherSearch}
             onChange={(e) => setLauncherSearch(e.target.value)}
             placeholder={t("Tìm kiếm nhanh chức năng...")}
+            data-no-autofocus={isMobile ? "true" : undefined}
+            autoFocus={false}
             style={{
               flex: 1,
               border: 'none',
@@ -3010,25 +3117,100 @@ export const Header = ({
           };
 
           const maxRecent = isMobile ? 9 : 7;
-          const recentItemsList: any[] = [];
+          const defaultFavItemsList: any[] = [];
           for (const name of targetList) {
             const item = findItem(name);
-            if (item && !recentItemsList.some(it => it.name === item.name || it.href === item.href)) {
-              recentItemsList.push(item);
+            if (item && !defaultFavItemsList.some(it => it.name === item.name || it.href === item.href)) {
+              defaultFavItemsList.push(item);
             }
-            if (recentItemsList.length >= maxRecent) break;
+            if (defaultFavItemsList.length >= maxRecent) break;
           }
 
-          if (recentItemsList.length < maxRecent) {
+          if (defaultFavItemsList.length < maxRecent) {
             for (const item of allVisibleItems) {
-              if (!recentItemsList.some(it => it.name === item.name || it.href === item.href)) {
-                recentItemsList.push(item);
+              if (!defaultFavItemsList.some(it => it.name === item.name || it.href === item.href)) {
+                defaultFavItemsList.push(item);
               }
-              if (recentItemsList.length >= maxRecent) break;
+              if (defaultFavItemsList.length >= maxRecent) break;
             }
           }
 
-          const recentItems = recentItemsList.slice(0, maxRecent);
+          const defaultFavoriteNames = defaultFavItemsList.slice(0, maxRecent).map(it => it.name);
+          const effectiveFavoriteNames = favoriteShortcutNames !== null ? favoriteShortcutNames : defaultFavoriteNames;
+
+          const favoriteItems: any[] = [];
+          for (const name of effectiveFavoriteNames) {
+            const item = findItem(name);
+            if (item && !favoriteItems.some(it => it.name === item.name || it.href === item.href)) {
+              favoriteItems.push(item);
+            }
+          }
+
+          const recentVisitedItems: any[] = [];
+          for (const name of recentVisitedNames) {
+            const item = findItem(name);
+            if (item && !recentVisitedItems.some(it => it.name === item.name || it.href === item.href)) {
+              recentVisitedItems.push(item);
+            }
+            if (recentVisitedItems.length >= maxRecent) break;
+          }
+          if (recentVisitedItems.length < maxRecent) {
+            for (const item of defaultFavItemsList) {
+              if (!recentVisitedItems.some(it => it.name === item.name || it.href === item.href)) {
+                recentVisitedItems.push(item);
+              }
+              if (recentVisitedItems.length >= maxRecent) break;
+            }
+          }
+
+          const isItemFavorited = (itemName: string) => {
+            return effectiveFavoriteNames.includes(itemName);
+          };
+
+          const handleToggleFavorite = (itemName: string, e?: React.MouseEvent) => {
+            if (e) e.stopPropagation();
+            const currentList = [...effectiveFavoriteNames];
+            const idx = currentList.indexOf(itemName);
+            let nextList: string[];
+            if (idx >= 0) {
+              nextList = currentList.filter(n => n !== itemName);
+            } else {
+              if (currentList.length >= 14) {
+                toast.error('Tối đa 14 lối tắt yêu thích');
+                return;
+              }
+              nextList = [...currentList, itemName];
+            }
+            setFavoriteShortcutNames(nextList);
+            try {
+              localStorage.setItem(favStorageKey, JSON.stringify(nextList));
+            } catch {}
+          };
+
+          const handleResetDefaultFavorites = () => {
+            setFavoriteShortcutNames(null);
+            try {
+              localStorage.removeItem(favStorageKey);
+            } catch {}
+            toast.success('Đã khôi phục lối tắt mặc định');
+          };
+
+          const handleSelectLauncherItem = (item: any) => {
+            if (isCustomizingLauncher) {
+              handleToggleFavorite(item.name);
+              return;
+            }
+            recordLauncherVisit(item.name);
+            if (item.name === 'WorkChat' || item.name === 'Tin nhắn nội bộ' || (item as any).isChat || item.href === '#chat') {
+              openChat();
+              setIsAppLauncherOpen(false);
+              return;
+            }
+            navigate(item.href);
+            setIsAppLauncherOpen(false);
+          };
+
+          const activeTopItems = launcherTopTab === 'favorites' ? favoriteItems : recentVisitedItems.slice(0, maxRecent);
 
           return (
             <div style={{ paddingRight: '4px' }}>
@@ -3040,35 +3222,32 @@ export const Header = ({
                   {filteredItems.length > 0 ? (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px 24px' }}>
                       {filteredItems.map(item => {
-                        const IconComponent = item.name.toLowerCase().includes('chấm công') ? Fingerprint : item.icon;
-                        const colors = getItemColor(item.name);
                         const desc = ITEM_DESC[item.name] || 'Xem chi tiết thông tin';
+                        const isFav = isItemFavorited(item.name);
                         return (
                           <div
                             key={item.name}
-                            onClick={() => {
-                              if (item.name === 'WorkChat' || item.name === 'Tin nhắn nội bộ' || (item as any).isChat || item.href === '#chat') {
-                                openChat();
-                                setIsAppLauncherOpen(false);
-                                return;
-                              }
-                              navigate(item.href);
-                              setIsAppLauncherOpen(false);
-                            }}
+                            onClick={() => handleSelectLauncherItem(item)}
                             style={{
                               display: 'flex',
                               alignItems: 'center',
                               gap: '12px',
                               padding: '8px 12px',
-                              borderRadius: '8px',
+                              borderRadius: '10px',
                               cursor: 'pointer',
+                              border: isCustomizingLauncher && isFav ? '1px solid rgba(245, 158, 11, 0.45)' : '1px solid transparent',
+                              background: isCustomizingLauncher && isFav ? 'rgba(245, 158, 11, 0.06)' : 'transparent',
                               transition: 'all 0.2s ease-in-out',
                             }}
                             onMouseEnter={e => {
-                              e.currentTarget.style.background = 'rgba(0, 0, 0, 0.03)';
+                              if (!(isCustomizingLauncher && isFav)) {
+                                e.currentTarget.style.background = 'rgba(0, 0, 0, 0.03)';
+                              }
                             }}
                             onMouseLeave={e => {
-                              e.currentTarget.style.background = 'transparent';
+                              if (!(isCustomizingLauncher && isFav)) {
+                                e.currentTarget.style.background = 'transparent';
+                              }
                             }}
                           >
                             <div style={{
@@ -3081,7 +3260,7 @@ export const Header = ({
                             }}>
                               <AppIcon name={(item as any).iconKey || item.name} size={32} />
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0, flex: 1 }}>
                               <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                 {t(item.name)}
                               </span>
@@ -3089,6 +3268,30 @@ export const Header = ({
                                 {t(desc)}
                               </span>
                             </div>
+                            <button
+                              type="button"
+                              onClick={(e) => handleToggleFavorite(item.name, e)}
+                              title={isFav ? 'Bỏ khỏi Lối tắt của tôi' : 'Thêm vào Lối tắt của tôi'}
+                              style={{
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '8px',
+                                border: 'none',
+                                background: 'transparent',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                flexShrink: 0,
+                                color: isFav ? '#f59e0b' : 'var(--color-text-muted)',
+                                opacity: isFav ? 1 : 0.45,
+                                transition: 'all 0.15s ease',
+                              }}
+                              onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'scale(1.12)'; }}
+                              onMouseLeave={e => { e.currentTarget.style.opacity = isFav ? '1' : '0.45'; e.currentTarget.style.transform = 'scale(1)'; }}
+                            >
+                              <Star size={16} fill={isFav ? '#f59e0b' : 'none'} />
+                            </button>
                           </div>
                         );
                       })}
@@ -3101,75 +3304,225 @@ export const Header = ({
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '1rem' : '1.75rem' }}>
-                  {/* Gần đây (Recent items) */}
-                  {recentItems.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', borderBottom: '1px solid var(--color-border-light)', paddingBottom: isMobile ? '1rem' : '1.5rem' }}>
-                      <span style={{ fontSize: isMobile ? '0.72rem' : '0.8125rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                        {t('Gần đây')}
-                      </span>
+                  {/* Top Section: Lối tắt của tôi / Vừa truy cập + Tùy chỉnh */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', borderBottom: '1px solid var(--color-border-light)', paddingBottom: isMobile ? '1rem' : '1.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                      {/* Segmented Sub-tabs */}
                       <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(7, 1fr)',
-                        gap: isMobile ? '8px' : '16px'
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '3px',
+                        borderRadius: '10px',
+                        background: 'var(--color-bg-light)',
+                        border: '1px solid var(--color-border-light)',
                       }}>
-                        {recentItems.map(item => {
-                          const colors = getItemColor(item.name);
-                          const Icon = item.icon;
-                          return (
-                            <div
-                              key={item.name}
-                              onClick={() => {
-                                if (item.name === 'WorkChat' || item.name === 'Tin nhắn nội bộ' || (item as any).isChat || item.href === '#chat') {
-                                  openChat();
-                                  setIsAppLauncherOpen(false);
-                                  return;
-                                }
-                                navigate(item.href);
-                                setIsAppLauncherOpen(false);
-                              }}
-                              style={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: isMobile ? '6px' : '12px',
-                                padding: isMobile ? '12px 8px' : '20px 16px',
-                                background: 'var(--color-bg)',
-                                border: '1px solid var(--color-border-light)',
-                                borderRadius: '18px',
-                                cursor: 'pointer',
-                                textAlign: 'center',
-                                boxShadow: 'var(--shadow-sm)',
-                                transition: 'all 0.2s ease-in-out'
-                              }}
-                              onMouseEnter={e => {
-                                e.currentTarget.style.background = 'rgba(0, 0, 0, 0.02)';
-                                e.currentTarget.style.borderColor = 'var(--color-border)';
-                              }}
-                              onMouseLeave={e => {
-                                e.currentTarget.style.background = 'var(--color-bg)';
-                                e.currentTarget.style.borderColor = 'var(--color-border-light)';
-                              }}
-                            >
-                              <div style={{
-                                width: isMobile ? '40px' : '56px',
-                                height: isMobile ? '40px' : '56px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                flexShrink: 0
-                              }}>
-                                <AppIcon name={(item as any).iconKey || item.name} size={isMobile ? 40 : 56} />
-                              </div>
-                              <span style={{ fontSize: isMobile ? '0.75rem' : '0.85rem', fontWeight: 800, color: 'var(--color-text)', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
-                                {t(item.name)}
-                              </span>
-                            </div>
-                          );
-                        })}
+                        <button
+                          type="button"
+                          onClick={() => setLauncherTopTab('favorites')}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: isMobile ? '5px 10px' : '5px 12px',
+                            borderRadius: '7px',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontSize: isMobile ? '0.74rem' : '0.78rem',
+                            fontWeight: 700,
+                            background: launcherTopTab === 'favorites' ? 'var(--color-surface, #ffffff)' : 'transparent',
+                            color: launcherTopTab === 'favorites' ? 'var(--color-primary, #BD1D2D)' : 'var(--color-text-muted)',
+                            boxShadow: launcherTopTab === 'favorites' ? '0 1px 2px rgba(0, 0, 0, 0.06)' : 'none',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <Star size={13} fill={launcherTopTab === 'favorites' ? 'currentColor' : 'none'} />
+                          {t('Lối tắt của tôi')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLauncherTopTab('recent');
+                            if (isCustomizingLauncher) setIsCustomizingLauncher(false);
+                          }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: isMobile ? '5px 10px' : '5px 12px',
+                            borderRadius: '7px',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontSize: isMobile ? '0.74rem' : '0.78rem',
+                            fontWeight: 700,
+                            background: launcherTopTab === 'recent' ? 'var(--color-surface, #ffffff)' : 'transparent',
+                            color: launcherTopTab === 'recent' ? 'var(--color-primary, #BD1D2D)' : 'var(--color-text-muted)',
+                            boxShadow: launcherTopTab === 'recent' ? '0 1px 2px rgba(0, 0, 0, 0.06)' : 'none',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <Clock size={13} />
+                          {t('Vừa truy cập')}
+                        </button>
+                      </div>
+
+                      {/* Right: Customize Shortcut Action */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {isCustomizingLauncher && (
+                          <button
+                            type="button"
+                            onClick={handleResetDefaultFavorites}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '5px 10px',
+                              borderRadius: '8px',
+                              border: '1px solid var(--color-border)',
+                              background: 'transparent',
+                              color: 'var(--color-text-muted)',
+                              fontSize: '0.74rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <RefreshCw size={12} />
+                            {!isMobile && t('Mặc định')}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = !isCustomizingLauncher;
+                            setIsCustomizingLauncher(next);
+                            if (next) setLauncherTopTab('favorites');
+                          }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '5px 12px',
+                            borderRadius: '8px',
+                            border: isCustomizingLauncher ? '1px solid var(--color-primary, #BD1D2D)' : '1px solid var(--color-border)',
+                            background: isCustomizingLauncher ? 'var(--color-primary, #BD1D2D)' : 'var(--color-surface, #ffffff)',
+                            color: isCustomizingLauncher ? '#ffffff' : 'var(--color-text)',
+                            fontSize: isMobile ? '0.74rem' : '0.78rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          {isCustomizingLauncher ? <Check size={13} /> : <Star size={13} />}
+                          {isCustomizingLauncher ? t('Hoàn tất') : t('Tùy chỉnh')}
+                        </button>
                       </div>
                     </div>
-                  )}
+
+                    {isCustomizingLauncher && (
+                      <div style={{
+                        fontSize: '0.76rem',
+                        color: 'var(--color-text-secondary)',
+                        background: 'rgba(245, 158, 11, 0.08)',
+                        border: '1px solid rgba(245, 158, 11, 0.25)',
+                        borderRadius: '10px',
+                        padding: '8px 12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                      }}>
+                        <Star size={14} fill="#f59e0b" color="#f59e0b" style={{ flexShrink: 0 }} />
+                        <span>Nhấn vào biểu tượng ngôi sao <strong>★</strong> ở danh sách bên dưới để ghim hoặc gỡ chức năng khỏi <strong>Lối tắt của tôi</strong> ({favoriteItems.length}/14).</span>
+                      </div>
+                    )}
+
+                    {activeTopItems.length > 0 ? (
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(7, minmax(0, 1fr))',
+                        gap: isMobile ? '8px' : '14px'
+                      }}>
+                        {activeTopItems.map(item => (
+                          <div
+                            key={item.name}
+                            onClick={() => handleSelectLauncherItem(item)}
+                            style={{
+                              position: 'relative',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: isMobile ? '6px' : '10px',
+                              padding: isMobile ? '12px 8px' : '18px 12px',
+                              background: 'var(--color-bg)',
+                              border: isCustomizingLauncher ? '1px dashed var(--color-primary, #BD1D2D)' : '1px solid var(--color-border-light)',
+                              borderRadius: '18px',
+                              cursor: 'pointer',
+                              textAlign: 'center',
+                              boxShadow: 'var(--shadow-sm)',
+                              transition: 'all 0.2s ease-in-out'
+                            }}
+                            onMouseEnter={e => {
+                              e.currentTarget.style.background = 'rgba(0, 0, 0, 0.02)';
+                              if (!isCustomizingLauncher) e.currentTarget.style.borderColor = 'var(--color-border)';
+                            }}
+                            onMouseLeave={e => {
+                              e.currentTarget.style.background = 'var(--color-bg)';
+                              if (!isCustomizingLauncher) e.currentTarget.style.borderColor = 'var(--color-border-light)';
+                            }}
+                          >
+                            {launcherTopTab === 'favorites' && isCustomizingLauncher && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleToggleFavorite(item.name, e)}
+                                title="Gỡ lối tắt"
+                                style={{
+                                  position: 'absolute',
+                                  top: '6px',
+                                  right: '6px',
+                                  width: '20px',
+                                  height: '20px',
+                                  borderRadius: '999px',
+                                  border: 'none',
+                                  background: 'rgba(239, 68, 68, 0.12)',
+                                  color: '#dc2626',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                <X size={12} />
+                              </button>
+                            )}
+                            <div style={{
+                              width: isMobile ? '40px' : '52px',
+                              height: isMobile ? '40px' : '52px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0
+                            }}>
+                              <AppIcon name={(item as any).iconKey || item.name} size={isMobile ? 40 : 52} />
+                            </div>
+                            <span style={{ fontSize: isMobile ? '0.75rem' : '0.82rem', fontWeight: 800, color: 'var(--color-text)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
+                              {t(item.name)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{
+                        padding: '18px',
+                        borderRadius: '14px',
+                        border: '1px dashed var(--color-border)',
+                        textAlign: 'center',
+                        fontSize: '0.8125rem',
+                        color: 'var(--color-text-muted)',
+                      }}>
+                        Chưa có lối tắt nào được ghim. Nhấn vào biểu tượng ngôi sao <strong>☆</strong> bên cạnh chức năng bất kỳ bên dưới để thêm vào Lối tắt của tôi.
+                      </div>
+                    )}
+                  </div>
 
                   {/* Categories */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '1.25rem' : '2rem' }}>
@@ -3182,37 +3535,34 @@ export const Header = ({
                           <div style={{ flex: 1, height: '1px', background: 'var(--color-border-light)' }} />
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(300px, 1fr))', gap: isMobile ? '10px' : '12px 24px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(300px, 1fr))', gap: isMobile ? '8px' : '10px 24px' }}>
                           {group.items.map(item => {
-                            const IconComponent = item.name.toLowerCase().includes('chấm công') ? Fingerprint : item.icon;
-                            const colors = getItemColor(item.name);
                             const desc = ITEM_DESC[item.name] || 'Xem chi tiết thông tin';
+                            const isFav = isItemFavorited(item.name);
                             return (
                               <div
                                 key={item.name}
-                                onClick={() => {
-                                  if (item.name === 'WorkChat' || item.name === 'Tin nhắn nội bộ' || (item as any).isChat || item.href === '#chat') {
-                                    openChat();
-                                    setIsAppLauncherOpen(false);
-                                    return;
-                                  }
-                                  navigate(item.href);
-                                  setIsAppLauncherOpen(false);
-                                }}
+                                onClick={() => handleSelectLauncherItem(item)}
                                 style={{
                                   display: 'flex',
                                   alignItems: 'center',
                                   gap: '12px',
                                   padding: isMobile ? '10px 12px' : '8px 12px',
-                                  borderRadius: '8px',
+                                  borderRadius: '10px',
                                   cursor: 'pointer',
+                                  border: isCustomizingLauncher && isFav ? '1px solid rgba(245, 158, 11, 0.45)' : '1px solid transparent',
+                                  background: isCustomizingLauncher && isFav ? 'rgba(245, 158, 11, 0.06)' : 'transparent',
                                   transition: 'all 0.2s ease-in-out',
                                 }}
                                 onMouseEnter={e => {
-                                  e.currentTarget.style.background = 'rgba(0, 0, 0, 0.03)';
+                                  if (!(isCustomizingLauncher && isFav)) {
+                                    e.currentTarget.style.background = 'rgba(0, 0, 0, 0.03)';
+                                  }
                                 }}
                                 onMouseLeave={e => {
-                                  e.currentTarget.style.background = 'transparent';
+                                  if (!(isCustomizingLauncher && isFav)) {
+                                    e.currentTarget.style.background = 'transparent';
+                                  }
                                 }}
                               >
                                 <div style={{
@@ -3225,7 +3575,7 @@ export const Header = ({
                                 }}>
                                   <AppIcon name={(item as any).iconKey || item.name} size={isMobile ? 34 : 32} />
                                 </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0, flex: 1 }}>
                                   <span style={{ fontSize: isMobile ? '0.92rem' : '0.85rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                     {t(item.name)}
                                   </span>
@@ -3235,6 +3585,30 @@ export const Header = ({
                                     </span>
                                   )}
                                 </div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleToggleFavorite(item.name, e)}
+                                  title={isFav ? 'Bỏ khỏi Lối tắt của tôi' : 'Thêm vào Lối tắt của tôi'}
+                                  style={{
+                                    width: '28px',
+                                    height: '28px',
+                                    borderRadius: '8px',
+                                    border: 'none',
+                                    background: 'transparent',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer',
+                                    flexShrink: 0,
+                                    color: isFav ? '#f59e0b' : 'var(--color-text-muted)',
+                                    opacity: isFav ? 1 : 0.4,
+                                    transition: 'all 0.15s ease',
+                                  }}
+                                  onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'scale(1.12)'; }}
+                                  onMouseLeave={e => { e.currentTarget.style.opacity = isFav ? '1' : '0.4'; e.currentTarget.style.transform = 'scale(1)'; }}
+                                >
+                                  <Star size={16} fill={isFav ? '#f59e0b' : 'none'} />
+                                </button>
                               </div>
                             );
                           })}
@@ -3419,7 +3793,7 @@ export const Header = ({
               .floating-checkin-btn {
                 bottom: calc(var(--mobile-bottom-nav-height, 62px) + env(safe-area-inset-bottom, 0px) + 76px) !important;
                 right: 16px !important;
-                z-index: 2147483640 !important;
+                z-index: 9990 !important;
               }
             }
             @keyframes pulse-ring {
@@ -3508,10 +3882,10 @@ export const Header = ({
                 onClick={handleClick}
                 style={{
                   position: 'fixed',
-                  bottom: typeof window !== 'undefined' && window.innerWidth <= 768 ? 'calc(var(--mobile-bottom-nav-height, 62px) + env(safe-area-inset-bottom, 0px) + 72px)' : 86,
-                  right: typeof window !== 'undefined' && window.innerWidth <= 768 ? 16 : 24,
-                  width: typeof window !== 'undefined' && window.innerWidth <= 768 ? 48 : 52,
-                  height: typeof window !== 'undefined' && window.innerWidth <= 768 ? 48 : 52,
+                  bottom: isMobile ? 'calc(var(--mobile-bottom-nav-height, 62px) + env(safe-area-inset-bottom, 0px) + 72px)' : 86,
+                  right: isMobile ? 16 : 24,
+                  width: isMobile ? 48 : 52,
+                  height: isMobile ? 48 : 52,
                   borderRadius: '50%',
                   background: btnBg,
                   color: 'white',

@@ -4,7 +4,7 @@ require_once __DIR__ . '/db_connect.php';
 $res = $pdo->query("
     SELECT source, COUNT(*) as c 
     FROM subscribers 
-    WHERE id NOT IN (SELECT DISTINCT subscriber_id FROM subscriber_lists)
+    WHERE NOT EXISTS (SELECT 1 FROM subscriber_lists sl WHERE sl.subscriber_id = subscribers.id)
     GROUP BY source
 ")->fetchAll(PDO::FETCH_ASSOC);
 

@@ -76,8 +76,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, onClose, 
 
     return createPortal(
         <div 
-            className="fixed inset-0 z-[999999] pointer-events-none"
-            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+            className="fixed inset-0 z-[2147483647] pointer-events-none"
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 2147483647 }}
         >
             <div
                 ref={menuRef}

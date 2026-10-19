@@ -820,7 +820,7 @@ const TableBlockCanvas: React.FC<Props> = ({ block, onUpdate, isSelected }) => {
             title="Chèn đường dẫn"
             placeholder="https://example.com"
             confirmLabel="Chèn"
-            zIndex={100200}
+            zIndex={2147483646}
             isDarkTheme={true}
         />
         </>

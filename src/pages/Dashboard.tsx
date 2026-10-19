@@ -1351,11 +1351,11 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       { key: 'sales_performance', label: t('Hiệu suất Lead') }
     ];
     const activeTabIndex = Math.max(0, TABS.findIndex(t => t.key === activeSubTab));
-    const tabWidth = 98;
+    const tabWidth = isMobile ? 68 : 98;
     const gap = 2;
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxWidth: '100%' }}>
         <div className="dashboard-subtab-container" style={{
           display: 'inline-flex',
           background: 'var(--color-border-light)',
@@ -1364,6 +1364,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
           borderRadius: '8px',
           gap: `${gap}px`,
           width: 'fit-content',
+          maxWidth: '100%',
           position: 'relative',
           marginLeft: '0',
           marginBottom: '0.35rem'
@@ -1393,14 +1394,15 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                 outline: 'none',
                 boxShadow: 'none',
                 background: 'none',
-                fontSize: '0.75rem',
+                fontSize: isMobile ? '0.68rem' : '0.75rem',
                 fontWeight: 700,
                 cursor: 'pointer',
                 color: activeSubTab === t.key ? 'var(--color-text)' : 'var(--color-text-muted)',
                 position: 'relative',
                 zIndex: 2,
                 transition: 'color 0.2s',
-                padding: 0
+                padding: 0,
+                whiteSpace: 'nowrap'
               }}
             >
               {t.label}

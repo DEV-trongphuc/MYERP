@@ -391,252 +391,264 @@ export const SalesLeadPerformanceDeck: React.FC<SalesLeadPerformanceDeckProps> =
         gap: '12px'
       }}>
         {/* Card 1: Tổng Lead Tiếp Nhận */}
-        <div style={{
-          padding: '1.15rem 1.25rem',
-          borderRadius: '14px',
-          background: 'var(--color-surface, #ffffff)',
-          border: '1px solid var(--color-border-light)',
-          boxShadow: 'var(--shadow-sm)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
-        }} className="hover-lift">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: 650, color: 'var(--color-text-muted)' }}>
+        <div
+          className="stat-card hover-lift"
+          style={{
+            minHeight: '132px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            position: 'relative',
+            overflow: 'hidden',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+            padding: '1.15rem 1.25rem'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', zIndex: 1 }}>
+            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>
               {t('Tổng Lead Tiếp Nhận')}
             </span>
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '10px',
-              background: 'rgba(59, 130, 246, 0.08)',
-              color: '#2563eb',
+            <div className="stat-icon" style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              background: 'var(--color-bg-subtle, #f1f5f9)',
+              color: 'var(--color-text-muted, #64748b)',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              flexShrink: 0
             }}>
-              <Users size={18} />
+              <Users size={16} />
             </div>
           </div>
-          <div>
-            <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-text)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+          <div style={{ zIndex: 1 }}>
+            <div className="stat-value" style={{ fontSize: '1.65rem', fontWeight: 800, color: 'var(--color-text)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
               {loading ? '...' : (summary?.total_leads?.toLocaleString('vi-VN') || 0)}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontSize: '0.725rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
               {(summary?.growth_rate || 0) >= 0 ? (
                 <span style={{ color: '#10b981', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-                  <TrendingUp size={13} /> +{summary?.growth_rate || 0}%
+                  <TrendingUp size={12} /> +{summary?.growth_rate || 0}%
                 </span>
               ) : (
                 <span style={{ color: '#ef4444', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-                  <TrendingDown size={13} /> {summary?.growth_rate || 0}%
+                  <TrendingDown size={12} /> {summary?.growth_rate || 0}%
                 </span>
               )}
-              <span style={{ color: 'var(--color-text-muted)' }}>{t('so với tháng trước')}</span>
+              <span>{t('so với tháng trước')}</span>
             </div>
           </div>
         </div>
 
-        {/* Card 2: Tỷ Lệ Kết Nối / Đã Gọi */}
-        <div style={{
-          padding: '1.15rem 1.25rem',
-          borderRadius: '14px',
-          background: 'var(--color-surface, #ffffff)',
-          border: '1px solid var(--color-border-light)',
-          boxShadow: 'var(--shadow-sm)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
-        }} className="hover-lift">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: 650, color: 'var(--color-text-muted)' }}>
+        {/* Card 2: Tỷ Lệ Đã Kết Nối */}
+        <div
+          className="stat-card hover-lift"
+          style={{
+            minHeight: '132px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            position: 'relative',
+            overflow: 'hidden',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+            padding: '1.15rem 1.25rem'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', zIndex: 1 }}>
+            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>
               {t('Tỷ Lệ Đã Kết Nối')}
             </span>
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '10px',
-              background: 'rgba(16, 185, 129, 0.08)',
-              color: '#059669',
+            <div className="stat-icon" style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              background: 'var(--color-bg-subtle, #f1f5f9)',
+              color: 'var(--color-text-muted, #64748b)',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              flexShrink: 0
             }}>
-              <PhoneCall size={18} />
+              <PhoneCall size={16} />
             </div>
           </div>
-          <div>
-            <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#059669', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+          <div style={{ zIndex: 1 }}>
+            <div className="stat-value" style={{ fontSize: '1.65rem', fontWeight: 800, color: 'var(--color-text)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
               {loading ? '...' : `${summary?.connected_rate || 0}%`}
             </div>
-            <div style={{ marginTop: '6px', fontSize: '0.725rem', color: 'var(--color-text-muted)' }}>
-              <strong style={{ color: 'var(--color-text)' }}>{summary?.contacted_leads || 0}</strong> {t('lead đã được gọi/tương tác')}
+            <div style={{ marginTop: '6px', fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+              <strong style={{ color: 'var(--color-text)', fontWeight: 700 }}>{summary?.contacted_leads || 0}</strong> {t('lead đã được gọi/tương tác')}
             </div>
           </div>
         </div>
 
-        {/* Card 3: Lead Chưa Gọi (Bỏ Ngâm) - Đồng bộ viền chuẩn, không viền đỏ */}
-        <div style={{
-          padding: '1.15rem 1.25rem',
-          borderRadius: '14px',
-          background: 'var(--color-surface, #ffffff)',
-          border: '1px solid var(--color-border-light)',
-          boxShadow: 'var(--shadow-sm)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
-        }} className="hover-lift">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: 650, color: 'var(--color-text-muted)' }}>
+        {/* Card 3: Lead Chưa Gọi (Ngâm) */}
+        <div
+          className="stat-card hover-lift"
+          style={{
+            minHeight: '132px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            position: 'relative',
+            overflow: 'hidden',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+            padding: '1.15rem 1.25rem'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', zIndex: 1 }}>
+            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>
               {t('Lead Chưa Gọi (Ngâm)')}
             </span>
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '10px',
-              background: 'rgba(239, 68, 68, 0.08)',
-              color: '#ef4444',
+            <div className="stat-icon" style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              background: 'var(--color-bg-subtle, #f1f5f9)',
+              color: 'var(--color-text-muted, #64748b)',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              flexShrink: 0
             }}>
-              <PhoneOff size={18} />
+              <PhoneOff size={16} />
             </div>
           </div>
-          <div>
-            <div style={{
-              fontSize: '1.75rem',
-              fontWeight: 800,
-              color: (summary?.uncontacted_rate || 0) > 15 ? '#ef4444' : 'var(--color-text)',
-              letterSpacing: '-0.02em',
-              lineHeight: 1.2
-            }}>
+          <div style={{ zIndex: 1 }}>
+            <div className="stat-value" style={{ fontSize: '1.65rem', fontWeight: 800, color: 'var(--color-text)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
               {loading ? '...' : (summary?.uncontacted_leads?.toLocaleString('vi-VN') || 0)}
             </div>
-            <div style={{ marginTop: '6px', fontSize: '0.725rem', color: (summary?.uncontacted_rate || 0) > 15 ? '#ef4444' : 'var(--color-text-muted)', fontWeight: 600 }}>
-              {t('Chiếm')} {summary?.uncontacted_rate || 0}% {t('tổng data tháng')}
+            <div style={{ marginTop: '6px', fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+              {t('Chiếm')} <strong style={{ color: 'var(--color-text)', fontWeight: 700 }}>{summary?.uncontacted_rate || 0}%</strong> {t('tổng data tháng')}
             </div>
           </div>
         </div>
 
-        {/* Card 4: Tỷ Lệ Lead Đạt Chuẩn */}
-        <div style={{
-          padding: '1.15rem 1.25rem',
-          borderRadius: '14px',
-          background: 'var(--color-surface, #ffffff)',
-          border: '1px solid var(--color-border-light)',
-          boxShadow: 'var(--shadow-sm)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
-        }} className="hover-lift">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: 650, color: 'var(--color-text-muted)' }}>
+        {/* Card 4: Lead Đạt Chuẩn (Qualified) */}
+        <div
+          className="stat-card hover-lift"
+          style={{
+            minHeight: '132px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            position: 'relative',
+            overflow: 'hidden',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+            padding: '1.15rem 1.25rem'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', zIndex: 1 }}>
+            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>
               {t('Lead Đạt Chuẩn (Qualified)')}
             </span>
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '10px',
-              background: 'rgba(245, 158, 11, 0.08)',
-              color: '#d97706',
+            <div className="stat-icon" style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              background: 'var(--color-bg-subtle, #f1f5f9)',
+              color: 'var(--color-text-muted, #64748b)',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              flexShrink: 0
             }}>
-              <Sparkles size={18} />
+              <Sparkles size={16} />
             </div>
           </div>
-          <div>
-            <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#d97706', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+          <div style={{ zIndex: 1 }}>
+            <div className="stat-value" style={{ fontSize: '1.65rem', fontWeight: 800, color: 'var(--color-text)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
               {loading ? '...' : `${summary?.qualified_rate || 0}%`}
             </div>
-            <div style={{ marginTop: '6px', fontSize: '0.725rem', color: 'var(--color-text-muted)' }}>
-              <strong style={{ color: 'var(--color-text)' }}>{summary?.qualified_leads || 0}</strong> {t('lead có tiềm năng cao')}
+            <div style={{ marginTop: '6px', fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+              <strong style={{ color: 'var(--color-text)', fontWeight: 700 }}>{summary?.qualified_leads || 0}</strong> {t('lead có tiềm năng cao')}
             </div>
           </div>
         </div>
 
-        {/* Card 5: Số Deal Tạo Ra */}
-        <div style={{
-          padding: '1.15rem 1.25rem',
-          borderRadius: '14px',
-          background: 'var(--color-surface, #ffffff)',
-          border: '1px solid var(--color-border-light)',
-          boxShadow: 'var(--shadow-sm)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
-        }} className="hover-lift">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: 650, color: 'var(--color-text-muted)' }}>
+        {/* Card 5: Cơ Hội Mở (Deals) */}
+        <div
+          className="stat-card hover-lift"
+          style={{
+            minHeight: '132px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            position: 'relative',
+            overflow: 'hidden',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+            padding: '1.15rem 1.25rem'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', zIndex: 1 }}>
+            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>
               {t('Cơ Hội Mở (Deals)')}
             </span>
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '10px',
-              background: 'rgba(139, 92, 246, 0.08)',
-              color: '#7c3aed',
+            <div className="stat-icon" style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              background: 'var(--color-bg-subtle, #f1f5f9)',
+              color: 'var(--color-text-muted, #64748b)',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              flexShrink: 0
             }}>
-              <Target size={18} />
+              <Target size={16} />
             </div>
           </div>
-          <div>
-            <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#7c3aed', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+          <div style={{ zIndex: 1 }}>
+            <div className="stat-value" style={{ fontSize: '1.65rem', fontWeight: 800, color: 'var(--color-text)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
               {loading ? '...' : (summary?.total_deals || 0)}
             </div>
-            <div style={{ marginTop: '6px', fontSize: '0.725rem', color: 'var(--color-text-muted)' }}>
-              {t('Tỷ lệ tạo deal:')} <strong style={{ color: 'var(--color-text)' }}>{summary?.deal_conversion_rate || 0}%</strong>
+            <div style={{ marginTop: '6px', fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+              {t('Tỷ lệ tạo deal:')} <strong style={{ color: 'var(--color-text)', fontWeight: 700 }}>{summary?.deal_conversion_rate || 0}%</strong>
             </div>
           </div>
         </div>
 
-        {/* Card 6: Tỷ Lệ Chốt & Doanh Số Thực Tế - Đồng bộ viền chuẩn, không gradient màu */}
-        <div style={{
-          padding: '1.15rem 1.25rem',
-          borderRadius: '14px',
-          background: 'var(--color-surface, #ffffff)',
-          border: '1px solid var(--color-border-light)',
-          boxShadow: 'var(--shadow-sm)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
-        }} className="hover-lift">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: 650, color: 'var(--color-text-muted)' }}>
+        {/* Card 6: Doanh Số & Tỷ Lệ Win */}
+        <div
+          className="stat-card hover-lift"
+          style={{
+            minHeight: '132px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            position: 'relative',
+            overflow: 'hidden',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+            padding: '1.15rem 1.25rem'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', zIndex: 1 }}>
+            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>
               {t('Doanh Số & Tỷ Lệ Win')}
             </span>
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '10px',
-              background: 'rgba(189, 29, 45, 0.08)',
-              color: 'var(--color-primary, #bd1d2d)',
+            <div className="stat-icon" style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              background: 'var(--color-bg-subtle, #f1f5f9)',
+              color: 'var(--color-text-muted, #64748b)',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              flexShrink: 0
             }}>
-              <Award size={18} />
+              <Award size={16} />
             </div>
           </div>
-          <div>
-            <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-primary, #bd1d2d)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+          <div style={{ zIndex: 1 }}>
+            <div className="stat-value" style={{ fontSize: '1.65rem', fontWeight: 800, color: 'var(--color-text)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
               {loading ? '...' : formatVND(summary?.won_value || 0)}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', fontSize: '0.725rem', color: 'var(--color-text-muted)' }}>
-              <span>{t('Chốt:')} <strong style={{ color: '#10b981' }}>{summary?.won_deals || 0} deal</strong></span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+              <span>{t('Chốt:')} <strong style={{ color: 'var(--color-text)', fontWeight: 700 }}>{summary?.won_deals || 0} deal</strong></span>
               <span>•</span>
-              <span>{t('Win Rate:')} <strong style={{ color: 'var(--color-primary, #bd1d2d)' }}>{summary?.win_rate || 0}%</strong></span>
+              <span>{t('Win Rate:')} <strong style={{ color: 'var(--color-text)', fontWeight: 700 }}>{summary?.win_rate || 0}%</strong></span>
             </div>
           </div>
         </div>

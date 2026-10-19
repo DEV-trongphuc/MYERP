@@ -645,7 +645,7 @@ const TicketsInner = ({ isActive, searchParams, setSearchParams }: { isActive: b
 
       const res = await fetchAPI(`get_reports&${queryParams.toString()}`);
       if (res.success) {
-        setReports(res.data);
+        setReports(Array.isArray(res.data) ? res.data : []);
         setTotalCount(res.total_count ?? 0);
         if (res.stats) {
           setStats(res.stats);
@@ -653,7 +653,7 @@ const TicketsInner = ({ isActive, searchParams, setSearchParams }: { isActive: b
             updateParams('status', 'all');
           }
         }
-        if (res.consultants) setConsultantOptions(res.consultants);
+        if (Array.isArray(res.consultants)) setConsultantOptions(res.consultants);
       }
     } catch (e: any) {
       toast.error(t('Lỗi tải ticket: ') + e.message);
@@ -707,7 +707,7 @@ const TicketsInner = ({ isActive, searchParams, setSearchParams }: { isActive: b
 
     fetchAPI('get_consultants')
       .then(res => {
-        if (res.success && res.data) {
+        if (res.success && Array.isArray(res.data)) {
           setAllConsultants(res.data);
         }
       })
@@ -715,7 +715,7 @@ const TicketsInner = ({ isActive, searchParams, setSearchParams }: { isActive: b
 
     fetchAPI('get_accounts')
       .then(res => {
-        if (res.success && res.data) {
+        if (res.success && Array.isArray(res.data)) {
           setAllAccounts(res.data);
         }
       })
@@ -723,7 +723,7 @@ const TicketsInner = ({ isActive, searchParams, setSearchParams }: { isActive: b
 
     fetchAPI('get_rounds')
       .then(res => {
-        if (res.success && res.data) {
+        if (res.success && Array.isArray(res.data)) {
           setRounds(res.data);
         }
       })
@@ -731,7 +731,7 @@ const TicketsInner = ({ isActive, searchParams, setSearchParams }: { isActive: b
 
     fetchAPI('get_connections')
       .then(res => {
-        if (res.success && res.data) {
+        if (res.success && Array.isArray(res.data)) {
           setConnections(res.data);
         }
       })

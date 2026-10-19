@@ -1327,7 +1327,9 @@ export const WorkChatModal: React.FC = () => {
   const composerRef = useRef<ChatComposerRef>(null);
   const [activeTab, setActiveTab] = useState<'chats' | 'staff'>(() => activeSidebarTab || 'chats');
   const [searchFilter, setSearchFilter] = useState('');
-  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+  const [viewportWidth, setViewportWidth] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1280));
+  const isMobile = viewportWidth < 768;
+  const isTablet = viewportWidth >= 768 && viewportWidth <= 1024;
   const [showMobileHeaderMenu, setShowMobileHeaderMenu] = useState(false);
   const [showDesktopHeaderMenu, setShowDesktopHeaderMenu] = useState(false);
 
@@ -1338,13 +1340,14 @@ export const WorkChatModal: React.FC = () => {
   }, [activeSidebarTab]);
 
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    const handleResize = () => setViewportWidth(window.innerWidth);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Multi-column layout (3-column desktop view) is ONLY active when maximized AND on a wide desktop screen (>= 900px)
-  const isMultiColumn = isMaximized && !isMobile && (typeof window !== 'undefined' ? window.innerWidth >= 900 : true);
+  // Multi-column layout (2-column on Tablet >= 768px, 3-column on Desktop >= 1150px when maximized)
+  const isMultiColumn = isMaximized && !isMobile;
+  const isDockedVault = isMultiColumn && viewportWidth >= 1150;
   const [showStickerPicker, setShowStickerPicker] = useState(false);
   const [showPackStickerModal, setShowPackStickerModal] = useState(false);
   const [packStickerInitialTab, setPackStickerInitialTab] = useState<string>('ideas');
@@ -1746,12 +1749,14 @@ export const WorkChatModal: React.FC = () => {
     try {
       const subType = String(meta.sub_type || '').toLowerCase();
       const entityType = String(meta.entity_type || '').toLowerCase();
-      if (subType === 'leave' || subType === 'ot' || subType === 'wfh' || subType === 'late_early') {
+      if (subType === 'leave' || subType === 'ot' || subType === 'wfh' || subType === 'late_early' || subType === 'remote_work' || subType === 'overtime') {
         await api.put(`/hrm/leaves/${entityId}/status`, { status: 'approved' });
-      } else if (entityType === 'purchase_order' || subType === 'purchase_order') {
+      } else if (subType === 'advance' || entityType === 'advance') {
+        await api.put(`/hrm/advances/${entityId}/status`, { status: 'approved' });
+      } else if (entityType === 'purchase_order' || subType === 'purchase_order' || entityType === 'po' || subType === 'po') {
         await api.post(`/purchase-orders/${entityId}/approve`);
       } else {
-        await api.patch(`/expenses/${entityId}`, { status: 'approved' });
+        await api.post(`/expenses/${entityId}/approve`);
       }
 
       setErpCardActionState(prev => ({ ...prev, [entityId]: { status: 'approved' } }));
@@ -1800,12 +1805,14 @@ export const WorkChatModal: React.FC = () => {
     try {
       const subType = String(meta.sub_type || '').toLowerCase();
       const entityType = String(meta.entity_type || '').toLowerCase();
-      if (subType === 'leave' || subType === 'ot' || subType === 'wfh' || subType === 'late_early') {
+      if (subType === 'leave' || subType === 'ot' || subType === 'wfh' || subType === 'late_early' || subType === 'remote_work' || subType === 'overtime') {
         await api.put(`/hrm/leaves/${entityId}/status`, { status: 'rejected', reject_reason: reason });
-      } else if (entityType === 'purchase_order' || subType === 'purchase_order') {
+      } else if (subType === 'advance' || entityType === 'advance') {
+        await api.put(`/hrm/advances/${entityId}/status`, { status: 'rejected', reject_reason: reason });
+      } else if (entityType === 'purchase_order' || subType === 'purchase_order' || entityType === 'po' || subType === 'po') {
         await api.post(`/purchase-orders/${entityId}/reject`, { reason });
       } else {
-        await api.patch(`/expenses/${entityId}`, { status: 'rejected', reject_reason: reason });
+        await api.post(`/expenses/${entityId}/reject`, { reason });
       }
 
       setErpCardActionState(prev => ({ ...prev, [entityId]: { status: 'rejected' } }));
@@ -2097,7 +2104,8 @@ export const WorkChatModal: React.FC = () => {
                   borderRadius: 0,
                   border: 'none',
                   margin: 0,
-                  padding: 0,
+                  paddingTop: 'env(safe-area-inset-top, 0px)',
+                  paddingBottom: 'env(safe-area-inset-bottom, 0px)',
                   boxShadow: 'none',
                   zIndex: 2147483000
                 }
@@ -2108,9 +2116,9 @@ export const WorkChatModal: React.FC = () => {
                   right: 0,
                   bottom: 0,
                   width: '100vw',
-                  height: '100vh',
+                  height: '100dvh',
                   maxWidth: '100vw',
-                  maxHeight: '100vh',
+                  maxHeight: '100dvh',
                   borderRadius: 0,
                   border: 'none',
                   margin: 0,
@@ -2119,12 +2127,12 @@ export const WorkChatModal: React.FC = () => {
                   zIndex: 2147483000
                 }
               : {
-                  bottom: '32px',
-                  right: '24px',
+                  bottom: isTablet ? '16px' : '32px',
+                  right: isTablet ? '16px' : '24px',
                   width: '560px',
                   maxWidth: 'calc(100vw - 32px)',
                   height: '630px',
-                  maxHeight: 'calc(100vh - 64px)',
+                  maxHeight: 'calc(100dvh - 48px)',
                   borderRadius: '20px',
                   boxShadow: '0 24px 60px -12px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(220, 38, 38, 0.08)',
                   zIndex: 2147483000
@@ -2149,8 +2157,8 @@ export const WorkChatModal: React.FC = () => {
             }
             transition={{ duration: 0.24, ease: [0.25, 1, 0.5, 1] }}
             style={{
-              width: isMultiColumn ? '330px' : '100%',
-              minWidth: isMultiColumn ? '330px' : '100%',
+              width: isMultiColumn ? (isTablet ? '280px' : '330px') : '100%',
+              minWidth: isMultiColumn ? (isTablet ? '280px' : '330px') : '100%',
               borderRight: isMultiColumn ? '1px solid #e2e8f0' : 'none',
               background: '#f8fafc',
               position: isMultiColumn ? 'relative' : 'absolute',
@@ -6291,28 +6299,29 @@ export const WorkChatModal: React.FC = () => {
           </motion.div>
 
           {/* ══════════════════════════════════════════════════════════════════════
-              COLUMN 3: GROUP INFO & MEDIA VAULT (COLLAPSIBLE / DOCKED ON MAXIMIZED)
+              COLUMN 3: GROUP INFO & MEDIA VAULT (COLLAPSIBLE / DOCKED ON WIDE DESKTOP)
              ══════════════════════════════════════════════════════════════════════ */}
           <AnimatePresence>
             {showMediaVault && displayConv && (
               <motion.div
                 key="chat-col-3-vault"
-                initial={isMultiColumn ? { width: 0, opacity: 0 } : { x: '100%', opacity: 0 }}
-                animate={isMultiColumn ? { width: '340px', opacity: 1 } : { x: 0, opacity: 1 }}
-                exit={isMultiColumn ? { width: 0, opacity: 0 } : { x: '100%', opacity: 0 }}
+                initial={isDockedVault ? { width: 0, opacity: 0 } : { x: '100%', opacity: 0 }}
+                animate={isDockedVault ? { width: '340px', opacity: 1 } : { x: 0, opacity: 1 }}
+                exit={isDockedVault ? { width: 0, opacity: 0 } : { x: '100%', opacity: 0 }}
                 transition={{ type: 'spring', damping: 28, stiffness: 320 }}
                 style={{
-                  width: isMultiColumn ? '340px' : '100%',
-                  minWidth: isMultiColumn ? '340px' : '100%',
+                  width: isDockedVault ? '340px' : (isMobile ? '100%' : '360px'),
+                  minWidth: isDockedVault ? '340px' : (isMobile ? '100%' : '360px'),
+                  maxWidth: '100%',
                   height: '100%',
-                  position: isMultiColumn ? 'relative' : 'absolute',
+                  position: isDockedVault ? 'relative' : 'absolute',
                   top: 0,
                   right: 0,
                   bottom: 0,
-                  zIndex: isMultiColumn ? 10 : 35,
-                  boxShadow: isMultiColumn ? 'none' : '-8px 0 24px rgba(0, 0, 0, 0.15)',
+                  zIndex: isDockedVault ? 10 : 35,
+                  boxShadow: isDockedVault ? 'none' : '-8px 0 24px rgba(0, 0, 0, 0.15)',
                   background: '#ffffff',
-                  borderLeft: isMultiColumn ? '1px solid #e2e8f0' : 'none',
+                  borderLeft: isDockedVault || !isMobile ? '1px solid #e2e8f0' : 'none',
                   overflow: 'hidden'
                 }}
               >
@@ -6320,7 +6329,7 @@ export const WorkChatModal: React.FC = () => {
                   onClose={() => setShowMediaVault(false)}
                   onOpenAddMember={() => setShowAddMemberModal(true)}
                   onOpenWallpaper={() => setShowWallpaperModal(true)}
-                  isMaximized={isMultiColumn}
+                  isMaximized={isDockedVault}
                   onCloseChat={closeChat}
                   initialCategory="all"
                   onSelectAgent={(ag) => setSelectedAgentForModal(ag)}
@@ -6447,7 +6456,7 @@ export const WorkChatModal: React.FC = () => {
               right: 0,
               bottom: 0,
               zIndex: 2147483050,
-              background: 'rgba(15, 23, 42, 0.45)',
+              background: 'rgba(0, 0, 0, 0.6)',
               backdropFilter: 'blur(3px)',
               display: 'flex',
               alignItems: 'center',
@@ -6666,7 +6675,7 @@ export const WorkChatModal: React.FC = () => {
               right: 0,
               bottom: 0,
               zIndex: 2147483050,
-              background: 'rgba(15, 23, 42, 0.45)',
+              background: 'rgba(0, 0, 0, 0.6)',
               backdropFilter: 'blur(3px)',
               display: 'flex',
               alignItems: 'center',

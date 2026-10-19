@@ -624,6 +624,7 @@ const ConsultantsInner = () => {
   }, [editingTeam, teamDrawerTab]);
 
   useEffect(() => {
+    if (!location.pathname.startsWith('/consultants')) return;
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get('tab');
     const teamIdParam = params.get('team_id') || (tabParam === 'teams' ? (params.get('open_id') || params.get('id')) : null);
@@ -661,7 +662,7 @@ const ConsultantsInner = () => {
         window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`);
       }
     }
-  }, [location.search, teams.length, users.length]);
+  }, [location.pathname, location.search, teams.length, users.length]);
 
   useEffect(() => {
     if (!teamModalOpen || teamDrawerTab !== 'comments' || teamComments.length === 0) return;

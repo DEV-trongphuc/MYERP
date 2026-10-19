@@ -4,9 +4,20 @@
 
 class SalesOrderController {
     private $db;
+    private static bool $schemaChecked = false;
 
     public function __construct() {
         $this->db = Database::getInstance();
+        if (!self::$schemaChecked && !$this->db->inTransaction()) {
+            self::$schemaChecked = true;
+            try {
+                $col = $this->db->query("SHOW COLUMNS FROM sales_orders LIKE 'deleted_at'")->fetch();
+                if (!$col) {
+                    $this->db->exec("ALTER TABLE sales_orders ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL");
+                }
+            } catch (\Throwable $e) {
+            }
+        }
     }
 
     /**
@@ -25,7 +36,7 @@ class SalesOrderController {
         $paymentStatus = trim($_GET['payment_status'] ?? '');
         $excludeStatus = trim($_GET['exclude_status'] ?? '');
 
-        $where = ["so.tenant_id = :tenant_id"];
+        $where = ["so.tenant_id = :tenant_id", "so.deleted_at IS NULL"];
         $params = [':tenant_id' => $tenantId];
 
         $companyId = (int)($_GET['company_id'] ?? 0);
@@ -193,7 +204,7 @@ class SalesOrderController {
             LEFT JOIN contacts c ON so.contact_id = c.id
             LEFT JOIN companies comp ON so.company_id = comp.id
             LEFT JOIN users u ON so.created_by = u.id
-            WHERE so.id = ? AND so.tenant_id = ?
+            WHERE so.id = ? AND so.tenant_id = ? AND so.deleted_at IS NULL
         ");
         $stmt->execute([$id, $auth['tenant_id']]);
         $order = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -296,18 +307,21 @@ class SalesOrderController {
 
             $this->db->commit();
 
-            // Dispatch notification to management/accountant about new SO
-            try {
-                require_once __DIR__ . '/../NotificationService.php';
-                NotificationService::send($this->db, $tenantId, 'SO_WAITING_APPROVAL', [
-                    'so_id' => $soId,
-                    'so_number' => $soNumber,
-                    'total' => $total,
-                    'creator_id' => $userId,
-                    'creator_name' => $auth['full_name'] ?? 'Nhân viên kinh doanh'
-                ]);
-            } catch (\Throwable $soNotifEx) {
-                error_log("SO Notification Error: " . $soNotifEx->getMessage());
+            // Dispatch notification to management/accountant about new SO (only when not draft)
+            if ($status !== 'draft') {
+                try {
+                    require_once __DIR__ . '/../NotificationService.php';
+                    NotificationService::send($this->db, $tenantId, 'SO_WAITING_APPROVAL', [
+                        'so_id' => $soId,
+                        'so_number' => $soNumber,
+                        'total' => $total,
+                        'creator_id' => $userId,
+                        'creator_name' => $auth['full_name'] ?? 'Nhân viên kinh doanh',
+                        'exclude_user_id' => (int)$userId
+                    ]);
+                } catch (\Throwable $soNotifEx) {
+                    error_log("SO Notification Error: " . $soNotifEx->getMessage());
+                }
             }
 
             // Notify customer's assigned salesperson & log interaction history
@@ -649,7 +663,7 @@ class SalesOrderController {
     public function destroy(array $auth, int $id): void {
         $this->db->beginTransaction();
         try {
-            $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? FOR UPDATE");
+            $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL FOR UPDATE");
             $stmt->execute([$id, $auth['tenant_id']]);
             $order = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -670,8 +684,8 @@ class SalesOrderController {
                 }
             }
 
-            $this->db->prepare("DELETE FROM sales_order_items WHERE so_id = ?")->execute([$id]);
-            $this->db->prepare("DELETE FROM sales_orders WHERE id = ?")->execute([$id]);
+            $this->db->prepare("UPDATE sales_orders SET deleted_at = NOW(), status = 'cancelled' WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL")
+                ->execute([$id, $auth['tenant_id']]);
             $this->db->commit();
             respond(200, ['id' => $id], 'Xóa đơn bán hàng thành công');
         } catch (\Throwable $e) {

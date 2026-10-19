@@ -202,9 +202,10 @@ const TEST_PROMPTS = [
 const STORAGE_KEY = 'myerp_turnio_agent_lab_messages_v2';
 
 const formatModelLabel = (modelId?: string): string => {
-  if (!modelId || modelId === 'qwen/qwen3.8-27b') return 'Turnio 3.8 27B';
-  if (modelId === 'openai/gpt-oss-120b') return 'Turnio 120B Pro';
-  if (modelId === 'openai/gpt-oss-20b') return 'Turnio 20B Lite';
+  if (!modelId || modelId === 'gemini-3.5-flash-lite') return 'Gemini 3.5 Flash Lite';
+  // if (modelId === 'qwen/qwen3.8-27b') return 'Turnio 3.8 27B';
+  // if (modelId === 'openai/gpt-oss-120b') return 'Turnio 120B Pro';
+  // if (modelId === 'openai/gpt-oss-20b') return 'Turnio 20B Lite';
   return modelId;
 };
 
@@ -212,7 +213,7 @@ export const QwenAgentLabPage: React.FC = () => {
   const navigate = useNavigate();
   const [statusInfo, setStatusInfo] = useState<StatusInfo | null>(null);
   const [loadingStatus, setLoadingStatus] = useState<boolean>(true);
-  const [selectedModel, setSelectedModel] = useState<string>('qwen/qwen3.8-27b');
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-3.5-flash-lite');
   const [temperature, setTemperature] = useState<number>(0.15);
   const [pinnedAgentId, setPinnedAgentId] = useState<string>('auto');
 
@@ -231,14 +232,14 @@ export const QwenAgentLabPage: React.FC = () => {
         id: 'welcome_turnio',
         role: 'assistant',
         content:
-          'Xin chào! Tôi là **SI IDEAS × Turnio 3.8 27B** hoạt động **100% độc lập trên LPU Engine (Đã loại bỏ hoàn toàn Gemini API)**.\n\n' +
-          'Tôi được tích hợp đầy đủ cơ chế **Multi-Agent Swarm**, **70 Công cụ Nghiệp vụ (`AgentToolRegistry`)**, **Trí nhớ Dài hạn & Ngữ cảnh Thực thể 48h**, **Cảnh báo Rủi ro Chủ động (`Proactive Insight`)**, **Đề xuất Hành động 1-Click (`Action Proposal`)**, **Lệnh tắt `/` (Slash Commands)** và **Đính kèm Hồ sơ ERP (`#`)**. Bạn có thể chọn kịch bản bên trái hoặc nhập câu hỏi bất kỳ!',
+          'Xin chào! Tôi là **SI IDEAS × Gemini 3.5 Flash Lite**.\n\n' +
+          'Tôi được tích hợp đầy đủ cơ chế **Multi-Agent Swarm**, **70 Công cụ Nghiệp vụ (`AgentToolRegistry`)**, **Trí nhớ Làm việc 2 Tầng & Ngữ cảnh Thực thể 48h**, **Cảnh báo Rủi ro Chủ động (`Proactive Insight`)**, **Đề xuất Hành động 1-Click (`Action Proposal`)**, **Lệnh tắt `/` (Slash Commands)** và **Đính kèm Hồ sơ ERP (`#`)**. Bạn có thể chọn kịch bản bên trái hoặc nhập câu hỏi bất kỳ!',
         timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
-        model: 'qwen/qwen3.8-27b',
+        model: 'gemini-3.5-flash-lite',
         collaborating_agents: [
           {
             id: 'master',
-            badge: 'SI IDEAS (Turnio 3.8 27B • Full Access)',
+            badge: 'SI IDEAS (Gemini 3.5 Flash Lite • Full Access)',
             focus: 'Điều phối viên trung tâm kết nối 70 công cụ ERP & MySQL thực tế.',
           },
         ],
@@ -603,9 +604,10 @@ export const QwenAgentLabPage: React.FC = () => {
                 cursor: 'pointer',
               }}
             >
-              <option value="qwen/qwen3.8-27b">Turnio 3.8 27B (Mặc định)</option>
+              <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite (Mặc định)</option>
+              {/* <option value="qwen/qwen3.8-27b">Turnio 3.8 27B (Mặc định)</option>
               <option value="openai/gpt-oss-120b">Turnio 120B Pro (Deep Reasoning)</option>
-              <option value="openai/gpt-oss-20b">Turnio 20B Lite (Fast Light)</option>
+              <option value="openai/gpt-oss-20b">Turnio 20B Lite (Fast Light)</option> */}
             </select>
           </div>
 

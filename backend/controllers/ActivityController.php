@@ -854,6 +854,7 @@ class ActivityController {
         $start_date = empty($b['start_date']) ? null : $b['start_date'];
         $status = $b['status'] ?? 'planned';
         $priority = in_array($b['priority'] ?? '', ['low', 'medium', 'high', 'urgent'], true) ? $b['priority'] : 'medium';
+        if ($priority === 'urgent') $priority = 'high';
         $done_at = null;
         if ($status === 'done') {
             $done_at = empty($b['done_at']) ? date('Y-m-d H:i:s') : $b['done_at'];
@@ -1238,7 +1239,9 @@ class ActivityController {
                 if ($f === 'due_date') {
                     $params[] = $this->normalizeDueDate($b[$f]);
                 } elseif ($f === 'priority') {
-                    $params[] = in_array($b[$f] ?? '', ['low', 'medium', 'high', 'urgent'], true) ? $b[$f] : 'medium';
+                    $pVal = in_array($b[$f] ?? '', ['low', 'medium', 'high', 'urgent'], true) ? $b[$f] : 'medium';
+                    if ($pVal === 'urgent') $pVal = 'high';
+                    $params[] = $pVal;
                 } elseif (in_array($f, ['done_at']) && $b[$f] === '') {
                     $params[] = null;
                 } elseif ($f === 'task_group_id') {
@@ -1286,7 +1289,7 @@ class ActivityController {
         }
         // 2. Participants (participant_ids)
         if (isset($b['participant_ids'])) {
-            $pIds = array_filter(array_map('intval', explode(',', $b['participant_ids'])));
+            $pIds = array_values(array_unique(array_filter(array_map('intval', explode(',', $b['participant_ids'])))));
             if (!empty($pIds)) {
                 $placeholders = implode(',', array_fill(0, count($pIds), '?'));
                 $stmtDel = $this->db->prepare("DELETE FROM task_hidden_users WHERE task_id = ? AND user_id IN ($placeholders)");
@@ -1295,7 +1298,7 @@ class ActivityController {
         }
         // 3. Mentions in the body (checklist items or description)
         if (isset($b['body']) && !empty($b['body'])) {
-            $pIds = $this->extractMentionUserIds((string)$b['body'], (int)$auth['tenant_id']);
+            $pIds = array_values(array_unique($this->extractMentionUserIds((string)$b['body'], (int)$auth['tenant_id'])));
             if (!empty($pIds)) {
                 $placeholders = implode(',', array_fill(0, count($pIds), '?'));
                 $stmtDel = $this->db->prepare("DELETE FROM task_hidden_users WHERE task_id = ? AND user_id IN ($placeholders)");

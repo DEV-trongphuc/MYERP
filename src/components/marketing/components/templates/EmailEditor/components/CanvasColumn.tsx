@@ -93,7 +93,7 @@ const CanvasColumn: React.FC<CanvasColumnProps> = (props) => {
         : verticalAlign === 'bottom' ? 'flex-end'
             : 'flex-start';
 
-    const halfGap = (parseInt(String(columnGap)) || 0) / 2;
+    const halfGap = forceStack ? 0 : (parseInt(String(columnGap)) || 0) / 2;
     const finalPaddingLeft = toPx(fromPx(css.paddingLeft as string) + halfGap);
     const finalPaddingRight = toPx(fromPx(css.paddingRight as string) + halfGap);
 
@@ -116,6 +116,9 @@ const CanvasColumn: React.FC<CanvasColumnProps> = (props) => {
                 flexDirection: isMobile ? undefined : 'column',
                 justifyContent: isMobile ? undefined : justifyContent,
                 width: isMobile ? colWidth : '100%',
+                minWidth: 0,
+                marginTop: css.marginTop,
+                marginBottom: forceStack ? (css.marginBottom || '10px') : css.marginBottom,
                 paddingTop: css.paddingTop, paddingBottom: css.paddingBottom, 
                 paddingLeft: finalPaddingLeft, paddingRight: finalPaddingRight,
                 backgroundColor, borderRadius: sanitizeRadius(borderRadius),

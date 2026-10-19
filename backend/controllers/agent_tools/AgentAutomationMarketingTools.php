@@ -304,7 +304,7 @@ class AgentAutomationMarketingTools
                 $sqlCrm = "
                     SELECT
                         COUNT(*) AS total_contacts,
-                        SUM(CASE WHEN c.subscriber_id IS NOT NULL AND c.subscriber_id != '' THEN 1 ELSE 0 END) AS matched_with_automation,
+                        SUM(CASE WHEN c.domation_subscriber_id IS NOT NULL AND c.domation_subscriber_id != '' THEN 1 ELSE 0 END) AS matched_with_automation,
                         SUM(CASE WHEN COALESCE(c.engagement_score, 0) >= 50 THEN 1 ELSE 0 END) AS hot_engaged_leads_50plus,
                         SUM(CASE WHEN COALESCE(c.engagement_score, 0) BETWEEN 20 AND 49 THEN 1 ELSE 0 END) AS warm_engaged_leads_20_to_49,
                         SUM(CASE WHEN COALESCE(c.stats_email_opened, 0) > 0 THEN 1 ELSE 0 END) AS email_opened_contacts,
@@ -1425,7 +1425,7 @@ class AgentAutomationMarketingTools
             LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
             LEFT JOIN users u ON c.owner_id = u.id
             LEFT JOIN (
-                SELECT contact_id, SUM(amount) AS total_deposit
+                SELECT contact_id, SUM(price) AS total_deposit
                 FROM deposits
                 WHERE deleted_at IS NULL AND status IN ('approved', 'completed', 'paid', 'pending')
                 GROUP BY contact_id
@@ -1502,7 +1502,7 @@ class AgentAutomationMarketingTools
                 LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
                 LEFT JOIN users u ON c.owner_id = u.id
                 WHERE c.tenant_id = ? AND c.deleted_at IS NULL
-                  AND c.subscriber_id = ?
+                  AND c.domation_subscriber_id = ?
                   AND {$rbacInfo['clause']}
                 LIMIT 1
             ");
@@ -1520,7 +1520,7 @@ class AgentAutomationMarketingTools
         $cid = (int)$contact['id'];
         $contactEmail = strtolower(trim((string)($contact['email'] ?? '')));
         $contactPhone9 = self::normalizePhone9Digits((string)($contact['phone'] ?? ''));
-        $linkedSubId = trim((string)($contact['subscriber_id'] ?? $subscriberIdArg));
+        $linkedSubId = trim((string)($contact['domation_subscriber_id'] ?? $contact['subscriber_id'] ?? $subscriberIdArg));
 
         // 1. Resolve matching Subscriber in `subscribers` (by subscriber_id, email, or 9-digit phone)
         $subscriber = null;
@@ -1545,10 +1545,10 @@ class AgentAutomationMarketingTools
                     $stmtS2 = $db->prepare("SELECT * FROM subscribers WHERE " . implode(' OR ', $subWhere) . " ORDER BY COALESCE(lead_score, 0) DESC, created_at DESC LIMIT 1");
                     $stmtS2->execute($subParams);
                     $subscriber = $stmtS2->fetch(PDO::FETCH_ASSOC) ?: null;
-                    if ($subscriber && empty($contact['subscriber_id']) && self::columnExists($db, 'contacts', 'subscriber_id')) {
+                    if ($subscriber && empty($contact['domation_subscriber_id']) && self::columnExists($db, 'contacts', 'domation_subscriber_id')) {
                         $linkedSubId = (string)$subscriber['id'];
-                        $db->prepare("UPDATE contacts SET subscriber_id = ? WHERE id = ?")->execute([$linkedSubId, $cid]);
-                        $contact['subscriber_id'] = $linkedSubId;
+                        $db->prepare("UPDATE contacts SET domation_subscriber_id = ? WHERE id = ?")->execute([$linkedSubId, $cid]);
+                        $contact['domation_subscriber_id'] = $linkedSubId;
                     }
                 }
             } catch (\Throwable $e) {}
@@ -1766,7 +1766,7 @@ class AgentAutomationMarketingTools
         $crmDeposits = [];
         try {
             $stmtAct = $db->prepare("
-                SELECT id, type, title, description, status, created_at
+                SELECT id, type, subject AS title, body AS description, status, created_at
                 FROM activities
                 WHERE contact_id = ? AND deleted_at IS NULL
                 ORDER BY created_at DESC
@@ -1778,7 +1778,7 @@ class AgentAutomationMarketingTools
 
         try {
             $stmtDep = $db->prepare("
-                SELECT id, amount, program, status, deposit_date, created_at
+                SELECT id, price AS amount, unit_code AS program, status, created_at AS deposit_date, created_at
                 FROM deposits
                 WHERE contact_id = ? AND deleted_at IS NULL
                 ORDER BY created_at DESC
@@ -1971,7 +1971,7 @@ class AgentAutomationMarketingTools
             }
         }
 
-        if (!self::tableExists($db, 'subscribers') || !self::columnExists($db, 'contacts', 'subscriber_id')) {
+        if (!self::tableExists($db, 'subscribers') || !self::columnExists($db, 'contacts', 'domation_subscriber_id')) {
             return [
                 'success' => false,
                 'error' => 'Bảng subscribers hoặc các cột Omnichannel trên bảng contacts chưa được khởi tạo.'
@@ -1990,10 +1990,10 @@ class AgentAutomationMarketingTools
                     ON c.email IS NOT NULL AND c.email != ''
                    AND s.email IS NOT NULL AND s.email != ''
                    AND LOWER(TRIM(c.email)) = LOWER(TRIM(s.email))
-                SET c.subscriber_id = s.id
+                SET c.domation_subscriber_id = s.id
                 WHERE c.tenant_id = ?
                   AND c.deleted_at IS NULL
-                  AND (c.subscriber_id IS NULL OR c.subscriber_id = '')
+                  AND (c.domation_subscriber_id IS NULL OR c.domation_subscriber_id = '')
             ");
             $stmtMatchEmail->execute([$tid]);
             $matchedByEmail = $stmtMatchEmail->rowCount();
@@ -2005,10 +2005,10 @@ class AgentAutomationMarketingTools
                     ON c.phone IS NOT NULL AND LENGTH(REGEXP_REPLACE(c.phone, '[^0-9]', '')) >= 9
                    AND LENGTH(REGEXP_REPLACE(COALESCE(NULLIF(s.phone_number, ''), s.phone, ''), '[^0-9]', '')) >= 9
                    AND RIGHT(REGEXP_REPLACE(c.phone, '[^0-9]', ''), 9) = RIGHT(REGEXP_REPLACE(COALESCE(NULLIF(s.phone_number, ''), s.phone, ''), '[^0-9]', ''), 9)
-                SET c.subscriber_id = s.id
+                SET c.domation_subscriber_id = s.id
                 WHERE c.tenant_id = ?
                   AND c.deleted_at IS NULL
-                  AND (c.subscriber_id IS NULL OR c.subscriber_id = '')
+                  AND (c.domation_subscriber_id IS NULL OR c.domation_subscriber_id = '')
             ");
             $stmtMatchPhone->execute([$tid]);
             $matchedByPhone = $stmtMatchPhone->rowCount();
@@ -2017,7 +2017,7 @@ class AgentAutomationMarketingTools
             if (self::columnExists($db, 'subscribers', 'contact_id')) {
                 $db->prepare("
                     UPDATE subscribers s
-                    INNER JOIN contacts c ON c.subscriber_id = s.id AND c.deleted_at IS NULL
+                    INNER JOIN contacts c ON c.domation_subscriber_id = s.id AND c.deleted_at IS NULL
                     SET s.contact_id = c.id
                     WHERE s.contact_id IS NULL OR s.contact_id = 0
                 ")->execute();
@@ -2026,7 +2026,7 @@ class AgentAutomationMarketingTools
             // 3. Refresh denormalized engagement metrics on matched contacts
             $sqlRefresh = "
                 UPDATE contacts c
-                INNER JOIN subscribers s ON s.id = c.subscriber_id
+                INNER JOIN subscribers s ON s.id = c.domation_subscriber_id
                 LEFT JOIN (
                     SELECT sfs.subscriber_id,
                            COUNT(DISTINCT sfs.flow_id) AS active_flows,
@@ -2097,7 +2097,7 @@ class AgentAutomationMarketingTools
             ];
         }
 
-        $totalMatchedNow = (int)$db->query("SELECT COUNT(*) FROM contacts WHERE tenant_id = {$tid} AND deleted_at IS NULL AND subscriber_id IS NOT NULL AND subscriber_id != ''")->fetchColumn();
+        $totalMatchedNow = (int)$db->query("SELECT COUNT(*) FROM contacts WHERE tenant_id = {$tid} AND deleted_at IS NULL AND domation_subscriber_id IS NOT NULL AND domation_subscriber_id != ''")->fetchColumn();
 
         return [
             'success' => true,
@@ -2279,7 +2279,7 @@ class AgentAutomationMarketingTools
             return $resContact['error_payload'];
         }
         $contact = $resContact['contact'];
-        $subId = trim((string)($contact['subscriber_id'] ?? ''));
+        $subId = trim((string)($contact['domation_subscriber_id'] ?? $contact['subscriber_id'] ?? ''));
 
         if ($subId === '') {
             return [
@@ -2488,7 +2488,7 @@ class AgentAutomationMarketingTools
     private static function ensureSubscriberForExistingContact(PDO $db, array $contact): string
     {
         $cid = (int)($contact['id'] ?? 0);
-        $subId = trim((string)($contact['subscriber_id'] ?? ''));
+        $subId = trim((string)($contact['domation_subscriber_id'] ?? $contact['subscriber_id'] ?? ''));
         if ($subId !== '' && self::tableExists($db, 'subscribers')) {
             $stmt = $db->prepare("SELECT id FROM subscribers WHERE id = ? LIMIT 1");
             $stmt->execute([$subId]);
@@ -2521,8 +2521,8 @@ class AgentAutomationMarketingTools
             $foundId = $stmt->fetchColumn();
             if ($foundId) {
                 $subId = (string)$foundId;
-                if ($cid > 0 && self::columnExists($db, 'contacts', 'subscriber_id')) {
-                    $db->prepare("UPDATE contacts SET subscriber_id = ? WHERE id = ?")->execute([$subId, $cid]);
+                if ($cid > 0 && self::columnExists($db, 'contacts', 'domation_subscriber_id')) {
+                    $db->prepare("UPDATE contacts SET domation_subscriber_id = ? WHERE id = ?")->execute([$subId, $cid]);
                 }
                 return $subId;
             }
@@ -2549,8 +2549,8 @@ class AgentAutomationMarketingTools
                 VALUES (?, ?, ?, ?, 'active', 'CRM', ?, ?, ?, NOW(), NOW())
             ");
             $stmtIns->execute([$newSubId, $safeEmail, $firstName, $lastName, $phone, $phone, $contact['city'] ?? null]);
-            if ($cid > 0 && self::columnExists($db, 'contacts', 'subscriber_id')) {
-                $db->prepare("UPDATE contacts SET subscriber_id = ? WHERE id = ?")->execute([$newSubId, $cid]);
+            if ($cid > 0 && self::columnExists($db, 'contacts', 'domation_subscriber_id')) {
+                $db->prepare("UPDATE contacts SET domation_subscriber_id = ? WHERE id = ?")->execute([$newSubId, $cid]);
             }
             return $newSubId;
         } catch (\Throwable $e) {

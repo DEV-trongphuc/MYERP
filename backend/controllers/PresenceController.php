@@ -28,7 +28,7 @@ class PresenceController {
         $tid = $auth['tenant_id'];
         $uid = $auth['user_id'];
         $body = getBody();
-        $page = trim($body['current_page'] ?? $body['page'] ?? '/dashboard');
+        $page = trim($body['current_page'] ?? $body['current_route'] ?? $body['current_path'] ?? $body['page'] ?? '/dashboard');
         $device = $_SERVER['HTTP_USER_AGENT'] ?? 'Web Browser';
 
         $stmt = $this->db->prepare("
@@ -49,7 +49,7 @@ class PresenceController {
 
     public function broadcast(array $auth): void {
         $body = getBody();
-        $message = trim($body['message'] ?? $body['content'] ?? '');
+        $message = trim($body['message'] ?? $body['content'] ?? $body['event'] ?? '');
         $level = trim($body['level'] ?? 'info');
 
         if (!$message) respond(422, null, 'Nội dung thông báo không được để trống', false);
@@ -75,7 +75,17 @@ class PresenceController {
     }
 
     public function forceLogout(array $auth, int $targetUserId): void {
+        requireRole($auth, ['admin', 'superadmin', 'super_admin', 'director']);
         $tid = $auth['tenant_id'];
+        if ($targetUserId <= 0) {
+            $b = getBody();
+            $targetUserId = (int)($b['user_id'] ?? $b['target_user_id'] ?? 0);
+        }
+        $chk = $this->db->prepare("SELECT id FROM users WHERE id = ? AND tenant_id = ? LIMIT 1");
+        $chk->execute([$targetUserId, $tid]);
+        if (!$chk->fetchColumn()) {
+            respond(404, null, 'Không tìm thấy tài khoản trong chi nhánh của bạn', false);
+        }
         
         // Invalidate all refresh tokens for target user
         $this->db->prepare("DELETE FROM refresh_tokens WHERE user_id = ?")->execute([$targetUserId]);
@@ -88,7 +98,7 @@ class PresenceController {
 
     private function ensureTables(): void {
         static $checked = false;
-        if ($checked) return;
+        if ($checked || $this->db->inTransaction()) return;
         try {
             $this->db->exec("
                 CREATE TABLE IF NOT EXISTS user_presence (
@@ -102,6 +112,24 @@ class PresenceController {
                     INDEX idx_tenant_seen (tenant_id, last_seen_at)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             ");
+            $this->db->exec("
+                CREATE TABLE IF NOT EXISTS system_broadcasts (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    tenant_id INT NOT NULL DEFAULT 1,
+                    sender_id INT NOT NULL DEFAULT 0,
+                    title VARCHAR(255) NULL,
+                    message TEXT NULL,
+                    content TEXT NULL,
+                    type VARCHAR(50) DEFAULT 'info',
+                    is_active TINYINT(1) DEFAULT 1,
+                    expires_at DATETIME NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ");
+            $cols = $this->db->query("SHOW COLUMNS FROM system_broadcasts LIKE 'message'")->fetchAll();
+            if (empty($cols)) {
+                $this->db->exec("ALTER TABLE system_broadcasts ADD COLUMN message TEXT NULL AFTER title");
+            }
             $checked = true;
         } catch (\Throwable $e) {
             error_log("Ensure Presence Error: " . $e->getMessage());

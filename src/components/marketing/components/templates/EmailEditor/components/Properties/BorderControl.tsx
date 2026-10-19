@@ -247,6 +247,7 @@ const BorderControl: React.FC<BorderControlProps> = ({ values, onChange, blocks,
             {/* Màu viền */}
             <div className="pt-2 border-t border-slate-100">
                 <ColorPicker
+                    solidOnly
                     label="Màu viền"
                     value={borderColor}
                     onChange={(v: string) => onChange({ borderColor: v })}

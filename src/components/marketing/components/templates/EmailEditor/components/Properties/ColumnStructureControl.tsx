@@ -36,15 +36,29 @@ const ColumnStructureControl: React.FC<ColumnStructureControlProps> = ({ childre
     }, [currentSpans]);
 
     const handleToggleSplit = (v: number) => {
-        let newSpans: number[];
         if (splitLines.includes(v)) {
-            // Remove split -> merge columns
+            // Remove split -> merge columns at idx and idx + 1 without shifting subsequent columns
             const idx = splitLines.indexOf(v);
-            newSpans = [...currentSpans];
-            const mergedVal = newSpans[idx] + newSpans[idx + 1];
+            const mergedVal = currentSpans[idx] + currentSpans[idx + 1];
+            const mergedWidth = `${(mergedVal * snapUnit).toFixed(4)}%`;
+            const nextChildren = [...children];
+            const leftCol = nextChildren[idx];
+            const rightCol = nextChildren[idx + 1];
+            if (leftCol) {
+                const mergedColChildren = [...(leftCol.children || []), ...(rightCol?.children || [])];
+                nextChildren.splice(idx, 2, {
+                    ...leftCol,
+                    children: mergedColChildren,
+                    style: { ...leftCol.style, width: mergedWidth }
+                });
+                onUpdateChildren(nextChildren);
+                return;
+            }
+            const newSpans = [...currentSpans];
             newSpans.splice(idx, 2, mergedVal);
+            applySpans(newSpans);
         } else {
-            // Add split -> split a column
+            // Add split -> split a column at colToSplitIdx and insert new empty column at colToSplitIdx + 1
             let acc = 0;
             let colToSplitIdx = -1;
             for (let i = 0; i < currentSpans.length; i++) {
@@ -56,18 +70,32 @@ const ColumnStructureControl: React.FC<ColumnStructureControlProps> = ({ childre
             }
 
             if (colToSplitIdx !== -1) {
-                newSpans = [...currentSpans];
-                const originalSpan = newSpans[colToSplitIdx];
+                const originalSpan = currentSpans[colToSplitIdx];
                 const boundaryStart = acc - originalSpan;
                 const leftSpan = v - boundaryStart;
                 const rightSpan = originalSpan - leftSpan;
+                const leftWidth = `${(leftSpan * snapUnit).toFixed(4)}%`;
+                const rightWidth = `${(rightSpan * snapUnit).toFixed(4)}%`;
+
+                const nextChildren = [...children];
+                const existingCol = nextChildren[colToSplitIdx];
+                if (existingCol) {
+                    nextChildren[colToSplitIdx] = {
+                        ...existingCol,
+                        style: { ...existingCol.style, width: leftWidth }
+                    };
+                    const newCol = createBlock('column');
+                    newCol.style = { ...newCol.style, width: rightWidth };
+                    nextChildren.splice(colToSplitIdx + 1, 0, newCol);
+                    onUpdateChildren(nextChildren);
+                    return;
+                }
+
+                const newSpans = [...currentSpans];
                 newSpans.splice(colToSplitIdx, 1, leftSpan, rightSpan);
-            } else {
-                return;
+                applySpans(newSpans);
             }
         }
-
-        applySpans(newSpans);
     };
 
     const applySpans = (spans: number[]) => {

@@ -509,8 +509,8 @@ const Audience: React.FC = () => {
             });
             const res = await api.get<any>(`lists?${query.toString()}`, {}, { signal: controller.signal });
             if (controller.signal.aborted) return;
-            if (res.success && res.data.pagination) {
-                setStaticLists(res.data.data);
+            if (res.success && res.data?.pagination) {
+                setStaticLists(Array.isArray(res.data.data) ? res.data.data : []);
                 setListsPagination(res.data.pagination);
             }
         } catch (err: any) {
@@ -535,8 +535,8 @@ const Audience: React.FC = () => {
             });
             const res = await api.get<any>(`segments?${query.toString()}`, {}, { signal: controller.signal });
             if (controller.signal.aborted) return;
-            if (res.success && res.data.pagination) {
-                setSegments(res.data.data);
+            if (res.success && res.data?.pagination) {
+                setSegments(Array.isArray(res.data.data) ? res.data.data : []);
                 setSegmentsPagination(res.data.pagination);
             }
         } catch (err: any) {
@@ -677,8 +677,8 @@ const Audience: React.FC = () => {
             const res = await api.get<any>(`subscribers?${query.toString()}`, {}, { signal: controller.signal });
             if (controller.signal.aborted) return;
             if (res.success) {
-                if (res.data.pagination) {
-                    setSubscribers(res.data.data);
+                if (res.data?.pagination) {
+                    setSubscribers(Array.isArray(res.data.data) ? res.data.data : []);
                     setPagination(res.data.pagination);
                 } else if (Array.isArray(res.data)) {
                     setSubscribers(res.data);

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Upload, Image as ImageIcon, Link2, FileText, X, Check, Eye, Paperclip, Clipboard } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { pushOverlay } from '../../utils/overlayStack';
 
 interface PendingUploadItem {
   file?: File;
@@ -34,6 +36,13 @@ export const PasteDropzoneArea: React.FC<PasteDropzoneAreaProps> = ({
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!pendingItem) return;
+    return pushOverlay('paste-dropzone-preview-modal', () => {
+      if (!uploading) setPendingItem(null);
+    }, 2147483646);
+  }, [pendingItem, uploading]);
 
   // Global & Local Paste Listener for Ctrl+V
   useEffect(() => {
@@ -216,9 +225,10 @@ export const PasteDropzoneArea: React.FC<PasteDropzoneAreaProps> = ({
         </div>
 
       {/* PREVIEW MODAL BEFORE CONFIRMING UPLOAD ("Có preview trước khi up thật nha") */}
+      {typeof document !== 'undefined' && createPortal(
       <AnimatePresence>
         {pendingItem && (
-          <div className="overlay-backdrop" style={{ zIndex: 1000030, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => !uploading && setPendingItem(null)}>
+          <div className="overlay-backdrop modal-above-drawer" style={{ zIndex: 2147483646, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => !uploading && setPendingItem(null)}>
             <motion.div
               style={{
                 width: '100%',
@@ -370,7 +380,9 @@ export const PasteDropzoneArea: React.FC<PasteDropzoneAreaProps> = ({
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body
+      )}
     </>
   );
 };

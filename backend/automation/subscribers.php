@@ -413,7 +413,7 @@ if ($method === 'POST' && $route === 'subscribers_bulk') {
             $tagSubParams = [];
 
             // [SEC-FIX] PRE-VERIFY IDs: Check if provided IDs belong to other workspaces
-            $providedIds = array_filter(array_column($chunk, 'id'));
+            $providedIds = array_values(array_unique(array_filter(array_column($chunk, 'id'))));
             $idBlacklist = [];
             if (!empty($providedIds)) {
                 $placeholders = implode(',', array_fill(0, count($providedIds), '?'));

@@ -35,7 +35,7 @@ interface MenuCoords {
   width: number;
 }
 
-const SELECT_Z_INDEX = 2147483650;
+const SELECT_Z_INDEX = 2147483647;
 
 const Select: React.FC<SelectProps> = ({
   label,

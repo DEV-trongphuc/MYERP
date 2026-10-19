@@ -311,12 +311,20 @@ class ContactController {
             }
         }
         if ($status && !$isGlobalPipelineSearch) {
-            if ($statusOp === 'not_in') {
-                $where[] = 'c.status != ?';
-            } else {
-                $where[] = 'c.status = ?';
+            $validEntityStatuses = ['lead', 'customer', 'qualified', 'churned', 'prospect', 'opportunity', 'inactive', 'active'];
+            if (in_array(strtolower(trim((string)$status)), $validEntityStatuses, true)) {
+                if ($statusOp === 'not_in') {
+                    $where[] = '(c.status != ? OR c.status IS NULL)';
+                } else {
+                    $where[] = 'c.status = ?';
+                }
+                $params[] = $status;
+            } elseif (empty($_GET['stages']) && empty($_GET['stage_id']) && empty($_GET['stage_ids'])) {
+                $_GET['stages'] = $status;
+                if ($statusOp !== '') {
+                    $_GET['stage_op'] = $statusOp;
+                }
             }
-            $params[] = $status;
         }
 
         if ($dataType !== '') {
@@ -329,10 +337,10 @@ class ContactController {
                 )
             )";
             $personalCond = "(
-                c.source IN ('ca_nhan', 'gioi_thieu', 'databank', 'referral', 'ref')
-                OR c.source LIKE 'ca_nhan%'
-                OR c.source = 'Nhân viên kinh doanh tự tìm kiếm'
-                OR (c.created_by = c.owner_id AND c.created_by NOT IN (1, 100009))
+                COALESCE(c.source, '') IN ('ca_nhan', 'gioi_thieu', 'databank', 'referral', 'ref')
+                OR COALESCE(c.source, '') LIKE 'ca_nhan%'
+                OR COALESCE(c.source, '') = 'Nhân viên kinh doanh tự tìm kiếm'
+                OR (c.created_by IS NOT NULL AND c.owner_id IS NOT NULL AND c.created_by = c.owner_id AND c.created_by NOT IN (1, 100009))
             )";
             if ($dataType === 'error_ticket') {
                 $where[] = $errorCond;
@@ -345,9 +353,13 @@ class ContactController {
             }
         }
 
-        // Apply shared Multi-Tier CRM Filter Engine (deferring stage_id/stages until after stageCounts)
+        // Apply shared Multi-Tier CRM Filter Engine (deferring stage_id/stages/lead_status/multi_program until after stageCounts)
         $baseFilterInput = $_GET;
         $baseFilterInput['_defer_stage_filter'] = true;
+        $baseFilterInput['_defer_data_type_filter'] = true;
+        $baseFilterInput['_defer_lead_status_filter'] = true;
+        $baseFilterInput['_defer_multi_program_filter'] = true;
+        $baseFilterInput['_skip_omnichannel_filter'] = true;
         unset($baseFilterInput['uncontacted']);
         applyCrmAdvancedMultiTierFilters($this->db, 'c.', $baseFilterInput, $where, $params);
 
@@ -357,12 +369,16 @@ class ContactController {
         }
 
         $stageSlug = !empty($_GET['stage_slug']) ? trim((string)$_GET['stage_slug']) : '';
+        $hasAcademicFilter = !empty($_GET['admission_from']) || !empty($_GET['admission_to'])
+            || (($_GET['date_field'] ?? '') === 'admission_date' && (!empty($_GET['from']) || !empty($_GET['to']) || !empty($_GET['from_date']) || !empty($_GET['to_date'])))
+            || !empty($_GET['study_status']) || !empty($_GET['student_code']) || !empty($_GET['expected_intake']);
+
         if (!$isGlobalPipelineSearch) {
             switch ($segment) {
                 case 'tiem_nang':
                     // By default, exclude pipeline 14 (enrolled / customer / won) from Tiềm năng list.
-                    // If searching ($isGlobalPipelineSearch) or filtering explicitly by stage 14, it remains accessible.
-                    if (empty($stage) && empty($stageSlug) && empty($_GET['stage_id']) && empty($_GET['stages']) && empty($_GET['stage_ids'])) {
+                    // If searching ($isGlobalPipelineSearch), filtering explicitly by stage, or filtering by admission/academic fields, keep them accessible.
+                    if (empty($stage) && empty($stageSlug) && empty($_GET['stage_id']) && empty($_GET['stages']) && empty($_GET['stage_ids']) && !$hasAcademicFilter) {
                         $where[] = "(c.stage_id != 44 AND (c.pipeline_status IS NULL OR c.pipeline_status NOT IN ('enrolled', 'hoc_vien', 'won')) AND c.status != 'customer')";
                     }
                     break;
@@ -470,7 +486,7 @@ class ContactController {
                             $stageCounts[(string)$resolvedSlug] = ($stageCounts[(string)$resolvedSlug] ?? 0) + $cnt;
                         }
                         $isEnrolledStage = ($resolvedId == 44) || in_array($resolvedSlug, ['enrolled', 'hoc_vien', 'won'], true) || (!empty($effStage['is_won']));
-                        if ($segment !== 'tiem_nang' || !$isEnrolledStage) {
+                        if ($segment !== 'tiem_nang' || !$isEnrolledStage || $hasAcademicFilter) {
                             $activeTotal += $cnt;
                         }
                     }
@@ -597,29 +613,12 @@ class ContactController {
         }
 
         if ($multiProgram) {
-            $where[] = "(
-                c.duplicate_with_id > 0
-                OR c.id IN (SELECT duplicate_with_id FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND duplicate_with_id > 0)
-                OR (c.person_id > 0 AND c.person_id IN (
-                    SELECT person_id FROM contacts 
-                    WHERE tenant_id = ? AND deleted_at IS NULL AND person_id > 0 
-                    GROUP BY person_id 
-                    HAVING COUNT(DISTINCT COALESCE(NULLIF(TRIM(program), ''), '__empty__')) >= 2 
-                        OR COUNT(DISTINCT stage_id) >= 2 
-                        OR SUM(CASE WHEN duplicate_with_id > 0 THEN 1 ELSE 0 END) > 0
-                ))
-                OR (c.phone != '' AND c.phone IS NOT NULL AND c.phone IN (
-                    SELECT phone FROM contacts 
-                    WHERE tenant_id = ? AND deleted_at IS NULL AND phone != '' AND phone IS NOT NULL 
-                    GROUP BY phone 
-                    HAVING COUNT(DISTINCT COALESCE(NULLIF(TRIM(program), ''), '__empty__')) >= 2 
-                        OR COUNT(DISTINCT stage_id) >= 2 
-                        OR SUM(CASE WHEN duplicate_with_id > 0 THEN 1 ELSE 0 END) > 0
-                ))
-            )";
-            $params[] = $tid;
-            $params[] = $tid;
-            $params[] = $tid;
+            $mpIds = function_exists('getCrmMultiProgramContactIds') ? getCrmMultiProgramContactIds($this->db, (int)$tid) : [];
+            if (!empty($mpIds)) {
+                $where[] = "c.id IN (" . implode(',', array_map('intval', $mpIds)) . ")";
+            } else {
+                $where[] = "1 = 0";
+            }
         }
 
         if ($isKanban) {
@@ -1005,19 +1004,19 @@ class ContactController {
         $whereMatches = [];
         $paramsMatches = [$tid];
         if (!empty($pids)) {
-            $pids = array_unique($pids);
+            $pids = array_values(array_unique($pids));
             $inP = implode(',', array_fill(0, count($pids), '?'));
             $whereMatches[] = "person_id IN ($inP)";
             $paramsMatches = array_merge($paramsMatches, $pids);
         }
         if (!empty($dwids) || !empty($cids)) {
-            $allIds = array_unique(array_merge($dwids, $cids));
+            $allIds = array_values(array_unique(array_merge($dwids, $cids)));
             $inIds = implode(',', array_fill(0, count($allIds), '?'));
             $whereMatches[] = "(duplicate_with_id IN ($inIds) OR id IN ($inIds))";
             $paramsMatches = array_merge($paramsMatches, $allIds, $allIds);
         }
         if (!empty($phones)) {
-            $phones = array_unique($phones);
+            $phones = array_values(array_unique($phones));
             $inPhones = implode(',', array_fill(0, count($phones), '?'));
             $whereMatches[] = "(phone IN ($inPhones) OR mobile IN ($inPhones))";
             $paramsMatches = array_merge($paramsMatches, $phones, $phones);
@@ -1241,9 +1240,35 @@ class ContactController {
         }
         $last_contact = empty($b['last_contact']) ? null : $b['last_contact'];
 
-        $assignedOwnerId = (in_array($auth['role'], ['sale', 'sales'], true)) ? (int)$auth['user_id'] : (!empty($b['owner_id']) ? (int)$b['owner_id'] : (int)$auth['user_id']);
-        $secPhone = !empty($mobile) ? $mobile : null;
+        $assignedOwnerId = (in_array($auth['role'], ['sale', 'sales'], true)) ? (int)$auth['user_id'] : (!empty($b['owner_id']) ? (int)$b['owner_id'] : (!empty($b['assigned_to']) ? (int)$b['assigned_to'] : (int)$auth['user_id']));
+        $secPhone = !empty($mobile) ? $mobile : (!empty($b['phone2']) ? trim((string)$b['phone2']) : null);
         $avatarUrl = !empty($b['avatar_url']) ? $b['avatar_url'] : null;
+
+        // Bidirectional sync between program (name) and project_id
+        $reqProgramStr = isset($b['program']) ? trim((string)$b['program']) : (isset($b['major']) ? trim((string)$b['major']) : null);
+        $reqProjectId = isset($b['project_id']) ? (int)$b['project_id'] : null;
+        if ($reqProgramStr !== null && $reqProgramStr !== '' && !$reqProjectId) {
+            $stmtProj = $this->db->prepare("SELECT id FROM projects WHERE (LOWER(name) = LOWER(?) OR LOWER(code) = LOWER(?)) AND tenant_id = ? LIMIT 1");
+            $stmtProj->execute([$reqProgramStr, $reqProgramStr, $auth['tenant_id']]);
+            $matchedProjId = $stmtProj->fetchColumn();
+            if ($matchedProjId) {
+                $reqProjectId = (int)$matchedProjId;
+            }
+        } elseif ($reqProjectId && $reqProjectId > 0 && ($reqProgramStr === null || $reqProgramStr === '')) {
+            $stmtProjName = $this->db->prepare("SELECT name FROM projects WHERE id = ? AND tenant_id = ? LIMIT 1");
+            $stmtProjName->execute([$reqProjectId, $auth['tenant_id']]);
+            $projName = $stmtProjName->fetchColumn();
+            if ($projName) {
+                $reqProgramStr = trim((string)$projName);
+            }
+        }
+        if ($reqProgramStr !== null && !isset($b['program'])) {
+            $b['program'] = $reqProgramStr;
+        }
+        if ($reqProjectId !== null && !isset($b['project_id'])) {
+            $b['project_id'] = $reqProjectId;
+        }
+
         $stmt = $this->db->prepare("
             INSERT INTO contacts (tenant_id,company_id,owner_id,created_by,full_name,avatar_url,
                 email,phone,mobile,phone2,job_title,department,source,status,tags,notes,stage_id,
@@ -1266,6 +1291,43 @@ class ContactController {
             $pipelineStatus
         ]);
         $id = (int)$this->db->lastInsertId();
+
+        // Persist extended CRM fields if provided in request payload
+        $extraStoreFields = [
+            'project_id', 'program', 'admission_date', 'gender', 'dob', 'citizen_id', 'passport',
+            'district', 'company', 'tax_code', 'industry', 'customer_type', 'budget_range', 'budget',
+            'expected_intake', 'lead_status', 'lead_temperature', 'temperature', 'suggested_temperature',
+            'campaign_id', 'zalo_link', 'zalo_phone', 'fb_link', 'facebook_link',
+            'utm_campaign', 'utm_medium', 'utm_content', 'utm_term', 'platform', 'form_name',
+            'next_action', 'next_followup_date', 'expected_decision_date', 'nurture_reason', 'lost_reason'
+        ];
+        $extraSets = [];
+        $extraParams = [];
+        foreach ($extraStoreFields as $ef) {
+            if (array_key_exists($ef, $b) && $b[$ef] !== null && $b[$ef] !== '') {
+                $val = $b[$ef];
+                if (in_array($ef, ['dob', 'admission_date', 'expected_decision_date', 'next_followup_date'], true)) {
+                    $valStr = trim((string)$val);
+                    if ($valStr === '0000-00-00' || $valStr === '00/00/0000' || $valStr === 'null') {
+                        continue;
+                    } elseif (preg_match('/^(\d{1,2})[-\/\.](\d{1,2})[-\/\.](\d{4})$/', $valStr, $dm)) {
+                        $val = sprintf('%04d-%02d-%02d', $dm[3], $dm[2], $dm[1]);
+                    }
+                }
+                $extraSets[] = "$ef = ?";
+                $extraParams[] = $val;
+            }
+        }
+        if (!empty($extraSets)) {
+            try {
+                $extraParams[] = $id;
+                $extraParams[] = $auth['tenant_id'];
+                $stmtExtra = $this->db->prepare("UPDATE contacts SET " . implode(', ', $extraSets) . " WHERE id = ? AND tenant_id = ?");
+                $stmtExtra->execute($extraParams);
+            } catch (\Throwable $eExtra) {
+                error_log("Extended fields update in ContactController::store warning: " . $eExtra->getMessage());
+            }
+        }
 
         // Send in-app notification to the assigned salesperson if created by someone else
         if ($assignedOwnerId > 0 && $assignedOwnerId !== (int)$auth['user_id']) {
@@ -1491,10 +1553,9 @@ class ContactController {
             }
         }
         $row['tags'] = $this->normalizeContactTags($row['tags'] ?? '[]', (int)($auth['tenant_id'] ?? 1));
-        // Synchronize project_id <-> program on read so Header & Learning tab always match
+        // Synchronize project_id <-> program on read: program is the source of truth
         $progTrim = trim((string)($row['program'] ?? ''));
-        $projIdVal = !empty($row['project_id']) ? (int)$row['project_id'] : 0;
-        if ($projIdVal <= 0 && $progTrim !== '') {
+        if ($progTrim !== '') {
             $stmtMatchProj = $this->db->prepare("
                 SELECT id, name FROM projects
                 WHERE tenant_id = ?
@@ -1509,13 +1570,8 @@ class ContactController {
             if ($matchedProj) {
                 $row['project_id'] = (int)$matchedProj['id'];
             }
-        } elseif ($projIdVal > 0 && $progTrim === '') {
-            $stmtProjName = $this->db->prepare("SELECT name FROM projects WHERE id = ? AND tenant_id = ? LIMIT 1");
-            $stmtProjName->execute([$projIdVal, $auth['tenant_id']]);
-            $projName = $stmtProjName->fetchColumn();
-            if ($projName) {
-                $row['program'] = trim((string)$projName);
-            }
+        } else {
+            $row['project_id'] = null;
         }
         $this->resolveEffectiveStageRow($row, (int)$auth['tenant_id']);
         $row['custom_fields'] = getCustomFields($this->db, $auth['tenant_id'], $id, 'contact');
@@ -1682,25 +1738,30 @@ class ContactController {
             }
         }
 
-        // Bidirectional sync between project_id and program name
-        $reqProgramStr = array_key_exists('program', $b) ? trim((string)($b['program'] ?? '')) : null;
-        if ($reqProgramStr !== null && $reqProgramStr !== '' && (!$reqProjectId || $reqProjectId <= 0)) {
-            $stmtMatchProj = $this->db->prepare("
-                SELECT id FROM projects
-                WHERE tenant_id = ?
-                  AND (
-                      LOWER(TRIM(name)) = LOWER(?)
-                      OR REPLACE(REPLACE(LOWER(TRIM(name)), ' ', ''), '-', '') = REPLACE(REPLACE(LOWER(?), ' ', ''), '-', '')
-                  )
-                LIMIT 1
-            ");
-            $stmtMatchProj->execute([$auth['tenant_id'], $reqProgramStr, $reqProgramStr]);
-            $matchedProjId = $stmtMatchProj->fetchColumn();
-            if ($matchedProjId) {
-                $b['project_id'] = (int)$matchedProjId;
-                $reqProjectId = (int)$matchedProjId;
+        // Bidirectional sync between project_id and program name (program is primary when provided)
+        $hasProgramKey = array_key_exists('program', $b);
+        $hasProjectKey = array_key_exists('project_id', $b);
+        $reqProgramStr = $hasProgramKey ? trim((string)($b['program'] ?? '')) : null;
+        if ($hasProgramKey) {
+            if ($reqProgramStr !== '') {
+                $stmtMatchProj = $this->db->prepare("
+                    SELECT id FROM projects
+                    WHERE tenant_id = ?
+                      AND (
+                          LOWER(TRIM(name)) = LOWER(?)
+                          OR REPLACE(REPLACE(LOWER(TRIM(name)), ' ', ''), '-', '') = REPLACE(REPLACE(LOWER(?), ' ', ''), '-', '')
+                      )
+                    LIMIT 1
+                ");
+                $stmtMatchProj->execute([$auth['tenant_id'], $reqProgramStr, $reqProgramStr]);
+                $matchedProjId = $stmtMatchProj->fetchColumn();
+                $b['project_id'] = $matchedProjId ? (int)$matchedProjId : null;
+                $reqProjectId = $b['project_id'];
+            } else {
+                $b['project_id'] = null;
+                $reqProjectId = null;
             }
-        } elseif ($reqProjectId && $reqProjectId > 0 && ($reqProgramStr === null || $reqProgramStr === '')) {
+        } elseif ($hasProjectKey && $reqProjectId && $reqProjectId > 0) {
             $stmtProjName = $this->db->prepare("SELECT name FROM projects WHERE id = ? AND tenant_id = ? LIMIT 1");
             $stmtProjName->execute([$reqProjectId, $auth['tenant_id']]);
             $projName = $stmtProjName->fetchColumn();
@@ -1729,11 +1790,18 @@ class ContactController {
             $b['mobile'] = $b['phone2'];
         }
 
+        if (array_key_exists('major', $b) && !array_key_exists('program', $b)) {
+            $b['program'] = $b['major'];
+        }
+        if (array_key_exists('assigned_to', $b) && !array_key_exists('owner_id', $b)) {
+            $b['owner_id'] = $b['assigned_to'];
+        }
+
         $fields = [
             'company_id','project_id','owner_id','full_name','avatar_url','email','phone',
             'mobile','job_title','department','source','status','notes',
             'birthday','address','city','ward',
-            'expected_revenue','win_probability','last_contact','stage_id',
+            'expected_revenue','win_probability','last_contact','lead_score','stage_id',
             'pipeline_status', 'ttl1_completed', 'ttl1_data',
             'gender', 'zalo_link', 'fb_link', 'customer_type', 'industry', 'budget_range',
             'temperature', 'suggested_temperature', 'campaign_id', 'collaborator_ids',
@@ -1743,12 +1811,16 @@ class ContactController {
             'form_name', 'zalo_phone', 'facebook_link',
             'lead_status', 'lead_temperature', 'next_action', 'next_followup_date',
             'expected_decision_date', 'expected_intake', 'nurture_reason', 'lost_reason', 'lost_stage_id',
-            'program', 'admission_date', 'student_id', 'study_status'
+            'program', 'admission_date', 'student_id', 'study_status',
+            'not_lead_proposed', 'created_at'
         ];
         $sets = []; $params = [];
         
         if ($newStatus === 'not_lead') {
             $sets[] = "not_lead_proposed = 0";
+            $sets[] = "not_lead_proposed_by = NULL";
+            $sets[] = "not_lead_proposed_at = NULL";
+        } elseif (array_key_exists('not_lead_proposed', $b) && (int)$b['not_lead_proposed'] === 0) {
             $sets[] = "not_lead_proposed_by = NULL";
             $sets[] = "not_lead_proposed_at = NULL";
         }
@@ -1786,26 +1858,45 @@ class ContactController {
 
         foreach ($fields as $f) {
             if ($f === 'company_id') continue;
+            if ($f === 'not_lead_proposed' && $newStatus === 'not_lead') continue;
             if (array_key_exists($f, $b)) { 
+                $v = $b[$f];
+                if ($f === 'created_at') {
+                    $val = trim((string)($v ?? ''));
+                    if ($val === '' || $val === 'null' || $val === '0000-00-00' || strtotime($val) === false) {
+                        continue;
+                    }
+                    $sets[] = "$f=?";
+                    $params[] = date('Y-m-d H:i:s', strtotime($val));
+                    continue;
+                }
+                if (in_array($f, ['status', 'temperature'], true) && ($v === '' || $v === null || $v === 'null')) {
+                    continue;
+                }
+                if ($f === 'suggested_temperature' && ($v === '' || $v === null || $v === 'null')) {
+                    $sets[] = "$f=?";
+                    $params[] = null;
+                    continue;
+                }
                 $sets[] = "$f=?"; 
                 // Fix date string & numeric strict mode crashes
-                if (in_array($f, ['birthday', 'dob', 'last_contact', 'leave_start', 'leave_end', 'expected_decision_date', 'admission_date'])) {
-                    $val = trim((string)($b[$f] ?? ''));
-                    if ($val === '' || $val === 'null' || $val === '0000-00-00' || $val === '00/00/0000' || $b[$f] === null) {
+                if (in_array($f, ['birthday', 'dob', 'last_contact', 'leave_start', 'leave_end', 'expected_decision_date', 'admission_date', 'next_followup_date'], true)) {
+                    $val = trim((string)($v ?? ''));
+                    if ($val === '' || $val === 'null' || $val === '0000-00-00' || $val === '00/00/0000' || $v === null) {
                         $params[] = null;
                     } else if (preg_match('/^(\d{1,2})[-\/\.](\d{1,2})[-\/\.](\d{4})$/', $val, $dm)) {
                         $params[] = sprintf('%04d-%02d-%02d', $dm[3], $dm[2], $dm[1]);
                     } else {
                         $params[] = $val;
                     }
-                } else if (in_array($f, ['stage_id', 'project_id', 'campaign_id', 'owner_id', 'company_id']) && (empty($b[$f]) || $b[$f] === 0 || $b[$f] === '0' || $b[$f] === 'null')) {
-                    $params[] = null;
-                } else if (in_array($f, ['budget', 'expected_revenue', 'win_probability']) && ($b[$f] === '' || $b[$f] === null || $b[$f] === 'null')) {
-                    $params[] = 0;
-                } else if ($f === 'ttl1_data' && is_array($b[$f])) {
-                    $params[] = json_encode($b[$f]);
+                } else if (in_array($f, ['stage_id', 'project_id', 'campaign_id', 'owner_id', 'company_id', 'lost_stage_id'], true)) {
+                    $params[] = (empty($v) || $v === 0 || $v === '0' || $v === 'null') ? null : (int)$v;
+                } else if (in_array($f, ['budget', 'expected_revenue', 'win_probability', 'lead_score', 'ttl1_completed', 'not_lead_proposed'], true)) {
+                    $params[] = ($v === '' || $v === null || $v === 'null') ? 0 : (is_numeric($v) ? (in_array($f, ['lead_score', 'ttl1_completed', 'not_lead_proposed'], true) ? (int)$v : $v) : 0);
+                } else if ($f === 'ttl1_data' && is_array($v)) {
+                    $params[] = json_encode($v);
                 } else {
-                    $params[] = $b[$f];
+                    $params[] = $v;
                 }
             }
         }
@@ -2080,7 +2171,7 @@ class ContactController {
             if (class_exists('DomationContactMatcher')) {
                 $tIdTrigger = (int)($auth['tenant_id'] ?? 1);
                 $subIdTrigger = DomationContactMatcher::syncContactToSubscriber($this->db, (int)$id, $tIdTrigger);
-                if ($subIdTrigger && $subIdTrigger > 0) {
+                if (!empty($subIdTrigger)) {
                     if (!function_exists('processSubscriberTrigger') && file_exists(__DIR__ . '/../automation/trigger_helper.php')) {
                         require_once __DIR__ . '/../automation/trigger_helper.php';
                     }
@@ -2088,18 +2179,22 @@ class ContactController {
                         $prevOwnerId = !empty($currentContact['owner_id']) ? (int)$currentContact['owner_id'] : 0;
                         $nextOwnerId = array_key_exists('owner_id', $b) && !empty($b['owner_id']) ? (int)$b['owner_id'] : $prevOwnerId;
                         if (array_key_exists('owner_id', $b) && $nextOwnerId > 0 && $nextOwnerId !== $prevOwnerId) {
-                            processSubscriberTrigger($this->db, $tIdTrigger, (int)$subIdTrigger, 'erp_event', [
+                            processSubscriberTrigger($this->db, $subIdTrigger, 'lead_assigned', $nextOwnerId, $tIdTrigger, [
                                 'event' => 'lead_assigned',
+                                'erp_event_name' => 'lead_assigned',
                                 'contact_id' => (int)$id,
-                                'assigned_to' => $nextOwnerId
+                                'owner_id' => $nextOwnerId,
+                                'assigned_to' => $nextOwnerId,
+                                'previous_owner_id' => $prevOwnerId
                             ]);
                         }
 
                         $prevStageId = (int)($currentContact['stage_id'] ?? 0);
                         $nextStageId = isset($b['stage_id']) && (int)$b['stage_id'] > 0 ? (int)$b['stage_id'] : $prevStageId;
                         if ((!empty($newStatus) && $newStatus !== $currStatus) || ($nextStageId > 0 && $nextStageId !== $prevStageId)) {
-                            processSubscriberTrigger($this->db, $tIdTrigger, (int)$subIdTrigger, 'erp_event', [
+                            processSubscriberTrigger($this->db, $subIdTrigger, 'stage_changed', $nextStageId, $tIdTrigger, [
                                 'event' => 'stage_changed',
+                                'erp_event_name' => 'stage_changed',
                                 'contact_id' => (int)$id,
                                 'from_stage_id' => $prevStageId,
                                 'to_stage_id' => $nextStageId,
@@ -2110,8 +2205,9 @@ class ContactController {
                         $prevTemp = (string)($currentContact['lead_temperature'] ?? $currentContact['temperature'] ?? $currentContact['lead_status'] ?? '');
                         $nextTemp = (string)($b['lead_temperature'] ?? $b['temperature'] ?? $b['lead_status'] ?? $prevTemp);
                         if ($nextTemp !== '' && $nextTemp !== $prevTemp) {
-                            processSubscriberTrigger($this->db, $tIdTrigger, (int)$subIdTrigger, 'erp_event', [
+                            processSubscriberTrigger($this->db, $subIdTrigger, 'temperature_changed', $nextTemp, $tIdTrigger, [
                                 'event' => 'temperature_changed',
+                                'erp_event_name' => 'temperature_changed',
                                 'contact_id' => (int)$id,
                                 'temperature' => $nextTemp
                             ]);
@@ -2428,10 +2524,11 @@ class ContactController {
 
         // Send in-app notification to the requested users (notify_user_ids)
         $notifyUserIds = [];
+        $currentUid = (int)($auth['user_id'] ?? 0);
         if (!empty($b['notify_user_ids']) && is_array($b['notify_user_ids'])) {
             foreach ($b['notify_user_ids'] as $uid) {
                 $uidInt = (int)$uid;
-                if ($uidInt > 0 && !in_array($uidInt, $notifyUserIds, true)) {
+                if ($uidInt > 0 && $uidInt !== $currentUid && !in_array($uidInt, $notifyUserIds, true)) {
                     $notifyUserIds[] = $uidInt;
                 }
             }
@@ -2439,7 +2536,7 @@ class ContactController {
 
         // Auto include the contact's assigned owner if someone else moved the pipeline
         $ownerId = (int)($currentContact['owner_id'] ?? 0);
-        if ($ownerId > 0 && $ownerId !== (int)$auth['user_id'] && !in_array($ownerId, $notifyUserIds, true)) {
+        if ($ownerId > 0 && $ownerId !== $currentUid && !in_array($ownerId, $notifyUserIds, true)) {
             $notifyUserIds[] = $ownerId;
         }
 
@@ -2463,6 +2560,7 @@ class ContactController {
                 ");
 
                 foreach ($notifyUserIds as $targetUid) {
+                    if ((int)$targetUid === $currentUid) continue;
                     $stmtInsertNotif->execute([
                         $targetUid,
                         $auth['tenant_id'],
@@ -2494,13 +2592,14 @@ class ContactController {
             if (class_exists('DomationContactMatcher')) {
                 $tIdTrigger = (int)($auth['tenant_id'] ?? 1);
                 $subIdTrigger = DomationContactMatcher::syncContactToSubscriber($this->db, (int)$id, $tIdTrigger);
-                if ($subIdTrigger && $subIdTrigger > 0) {
+                if (!empty($subIdTrigger)) {
                     if (!function_exists('processSubscriberTrigger') && file_exists(__DIR__ . '/../automation/trigger_helper.php')) {
                         require_once __DIR__ . '/../automation/trigger_helper.php';
                     }
                     if (function_exists('processSubscriberTrigger')) {
-                        processSubscriberTrigger($this->db, $tIdTrigger, (int)$subIdTrigger, 'erp_event', [
+                        processSubscriberTrigger($this->db, $subIdTrigger, 'stage_changed', (int)$stageId, $tIdTrigger, [
                             'event' => 'stage_changed',
+                            'erp_event_name' => 'stage_changed',
                             'contact_id' => (int)$id,
                             'from_stage_id' => (int)$currStageId,
                             'to_stage_id' => (int)$stageId,
@@ -2510,8 +2609,9 @@ class ContactController {
                         $prevTemp = (string)($currentContact['lead_temperature'] ?? $currentContact['temperature'] ?? $currentContact['lead_status'] ?? '');
                         $nextTemp = (string)($leadTemp ?: $targetLeadStatus ?: $prevTemp);
                         if ($nextTemp !== '' && $nextTemp !== $prevTemp) {
-                            processSubscriberTrigger($this->db, $tIdTrigger, (int)$subIdTrigger, 'erp_event', [
+                            processSubscriberTrigger($this->db, $subIdTrigger, 'temperature_changed', $nextTemp, $tIdTrigger, [
                                 'event' => 'temperature_changed',
+                                'erp_event_name' => 'temperature_changed',
                                 'contact_id' => (int)$id,
                                 'temperature' => $nextTemp
                             ]);
@@ -2530,7 +2630,7 @@ class ContactController {
     public function destroy(array $auth, int $id): void {
         $scope = $this->getScope($auth, 'leads', 'delete');
         
-        $stmtC = $this->db->prepare("SELECT id, owner_id, created_by, source, phone, mobile, email, person_id FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL LIMIT 1");
+        $stmtC = $this->db->prepare("SELECT id, owner_id, created_by, source, phone, mobile, email, person_id, duplicate_with_id, program FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL LIMIT 1");
         $stmtC->execute([$id, $auth['tenant_id']]);
         $cRow = $stmtC->fetch(PDO::FETCH_ASSOC);
 
@@ -2580,9 +2680,9 @@ class ContactController {
         ");
         $stmtSib->execute([
             $auth['tenant_id'], $id,
-            $cRow['person_id'] ?: -1,
-            $id, $cRow['duplicate_with_id'] ?: -1,
-            $cRow['phone'] ?: '', $cRow['phone'] ?: ''
+            ($cRow['person_id'] ?? null) ?: -1,
+            $id, ($cRow['duplicate_with_id'] ?? null) ?: -1,
+            ($cRow['phone'] ?? '') ?: '', ($cRow['phone'] ?? '') ?: ''
         ]);
         $remainingSiblingIds = $stmtSib->fetchAll(PDO::FETCH_COLUMN) ?: [];
         $hasRemainingSiblings = !empty($remainingSiblingIds);
@@ -2598,69 +2698,36 @@ class ContactController {
                 if (count($remainingSiblingIds) > 1) {
                     $otherSiblings = array_slice($remainingSiblingIds, 1);
                     $inOther = implode(',', array_map('intval', $otherSiblings));
-                    $this->db->query("UPDATE contacts SET duplicate_with_id = $newRootId WHERE id IN ($inOther) AND tenant_id = {$auth['tenant_id']}");
+                    $this->db->query("UPDATE contacts SET duplicate_with_id = $newRootId WHERE id IN ($inOther) AND tenant_id = " . (int)$auth['tenant_id']);
                 }
             }
 
-            // 1. Dọn sạch toàn bộ nhật ký / hoạt động liên quan đến riêng hồ sơ liên hệ này
-            $delAct = $this->db->prepare("DELETE FROM activities WHERE contact_id = ? OR (related_type = 'contact' AND related_id = ?)");
-            $delAct->execute([$id, $id]);
+            // 1. Soft-delete toàn bộ hoạt động (activities) liên quan đến hồ sơ liên hệ này (không xóa cứng dữ liệu)
+            $softDelAct = $this->db->prepare("UPDATE activities SET deleted_at = NOW() WHERE (contact_id = ? OR (related_type = 'contact' AND related_id = ?)) AND deleted_at IS NULL");
+            $softDelAct->execute([$id, $id]);
 
-            // 2. Dọn sạch ghi chú (notes) liên quan đến riêng hồ sơ liên hệ này
-            $delNotes = $this->db->prepare("DELETE FROM notes WHERE entity_type = 'contact' AND entity_id = ?");
-            $delNotes->execute([$id]);
-
-            // 3. Dọn sạch deal nếu có thuộc về liên hệ này
-            $stDeals = $this->db->prepare("SELECT id FROM deals WHERE contact_id = ? AND tenant_id = ?");
+            // 2. Soft-delete deal nếu có thuộc về liên hệ này (giữ nguyên notes và leads để khôi phục 100% khi cần)
+            $stDeals = $this->db->prepare("SELECT id FROM deals WHERE contact_id = ? AND tenant_id = ? AND deleted_at IS NULL");
             $stDeals->execute([$id, $auth['tenant_id']]);
             $dealIds = $stDeals->fetchAll(PDO::FETCH_COLUMN);
             if (!empty($dealIds)) {
                 $inDeals = implode(',', array_map('intval', $dealIds));
-                $this->db->query("DELETE FROM activities WHERE related_type = 'deal' AND related_id IN ($inDeals)");
-                $this->db->query("DELETE FROM deals WHERE id IN ($inDeals)");
+                $this->db->query("UPDATE activities SET deleted_at = NOW() WHERE related_type = 'deal' AND related_id IN ($inDeals) AND deleted_at IS NULL");
+                $this->db->query("UPDATE deals SET deleted_at = NOW() WHERE id IN ($inDeals) AND tenant_id = " . (int)$auth['tenant_id'] . " AND deleted_at IS NULL");
             }
 
-            // 4. Chỉ dọn sạch lead marketing/thủ công nếu khách hàng KHÔNG CÒN hồ sơ liên kết nào khác
-            if (!$hasRemainingSiblings && $isSelfEntered) {
-                $phones = array_filter([$cRow['phone'] ?? null, $cRow['mobile'] ?? null]);
-                if (!empty($phones)) {
-                    require_once __DIR__ . '/../webhook_logic.php';
-                    $cleanPhones = [];
-                    foreach ($phones as $p) {
-                        $norm = normalizePhone($p);
-                        if ($norm) $cleanPhones[] = $norm;
-                        $cleanPhones[] = $p;
-                    }
-                    $cleanPhones = array_unique(array_filter($cleanPhones));
-                    if (!empty($cleanPhones)) {
-                        $placeholders = implode(',', array_fill(0, count($cleanPhones), '?'));
-                        $stLeads = $this->db->prepare("
-                            SELECT id FROM leads 
-                            WHERE phone IN ($placeholders) 
-                            AND (source IN ('ca_nhan', 'gioi_thieu', 'databank', 'self_assign', 'other') OR connection_id IS NULL)
-                        ");
-                        $stLeads->execute($cleanPhones);
-                        $leadIds = $stLeads->fetchAll(PDO::FETCH_COLUMN);
-                        if (!empty($leadIds)) {
-                            $inLeads = implode(',', array_map('intval', $leadIds));
-                            $this->db->query("DELETE FROM distribution_logs WHERE lead_id IN ($inLeads)");
-                            $this->db->query("DELETE FROM data_reports WHERE lead_id IN ($inLeads)");
-                            $this->db->query("DELETE FROM leads WHERE id IN ($inLeads)");
-                        }
-                    }
-                }
-            }
-
-            // 5. Luôn soft-delete hồ sơ liên hệ (để có thể khôi phục trong thùng rác và an toàn tuyệt đối)
+            // 3. Luôn soft-delete hồ sơ liên hệ (chuyển vào thùng rác, tuyệt đối không xóa cứng lead/notes)
             $delStmt = $this->db->prepare("UPDATE contacts SET deleted_at = NOW() WHERE id = ? AND tenant_id = ?");
             $delStmt->execute([$id, $auth['tenant_id']]);
 
-            // Cập nhật trạng thái công khai của person sau khi contact đã bị xóa
+            // Cập nhật trạng thái công khai của person sau khi contact đã bị xóa mềm
             $this->restorePersonPublicStatus($id, $auth['tenant_id']);
 
             $this->db->commit();
-        } catch (Exception $e) {
-            $this->db->rollBack();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             respond(500, null, 'Lỗi khi xóa liên hệ: ' . $e->getMessage(), false);
         }
 
@@ -2721,97 +2788,44 @@ class ContactController {
             respond(404, null, 'Không tìm thấy liên hệ cần xóa', false);
         }
 
-        $selfEnteredIds = [];
-        $otherIds = [];
-        $selfEnteredPhones = [];
-
-        foreach ($matchedContacts as $c) {
-            $src = strtolower($c['source'] ?? '');
-            $isSelf = in_array($src, ['ca_nhan', 'gioi_thieu', 'databank', 'self_assign', 'other'], true) || 
-                      !in_array($src, ['facebook', 'google', 'google_lp', 'website', 'mkt_webhook', 'capi', 'campaign'], true);
-            if ($isSelf) {
-                $selfEnteredIds[] = (int)$c['id'];
-                if (!empty($c['phone'])) $selfEnteredPhones[] = $c['phone'];
-                if (!empty($c['mobile'])) $selfEnteredPhones[] = $c['mobile'];
-            } else {
-                $otherIds[] = (int)$c['id'];
-            }
-        }
-
-        $allProcessedIds = array_merge($selfEnteredIds, $otherIds);
+        $allProcessedIds = array_values(array_map(fn($c) => (int)$c['id'], $matchedContacts));
 
         $this->db->beginTransaction();
         try {
             $this->restorePersonsPublicStatusBatch($allProcessedIds, $auth['tenant_id']);
 
-            // 1. Xử lý các liên hệ tự nhập: Xóa vĩnh viễn và làm sạch toàn bộ nhật ký / deal / lead
-            if (!empty($selfEnteredIds)) {
-                $inSelf = implode(',', $selfEnteredIds);
-                
-                // Xóa activities (nhật ký, cuộc gọi, meeting, task)
-                $this->db->query("DELETE FROM activities WHERE contact_id IN ($inSelf) OR (related_type = 'contact' AND related_id IN ($inSelf))");
-                
-                // Xóa notes
-                $this->db->query("DELETE FROM notes WHERE entity_type = 'contact' AND entity_id IN ($inSelf)");
+            if (!empty($allProcessedIds)) {
+                $inIds = implode(',', $allProcessedIds);
+                $tidInt = (int)$auth['tenant_id'];
 
-                // Xóa deals
-                $stDeals = $this->db->query("SELECT id FROM deals WHERE contact_id IN ($inSelf)");
-                $dealIds = $stDeals->fetchAll(PDO::FETCH_COLUMN);
+                // 1. Soft-delete contacts (chuyển vào thùng rác, tuyệt đối không xóa cứng lead/notes)
+                $this->db->query("UPDATE contacts SET deleted_at = NOW() WHERE id IN ($inIds) AND tenant_id = $tidInt AND deleted_at IS NULL");
+
+                // 2. Soft-delete activities liên quan
+                $this->db->query("UPDATE activities SET deleted_at = NOW() WHERE (contact_id IN ($inIds) OR (related_type = 'contact' AND related_id IN ($inIds))) AND deleted_at IS NULL");
+
+                // 3. Soft-delete deals liên quan
+                $stDeals = $this->db->query("SELECT id FROM deals WHERE contact_id IN ($inIds) AND tenant_id = $tidInt AND deleted_at IS NULL");
+                $dealIds = $stDeals ? $stDeals->fetchAll(PDO::FETCH_COLUMN) : [];
                 if (!empty($dealIds)) {
                     $inDeals = implode(',', array_map('intval', $dealIds));
-                    $this->db->query("DELETE FROM activities WHERE related_type = 'deal' AND related_id IN ($inDeals)");
-                    $this->db->query("DELETE FROM deals WHERE id IN ($inDeals)");
+                    $this->db->query("UPDATE activities SET deleted_at = NOW() WHERE related_type = 'deal' AND related_id IN ($inDeals) AND deleted_at IS NULL");
+                    $this->db->query("UPDATE deals SET deleted_at = NOW() WHERE id IN ($inDeals) AND tenant_id = $tidInt AND deleted_at IS NULL");
                 }
-
-                // Dọn sạch lead & distribution_logs nếu có
-                if (!empty($selfEnteredPhones)) {
-                    require_once __DIR__ . '/../webhook_logic.php';
-                    $cleanPhones = [];
-                    foreach ($selfEnteredPhones as $p) {
-                        $norm = normalizePhone($p);
-                        if ($norm) $cleanPhones[] = $norm;
-                        $cleanPhones[] = $p;
-                    }
-                    $cleanPhones = array_unique(array_filter($cleanPhones));
-                    if (!empty($cleanPhones)) {
-                        $pPlaceholders = implode(',', array_fill(0, count($cleanPhones), '?'));
-                        $stL = $this->db->prepare("
-                            SELECT id FROM leads 
-                            WHERE phone IN ($pPlaceholders) 
-                            AND (source IN ('ca_nhan', 'gioi_thieu', 'databank', 'self_assign', 'other') OR connection_id IS NULL)
-                        ");
-                        $stL->execute($cleanPhones);
-                        $leadIds = $stL->fetchAll(PDO::FETCH_COLUMN);
-                        if (!empty($leadIds)) {
-                            $inLeads = implode(',', array_map('intval', $leadIds));
-                            $this->db->query("DELETE FROM distribution_logs WHERE lead_id IN ($inLeads)");
-                            $this->db->query("DELETE FROM data_reports WHERE lead_id IN ($inLeads)");
-                            $this->db->query("DELETE FROM leads WHERE id IN ($inLeads)");
-                        }
-                    }
-                }
-
-                // Xóa vĩnh viễn khỏi contacts
-                $this->db->query("DELETE FROM contacts WHERE id IN ($inSelf) AND tenant_id = " . (int)$auth['tenant_id']);
-            }
-
-            // 2. Xử lý các liên hệ MKT / công ty: Soft delete liên hệ và soft delete nhật ký
-            if (!empty($otherIds)) {
-                $inOther = implode(',', $otherIds);
-                $this->db->query("UPDATE contacts SET deleted_at = NOW() WHERE id IN ($inOther) AND tenant_id = " . (int)$auth['tenant_id']);
-                $this->db->query("UPDATE activities SET deleted_at = NOW() WHERE (contact_id IN ($inOther) OR (related_type = 'contact' AND related_id IN ($inOther))) AND deleted_at IS NULL");
             }
 
             $this->db->commit();
-        } catch (Exception $e) {
-            $this->db->rollBack();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             respond(500, null, 'Lỗi khi xóa hàng loạt liên hệ: ' . $e->getMessage(), false);
         }
 
         if (function_exists('logActivity')) {
-            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'BULK_DELETE', 'contact', null, json_encode(['ids' => $allProcessedIds, 'self_entered' => $selfEnteredIds]));
+            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'BULK_DELETE', 'contact', null, json_encode(['ids' => $allProcessedIds, 'deleted_count' => count($allProcessedIds)]));
         }
-        respond(200, null, "Đã xóa " . count($allProcessedIds) . " liên hệ và làm sạch toàn bộ nhật ký liên quan");
+        respond(200, ['deleted_count' => count($allProcessedIds), 'ids' => $allProcessedIds], "Đã xóa " . count($allProcessedIds) . " liên hệ (chuyển vào thùng rác)");
     }
 
     private function getSetting(string $key, string $default): string {
@@ -3077,71 +3091,101 @@ class ContactController {
         if ($activeCount <= 1) {
             // Only this sale owns this Person. Release to Databank!
             $defaultStageId = $this->getStageIdFromSlug('chua_xac_dinh', $tid);
-            
-            $stmtRelease = $this->db->prepare("
-                UPDATE contacts 
-                SET owner_id = NULL, 
-                    pipeline_status = 'chua_xac_dinh', 
-                    stage_id = ?, 
-                    status = 'lead',
-                    security_expires_at = NULL,
-                    parallel_assigned = 0,
-                    deleted_at = NOW()
-                WHERE id = ? AND tenant_id = ?
-            ");
-            $stmtRelease->execute([$defaultStageId, $id, $tid]);
 
-            // Also update persons to be public
-            $stmtPerson = $this->db->prepare("UPDATE persons SET is_public = 1, released_to_kho_at = NOW(), deleted_from_databank = 0 WHERE id = ?");
-            $stmtPerson->execute([$personId]);
-
-            // Also update leads to set assigned_to = NULL
-            if ($personId) {
-                $stmtLeadUpdate = $this->db->prepare("UPDATE leads SET assigned_to = NULL, last_assigned_at = NULL WHERE person_id = ?");
-                $stmtLeadUpdate->execute([$personId]);
-
-                // Xóa toàn bộ thông tin công việc (activities) và ghi chú (notes) khi trả về Databank
-                $stmtDelNotes = $this->db->prepare("DELETE FROM notes WHERE entity_type = 'contact' AND entity_id IN (SELECT id FROM contacts WHERE person_id = ?)");
-                $stmtDelNotes->execute([$personId]);
-
-                $stmtDelActs = $this->db->prepare("DELETE FROM activities WHERE related_type = 'contact' AND related_id IN (SELECT id FROM contacts WHERE person_id = ?)");
-                $stmtDelActs->execute([$personId]);
-
-                $stmtClearNotes = $this->db->prepare("UPDATE contacts SET notes = NULL WHERE person_id = ?");
-                $stmtClearNotes->execute([$personId]);
-
-                // Log distribution log for releasing to databank
-                $stmtLog = $this->db->prepare("INSERT INTO distribution_logs (lead_id, assigned_to, round_id, status, message) VALUES (?, ?, ?, ?, ?)");
-                $stmtLog->execute([$leadId, null, null, 'released_to_kho', 'Tư vấn viên chủ động trả về Databank chung (do chỉ có 1 Sale chăm sóc)']);
+            $startedTx = !$this->db->inTransaction();
+            if ($startedTx) {
+                $this->db->beginTransaction();
             }
+            try {
+                $stmtRelease = $this->db->prepare("
+                    UPDATE contacts 
+                    SET owner_id = NULL, 
+                        pipeline_status = 'chua_xac_dinh', 
+                        stage_id = ?, 
+                        status = 'lead',
+                        security_expires_at = NULL,
+                        parallel_assigned = 0,
+                        deleted_at = NOW()
+                    WHERE id = ? AND tenant_id = ?
+                ");
+                $stmtRelease->execute([$defaultStageId, $id, $tid]);
 
-            // Log activity & interaction
-            logActivity($this->db, $tid, $auth['user_id'], 'RELEASE_TO_DATABANK', 'contact', $id, "Trả khách hàng về Databank chung (do chỉ có 1 Sale chăm sóc)");
-            logInteraction($this->db, $tid, $auth['user_id'], 'system', 'Đã trả khách hàng về Databank chung', null, 'contact', $id);
+                // Also update persons to be public
+                $stmtPerson = $this->db->prepare("UPDATE persons SET is_public = 1, released_to_kho_at = NOW(), deleted_from_databank = 0 WHERE id = ?");
+                $stmtPerson->execute([$personId]);
+
+                // Also update leads to set assigned_to = NULL
+                if ($personId) {
+                    $stmtLeadUpdate = $this->db->prepare("UPDATE leads SET assigned_to = NULL, last_assigned_at = NULL WHERE person_id = ?");
+                    $stmtLeadUpdate->execute([$personId]);
+
+                    // Xóa mềm toàn bộ thông tin công việc (activities) và ghi chú (notes) khi trả về Databank
+                    $stmtDelNotes = $this->db->prepare("UPDATE notes SET deleted_at = NOW() WHERE entity_type = 'contact' AND entity_id IN (SELECT id FROM contacts WHERE person_id = ?) AND deleted_at IS NULL");
+                    $stmtDelNotes->execute([$personId]);
+
+                    $stmtDelActs = $this->db->prepare("UPDATE activities SET deleted_at = NOW() WHERE related_type = 'contact' AND related_id IN (SELECT id FROM contacts WHERE person_id = ?) AND deleted_at IS NULL");
+                    $stmtDelActs->execute([$personId]);
+
+                    $stmtClearNotes = $this->db->prepare("UPDATE contacts SET notes = NULL WHERE person_id = ?");
+                    $stmtClearNotes->execute([$personId]);
+
+                    // Log distribution log for releasing to databank
+                    $stmtLog = $this->db->prepare("INSERT INTO distribution_logs (lead_id, assigned_to, round_id, status, message) VALUES (?, ?, ?, ?, ?)");
+                    $stmtLog->execute([$leadId, null, null, 'released_to_kho', 'Tư vấn viên chủ động trả về Databank chung (do chỉ có 1 Sale chăm sóc)']);
+                }
+
+                // Log activity & interaction
+                logActivity($this->db, $tid, $auth['user_id'], 'RELEASE_TO_DATABANK', 'contact', $id, "Trả khách hàng về Databank chung (do chỉ có 1 Sale chăm sóc)");
+                logInteraction($this->db, $tid, $auth['user_id'], 'system', 'Đã trả khách hàng về Databank chung', null, 'contact', $id);
+
+                if ($startedTx) {
+                    $this->db->commit();
+                }
+            } catch (\Throwable $e) {
+                if ($startedTx && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+                throw $e;
+            }
 
             respond(200, ['action' => 'released'], 'Đã trả khách hàng về Databank chung thành công!');
         } else {
             // 2 or more sales own this Person in parallel.
-            $stmtDelete = $this->db->prepare("UPDATE contacts SET deleted_at = NOW(), notes = NULL WHERE id = ? AND tenant_id = ?");
-            $stmtDelete->execute([$id, $tid]);
-            
-            $this->restorePersonPublicStatus($id, $tid);
-
-            // Xóa thông tin công việc (activities) và ghi chú (notes) liên quan đến contact bị xóa này
-            $stmtDelNotes = $this->db->prepare("DELETE FROM notes WHERE entity_type = 'contact' AND entity_id = ?");
-            $stmtDelNotes->execute([$id]);
-
-            $stmtDelActs = $this->db->prepare("DELETE FROM activities WHERE related_type = 'contact' AND related_id = ?");
-            $stmtDelActs->execute([$id]);
-
-            // Log distribution log for removing parallel contact
-            if ($leadId && $consultantId) {
-                $stmtLog = $this->db->prepare("INSERT INTO distribution_logs (lead_id, assigned_to, round_id, status, message) VALUES (?, ?, ?, ?, ?)");
-                $stmtLog->execute([$leadId, $consultantId, null, 'released_to_kho', 'Tư vấn viên xóa khỏi danh sách cá nhân (trả về Databank song song)']);
+            $startedTx = !$this->db->inTransaction();
+            if ($startedTx) {
+                $this->db->beginTransaction();
             }
+            try {
+                $stmtDelete = $this->db->prepare("UPDATE contacts SET deleted_at = NOW(), notes = NULL WHERE id = ? AND tenant_id = ?");
+                $stmtDelete->execute([$id, $tid]);
+                
+                $this->restorePersonPublicStatus($id, $tid);
 
-            // Log activity & interaction
-            logActivity($this->db, $tid, $auth['user_id'], 'REMOVE_PARALLEL_CONTACT', 'contact', $id, "Xóa liên hệ khỏi danh sách cá nhân (do trả về Databank song song)");
+                // Xóa mềm thông tin công việc (activities) và ghi chú (notes) liên quan đến contact bị xóa này
+                $stmtDelNotes = $this->db->prepare("UPDATE notes SET deleted_at = NOW() WHERE entity_type = 'contact' AND entity_id = ? AND deleted_at IS NULL");
+                $stmtDelNotes->execute([$id]);
+
+                $stmtDelActs = $this->db->prepare("UPDATE activities SET deleted_at = NOW() WHERE related_type = 'contact' AND related_id = ? AND deleted_at IS NULL");
+                $stmtDelActs->execute([$id]);
+
+                // Log distribution log for removing parallel contact
+                if ($leadId && $consultantId) {
+                    $stmtLog = $this->db->prepare("INSERT INTO distribution_logs (lead_id, assigned_to, round_id, status, message) VALUES (?, ?, ?, ?, ?)");
+                    $stmtLog->execute([$leadId, $consultantId, null, 'released_to_kho', 'Tư vấn viên xóa khỏi danh sách cá nhân (trả về Databank song song)']);
+                }
+
+                // Log activity & interaction
+                logActivity($this->db, $tid, $auth['user_id'], 'REMOVE_PARALLEL_CONTACT', 'contact', $id, "Xóa liên hệ khỏi danh sách cá nhân (do trả về Databank song song)");
+
+                if ($startedTx) {
+                    $this->db->commit();
+                }
+            } catch (\Throwable $e) {
+                if ($startedTx && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+                throw $e;
+            }
             
             respond(200, ['action' => 'deleted'], 'Đã xóa khách hàng khỏi danh sách chăm sóc của bạn thành công!');
         }
@@ -3348,7 +3392,7 @@ class ContactController {
         // 1. Fetch all distinct person_ids linked to these contactIds
         $stmt = $this->db->prepare("SELECT DISTINCT person_id FROM contacts WHERE id IN ($placeholders) AND tenant_id = ?");
         $stmt->execute(array_merge($contactIds, [$tenantId]));
-        $personIds = array_filter(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)));
+        $personIds = array_values(array_unique(array_filter(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)))));
         if (empty($personIds)) return;
         
         $inPeople = implode(',', array_fill(0, count($personIds), '?'));
@@ -4201,16 +4245,17 @@ class ContactController {
 
         // Bắn thông báo (Notifications)
         $notifyUserIds = [];
+        $currentUid = (int)($auth['user_id'] ?? 0);
         if (!empty($body['notify_user_ids']) && is_array($body['notify_user_ids'])) {
             foreach ($body['notify_user_ids'] as $uid) {
                 $uidInt = (int)$uid;
-                if ($uidInt > 0 && !in_array($uidInt, $notifyUserIds, true)) {
+                if ($uidInt > 0 && $uidInt !== $currentUid && !in_array($uidInt, $notifyUserIds, true)) {
                     $notifyUserIds[] = $uidInt;
                 }
             }
         }
         $ownerId = (int)($contact['owner_id'] ?? 0);
-        if ($ownerId > 0 && $ownerId !== (int)$auth['user_id'] && !in_array($ownerId, $notifyUserIds, true)) {
+        if ($ownerId > 0 && $ownerId !== $currentUid && !in_array($ownerId, $notifyUserIds, true)) {
             $notifyUserIds[] = $ownerId;
         }
 
@@ -4221,7 +4266,7 @@ class ContactController {
             $nuRow = $stmtNu->fetch(PDO::FETCH_ASSOC);
             if ($nuRow && (int)$nuRow['id'] > 0) {
                 $nuId = (int)$nuRow['id'];
-                if ($nuId !== (int)$auth['user_id'] && !in_array($nuId, $notifyUserIds, true)) {
+                if ($nuId !== $currentUid && !in_array($nuId, $notifyUserIds, true)) {
                     $notifyUserIds[] = $nuId;
                 }
             }
@@ -4281,6 +4326,7 @@ class ContactController {
                 ");
 
                 foreach ($notifyUserIds as $targetUid) {
+                    if ((int)$targetUid === $currentUid) continue;
                     $stmtInsertNotif->execute([
                         $targetUid,
                         $auth['tenant_id'],
@@ -4402,6 +4448,7 @@ class ContactController {
     private function ensurePresenceTableExists(): void {
         static $checked = false;
         if ($checked) return;
+        if ($this->db->inTransaction()) return;
         try {
             $this->db->exec("
                 CREATE TABLE IF NOT EXISTS contact_presence (
@@ -4429,7 +4476,8 @@ class ContactController {
         }
 
         $body = getBody();
-        $ownerId = (int)($body['owner_id'] ?? $body['user_id'] ?? $body['consultant_id'] ?? 0);
+        $ownerId = (int)($body['owner_id'] ?? $body['assigned_to'] ?? $body['user_id'] ?? $body['consultant_id'] ?? 0);
+        $reason = trim((string)($body['reason'] ?? $body['note'] ?? ''));
         if ($ownerId <= 0) {
             respond(422, null, 'Vui lòng chỉ định nhân sự phụ trách hợp lệ', false);
         }
@@ -4472,9 +4520,29 @@ class ContactController {
         $stmt = $this->db->prepare("UPDATE contacts SET owner_id = ?, updated_at = NOW() WHERE id = ? AND tenant_id = ?");
         $stmt->execute([$ownerId, $contactId, $auth['tenant_id']]);
 
-        logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'reassign', 'Điều chuyển phụ trách', "Điều chuyển khách hàng cho nhân sự {$targetUser['full_name']}", 'contact', $contactId);
+        $logDesc = "Điều chuyển khách hàng cho nhân sự {$targetUser['full_name']}" . ($reason !== '' ? " (Lý do: {$reason})" : "");
+        logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'reassign', 'Điều chuyển phụ trách', $logDesc, 'contact', $contactId);
 
-        respond(200, ['contact_id' => $contactId, 'owner_id' => $ownerId], 'Điều chuyển nhân sự phụ trách thành công');
+        if ($ownerId > 0 && $ownerId !== (int)$auth['user_id']) {
+            try {
+                require_once __DIR__ . '/../NotificationService.php';
+                $actorName = $auth['full_name'] ?? $auth['name'] ?? 'Quản lý';
+                $contactFullName = $contact['full_name'] ?? 'Khách hàng';
+                $notifTitle = "Phân bổ khách hàng mới";
+                $notifBody = "{$actorName} vừa phân bổ bạn phụ trách khách hàng \"{$contactFullName}\"" . ($reason !== '' ? " (Lý do: {$reason})" : "");
+                $notifLink = "/contacts?open_contact_id={$contactId}";
+                $stmtNotif = $this->db->prepare("
+                    INSERT INTO notifications (user_id, tenant_id, title, body, type, link, is_read, created_at)
+                    VALUES (?, ?, ?, ?, 'contact', ?, 0, NOW())
+                ");
+                $stmtNotif->execute([$ownerId, $auth['tenant_id'], $notifTitle, $notifBody, $notifLink]);
+                NotificationService::pruneUserNotifications($this->db, $ownerId, 200);
+            } catch (\Throwable $notifErr) {
+                error_log("assignContact notification error: " . $notifErr->getMessage());
+            }
+        }
+
+        respond(200, ['contact_id' => $contactId, 'owner_id' => $ownerId, 'assigned_to' => $ownerId, 'reason' => $reason], 'Điều chuyển nhân sự phụ trách thành công');
     }
 
     public function addNote(array $auth, int $contactId): void {
@@ -4513,12 +4581,12 @@ class ContactController {
         $filterInput = array_merge($_GET, is_array($b['filters'] ?? null) ? $b['filters'] : [], $b);
 
         $listMode = strtolower(trim((string)($b['list_mode'] ?? (!empty($b['list_id']) ? 'existing' : 'new'))));
-        $listId = (int)($b['list_id'] ?? 0);
+        $listId = trim((string)($b['list_id'] ?? ''));
         $listName = trim((string)($b['list_name'] ?? $b['name'] ?? ''));
         $listDesc = trim((string)($b['description'] ?? 'Đồng bộ từ bộ lọc Khách hàng & Lead (/contacts)'));
         $onlyWithEmail = !empty($b['only_with_email']) && in_array(strtolower((string)$b['only_with_email']), ['1', 'true', 'yes'], true);
 
-        if ($listMode === 'existing' && $listId <= 0) {
+        if ($listMode === 'existing' && ($listId === '' || $listId === '0')) {
             respond(422, null, 'Vui lòng chọn danh sách tĩnh có sẵn (list_id)', false);
         }
         if ($listMode === 'new' && $listName === '') {
@@ -4665,12 +4733,20 @@ class ContactController {
                 }
             }
             if ($status && !$isGlobalPipelineSearch) {
-                if ($statusOp === 'not_in') {
-                    $where[] = 'c.status != ?';
-                } else {
-                    $where[] = 'c.status = ?';
+                $validEntityStatuses = ['lead', 'customer', 'qualified', 'churned', 'prospect', 'opportunity', 'inactive', 'active'];
+                if (in_array(strtolower(trim((string)$status)), $validEntityStatuses, true)) {
+                    if ($statusOp === 'not_in') {
+                        $where[] = '(c.status != ? OR c.status IS NULL)';
+                    } else {
+                        $where[] = 'c.status = ?';
+                    }
+                    $params[] = $status;
+                } elseif (empty($filterInput['stages']) && empty($filterInput['stage_id']) && empty($filterInput['stage_ids'])) {
+                    $filterInput['stages'] = $status;
+                    if ($statusOp !== '') {
+                        $filterInput['stage_op'] = $statusOp;
+                    }
                 }
-                $params[] = $status;
             }
 
             if ($dataType !== '') {
@@ -4683,10 +4759,10 @@ class ContactController {
                     )
                 )";
                 $personalCond = "(
-                    c.source IN ('ca_nhan', 'gioi_thieu', 'databank', 'referral', 'ref')
-                    OR c.source LIKE 'ca_nhan%'
-                    OR c.source = 'Nhân viên kinh doanh tự tìm kiếm'
-                    OR (c.created_by = c.owner_id AND c.created_by NOT IN (1, 100009))
+                    COALESCE(c.source, '') IN ('ca_nhan', 'gioi_thieu', 'databank', 'referral', 'ref')
+                    OR COALESCE(c.source, '') LIKE 'ca_nhan%'
+                    OR COALESCE(c.source, '') = 'Nhân viên kinh doanh tự tìm kiếm'
+                    OR (c.created_by IS NOT NULL AND c.owner_id IS NOT NULL AND c.created_by = c.owner_id AND c.created_by NOT IN (1, 100009))
                 )";
                 if ($dataType === 'error_ticket') {
                     $where[] = $errorCond;
@@ -4710,10 +4786,13 @@ class ContactController {
             }
 
             $stageSlug = !empty($filterInput['stage_slug']) ? trim((string)$filterInput['stage_slug']) : '';
+            $hasAcademicFilter = !empty($filterInput['admission_from']) || !empty($filterInput['admission_to'])
+                || (($filterInput['date_field'] ?? '') === 'admission_date' && (!empty($filterInput['from']) || !empty($filterInput['to']) || !empty($filterInput['from_date']) || !empty($filterInput['to_date'])))
+                || !empty($filterInput['study_status']) || !empty($filterInput['student_code']) || !empty($filterInput['expected_intake']);
             if (!$isGlobalPipelineSearch) {
                 switch ($segment) {
                     case 'tiem_nang':
-                        if (empty($stage) && empty($stageSlug) && empty($filterInput['stage_id']) && empty($filterInput['stages']) && empty($filterInput['stage_ids'])) {
+                        if (empty($stage) && empty($stageSlug) && empty($filterInput['stage_id']) && empty($filterInput['stages']) && empty($filterInput['stage_ids']) && !$hasAcademicFilter) {
                             $where[] = "(c.stage_id != 44 AND (c.pipeline_status IS NULL OR c.pipeline_status NOT IN ('enrolled', 'hoc_vien', 'won')) AND c.status != 'customer')";
                         }
                         break;
@@ -4830,18 +4909,27 @@ class ContactController {
         ensureAllCrmContactsSyncedForFilter($this->db, $tid);
 
         // Resolve or create the static list in `lists`
-        if ($listMode === 'existing' && $listId > 0) {
+        if ($listMode === 'existing' && $listId !== '' && $listId !== '0') {
             $stmtList = $this->db->prepare("SELECT id, name FROM lists WHERE id = ? AND workspace_id = ? LIMIT 1");
             $stmtList->execute([$listId, $tid]);
             $existingList = $stmtList->fetch(PDO::FETCH_ASSOC);
             if (!$existingList) {
                 respond(404, null, 'Không tìm thấy danh sách tĩnh đã chọn', false);
             }
+            $listId = (string)$existingList['id'];
             $listName = (string)$existingList['name'];
         } else {
-            $stmtInsList = $this->db->prepare("INSERT INTO lists (workspace_id, name, description, subscriber_count, phone_count, created_at) VALUES (?, ?, ?, 0, 0, NOW())");
-            $stmtInsList->execute([$tid, $listName, $listDesc]);
-            $listId = (int)$this->db->lastInsertId();
+            $newListId = sprintf(
+                '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+                mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+                mt_rand(0, 0xffff),
+                mt_rand(0, 0x0fff) | 0x4000,
+                mt_rand(0, 0x3fff) | 0x8000,
+                mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+            );
+            $stmtInsList = $this->db->prepare("INSERT INTO lists (id, workspace_id, name, type, source, subscriber_count, phone_count, created_by, created_at) VALUES (?, ?, ?, 'static', 'crm_filter', 0, 0, ?, NOW())");
+            $stmtInsList->execute([$newListId, $tid, $listName, (int)($auth['user_id'] ?? 0)]);
+            $listId = $newListId;
         }
 
         $addedCount = 0;
@@ -4853,7 +4941,10 @@ class ContactController {
                 $stmtSub->execute(array_merge([$tid], $cidChunk));
                 $foundSubIds = $stmtSub->fetchAll(PDO::FETCH_COLUMN) ?: [];
                 foreach ($foundSubIds as $sid) {
-                    $subscriberIds[(int)$sid] = (int)$sid;
+                    $sidKey = (string)$sid;
+                    if ($sidKey !== '') {
+                        $subscriberIds[$sidKey] = $sid;
+                    }
                 }
             }
 
@@ -4901,6 +4992,49 @@ class ContactController {
             'subscriber_count' => $subCount,
             'phone_count' => $phoneCount,
         ], "Đã đồng bộ {$totalMatched} khách hàng vào danh sách tĩnh \"{$listName}\"");
+    }
+
+    public function manageContactTags(array $auth, int $id, string $method = 'POST'): void {
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $b = getBody();
+        $tagName = trim((string)($b['name'] ?? $b['tag'] ?? $_GET['name'] ?? $_GET['tag'] ?? ''));
+
+        $stmt = $this->db->prepare("SELECT tags FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL LIMIT 1");
+        $stmt->execute([$id, $tid]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            respond(404, null, 'Không tìm thấy khách hàng', false);
+        }
+
+        $tags = [];
+        if (!empty($row['tags'])) {
+            $decoded = json_decode((string)$row['tags'], true);
+            if (is_array($decoded)) {
+                $tags = array_values(array_filter(array_map(fn($t) => is_array($t) ? trim((string)($t['name'] ?? '')) : trim((string)$t), $decoded)));
+            } else {
+                $tags = array_values(array_filter(array_map('trim', explode(',', (string)$row['tags']))));
+            }
+        }
+
+        if ($method === 'DELETE') {
+            if ($tagName !== '') {
+                $tags = array_values(array_filter($tags, fn($t) => mb_strtolower($t) !== mb_strtolower($tagName)));
+            }
+        } else {
+            if ($tagName !== '' && !in_array($tagName, $tags, true)) {
+                $tags[] = $tagName;
+                try {
+                    $stmtTag = $this->db->prepare("INSERT IGNORE INTO tags (tenant_id, name, color) VALUES (?, ?, '#BD1D2D')");
+                    $stmtTag->execute([$tid, $tagName]);
+                } catch (\Throwable $eTag) {}
+            }
+        }
+
+        $tags = array_values(array_unique($tags));
+        $stmtUpd = $this->db->prepare("UPDATE contacts SET tags = ? WHERE id = ? AND tenant_id = ?");
+        $stmtUpd->execute([json_encode($tags, JSON_UNESCAPED_UNICODE), $id, $tid]);
+
+        respond(200, ['tags' => $tags], 'Cập nhật nhãn thành công');
     }
 }
 

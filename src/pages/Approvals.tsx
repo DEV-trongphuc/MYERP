@@ -602,15 +602,34 @@ export default function Approvals() {
 
   // Auto-open requested approval from URL parameters or global custom event
   useEffect(() => {
+    if (!location.pathname.startsWith('/approvals')) return;
     const params = new URLSearchParams(location.search || window.location.search);
     const hcId = params.get('highlight_comment_id') || params.get('comment_id');
     if (hcId) {
       setHighlightedCommentId(hcId);
     }
     const openId = params.get('open_id') || params.get('id');
-    const openType = params.get('open_type') || params.get('type');
+    const tabParam = (params.get('tab') || '').toLowerCase();
+    const tabTypeMap: Record<string, string> = {
+      leave: 'leave',
+      overtime: 'leave',
+      advance: 'advance',
+      advances: 'advance',
+      attendance: 'attendance_bulk',
+      kpi: 'kpi',
+      expenses: 'expense',
+      expense: 'expense',
+      po: 'po'
+    };
+    const rawOpenType = params.get('open_type') || params.get('type') || tabTypeMap[tabParam] || null;
+    const openType = rawOpenType === 'overtime' ? 'leave' : rawOpenType;
     const openStatus = params.get('open_status');
     const actionParam = params.get('action');
+
+    if (tabParam === 'my_requests' && !hasAutoSwitchedTabRef.current) {
+      setActiveTab('my_requests');
+      hasAutoSwitchedTabRef.current = true;
+    }
 
     if (openId && !isNaN(Number(openId)) && Number(openId) > 0) {
       useUIStore.getState().closeApprovalDrawer();
@@ -764,6 +783,7 @@ export default function Approvals() {
       if (customEvent.detail) {
         useUIStore.getState().closeApprovalDrawer();
         const { id, type, raw, mode } = customEvent.detail;
+        const normalizedType = type === 'overtime' ? 'leave' : type;
         if (raw && (mode === 'edit' || mode === 'duplicate')) {
           handleEditRequest(raw, mode === 'duplicate');
           pendingOpenRef.current = null;
@@ -771,14 +791,18 @@ export default function Approvals() {
           setSelectedTimelineItem(raw);
           pendingOpenRef.current = null;
         } else if (id) {
-          pendingOpenRef.current = { id: Number(id), type };
+          pendingOpenRef.current = { id: Number(id), type: normalizedType };
           loadData();
         }
       }
     };
 
     window.addEventListener('open-approval-item', handleCustomOpen);
-    return () => window.removeEventListener('open-approval-item', handleCustomOpen);
+    window.addEventListener('open-approval-drawer', handleCustomOpen);
+    return () => {
+      window.removeEventListener('open-approval-item', handleCustomOpen);
+      window.removeEventListener('open-approval-drawer', handleCustomOpen);
+    };
   }, [location.search, pendingList.length, myRequestsList.length, allList.length, clearApprovalUrlParams]);
 
   // Fast O(1) user lookup maps for optimal table and drawer rendering
@@ -6151,101 +6175,108 @@ export default function Approvals() {
         gap: isMobile ? '8px' : '10px',
         background: 'var(--color-surface, #ffffff)',
         border: '1px solid var(--color-border)',
-        borderRadius: isMobile ? '12px' : '12px',
+        borderRadius: '12px',
         padding: isMobile ? '8px 10px' : '6px 10px',
         marginBottom: '0.65rem',
         boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
         position: 'relative',
-        flexWrap: isMobile ? 'wrap' : 'nowrap',
+        flexWrap: 'wrap',
         overflow: 'visible'
       }}>
-        {/* Left: View Mode Tabs (Desktop) */}
-        {!isMobile && (
-          <div style={{
+        {/* Left: View Mode Tabs (Mobile, Tablet & Desktop) */}
+        <div
+          className="segmented-tab-container"
+          style={{
             display: 'flex',
             gap: '2px',
             background: 'var(--color-bg-secondary, #f1f5f9)',
             padding: '2px',
             borderRadius: '8px',
             position: 'relative',
-            flexShrink: 0
-          }}>
-            {[
-              { id: 'all', label: t('Tất cả đề xuất'), icon: FileText, count: allList.length, countBg: activeTab === 'all' ? 'var(--color-bg-secondary, #f1f5f9)' : 'rgba(0,0,0,0.06)', countColor: 'var(--color-text)' },
-              { id: 'pending', label: t('Chờ tôi duyệt'), icon: Activity, count: pendingList.length, countBg: '#ef4444', countColor: 'white' },
-              { id: 'my_requests', label: t('Yêu cầu của tôi'), icon: User, count: (myRequestsList.length + draftApprovalItems.length), countBg: activeTab === 'my_requests' ? 'var(--color-bg-secondary, #f1f5f9)' : 'rgba(0,0,0,0.06)', countColor: 'var(--color-text)' },
-              { id: 'following', label: t('Được gắn theo dõi'), icon: Eye, count: followingList.length, countBg: '#3b82f6', countColor: 'white' }
-            ].map(tab => {
-              const isActive = activeTab === tab.id;
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => handleTabChange(tab.id as any)}
-                  style={{
-                    position: 'relative',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    padding: '4px 9px',
-                    borderRadius: '6px',
-                    fontWeight: isActive ? 700 : 500,
-                    fontSize: '0.78rem',
-                    background: 'transparent',
-                    color: isActive ? 'var(--color-text)' : 'var(--color-text-muted)',
-                    border: 'none',
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                    transition: 'color 0.15s ease',
-                    whiteSpace: 'nowrap'
-                  }}
-                >
-                  {isActive && (
-                    <motion.div
-                      layoutId="activeApprovalTab"
-                      transition={{ type: 'spring', stiffness: 450, damping: 35 }}
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        background: 'var(--color-surface, #ffffff)',
-                        borderRadius: '6px',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)',
-                        zIndex: 0
-                      }}
-                    />
+            flexShrink: 0,
+            width: isMobile ? '100%' : 'auto',
+            maxWidth: '100%',
+            overflowX: 'auto'
+          }}
+        >
+          {[
+            { id: 'all', label: isMobile ? t('Tất cả') : t('Tất cả đề xuất'), icon: FileText, count: allList.length, countBg: activeTab === 'all' ? 'var(--color-bg-secondary, #f1f5f9)' : 'rgba(0,0,0,0.06)', countColor: 'var(--color-text)' },
+            { id: 'pending', label: isMobile ? t('Chờ duyệt') : t('Chờ tôi duyệt'), icon: Activity, count: pendingList.length, countBg: '#ef4444', countColor: 'white' },
+            { id: 'my_requests', label: isMobile ? t('Của tôi') : t('Yêu cầu của tôi'), icon: User, count: (myRequestsList.length + draftApprovalItems.length), countBg: activeTab === 'my_requests' ? 'var(--color-bg-secondary, #f1f5f9)' : 'rgba(0,0,0,0.06)', countColor: 'var(--color-text)' },
+            { id: 'following', label: isMobile ? t('Theo dõi') : t('Được gắn theo dõi'), icon: Eye, count: followingList.length, countBg: '#3b82f6', countColor: 'white' }
+          ].map(tab => {
+            const isActive = activeTab === tab.id;
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => handleTabChange(tab.id as any)}
+                style={{
+                  position: 'relative',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flex: isMobile ? '1 0 auto' : '0 0 auto',
+                  gap: '5px',
+                  padding: isMobile ? '5px 8px' : '4px 9px',
+                  borderRadius: '6px',
+                  fontWeight: isActive ? 700 : 500,
+                  fontSize: isMobile ? '0.74rem' : '0.78rem',
+                  background: 'transparent',
+                  color: isActive ? 'var(--color-text)' : 'var(--color-text-muted)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  transition: 'color 0.15s ease',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                {isActive && (
+                  <motion.div
+                    layoutId="activeApprovalTab"
+                    transition={{ type: 'spring', stiffness: 450, damping: 35 }}
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      background: 'var(--color-surface, #ffffff)',
+                      borderRadius: '6px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)',
+                      zIndex: 0
+                    }}
+                  />
+                )}
+                <span style={{ position: 'relative', zIndex: 1, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                  <Icon size={13} />
+                  <span>{tab.label}</span>
+                  {tab.count > 0 && (
+                    <span style={{
+                      fontSize: '0.66rem',
+                      background: tab.countBg,
+                      color: tab.countColor,
+                      padding: '1px 5px',
+                      borderRadius: 99,
+                      fontWeight: 700,
+                      lineHeight: 1.2
+                    }}>
+                      {tab.count}
+                    </span>
                   )}
-                  <span style={{ position: 'relative', zIndex: 1, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                    <Icon size={13} />
-                    <span>{tab.label}</span>
-                    {tab.count > 0 && (
-                      <span style={{
-                        fontSize: '0.66rem',
-                        background: tab.countBg,
-                        color: tab.countColor,
-                        padding: '1px 5px',
-                        borderRadius: 99,
-                        fontWeight: 700,
-                        lineHeight: 1.2
-                      }}>
-                        {tab.count}
-                      </span>
-                    )}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+                </span>
+              </button>
+            );
+          })}
+        </div>
 
         {/* Right: Search Field & Status Filter */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
           gap: '6px',
-          flex: isMobile ? 1 : '0 1 auto',
+          flex: isMobile ? '1 1 100%' : '1 1 auto',
           justifyContent: isMobile ? 'stretch' : 'flex-end',
           width: isMobile ? '100%' : 'auto',
+          flexWrap: 'wrap',
           flexShrink: 0
         }}>
           {/* Search Field */}
@@ -7252,7 +7283,7 @@ export default function Approvals() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 2147483647
+          zIndex: 2147483646
         }}>
           <div className="card" style={{ width: '450px', padding: '1.5rem', background: 'var(--color-surface)' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '1rem', color: '#ef4444' }}>
@@ -7382,7 +7413,7 @@ export default function Approvals() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              zIndex: 2147483647,
+              zIndex: 2147483646,
               padding: isMobile ? '12px' : '1.5rem'
             }}
             onClick={() => setApproveConfirmOpen(false)}
@@ -8112,7 +8143,7 @@ export default function Approvals() {
                   style={{
                     position: 'fixed',
                     inset: 0,
-                    zIndex: 2147483640,
+                    zIndex: 2147483620,
                     background: 'rgba(0, 0, 0, 0.45)',
                     backdropFilter: 'blur(8px)',
                     WebkitBackdropFilter: 'blur(8px)'
@@ -8120,7 +8151,7 @@ export default function Approvals() {
                 />
 
                 <motion.div
-                  className="drawer-sheet"
+                  className="drawer-sheet drawer-panel"
                   initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
                   animate={{ y: 0, x: 0, opacity: 1 }}
                   exit={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
@@ -8139,7 +8170,7 @@ export default function Approvals() {
                     borderTopLeftRadius: 0,
                     borderBottomLeftRadius: 0,
                     overflow: 'hidden',
-                    zIndex: 2147483645
+                    zIndex: 2147483625
                   }}
                 >
                   
@@ -14602,7 +14633,7 @@ export default function Approvals() {
               onSaveDraft={() => handleSaveCurrentDraft(true)}
               onDiscard={handleDiscardExit}
               onContinue={() => setShowExitConfirmModal(false)}
-              zIndex={2147483647}
+              zIndex={2147483646}
             />
           </>
         );
@@ -14949,7 +14980,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       return false;
     }
 
-    if (item.type === 'leave' || item.type === 'advance') {
+    const isLeaveLikeType = ['leave', 'wfh', 'ot', 'late_early', 'remote_work', 'overtime'].includes(String(item.type || '').toLowerCase());
+    if (isLeaveLikeType || item.type === 'advance') {
       const s1 = String(detail?.status_level_1 || (item as any)?.status_level_1 || 'pending').toLowerCase();
       const s2 = String(detail?.status_level_2 || (item as any)?.status_level_2 || 'pending').toLowerCase();
 
@@ -15013,10 +15045,15 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
   const [detailTab, setDetailTab] = useState<'comments' | 'history'>('comments');
 
   const getCommentsEndpoint = (type: string, id: number) => {
-    switch (type) {
+    switch (String(type || '').toLowerCase()) {
       case 'expense':
         return `/expenses/${id}/comments`;
       case 'leave':
+      case 'wfh':
+      case 'ot':
+      case 'late_early':
+      case 'remote_work':
+      case 'overtime':
         return `/hrm/leaves/${id}/comments`;
       case 'advance':
         return `/hrm/advances/${id}/comments`;
@@ -15208,7 +15245,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         setLoading(true);
       }
       try {
-        if (item.type === 'leave') {
+        if (['leave', 'wfh', 'ot', 'late_early', 'remote_work', 'overtime'].includes(String(item.type || '').toLowerCase())) {
           let foundObj: any = null;
           try {
             const res = await api.get(`/hrm/leaves/${item.id}`);
@@ -19647,7 +19684,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 2147483647,
+          zIndex: 2147483646,
           padding: '1rem'
         }} onClick={() => setReminderTargetUser(null)}>
           <div style={{
@@ -19759,13 +19796,14 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 background: 'rgba(0, 0, 0, 0.45)',
                 backdropFilter: 'blur(8px)',
                 WebkitBackdropFilter: 'blur(8px)',
-                zIndex: zIndex ? Math.min(zIndex, 2147483640) : 2147483640
-              }}
+                zIndex: (zIndex ? Math.min(zIndex, 2147483638) : 2147483625) - 5,
+                '--drawer-backdrop-z': (zIndex ? Math.min(zIndex, 2147483638) : 2147483625) - 5
+              } as React.CSSProperties}
             />
 
             {/* Drawer Sheet Container */}
             <motion.div 
-              className="drawer-sheet"
+              className="drawer-sheet drawer-panel"
               initial={isMobile ? { y: '100%', opacity: 0 } : { opacity: 0, x: '100%' }}
               animate={isMobile ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }}
               exit={isMobile ? { y: '60%', opacity: 0 } : { opacity: 0, x: '60%' }}
@@ -19781,9 +19819,10 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 display: 'flex',
                 flexDirection: 'column',
                 boxSizing: 'border-box',
-                zIndex: (zIndex ? Math.min(zIndex, 2147483645) : 2147483645),
+                zIndex: (zIndex ? Math.min(zIndex, 2147483638) : 2147483625),
+                '--drawer-panel-z': (zIndex ? Math.min(zIndex, 2147483638) : 2147483625),
                 overflow: 'hidden'
-              }} 
+              } as React.CSSProperties} 
               onClick={e => e.stopPropagation()}
             >
         
@@ -20300,7 +20339,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         onClose={() => setLightboxState(prev => ({ ...prev, isOpen: false }))}
         items={lightboxState.items}
         initialIndex={lightboxState.initialIndex}
-        zIndex={2147483647}
+        zIndex={2147483646}
       />
 
       <NoteDetailModal
@@ -20309,14 +20348,14 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         title={activeNoteModal?.title || t('Ghi chú / Mục đích sử dụng')}
         itemName={activeNoteModal?.itemName}
         notes={activeNoteModal?.notes || ''}
-        zIndex={2147483647}
+        zIndex={2147483646}
       />
 
       <QrImageModal
         isOpen={!!previewQrModalUrl}
         qrUrl={previewQrModalUrl}
         onClose={() => setPreviewQrModalUrl(null)}
-        zIndex={2147483647}
+        zIndex={2147483646}
       />
 
       <input 

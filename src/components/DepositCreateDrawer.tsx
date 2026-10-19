@@ -883,7 +883,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
   };
   const uploadInFlightRef = useRef(false);
 
-  const baseZIndex = zIndex || 2147483641;
+  const baseZIndex = Math.min(zIndex || 2147483620, 2147483625);
 
   const content = (
     <AnimatePresence>

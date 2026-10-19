@@ -404,7 +404,7 @@ export const WorkspaceTaskStatsModal: React.FC<WorkspaceTaskStatsModalProps> = (
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 2147483640,
+        zIndex: 2147483610,
         backgroundColor: 'rgba(0, 0, 0, 0.85)',
         backdropFilter: 'blur(16px)',
         WebkitBackdropFilter: 'blur(16px)',

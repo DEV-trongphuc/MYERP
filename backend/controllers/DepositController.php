@@ -3,9 +3,20 @@
 
 class DepositController {
     private PDO $db;
+    private static bool $schemaChecked = false;
 
     public function __construct(PDO $db) {
         $this->db = $db;
+        if (!self::$schemaChecked && !$this->db->inTransaction()) {
+            self::$schemaChecked = true;
+            try {
+                $col = $this->db->query("SHOW COLUMNS FROM deposits LIKE 'deleted_at'")->fetch();
+                if (!$col) {
+                    $this->db->exec("ALTER TABLE deposits ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL");
+                }
+            } catch (\Throwable $e) {
+            }
+        }
     }
 
     public function index(array $auth): void {
@@ -125,6 +136,11 @@ class DepositController {
         if (isset($_GET['id'])) {
             $sql .= " AND d.id = ?";
             $params[] = (int)$_GET['id'];
+        }
+
+        if (!empty($_GET['status'])) {
+            $sql .= " AND d.status = ?";
+            $params[] = $_GET['status'];
         }
 
         $sql .= " ORDER BY d.created_at DESC";
@@ -418,9 +434,9 @@ class DepositController {
                 $fields[] = "created_by = ?";
                 $params[] = (int)$b['created_by'];
             }
-            if (isset($b['notes'])) {
+            if (isset($b['notes']) || isset($b['note'])) {
                 $fields[] = "notes = ?";
-                $params[] = trim($b['notes']);
+                $params[] = trim($b['notes'] ?? $b['note']);
             }
             if (isset($b['currency'])) {
                 $fields[] = "currency = ?";
@@ -440,6 +456,12 @@ class DepositController {
                 $sqlUpd = "UPDATE deposits SET " . implode(', ', $fields) . " WHERE id = ?";
                 $stmtUpd = $this->db->prepare($sqlUpd);
                 $stmtUpd->execute($params);
+            }
+
+            $receiptOrUnc = !empty($b['unc_file_path']) ? trim($b['unc_file_path']) : (!empty($b['receipt_url']) ? trim($b['receipt_url']) : null);
+            if ($receiptOrUnc !== null) {
+                $stmtUnc = $this->db->prepare("UPDATE deposit_milestones SET unc_file_path = ? WHERE deposit_id = ? ORDER BY id ASC LIMIT 1");
+                $stmtUnc->execute([$receiptOrUnc, $id]);
             }
 
             // Also update contact full_name, phone, email if passed
@@ -470,8 +492,10 @@ class DepositController {
             $this->db->commit();
             logActivity($this->db, $tid, $auth['user_id'], 'UPDATE_DEPOSIT', 'deposit', $id, "Kế toán / Admin cập nhật thông tin đơn hàng #$id");
             respond(200, null, 'Cập nhật thông tin đơn hàng thành công');
-        } catch (Exception $e) {
-            $this->db->rollBack();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             respond(500, null, 'Lỗi cập nhật: ' . $e->getMessage(), false);
         }
     }
@@ -486,7 +510,7 @@ class DepositController {
         $unitCode  = trim($b['unit_code'] ?? '') ?: '—';
         $price     = (float)($b['price'] ?? 0);
         $expectedCommission = (float)($b['expected_commission'] ?? 0);
-        $notes     = trim($b['notes'] ?? '');
+        $notes     = trim($b['notes'] ?? $b['note'] ?? '');
         $milestones = $b['milestones'] ?? []; // Array of { name, amount }
 
         if ((!$contactId && !$companyId && !$supplierId) || !$projectId || $price <= 0) {
@@ -540,23 +564,25 @@ class DepositController {
                 }
             }
 
-            // Check if unit is already deposit-locked (not rejected/cancelled)
-            if ($unitCode !== '—') {
-                $stmtCheckUnit = $this->db->prepare("
+            // Guard against accidental rapid double-submission of the exact same deposit within 15 seconds
+            if ($contactId && $projectId && $price > 0) {
+                $stmtCheckDup = $this->db->prepare("
                     SELECT id 
                     FROM deposits 
-                    WHERE project_id = ? 
-                      AND unit_code = ? 
+                    WHERE contact_id = ? 
+                      AND project_id = ? 
+                      AND price = ?
+                      AND unit_code = ?
                       AND status NOT IN ('rejected', 'cancelled')
                       AND deleted_at IS NULL
+                      AND created_at >= DATE_SUB(NOW(), INTERVAL 15 SECOND)
                     LIMIT 1
                     FOR UPDATE
                 ");
-                $stmtCheckUnit->execute([$projectId, $unitCode]);
-                $existingDeposit = $stmtCheckUnit->fetch();
-                if ($existingDeposit) {
+                $stmtCheckDup->execute([$contactId, $projectId, $price, $unitCode]);
+                if ($stmtCheckDup->fetch()) {
                     $this->db->rollBack();
-                    respond(409, null, "Sản phẩm/căn hộ {$unitCode} đã được giữ chỗ hoặc đặt cọc bởi phiếu cọc khác. Vui lòng chọn sản phẩm khác.", false);
+                    respond(409, null, "Phiếu thanh toán này vừa được tạo cách đây vài giây. Vui lòng kiểm tra lại danh sách phiếu thanh toán.", false);
                 }
             }
 
@@ -602,13 +628,15 @@ class DepositController {
                 }
             }
 
-            // Tag accountant & create notification if assigned (prevent notifying self)
+            // Tag accountant if assigned (prevent notifying self)
+            $creatorName = $auth['full_name'] ?? $auth['name'] ?? '';
+            if (empty($creatorName)) {
+                $stmtU = $this->db->prepare("SELECT full_name FROM users WHERE id = ?");
+                $stmtU->execute([$auth['user_id']]);
+                $creatorName = $stmtU->fetchColumn() ?: 'Nhân viên';
+            }
             if ($accountantId > 0 && $accountantId !== (int)$auth['user_id']) {
                 try {
-                    $stmtU = $this->db->prepare("SELECT full_name FROM users WHERE id = ?");
-                    $stmtU->execute([$auth['user_id']]);
-                    $creatorName = $stmtU->fetchColumn() ?: 'Nhân viên';
-
                     $stmtAcct = $this->db->prepare("SELECT full_name, username FROM users WHERE id = ?");
                     $stmtAcct->execute([$accountantId]);
                     $acctUser = $stmtAcct->fetch();
@@ -620,7 +648,6 @@ class DepositController {
 
                         $entityType = $contactId ? 'contact' : ($companyId ? 'company' : ($supplierId ? 'supplier' : 'deposit'));
                         $entityId = $contactId ?: ($companyId ?: ($supplierId ?: $depositId));
-                        $targetLink = $contactId ? "/contacts/$contactId" : ($companyId ? "/companies" : ($supplierId ? "/suppliers" : "/deposits"));
 
                         // Insert note
                         $stmtNote = $this->db->prepare("
@@ -636,24 +663,28 @@ class DepositController {
                             VALUES (?, ?)
                         ");
                         $stmtMention->execute([$noteId, $accountantId]);
-
-                        // Send notification to accountant
-                        $stmtNotif = $this->db->prepare("
-                            INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
-                            VALUES (?, ?, 'Yêu cầu phê duyệt phiếu thanh toán', ?, 'deposit', ?)
-                        ");
-                        $acctTargetLink = "/deposits?open_id=$depositId";
-                        $stmtNotif->execute([
-                            $accountantId,
-                            $auth['tenant_id'],
-                            "Nhân viên $creatorName đã tạo phiếu thanh toán mới (#SO-$depositId) và chỉ định bạn phê duyệt.",
-                            $acctTargetLink
-                        ]);
                     }
                 } catch (Throwable $notifErr) {
                     // Suppress notification errors to avoid failing the deposit creation
-                    error_log("Failed to send accountant notification: " . $notifErr->getMessage());
+                    error_log("Failed to create accountant mention note: " . $notifErr->getMessage());
                 }
+            }
+
+            // Dispatch DEPOSIT_NEW notification to assigned accountant or fallback accountants/admins (excluding creator)
+            try {
+                require_once __DIR__ . '/../NotificationService.php';
+                $custNameForNotif = !empty($contact['full_name']) ? $contact['full_name'] : 'Khách hàng';
+                NotificationService::send($this->db, $auth['tenant_id'], 'DEPOSIT_NEW', [
+                    'approver_id' => $accountantId > 0 ? (int)$accountantId : 0,
+                    'user_id' => (int)$auth['user_id'],
+                    'user_name' => $creatorName,
+                    'deposit_id' => $depositId,
+                    'customer_name' => $custNameForNotif,
+                    'amount' => $price,
+                    'exclude_user_id' => (int)$auth['user_id']
+                ]);
+            } catch (Throwable $depNotifErr) {
+                error_log("Failed to dispatch DEPOSIT_NEW notification: " . $depNotifErr->getMessage());
             }
 
             // Tag participants & send notification
@@ -732,7 +763,7 @@ class DepositController {
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             ");
             $isFirstMilestone = true;
-            $initialUncPath = !empty($b['unc_file_path']) ? trim($b['unc_file_path']) : null;
+            $initialUncPath = !empty($b['unc_file_path']) ? trim($b['unc_file_path']) : (!empty($b['receipt_url']) ? trim($b['receipt_url']) : null);
             foreach ($milestones as $m) {
                 $payDate = !empty($m['expected_pay_date']) ? $m['expected_pay_date'] : null;
                 $originalAmount = isset($m['original_amount']) ? (float)$m['original_amount'] : null;
@@ -795,6 +826,16 @@ class DepositController {
                         $customShares[$uInt] = $pInt;
                     }
                 }
+            } elseif (!empty($b['collaborators']) && is_array($b['collaborators'])) {
+                foreach ($b['collaborators'] as $collabItem) {
+                    if (is_array($collabItem)) {
+                        $uInt = (int)($collabItem['user_id'] ?? $collabItem['id'] ?? 0);
+                        $pInt = (int)($collabItem['percentage'] ?? $collabItem['share'] ?? 0);
+                        if ($uInt > 0 && $pInt > 0) {
+                            $customShares[$uInt] = $pInt;
+                        }
+                    }
+                }
             }
 
             $createCoopSlip = !empty($b['create_coop_slip']) || !empty($b['is_cooperation']);
@@ -844,8 +885,10 @@ class DepositController {
                 'id' => $depositId,
                 'milestones' => $createdMilestones
             ], 'Tạo đơn đặt hàng và khởi tạo lịch thanh toán thành công');
-        } catch (Exception $e) {
-            $this->db->rollBack();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             respond(500, null, 'Lỗi lưu đơn đặt hàng: ' . $e->getMessage(), false);
         }
     }
@@ -863,7 +906,7 @@ class DepositController {
 
         // Check ownership of deposit
         $stmtDep = $this->db->prepare("
-            SELECT d.id, d.contact_id, d.created_by, c.tenant_id, c.owner_id 
+            SELECT d.id, d.contact_id, d.created_by, d.accountant_id, d.price, c.tenant_id, c.owner_id, c.full_name AS customer_name
             FROM deposits d 
             JOIN contacts c ON d.contact_id = c.id 
             WHERE d.id = ? AND c.tenant_id = ?
@@ -965,6 +1008,25 @@ class DepositController {
                 }
             } catch (\Throwable $cfEx) {
                 error_log("Error auto-saving UNC deposit file to cloud_files: " . $cfEx->getMessage());
+            }
+
+            try {
+                require_once __DIR__ . '/../NotificationService.php';
+                $stmtMInfo = $this->db->prepare("SELECT expected_amount FROM deposit_milestones WHERE id = ? LIMIT 1");
+                $stmtMInfo->execute([$milestoneId]);
+                $milestoneAmt = (float)($stmtMInfo->fetchColumn() ?: ($dep['price'] ?? 0));
+                $acctId = !empty($dep['accountant_id']) ? (int)$dep['accountant_id'] : 0;
+                NotificationService::send($this->db, (int)$auth['tenant_id'], 'DEPOSIT_NEW', [
+                    'approver_id' => $acctId,
+                    'user_id' => (int)$auth['user_id'],
+                    'user_name' => $auth['full_name'] ?? $auth['name'] ?? 'Nhân viên',
+                    'deposit_id' => $id,
+                    'customer_name' => $dep['customer_name'] ?? 'Khách hàng',
+                    'amount' => $milestoneAmt,
+                    'exclude_user_id' => (int)$auth['user_id']
+                ]);
+            } catch (\Throwable $uncNotifEx) {
+                error_log("Failed to dispatch DEPOSIT_NEW notification on UNC upload: " . $uncNotifEx->getMessage());
             }
 
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'UPLOAD_DEPOSIT_UNC', 'deposit_milestone', $milestoneId, "Tải lên UNC cho đợt thanh toán ID: $milestoneId");
@@ -1139,7 +1201,7 @@ class DepositController {
             }
 
             respond(200, null, 'Phê duyệt đợt thanh toán đơn hàng thành công');
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             error_log("Error in approveMilestone: " . $e->getMessage());
             try {
                 if ($this->db->inTransaction()) {
@@ -1378,8 +1440,10 @@ class DepositController {
             $this->db->commit();
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'CANCEL_DEPOSIT', 'deposit', $id, "Hủy đơn hàng/Bể giao dịch. Lý do: $reason");
             respond(200, null, 'Báo cáo hủy đơn hàng và cập nhật trạng thái khách hàng thành công');
-        } catch (Exception $e) {
-            $this->db->rollBack();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             respond(500, null, 'Lỗi báo hủy cọc: ' . $e->getMessage(), false);
         }
     }
@@ -1716,8 +1780,10 @@ class DepositController {
 
             $this->db->commit();
             respond(200, null, 'Cập nhật lịch trình thanh toán thành công');
-        } catch (Exception $e) {
-            $this->db->rollBack();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             respond(500, null, $e->getMessage(), false);
         }
     }
@@ -2112,7 +2178,9 @@ class DepositController {
             $this->db->commit();
             respond(200, ['id' => $id, 'status' => 'approved'], 'Xác nhận thanh toán đặt cọc thành công');
         } catch (\Throwable $e) {
-            $this->db->rollBack();
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             respond(500, null, 'Lỗi xác nhận thanh toán: ' . $e->getMessage(), false);
         }
     }
@@ -2142,8 +2210,10 @@ class DepositController {
                 respond(400, null, 'Phiếu đặt cọc đã được hủy hoặc hoàn cọc trước đó', false);
             }
 
-            $this->db->prepare("UPDATE deposits SET status = 'cancelled', cancelled_reason = 'Hoàn cọc', updated_at = NOW() WHERE id = ?")
-                ->execute([$id]);
+            $b = getBody();
+            $reason = trim($b['reason'] ?? $b['note'] ?? 'Hoàn cọc') ?: 'Hoàn cọc';
+            $this->db->prepare("UPDATE deposits SET status = 'cancelled', cancelled_reason = ?, updated_at = NOW() WHERE id = ?")
+                ->execute([$reason, $id]);
 
             if (function_exists('logActivity')) {
                 logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'REFUND_DEPOSIT', 'deposit', $id, json_encode(['title' => $dep['title'] ?? '']));
@@ -2152,7 +2222,9 @@ class DepositController {
             $this->db->commit();
             respond(200, ['id' => $id, 'status' => 'cancelled'], 'Hoàn cọc thành công');
         } catch (\Throwable $e) {
-            $this->db->rollBack();
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             respond(500, null, 'Lỗi hoàn cọc: ' . $e->getMessage(), false);
         }
     }

@@ -102,9 +102,15 @@ try {
             $settings['verified_senders'] = $verifiedSenders;
             $settings['sender_emails'] = $verifiedSenders;
             $settings['default_sender_email'] = $verifiedSenders[0] ?? 'marketing@ideas.edu.vn';
-            $settings['default_sender_name'] = !empty($settings['smtp_from_name'])
-                ? $settings['smtp_from_name']
-                : (!empty($settings['ses_sender_name']) ? $settings['ses_sender_name'] : 'Viện Quốc Tế IDEAS');
+            $rawSenderName = !empty($settings['smtp_from_name'])
+                ? trim((string)$settings['smtp_from_name'])
+                : (!empty($settings['ses_sender_name']) ? trim((string)$settings['ses_sender_name']) : 'IDEAS');
+            if ($rawSenderName === '' || preg_match('/^viện\s+quốc\s+tế\s+ideas$/iu', $rawSenderName)) {
+                $rawSenderName = 'IDEAS';
+            }
+            $settings['default_sender_name'] = $rawSenderName;
+            $settings['smtp_from_name'] = $rawSenderName;
+            $settings['ses_sender_name'] = $rawSenderName;
 
             jsonResponse(true, $settings);
             break;

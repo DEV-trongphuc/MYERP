@@ -1047,6 +1047,9 @@ const CampaignWizard: React.FC<CampaignWizardProps> = ({
                     className="drawer-backdrop"
                     onClick={handleIntentClose}
                     style={{
+                        background: 'rgba(0, 0, 0, 0.6)',
+                        backdropFilter: 'blur(6px)',
+                        WebkitBackdropFilter: 'blur(6px)',
                         opacity: animateWizardIn ? 1 : 0,
                         transition: 'opacity 0.22s cubic-bezier(0.25, 0.1, 0.25, 1)',
                         pointerEvents: animateWizardIn ? 'auto' : 'none',
@@ -1931,7 +1934,7 @@ const CampaignWizard: React.FC<CampaignWizardProps> = ({
                 {/* PRE-LAUNCH NURTURE OFFER MODAL */}
                 {showNurtureOffer && (
                     <div className="fixed inset-0 z-[2147483646] flex items-center justify-center p-4 lg:p-6 animate-in fade-in duration-300" style={{ zIndex: 2147483646 }}>
-                        <div className="absolute inset-0 bg-slate-950/70" onClick={() => { setShowNurtureOffer(false); setShowFlowSelectModal(false); }} />
+                        <div className="modal-backdrop absolute inset-0 bg-black/60 backdrop-blur-[6px]" style={{ background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }} onClick={() => { setShowNurtureOffer(false); setShowFlowSelectModal(false); }} />
                         <div className="relative bg-white rounded-[18px] shadow-2xl overflow-hidden max-w-lg w-full transform transition-all border border-slate-200/60 animate-in zoom-in-95 duration-500">
                             {showFlowSelectModal ? (
                                 <div className="p-8 pb-6 flex flex-col gap-3 bg-white animate-in slide-in-from-right-4 duration-300">
@@ -2193,7 +2196,7 @@ const CampaignWizard: React.FC<CampaignWizardProps> = ({
             {/* Confirm modal when closing wizard with unsaved changes */}
             {showUnsavedConfirmModal && (
                 <div className="fixed inset-0 z-[2147483647] flex items-center justify-center p-4 animate-in fade-in duration-200" style={{ zIndex: 2147483647 }}>
-                    <div className="absolute inset-0 bg-black/80 backdrop-blur-[2px]" onClick={() => setShowUnsavedConfirmModal(false)} />
+                    <div className="modal-backdrop absolute inset-0 bg-black/60 backdrop-blur-[6px]" style={{ background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }} onClick={() => setShowUnsavedConfirmModal(false)} />
                     <div className="relative bg-white rounded-[18px] shadow-2xl p-7 md:p-8 max-w-lg w-full animate-in zoom-in-95 duration-300 border border-slate-100">
                         <button
                             onClick={() => setShowUnsavedConfirmModal(false)}

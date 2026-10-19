@@ -257,7 +257,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   users: propUsers,
   zIndex
 }) => {
-  const baseZIndex = zIndex || 2147483641;
+  const baseZIndex = Math.min(zIndex || 2147483620, 2147483625);
   const { addToast } = useUIStore();
   const saveInFlightRef = useRef(false);
   const justHydratedRef = useRef(false);

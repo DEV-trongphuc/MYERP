@@ -42,6 +42,7 @@ export const InvoicesPage: React.FC = () => {
   const debouncedSearch = useDebounce(search.trim(), 300);
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [previewItem, setPreviewItem] = useState<any>(null);
   const [total, setTotal] = useState(0);
@@ -59,15 +60,15 @@ export const InvoicesPage: React.FC = () => {
     try {
       const params: any = { 
         page, 
-        limit: PAGE_SIZE, 
+        limit: pageSize, 
         from: dateRange.from, 
         to: dateRange.to, 
         status: statusFilter,
         search: search
       };
       const r = await api.get('/invoices', { params });
-      const data = r.data.data;
-      setItems(data.items || []);
+      const data = r.data?.data || {};
+      setItems(Array.isArray(data.items) ? data.items : []);
       setTotal(data.total || 0);
       setSummary(data.summary || { total_rev: 0, paid_amt: 0, pending_amt: 0, overdue_amt: 0 });
     } catch (e: any) {
@@ -77,17 +78,18 @@ export const InvoicesPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, dateRange, statusFilter, search]);
+  }, [page, pageSize, dateRange, statusFilter, search]);
 
   useEffect(() => { fetchInvoices(); }, [fetchInvoices]);
 
   useEffect(() => {
+    if (!location.pathname.startsWith('/invoices')) return;
     if (location.state?.openCreate) {
       const contact = location.state.defaultContact;
       useUIStore.getState().setShowPOS(contact || true);
       navigate(location.pathname, { replace: true });
     }
-  }, [location.state, navigate]);
+  }, [location.pathname, location.state, navigate]);
 
   // ESC key to close modals
   useEffect(() => {
@@ -548,7 +550,7 @@ export const InvoicesPage: React.FC = () => {
             </tbody>
           </table>
         </div>
-        <Pagination total={total} page={page} pageSize={PAGE_SIZE} onChange={setPage} showSizeChanger onPageSizeChange={() => setPage(1)} />
+        <Pagination total={total} page={page} pageSize={pageSize} onChange={setPage} showSizeChanger onPageSizeChange={(newSize) => { setPageSize(newSize); setPage(1); }} />
       </div>
 
 

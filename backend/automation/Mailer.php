@@ -198,9 +198,14 @@ class Mailer {
     public function getDefaultSenderName(): string
     {
         if (!empty($this->dynamicSenderName)) {
-            return $this->dynamicSenderName;
+            $dyn = trim((string)$this->dynamicSenderName);
+            return preg_match('/^viện\s+quốc\s+tế\s+ideas$/iu', $dyn) ? 'IDEAS' : $dyn;
         }
-        return !empty($this->smtpSettings['smtp_from_name']) ? $this->smtpSettings['smtp_from_name'] : 'Viện Quốc Tế IDEAS';
+        $configured = !empty($this->smtpSettings['smtp_from_name']) ? trim((string)$this->smtpSettings['smtp_from_name']) : '';
+        if ($configured === '' || preg_match('/^viện\s+quốc\s+tế\s+ideas$/iu', $configured)) {
+            return 'IDEAS';
+        }
+        return $configured;
     }
 
     public function setDynamicSender($email)

@@ -7433,11 +7433,12 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         {/* PARTICIPANTS & SUBTASKS MODAL */}
         {showParticipantsModal && (
           <div 
+            className="modal-backdrop modal-above-drawer"
             style={{
               position: 'fixed',
               inset: 0,
               background: 'rgba(0, 0, 0, 0.65)',
-              zIndex: 1000300,
+              zIndex: 2147483645,
               backdropFilter: 'blur(4px)',
               display: 'flex',
               alignItems: 'center',
@@ -7744,11 +7745,12 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         {/* SUBTASK PARTICIPANTS MODAL */}
         {selectedSubtaskForParticipants && (
           <div 
+            className="modal-backdrop modal-above-drawer"
             style={{
               position: 'fixed',
               inset: 0,
               background: 'rgba(0, 0, 0, 0.65)',
-              zIndex: 1000300,
+              zIndex: 2147483645,
               backdropFilter: 'blur(4px)',
               display: 'flex',
               alignItems: 'center',

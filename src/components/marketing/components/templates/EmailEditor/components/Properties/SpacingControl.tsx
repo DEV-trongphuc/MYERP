@@ -72,8 +72,9 @@ const SpacingControl: React.FC<SpacingControlProps> = ({ label, values, onChange
                         </button>
                     )}
                     <button
+                        type="button"
                         onClick={() => setIsLocked(!isLocked)}
-                        className={`p-1 rounded transition-all shadow-sm ${isLocked ? 'text-blue-600 bg-white border border-slate-100' : 'text-slate-400 bg-white border border-slate-100 hover:text-slate-600'}`}
+                        className={`p-1 rounded transition-all shadow-sm cursor-pointer outline-none focus:outline-none ${isLocked ? 'text-[#BD1D2D] bg-white border border-slate-100' : 'text-slate-400 bg-white border border-slate-100 hover:text-slate-600'}`}
                         title={isLocked ? "Đang khóa 4 chiều" : "Chỉnh riêng từng chiều"}
                         disabled={isAuto}
                     >
@@ -94,7 +95,7 @@ const SpacingControl: React.FC<SpacingControlProps> = ({ label, values, onChange
                             type="range" min="0" max={max}
                             value={getNum(values.top)}
                             onChange={(e) => handleMainChange(e.target.value)}
-                            className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                            className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-[#BD1D2D]"
                         />
                     </div>
                     <div className="relative w-14 shrink-0">
@@ -102,7 +103,7 @@ const SpacingControl: React.FC<SpacingControlProps> = ({ label, values, onChange
                             type="number"
                             value={getNum(values.top)}
                             onChange={(e) => handleMainChange(e.target.value)}
-                            className="w-full text-right text-[11px] font-black text-slate-700 bg-slate-50 border border-slate-200 rounded-lg py-1.5 pr-6 pl-1 outline-none focus:border-blue-600 transition-colors"
+                            className="w-full text-right text-[11px] font-black text-slate-700 bg-slate-50 border border-slate-200 rounded-lg py-1.5 pr-6 pl-1 outline-none focus:border-[#BD1D2D] transition-colors"
                         />
                         <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400">px</span>
                     </div>

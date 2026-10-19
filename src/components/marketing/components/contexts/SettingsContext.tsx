@@ -60,8 +60,16 @@ export function parseVerifiedSenderEmails(rawSettings?: Record<string, any> | nu
   return Array.from(set);
 }
 
+const normalizeSenderBrandName = (raw?: string | null): string => {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed || /^viện\s+quốc\s+tế\s+ideas$/i.test(trimmed)) {
+    return 'IDEAS';
+  }
+  return trimmed;
+};
+
 let cachedSettingsData: Record<string, any> = {
-  senderName: 'Viện Quốc Tế IDEAS',
+  senderName: 'IDEAS',
   senderEmail: DEFAULT_VERIFIED_SENDERS[0],
   replyTo: DEFAULT_VERIFIED_SENDERS[1],
 };
@@ -80,12 +88,13 @@ async function fetchGlobalMktSettings(force = false): Promise<void> {
       const payload = res?.data && typeof res.data === 'object' ? res.data : (res && typeof res === 'object' ? res : null);
       if (payload) {
         const parsedEmails = parseVerifiedSenderEmails(payload);
-        const senderName =
+        const senderName = normalizeSenderBrandName(
           payload.default_sender_name ||
           payload.smtp_from_name ||
           payload.ses_sender_name ||
           payload.company_name ||
-          'Viện Quốc Tế IDEAS';
+          'IDEAS'
+        );
         cachedSenderEmails = parsedEmails;
         cachedSettingsData = {
           ...cachedSettingsData,
@@ -110,7 +119,7 @@ async function fetchGlobalMktSettings(force = false): Promise<void> {
 const defaultSettings: SettingsContextType = {
   settings: cachedSettingsData,
   senderEmails: cachedSenderEmails,
-  senderName: cachedSettingsData.senderName || 'Viện Quốc Tế IDEAS',
+  senderName: normalizeSenderBrandName(cachedSettingsData.senderName),
   updateSettings: () => {},
   refreshSettings: () => fetchGlobalMktSettings(true),
 };
@@ -142,7 +151,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       value={{
         settings,
         senderEmails,
-        senderName: String(settings.senderName || cachedSettingsData.senderName || 'Viện Quốc Tế IDEAS'),
+        senderName: normalizeSenderBrandName(settings.senderName || cachedSettingsData.senderName),
         updateSettings: (next) => {
           cachedSettingsData = { ...cachedSettingsData, ...next };
           const nextEmails = parseVerifiedSenderEmails(cachedSettingsData);
@@ -176,7 +185,7 @@ export function useSettings(): SettingsContextType {
   return {
     settings: cachedSettingsData,
     senderEmails: cachedSenderEmails,
-    senderName: String(cachedSettingsData.senderName || 'Viện Quốc Tế IDEAS'),
+    senderName: normalizeSenderBrandName(cachedSettingsData.senderName),
     updateSettings: (next) => {
       cachedSettingsData = { ...cachedSettingsData, ...next };
       cachedSenderEmails = parseVerifiedSenderEmails(cachedSettingsData);

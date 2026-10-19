@@ -1440,9 +1440,40 @@ export const DealsPage: React.FC = () => {
   }, [pipelineView, teams]);
 
   useEffect(() => {
+    if (!location.pathname.startsWith('/deals')) return;
     const controller = new AbortController();
     const urlParams = new URLSearchParams(location.search);
     const targetId = urlParams.get('open_deal_id') || urlParams.get('id') || urlParams.get('deal_id');
+    const shouldCreate = urlParams.get('create') === '1';
+
+    if (shouldCreate || sessionStorage.getItem('ai_draft_deal')) {
+      let draft: any = {};
+      try {
+        const raw = sessionStorage.getItem('ai_draft_deal');
+        if (raw) {
+          sessionStorage.removeItem('ai_draft_deal');
+          draft = JSON.parse(raw) || {};
+        }
+      } catch (e) {}
+      setSelectedDeal({
+        title: draft.title || draft.name || '',
+        value: draft.value || draft.amount || draft.expected_revenue || 0,
+        expected_revenue: draft.expected_revenue || draft.value || draft.amount || 0,
+        contact_id: draft.contact_id || null,
+        stage_id: draft.stage_id || (stages[0]?.id ?? null),
+        status: draft.status || 'open',
+        notes: draft.notes || draft.description || '',
+      } as any);
+      setShowDealDrawer(true);
+      if (shouldCreate) {
+        const newParams = new URLSearchParams(window.location.search);
+        newParams.delete('create');
+        const cleanUrl = window.location.pathname + (newParams.toString() ? '?' + newParams.toString() : '');
+        window.history.replaceState({}, '', cleanUrl);
+      }
+      return () => controller.abort();
+    }
+
     if (targetId) {
       const did = Number(targetId);
       if (did) {
@@ -1473,7 +1504,7 @@ export const DealsPage: React.FC = () => {
       }
     }
     return () => controller.abort();
-  }, [location.search, navigate]);
+  }, [location.pathname, location.search, navigate, stages]);
 
   useEffect(() => {
     let activeController: AbortController | null = null;
@@ -1494,12 +1525,34 @@ export const DealsPage: React.FC = () => {
         });
       }
     };
+    const handleOpenCreateDealModal = (e: any) => {
+      let draft = e.detail || {};
+      try {
+        const raw = sessionStorage.getItem('ai_draft_deal');
+        if (raw) {
+          sessionStorage.removeItem('ai_draft_deal');
+          draft = { ...JSON.parse(raw), ...draft };
+        }
+      } catch (err) {}
+      setSelectedDeal({
+        title: draft.title || draft.name || '',
+        value: draft.value || draft.amount || draft.expected_revenue || 0,
+        expected_revenue: draft.expected_revenue || draft.value || draft.amount || 0,
+        contact_id: draft.contact_id || null,
+        stage_id: draft.stage_id || (stages[0]?.id ?? null),
+        status: draft.status || 'open',
+        notes: draft.notes || draft.description || '',
+      } as any);
+      setShowDealDrawer(true);
+    };
     window.addEventListener('open-deal-drawer', handleOpenDealDrawer);
+    window.addEventListener('open-create-deal-modal', handleOpenCreateDealModal);
     return () => {
       if (activeController) activeController.abort();
       window.removeEventListener('open-deal-drawer', handleOpenDealDrawer);
+      window.removeEventListener('open-create-deal-modal', handleOpenCreateDealModal);
     };
-  }, []);
+  }, [stages]);
 
   const stageIdsKey = useMemo(() => stages.map(s => s.id).join(','), [stages]);
 
@@ -1739,8 +1792,13 @@ export const DealsPage: React.FC = () => {
     saveDealInFlightRef.current = true;
     try {
       if (selectedDeal && formData) {
-        await api.put(`/deals/${selectedDeal.id}`, formData);
-        addToast('Đã cập nhật cơ hội thành công', 'success');
+        if (selectedDeal.id) {
+          await api.put(`/deals/${selectedDeal.id}`, formData);
+          addToast('Đã cập nhật cơ hội thành công', 'success');
+        } else {
+          await api.post('/deals', formData);
+          addToast('Đã tạo cơ hội mới thành công', 'success');
+        }
       }
       setShowDealDrawer(false);
       fetchData();
@@ -2749,6 +2807,7 @@ export const DealsPage: React.FC = () => {
             <div style={{ position: 'fixed', inset: 0, zIndex: 2147483640, display: 'flex', justifyContent: 'flex-end', overflow: 'hidden' }}>
               {/* Backdrop */}
               <motion.div
+                className="drawer-backdrop"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -2756,9 +2815,10 @@ export const DealsPage: React.FC = () => {
                 style={{
                   position: 'fixed',
                   inset: 0,
-                  background: 'rgba(15, 23, 42, 0.55)',
-                  backdropFilter: 'blur(3px)',
-                  zIndex: 2147483639
+                  background: 'rgba(0, 0, 0, 0.6)',
+                  backdropFilter: 'blur(6px)',
+                  WebkitBackdropFilter: 'blur(6px)',
+                  zIndex: 2147483620
                 }}
               />
 

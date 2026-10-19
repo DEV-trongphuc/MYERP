@@ -67,7 +67,7 @@ class OmnichannelController {
     public function sendZalo(array $auth): void {
         $tid = $auth['tenant_id'];
         $body = getBody();
-        $phone = trim($body['phone'] ?? '');
+        $phone = trim($body['phone'] ?? $body['zalo_user_id'] ?? $body['recipient_phone'] ?? $body['recipient'] ?? '');
         $message = trim($body['message'] ?? $body['content'] ?? '');
 
         if (!$phone || !$message) {
@@ -92,7 +92,7 @@ class OmnichannelController {
     public function sendZns(array $auth): void {
         $tid = $auth['tenant_id'];
         $body = getBody();
-        $phone = trim($body['phone'] ?? '');
+        $phone = trim($body['phone'] ?? $body['zalo_user_id'] ?? $body['recipient_phone'] ?? $body['recipient'] ?? '');
         $templateId = trim($body['template_id'] ?? '');
 
         if (!$phone) {
@@ -142,19 +142,21 @@ class OmnichannelController {
         static $checked = false;
         if ($checked) return;
         try {
-            $this->db->exec("
-                CREATE TABLE IF NOT EXISTS omnichannel_logs (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    tenant_id INT NOT NULL DEFAULT 1,
-                    channel VARCHAR(50) NOT NULL DEFAULT 'zalo',
-                    recipient VARCHAR(100) NOT NULL,
-                    message TEXT NULL,
-                    status VARCHAR(50) NOT NULL DEFAULT 'delivered',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    INDEX idx_tenant_time (tenant_id, created_at)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-            ");
-            $checked = true;
+            if (!$this->db->inTransaction()) {
+                $this->db->exec("
+                    CREATE TABLE IF NOT EXISTS omnichannel_logs (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        tenant_id INT NOT NULL DEFAULT 1,
+                        channel VARCHAR(50) NOT NULL DEFAULT 'zalo',
+                        recipient VARCHAR(100) NOT NULL,
+                        message TEXT NULL,
+                        status VARCHAR(50) NOT NULL DEFAULT 'delivered',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        INDEX idx_tenant_time (tenant_id, created_at)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                ");
+                $checked = true;
+            }
         } catch (\Throwable $e) {
             error_log("Ensure Omnichannel Logs Error: " . $e->getMessage());
         }

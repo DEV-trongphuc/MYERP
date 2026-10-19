@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileText, LogOut, Edit3, AlertCircle, RefreshCw } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { pushOverlay } from '../../utils/overlayStack';
 
 export interface DraftExitConfirmModalProps {
   isOpen: boolean;
@@ -27,11 +28,12 @@ export const DraftExitConfirmModal: React.FC<DraftExitConfirmModalProps> = ({
   saveDraftText = 'Lưu nháp',
   discardText = 'Rời khỏi',
   continueText = 'Tiếp tục chỉnh sửa',
-  zIndex = 2147483647
+  zIndex = 2147483646
 }) => {
   const { t } = useLanguage();
   const [isSaving, setIsSaving] = useState(false);
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
+  const effectiveZIndex = zIndex ? Math.min(Math.max(zIndex, 2147483640), 2147483646) : 2147483646;
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -39,17 +41,15 @@ export const DraftExitConfirmModal: React.FC<DraftExitConfirmModalProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Handle ESC key to continue editing
+  // Register in LIFO overlay stack for ESC and Mobile Back button dismissal
   useEffect(() => {
     if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isSaving) {
+    return pushOverlay('draft-exit-confirm-modal', () => {
+      if (!isSaving) {
         onContinue();
       }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, isSaving, onContinue]);
+    }, effectiveZIndex);
+  }, [isOpen, isSaving, onContinue, effectiveZIndex]);
 
   const handleSaveDraftClick = async () => {
     if (isSaving) return;
@@ -72,10 +72,11 @@ export const DraftExitConfirmModal: React.FC<DraftExitConfirmModalProps> = ({
     <AnimatePresence>
       {isOpen && (
         <div
+          className="modal-backdrop modal-above-drawer"
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex,
+            zIndex: effectiveZIndex,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

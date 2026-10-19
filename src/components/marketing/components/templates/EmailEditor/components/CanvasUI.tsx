@@ -122,12 +122,12 @@ export const CanvasHandleOverlay: React.FC<HandleOverlayProps> = ({
                         top: barPos.top < 85 ? barPos.top + 8 : barPos.top - 28,
                         left: barPos.left,
                         width: barPos.width,
-                        zIndex: 100050,
+                        zIndex: 2147483640,
                         pointerEvents: 'none',
                         transition: 'top 0.15s ease-out',
                     }}
                 >
-                    <div className="absolute right-0 top-0 flex gap-1 pointer-events-auto origin-bottom-right transform scale-95 hover:scale-100 transition-transform duration-200">
+                    <div className="absolute right-0 top-0 flex gap-1 pointer-events-auto">
                         <button
                             onClick={(e) => { e.stopPropagation(); onSelectParent?.(); }}
                             disabled={!onSelectParent}

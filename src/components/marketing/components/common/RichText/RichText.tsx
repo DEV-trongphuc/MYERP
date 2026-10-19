@@ -254,7 +254,7 @@ const RichText: React.FC<RichTextProps> = ({ value, onChange, className = "", bo
         return (
             <button
                 onMouseDown={(e) => { e.preventDefault(); exec(cmd, val); }}
-                className={`p-1.5 rounded-md transition-all duration-200 ${isActive ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}
+                className={`p-1.5 rounded-md transition-all duration-200 ${isActive ? 'bg-[#BD1D2D] text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}
                 title={title}
             >
                 <Icon className="w-4 h-4" />
@@ -263,7 +263,7 @@ const RichText: React.FC<RichTextProps> = ({ value, onChange, className = "", bo
     };
 
     return (
-        <div className={`group border border-slate-200 rounded-xl overflow-visible bg-white focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all shadow-sm ${className}`}>
+        <div className={`group border border-slate-200 rounded-xl overflow-visible bg-white focus-within:ring-2 focus-within:ring-[#BD1D2D]/20 focus-within:border-[#BD1D2D] transition-all shadow-sm ${className}`}>
             <div className="flex flex-wrap items-center gap-1 p-2 border-b border-slate-100 bg-slate-50/80 backdrop-blur-sm sticky top-0 z-20 select-none">
                 {/* --- Group 1: Typography --- */}
                 <div className="flex items-center gap-0.5 bg-white/50 p-0.5 rounded-lg border border-slate-200/50 mr-1">
@@ -305,7 +305,7 @@ const RichText: React.FC<RichTextProps> = ({ value, onChange, className = "", bo
                             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); applyFontSize(customFontSize + 'px'); } }}
                             onBlur={e => { applyFontSize(customFontSize + 'px'); }}
                             onFocus={() => saveSelection()}
-                            className="w-12 h-8 text-center text-xs border border-slate-200 rounded-md bg-white text-slate-700 font-bold focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                            className="w-12 h-8 text-center text-xs border border-slate-200 rounded-md bg-white text-slate-700 font-bold focus:ring-1 focus:ring-[#BD1D2D] focus:border-[#BD1D2D] outline-none"
                             title="Nhập cỡ chữ (px) rồi Enter"
                         />
                         {showFontSizeDropdown && (
@@ -329,11 +329,11 @@ const RichText: React.FC<RichTextProps> = ({ value, onChange, className = "", bo
                 {/* --- Group 3: Colors --- */}
                 <div className="flex items-center gap-0.5 bg-white/50 p-0.5 rounded-lg border border-slate-200/50 mr-1">
                     <div className="relative">
-                        <button onMouseDown={(e) => handleColorClick(e, 'fore')} className={`p-1.5 rounded-md transition-all h-8 flex items-center justify-center ${showColorPicker === 'fore' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`} title="Màu chữ"><Type className="w-4 h-4" /></button>
+                        <button onMouseDown={(e) => handleColorClick(e, 'fore')} className={`p-1.5 rounded-md transition-all h-8 flex items-center justify-center ${showColorPicker === 'fore' ? 'bg-[#BD1D2D] text-white' : 'text-slate-500 hover:bg-slate-100'}`} title="Màu chữ"><Type className="w-4 h-4" /></button>
                         {showColorPicker === 'fore' && <PopoverColorPicker onSelect={(c) => { restoreSelection(); exec('foreColor', c); }} onClose={() => setShowColorPicker(null)} position={pickerPosition} usedColors={usedColors} />}
                     </div>
                     <div className="relative">
-                        <button onMouseDown={(e) => handleColorClick(e, 'hilite')} className={`p-1.5 rounded-md transition-all h-8 flex items-center justify-center ${showColorPicker === 'hilite' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`} title="Màu nền chữ"><Highlighter className="w-4 h-4" /></button>
+                        <button onMouseDown={(e) => handleColorClick(e, 'hilite')} className={`p-1.5 rounded-md transition-all h-8 flex items-center justify-center ${showColorPicker === 'hilite' ? 'bg-[#BD1D2D] text-white' : 'text-slate-500 hover:bg-slate-100'}`} title="Màu nền chữ"><Highlighter className="w-4 h-4" /></button>
                         {showColorPicker === 'hilite' && <PopoverColorPicker onSelect={(c) => { restoreSelection(); exec('hiliteColor', c); }} onClose={() => setShowColorPicker(null)} position={pickerPosition} usedColors={usedColors} />}
                     </div>
                 </div>
@@ -348,7 +348,7 @@ const RichText: React.FC<RichTextProps> = ({ value, onChange, className = "", bo
 
                 {/* --- Group 5: Actions --- */}
                 <div className="flex items-center gap-0.5 bg-white/50 p-0.5 rounded-lg border border-slate-200/50">
-                    <button onMouseDown={handleLinkBtnClick} className={`p-1.5 rounded-md transition-all h-8 flex items-center justify-center ${showLinkInput || activeLinkNode ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`} title="Chèn Link"><LinkIcon className="w-4 h-4" /></button>
+                    <button onMouseDown={handleLinkBtnClick} className={`p-1.5 rounded-md transition-all h-8 flex items-center justify-center ${showLinkInput || activeLinkNode ? 'bg-[#BD1D2D] text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`} title="Chèn Link"><LinkIcon className="w-4 h-4" /></button>
                     <ToolbarBtn icon={RemoveFormatting} cmd="removeFormat" title="Xóa định dạng" />
 
                     {/* Variable Insertion */}
@@ -358,7 +358,7 @@ const RichText: React.FC<RichTextProps> = ({ value, onChange, className = "", bo
                             className={`flex items-center gap-1 px-2 py-1 rounded-md transition-all text-[10px] font-bold uppercase tracking-wider border h-8 ${showVariablePicker ? 'bg-slate-100 border-slate-200' : 'border-slate-200 hover:bg-slate-50 hover:border-slate-300'} text-slate-600 group/var`}
                             title="Chèn biến"
                         >
-                            <span className="font-mono text-xs text-blue-600 font-black">{`{}`}</span>
+                            <span className="font-mono text-xs text-[#BD1D2D] font-black">{`{}`}</span>
                             <span className="hidden sm:inline">Biến</span>
                         </button>
                         {showVariablePicker && (
@@ -377,24 +377,24 @@ const RichText: React.FC<RichTextProps> = ({ value, onChange, className = "", bo
                                         <button
                                             key={v.val}
                                             onMouseDown={(e) => { e.preventDefault(); exec('insertText', v.val); setShowVariablePicker(false); }}
-                                            className="w-full text-left px-3 py-2 text-[11px] font-medium hover:bg-slate-50 rounded-lg text-slate-700 hover:text-blue-600 flex justify-between items-center group/opt"
+                                            className="w-full text-left px-3 py-2 text-[11px] font-medium hover:bg-slate-50 rounded-lg text-slate-700 hover:text-[#BD1D2D] flex justify-between items-center group/opt"
                                         >
                                             <span>{v.label}</span>
-                                            <span className="font-mono text-[9px] text-slate-300 group-hover/opt:text-blue-600/50">{v.val}</span>
+                                            <span className="font-mono text-[9px] text-slate-300 group-hover/opt:text-[#BD1D2D]/50">{v.val}</span>
                                         </button>
                                     ))}
                                     {customMergeTags.length > 0 && (
                                         <>
                                             <div className="border-t border-slate-100 my-1 mx-2" />
-                                            <p className="text-[8px] font-black text-blue-500 uppercase tracking-widest px-3 pb-1">Custom Fields</p>
+                                            <p className="text-[8px] font-black text-[#BD1D2D] uppercase tracking-widest px-3 pb-1">Custom Fields</p>
                                             {customMergeTags.map(f => (
                                                 <button
                                                     key={f.key}
                                                     onMouseDown={(e) => { e.preventDefault(); exec('insertText', `{{${f.key}}}`); setShowVariablePicker(false); }}
-                                                    className="w-full text-left px-3 py-2 text-[11px] font-medium hover:bg-blue-50 rounded-lg text-slate-700 hover:text-blue-600 flex justify-between items-center group/opt"
+                                                    className="w-full text-left px-3 py-2 text-[11px] font-medium hover:bg-[#BD1D2D]/5 rounded-lg text-slate-700 hover:text-[#BD1D2D] flex justify-between items-center group/opt"
                                                 >
                                                     <span>{f.label}</span>
-                                                    <span className="font-mono text-[9px] text-blue-300 group-hover/opt:text-blue-400">{`{{${f.key}}}`}</span>
+                                                    <span className="font-mono text-[9px] text-[#BD1D2D]/40 group-hover/opt:text-[#BD1D2D]">{`{{${f.key}}}`}</span>
                                                 </button>
                                             ))}
                                         </>
@@ -407,7 +407,7 @@ const RichText: React.FC<RichTextProps> = ({ value, onChange, className = "", bo
             </div>
 
             {(showLinkInput || activeLinkNode) && (
-                <div className="p-2 bg-blue-50/50 border-b border-blue-100 flex items-center gap-2 animate-in slide-in-from-top-1">
+                <div className="p-2 bg-[#BD1D2D]/5 border-b border-[#BD1D2D]/15 flex items-center gap-2 animate-in slide-in-from-top-1">
                     {showLinkInput ? (
                         <>
                             {linkUrl === '{{unsubscribe_url}}' ? (
@@ -416,10 +416,10 @@ const RichText: React.FC<RichTextProps> = ({ value, onChange, className = "", bo
                                     <span className="text-xs">Link hệ thống (System Variable) - Không cần chỉnh sửa</span>
                                 </div>
                             ) : (
-                                <input type="text" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && applyLink()} placeholder="https://..." className="flex-1 bg-white border border-blue-200 focus:border-blue-500 rounded-lg px-3 py-1.5 text-xs outline-none" autoFocus />
+                                <input type="text" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && applyLink()} placeholder="https://..." className="flex-1 bg-white border border-slate-200 focus:border-[#BD1D2D] rounded-lg px-3 py-1.5 text-xs outline-none" autoFocus />
                             )}
 
-                            <button onClick={applyLink} className="p-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"><Check className="w-3.5 h-3.5" /></button>
+                            <button onClick={applyLink} className="p-1.5 bg-[#BD1D2D] hover:bg-[#a61927] text-white rounded-lg"><Check className="w-3.5 h-3.5" /></button>
                             <button onClick={() => setShowLinkInput(false)} className="p-1.5 text-slate-400"><X className="w-3.5 h-3.5" /></button>
                         </>
                     ) : (
@@ -432,11 +432,11 @@ const RichText: React.FC<RichTextProps> = ({ value, onChange, className = "", bo
                                     <span className="text-[10px] text-slate-400 italic">User click sẽ tự động Hủy đăng kýKhông cần sửa.</span>
                                 </div>
                             ) : (
-                                <span className="text-xs text-blue-800 font-medium truncate flex-1 pl-2">Link: {activeLinkNode?.getAttribute('href')}</span>
+                                <span className="text-xs text-[#BD1D2D] font-medium truncate flex-1 pl-2">Link: {activeLinkNode?.getAttribute('href')}</span>
                             )}
 
                             {activeLinkNode?.getAttribute('href') !== '{{unsubscribe_url}}' && (
-                                <button onClick={() => { setLinkUrl(activeLinkNode?.getAttribute('href') || ''); setShowLinkInput(true); }} className="px-2 py-1 bg-white border border-blue-200 text-blue-700 rounded text-[10px] font-bold hover:bg-blue-50">Sửa</button>
+                                <button onClick={() => { setLinkUrl(activeLinkNode?.getAttribute('href') || ''); setShowLinkInput(true); }} className="px-2 py-1 bg-white border border-[#BD1D2D]/20 text-[#BD1D2D] rounded text-[10px] font-bold hover:bg-[#BD1D2D]/5">Sửa</button>
                             )}
                             {activeLinkNode?.getAttribute('href') !== '{{unsubscribe_url}}' && (
                                 <button onClick={removeLink} className="px-2 py-1 bg-white border border-rose-200 text-rose-600 rounded text-[10px] font-bold flex items-center gap-1"><Unlink className="w-3 h-3" /></button>

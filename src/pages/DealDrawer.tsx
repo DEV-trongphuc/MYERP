@@ -39,7 +39,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
   const [formData, setFormData] = useState(deal || {});
 
   const currentUser = useAuthStore(state => state.user);
-  const isOwner = Number(currentUser?.id) === Number(formData?.owner_id || deal?.owner_id || formData?.created_by || deal?.created_by);
+  const isOwner = !deal?.id || Number(currentUser?.id) === Number(formData?.owner_id || deal?.owner_id || formData?.created_by || deal?.created_by);
   const isPrivileged = currentUser?.role && ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'assistant'].includes(currentUser.role);
   const isReadOnly = !isOwner && !isPrivileged;
   const isViewer = currentUser?.role === 'viewer' || isReadOnly;
@@ -103,7 +103,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
       document.body.style.overflow = 'hidden';
       const unregister = pushOverlay('deal-drawer', () => {
         escapeHandlerRef.current();
-      }, 100);
+      }, 2000);
       return () => {
         document.body.style.overflow = '';
         unregister();
@@ -193,11 +193,14 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
         api.get(`/projects${bypassProj}`, { signal: abortController.signal }).catch(() => ({ data: { data: [] } }))
       ]);
       if (abortController.signal.aborted) return;
-      setContacts(rC.data.data?.items || []);
-      setCompanies(rCo.data.data?.items || []);
-      setAllTags(rT.data.data || []);
-      const ud = rU.data.data;
-      const list = Array.isArray(ud) ? ud : (ud?.items || []);
+      const cRaw = rC.data?.data;
+      setContacts(Array.isArray(cRaw) ? cRaw : (Array.isArray(cRaw?.items) ? cRaw.items : []));
+      const coRaw = rCo.data?.data;
+      setCompanies(Array.isArray(coRaw) ? coRaw : (Array.isArray(coRaw?.items) ? coRaw.items : []));
+      const tRaw = rT.data?.data;
+      setAllTags(Array.isArray(tRaw) ? tRaw : (Array.isArray(tRaw?.items) ? tRaw.items : []));
+      const ud = rU.data?.data;
+      const list = Array.isArray(ud) ? ud : (Array.isArray(ud?.items) ? ud.items : []);
       const mapped = list.map((u: any) => ({
         ...u,
         id: u.id,
@@ -206,7 +209,8 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
         role: u.role || 'sale'
       }));
       setUsers(mapped);
-      setProjects(rP.data.data || []);
+      const pRaw = rP.data?.data;
+      setProjects(Array.isArray(pRaw) ? pRaw : (Array.isArray(pRaw?.items) ? pRaw.items : []));
     } catch (e: any) {
       if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
     } finally {
@@ -228,9 +232,10 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
         api.get(`/activities?related_type=deal&related_id=${deal.id}`, { signal: abortController.signal }).catch(() => ({ data: { data: [] } }))
       ]);
       if (abortController.signal.aborted) return;
-      setNotes(rNotes.data.data || []);
+      const nRaw = rNotes.data?.data;
+      setNotes(Array.isArray(nRaw) ? nRaw : (Array.isArray(nRaw?.items) ? nRaw.items : []));
       const tasksData = rTasks.data?.data;
-      setDealTasks(Array.isArray(tasksData) ? tasksData : (tasksData?.items || []));
+      setDealTasks(Array.isArray(tasksData) ? tasksData : (Array.isArray(tasksData?.items) ? tasksData.items : []));
     } catch (e: any) {
       if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       setNotes([]);
@@ -445,19 +450,20 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
         className="drawer-backdrop"
         onClick={handleClose}
         style={{
-          zIndex: 1000,
-          '--drawer-backdrop-z': 1000,
+          zIndex: 2147483620,
+          '--drawer-backdrop-z': 2147483620,
           opacity: animateIn ? 1 : 0,
-          transition: 'opacity 0.28s cubic-bezier(0.25, 0.1, 0.25, 1)',
+          transition: 'opacity 0.22s cubic-bezier(0.25, 0.1, 0.25, 1)',
           pointerEvents: animateIn ? 'auto' : 'none'
         } as any}
       />
       <div
         className={`${styles.drawer} drawer-sheet`}
         style={{
+          zIndex: 2147483625,
           transform: animateIn ? 'translateX(0)' : 'translateX(60%)',
           opacity: animateIn ? 1 : 0,
-          transition: 'transform 0.28s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.28s cubic-bezier(0.25, 0.1, 0.25, 1)',
+          transition: 'transform 0.22s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.22s cubic-bezier(0.25, 0.1, 0.25, 1)',
           willChange: 'transform, opacity'
         }}
       >
@@ -1121,7 +1127,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                   <span>Đổi Căn</span>
                 </button>
               )}
-              <button className="btn ghost" onClick={onClose}>{isViewer ? 'Đóng' : 'Hủy bỏ'}</button>
+              <button className="btn ghost" onClick={handleClose}>{isViewer ? 'Đóng' : 'Hủy bỏ'}</button>
               {!isViewer && (
                 <button className="btn primary" onClick={async () => {
                   if (saveDealInFlightRef.current) return;

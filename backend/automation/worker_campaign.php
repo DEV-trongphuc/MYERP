@@ -469,7 +469,7 @@ if (!function_exists('runWorkerCampaign')) {
                         $cSubject = $campaign['subject'];
                         if (strpos($cHtml, '[VOUCHER_') !== false || strpos($cSubject, '[VOUCHER_') !== false) {
                             preg_match_all('/\[VOUCHER_([a-zA-Z0-9_\-]+)\]/i', $cSubject . $cHtml, $vMatches);
-                            $vCampIds = array_unique($vMatches[1] ?? []);
+                            $vCampIds = array_values(array_unique($vMatches[1] ?? []));
                             if (!empty($vCampIds)) {
                                 foreach ($vCampIds as $vCid) {
                                     $placeholders = implode(',', array_fill(0, count($recipients), '?'));

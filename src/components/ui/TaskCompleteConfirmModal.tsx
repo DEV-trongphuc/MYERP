@@ -117,10 +117,11 @@ export const TaskCompleteConfirmModal: React.FC<TaskCompleteConfirmModalProps> =
   const modalNode = (
     <AnimatePresence>
       <div 
+        className="modal-backdrop modal-above-drawer"
         style={{
           position: 'fixed',
           inset: 0,
-          zIndex: 99999999, // Topmost level, above header, sidebar, and all floats
+          zIndex: 2147483646, // Tier 5 topmost modal level, above drawers and below Global Toasts
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

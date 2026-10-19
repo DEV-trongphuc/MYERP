@@ -138,8 +138,8 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ isVisible, position, 
     return createPortal(
         <>
             <div
-                className={`fixed z-[100100] flex flex-col bg-slate-900 text-white rounded-[14px] shadow-2xl px-1.5 py-1.5 gap-0.5 border border-slate-700/50 ${!isVisible ? 'invisible pointer-events-none' : 'animate-in fade-in zoom-in-95 duration-150'}`}
-                style={{ top: effectiveTop, left: Math.max(180, Math.min(typeof window !== 'undefined' ? window.innerWidth - 180 : 800, position.left)), transform, width: 'max-content', marginTop }}
+                className={`fixed z-[2147483642] flex flex-col bg-slate-900 text-white rounded-[14px] shadow-2xl px-1.5 py-1.5 gap-0.5 border border-slate-700/50 ${!isVisible ? 'invisible pointer-events-none' : 'animate-in fade-in zoom-in-95 duration-150'}`}
+                style={{ top: effectiveTop, left: Math.max(180, Math.min(typeof window !== 'undefined' ? window.innerWidth - 180 : 800, position.left)), transform, width: 'max-content', marginTop, zIndex: 2147483642 }}
                 onMouseDown={(e) => e.preventDefault()}
                 onMouseEnter={onToolbarMouseEnter}
                 onMouseLeave={onToolbarMouseLeave}
@@ -392,7 +392,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ isVisible, position, 
                 title="Chèn đường dẫn"
                 placeholder="https://example.com"
                 confirmLabel="Chèn"
-                zIndex={100200}
+                zIndex={2147483646}
                 isDarkTheme={true}
             />
         </>,

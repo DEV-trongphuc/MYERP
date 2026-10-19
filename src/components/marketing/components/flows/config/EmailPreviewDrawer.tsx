@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Smartphone, Monitor, SmartphoneNfc, Code, Check, Edit3, Copy, Send, ArrowLeft } from 'lucide-react';
+import { X, Smartphone, Monitor, SmartphoneNfc, Code, Check, Edit3, Copy, Send } from 'lucide-react';
 import { Template } from '../../../types';
 import QuickSendEmailModal from '../../templates/QuickSendEmailModal';
 import { Avatar } from '../../../../ui/Avatar';
 import { pushOverlay } from '../../../../../utils/overlayStack';
 import { getMktPortalRoot } from '../../../utils/portalRoot';
+import { api } from '../../../services/storageAdapter';
+// @ts-ignore: `compileHTML` is a named export from `htmlCompiler`
+import { compileHTML } from '../../templates/EmailEditor/utils/htmlCompiler';
 
 interface EmailPreviewDrawerProps {
   template: Template | null;
@@ -24,6 +27,8 @@ const EmailPreviewDrawer: React.FC<EmailPreviewDrawerProps> = ({ template, htmlC
   const [isVisible, setIsVisible] = React.useState(false);
   const [animateIn, setAnimateIn] = React.useState(false);
   const [showQuickSend, setShowQuickSend] = useState(false);
+  const [fetchedHtml, setFetchedHtml] = useState<string>('');
+  const [isFetchingFull, setIsFetchingFull] = useState<boolean>(false);
 
   const onClose = React.useCallback(() => {
     setAnimateIn(false);
@@ -56,14 +61,53 @@ const EmailPreviewDrawer: React.FC<EmailPreviewDrawerProps> = ({ template, htmlC
     return pushOverlay('email-preview-drawer', onClose, 2000);
   }, [isOpen, onClose]);
 
+  useEffect(() => {
+    setFetchedHtml('');
+    if (!isOpen || !template) {
+      setIsFetchingFull(false);
+      return;
+    }
+    const existingHtml = htmlContent || template.htmlContent || (
+      template.blocks && template.blocks.length > 0 && typeof template.blocks[0] === 'object'
+        ? compileHTML(template.blocks, template.bodyStyle, template.name)
+        : ''
+    );
+    if (existingHtml || template.id.startsWith('sys_')) {
+      setIsFetchingFull(false);
+      return;
+    }
+    let cancelled = false;
+    setIsFetchingFull(true);
+    api.get<Template>(`templates/${template.id}`)
+      .then(res => {
+        if (cancelled) return;
+        if (res.success && res.data) {
+          const full = res.data;
+          const compiled = full.htmlContent || (
+            full.blocks && full.blocks.length > 0 && typeof full.blocks[0] === 'object'
+              ? compileHTML(full.blocks, full.bodyStyle, full.name)
+              : ''
+          );
+          if (compiled) setFetchedHtml(compiled);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setIsFetchingFull(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, template?.id, htmlContent, template?.htmlContent]);
+
   if (!isVisible) return null;
 
-  let contentToRender = htmlContent;
-  if (!contentToRender && template) {
-    contentToRender = template.htmlContent;
+  let contentToRender = htmlContent || template?.htmlContent || fetchedHtml;
+  if (!contentToRender && template?.blocks && template.blocks.length > 0 && typeof template.blocks[0] === 'object') {
+    contentToRender = compileHTML(template.blocks, template.bodyStyle, template.name);
   }
 
-  const showMock = !contentToRender;
+  const showMock = !contentToRender && !isFetchingFull;
 
   const drawerContent = (
     <div className="fixed inset-0 z-[2147483625] flex justify-end" style={{ zIndex: 2147483625, pointerEvents: animateIn ? 'auto' : 'none' }}>
@@ -71,6 +115,9 @@ const EmailPreviewDrawer: React.FC<EmailPreviewDrawerProps> = ({ template, htmlC
         className="drawer-backdrop"
         onClick={onClose}
         style={{
+          background: 'rgba(0, 0, 0, 0.6)',
+          backdropFilter: 'blur(6px)',
+          WebkitBackdropFilter: 'blur(6px)',
           opacity: animateIn ? 1 : 0,
           transition: 'opacity 0.22s cubic-bezier(0.25, 0.1, 0.25, 1)',
           pointerEvents: animateIn ? 'auto' : 'none',
@@ -180,7 +227,18 @@ const EmailPreviewDrawer: React.FC<EmailPreviewDrawerProps> = ({ template, htmlC
             </div>
 
             <div className="email-canvas-scope flex-1 bg-white relative overflow-hidden">
-              {showMock ? (
+              {isFetchingFull && !contentToRender ? (
+                <div className="p-8 max-w-[600px] mx-auto space-y-5 animate-pulse">
+                  <div className="w-full h-56 bg-slate-200/80 rounded-xl" />
+                  <div className="h-6 bg-slate-200/80 rounded-md w-3/4" />
+                  <div className="space-y-2.5">
+                    <div className="h-4 bg-slate-200/70 rounded w-full" />
+                    <div className="h-4 bg-slate-200/70 rounded w-11/12" />
+                    <div className="h-4 bg-slate-200/70 rounded w-4/5" />
+                  </div>
+                  <div className="h-10 bg-slate-200/80 rounded-lg w-44 mx-auto mt-6" />
+                </div>
+              ) : showMock ? (
                 <div className="absolute inset-0 p-8 text-center flex flex-col items-center justify-center">
                   <div className="w-16 h-16 bg-[#fff4e0] rounded-2xl mx-auto flex items-center justify-center text-[var(--color-primary)] mb-4">
                     <SmartphoneNfc className="w-8 h-8" />

@@ -663,6 +663,9 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                 className="drawer-backdrop"
                 onClick={onClose}
                 style={{
+                    background: 'rgba(0, 0, 0, 0.6)',
+                    backdropFilter: 'blur(6px)',
+                    WebkitBackdropFilter: 'blur(6px)',
                     opacity: animateIn ? 1 : 0,
                     transition: 'opacity 0.22s cubic-bezier(0.25, 0.1, 0.25, 1)',
                     pointerEvents: animateIn ? 'auto' : 'none',

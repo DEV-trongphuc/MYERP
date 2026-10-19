@@ -488,7 +488,7 @@ try {
                 SELECT r.*,
                     COALESCE(r.contact_id, s.contact_id, ct.id) AS contact_id,
                     COALESCE(s.email, ct.email) AS subscriber_email,
-                    COALESCE(NULLIF(TRIM(CONCAT(COALESCE(s.first_name, ''), ' ', COALESCE(s.last_name, ''))), ''), s.first_name, ct.name, 'Ẩn danh') AS subscriber_name,
+                    COALESCE(NULLIF(TRIM(CONCAT(COALESCE(s.first_name, ''), ' ', COALESCE(s.last_name, ''))), ''), s.first_name, ct.full_name, 'Ẩn danh') AS subscriber_name,
                     COALESCE(s.phone_number, ct.phone) AS subscriber_phone
                 FROM survey_responses r
                 LEFT JOIN subscribers s ON s.id = r.subscriber_id

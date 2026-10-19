@@ -1,7 +1,20 @@
 <?php
 class QuoteController {
     private PDO $db;
-    public function __construct(PDO $db) { $this->db = $db; }
+    private static bool $schemaChecked = false;
+    public function __construct(PDO $db) {
+        $this->db = $db;
+        if (!self::$schemaChecked && !$this->db->inTransaction()) {
+            self::$schemaChecked = true;
+            try {
+                $col = $this->db->query("SHOW COLUMNS FROM quotes LIKE 'deleted_at'")->fetch();
+                if (!$col) {
+                    $this->db->exec("ALTER TABLE quotes ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL");
+                }
+            } catch (\Throwable $e) {
+            }
+        }
+    }
 
     public function index(array $auth): void {
         $page   = max(1, (int)($_GET['page']   ?? 1));
@@ -28,7 +41,7 @@ class QuoteController {
             $userIds = array_merge($userIds, array_map('intval', $teamMemberIds));
         }
 
-        $where  = ['q.tenant_id = ?'];
+        $where  = ['q.tenant_id = ?', 'q.deleted_at IS NULL'];
         $params = [$tid];
 
         if ($contactId) {
@@ -207,7 +220,7 @@ class QuoteController {
             $calculatedSubtotal = max(0, (float)($b['subtotal'] ?? ($b['total'] ?? 0)));
         }
         
-        $quoteDiscount = max(0, (float)($b['discount'] ?? 0));
+        $quoteDiscount = max(0, (float)($b['discount'] ?? $b['discount_amount'] ?? 0));
         if ($quoteDiscount > $calculatedSubtotal) {
             respond(422, null, 'Tổng chiết khấu không được vượt quá tổng thành tiền báo giá', false);
         }
@@ -220,6 +233,7 @@ class QuoteController {
         // Generate robust quote number
         $qNum = 'QT-' . date('Ymd') . '-' . strtoupper(bin2hex(random_bytes(2)));
         $validUntil = empty($b['valid_until']) ? null : $b['valid_until'];
+        $notesVal = $b['notes'] ?? $b['note'] ?? null;
 
         $this->db->beginTransaction();
         try {
@@ -231,7 +245,7 @@ class QuoteController {
                 $tid, $b['deal_id'] ?? null, $b['contact_id'] ?? null, $uid,
                 $qNum, $b['title'], $b['status'] ?? 'draft',
                 $calculatedSubtotal, $quoteDiscount, $quoteTax, $calculatedTotal,
-                $validUntil, $b['notes'] ?? null
+                $validUntil, $notesVal
             ]);
             $qid = (int)$this->db->lastInsertId();
 
@@ -269,7 +283,7 @@ class QuoteController {
         $isSale = $role === 'sales' || $role === 'sale';
         $isManager = $role === 'manager';
 
-        $sql = "SELECT q.*,u.full_name as created_by_name FROM quotes q LEFT JOIN users u ON q.created_by=u.id WHERE q.id=? AND q.tenant_id=?";
+        $sql = "SELECT q.*,u.full_name as created_by_name FROM quotes q LEFT JOIN users u ON q.created_by=u.id WHERE q.id=? AND q.tenant_id=? AND q.deleted_at IS NULL";
         $p = [$id, $tid];
         if ($isSale) {
             $sql .= " AND q.created_by=?";
@@ -295,7 +309,13 @@ class QuoteController {
         $uid = (int)($auth['user_id'] ?? 0);
         $tid = (int)($auth['tenant_id'] ?? 0);
 
-        $b=getBody(); 
+        $b=getBody();
+        if (!array_key_exists('notes', $b) && array_key_exists('note', $b)) {
+            $b['notes'] = $b['note'];
+        }
+        if (!array_key_exists('discount', $b) && array_key_exists('discount_amount', $b)) {
+            $b['discount'] = $b['discount_amount'];
+        }
         $fields=['title','status','valid_until','notes','terms'];
         $sets=[];$params=[];
         foreach($fields as $f){
@@ -507,7 +527,7 @@ class QuoteController {
 
             $this->db->commit();
             respond(200, ['invoice_id' => $invId], 'Đã chuyển báo giá thành hóa đơn thành công');
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             if ($this->db->inTransaction()) $this->db->rollBack();
             respond(400, null, $e->getMessage(), false);
         }
@@ -525,7 +545,7 @@ class QuoteController {
             respond(403, null, 'Bạn không có quyền xóa báo giá', false);
         }
 
-        $sql = "DELETE FROM quotes WHERE id=? AND tenant_id=?";
+        $sql = "UPDATE quotes SET deleted_at = NOW(), status = 'cancelled' WHERE id=? AND tenant_id=? AND deleted_at IS NULL";
         $p = [$id, $tid];
         if ($scope === 'team') {
             $sql .= " AND (created_by = ? OR created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?) OR team_id = (SELECT team_id FROM users WHERE id = ?)))";
@@ -536,10 +556,22 @@ class QuoteController {
             $sql .= " AND created_by=?";
             $p[] = $uid;
         }
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute($p);
-        if (!$stmt->rowCount()) respond(404, null, 'Không tìm thấy hoặc không có quyền', false);
-        respond(200,null,'Đã xóa báo giá');
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($p);
+            if (!$stmt->rowCount()) {
+                $this->db->rollBack();
+                respond(404, null, 'Không tìm thấy hoặc không có quyền', false);
+            }
+            $this->db->commit();
+            respond(200, null, 'Đã xóa báo giá');
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi khi xóa báo giá: ' . $e->getMessage(), false);
+        }
     }
 
     private function getScope(array $auth, string $module, string $action): string {

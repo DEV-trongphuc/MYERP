@@ -60,7 +60,7 @@ class SearchController {
             }
 
             $sqlC = "SELECT c.id, c.full_name as label, c.full_name, c.phone, c.email, c.status, c.expected_revenue, 
-                            c.avatar, c.stage_id, ps.name as stage_name, u.full_name as owner_name, 'contact' as type 
+                            c.avatar_url as avatar, c.stage_id, ps.name as stage_name, u.full_name as owner_name, 'contact' as type 
                      FROM contacts c
                      LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
                      LEFT JOIN users u ON c.owner_id = u.id
@@ -147,8 +147,8 @@ class SearchController {
                 $pT[] = $uid;
                 $pT[] = $uid;
                 $pT[] = (string)$uid;
-                $pT[] = "%@{$auth['full_name']}%";
-                $pT[] = "%@{$auth['username']}%";
+                $pT[] = "%@" . ($auth['full_name'] ?? '') . "%";
+                $pT[] = "%@" . ($auth['username'] ?? $auth['email'] ?? '') . "%";
                 $pT[] = $uid;
             }
 
@@ -195,7 +195,7 @@ class SearchController {
         // 3. 📝 Approvals Search (#3079 or Proposal Title)
         try {
             // 3.1 Expenses & Payment requests
-            $expWhere = "(e.title LIKE ? OR e.notes LIKE ? OR e.description LIKE ? OR u.full_name LIKE ?)";
+            $expWhere = "(e.title LIKE ? OR e.notes LIKE ? OR e.category LIKE ? OR u.full_name LIKE ?)";
             $expParams = [$like, $like, $like, $like];
             if ($searchId > 0) {
                 $expWhere = "(e.id = ? OR $expWhere)";
@@ -203,15 +203,14 @@ class SearchController {
             }
 
             $sqlExp = "SELECT e.id, e.title as label, e.title, e.amount, e.currency, e.status, e.category, 
-                              e.user_id, e.created_by, e.created_at, e.approver_id, e.approver_id_2, e.approver_id_3,
+                              e.created_by as user_id, e.created_by, e.created_at, e.approver_id, e.approver_id_2, e.approver_id_3,
                               u.full_name as employee_name, 'expense' as approval_type, 'approval' as type
                        FROM expenses e
-                       LEFT JOIN users u ON COALESCE(e.user_id, e.created_by) = u.id
-                       WHERE e.tenant_id = ? AND $expWhere";
+                       LEFT JOIN users u ON e.created_by = u.id
+                       WHERE e.tenant_id = ? AND e.deleted_at IS NULL AND $expWhere";
             $pExp = array_merge([$tid], $expParams);
             if (!$isGlobalAdmin && $role !== 'accountant' && $role !== 'hr') {
-                $sqlExp .= " AND (e.user_id = ? OR e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ?)";
-                $pExp[] = $uid;
+                $sqlExp .= " AND (e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ?)";
                 $pExp[] = $uid;
                 $pExp[] = $uid;
                 $pExp[] = $uid;

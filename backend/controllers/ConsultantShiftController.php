@@ -11,15 +11,28 @@ class ConsultantShiftController {
 
     public function index(array $auth): void {
         $tid = $auth['tenant_id'];
+        $where = ["s.tenant_id = ?"];
+        $params = [$tid];
+
+        if (!empty($_GET['from_date'])) {
+            $where[] = "s.shift_date >= ?";
+            $params[] = $_GET['from_date'];
+        }
+        if (!empty($_GET['to_date'])) {
+            $where[] = "s.shift_date <= ?";
+            $params[] = $_GET['to_date'];
+        }
+
+        $w = implode(' AND ', $where);
         $stmt = $this->db->prepare("
             SELECT s.*, u.full_name as consultant_name, u.email as consultant_email, u.avatar_url
             FROM consultant_shifts s
             JOIN users u ON s.user_id = u.id
-            WHERE s.tenant_id = ?
+            WHERE $w
             ORDER BY s.shift_date DESC, s.id DESC
             LIMIT 100
         ");
-        $stmt->execute([$tid]);
+        $stmt->execute($params);
         $shifts = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
         respond(200, $shifts, 'Lấy danh sách ca trực tư vấn thành công');
     }
@@ -87,7 +100,7 @@ class ConsultantShiftController {
         $tid = $auth['tenant_id'];
         $body = getBody();
         $status = trim($body['status'] ?? '');
-        $note = trim($body['notes'] ?? '');
+        $note = trim($body['notes'] ?? $body['manager_note'] ?? $body['note'] ?? '');
 
         $stmtCheck = $this->db->prepare("SELECT user_id, status FROM consultant_shifts WHERE id = ? AND tenant_id = ? LIMIT 1");
         $stmtCheck->execute([$id, $tid]);
@@ -162,7 +175,9 @@ class ConsultantShiftController {
             respond(404, null, 'Không tìm thấy nhân sự thuộc chi nhánh/tổ chức này', false);
         }
         $current = (int)$row['vacation_mode'];
-        $newMode = $current === 1 ? 0 : 1;
+        $newMode = array_key_exists('vacation_mode', $body)
+            ? ($body['vacation_mode'] ? 1 : 0)
+            : ($current === 1 ? 0 : 1);
 
         $this->db->prepare("UPDATE users SET vacation_mode = ?, updated_at = NOW() WHERE id = ? AND tenant_id = ?")
             ->execute([$newMode, $userId, $tid]);
@@ -177,22 +192,24 @@ class ConsultantShiftController {
         static $checked = false;
         if ($checked) return;
         try {
-            $this->db->exec("
-                CREATE TABLE IF NOT EXISTS consultant_shifts (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    tenant_id INT NOT NULL DEFAULT 1,
-                    user_id INT NOT NULL,
-                    shift_type VARCHAR(50) NOT NULL DEFAULT 'regular',
-                    shift_date DATE NOT NULL,
-                    status VARCHAR(50) NOT NULL DEFAULT 'pending',
-                    notes TEXT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                    INDEX idx_tenant_date (tenant_id, shift_date),
-                    INDEX idx_user_shift (user_id, shift_date)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-            ");
-            $checked = true;
+            if (!$this->db->inTransaction()) {
+                $this->db->exec("
+                    CREATE TABLE IF NOT EXISTS consultant_shifts (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        tenant_id INT NOT NULL DEFAULT 1,
+                        user_id INT NOT NULL,
+                        shift_type VARCHAR(50) NOT NULL DEFAULT 'regular',
+                        shift_date DATE NOT NULL,
+                        status VARCHAR(50) NOT NULL DEFAULT 'pending',
+                        notes TEXT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        INDEX idx_tenant_date (tenant_id, shift_date),
+                        INDEX idx_user_shift (user_id, shift_date)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                ");
+                $checked = true;
+            }
         } catch (\Throwable $e) {
             error_log("Ensure Consultant Shifts Error: " . $e->getMessage());
         }

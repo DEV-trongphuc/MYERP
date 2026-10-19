@@ -288,6 +288,9 @@ const RichText: React.FC<RichTextProps> = ({ html, onChange, placeholder, classN
                     outline: 'none',
                     cursor: disabled ? 'default' : 'text',
                     minHeight: '1em',
+                    whiteSpace: 'normal',
+                    wordBreak: 'break-word',
+                    overflowWrap: 'break-word',
                     ...style
                 }}
                 onBlur={() => {
@@ -322,9 +325,15 @@ const RichText: React.FC<RichTextProps> = ({ html, onChange, placeholder, classN
                     color: ${style?.color || '#1e293b'} !important;
                     display: block !important;
                     min-height: 1em !important;
+                    white-space: normal !important;
+                    word-break: break-word !important;
+                    overflow-wrap: break-word !important;
                 }
                 #${instanceId} p {
                     color: ${style?.color || '#1e293b'} !important;
+                    white-space: normal !important;
+                    word-break: break-word !important;
+                    overflow-wrap: break-word !important;
                 }
                 #${instanceId} a { color: ${bodyLinkColor} !important; text-decoration: underline !important; }
                 ${blockFontSize ? `#${instanceId} p, #${instanceId} div:not([class]) { font-size: ${typeof blockFontSize === 'number' ? blockFontSize + 'px' : blockFontSize}; }` : ''}

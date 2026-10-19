@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, Info, X, RefreshCw } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { numberToVietnameseText } from '../../utils/numberToText';
+import { pushOverlay } from '../../utils/overlayStack';
 
 export const GlobalConfirmModal: React.FC = () => {
   const { confirmModal, closeConfirm } = useUIStore();
@@ -76,11 +77,16 @@ export const GlobalConfirmModal: React.FC = () => {
     }
   };
 
-  const handleCancel = () => {
+  const handleCancel = React.useCallback(() => {
     if (isSubmitting) return;
     if (onCancel) onCancel();
     closeConfirm();
-  };
+  }, [isSubmitting, onCancel, closeConfirm]);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    return pushOverlay('global-confirm-modal', handleCancel, 2147483646);
+  }, [isOpen, handleCancel]);
 
   const renderMessage = (text: string) => {
     if (!text) return null;
@@ -109,12 +115,13 @@ export const GlobalConfirmModal: React.FC = () => {
     <AnimatePresence>
       {isOpen && (
         <div 
+          className="modal-backdrop modal-above-drawer"
           style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
             backgroundColor: 'rgba(0, 0, 0, 0.75)',
             backdropFilter: 'blur(4px)',
             WebkitBackdropFilter: 'blur(4px)',
-            zIndex: 9999999999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 2147483646, display: 'flex', alignItems: 'center', justifyContent: 'center',
             padding: '1.5rem',
             contain: 'strict',
             willChange: 'opacity'

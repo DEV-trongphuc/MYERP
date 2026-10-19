@@ -71,7 +71,7 @@ const CustomSelect: React.FC<{
                 top: rect.top - dropdownHeight - 4,
                 left: rect.left,
                 width: rect.width,
-                zIndex: 999999,
+                zIndex: 2147483647,
             });
         } else {
             setDropdownStyle({
@@ -79,7 +79,7 @@ const CustomSelect: React.FC<{
                 top: rect.bottom + 4,
                 left: rect.left,
                 width: rect.width,
-                zIndex: 999999,
+                zIndex: 2147483647,
             });
         }
     }, [options.length]);
@@ -561,7 +561,7 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
             top = pickerButtonRect.bottom + 4;
         }
 
-        return { position: 'fixed', top, left, width: W, zIndex: 999999 };
+        return { position: 'fixed', top, left, width: W, zIndex: 2147483647 };
     };
 
     if (loading) {
@@ -921,7 +921,7 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                                                             <>
                                                                 <div
                                                                     className="fixed inset-0"
-                                                                    style={{ zIndex: 999998 }}
+                                                                    style={{ zIndex: 2147483646 }}
                                                                     onClick={() => { setVarPickerField(null); setPickerButtonRect(null); }}
                                                                 />
                                                                 <div

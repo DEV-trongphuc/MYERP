@@ -279,11 +279,11 @@ class ProjectController {
 
         // Update campaigns to link to this new project
         $campaignIdsArray = isset($b['campaign_ids_array']) && is_array($b['campaign_ids_array']) 
-            ? array_filter(array_map('intval', $b['campaign_ids_array'])) 
+            ? array_values(array_filter(array_map('intval', $b['campaign_ids_array']))) 
             : [];
             
         if (empty($campaignIdsArray) && !empty($campaign_ids)) {
-            $campNames = array_filter(array_map('trim', explode(',', $campaign_ids)));
+            $campNames = array_values(array_filter(array_map('trim', explode(',', $campaign_ids))));
             if (!empty($campNames)) {
                 $inClause = implode(',', array_fill(0, count($campNames), '?'));
                 $stmtC = $this->db->prepare("SELECT id FROM marketing_campaigns WHERE tenant_id = ? AND name IN ($inClause)");
@@ -293,6 +293,7 @@ class ProjectController {
         }
 
         if (!empty($campaignIdsArray)) {
+            $campaignIdsArray = array_values($campaignIdsArray);
             $inClause = implode(',', array_fill(0, count($campaignIdsArray), '?'));
             $stmtSet = $this->db->prepare("UPDATE marketing_campaigns SET project_id = ? WHERE tenant_id = ? AND id IN ($inClause)");
             $stmtSet->execute(array_merge([$newId, $auth['tenant_id']], $campaignIdsArray));
@@ -355,11 +356,11 @@ class ProjectController {
 
         // Update campaigns to link to this project
         $campaignIdsArray = isset($b['campaign_ids_array']) && is_array($b['campaign_ids_array']) 
-            ? array_filter(array_map('intval', $b['campaign_ids_array'])) 
+            ? array_values(array_filter(array_map('intval', $b['campaign_ids_array']))) 
             : [];
             
         if (empty($campaignIdsArray) && !empty($campaign_ids)) {
-            $campNames = array_filter(array_map('trim', explode(',', $campaign_ids)));
+            $campNames = array_values(array_filter(array_map('trim', explode(',', $campaign_ids))));
             if (!empty($campNames)) {
                 $inClause = implode(',', array_fill(0, count($campNames), '?'));
                 $stmtC = $this->db->prepare("SELECT id FROM marketing_campaigns WHERE tenant_id = ? AND name IN ($inClause)");
@@ -373,6 +374,7 @@ class ProjectController {
         $stmtClear->execute([$id, $auth['tenant_id']]);
 
         if (!empty($campaignIdsArray)) {
+            $campaignIdsArray = array_values($campaignIdsArray);
             $inClause = implode(',', array_fill(0, count($campaignIdsArray), '?'));
             $stmtSet = $this->db->prepare("UPDATE marketing_campaigns SET project_id = ? WHERE tenant_id = ? AND id IN ($inClause)");
             $stmtSet->execute(array_merge([$id, $auth['tenant_id']], $campaignIdsArray));
@@ -1096,6 +1098,20 @@ class ProjectController {
             $params[] = $uid;
             $params[] = (string)$uid;
             $params[] = $uid;
+        }
+
+        if (!empty($_GET['status']) && $_GET['status'] !== 'all') {
+            $where .= " AND a.status = ?";
+            $params[] = $_GET['status'];
+        }
+        $assigneeFilter = $_GET['assignee_id'] ?? $_GET['user_id'] ?? '';
+        if (!empty($assigneeFilter) && $assigneeFilter !== 'all') {
+            $where .= " AND a.user_id = ?";
+            $params[] = (int)$assigneeFilter;
+        }
+        if (!empty($_GET['project_id']) && $_GET['project_id'] !== 'all') {
+            $where .= " AND a.related_type = 'project' AND a.related_id = ?";
+            $params[] = (int)$_GET['project_id'];
         }
 
         $stmt = $this->db->prepare("

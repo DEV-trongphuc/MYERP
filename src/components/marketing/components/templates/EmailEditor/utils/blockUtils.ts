@@ -589,11 +589,11 @@ export const createBlock = (type: string, layout?: string): EmailBlock => {
             surveyDescription: 'Ý kiến của bạn giúp chúng tôi nâng cao chất lượng dịch vụ mỗi ngày. Chỉ mất 1 phút để hoàn thành!',
             surveyBadgeText: 'KHẢO SÁT NHANH',
             surveyButtonText: 'Tham gia khảo sát ngay →',
-            surveyAccentColor: '#2563EB',
-            surveyCardBgColor: '#F8FAFC',
-            surveyBorderColor: '#BFDBFE',
+            surveyAccentColor: '#BD1D2D',
+            surveyCardBgColor: '#FFFFFF',
+            surveyBorderColor: '#E2E8F0',
             surveyButtonTextColor: '#FFFFFF',
-            borderRadius: '14px',
+            borderRadius: '16px',
             textAlign: 'center',
         };
     }

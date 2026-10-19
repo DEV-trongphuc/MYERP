@@ -1,14 +1,27 @@
 <?php
 class PurchaseOrderController {
     private PDO $db;
-    public function __construct(PDO $db) { $this->db = $db; }
+    private static bool $schemaChecked = false;
+    public function __construct(PDO $db) {
+        $this->db = $db;
+        if (!self::$schemaChecked && !$this->db->inTransaction()) {
+            self::$schemaChecked = true;
+            try {
+                $col = $this->db->query("SHOW COLUMNS FROM purchase_orders LIKE 'deleted_at'")->fetch();
+                if (!$col) {
+                    $this->db->exec("ALTER TABLE purchase_orders ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL");
+                }
+            } catch (\Throwable $e) {
+            }
+        }
+    }
 
     public function index(array $auth): void {
         $tid = $auth['tenant_id'];
         $supplierId = (int)($_GET['supplier_id'] ?? 0);
         $paymentStatus = trim($_GET['payment_status'] ?? '');
 
-        $where = ["po.tenant_id = ?"];
+        $where = ["po.tenant_id = ?", "po.deleted_at IS NULL"];
         $params = [$tid];
 
         if ($supplierId > 0) {
@@ -338,7 +351,7 @@ class PurchaseOrderController {
             }
 
             $this->show($auth, $poId);
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             if (get_class($e) === 'ResponseException') {
                 if ($this->db->inTransaction()) $this->db->rollBack();
                 throw $e;
@@ -366,7 +379,7 @@ class PurchaseOrderController {
             LEFT JOIN users real1 ON po.approved_by = real1.id
             LEFT JOIN users real2 ON po.approved_by_2 = real2.id
             LEFT JOIN users real3 ON po.approved_by_3 = real3.id
-            WHERE po.id = ? AND po.tenant_id = ?
+            WHERE po.id = ? AND po.tenant_id = ? AND po.deleted_at IS NULL
         ");
         $stmt->execute([$id, $auth['tenant_id']]);
         $po = $stmt->fetch();
@@ -407,7 +420,7 @@ class PurchaseOrderController {
         $this->db->beginTransaction();
         try {
             // 1. Get PO and items
-            $stmt = $this->db->prepare("SELECT status, approval_status FROM purchase_orders WHERE id = ? AND tenant_id = ? FOR UPDATE");
+            $stmt = $this->db->prepare("SELECT status, approval_status FROM purchase_orders WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL FOR UPDATE");
             $stmt->execute([$id, $auth['tenant_id']]);
             $po = $stmt->fetch();
             if (!$po) {
@@ -478,7 +491,7 @@ class PurchaseOrderController {
             $this->db->commit();
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'Nhập kho từ PO', 'purchase_order', $id, $poInfo['po_number']);
             respond(200, null, 'Đã nhập kho thành công, đã tạo lô hàng và cập nhật số lượng tồn kho');
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             if (get_class($e) === 'ResponseException') {
                 if ($this->db->inTransaction()) $this->db->rollBack();
                 throw $e;
@@ -488,9 +501,13 @@ class PurchaseOrderController {
         }
     }
 
-    public function approve(array $auth, int $id): void {
+    public function approve(array $auth, int $id, ?string $defaultAction = null): void {
         $b = getBody();
-        $statusInput = $b['status'] ?? ''; // 'approved' or 'rejected'
+        $statusInput = trim((string)($b['status'] ?? '')); // 'approved' or 'rejected'
+        if ($statusInput === '') {
+            $statusInput = $defaultAction === 'reject' ? 'rejected' : ($defaultAction === 'approve' ? 'approved' : '');
+        }
+        $reason = trim((string)($b['reject_reason'] ?? $b['reason'] ?? $b['note'] ?? ''));
         if (!in_array($statusInput, ['approved', 'rejected'], true)) {
             respond(400, null, 'Trạng thái phê duyệt không hợp lệ', false);
         }
@@ -608,7 +625,8 @@ class PurchaseOrderController {
 
             // Log activity
             $actionLabel = $statusInput === 'approved' ? 'Phê duyệt PO Cấp ' . $currentLevel : 'Từ chối PO Cấp ' . $currentLevel;
-            logActivity($this->db, $tid, $userId, $actionLabel, 'purchase_order', $id, $po['po_number']);
+            $logPayload = $reason !== '' ? ($po['po_number'] . ' | Lý do: ' . $reason) : $po['po_number'];
+            logActivity($this->db, $tid, $userId, $actionLabel, 'purchase_order', $id, $logPayload);
 
             // Send notification
             try {
@@ -618,6 +636,7 @@ class PurchaseOrderController {
                     'po_number' => $po['po_number'],
                     'current_level' => $currentLevel,
                     'status' => $statusInput,
+                    'reason' => $reason,
                     'next_approval_status' => $nextApprovalStatus,
                     'creator_id' => $po['created_by'],
                     'approver_name' => $auth['full_name'] ?? 'Người duyệt'
@@ -645,7 +664,7 @@ class PurchaseOrderController {
             }
 
             respond(200, null, 'Phản hồi phê duyệt đơn hàng thành công');
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             if (get_class($e) === 'ResponseException') {
                 if ($this->db->inTransaction()) $this->db->rollBack();
                 throw $e;
@@ -656,7 +675,7 @@ class PurchaseOrderController {
     }
 
     public function update(array $auth, int $id): void {
-        $stmtPo = $this->db->prepare("SELECT * FROM purchase_orders WHERE id = ? AND tenant_id = ?");
+        $stmtPo = $this->db->prepare("SELECT * FROM purchase_orders WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
         $stmtPo->execute([$id, $auth['tenant_id']]);
         $po = $stmtPo->fetch(PDO::FETCH_ASSOC);
 
@@ -915,7 +934,7 @@ class PurchaseOrderController {
         $tid = (int)($auth['tenant_id'] ?? 0);
         $isManagementOrAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true);
 
-        $stmt = $this->db->prepare("SELECT id, status, payment_status, created_by FROM purchase_orders WHERE id = ? AND tenant_id = ?");
+        $stmt = $this->db->prepare("SELECT id, status, payment_status, created_by FROM purchase_orders WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
         $stmt->execute([$id, $tid]);
         $po = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -939,10 +958,7 @@ class PurchaseOrderController {
 
         try {
             $this->db->beginTransaction();
-            $stmtItems = $this->db->prepare("DELETE FROM purchase_order_items WHERE po_id = ?");
-            $stmtItems->execute([$id]);
-
-            $stmtDel = $this->db->prepare("DELETE FROM purchase_orders WHERE id = ? AND tenant_id = ?");
+            $stmtDel = $this->db->prepare("UPDATE purchase_orders SET deleted_at = NOW(), status = 'cancelled' WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
             $stmtDel->execute([$id, $tid]);
 
             $this->db->commit();

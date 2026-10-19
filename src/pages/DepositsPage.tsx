@@ -1,5 +1,6 @@
 import React, { useEffect, useState, lazy, Suspense, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { useLocation } from 'react-router-dom';
 import { fetchAPI } from '../utils/api';
 import api from '../api/axios';
 import { compressToWebP } from '../utils/imageCompress';
@@ -289,9 +290,21 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
   const [showManageModal, setShowManageModal] = useState(false);
   const [selectedDepForManage, setSelectedDepForManage] = useState<Deposit | null>(null);
 
-  // Auto-open deposit drawer from notification deep-link
+  const location = useLocation();
+  const isDepositsRouteActive = location.pathname.startsWith('/deposits') || location.pathname.startsWith('/sales-orders') || location.pathname.startsWith('/cash-flow');
+
+  // Auto-open deposit drawer from notification deep-link or POS from ?action=create
   useEffect(() => {
+    if (!isDepositsRouteActive) return;
     const params = new URLSearchParams(window.location.search);
+    if (params.get('action') === 'create' || params.get('create') === '1') {
+      params.delete('action');
+      params.delete('create');
+      const newSearch = params.toString();
+      window.history.replaceState({}, '', `${window.location.pathname}${newSearch ? `?${newSearch}` : ''}${window.location.hash}`);
+      useUIStore.getState().setShowPOS(true);
+      return;
+    }
     const openId = params.get('open_id') || params.get('id');
     if (openId) {
       params.delete('open_id');
@@ -317,10 +330,12 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
           }
         });
     }
-  }, [deposits]);
+  }, [deposits, isDepositsRouteActive, location.search]);
 
   useEffect(() => {
     const handleOpenDepositDrawer = (e: any) => {
+      const path = window.location.pathname;
+      if (!path.startsWith('/deposits') && !path.startsWith('/sales-orders') && !path.startsWith('/cash-flow')) return;
       const depId = e.detail?.id || e.detail?.depositId;
       if (depId) {
         api.get(`/deposits/${depId}`)

@@ -1078,7 +1078,7 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
   const fetchRounds = async () => {
     try {
       const res = await fetchAPI('get_rounds');
-      if (res.success && res.data) {
+      if (res.success && Array.isArray(res.data)) {
         setRounds(res.data);
       }
     } catch (e) {
@@ -1089,7 +1089,7 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
   const fetchConsultants = async () => {
     try {
       const json = await fetchAPI('get_consultants');
-      if (json.success) {
+      if (json.success && Array.isArray(json.data)) {
         setConsultants(json.data);
       }
     } catch (e: any) {

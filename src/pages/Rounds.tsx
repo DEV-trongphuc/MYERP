@@ -559,7 +559,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
     try {
       const res = await fetchAPI(`get_reports&round_id=${roundId}`, { signal });
       if (signal.aborted) return;
-      if (res.success) setReports(res.data);
+      if (res.success) setReports(Array.isArray(res.data) ? res.data : []);
     } catch (e: any) {
       if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       console.error(e);

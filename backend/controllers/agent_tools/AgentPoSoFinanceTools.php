@@ -230,7 +230,7 @@ class AgentPoSoFinanceTools
         $userIds = [$uid];
         if (strtolower($role) === 'manager' && $uid > 0) {
             try {
-                $stmt = $db->prepare("SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?) AND deleted_at IS NULL");
+                $stmt = $db->prepare("SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?) AND is_active = 1 AND deleted_at IS NULL");
                 $stmt->execute([$uid]);
                 $rows = $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
                 foreach ($rows as $r) {
@@ -1472,7 +1472,7 @@ class AgentPoSoFinanceTools
 
         try {
             $stmtBulk = $db->prepare("
-                SELECT abr.id, abr.reason, abr.status, abr.created_at,
+                SELECT abr.id, abr.admin_note AS reason, abr.status, abr.created_at,
                        u.full_name as requester_name
                 FROM attendance_bulk_requests abr
                 JOIN users u ON abr.user_id = u.id
@@ -1741,11 +1741,11 @@ class AgentPoSoFinanceTools
                             ->execute([$qty, $unitCost, $prodId, $tid]);
                         try {
                             $batchNo = 'LOT-' . date('ymd') . '-' . $recordId . '-' . $prodId;
-                            $db->prepare("INSERT INTO batches (tenant_id, product_id, po_id, batch_number, quantity, remaining_qty, unit_cost, received_date) VALUES (?, ?, ?, ?, ?, ?, ?, CURDATE())")
+                            $db->prepare("INSERT INTO batches (tenant_id, product_id, po_id, batch_code, initial_qty, current_qty, import_price, import_date) VALUES (?, ?, ?, ?, ?, ?, ?, CURDATE())")
                                 ->execute([$tid, $prodId, $recordId, $batchNo, $qty, $qty, $unitCost]);
                             $batchId = (int)$db->lastInsertId();
-                            $db->prepare("INSERT INTO inventory_logs (tenant_id, product_id, batch_id, created_by, type, quantity, reference, notes) VALUES (?, ?, ?, ?, 'in', ?, ?, ?)")
-                                ->execute([$tid, $prodId, $batchId ?: null, $uid, $qty, $po['po_number'], "Nhập kho từ PO {$po['po_number']}"]);
+                            $db->prepare("INSERT INTO inventory_logs (tenant_id, batch_id, created_by, action_type, qty_change, reason) VALUES (?, ?, ?, 'IN_PO', ?, ?)")
+                                ->execute([$tid, $batchId ?: null, $uid, $qty, "Nhập kho từ PO {$po['po_number']}"]);
                         } catch (\Throwable $e) {
                             // Ignore if batches/inventory_logs schema optional
                         }

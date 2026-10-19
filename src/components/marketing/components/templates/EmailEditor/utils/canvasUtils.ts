@@ -33,7 +33,15 @@ export const buildCss = (s: EmailBlockStyle, viewMode: 'desktop' | 'mobile', bod
         ? rs.backgroundImage
         : rs.backgroundColor;
 
+    const bStyle = (rs.borderStyle && rs.borderStyle !== 'none') ? rs.borderStyle : 'solid';
+    const bColor = rs.borderColor || '#e2e8f0';
+    const bTopW = toPx(rs.borderTopWidth);
+    const bRightW = toPx(rs.borderRightWidth);
+    const bBottomW = toPx(rs.borderBottomWidth);
+    const bLeftW = toPx(rs.borderLeftWidth);
+
     return {
+        ...rs,
         paddingTop, paddingRight, paddingBottom, paddingLeft,
         marginTop: toPx(rs.marginTop), 
         marginRight: marginRight, 
@@ -54,10 +62,14 @@ export const buildCss = (s: EmailBlockStyle, viewMode: 'desktop' | 'mobile', bod
         lineHeight: sanitizeLineHeight(rs.lineHeight),
         borderStyle: rs.borderStyle as any,
         borderColor: rs.borderColor,
-        borderTopWidth: toPx(rs.borderTopWidth),
-        borderRightWidth: toPx(rs.borderRightWidth),
-        borderBottomWidth: toPx(rs.borderBottomWidth),
-        borderLeftWidth: toPx(rs.borderLeftWidth),
+        borderTopWidth: bTopW,
+        borderRightWidth: bRightW,
+        borderBottomWidth: bBottomW,
+        borderLeftWidth: bLeftW,
+        borderTop: (bTopW && parseFloat(String(bTopW)) > 0 && rs.borderStyle !== 'none') ? `${bTopW} ${bStyle} ${bColor}` : undefined,
+        borderRight: (bRightW && parseFloat(String(bRightW)) > 0 && rs.borderStyle !== 'none') ? `${bRightW} ${bStyle} ${bColor}` : undefined,
+        borderBottom: (bBottomW && parseFloat(String(bBottomW)) > 0 && rs.borderStyle !== 'none') ? `${bBottomW} ${bStyle} ${bColor}` : undefined,
+        borderLeft: (bLeftW && parseFloat(String(bLeftW)) > 0 && rs.borderStyle !== 'none') ? `${bLeftW} ${bStyle} ${bColor}` : undefined,
         borderRadius: sanitizeRadius(rs.borderRadius),
         borderTopLeftRadius: sanitizeRadius(rs.borderTopLeftRadius),
         borderTopRightRadius: sanitizeRadius(rs.borderTopRightRadius),

@@ -12,7 +12,7 @@ try {
     $res = $pdo->query("
         SELECT source, COUNT(*) as c 
         FROM subscribers 
-        WHERE id NOT IN (SELECT DISTINCT subscriber_id FROM subscriber_lists)
+        WHERE NOT EXISTS (SELECT 1 FROM subscriber_lists sl WHERE sl.subscriber_id = subscribers.id)
         GROUP BY source
     ")->fetchAll(PDO::FETCH_ASSOC);
 
@@ -36,10 +36,10 @@ try {
         $placeholders = implode(',', array_fill(0, count($sourcesToDelete), '?'));
         $stmt = $pdo->prepare("
             DELETE FROM subscribers 
-            WHERE id NOT IN (SELECT DISTINCT subscriber_id FROM subscriber_lists)
+            WHERE NOT EXISTS (SELECT 1 FROM subscriber_lists sl WHERE sl.subscriber_id = subscribers.id)
             AND source IN ($placeholders)
         ");
-        $stmt->execute($sourcesToDelete);
+        $stmt->execute(array_values($sourcesToDelete));
         $deleted = $stmt->rowCount();
         echo "<br><b style='color:green'>Cleaned up $deleted orphaned subscribers from Integration sources.</b><br>";
         echo "<b>WORKSPACE DATA IS NOW 100% CLEAN!</b>";

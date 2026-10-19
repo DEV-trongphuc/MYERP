@@ -23,9 +23,15 @@ const cleanNameForAvatar = (name: string) => {
 const getInitials = (name: string) => {
   const cleaned = cleanNameForAvatar(name);
   if (!cleaned) return '?';
-  const parts = cleaned.split(' ');
+  const parts = cleaned
+    .split(' ')
+    .map(p => p.replace(/^[^a-zA-ZÀ-ỹ0-9]+|[^a-zA-ZÀ-ỹ0-9]+$/g, ''))
+    .filter(Boolean);
   if (parts.length >= 2) {
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  if (parts.length === 1 && parts[0].length > 0) {
+    return parts[0].slice(0, 2).toUpperCase();
   }
   return cleaned[0].toUpperCase();
 };

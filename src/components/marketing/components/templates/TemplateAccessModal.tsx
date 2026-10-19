@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import erpApi from '../../../../api/axios';
 import { Avatar } from '../../../ui/Avatar';
+import { getMktPortalRoot } from '../../utils/portalRoot';
 
 export type TemplateVisibilityMode = 'shared' | 'personal' | 'custom' | 'system';
 
@@ -422,7 +423,8 @@ const TemplateAccessModal: React.FC<TemplateAccessModalProps> = ({
 
     const modalNode = (
         <div
-            className="fixed inset-0 z-[2147483646] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
+            className="fixed inset-0 z-[2147483646] bg-black/60 backdrop-blur-[6px] flex items-center justify-center p-4 animate-in fade-in duration-200"
+            style={{ zIndex: 2147483646, background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
             onClick={onClose}
         >
             <div
@@ -932,7 +934,7 @@ const TemplateAccessModal: React.FC<TemplateAccessModalProps> = ({
         </div>
     );
 
-    return createPortal(modalNode, document.body);
+    return createPortal(modalNode, getMktPortalRoot());
 };
 
 export default TemplateAccessModal;

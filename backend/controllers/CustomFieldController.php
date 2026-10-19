@@ -57,7 +57,19 @@ class CustomFieldController {
         }
         
         $b = getBody();
-        if (empty($b['entity_type']) || empty($b['label']) || empty($b['field_type'])) {
+        if (empty($b['label']) && !empty($b['field_label'])) {
+            $b['label'] = $b['field_label'];
+        }
+        if (empty($b['field_key']) && !empty($b['field_name'])) {
+            $b['field_key'] = $b['field_name'];
+        }
+        if (empty($b['entity_type'])) {
+            $b['entity_type'] = 'contact';
+        }
+        if (empty($b['field_type'])) {
+            $b['field_type'] = 'text';
+        }
+        if (empty($b['label'])) {
             respond(422, null, 'Vui lòng điền đầy đủ module, tên trường và loại dữ liệu', false);
         }
         
@@ -70,7 +82,7 @@ class CustomFieldController {
         }
         
         $options = null;
-        if (in_array($b['field_type'], ['dropdown', 'multiselect']) && isset($b['options'])) {
+        if (in_array($b['field_type'], ['dropdown', 'multiselect', 'select']) && isset($b['options'])) {
             $options = json_encode(is_array($b['options']) ? $b['options'] : explode(',', $b['options']));
         }
 
@@ -99,8 +111,20 @@ class CustomFieldController {
             respond(403, null, 'Bạn không có quyền quản lý trường tùy chỉnh', false);
         }
         
+        $chk = $this->db->prepare("SELECT id FROM custom_fields WHERE id = ? AND tenant_id = ? LIMIT 1");
+        $chk->execute([$id, $auth['tenant_id']]);
+        if (!$chk->fetchColumn()) {
+            respond(404, null, 'Không tìm thấy trường tùy chỉnh', false);
+        }
+
         $b = getBody();
-        $fields = ['label', 'field_type', 'is_required', 'is_filterable', 'order_index', 'options'];
+        if (!array_key_exists('label', $b) && array_key_exists('field_label', $b)) {
+            $b['label'] = $b['field_label'];
+        }
+        if (!array_key_exists('field_key', $b) && array_key_exists('field_name', $b)) {
+            $b['field_key'] = $b['field_name'];
+        }
+        $fields = ['label', 'field_key', 'field_type', 'is_required', 'is_filterable', 'order_index', 'options'];
         $sets = []; $params = [];
         
         foreach ($fields as $f) {
@@ -123,11 +147,7 @@ class CustomFieldController {
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
         
-        if ($stmt->rowCount() === 0) {
-            respond(404, null, 'Không tìm thấy trường tùy chỉnh hoặc không có thay đổi', false);
-        }
-        
-        respond(200, null, 'Cập nhật trường tùy chỉnh thành công');
+        respond(200, ['id' => $id], 'Cập nhật trường tùy chỉnh thành công');
     }
 
     public function destroy(array $auth, int $id): void {

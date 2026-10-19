@@ -70,8 +70,8 @@ class CapiController {
     public function saveSettings(array $auth): void {
         requireRole($auth, ['admin', 'superadmin', 'super_admin', 'director']);
         $b = getBody();
-        $pixelId = trim($b['meta_pixel_id'] ?? '');
-        $token = trim($b['meta_access_token'] ?? '');
+        $pixelId = trim($b['meta_pixel_id'] ?? $b['pixel_id'] ?? '');
+        $token = trim($b['meta_access_token'] ?? $b['access_token'] ?? '');
         
         $triggersRaw = $b['capi_event_triggers'] ?? [];
         $triggersJson = json_encode($triggersRaw, JSON_UNESCAPED_UNICODE);

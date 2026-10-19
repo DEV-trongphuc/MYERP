@@ -245,13 +245,13 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ label, value, onChange, block
                                         </div>
                                             <button
                                                 onClick={handleHexApply}
-                                                className="bg-blue-600 hover:bg-blue-700 text-white rounded-[14px] px-4 py-2 text-[11px] font-black transition-all shadow-md active:scale-95 shrink-0"
+                                                className="bg-[#BD1D2D] hover:bg-[#a61927] text-white rounded-[14px] px-4 py-2 text-[11px] font-black transition-all shadow-md active:scale-95 shrink-0"
                                             >OK</button>
                                         </div>
                                         {/* Native color picker */}
                                         <div className="mt-2 relative">
                                             <div className="w-full h-8 bg-slate-50 border border-slate-200 hover:bg-slate-100 rounded-xl flex items-center justify-center gap-1.5 text-[10px] font-black text-slate-500 transition-colors pointer-events-none">
-                                                <Pipette className="w-3.5 h-3.5 text-blue-600" />
+                                                <Pipette className="w-3.5 h-3.5 text-[#BD1D2D]" />
                                                 <span>CHỌN MÀU TỪ BẢNG MÀU</span>
                                             </div>
                                             <input
@@ -271,7 +271,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ label, value, onChange, block
                                                 <button
                                                     key={i}
                                                     onClick={() => { onChange(c, 'solid'); setIsOpen(false); }}
-                                                    className="w-6 h-6 rounded-full border-2 border-white shadow-md hover:scale-110 transition-transform ring-1 ring-slate-200 hover:ring-blue-500"
+                                                    className="w-6 h-6 rounded-full border-2 border-white shadow-md hover:scale-110 transition-transform ring-1 ring-slate-200 hover:ring-[#BD1D2D]"
                                                     style={{ backgroundColor: c }}
                                                     title={c}
                                                 />
@@ -290,7 +290,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ label, value, onChange, block
                                                 <button
                                                     key={c}
                                                     onClick={() => { onChange(c, 'solid'); setIsOpen(false); }}
-                                                    className="w-5 h-5 rounded-full border-2 border-white shadow-sm hover:scale-110 transition-transform ring-1 ring-slate-200 hover:ring-blue-500"
+                                                    className="w-5 h-5 rounded-full border-2 border-white shadow-sm hover:scale-110 transition-transform ring-1 ring-slate-200 hover:ring-[#BD1D2D]"
                                                     style={{ backgroundColor: c }}
                                                     title={c}
                                                 />
@@ -321,7 +321,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ label, value, onChange, block
                                             <label className="text-[8px] font-bold uppercase text-slate-400">Góc</label>
                                             <input
                                                 type="number"
-                                                className="w-full text-xs border border-slate-200 rounded-xl px-1 py-2 text-center font-bold outline-none focus:border-blue-400"
+                                                className="w-full text-xs border border-slate-200 rounded-xl px-1 py-2 text-center font-bold outline-none focus:border-[#BD1D2D]"
                                                 value={gradAngle}
                                                 onChange={(e) => applyGradient(parseInt(e.target.value) || 0, gradColor1, gradColor2)}
                                             />

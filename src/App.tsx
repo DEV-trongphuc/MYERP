@@ -17,6 +17,7 @@ import { NetworkStatusIndicator } from './components/ui/NetworkStatusIndicator';
 import { GlobalEntityDrawers } from './components/ui/GlobalEntityDrawers';
 import { ChatFloatingLauncher } from './components/chat/ChatFloatingLauncher';
 import { popAndCloseTopOverlay, hasOpenOverlays } from './utils/overlayStack';
+import { useNativeAppBackGuard } from './hooks/useNativeAppBackGuard';
 
 const QRCodeCallModal = lazy(() => import('./components/ui/QRCodeCallModal').then(m => ({ default: m.QRCodeCallModal })));
 const ProfileModal = lazy(() => import('./components/ProfileModal').then(m => ({ default: m.ProfileModal })));
@@ -56,6 +57,7 @@ const FilesPage = lazy(() => import('./pages/FilesPage').then(module => ({ defau
 const InventoryPage = lazy(() => import('./pages/InventoryPage').then(module => ({ default: module.default })));
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
 const DepositsPage = lazy(() => import('./pages/DepositsPage'));
+const CooperationSlipsPage = lazy(() => import('./pages/CooperationSlipsPage'));
 const AttendancePage = lazy(() => import('./pages/AttendancePage').then(module => ({ default: module.AttendancePage })));
 const TicketsPage = lazy(() => import('./pages/TicketsPage').then(module => ({ default: module.TicketsPage })));
 const DownloadPage = lazy(() => import('./pages/DownloadPage').then(module => ({ default: module.DownloadPage })));
@@ -254,6 +256,9 @@ const AppTabs = () => {
         return <ProjectsPage key="projects" />;
       case '/deposits':
         return <DepositsPage key="deposits" defaultTab="list" />;
+      case '/cooperation-slips':
+      case '/cooperations':
+        return <CooperationSlipsPage key="cooperation-slips" />;
       case '/cash-flow':
         return <DepositsPage key="cash-flow" defaultTab="stats" />;
       case '/hrm':
@@ -366,6 +371,9 @@ const KeyboardShortcutsController = () => {
   const navigate = useNavigate();
   const { t } = useLanguage();
   const [showHelpModal, setShowHelpModal] = useState(false);
+
+  // 3-Layer Native-App Back & Swipe Guard (Mobile/Tablet edge-swipe blocker + LIFO popstate interceptor)
+  useNativeAppBackGuard();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

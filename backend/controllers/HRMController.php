@@ -808,41 +808,39 @@ class HRMController {
                 $leaveTypeText = self::formatLeaveTypeText($b['leave_type']);
 
                 require_once __DIR__ . '/../NotificationService.php';
-                $targetUserId = $approverId ?: $auth['user_id'];
-                NotificationService::send($this->db, $auth['tenant_id'], 'HRM_LEAVE_REQUEST', [
-                    'approver_id' => $targetUserId,
-                    'target_user_id' => $targetUserId,
-                    'user_id' => $targetUserId,
-                    'user_name' => $userName,
-                    'submitter_id' => (int)$auth['user_id'],
-                    'leave_type_text' => $leaveTypeText,
-                    'start_date' => $startDate,
-                    'end_date' => $endDate,
-                    'total_days' => $totalDays,
-                    'reason' => $reason,
-                    'date' => date('Y-m-d'),
-                    'ref_id' => $leaveId
-                ]);
+                if (!$isSelfApproved) {
+                    NotificationService::send($this->db, $auth['tenant_id'], 'HRM_LEAVE_REQUEST', [
+                        'approver_id' => $approverId > 0 ? (int)$approverId : 0,
+                        'target_user_id' => $approverId > 0 ? (int)$approverId : 0,
+                        'user_id' => (int)$auth['user_id'],
+                        'user_name' => $userName,
+                        'submitter_id' => (int)$auth['user_id'],
+                        'exclude_user_id' => (int)$auth['user_id'],
+                        'leave_type' => $leaveType,
+                        'leave_type_text' => $leaveTypeText,
+                        'start_date' => $startDate,
+                        'end_date' => $endDate,
+                        'total_days' => $totalDays,
+                        'reason' => $reason,
+                        'date' => date('Y-m-d'),
+                        'ref_id' => $leaveId
+                    ]);
+                }
 
-                // Notify related persons
+                // Notify related persons with informational watcher notification
                 if (!empty($relArr)) {
-                    foreach ($relArr as $relUid) {
-                        $relUid = (int)$relUid;
-                        if ($relUid > 0 && $relUid !== (int)$auth['user_id'] && $relUid !== (int)$targetUserId) {
-                            NotificationService::send($this->db, $auth['tenant_id'], 'HRM_LEAVE_REQUEST', [
-                                'approver_id' => $relUid,
-                                'target_user_id' => $relUid,
-                                'user_id' => $relUid,
-                                'user_name' => $userName,
-                                'submitter_id' => (int)$auth['user_id'],
-                                'leave_type_text' => $leaveTypeText,
-                                'start_date' => $startDate,
-                                'end_date' => $endDate,
-                                'total_days' => $totalDays,
-                                'reason' => $reason ? ($reason . ' (Bạn được gắn là Người theo dõi)') : '(Bạn được gắn là Người theo dõi)',
-                                'date' => date('Y-m-d'),
-                                'ref_id' => $leaveId
-                            ]);
+                    $isOt = ($leaveType === 'overtime');
+                    $wTitle = $isOt ? "📌 Bạn được gắn theo dõi đề xuất tăng ca" : "📌 Bạn được gắn theo dõi đơn nghỉ phép";
+                    $wBody = "{$userName} vừa tạo " . ($isOt ? "đề xuất tăng ca" : "đơn xin nghỉ phép ({$leaveTypeText})") . " ({$startDate} - {$endDate}) và gắn bạn làm người liên quan.";
+                    $wLink = "/approvals?tab=leave&open_id={$leaveId}&open_type=leave";
+                    $stmtWatch = $this->db->prepare("
+                        INSERT INTO notifications (user_id, tenant_id, title, body, type, link, is_read, created_at)
+                        VALUES (?, ?, ?, ?, 'leave', ?, 0, NOW())
+                    ");
+                    foreach (array_unique(array_map('intval', $relArr)) as $relUid) {
+                        if ($relUid > 0 && $relUid !== (int)$auth['user_id'] && $relUid !== (int)$approverId && $relUid !== (int)$approverId2) {
+                            $stmtWatch->execute([$relUid, $auth['tenant_id'], $wTitle, $wBody, $wLink]);
+                            NotificationService::pruneUserNotifications($this->db, $relUid, 200);
                         }
                     }
                 }
@@ -989,15 +987,17 @@ class HRMController {
 
             $this->db->commit();
 
-            if (in_array($oldStatus, ['draft', 'rejected'], true) && $newStatus === 'pending' && $approverId && $approverId !== $uid) {
+            if (in_array($oldStatus, ['draft', 'rejected'], true) && $newStatus === 'pending' && (!$approverId || $approverId !== $uid)) {
                 try {
                     require_once __DIR__ . '/../NotificationService.php';
                     NotificationService::send($this->db, $tid, 'HRM_LEAVE_REQUEST', [
-                        'approver_id' => $approverId,
-                        'target_user_id' => $approverId,
-                        'user_id' => $approverId,
+                        'approver_id' => $approverId > 0 ? (int)$approverId : 0,
+                        'target_user_id' => $approverId > 0 ? (int)$approverId : 0,
+                        'user_id' => (int)$row['user_id'],
                         'user_name' => $row['employee_name'] ?: ($auth['full_name'] ?? 'Nhân viên'),
                         'submitter_id' => (int)$row['user_id'],
+                        'exclude_user_id' => $uid,
+                        'leave_type' => $leaveType,
                         'leave_type_text' => self::formatLeaveTypeText($leaveType),
                         'start_date' => $startDate,
                         'end_date' => $endDate,
@@ -1018,15 +1018,15 @@ class HRMController {
         }
     }
 
-    public function approveLeave(array $auth): void {
+    public function approveLeave(array $auth, ?int $urlId = null): void {
         $b = getBody();
-        if (empty($b['id']) || empty($b['status'])) {
+        $id = (int)($b['id'] ?? $b['request_id'] ?? $urlId ?? $_GET['id'] ?? 0);
+        if (!$id || empty($b['status'])) {
             respond(400, null, 'Thiếu ID hoặc trạng thái phê duyệt', false);
         }
 
-        $id = (int)$b['id'];
         $statusInput = $b['status'];
-        $approverNote = $b['reason'] ?? 'Không có ghi chú thêm';
+        $approverNote = $b['reason'] ?? $b['reject_reason'] ?? $b['manager_note'] ?? $b['note'] ?? 'Không có ghi chú thêm';
 
         $ownTx = !$this->db->inTransaction();
         if ($ownTx) {
@@ -1633,31 +1633,36 @@ class HRMController {
                 $userName = $stmtUser->fetchColumn() ?: 'Nhân viên';
 
                 require_once __DIR__ . '/../NotificationService.php';
-                $targetUserId = $approverId ?: $auth['user_id'];
-                NotificationService::send($this->db, $auth['tenant_id'], 'HRM_ADVANCE_REQUEST', [
-                    'user_id' => $targetUserId,
-                    'user_name' => $userName,
-                    'amount' => $amount,
-                    'reason' => $b['reason'] ?? '',
-                    'date' => date('Y-m-d'),
-                    'ref_id' => $advId
-                ]);
+                if (!$isSelfApproved) {
+                    NotificationService::send($this->db, $auth['tenant_id'], 'HRM_ADVANCE_REQUEST', [
+                        'approver_id' => $approverId > 0 ? (int)$approverId : 0,
+                        'target_user_id' => $approverId > 0 ? (int)$approverId : 0,
+                        'user_id' => (int)$auth['user_id'],
+                        'submitter_id' => (int)$auth['user_id'],
+                        'exclude_user_id' => (int)$auth['user_id'],
+                        'user_name' => $userName,
+                        'amount' => $amount,
+                        'reason' => $b['reason'] ?? '',
+                        'date' => date('Y-m-d'),
+                        'ref_id' => $advId
+                    ]);
+                }
 
-                // Notify related persons
+                // Notify related persons with informational watcher notification
                 if (!empty($b['related_user_ids'])) {
-                    $relList = is_array($b['related_user_ids']) ? $b['related_user_ids'] : json_decode($b['related_user_ids'], true);
+                    $relList = is_array($b['related_user_ids']) ? $b['related_user_ids'] : json_decode((string)$b['related_user_ids'], true);
                     if (is_array($relList)) {
-                        foreach ($relList as $relUid) {
-                            $relUid = (int)$relUid;
-                            if ($relUid > 0 && $relUid !== (int)$auth['user_id'] && $relUid !== (int)$targetUserId) {
-                                NotificationService::send($this->db, $auth['tenant_id'], 'HRM_ADVANCE_REQUEST', [
-                                    'user_id' => $relUid,
-                                    'user_name' => $userName,
-                                    'amount' => $amount,
-                                    'reason' => ($b['reason'] ?? '') . ' (Bạn được gắn là Người liên quan)',
-                                    'date' => date('Y-m-d'),
-                                    'ref_id' => $advId
-                                ]);
+                        $wTitle = "📌 Bạn được gắn theo dõi đề nghị tạm ứng";
+                        $wBody = "{$userName} vừa tạo đề nghị tạm ứng (" . number_format($amount, 0, ',', '.') . "đ) và gắn bạn làm người liên quan.";
+                        $wLink = "/approvals?tab=advance&open_id={$advId}&open_type=advance";
+                        $stmtWatch = $this->db->prepare("
+                            INSERT INTO notifications (user_id, tenant_id, title, body, type, link, is_read, created_at)
+                            VALUES (?, ?, ?, ?, 'expense', ?, 0, NOW())
+                        ");
+                        foreach (array_unique(array_map('intval', $relList)) as $relUid) {
+                            if ($relUid > 0 && $relUid !== (int)$auth['user_id'] && $relUid !== (int)$approverId && $relUid !== (int)$approverId2) {
+                                $stmtWatch->execute([$relUid, $auth['tenant_id'], $wTitle, $wBody, $wLink]);
+                                NotificationService::pruneUserNotifications($this->db, $relUid, 200);
                             }
                         }
                     }
@@ -1788,11 +1793,15 @@ class HRMController {
 
             $this->db->commit();
 
-            if (in_array($oldStatus, ['draft', 'rejected'], true) && $newStatus === 'pending' && $approverId && $approverId !== $uid) {
+            if (in_array($oldStatus, ['draft', 'rejected'], true) && $newStatus === 'pending' && (!$approverId || $approverId !== $uid)) {
                 try {
                     require_once __DIR__ . '/../NotificationService.php';
                     NotificationService::send($this->db, $tid, 'HRM_ADVANCE_REQUEST', [
-                        'user_id' => $approverId,
+                        'approver_id' => $approverId > 0 ? (int)$approverId : 0,
+                        'target_user_id' => $approverId > 0 ? (int)$approverId : 0,
+                        'user_id' => (int)$row['user_id'],
+                        'submitter_id' => (int)$row['user_id'],
+                        'exclude_user_id' => $uid,
                         'user_name' => $row['employee_name'] ?: ($auth['full_name'] ?? 'Nhân viên'),
                         'amount' => $amount,
                         'reason' => $reason,
@@ -1811,15 +1820,15 @@ class HRMController {
         }
     }
 
-    public function approveAdvance(array $auth): void {
+    public function approveAdvance(array $auth, ?int $urlId = null): void {
         $b = getBody();
-        if (empty($b['id']) || empty($b['status'])) {
+        $id = (int)($b['id'] ?? $b['request_id'] ?? $urlId ?? $_GET['id'] ?? 0);
+        if (!$id || empty($b['status'])) {
             respond(400, null, 'Thiếu ID hoặc trạng thái phê duyệt', false);
         }
 
-        $id = (int)$b['id'];
         $statusInput = $b['status'];
-        $approverNote = $b['reason'] ?? 'Không có ghi chú thêm';
+        $approverNote = $b['reason'] ?? $b['reject_reason'] ?? $b['manager_note'] ?? $b['note'] ?? 'Không có ghi chú thêm';
 
         $this->db->beginTransaction();
         try {
@@ -1997,7 +2006,14 @@ class HRMController {
         if (!$this->isAdmin($auth)) respond(403, null, 'Quyền admin là bắt buộc', false);
         $b = getBody();
         $monthYear = $b['month_year'] ?? ''; // Format: YYYY-MM or YYYY-13, YYYY-MID, YYYY-YEND
-        if (empty($monthYear) || !preg_match('/^\d{4}-(?:[0-1]\d|13|MID|YEND)$/', $monthYear)) {
+        if (empty($monthYear) && !empty($b['month']) && !empty($b['year'])) {
+            $monthYear = sprintf('%04d-%02d', (int)$b['year'], (int)$b['month']);
+        } elseif (empty($monthYear) && !empty($b['month']) && preg_match('/^\d{4}-/', (string)$b['month'])) {
+            $monthYear = (string)$b['month'];
+        } elseif (empty($monthYear)) {
+            $monthYear = date('Y-m');
+        }
+        if (!preg_match('/^\d{4}-(?:[0-1]\d|13|MID|YEND)$/', $monthYear)) {
             respond(400, null, 'Định dạng kỳ thanh toán không hợp lệ', false);
         }
 
@@ -2547,8 +2563,10 @@ class HRMController {
 
             $this->db->commit();
             respond(200, ['success' => true, 'data' => $results]);
-        } catch (\Exception $e) {
-            $this->db->rollBack();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             respond(500, null, 'Lỗi khi tính bảng lương: ' . $e->getMessage(), false);
         }
     }
@@ -2557,7 +2575,13 @@ class HRMController {
 
     public function indexPayslips(array $auth): void {
         $monthYear = $_GET['month_year'] ?? '';
-        if (empty($monthYear)) respond(400, null, 'Thiếu tham số tháng (month_year)', false);
+        if (empty($monthYear) && !empty($_GET['month']) && !empty($_GET['year'])) {
+            $monthYear = sprintf('%04d-%02d', (int)$_GET['year'], (int)$_GET['month']);
+        } elseif (empty($monthYear) && !empty($_GET['month']) && preg_match('/^\d{4}-/', (string)$_GET['month'])) {
+            $monthYear = (string)$_GET['month'];
+        } elseif (empty($monthYear)) {
+            $monthYear = 'all';
+        }
 
         [$graceMale, $graceFemale] = $this->getSystemLateGraceSettings();
         $enrichPayslips = function(array $rows) use ($graceMale, $graceFemale): array {
@@ -2575,25 +2599,36 @@ class HRMController {
             return $rows;
         };
 
+        $extraWhere = '';
+        $extraParams = [];
+        if (!empty($_GET['user_id'])) {
+            $extraWhere .= ' AND p.user_id = ?';
+            $extraParams[] = (int)$_GET['user_id'];
+        }
+        if (!empty($_GET['status'])) {
+            $extraWhere .= ' AND p.status = ?';
+            $extraParams[] = $_GET['status'];
+        }
+
         if ($monthYear === 'all') {
             if ($this->isAdmin($auth)) {
                 $stmt = $this->db->prepare("
                     SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title, u.gender
                     FROM monthly_payslips p
                     JOIN users u ON p.user_id = u.id
-                    WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
-                    ORDER BY p.month_year DESC
+                    WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'{$extraWhere}
+                    ORDER BY p.month_year DESC, p.id DESC
                 ");
-                $stmt->execute([$auth['tenant_id']]);
+                $stmt->execute(array_merge([$auth['tenant_id']], $extraParams));
             } else {
                 $stmt = $this->db->prepare("
                     SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title, u.gender
                     FROM monthly_payslips p
                     JOIN users u ON p.user_id = u.id
-                    WHERE u.tenant_id = ? AND p.user_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
-                    ORDER BY p.month_year DESC
+                    WHERE u.tenant_id = ? AND p.user_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'{$extraWhere}
+                    ORDER BY p.month_year DESC, p.id DESC
                 ");
-                $stmt->execute([$auth['tenant_id'], $auth['user_id']]);
+                $stmt->execute(array_merge([$auth['tenant_id'], $auth['user_id']], $extraParams));
             }
             respond(200, $enrichPayslips($stmt->fetchAll(PDO::FETCH_ASSOC)));
             return;
@@ -2604,25 +2639,151 @@ class HRMController {
                 SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title, u.gender
                 FROM monthly_payslips p
                 JOIN users u ON p.user_id = u.id
-                WHERE u.tenant_id = ? AND p.month_year = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
+                WHERE u.tenant_id = ? AND p.month_year = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'{$extraWhere}
             ");
-            $stmt->execute([$auth['tenant_id'], $monthYear]);
+            $stmt->execute(array_merge([$auth['tenant_id'], $monthYear], $extraParams));
         } else {
             $stmt = $this->db->prepare("
                 SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title, u.gender
                 FROM monthly_payslips p
                 JOIN users u ON p.user_id = u.id
-                WHERE u.tenant_id = ? AND p.user_id = ? AND p.month_year = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
+                WHERE u.tenant_id = ? AND p.user_id = ? AND p.month_year = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'{$extraWhere}
             ");
-            $stmt->execute([$auth['tenant_id'], $auth['user_id'], $monthYear]);
+            $stmt->execute(array_merge([$auth['tenant_id'], $auth['user_id'], $monthYear], $extraParams));
         }
         respond(200, $enrichPayslips($stmt->fetchAll(PDO::FETCH_ASSOC)));
+    }
+
+    public function showPayslip(array $auth, int $id): void {
+        $stmt = $this->db->prepare("
+            SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title, u.gender
+            FROM monthly_payslips p
+            JOIN users u ON p.user_id = u.id
+            WHERE p.id = ? AND u.tenant_id = ?
+        ");
+        $stmt->execute([$id, $auth['tenant_id']]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            respond(404, null, 'Không tìm thấy phiếu lương', false);
+        }
+        if (!$this->isAdmin($auth) && (int)$row['user_id'] !== (int)$auth['user_id']) {
+            respond(403, null, 'Bạn không có quyền xem phiếu lương này', false);
+        }
+        [$graceMale, $graceFemale] = $this->getSystemLateGraceSettings();
+        $graceInfo = $this->resolveEmployeeLateGraceMinutes($row['gender'] ?? null, $row['employee_name'] ?? null, $graceMale, $graceFemale);
+        $graceMinutes = $graceInfo['grace_minutes'];
+        $lateMins = (int)($row['lateness_minutes'] ?? 0);
+        $row['gender'] = $graceInfo['gender'];
+        $row['gender_label'] = $graceInfo['gender_label'];
+        $row['late_grace_minutes'] = $graceMinutes;
+        $row['excess_late_minutes'] = max(0, $lateMins - $graceMinutes);
+        $row['remaining_late_grace_minutes'] = max(0, $graceMinutes - $lateMins);
+        respond(200, $row);
+    }
+
+    public function adjustPayslip(array $auth, int $id): void {
+        if (!$this->isAdmin($auth)) respond(403, null, 'Quyền admin là bắt buộc', false);
+        $b = getBody();
+        if (!empty($b['payslips']) && is_array($b['payslips'])) {
+            $this->savePayroll($auth);
+            return;
+        }
+        $stmt = $this->db->prepare("
+            SELECT mp.*
+            FROM monthly_payslips mp
+            JOIN users u ON mp.user_id = u.id
+            WHERE mp.id = ? AND u.tenant_id = ?
+        ");
+        $stmt->execute([$id, $auth['tenant_id']]);
+        $ps = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$ps) {
+            respond(404, null, 'Không tìm thấy phiếu lương', false);
+        }
+        if (($ps['status'] ?? '') === 'locked') {
+            respond(422, null, 'Bảng lương đã bị khóa, không thể chỉnh sửa số liệu', false);
+        }
+
+        $kpiBonus = array_key_exists('kpi_bonus', $b) ? (float)$b['kpi_bonus']
+            : (array_key_exists('bonus_amount', $b) ? (float)$b['bonus_amount']
+            : (array_key_exists('bonus', $b) ? (float)$b['bonus'] : (float)($ps['kpi_bonus'] ?? 0)));
+        $latenessPenalty = array_key_exists('lateness_penalty', $b) ? (float)$b['lateness_penalty']
+            : (array_key_exists('penalty_amount', $b) ? (float)$b['penalty_amount']
+            : (array_key_exists('deduction', $b) ? (float)$b['deduction'] : (float)($ps['lateness_penalty'] ?? 0)));
+        $allowanceTotal = array_key_exists('allowance_total', $b) ? (float)$b['allowance_total']
+            : (array_key_exists('allowance', $b) ? (float)$b['allowance'] : (float)($ps['allowance_total'] ?? 0));
+        $basicSalary = array_key_exists('salary_basic_calculated', $b) ? (float)$b['salary_basic_calculated'] : (float)($ps['salary_basic_calculated'] ?? 0);
+        $overtimeSalary = array_key_exists('overtime_salary', $b) ? (float)$b['overtime_salary'] : (float)($ps['overtime_salary'] ?? 0);
+        $diligenceBonus = array_key_exists('diligence_bonus', $b) ? (float)$b['diligence_bonus'] : (float)($ps['diligence_bonus'] ?? 0);
+        $bhxh = array_key_exists('insurance_bhxh', $b) ? (float)$b['insurance_bhxh'] : (float)($ps['insurance_bhxh'] ?? 0);
+        $bhyt = array_key_exists('insurance_bhyt', $b) ? (float)$b['insurance_bhyt'] : (float)($ps['insurance_bhyt'] ?? 0);
+        $bhtn = array_key_exists('insurance_bhtn', $b) ? (float)$b['insurance_bhtn'] : (float)($ps['insurance_bhtn'] ?? 0);
+        $pit = array_key_exists('tax_pit', $b) ? (float)$b['tax_pit'] : (float)($ps['tax_pit'] ?? 0);
+        $adv = array_key_exists('advance_deduction', $b) ? (float)$b['advance_deduction'] : (float)($ps['advance_deduction'] ?? 0);
+        $note = $b['note'] ?? $b['notes'] ?? ($ps['note'] ?? null);
+
+        if (array_key_exists('net_salary', $b)) {
+            $netSalary = max(0.0, (float)$b['net_salary']);
+        } else {
+            $netSalary = max(0.0, $basicSalary + $allowanceTotal + $kpiBonus + $overtimeSalary + $diligenceBonus - ($bhxh + $bhyt + $bhtn) - $latenessPenalty - $pit - $adv);
+        }
+
+        $upd = $this->db->prepare("
+            UPDATE monthly_payslips mp
+            JOIN users u ON mp.user_id = u.id
+            SET mp.kpi_bonus = ?,
+                mp.lateness_penalty = ?,
+                mp.allowance_total = ?,
+                mp.salary_basic_calculated = ?,
+                mp.overtime_salary = ?,
+                mp.diligence_bonus = ?,
+                mp.net_salary = ?,
+                mp.note = ?
+            WHERE mp.id = ? AND u.tenant_id = ? AND mp.status != 'locked'
+        ");
+        $upd->execute([
+            max(0.0, $kpiBonus),
+            max(0.0, $latenessPenalty),
+            max(0.0, $allowanceTotal),
+            max(0.0, $basicSalary),
+            max(0.0, $overtimeSalary),
+            max(0.0, $diligenceBonus),
+            $netSalary,
+            $note,
+            $id,
+            $auth['tenant_id']
+        ]);
+
+        $this->showPayslip($auth, $id);
+    }
+
+    public function deletePayslip(array $auth, int $id): void {
+        if (!$this->isAdmin($auth)) respond(403, null, 'Quyền admin là bắt buộc', false);
+        $stmt = $this->db->prepare("
+            SELECT mp.id, mp.status
+            FROM monthly_payslips mp
+            JOIN users u ON mp.user_id = u.id
+            WHERE mp.id = ? AND u.tenant_id = ?
+        ");
+        $stmt->execute([$id, $auth['tenant_id']]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            respond(404, null, 'Không tìm thấy phiếu lương', false);
+        }
+        if (($row['status'] ?? '') === 'locked') {
+            respond(422, null, 'Không thể xóa phiếu lương đã khóa', false);
+        }
+        $this->db->prepare("
+            DELETE mp FROM monthly_payslips mp
+            JOIN users u ON mp.user_id = u.id
+            WHERE mp.id = ? AND u.tenant_id = ?
+        ")->execute([$id, $auth['tenant_id']]);
+        respond(200, ['id' => $id], 'Xóa bảng lương thành công');
     }
 
     public function sendPayslips(array $auth): void {
         if (!$this->isAdmin($auth)) respond(403, null, 'Quyền admin là bắt buộc', false);
         $b = getBody();
-        $id = (int)($b['id'] ?? 0);
+        $id = (int)($b['id'] ?? $b['payroll_id'] ?? 0);
         $monthYear = $b['month_year'] ?? '';
 
         if ($id > 0) {
@@ -2698,7 +2859,7 @@ class HRMController {
 
     public function confirmPayslip(array $auth): void {
         $b = getBody();
-        $id = (int)($b['id'] ?? 0);
+        $id = (int)($b['id'] ?? $b['payroll_id'] ?? 0);
         $signatureUrl = $b['signature_url'] ?? '';
         $action = $b['action'] ?? 'confirm';
         $note = trim($b['note'] ?? '');
@@ -2783,31 +2944,67 @@ class HRMController {
     public function lockPayroll(array $auth): void {
         if (!$this->isAdmin($auth)) respond(403, null, 'Quyền admin là bắt buộc', false);
         $b = getBody();
+        $payrollId = (int)($b['payroll_id'] ?? $b['id'] ?? 0);
         $monthYear = $b['month_year'] ?? '';
-        if (empty($monthYear)) respond(400, null, 'Thiếu tháng khóa lương', false);
+        if (empty($monthYear) && !empty($b['month']) && !empty($b['year'])) {
+            $monthYear = sprintf('%04d-%02d', (int)$b['year'], (int)$b['month']);
+        }
+        if (empty($monthYear) && $payrollId > 0) {
+            $stmtM = $this->db->prepare("
+                SELECT mp.month_year
+                FROM monthly_payslips mp
+                JOIN users u ON mp.user_id = u.id
+                WHERE mp.id = ? AND u.tenant_id = ?
+            ");
+            $stmtM->execute([$payrollId, $auth['tenant_id']]);
+            $monthYear = (string)($stmtM->fetchColumn() ?: '');
+        }
+        if (empty($monthYear) && $payrollId <= 0) {
+            $monthYear = date('Y-m');
+        }
 
         $action = $b['action'] ?? 'lock';
         if ($action === 'unlock') {
-            $stmt = $this->db->prepare("
-                UPDATE monthly_payslips mp
-                JOIN users u ON mp.user_id = u.id
-                SET mp.status = 'draft', mp.signature_url = NULL, mp.confirmed_at = NULL 
-                WHERE mp.month_year = ? AND u.tenant_id = ?
-            ");
-            $stmt->execute([$monthYear, $auth['tenant_id']]);
+            if ($payrollId > 0 && empty($b['month_year'])) {
+                $stmt = $this->db->prepare("
+                    UPDATE monthly_payslips mp
+                    JOIN users u ON mp.user_id = u.id
+                    SET mp.status = 'draft', mp.signature_url = NULL, mp.confirmed_at = NULL 
+                    WHERE mp.id = ? AND u.tenant_id = ?
+                ");
+                $stmt->execute([$payrollId, $auth['tenant_id']]);
+            } else {
+                $stmt = $this->db->prepare("
+                    UPDATE monthly_payslips mp
+                    JOIN users u ON mp.user_id = u.id
+                    SET mp.status = 'draft', mp.signature_url = NULL, mp.confirmed_at = NULL 
+                    WHERE mp.month_year = ? AND u.tenant_id = ?
+                ");
+                $stmt->execute([$monthYear, $auth['tenant_id']]);
+            }
             respond(200, ['success' => true, 'message' => 'Unlocked successfully']);
             return;
         }
 
-        $stmt = $this->db->prepare("
-            UPDATE monthly_payslips mp
-            JOIN users u ON mp.user_id = u.id
-            SET mp.status = 'locked' 
-            WHERE mp.month_year = ? AND u.tenant_id = ?
-        ");
-        $stmt->execute([$monthYear, $auth['tenant_id']]);
+        if ($payrollId > 0 && empty($b['month_year'])) {
+            $stmt = $this->db->prepare("
+                UPDATE monthly_payslips mp
+                JOIN users u ON mp.user_id = u.id
+                SET mp.status = 'locked' 
+                WHERE mp.id = ? AND u.tenant_id = ?
+            ");
+            $stmt->execute([$payrollId, $auth['tenant_id']]);
+        } else {
+            $stmt = $this->db->prepare("
+                UPDATE monthly_payslips mp
+                JOIN users u ON mp.user_id = u.id
+                SET mp.status = 'locked' 
+                WHERE mp.month_year = ? AND u.tenant_id = ?
+            ");
+            $stmt->execute([$monthYear, $auth['tenant_id']]);
+        }
 
-        respond(200, ['success' => true]);
+        respond(200, ['success' => true, 'status' => 'locked']);
     }
 
     /**
@@ -5227,7 +5424,7 @@ class HRMController {
         if (!is_array($payslips)) respond(400, null, 'Dữ liệu không hợp lệ', false);
 
         // Pre-check: Ensure no locked payslips are being modified (State Machine SEC-HRM-02)
-        $ids = array_filter(array_map(fn($p) => (int)($p['id'] ?? 0), $payslips));
+        $ids = array_values(array_filter(array_map(fn($p) => (int)($p['id'] ?? 0), $payslips)));
         if (!empty($ids)) {
             $inClause = implode(',', array_fill(0, count($ids), '?'));
             $checkLocked = $this->db->prepare("
@@ -5298,8 +5495,10 @@ class HRMController {
             
             $this->db->commit();
             respond(200, ['success' => true]);
-        } catch (Exception $e) {
-            $this->db->rollBack();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             respond(500, null, $e->getMessage(), false);
         }
     }
@@ -5614,4 +5813,49 @@ class HRMController {
 
         respond(200, ['related_user_ids' => $relatedUserIds], 'Cập nhật danh sách người liên quan thành công');
     }
+
+    public function deleteHrmComment(array $auth, int $commentId): void {
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $uid = (int)($auth['user_id'] ?? 0);
+        $isAdmin = $this->isAdmin($auth) || in_array(strtolower($auth['role'] ?? ''), ['director', 'hr', 'manager'], true);
+
+        $stmt = $this->db->prepare("SELECT * FROM comments WHERE id = ? AND tenant_id = ? LIMIT 1");
+        $stmt->execute([$commentId, $tid]);
+        $comment = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($comment) {
+            if (!$isAdmin && (int)$comment['user_id'] !== $uid) {
+                respond(403, null, 'Bạn không có quyền xóa bình luận này', false);
+            }
+            $fetchStmt = $this->db->prepare("SELECT attachments, body FROM comments WHERE (id = ? OR parent_id = ?) AND tenant_id = ?");
+            $fetchStmt->execute([$commentId, $commentId, $tid]);
+            $commentsToDelete = $fetchStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            foreach ($commentsToDelete as $c) {
+                if (!empty($c['attachments']) && function_exists('deleteAttachmentFiles')) deleteAttachmentFiles($c['attachments']);
+                if (!empty($c['body']) && function_exists('deleteAttachmentFiles')) deleteAttachmentFiles($c['body']);
+            }
+            $delStmt = $this->db->prepare("DELETE FROM comments WHERE (id = ? OR parent_id = ?) AND tenant_id = ?");
+            $delStmt->execute([$commentId, $commentId, $tid]);
+            respond(200, ['success' => true], 'Đã xóa bình luận thành công');
+        }
+
+        // Fallback check legacy HRM comment tables if any
+        foreach (['hrm_request_comments', 'leave_comments', 'advance_comments', 'hrm_leave_comments'] as $tbl) {
+            try {
+                $chk = $this->db->prepare("SELECT * FROM `{$tbl}` WHERE id = ? LIMIT 1");
+                $chk->execute([$commentId]);
+                $legacyRow = $chk->fetch(PDO::FETCH_ASSOC);
+                if ($legacyRow) {
+                    if (!$isAdmin && (int)($legacyRow['user_id'] ?? 0) !== $uid) {
+                        respond(403, null, 'Bạn không có quyền xóa bình luận này', false);
+                    }
+                    $this->db->prepare("DELETE FROM `{$tbl}` WHERE id = ?")->execute([$commentId]);
+                    respond(200, ['success' => true], 'Đã xóa bình luận thành công');
+                }
+            } catch (\Throwable $eTbl) {}
+        }
+
+        respond(404, null, 'Bình luận không tồn tại', false);
+    }
 }
+

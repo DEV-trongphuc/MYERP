@@ -242,7 +242,7 @@ export const MetaCustomerProfileModal: React.FC<MetaCustomerProfileModalProps> =
 
     if (loading) {
         return createPortal(
-            <div className="fixed inset-0 bg-black/40 backdrop-blur-[1px] z-[2147483625] flex items-center justify-center p-4" style={{ zIndex: 2147483625 }}>
+            <div className="modal-backdrop fixed inset-0 bg-black/60 backdrop-blur-[6px] z-[2147483625] flex items-center justify-center p-4" style={{ zIndex: 2147483625, background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>
                 <div className="bg-white rounded-[18px] p-12 flex flex-col items-center gap-4 shadow-2xl">
                     <History className="w-8 h-8 animate-spin text-[var(--color-primary)]" />
                     <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Đang tải hồ sơ...</p>
@@ -264,6 +264,9 @@ export const MetaCustomerProfileModal: React.FC<MetaCustomerProfileModalProps> =
                 className="drawer-backdrop"
                 onClick={handleClose}
                 style={{
+                    background: 'rgba(0, 0, 0, 0.6)',
+                    backdropFilter: 'blur(6px)',
+                    WebkitBackdropFilter: 'blur(6px)',
                     opacity: animateIn ? 1 : 0,
                     transition: 'opacity 0.22s cubic-bezier(0.25, 0.1, 0.25, 1)',
                     pointerEvents: animateIn ? 'auto' : 'none',

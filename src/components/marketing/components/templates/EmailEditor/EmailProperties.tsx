@@ -126,29 +126,22 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
 
     // Helper to handle color/gradient update correctly
     const handleColorUpdate = (colorVal: string, type: 'solid' | 'gradient', property: string) => {
-        // Properties that are always solid colors (no gradients supported/needed)
-        const isSolidOnly = ['color', 'timelineDotColor', 'timelineLineColor', 'iconColor', 'checkIconColor', 'playButtonColor', 'iconBackgroundColor'].includes(property);
-
-        if (isSolidOnly) {
-            updateStyle({ [property]: colorVal });
+        // Only backgroundColor and contentBackgroundColor support gradients; all other color properties are solid-only
+        if (property !== 'backgroundColor' && property !== 'contentBackgroundColor') {
+            updateStyle({ [property]: colorVal } as any);
             return;
         }
 
-        // Properties that support gradients
+        if (property === 'contentBackgroundColor') {
+            updateStyle({ contentBackgroundColor: colorVal });
+            return;
+        }
+
+        // property === 'backgroundColor'
         if (type === 'gradient') {
-            updateStyle({ backgroundImage: colorVal, [property]: 'transparent' });
-            // If updating contentBackgroundColor, ensure it's handled as primary for background.
-            if (property === 'contentBackgroundColor') {
-                updateStyle({ [property]: colorVal });
-            }
+            updateStyle({ backgroundImage: colorVal, backgroundColor: 'transparent' });
         } else {
-            // Solid color update
-            const updates: any = { [property]: colorVal };
-            // Only clear backgroundImage if it's a primary background property being updated
-            if (['backgroundColor', 'contentBackgroundColor'].includes(property)) {
-                updates.backgroundImage = 'none';
-            }
-            updateStyle(updates);
+            updateStyle({ backgroundColor: colorVal, backgroundImage: 'none' });
         }
     };
 
@@ -196,7 +189,7 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                             <p className="text-[10px] text-slate-400 mt-1 leading-normal">Màu nền chỉ áp dụng cho khu vực chứa nội dung email.</p>
                         </div>
                         <div className="p-3 bg-slate-50/70 rounded-xl border border-slate-200/70">
-                            <ColorPicker label="Màu Link chung" value={bodyStyle.linkColor} onChange={(v: string, t: any) => handleBodyColorUpdate(v, t, 'linkColor')} blocks={blocks} bodyStyle={bodyStyle} />
+                            <ColorPicker solidOnly label="Màu Link chung" value={bodyStyle.linkColor} onChange={(v: string, t: any) => handleBodyColorUpdate(v, t, 'linkColor')} blocks={blocks} bodyStyle={bodyStyle} />
                             <p className="text-[10px] text-slate-400 mt-1 leading-normal">Màu mặc định cho tất cả các liên kết trong email.</p>
                         </div>
                     </div>
@@ -274,8 +267,8 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
 
         updateObj.style = finalStyle;
 
-        // fontSize / fontFamily / color → inject vào content để thấy realtime cho text blocks
-        if (isTextBlock) {
+        // fontSize / fontFamily / color → inject vào content để thấy realtime cho text blocks (chỉ khi ở Desktop mode)
+        if (deviceMode === 'desktop' && isTextBlock) {
             let newContent = selectedBlock!.content || '';
             let contentChanged = false;
 
@@ -405,7 +398,7 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                                         options={BODY_FONT_OPTIONS}
                                     />
                                     <div className="mt-2">
-                                        <ColorPicker label="Màu chữ" value={getStyle('color') || '#1e293b'} onChange={(v, t) => handleColorUpdate(v, t, 'color')} blocks={blocks} bodyStyle={bodyStyle} />
+                                        <ColorPicker solidOnly label="Màu chữ" value={getStyle('color') || '#1e293b'} onChange={(v, t) => handleColorUpdate(v, t, 'color')} blocks={blocks} bodyStyle={bodyStyle} />
                                     </div>
                                 </Accordion>
                             </div>
@@ -439,7 +432,7 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                                         <VisualMeasure label="Cỡ" value={getStyle('fontSize')} defaultValue={14} onChange={(v) => updateStyle({ fontSize: v })} max={100} unit="px" />
                                         <VisualMeasure label="Dòng" tooltip="Tỷ lệ chiều cao của mỗi dòng chữ. Giá trị chuẩn thường là 1.5 để dễ đọc." value={getStyle('lineHeight')} defaultValue={1.5} onChange={(v) => updateStyle({ lineHeight: v })} max={3} unit="" hideSlider />
                                     </div>
-                                    <ColorPicker label="Màu chữ" value={getStyle('color') || '#1e293b'} onChange={(v, t) => handleColorUpdate(v, t, 'color')} blocks={blocks} bodyStyle={bodyStyle} />
+                                    <ColorPicker solidOnly label="Màu chữ" value={getStyle('color') || '#1e293b'} onChange={(v, t) => handleColorUpdate(v, t, 'color')} blocks={blocks} bodyStyle={bodyStyle} />
                                 </Accordion>
                             </div>
                         )}
@@ -502,16 +495,26 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                                 </button>
                                 <Accordion title="Giao diện Timeline" icon={LucideIcons.ListStart} defaultOpen>
                                     <div className="space-y-4">
-                                        <ColorPicker label="Màu Chấm (Dot)" value={getStyle('timelineDotColor') || '#BD1D2D'} onChange={(v, t) => handleColorUpdate(v, t, 'timelineDotColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
-                                        <ColorPicker label="Màu Đường (Line)" value={getStyle('timelineLineColor') || '#e2e8f0'} onChange={(v, t) => handleColorUpdate(v, t, 'timelineLineColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
+                                        <ColorPicker solidOnly label="Màu Chấm (Dot)" value={getStyle('timelineDotColor') || '#BD1D2D'} onChange={(v, t) => handleColorUpdate(v, t, 'timelineDotColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
+                                        <div className="space-y-2">
+                                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Hình dáng chấm (Dot)</label>
+                                            <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
+                                                {([['circle', 'Tròn'], ['square', 'Vuông Bo Góc']] as const).map(([sh, lbl]) => (
+                                                    <button key={sh} onClick={() => updateStyle({ timelineDotShape: sh })} className={`flex-1 py-1.5 text-[9px] font-bold uppercase rounded-lg transition-all ${(getStyle('timelineDotShape') || 'circle') === sh ? 'bg-white shadow text-[#BD1D2D]' : 'text-slate-400 hover:text-slate-600'}`}>{lbl}</button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <ColorPicker solidOnly label="Màu Đường (Line)" value={getStyle('timelineLineColor') || '#e2e8f0'} onChange={(v, t) => handleColorUpdate(v, t, 'timelineLineColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
                                         <div className="space-y-2">
                                             <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Kiểu đường</label>
                                             <div className="flex bg-slate-100 p-1 rounded-xl">
                                                 {['solid', 'dashed', 'dotted'].map(st => (
-                                                    <button key={st} onClick={() => updateStyle({ timelineLineStyle: st as any })} className={`flex-1 py-1.5 text-[9px] font-bold uppercase rounded-lg transition-all ${getStyle('timelineLineStyle') === st ? 'bg-white shadow text-[#BD1D2D]' : 'text-slate-400 hover:text-slate-600'}`}>{st}</button>
+                                                    <button key={st} onClick={() => updateStyle({ timelineLineStyle: st as any })} className={`flex-1 py-1.5 text-[9px] font-bold uppercase rounded-lg transition-all ${(getStyle('timelineLineStyle') || 'solid') === st ? 'bg-white shadow text-[#BD1D2D]' : 'text-slate-400 hover:text-slate-600'}`}>{st}</button>
                                                 ))}
                                             </div>
                                         </div>
+                                        <ColorPicker solidOnly label="Màu chữ tiêu đề mốc" value={getStyle('color') || '#1e293b'} onChange={(v, t) => handleColorUpdate(v, t, 'color')} blocks={blocks} bodyStyle={bodyStyle} />
+                                        <ColorPicker solidOnly label="Màu chữ mô tả" value={(getStyle('timelineDescColor' as any) as string) || '#64748b'} onChange={(v, t) => handleColorUpdate(v, t, 'timelineDescColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
                                     </div>
                                 </Accordion>
                             </div>
@@ -528,7 +531,7 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                                         <VisualMeasure label="Cỡ" value={getStyle('fontSize')} defaultValue={14} onChange={(v) => updateStyle({ fontSize: v })} max={100} unit="px" />
                                         <VisualMeasure label="Dòng" tooltip="Tỷ lệ chiều cao của mỗi dòng chữ. Giá trị chuẩn thường là 1.5 để dễ đọc." value={getStyle('lineHeight')} defaultValue={1.5} onChange={(v) => updateStyle({ lineHeight: v })} max={3} unit="" hideSlider />
                                     </div>
-                                    <ColorPicker label="Màu chữ" value={getStyle('color') || '#1e293b'} onChange={(v, t) => handleColorUpdate(v, t, 'color')} blocks={blocks} bodyStyle={bodyStyle} />
+                                    <ColorPicker solidOnly label="Màu chữ" value={getStyle('color') || '#1e293b'} onChange={(v, t) => handleColorUpdate(v, t, 'color')} blocks={blocks} bodyStyle={bodyStyle} />
                                 </Accordion>
                             </div>
                         )}
@@ -620,9 +623,9 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                                     </div>
                                 )}
                                 {(!selectedBlock.url || selectedBlock.url === '#' || !selectedBlock.url.trim()) && (
-                                    <div className="flex items-start gap-2 p-2 bg-orange-50 border border-orange-100 rounded-xl">
-                                        <LucideIcons.Link className="w-3.5 h-3.5 text-orange-500 shrink-0 mt-0.5" />
-                                        <p className="text-[10px] text-orange-700 font-medium">Chưa gắn link cho ảnh — người đọc click không đi đến đâu.</p>
+                                    <div className="flex items-start gap-2 p-2 bg-rose-50/70 border border-rose-200/70 rounded-xl">
+                                        <LucideIcons.Link className="w-3.5 h-3.5 text-[#BD1D2D] shrink-0 mt-0.5" />
+                                        <p className="text-[10px] text-[#BD1D2D] font-medium">Chưa gắn link cho ảnh — người đọc click không đi đến đâu.</p>
                                     </div>
                                 )}
                             </div>
@@ -632,7 +635,7 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                                 <div className="p-4 bg-slate-50/50 border border-slate-100 rounded-[14px] flex gap-3 text-slate-800"><LucideIcons.Video className="w-5 h-5 shrink-0" /><p className="text-[10px] font-medium leading-tight">Video hiển thị dạng thumbnail có nút Play.</p></div>
                                 <Input label="Video URL" value={selectedBlock.videoUrl || ''} onChange={(e) => onUpdateBlock(selectedBlock.id, { videoUrl: e.target.value })} icon={LucideIcons.Link} customSize="sm" />
                                 <ImageUploader label="Thumbnail (Optional)" value={selectedBlock.thumbnailUrl || ''} onChange={(url: string) => onUpdateBlock(selectedBlock.id, { thumbnailUrl: url })} />
-                                <ColorPicker label="Màu nút Play" value={getStyle('playButtonColor') || '#BD1D2D'} onChange={(v, t) => handleColorUpdate(v, t, 'playButtonColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
+                                <ColorPicker solidOnly label="Màu nút Play" value={getStyle('playButtonColor') || '#BD1D2D'} onChange={(v, t) => handleColorUpdate(v, t, 'playButtonColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
                             </div>
                         )}
 
@@ -658,7 +661,7 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                                             ))}
                                         </div>
                                     </div>
-                                    <ColorPicker label="Màu đường kẻ" value={getStyle('borderColor') || '#eeeeee'} onChange={(v, t) => handleColorUpdate(v, t, 'borderColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
+                                    <ColorPicker solidOnly label="Màu đường kẻ" value={getStyle('borderColor') || '#eeeeee'} onChange={(v, t) => handleColorUpdate(v, t, 'borderColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
                                 </div>
                                 {/* Live preview */}
                                 <div className="px-4">
@@ -700,7 +703,7 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                                                 {editSocialId === link.id && (
                                                     <div className="pt-3 mt-3 border-t border-slate-50 space-y-3 animate-in zoom-in-95">
                                                         {link.network === 'custom' && <ImageUploader label="Custom Icon (URL)" value={link.imageUrl || ''} onChange={(url) => { const newLinks = [...(selectedBlock.socialLinks || [])]; newLinks[idx] = { ...newLinks[idx], imageUrl: url }; onUpdateBlock(selectedBlock.id, { socialLinks: newLinks }); }} />}
-                                                        <div className="grid grid-cols-2 gap-3"><ColorPicker label="Màu Icon" value={link.customStyle?.iconColor || ''} onChange={(v) => { const newLinks = [...(selectedBlock.socialLinks || [])]; newLinks[idx] = { ...newLinks[idx], customStyle: { ...newLinks[idx].customStyle, iconColor: v } }; onUpdateBlock(selectedBlock.id, { socialLinks: newLinks }); }} blocks={blocks} bodyStyle={bodyStyle} /><ColorPicker label="Màu Nền" value={link.customStyle?.backgroundColor || ''} onChange={(v) => { const newLinks = [...(selectedBlock.socialLinks || [])]; newLinks[idx] = { ...newLinks[idx], customStyle: { ...newLinks[idx].customStyle, backgroundColor: v } }; onUpdateBlock(selectedBlock.id, { socialLinks: newLinks }); }} blocks={blocks} bodyStyle={bodyStyle} /></div>
+                                                        <div className="grid grid-cols-2 gap-3"><ColorPicker solidOnly label="Màu Icon" value={link.customStyle?.iconColor || ''} onChange={(v) => { const newLinks = [...(selectedBlock.socialLinks || [])]; newLinks[idx] = { ...newLinks[idx], customStyle: { ...newLinks[idx].customStyle, iconColor: v } }; onUpdateBlock(selectedBlock.id, { socialLinks: newLinks }); }} blocks={blocks} bodyStyle={bodyStyle} /><ColorPicker solidOnly label="Màu Nền" value={link.customStyle?.backgroundColor || ''} onChange={(v) => { const newLinks = [...(selectedBlock.socialLinks || [])]; newLinks[idx] = { ...newLinks[idx], customStyle: { ...newLinks[idx].customStyle, backgroundColor: v } }; onUpdateBlock(selectedBlock.id, { socialLinks: newLinks }); }} blocks={blocks} bodyStyle={bodyStyle} /></div>
                                                     </div>
                                                 )}
                                             </div>
@@ -762,7 +765,7 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                                                             'ThumbsUp', 'Shield', 'Award', 'Gift', 'User',
                                                             'Home', 'Calendar', 'Clock', 'Lock', 'Settings'
                                                         ].map((iconId) => {
-                                                            const isSelected = getStyle('checkIcon') === iconId || (!getStyle('checkIcon') && iconId === 'Check');
+                                                            const isSelected = (getStyle('checkIcon') || 'CheckCircle') === iconId;
                                                             const iconColor = isSelected ? '#ffffff' : '#94a3b8';
                                                             return (
                                                                 <button key={iconId} onClick={() => updateStyle({ checkIcon: iconId })} className={`p-2 rounded-xl flex items-center justify-center border transition-all ${isSelected ? 'bg-[#BD1D2D] border-[#BD1D2D] shadow-md' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
@@ -1007,10 +1010,23 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                                             { value: 'box', label: 'Hộp chữ nhật (Box)' }
                                         ]}
                                     />
+
+                                    <Input
+                                        label="Nút bấm (Text)"
+                                        value={(getStyle('voucherButtonText' as any) as string) || selectedBlock.content || 'LƯU MÃ NGAY'}
+                                        onChange={(e) => onUpdateBlock(selectedBlock.id, { content: e.target.value, style: { ...selectedBlock.style, voucherButtonText: e.target.value } as any })}
+                                        placeholder="LƯU MÃ NGAY"
+                                    />
+                                    <Input
+                                        label="Đường dẫn nút (URL)"
+                                        value={selectedBlock.url || ''}
+                                        onChange={e => onUpdateBlock(selectedBlock.id, { url: e.target.value })}
+                                        placeholder="https://..."
+                                    />
                                 </div>
                                 <Accordion title="Màu sắc ưu đãi" icon={LucideIcons.Palette} defaultOpen>
                                     <div className="space-y-4">
-                                        <ColorPicker label="Màu viền ranh (Border)" value={getStyle('voucherBorderColor') || '#BD1D2D'} onChange={(v, t) => handleColorUpdate(v, t, 'voucherBorderColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
+                                        <ColorPicker solidOnly label="Màu viền ranh (Border)" value={getStyle('voucherBorderColor') || '#BD1D2D'} onChange={(v, t) => handleColorUpdate(v, t, 'voucherBorderColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
                                         <div className="space-y-2">
                                             <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Kiểu viền</label>
                                             <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
@@ -1046,7 +1062,7 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                                         <VisualMeasure label="Khoảng cách (Letter Spacing)" value={getStyle('letterSpacing')} defaultValue={12} onChange={(v) => updateStyle({ letterSpacing: v })} max={40} unit="px" />
                                     </div>
                                     <div className="grid grid-cols-2 gap-3 mb-2 pt-2 border-t border-slate-100">
-                                        <ColorPicker label="Màu chữ" value={getStyle('color') || '#166534'} onChange={(v, t) => handleColorUpdate(v, t, 'color')} blocks={blocks} bodyStyle={bodyStyle} />
+                                        <ColorPicker solidOnly label="Màu chữ" value={getStyle('color') || '#166534'} onChange={(v, t) => handleColorUpdate(v, t, 'color')} blocks={blocks} bodyStyle={bodyStyle} />
                                         <ColorPicker label="Màu nền" value={getStyle('backgroundColor') || '#f0fdf4'} onChange={(v, t) => handleColorUpdate(v, t, 'backgroundColor')} blocks={blocks} bodyStyle={bodyStyle} />
                                     </div>
                                 </Accordion>
@@ -1268,7 +1284,10 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                                                 </div>
                                             </div>
                                         ) : (
-                                            <ColorPicker solidOnly label="Màu nền hàng" value={getStyle('tableSolidBg') || '#ffffff'} onChange={(v, t) => handleColorUpdate(v, t, 'tableSolidBg' as any)} blocks={blocks} bodyStyle={bodyStyle} />
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <ColorPicker solidOnly label="Màu nền chung" value={getStyle('tableSolidBg') || '#ffffff'} onChange={(v, t) => handleColorUpdate(v, t, 'tableSolidBg' as any)} blocks={blocks} bodyStyle={bodyStyle} />
+                                                <ColorPicker solidOnly label="Màu chữ nội dung" value={getStyle('tableEvenTextColor') || getStyle('color') || '#1e293b'} onChange={(v) => updateStyle({ tableEvenTextColor: v, tableOddTextColor: v, color: v } as any)} blocks={blocks} bodyStyle={bodyStyle} />
+                                            </div>
                                         )}
 
                                         {/* Font size */}
@@ -1402,7 +1421,13 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
 
                 {activeTab === 'style' && (
                     <div className="space-y-6 animate-in fade-in">
-                        {(isColumn || isRow || isButton || ['social', 'review', 'image', 'text', 'quote'].includes(selectedBlock.type)) && <AlignmentControl values={s} onChange={updateStyle} />}
+                        {(isColumn || isRow || isButton || ['social', 'review', 'image', 'text', 'quote'].includes(selectedBlock.type)) && (
+                            <AlignmentControl
+                                values={{ textAlign: getStyle('textAlign'), verticalAlign: getStyle('verticalAlign') }}
+                                onChange={updateStyle}
+                                showVertical={selectedBlock.type === 'column' || selectedBlock.type === 'row'}
+                            />
+                        )}
 
                         {isRow && (
                             <div className="bg-slate-50 p-3 rounded-[14px] border border-slate-100 flex items-center justify-between mx-1">
@@ -1435,14 +1460,15 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                             <RadiusControl label="Bo góc" values={{ borderRadius: getStyle('borderRadius') }} onChange={(v: any) => updateStyle({ borderRadius: v.borderRadius })} />
                         </Accordion>
 
-
-
                         {/* [UX] Secondary sections start collapsed — expand when needed */}
                         <Accordion title="Màu nền & Viền" icon={LucideIcons.Palette}>
                             <div className="space-y-4">
-                                <ColorPicker label="Màu nền" value={getStyle('backgroundColor')} onChange={(v, t) => handleColorUpdate(v, t, 'backgroundColor')} blocks={blocks} bodyStyle={bodyStyle} />
+                                <ColorPicker label={selectedBlock.type === 'section' ? 'Màu nền (Ngoài)' : 'Màu nền'} value={getStyle('backgroundColor')} onChange={(v, t) => handleColorUpdate(v, t, 'backgroundColor')} blocks={blocks} bodyStyle={bodyStyle} />
+                                {selectedBlock.type === 'section' && (
+                                    <ColorPicker label="Màu nền khung nội dung (Trong 600px)" value={getStyle('contentBackgroundColor') || 'transparent'} onChange={(v, t) => handleColorUpdate(v, t, 'contentBackgroundColor')} blocks={blocks} bodyStyle={bodyStyle} />
+                                )}
                                 {isButton && <ColorPicker label="Màu nền nút" value={getStyle('contentBackgroundColor')} onChange={(v, t) => handleColorUpdate(v, t, 'contentBackgroundColor')} blocks={blocks} bodyStyle={bodyStyle} />}
-                                <BorderControl values={s} onChange={updateStyle} blocks={blocks} bodyStyle={bodyStyle} />
+                                <BorderControl values={deviceMode === 'mobile' ? { ...s, ...(s.mobile || {}) } : s} onChange={updateStyle} blocks={blocks} bodyStyle={bodyStyle} />
                             </div>
                         </Accordion>
 
@@ -1452,7 +1478,7 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                                     <div className="space-y-1"><label className="text-[9px] font-bold text-slate-400 uppercase">Kiểu</label><div className="flex bg-slate-100 p-1 rounded-xl">{['color', 'dark', 'light'].map(m => (<button key={m} onClick={() => updateStyle({ iconMode: m as any })} className={`flex-1 py-1 text-[9px] font-bold uppercase rounded-lg transition-all ${getStyle('iconMode') === m ? 'bg-white shadow text-[#BD1D2D]' : 'text-slate-400 hover:text-slate-600'}`}>{m}</button>))}</div></div>
                                     <VisualMeasure label="Cỡ Icon" value={getStyle('iconSize')} defaultValue={32} onChange={(v) => updateStyle({ iconSize: v })} max={64} unit="px" />
                                     <VisualMeasure label="Khoảng cách" value={getStyle('gap')} defaultValue={10} onChange={(v) => updateStyle({ gap: v })} max={50} unit="px" />
-                                    <div className="grid grid-cols-2 gap-3"><ColorPicker label="Màu Icon" value={getStyle('iconColor')} onChange={(v, t) => handleColorUpdate(v, t, 'iconColor')} blocks={blocks} bodyStyle={bodyStyle} /><ColorPicker label="Màu Nền" value={getStyle('iconBackgroundColor')} onChange={(v, t) => handleColorUpdate(v, t, 'iconBackgroundColor')} blocks={blocks} bodyStyle={bodyStyle} /></div>
+                                    <div className="grid grid-cols-2 gap-3"><ColorPicker solidOnly label="Màu Icon" value={getStyle('iconColor')} onChange={(v, t) => handleColorUpdate(v, t, 'iconColor')} blocks={blocks} bodyStyle={bodyStyle} /><ColorPicker solidOnly label="Màu Nền" value={getStyle('iconBackgroundColor')} onChange={(v, t) => handleColorUpdate(v, t, 'iconBackgroundColor')} blocks={blocks} bodyStyle={bodyStyle} /></div>
                                 </div>
                             </Accordion>
                         )}
@@ -1473,9 +1499,9 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                                                 <VisualMeasure label="Cỡ tiêu đề" value={getStyle('checkTitleSize' as any)} defaultValue={18} onChange={(v) => updateStyle({ checkTitleSize: v } as any)} max={60} unit="px" />
                                                 <VisualMeasure label="Cỡ mục" value={getStyle('checkItemSize' as any)} defaultValue={14} onChange={(v) => updateStyle({ checkItemSize: v } as any)} max={48} unit="px" />
                                             </div>
-                                            <ColorPicker label="Màu tiêu đề" value={(getStyle('checkTitleColor' as any) as string) || '#1e293b'} onChange={(v, t) => handleColorUpdate(v, t, 'checkTitleColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
-                                            <ColorPicker label="Màu chữ mục" value={getStyle('color') || '#334155'} onChange={(v, t) => handleColorUpdate(v, t, 'color')} blocks={blocks} bodyStyle={bodyStyle} />
-                                            <ColorPicker label="Màu mô tả mục" value={(getStyle('checkDescColor' as any) as string) || '#64748b'} onChange={(v, t) => handleColorUpdate(v, t, 'checkDescColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
+                                            <ColorPicker solidOnly label="Màu tiêu đề" value={(getStyle('checkTitleColor' as any) as string) || '#1e293b'} onChange={(v, t) => handleColorUpdate(v, t, 'checkTitleColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
+                                            <ColorPicker solidOnly label="Màu chữ mục" value={getStyle('color') || '#334155'} onChange={(v, t) => handleColorUpdate(v, t, 'color')} blocks={blocks} bodyStyle={bodyStyle} />
+                                            <ColorPicker solidOnly label="Màu mô tả mục" value={(getStyle('checkDescColor' as any) as string) || '#64748b'} onChange={(v, t) => handleColorUpdate(v, t, 'checkDescColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
                                         </div>
                                     </div>
                                 </Accordion>
@@ -1485,13 +1511,27 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                         {selectedBlock.type === 'timeline' && (
                             <Accordion title="Giao diện Timeline" icon={LucideIcons.ListStart}>
                                 <div className="space-y-4">
-                                    <ColorPicker label="Màu Chấm (Dot)" value={getStyle('timelineDotColor') || '#BD1D2D'} onChange={(v, t) => handleColorUpdate(v, t, 'timelineDotColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
-                                    <ColorPicker label="Màu Đường (Line)" value={getStyle('timelineLineColor') || '#e2e8f0'} onChange={(v, t) => handleColorUpdate(v, t, 'timelineLineColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <ColorPicker solidOnly label="Màu Chấm (Dot)" value={getStyle('timelineDotColor') || '#BD1D2D'} onChange={(v, t) => handleColorUpdate(v, t, 'timelineDotColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
+                                        <ColorPicker solidOnly label="Màu Đường (Line)" value={getStyle('timelineLineColor') || '#e2e8f0'} onChange={(v, t) => handleColorUpdate(v, t, 'timelineLineColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Hình dạng nút (Dot Shape)</label>
+                                        <div className="flex bg-slate-100 p-1 rounded-xl">
+                                            {([['circle', 'Tròn'], ['square', 'Vuông Bo Góc']] as const).map(([val, lbl]) => (
+                                                <button key={val} onClick={() => updateStyle({ timelineDotShape: val } as any)} className={`flex-1 py-1.5 text-[9px] font-bold uppercase rounded-lg transition-all ${(getStyle('timelineDotShape' as any) || 'circle') === val ? 'bg-white shadow text-[#BD1D2D]' : 'text-slate-400 hover:text-slate-600'}`}>{lbl}</button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <ColorPicker solidOnly label="Màu chữ tiêu đề mốc" value={getStyle('color') || '#0f172a'} onChange={(v, t) => handleColorUpdate(v, t, 'color')} blocks={blocks} bodyStyle={bodyStyle} />
+                                        <ColorPicker solidOnly label="Màu chữ mô tả" value={(getStyle('timelineDescColor' as any) as string) || '#64748b'} onChange={(v, t) => handleColorUpdate(v, t, 'timelineDescColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
+                                    </div>
                                     <div className="space-y-2">
                                         <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Kiểu đường</label>
                                         <div className="flex bg-slate-100 p-1 rounded-xl">
                                             {['solid', 'dashed', 'dotted'].map(s => (
-                                                <button key={s} onClick={() => updateStyle({ timelineLineStyle: s as any })} className={`flex-1 py-1 text-[9px] font-bold uppercase rounded-lg transition-all ${getStyle('timelineLineStyle') === s ? 'bg-white shadow text-[#BD1D2D]' : 'text-slate-400 hover:text-slate-600'}`}>{s}</button>
+                                                <button key={s} onClick={() => updateStyle({ timelineLineStyle: s as any })} className={`flex-1 py-1 text-[9px] font-bold uppercase rounded-lg transition-all ${(getStyle('timelineLineStyle') || 'solid') === s ? 'bg-white shadow text-[#BD1D2D]' : 'text-slate-400 hover:text-slate-600'}`}>{s}</button>
                                             ))}
                                         </div>
                                     </div>
@@ -1502,7 +1542,7 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                         {selectedBlock.type === 'video' && (
                             <Accordion title="Giao diện Video" icon={LucideIcons.PlayCircle}>
                                 <div className="space-y-4">
-                                    <ColorPicker label="Màu nút Play" value={getStyle('playButtonColor') || '#BD1D2D'} onChange={(v, t) => handleColorUpdate(v, t, 'playButtonColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
+                                    <ColorPicker solidOnly label="Màu nút Play" value={getStyle('playButtonColor') || '#BD1D2D'} onChange={(v, t) => handleColorUpdate(v, t, 'playButtonColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
                                 </div>
                             </Accordion>
                         )}
@@ -1535,30 +1575,19 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                         )}
 
                         {selectedBlock.type === 'header' && (
-                            <div className="space-y-4">
-                                <Accordion title="Header Styles" icon={LucideIcons.Layout} defaultOpen>
-                                    <div className="space-y-4">
-                                        <VisualMeasure label="Menu Gap" value={getStyle('menuGap')} defaultValue={20} onChange={(v) => updateStyle({ menuGap: v })} max={50} unit="px" />
+                            <Accordion title="Giao diện Header & Menu" icon={LucideIcons.Layout} defaultOpen>
+                                <div className="space-y-4">
+                                    <VisualMeasure label="Khoảng cách Menu" value={getStyle('menuGap')} defaultValue={20} onChange={(v) => updateStyle({ menuGap: v })} max={50} unit="px" />
 
-                                        <div className="pt-3 border-t border-slate-100 space-y-4">
-                                            {(getStyle('headerMenuType') || 'link') === 'button' ? (
-                                                <div className="grid grid-cols-2 gap-3">
-                                                    <ColorPicker label="Button Bg" solidOnly value={getStyle('buttonBg') || '#BD1D2D'} onChange={(v) => updateStyle({ buttonBg: v })} blocks={blocks} bodyStyle={bodyStyle} />
-                                                    <ColorPicker label="Button Text" solidOnly value={getStyle('buttonColor') || '#ffffff'} onChange={(v) => updateStyle({ buttonColor: v })} blocks={blocks} bodyStyle={bodyStyle} />
-                                                </div>
-                                            ) : (
-                                                <ColorPicker label="Link Color" solidOnly value={getStyle('color') || '#475569'} onChange={(v, t) => handleColorUpdate(v, t, 'color')} blocks={blocks} bodyStyle={bodyStyle} />
-                                            )}
+                                    <div className="pt-3 border-t border-slate-100 space-y-4">
+                                        <ColorPicker label="Màu chữ Link" solidOnly value={getStyle('color') || '#475569'} onChange={(v, t) => handleColorUpdate(v, t, 'color')} blocks={blocks} bodyStyle={bodyStyle} />
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <ColorPicker label="Màu nền nút" solidOnly value={getStyle('buttonBg') || '#BD1D2D'} onChange={(v) => updateStyle({ buttonBg: v })} blocks={blocks} bodyStyle={bodyStyle} />
+                                            <ColorPicker label="Màu chữ nút" solidOnly value={getStyle('buttonColor') || '#ffffff'} onChange={(v) => updateStyle({ buttonColor: v })} blocks={blocks} bodyStyle={bodyStyle} />
                                         </div>
                                     </div>
-                                </Accordion>
-
-                                <Accordion title="Kích thước & Khoảng cách" icon={LucideIcons.Maximize}>
-                                    <ColorPicker label="Background Color" value={getStyle('backgroundColor')} onChange={(v, t) => handleColorUpdate(v, t, 'backgroundColor')} blocks={blocks} bodyStyle={bodyStyle} />
-                                    <SpacingControl label="Padding" values={{ top: getStyle('paddingTop'), right: getStyle('paddingRight'), bottom: getStyle('paddingBottom'), left: getStyle('paddingLeft') }} onChange={(v: any) => updateStyle({ paddingTop: v.top, paddingRight: v.right, paddingBottom: v.bottom, paddingLeft: v.left })} />
-                                    <RadiusControl label="Border Radius" values={{ borderRadius: getStyle('borderRadius') }} onChange={(v: any) => updateStyle({ borderRadius: v.borderRadius })} />
-                                </Accordion>
-                            </div>
+                                </div>
+                            </Accordion>
                         )}
 
                         {selectedBlock.type === 'divider' && (
@@ -1573,12 +1602,45 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                                             ))}
                                         </div>
                                     </div>
-                                    <ColorPicker label="Màu đường kẻ" value={getStyle('borderColor') || '#eeeeee'} onChange={(v, t) => handleColorUpdate(v, t, 'borderColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
+                                    <ColorPicker solidOnly label="Màu đường kẻ" value={getStyle('borderColor') || '#eeeeee'} onChange={(v, t) => handleColorUpdate(v, t, 'borderColor' as any)} blocks={blocks} bodyStyle={bodyStyle} />
                                 </div>
                             </Accordion>
                         )}
 
-
+                        <Accordion title="Hiển thị theo thiết bị (Responsive)" icon={LucideIcons.MonitorSmartphone}>
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                                    <div className="flex items-center gap-2">
+                                        <LucideIcons.Monitor className="w-3.5 h-3.5 text-slate-500" />
+                                        <span className="text-[10px] font-bold text-slate-700 uppercase tracking-widest">Ẩn trên Máy tính (Desktop)</span>
+                                    </div>
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            className="sr-only peer"
+                                            checked={Boolean(s.hideOnDesktop)}
+                                            onChange={(e) => onUpdateBlock(selectedBlock.id, { style: { ...s, hideOnDesktop: e.target.checked } })}
+                                        />
+                                        <div className="w-9 h-5 bg-slate-200 rounded-full peer peer-checked:bg-[#BD1D2D] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                                    </label>
+                                </div>
+                                <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                                    <div className="flex items-center gap-2">
+                                        <LucideIcons.Smartphone className="w-3.5 h-3.5 text-slate-500" />
+                                        <span className="text-[10px] font-bold text-slate-700 uppercase tracking-widest">Ẩn trên Điện thoại (Mobile)</span>
+                                    </div>
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            className="sr-only peer"
+                                            checked={Boolean(s.hideOnMobile)}
+                                            onChange={(e) => onUpdateBlock(selectedBlock.id, { style: { ...s, hideOnMobile: e.target.checked } })}
+                                        />
+                                        <div className="w-9 h-5 bg-slate-200 rounded-full peer peer-checked:bg-[#BD1D2D] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                                    </label>
+                                </div>
+                            </div>
+                        </Accordion>
 
                     </div>
                 )}

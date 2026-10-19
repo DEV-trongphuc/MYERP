@@ -1534,6 +1534,10 @@ class AgentToolRegistry {
                                     'enum' => ['program_stage', 'source_stage', 'owner_stage', 'branch_program', 'month_source', 'none'],
                                     'description' => 'Chiều bóc tách ma trận và biểu đồ chính: program_stage (Chương trình × Giai đoạn), source_stage (Nguồn × Giai đoạn/Cọc), owner_stage (Chuyên viên × Doanh số cọc), branch_program (Chi nhánh × Chương trình), month_source (Tháng × Nguồn lead).'
                                 ],
+                                'compare_previous_period' => [
+                                    'type' => 'BOOLEAN',
+                                    'description' => 'So sánh tự động với kỳ liền trước có độ dài tương đương (trả về previous_period, previous_total_leads, lead_growth_pct, previous_deposit_amount, deposit_growth_pct, previous_conversion_pct, conversion_diff_pt).'
+                                ],
                                 'limit' => [
                                     'type' => 'INTEGER',
                                     'description' => 'Số lượng bản ghi xem trước (mặc định 5, tối đa 20).'
@@ -2194,32 +2198,6 @@ class AgentToolRegistry {
             $essential = [
                 'draft_action_proposal',
                 'get_system_navigation',
-                'get_company_staff_directory',
-                'get_my_tasks',
-                'get_pending_approvals',
-                'approve_or_reject_erp_ticket',
-                'update_task_progress_and_status',
-                'complete_task_checklist_item',
-                'quick_log_crm_activity',
-                'reassign_lead_owner',
-                'smart_create_or_assign_leads',
-                'manage_lead_round_distribution',
-                'smart_manage_tasks_and_subtasks',
-                'query_and_manage_projects',
-                'manage_my_hr_profile_and_requests',
-                'smart_manage_hrm_and_payroll',
-                'smart_manage_po_so_and_approvals',
-                'query_omnichannel_journey_and_automation_analytics',
-                'get_lead_digital_footprint_360',
-                'smart_manage_automation_flows_and_campaigns',
-                'query_crm_leads_multitier',
-                'query_finance_multitier_analytics',
-                'query_deposits_and_revenue_multitier',
-                'query_tasks_and_projects_multitier',
-                'query_deals_and_b2b_multitier',
-                'query_tickets_and_sla_multitier',
-                'query_hrm_workforce_and_payroll_multitier',
-                'query_inventory_and_assets_multitier',
                 'query_cross_domain_executive_synthesis'
             ];
             $effectiveAllowed = array_unique(array_merge($allowedToolNames, $essential));
@@ -2734,13 +2712,13 @@ class AgentToolRegistry {
             ];
         }
 
-        // 2. Search by tokenized/accent-insensitive full_name, student_code, phone, email (LIMIT 6 to detect ambiguity)
+        // 2. Search by tokenized/accent-insensitive full_name, ID, phone, email (LIMIT 6 to detect ambiguity)
         $cleanPhone = preg_replace('/[^0-9]/', '', $query);
         $sParams = [$tid];
         $fuzzyNameClause = self::buildVietnameseFuzzyNameWhere('c.full_name', $query, $sParams);
-        $sWhere = [$fuzzyNameClause, "c.email LIKE ?", "c.student_code LIKE ?"];
+        $sWhere = [$fuzzyNameClause, "c.email LIKE ?", "CAST(c.id AS CHAR) = ?"];
         $sParams[] = '%' . $query . '%';
-        $sParams[] = '%' . $query . '%';
+        $sParams[] = ltrim(trim($query), '#');
         if (!empty($cleanPhone) && strlen($cleanPhone) >= 6) {
             $sWhere[] = "c.phone LIKE ?";
             $sParams[] = '%' . $cleanPhone . '%';
@@ -2756,14 +2734,14 @@ class AgentToolRegistry {
                   AND {$rbacClause}
                 ORDER BY
                   CASE
-                    WHEN LOWER(IFNULL(c.student_code, '')) = LOWER(?) THEN 0
+                    WHEN CAST(c.id AS CHAR) = ? THEN 0
                     WHEN IFNULL(c.phone, '') = ? THEN 1
                     WHEN LOWER(c.full_name) = LOWER(?) THEN 2
                     ELSE 3
                   END ASC,
                   c.id DESC
                 LIMIT 6";
-        $execParams = array_merge($sParams, $rbacParams, [$query, $query, $query]);
+        $execParams = array_merge($sParams, $rbacParams, [ltrim(trim($query), '#'), $query, $query]);
         $stmt = $db->prepare($sql);
         $stmt->execute($execParams);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -6219,15 +6197,15 @@ class AgentToolRegistry {
                         $upStmt->execute($params);
                     }
 
-                    if ($pendingApprovalTriggered && $approverId > 0) {
+                    if ($pendingApprovalTriggered && $approverId > 0 && (int)$approverId !== (int)$uid) {
                         try {
-                            $notifStmt = $db->prepare("INSERT INTO notifications (tenant_id, user_id, title, message, type, link, is_read, created_at) VALUES (?, ?, ?, ?, 'task_approval', ?, 0, NOW())");
+                            $notifStmt = $db->prepare("INSERT INTO notifications (tenant_id, user_id, title, body, type, link, is_read, created_at) VALUES (?, ?, ?, ?, 'task_approval', ?, 0, NOW())");
                             $notifStmt->execute([
                                 $tid,
                                 $approverId,
-                                "Chờ nghiệm thu công việc #{$taskId}",
+                                "⏳ Chờ nghiệm thu công việc #{$taskId}",
                                 "{$userName} đã hoàn thành 100% công việc '{$task['subject']}' và gửi yêu cầu nghiệm thu.",
-                                "/workspace?task_id={$taskId}"
+                                "/tasks?id={$taskId}"
                             ]);
                         } catch (\Throwable $e) {}
                     }
@@ -10285,15 +10263,13 @@ class AgentToolRegistry {
                         }
                     }
 
-                    // 3. Sources Multi-Filter (matches source, utm_source, and platform)
+                    // 3. Sources Multi-Filter
                     if (!empty($sourcesParam) && $sourcesParam !== 'all') {
                         $srcList = array_filter(array_map('trim', explode(',', $sourcesParam)));
                         if (!empty($srcList)) {
                             $srcOrs = [];
                             foreach ($srcList as $s) {
-                                $srcOrs[] = "(c.source LIKE ? OR c.utm_source LIKE ? OR c.platform LIKE ?)";
-                                $params[] = '%' . $s . '%';
-                                $params[] = '%' . $s . '%';
+                                $srcOrs[] = "c.source LIKE ?";
                                 $params[] = '%' . $s . '%';
                             }
                             $where[] = "(" . implode(' OR ', $srcOrs) . ")";
@@ -10542,6 +10518,77 @@ class AgentToolRegistry {
                     $conversionPct = $totalMatching > 0 ? round(($depositedLeadCount / $totalMatching) * 100, 1) : 0;
                     $avgDeposit = $depositCount > 0 ? round($totalDepositAmount / $depositCount, 0) : 0;
 
+                    // Automatic Previous Period Comparison when fromDate and toDate are present
+                    $comparePreviousPeriod = (bool)($args['compare_previous_period'] ?? true);
+                    $periodComparison = null;
+                    if ($fromDate !== '' && $toDate !== '' && $comparePreviousPeriod) {
+                        $tsFrom = strtotime($fromDate);
+                        $tsTo = strtotime($toDate);
+                        if ($tsFrom !== false && $tsTo !== false && $tsTo >= $tsFrom) {
+                            $daysDiff = max(1, (int)round(($tsTo - $tsFrom) / 86400) + 1);
+                            $prevToTs = strtotime('-1 day', $tsFrom);
+                            $prevFromTs = strtotime('-' . ($daysDiff - 1) . ' days', $prevToTs);
+                            $prevFromDate = date('Y-m-d', $prevFromTs);
+                            $prevToDate = date('Y-m-d', $prevToTs);
+
+                            try {
+                                $prevWhere = $whereWithoutDate;
+                                $prevParams = $paramsWithoutDate;
+                                if ($dateField === 'deposit_date') {
+                                    $prevWhere[] = "EXISTS (SELECT 1 FROM deposits dep_d WHERE dep_d.contact_id = c.id AND dep_d.status NOT IN ('cancelled', 'rejected') AND dep_d.created_at BETWEEN ? AND ?)";
+                                    $prevParams[] = $prevFromDate . ' 00:00:00';
+                                    $prevParams[] = $prevToDate . ' 23:59:59';
+                                } elseif (in_array($dateField, ['admission_date', 'next_followup_date', 'expected_decision_date', 'birthday'], true)) {
+                                    $colExpr = ($dateField === 'birthday') ? 'COALESCE(c.birthday, c.dob)' : "c.{$dateField}";
+                                    $prevWhere[] = "{$colExpr} >= ? AND {$colExpr} <= ?";
+                                    $prevParams[] = $prevFromDate;
+                                    $prevParams[] = $prevToDate . ' 23:59:59';
+                                } else {
+                                    $targetDateField = ($dateField === 'last_contact') ? 'c.last_contact' : (($dateField === 'updated_at') ? 'c.updated_at' : 'c.created_at');
+                                    $prevWhere[] = "{$targetDateField} BETWEEN ? AND ?";
+                                    $prevParams[] = $prevFromDate . ' 00:00:00';
+                                    $prevParams[] = $prevToDate . ' 23:59:59';
+                                }
+                                $prevWhereSql = implode(' AND ', $prevWhere);
+                                $prevRollupSql = "SELECT 
+                                                    COUNT(DISTINCT c.id) as total_matching,
+                                                    COUNT(DISTINCT dep.contact_id) as deposited_lead_count,
+                                                    COALESCE(SUM(dep.price), 0) as total_deposit_amount
+                                                  FROM contacts c
+                                                  LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
+                                                  LEFT JOIN users u ON c.owner_id = u.id
+                                                  LEFT JOIN deposits dep ON dep.contact_id = c.id AND dep.status NOT IN ('cancelled', 'rejected')
+                                                  WHERE {$prevWhereSql}";
+                                $prevStmt = $db->prepare($prevRollupSql);
+                                $prevStmt->execute($prevParams);
+                                $prevData = $prevStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+                                $prevTotalLeads = (int)($prevData['total_matching'] ?? 0);
+                                $prevDepositedLeads = (int)($prevData['deposited_lead_count'] ?? 0);
+                                $prevDepositAmt = (float)($prevData['total_deposit_amount'] ?? 0);
+                                $prevConvPct = $prevTotalLeads > 0 ? round(($prevDepositedLeads / $prevTotalLeads) * 100, 1) : 0.0;
+                                $leadGrowthPct = $prevTotalLeads > 0
+                                    ? round((($totalMatching - $prevTotalLeads) / $prevTotalLeads) * 100, 1)
+                                    : ($totalMatching > 0 ? 100.0 : 0.0);
+                                $depGrowthPct = $prevDepositAmt > 0
+                                    ? round((($totalDepositAmount - $prevDepositAmt) / $prevDepositAmt) * 100, 1)
+                                    : ($totalDepositAmount > 0 ? 100.0 : 0.0);
+                                $convDiffPt = round($conversionPct - $prevConvPct, 1);
+
+                                $periodComparison = [
+                                    'previous_period' => "{$prevFromDate} -> {$prevToDate}",
+                                    'previous_total_leads' => $prevTotalLeads,
+                                    'lead_growth_pct' => ($leadGrowthPct >= 0 ? '+' : '') . $leadGrowthPct . '%',
+                                    'previous_deposit_amount' => number_format($prevDepositAmt, 0, ',', '.') . ' VNĐ',
+                                    'deposit_growth_pct' => ($depGrowthPct >= 0 ? '+' : '') . $depGrowthPct . '%',
+                                    'previous_conversion_pct' => $prevConvPct . '%',
+                                    'conversion_diff_pt' => ($convDiffPt >= 0 ? '+' : '') . $convDiffPt . ' pt'
+                                ];
+                            } catch (\Throwable $ePrev) {
+                                // Safe ignore comparison error
+                            }
+                        }
+                    }
+
                     // ==========================================
                     // 2. MULTI-TIER FACETED AGGREGATIONS (GROUP BY)
                     // ==========================================
@@ -10551,6 +10598,9 @@ class AgentToolRegistry {
                                   COALESCE(NULLIF(TRIM(c.program), ''), 'Chưa phân loại') as program_name,
                                   COUNT(DISTINCT c.id) as lead_count,
                                   COUNT(DISTINCT dep.id) as deposit_count,
+                                  COUNT(DISTINCT dep.contact_id) as deposited_lead_count,
+                                  ROUND(COUNT(DISTINCT dep.contact_id) * 100.0 / NULLIF(COUNT(DISTINCT c.id), 0), 1) as conversion_rate_pct,
+                                  SUM(CASE WHEN (c.last_contact IS NULL OR c.last_contact = '') THEN 1 ELSE 0 END) as uncontacted_count,
                                   COALESCE(SUM(dep.price), 0) as deposit_amount
                                 FROM contacts c
                                 LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
@@ -10588,6 +10638,9 @@ class AgentToolRegistry {
                                  COALESCE(NULLIF(TRIM(c.source), ''), 'Chưa rõ nguồn') as source_name,
                                  COUNT(DISTINCT c.id) as lead_count,
                                  COUNT(DISTINCT dep.id) as deposit_count,
+                                 COUNT(DISTINCT dep.contact_id) as deposited_lead_count,
+                                 ROUND(COUNT(DISTINCT dep.contact_id) * 100.0 / NULLIF(COUNT(DISTINCT c.id), 0), 1) as conversion_rate_pct,
+                                 SUM(CASE WHEN (c.last_contact IS NULL OR c.last_contact = '') THEN 1 ELSE 0 END) as uncontacted_count,
                                  COALESCE(SUM(dep.price), 0) as deposit_amount
                                FROM contacts c
                                LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
@@ -10596,7 +10649,7 @@ class AgentToolRegistry {
                                WHERE {$whereSql}
                                GROUP BY source_name
                                ORDER BY lead_count DESC
-                               LIMIT 6";
+                               LIMIT 12";
                     $srcStmt = $db->prepare($srcSql);
                     $srcStmt->execute($params);
                     $srcFacets = $srcStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -10606,6 +10659,9 @@ class AgentToolRegistry {
                                    COALESCE(u.full_name, 'Chưa phân công') as owner_name,
                                    COUNT(DISTINCT c.id) as lead_count,
                                    COUNT(DISTINCT dep.id) as deposit_count,
+                                   COUNT(DISTINCT dep.contact_id) as deposited_lead_count,
+                                   ROUND(COUNT(DISTINCT dep.contact_id) * 100.0 / NULLIF(COUNT(DISTINCT c.id), 0), 1) as conversion_rate_pct,
+                                   SUM(CASE WHEN (c.last_contact IS NULL OR c.last_contact = '') THEN 1 ELSE 0 END) as uncontacted_count,
                                    COALESCE(SUM(dep.price), 0) as deposit_amount
                                  FROM contacts c
                                  LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
@@ -10614,7 +10670,7 @@ class AgentToolRegistry {
                                  WHERE {$whereSql}
                                  GROUP BY owner_name
                                  ORDER BY lead_count DESC
-                                 LIMIT 6";
+                                 LIMIT 12";
                     $ownerStmt = $db->prepare($ownerSql);
                     $ownerStmt->execute($params);
                     $ownerFacets = $ownerStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -10863,6 +10919,7 @@ class AgentToolRegistry {
                             'avg_deposit_amount' => number_format($avgDeposit, 0, ',', '.') . ' VNĐ',
                             'conversion_rate_pct' => $conversionPct . '%'
                         ],
+                        'period_comparison' => $periodComparison,
                         'facets' => [
                             'by_program' => $progFacets,
                             'by_stage' => $stageFacets,
@@ -11296,14 +11353,13 @@ class AgentToolRegistry {
                         }
                     }
 
-                    // 5. Lead Source / UTM Source Filter
+                    // 5. Lead Source Filter
                     if ($sourcesParam !== '' && $sourcesParam !== 'all') {
                         $srcList = array_filter(array_map('trim', explode(',', $sourcesParam)));
                         if (!empty($srcList)) {
                             $srcOrs = [];
                             foreach ($srcList as $sItem) {
-                                $srcOrs[] = "(c.source LIKE ? OR c.utm_source LIKE ?)";
-                                $params[] = '%' . $sItem . '%';
+                                $srcOrs[] = "c.source LIKE ?";
                                 $params[] = '%' . $sItem . '%';
                             }
                             $where[] = "(" . implode(' OR ', $srcOrs) . ")";
@@ -11977,14 +12033,14 @@ class AgentToolRegistry {
                             $sOrs = [];
                             foreach ($statusList as $st) {
                                 if ($st === 'won') {
-                                    $sOrs[] = "(d.status = 'won' OR ps.is_won = 1)";
+                                    $sOrs[] = "COALESCE(ps.is_won, 0) = 1";
                                 } elseif ($st === 'lost') {
-                                    $sOrs[] = "(d.status = 'lost' OR ps.is_lost = 1)";
+                                    $sOrs[] = "COALESCE(ps.is_lost, 0) = 1";
                                 } elseif ($st === 'open') {
-                                    $sOrs[] = "(COALESCE(d.status, 'open') = 'open' AND COALESCE(ps.is_won, 0) = 0 AND COALESCE(ps.is_lost, 0) = 0)";
+                                    $sOrs[] = "(COALESCE(ps.is_won, 0) = 0 AND COALESCE(ps.is_lost, 0) = 0)";
                                 } else {
-                                    $sOrs[] = "d.status = ?";
-                                    $params[] = $st;
+                                    $sOrs[] = "ps.name LIKE ?";
+                                    $params[] = '%' . $st . '%';
                                 }
                             }
                             $where[] = "(" . implode(' OR ', $sOrs) . ")";
@@ -12067,8 +12123,8 @@ class AgentToolRegistry {
                         SELECT COUNT(DISTINCT d.id) as total_count,
                                COALESCE(SUM(d.value), 0) as total_value,
                                COALESCE(SUM(d.value * COALESCE(d.probability, 50) / 100), 0) as weighted_value,
-                               COALESCE(SUM(CASE WHEN d.status = 'won' OR ps.is_won = 1 THEN d.value ELSE 0 END), 0) as won_value,
-                               COALESCE(SUM(CASE WHEN COALESCE(d.status, 'open') = 'open' AND COALESCE(ps.is_won, 0) = 0 AND COALESCE(ps.is_lost, 0) = 0 THEN d.value ELSE 0 END), 0) as open_value
+                               COALESCE(SUM(CASE WHEN COALESCE(ps.is_won, 0) = 1 THEN d.value ELSE 0 END), 0) as won_value,
+                               COALESCE(SUM(CASE WHEN COALESCE(ps.is_won, 0) = 0 AND COALESCE(ps.is_lost, 0) = 0 THEN d.value ELSE 0 END), 0) as open_value
                         {$baseJoins}
                         WHERE {$whereSql}
                     ");
@@ -12089,7 +12145,9 @@ class AgentToolRegistry {
                     $stageFacets = $stmtStage->fetchAll(PDO::FETCH_ASSOC);
 
                     $stmtRows = $db->prepare("
-                        SELECT d.id, d.title, d.value, d.currency, d.probability, d.expected_close_date, d.priority, d.status, d.created_at,
+                        SELECT d.id, d.title, d.value, d.currency, d.probability, d.expected_close_date, d.priority,
+                               CASE WHEN COALESCE(ps.is_won, 0) = 1 THEN 'won' WHEN COALESCE(ps.is_lost, 0) = 1 THEN 'lost' ELSE 'open' END as status,
+                               d.created_at,
                                COALESCE(ps.name, 'Chưa phân giai đoạn') as stage_name,
                                COALESCE(co.name, '') as company_name,
                                COALESCE(c.full_name, '') as contact_name,
@@ -12734,11 +12792,14 @@ class AgentToolRegistry {
                 // TOOL: query_cross_domain_executive_synthesis (CROSS-DOMAIN 360° EXECUTIVE ENGINE)
                 // =========================================================================
                 case 'query_cross_domain_executive_synthesis': {
-                    $period      = strtolower(trim((string)($args['period'] ?? 'this_month')));
-                    $fromDate    = trim((string)($args['from_date'] ?? $args['from'] ?? ''));
-                    $toDate      = trim((string)($args['to_date'] ?? $args['to'] ?? ''));
-                    $citiesParam = trim((string)($args['branches_or_cities'] ?? $args['city'] ?? ''));
-                    $progsParam  = trim((string)($args['programs'] ?? $args['program'] ?? ''));
+                    $period         = strtolower(trim((string)($args['period'] ?? 'this_month')));
+                    $fromDate       = trim((string)($args['from_date'] ?? $args['from'] ?? ''));
+                    $toDate         = trim((string)($args['to_date'] ?? $args['to'] ?? ''));
+                    $citiesParam    = trim((string)($args['branches_or_cities'] ?? $args['city'] ?? ''));
+                    $progsParam     = trim((string)($args['programs'] ?? $args['program'] ?? ''));
+                    $sourcesParam   = trim((string)($args['source'] ?? $args['sources'] ?? ''));
+                    $teamIdParam    = (int)($args['team_id'] ?? 0);
+                    $ownerNameParam = trim((string)($args['owner_name'] ?? $args['owners'] ?? ''));
 
                     if ($fromDate === '' && $toDate === '') {
                         if ($period === 'today') {
@@ -12799,6 +12860,39 @@ class AgentToolRegistry {
                             $crmWhere[] = "(" . implode(' OR ', $pOrs) . ")";
                         }
                     }
+                    if ($sourcesParam !== '' && $sourcesParam !== 'all') {
+                        $sList = array_filter(array_map('trim', explode(',', $sourcesParam)));
+                        if (!empty($sList)) {
+                            $sOrs = [];
+                            foreach ($sList as $si) {
+                                $sOrs[] = "c.source LIKE ?";
+                                $crmParams[] = "%{$si}%";
+                            }
+                            $crmWhere[] = "(" . implode(' OR ', $sOrs) . ")";
+                        }
+                    }
+                    if ($teamIdParam > 0) {
+                        $crmWhere[] = "EXISTS (SELECT 1 FROM users u_tm WHERE u_tm.id = c.owner_id AND u_tm.team_id = ?)";
+                        $crmParams[] = $teamIdParam;
+                    }
+                    if ($ownerNameParam !== '' && $ownerNameParam !== 'all') {
+                        $ownList = array_filter(array_map('trim', explode(',', $ownerNameParam)));
+                        if (!empty($ownList)) {
+                            $ownOrs = [];
+                            foreach ($ownList as $own) {
+                                if (is_numeric($own)) {
+                                    $ownOrs[] = "(c.owner_id = ? OR FIND_IN_SET(?, COALESCE(c.collaborator_ids, '')))";
+                                    $crmParams[] = (int)$own;
+                                    $crmParams[] = (string)(int)$own;
+                                } else {
+                                    $ownFuzzyWhere = self::buildVietnameseFuzzyNameWhere('u_own.full_name', $own, $crmParams);
+                                    $ownOrs[] = "EXISTS (SELECT 1 FROM users u_own WHERE (u_own.id = c.owner_id OR FIND_IN_SET(u_own.id, COALESCE(c.collaborator_ids, ''))) AND ({$ownFuzzyWhere} OR u_own.email LIKE ?))";
+                                    $crmParams[] = '%' . $own . '%';
+                                }
+                            }
+                            $crmWhere[] = "(" . implode(' OR ', $ownOrs) . ")";
+                        }
+                    }
                     $crmWhereSql = implode(' AND ', $crmWhere);
                     $stmtCrm = $db->prepare("
                         SELECT COUNT(DISTINCT c.id) as total_leads,
@@ -12833,6 +12927,52 @@ class AgentToolRegistry {
                         $depParams[] = $fromDate . ' 00:00:00';
                         $depParams[] = $toDate . ' 23:59:59';
                     }
+                    if ($progsParam !== '' && $progsParam !== 'all') {
+                        $pListDep = array_filter(array_map('trim', explode(',', $progsParam)));
+                        if (!empty($pListDep)) {
+                            $pOrsDep = [];
+                            foreach ($pListDep as $pi) {
+                                $pOrsDep[] = "(c.program LIKE ? OR p.name LIKE ?)";
+                                $depParams[] = "%{$pi}%";
+                                $depParams[] = "%{$pi}%";
+                            }
+                            $depWhere[] = "(" . implode(' OR ', $pOrsDep) . ")";
+                        }
+                    }
+                    if ($sourcesParam !== '' && $sourcesParam !== 'all') {
+                        $sListDep = array_filter(array_map('trim', explode(',', $sourcesParam)));
+                        if (!empty($sListDep)) {
+                            $sOrsDep = [];
+                            foreach ($sListDep as $si) {
+                                $sOrsDep[] = "c.source LIKE ?";
+                                $depParams[] = "%{$si}%";
+                            }
+                            $depWhere[] = "(" . implode(' OR ', $sOrsDep) . ")";
+                        }
+                    }
+                    if ($teamIdParam > 0) {
+                        $depWhere[] = "(u.team_id = ? OR EXISTS (SELECT 1 FROM users u_tm WHERE u_tm.id = c.owner_id AND u_tm.team_id = ?))";
+                        $depParams[] = $teamIdParam;
+                        $depParams[] = $teamIdParam;
+                    }
+                    if ($ownerNameParam !== '' && $ownerNameParam !== 'all') {
+                        $ownListDep = array_filter(array_map('trim', explode(',', $ownerNameParam)));
+                        if (!empty($ownListDep)) {
+                            $ownOrsDep = [];
+                            foreach ($ownListDep as $own) {
+                                if (is_numeric($own)) {
+                                    $ownOrsDep[] = "(d.created_by = ? OR c.owner_id = ?)";
+                                    $depParams[] = (int)$own;
+                                    $depParams[] = (int)$own;
+                                } else {
+                                    $ownFuzzyDep = self::buildVietnameseFuzzyNameWhere('u_own.full_name', $own, $depParams);
+                                    $ownOrsDep[] = "EXISTS (SELECT 1 FROM users u_own WHERE (u_own.id = d.created_by OR u_own.id = c.owner_id) AND ({$ownFuzzyDep} OR u_own.email LIKE ?))";
+                                    $depParams[] = '%' . $own . '%';
+                                }
+                            }
+                            $depWhere[] = "(" . implode(' OR ', $ownOrsDep) . ")";
+                        }
+                    }
                     $depWhereSql = implode(' AND ', $depWhere);
                     $stmtDep = $db->prepare("
                         SELECT COUNT(DISTINCT d.id) as total_deposits,
@@ -12851,7 +12991,7 @@ class AgentToolRegistry {
                     $pendingRev  = (float)($depAgg['pending_revenue'] ?? 0);
                     $activeRev   = (float)($depAgg['active_revenue'] ?? 0);
 
-                    // 3. Expenses & Operating Cashflow Synthesis
+                    // 3. Expenses & Operating Cashflow Synthesis + Marketing Spend (CPL / CAC / ROAS)
                     $expWhere = ['e.tenant_id = ?', 'e.deleted_at IS NULL'];
                     $expParams = [$tid];
                     if (!$isFinExec) {
@@ -12867,7 +13007,11 @@ class AgentToolRegistry {
                     $stmtExp = $db->prepare("
                         SELECT COUNT(DISTINCT e.id) as expense_count,
                                COALESCE(SUM(CASE WHEN e.status IN ('approved', 'paid', 'completed') THEN e.amount ELSE 0 END), 0) as approved_expense,
-                               COALESCE(SUM(CASE WHEN e.status = 'pending' THEN e.amount ELSE 0 END), 0) as pending_expense
+                               COALESCE(SUM(CASE WHEN e.status = 'pending' THEN e.amount ELSE 0 END), 0) as pending_expense,
+                               COALESCE(SUM(CASE WHEN e.status IN ('approved', 'paid', 'completed') AND (
+                                   LOWER(COALESCE(e.category, '')) LIKE '%market%' OR LOWER(COALESCE(e.category, '')) LIKE '%ads%' OR LOWER(COALESCE(e.category, '')) LIKE '%quảng cáo%' OR LOWER(COALESCE(e.category, '')) LIKE '%truyền thông%' OR LOWER(COALESCE(e.category, '')) LIKE '%sự kiện%'
+                                   OR LOWER(COALESCE(e.title, '')) LIKE '%market%' OR LOWER(COALESCE(e.title, '')) LIKE '%ads%' OR LOWER(COALESCE(e.title, '')) LIKE '%quảng cáo%' OR LOWER(COALESCE(e.title, '')) LIKE '%facebook%' OR LOWER(COALESCE(e.title, '')) LIKE '%google%' OR LOWER(COALESCE(e.title, '')) LIKE '%tiktok%' OR LOWER(COALESCE(e.title, '')) LIKE '%zalo%'
+                               ) THEN e.amount ELSE 0 END), 0) as marketing_expense
                         FROM expenses e
                         WHERE {$expWhereSql}
                     ");
@@ -12875,7 +13019,11 @@ class AgentToolRegistry {
                     $expAgg = $stmtExp->fetch(PDO::FETCH_ASSOC) ?: [];
                     $approvedExp = (float)($expAgg['approved_expense'] ?? 0);
                     $pendingExp  = (float)($expAgg['pending_expense'] ?? 0);
+                    $mktExp      = (float)($expAgg['marketing_expense'] ?? 0);
                     $netCashflow = $approvedRev - $approvedExp;
+                    $cplVnd      = $totalLeads > 0 ? round($mktExp / $totalLeads, 0) : 0.0;
+                    $cacVnd      = $depositedLeads > 0 ? round($mktExp / $depositedLeads, 0) : 0.0;
+                    $roasRatio   = $mktExp > 0 ? round($activeRev / $mktExp, 2) : null;
 
                     // 4. Consolidated HRM, Tasks & Tickets Pulse (Single Multi-Subquery SELECT)
                     $canViewFullHrm = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'hr', 'nhan_su', 'accountant', 'ke_toan'], true);
@@ -12891,6 +13039,41 @@ class AgentToolRegistry {
                     ");
                     $stmtOps->execute([$tid, $tid, $tid, $tid, $tid, $tid, $tid]);
                     $opsAgg = $stmtOps->fetch(PDO::FETCH_ASSOC) ?: [];
+
+                    // 5. Top 5 Sales Performers by Deposit Revenue & Conversion Rate
+                    $stmtTopSales = $db->prepare("
+                        SELECT COALESCE(u.full_name, 'Chưa phân bổ') as sale_name,
+                               COUNT(DISTINCT c.id) as lead_count,
+                               COUNT(DISTINCT dep.contact_id) as deposited_lead_count,
+                               COUNT(DISTINCT dep.id) as deposit_count,
+                               COALESCE(SUM(dep.price), 0) as deposit_revenue,
+                               SUM(CASE WHEN (c.last_contact IS NULL OR c.last_contact = '') AND NOT EXISTS (SELECT 1 FROM activities act_s WHERE (act_s.contact_id = c.id OR (act_s.related_id = c.id AND act_s.related_type IN ('contact', 'lead'))) AND act_s.deleted_at IS NULL) THEN 1 ELSE 0 END) as uncontacted_leads
+                        FROM contacts c
+                        LEFT JOIN users u ON c.owner_id = u.id
+                        LEFT JOIN deposits dep ON dep.contact_id = c.id AND dep.status NOT IN ('cancelled', 'rejected')
+                        WHERE {$crmWhereSql}
+                        GROUP BY u.id, u.full_name
+                        ORDER BY deposit_revenue DESC, deposited_lead_count DESC, lead_count DESC
+                        LIMIT 5
+                    ");
+                    $stmtTopSales->execute($crmParams);
+                    $topSalesRows = $stmtTopSales->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                    $topSalesPerformers = [];
+                    foreach ($topSalesRows as $ts) {
+                        $tsLeads = (int)($ts['lead_count'] ?? 0);
+                        $tsDepLeads = (int)($ts['deposited_lead_count'] ?? 0);
+                        $tsRev = (float)($ts['deposit_revenue'] ?? 0);
+                        $topSalesPerformers[] = [
+                            'sale_name' => $ts['sale_name'],
+                            'lead_count' => $tsLeads,
+                            'deposited_lead_count' => $tsDepLeads,
+                            'deposit_count' => (int)($ts['deposit_count'] ?? 0),
+                            'conversion_rate_pct' => ($tsLeads > 0 ? round(($tsDepLeads / $tsLeads) * 100, 1) : 0.0) . '%',
+                            'deposit_revenue' => number_format($tsRev, 0, ',', '.') . ' VNĐ',
+                            'deposit_revenue_raw' => $tsRev,
+                            'uncontacted_leads' => (int)($ts['uncontacted_leads'] ?? 0)
+                        ];
+                    }
 
                     $chartData = [
                         [
@@ -12917,7 +13100,9 @@ class AgentToolRegistry {
                         'from' => $fromDate,
                         'to' => $toDate,
                         'city' => $citiesParam ?: null,
-                        'program' => $progsParam ?: null
+                        'program' => $progsParam ?: null,
+                        'source' => $sourcesParam ?: null,
+                        'assigned_to' => $ownerNameParam ?: null
                     ]));
                     $depExportUrl = '/export?' . http_build_query(array_filter([
                         'type' => 'deposit',
@@ -12935,7 +13120,11 @@ class AgentToolRegistry {
                         'period_applied' => [
                             'period' => $period,
                             'from_date' => $fromDate,
-                            'to_date' => $toDate
+                            'to_date' => $toDate,
+                            'program' => $progsParam ?: 'all',
+                            'source' => $sourcesParam ?: 'all',
+                            'team_id' => $teamIdParam ?: 'all',
+                            'owner_name' => $ownerNameParam ?: 'all'
                         ],
                         'crm_and_funnel' => [
                             'total_leads' => $totalLeads,
@@ -12953,8 +13142,13 @@ class AgentToolRegistry {
                             'expense_count' => (int)($expAgg['expense_count'] ?? 0),
                             'approved_expense' => number_format($approvedExp, 0, ',', '.') . ' VNĐ',
                             'pending_expense' => number_format($pendingExp, 0, ',', '.') . ' VNĐ',
+                            'marketing_expense' => number_format($mktExp, 0, ',', '.') . ' VNĐ',
+                            'cpl_vnd' => number_format($cplVnd, 0, ',', '.') . ' VNĐ/lead',
+                            'cac_vnd' => number_format($cacVnd, 0, ',', '.') . ' VNĐ/học viên cọc',
+                            'roas_ratio' => $roasRatio !== null ? ($roasRatio . 'x') : 'N/A (Chưa phát sinh chi phí Marketing)',
                             'net_operating_cashflow' => number_format($netCashflow, 0, ',', '.') . ' VNĐ'
                         ],
+                        'top_sales_performers' => $topSalesPerformers,
                         'hrm_and_workforce' => [
                             'active_staff' => (int)($opsAgg['active_staff'] ?? 0),
                             'present_today' => (int)($opsAgg['present_today'] ?? 0),
@@ -13523,7 +13717,10 @@ class AgentToolRegistry {
      * Supports arbitrary table alias ('c.' or 't.') and NULL-safe EXISTS / NOT EXISTS subqueries.
      */
     public static function applyMultitierExtendedContactFilters(PDO $db, string $alias, array $args, array &$where, array &$params): void {
+        require_once __DIR__ . '/../utils/search_helpers.php';
         $p = rtrim(trim($alias), '.') . '.';
+        $contactCols = function_exists('getCrmTableColumnsCache') ? getCrmTableColumnsCache($db, 'contacts') : [];
+        $actCols = function_exists('getCrmTableColumnsCache') ? getCrmTableColumnsCache($db, 'activities') : [];
 
         // 1. Stale Days Filter (3-source NULL-safe check: last_contact, activities, and manual notes)
         $staleDays = !empty($args['stale_days']) ? (int)$args['stale_days'] : 0;
@@ -13560,6 +13757,24 @@ class AgentToolRegistry {
                       AND act_iw.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
                 )";
                 array_push($params, $interactionType, $interactedWithinDays);
+            } elseif ($interactionType === 'overdue_task') {
+                $where[] = "EXISTS (
+                    SELECT 1 FROM activities act_iw
+                    WHERE (act_iw.contact_id = {$p}id OR (act_iw.related_type IN ('contact', 'lead') AND act_iw.related_id = {$p}id))
+                      AND act_iw.deleted_at IS NULL
+                      AND act_iw.status NOT IN ('completed', 'done', 'cancelled')
+                      AND act_iw.due_date IS NOT NULL
+                      AND act_iw.due_date < NOW()
+                )";
+            } elseif ($interactionType === 'upcoming_task') {
+                $where[] = "EXISTS (
+                    SELECT 1 FROM activities act_iw
+                    WHERE (act_iw.contact_id = {$p}id OR (act_iw.related_type IN ('contact', 'lead') AND act_iw.related_id = {$p}id))
+                      AND act_iw.deleted_at IS NULL
+                      AND act_iw.status NOT IN ('completed', 'done', 'cancelled')
+                      AND act_iw.due_date IS NOT NULL
+                      AND act_iw.due_date >= NOW()
+                )";
             } elseif ($interactionType === 'note') {
                 $where[] = "(
                     EXISTS (
@@ -13595,6 +13810,48 @@ class AgentToolRegistry {
                 )";
                 array_push($params, $interactedWithinDays, $interactedWithinDays, $interactedWithinDays);
             }
+        } elseif ($interactionType !== '' && $interactionType !== 'all') {
+            if (in_array($interactionType, ['call', 'meeting', 'email', 'task', 'chat'], true)) {
+                $where[] = "EXISTS (
+                    SELECT 1 FROM activities act_it
+                    WHERE (act_it.contact_id = {$p}id OR (act_it.related_type IN ('contact', 'lead') AND act_it.related_id = {$p}id))
+                      AND act_it.type = ?
+                      AND act_it.deleted_at IS NULL
+                )";
+                $params[] = $interactionType;
+            } elseif ($interactionType === 'overdue_task') {
+                $where[] = "EXISTS (
+                    SELECT 1 FROM activities act_it
+                    WHERE (act_it.contact_id = {$p}id OR (act_it.related_type IN ('contact', 'lead') AND act_it.related_id = {$p}id))
+                      AND act_it.deleted_at IS NULL
+                      AND act_it.status NOT IN ('completed', 'done', 'cancelled')
+                      AND act_it.due_date IS NOT NULL
+                      AND act_it.due_date < NOW()
+                )";
+            } elseif ($interactionType === 'upcoming_task') {
+                $where[] = "EXISTS (
+                    SELECT 1 FROM activities act_it
+                    WHERE (act_it.contact_id = {$p}id OR (act_it.related_type IN ('contact', 'lead') AND act_it.related_id = {$p}id))
+                      AND act_it.deleted_at IS NULL
+                      AND act_it.status NOT IN ('completed', 'done', 'cancelled')
+                      AND act_it.due_date IS NOT NULL
+                      AND act_it.due_date >= NOW()
+                )";
+            } elseif ($interactionType === 'note') {
+                $where[] = "(
+                    EXISTS (
+                        SELECT 1 FROM notes n_it
+                        WHERE n_it.entity_type = 'contact' AND n_it.entity_id = {$p}id
+                          AND n_it.body NOT LIKE '[Tự động]%' AND n_it.body NOT LIKE '[Phân bổ]%' AND n_it.body NOT LIKE '[Giao data]%' AND n_it.body NOT LIKE '[Auto]%' AND n_it.body NOT LIKE '[Import]%' AND n_it.body NOT LIKE '[Tái phân bổ]%'
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM activities act_it
+                        WHERE (act_it.contact_id = {$p}id OR (act_it.related_type IN ('contact', 'lead') AND act_it.related_id = {$p}id))
+                          AND act_it.type = 'note'
+                          AND act_it.deleted_at IS NULL
+                    )
+                )";
+            }
         }
 
         // 3. Call Count Range (min_call_count / max_call_count)
@@ -13617,48 +13874,69 @@ class AgentToolRegistry {
                 $kwOrs = [];
                 foreach ($kwList as $kw) {
                     $likeKw = '%' . $kw . '%';
-                    $kwOrs[] = "(
-                        {$p}notes LIKE ?
-                        OR {$p}lost_reason LIKE ?
-                        OR {$p}nurture_reason LIKE ?
-                        OR EXISTS (SELECT 1 FROM notes n_kw WHERE n_kw.entity_type = 'contact' AND n_kw.entity_id = {$p}id AND n_kw.body LIKE ?)
-                        OR EXISTS (SELECT 1 FROM activities act_kw WHERE (act_kw.contact_id = {$p}id OR (act_kw.related_type IN ('contact', 'lead') AND act_kw.related_id = {$p}id)) AND act_kw.deleted_at IS NULL AND (act_kw.body LIKE ? OR act_kw.subject LIKE ?))
-                    )";
-                    array_push($params, $likeKw, $likeKw, $likeKw, $likeKw, $likeKw, $likeKw);
+                    $subOrs = ["{$p}notes LIKE ?"];
+                    $params[] = $likeKw;
+                    if (isset($contactCols['lost_reason'])) {
+                        $subOrs[] = "{$p}lost_reason LIKE ?";
+                        $params[] = $likeKw;
+                    }
+                    if (isset($contactCols['nurture_reason'])) {
+                        $subOrs[] = "{$p}nurture_reason LIKE ?";
+                        $params[] = $likeKw;
+                    }
+                    $subOrs[] = "EXISTS (SELECT 1 FROM notes n_kw WHERE n_kw.entity_type = 'contact' AND n_kw.entity_id = {$p}id AND n_kw.body LIKE ?)";
+                    $params[] = $likeKw;
+                    $actSubOrs = ["act_kw.subject LIKE ?"];
+                    $params[] = $likeKw;
+                    if (isset($actCols['description'])) {
+                        $actSubOrs[] = "act_kw.description LIKE ?";
+                        $params[] = $likeKw;
+                    }
+                    if (isset($actCols['body'])) {
+                        $actSubOrs[] = "act_kw.body LIKE ?";
+                        $params[] = $likeKw;
+                    }
+                    $subOrs[] = "EXISTS (SELECT 1 FROM activities act_kw WHERE (act_kw.contact_id = {$p}id OR (act_kw.related_type IN ('contact', 'lead') AND act_kw.related_id = {$p}id)) AND act_kw.deleted_at IS NULL AND (" . implode(' OR ', $actSubOrs) . "))";
+                    $kwOrs[] = "(" . implode(' OR ', $subOrs) . ")";
                 }
                 $where[] = "(" . implode(' OR ', $kwOrs) . ")";
             }
         }
 
         // 5. Age, Birth Year & Birthday Month Filters
-        $dobExpr = "COALESCE({$p}birthday, {$p}dob)";
-        if (isset($args['age_min']) && $args['age_min'] !== '' && (int)$args['age_min'] > 0) {
-            $where[] = "({$dobExpr} IS NOT NULL AND {$dobExpr} > '1900-01-01' AND TIMESTAMPDIFF(YEAR, {$dobExpr}, CURDATE()) >= ?)";
-            $params[] = (int)$args['age_min'];
-        }
-        if (isset($args['age_max']) && $args['age_max'] !== '' && (int)$args['age_max'] > 0) {
-            $where[] = "({$dobExpr} IS NOT NULL AND {$dobExpr} > '1900-01-01' AND TIMESTAMPDIFF(YEAR, {$dobExpr}, CURDATE()) <= ?)";
-            $params[] = (int)$args['age_max'];
-        }
-        if (isset($args['birth_year_from']) && $args['birth_year_from'] !== '' && (int)$args['birth_year_from'] > 1900) {
-            $where[] = "({$dobExpr} IS NOT NULL AND YEAR({$dobExpr}) >= ?)";
-            $params[] = (int)$args['birth_year_from'];
-        }
-        if (isset($args['birth_year_to']) && $args['birth_year_to'] !== '' && (int)$args['birth_year_to'] > 1900) {
-            $where[] = "({$dobExpr} IS NOT NULL AND YEAR({$dobExpr}) <= ?)";
-            $params[] = (int)$args['birth_year_to'];
-        }
-        if (isset($args['birthday_month']) && $args['birthday_month'] !== '') {
-            $bMonth = (int)$args['birthday_month'];
-            if ($bMonth >= 1 && $bMonth <= 12) {
-                $where[] = "({$dobExpr} IS NOT NULL AND MONTH({$dobExpr}) = ?)";
-                $params[] = $bMonth;
+        $dobCols = [];
+        if (isset($contactCols['birthday'])) $dobCols[] = "{$p}birthday";
+        if (isset($contactCols['dob'])) $dobCols[] = "{$p}dob";
+        $dobExpr = count($dobCols) > 1 ? ('COALESCE(' . implode(', ', $dobCols) . ')') : ($dobCols[0] ?? 'NULL');
+        if ($dobExpr !== 'NULL') {
+            if (isset($args['age_min']) && $args['age_min'] !== '' && (int)$args['age_min'] > 0) {
+                $where[] = "({$dobExpr} IS NOT NULL AND {$dobExpr} > '1900-01-01' AND TIMESTAMPDIFF(YEAR, {$dobExpr}, CURDATE()) >= ?)";
+                $params[] = (int)$args['age_min'];
+            }
+            if (isset($args['age_max']) && $args['age_max'] !== '' && (int)$args['age_max'] > 0) {
+                $where[] = "({$dobExpr} IS NOT NULL AND {$dobExpr} > '1900-01-01' AND TIMESTAMPDIFF(YEAR, {$dobExpr}, CURDATE()) <= ?)";
+                $params[] = (int)$args['age_max'];
+            }
+            if (isset($args['birth_year_from']) && $args['birth_year_from'] !== '' && (int)$args['birth_year_from'] > 1900) {
+                $where[] = "({$dobExpr} IS NOT NULL AND YEAR({$dobExpr}) >= ?)";
+                $params[] = (int)$args['birth_year_from'];
+            }
+            if (isset($args['birth_year_to']) && $args['birth_year_to'] !== '' && (int)$args['birth_year_to'] > 1900) {
+                $where[] = "({$dobExpr} IS NOT NULL AND YEAR({$dobExpr}) <= ?)";
+                $params[] = (int)$args['birth_year_to'];
+            }
+            if (isset($args['birthday_month']) && $args['birthday_month'] !== '') {
+                $bMonth = (int)$args['birthday_month'];
+                if ($bMonth >= 1 && $bMonth <= 12) {
+                    $where[] = "({$dobExpr} IS NOT NULL AND MONTH({$dobExpr}) = ?)";
+                    $params[] = $bMonth;
+                }
             }
         }
 
         // 6. Job Titles Filter
         $jobTitlesParam = trim((string)($args['job_titles'] ?? ($args['job_title'] ?? '')));
-        if (!empty($jobTitlesParam) && $jobTitlesParam !== 'all') {
+        if (!empty($jobTitlesParam) && $jobTitlesParam !== 'all' && isset($contactCols['job_title'])) {
             $jtLow = strtolower($jobTitlesParam);
             if ($jtLow === 'has_job_title' || $jtLow === 'not_empty') {
                 $where[] = "({$p}job_title IS NOT NULL AND TRIM({$p}job_title) != '')";
@@ -13681,18 +13959,28 @@ class AgentToolRegistry {
         $companiesParam = trim((string)($args['companies'] ?? ''));
         if (!empty($companiesParam) && $companiesParam !== 'all') {
             $compLow = strtolower($companiesParam);
+            $hasCompanyCol = isset($contactCols['company']);
             if ($compLow === 'has_company' || $compLow === 'not_empty') {
-                $where[] = "(({$p}company IS NOT NULL AND TRIM({$p}company) != '') OR ({$p}company_id IS NOT NULL AND {$p}company_id > 0))";
+                $where[] = $hasCompanyCol
+                    ? "(({$p}company IS NOT NULL AND TRIM({$p}company) != '') OR ({$p}company_id IS NOT NULL AND {$p}company_id > 0))"
+                    : "({$p}company_id IS NOT NULL AND {$p}company_id > 0)";
             } elseif ($compLow === 'no_company' || $compLow === 'empty') {
-                $where[] = "(({$p}company IS NULL OR TRIM({$p}company) = '') AND ({$p}company_id IS NULL OR {$p}company_id = 0))";
+                $where[] = $hasCompanyCol
+                    ? "(({$p}company IS NULL OR TRIM({$p}company) = '') AND ({$p}company_id IS NULL OR {$p}company_id = 0))"
+                    : "({$p}company_id IS NULL OR {$p}company_id = 0)";
             } else {
                 $compList = array_filter(array_map('trim', explode(',', $companiesParam)));
                 if (!empty($compList)) {
                     $compOrs = [];
                     foreach ($compList as $comp) {
                         $likeComp = '%' . $comp . '%';
-                        $compOrs[] = "({$p}company LIKE ? OR EXISTS (SELECT 1 FROM companies co_f WHERE co_f.id = {$p}company_id AND co_f.name LIKE ?))";
-                        array_push($params, $likeComp, $likeComp);
+                        if ($hasCompanyCol) {
+                            $compOrs[] = "({$p}company LIKE ? OR EXISTS (SELECT 1 FROM companies co_f WHERE co_f.id = {$p}company_id AND co_f.name LIKE ?))";
+                            array_push($params, $likeComp, $likeComp);
+                        } else {
+                            $compOrs[] = "(EXISTS (SELECT 1 FROM companies co_f WHERE co_f.id = {$p}company_id AND co_f.name LIKE ?) OR {$p}notes LIKE ?)";
+                            array_push($params, $likeComp, $likeComp);
+                        }
                     }
                     $where[] = "(" . implode(' OR ', $compOrs) . ")";
                 }
@@ -13707,8 +13995,17 @@ class AgentToolRegistry {
                 $indOrs = [];
                 foreach ($indList as $ind) {
                     $likeInd = '%' . $ind . '%';
-                    $indOrs[] = "({$p}industry LIKE ? OR {$p}department LIKE ? OR EXISTS (SELECT 1 FROM companies co_i WHERE co_i.id = {$p}company_id AND co_i.industry LIKE ?))";
-                    array_push($params, $likeInd, $likeInd, $likeInd);
+                    $subInd = ["EXISTS (SELECT 1 FROM companies co_i WHERE co_i.id = {$p}company_id AND co_i.industry LIKE ?)"];
+                    $params[] = $likeInd;
+                    if (isset($contactCols['industry'])) {
+                        $subInd[] = "{$p}industry LIKE ?";
+                        $params[] = $likeInd;
+                    }
+                    if (isset($contactCols['department'])) {
+                        $subInd[] = "{$p}department LIKE ?";
+                        $params[] = $likeInd;
+                    }
+                    $indOrs[] = "(" . implode(' OR ', $subInd) . ")";
                 }
                 $where[] = "(" . implode(' OR ', $indOrs) . ")";
             }
@@ -13722,8 +14019,21 @@ class AgentToolRegistry {
                 $eduOrs = [];
                 foreach ($eduList as $ed) {
                     $likeEd = '%' . $ed . '%';
-                    $eduOrs[] = "({$p}major LIKE ? OR {$p}ttl1_data LIKE ? OR {$p}notes LIKE ? OR {$p}job_title LIKE ?)";
-                    array_push($params, $likeEd, $likeEd, $likeEd, $likeEd);
+                    $subEdu = ["{$p}notes LIKE ?"];
+                    $params[] = $likeEd;
+                    if (isset($contactCols['job_title'])) {
+                        $subEdu[] = "{$p}job_title LIKE ?";
+                        $params[] = $likeEd;
+                    }
+                    if (isset($contactCols['major'])) {
+                        $subEdu[] = "{$p}major LIKE ?";
+                        $params[] = $likeEd;
+                    }
+                    if (isset($contactCols['ttl1_data'])) {
+                        $subEdu[] = "{$p}ttl1_data LIKE ?";
+                        $params[] = $likeEd;
+                    }
+                    $eduOrs[] = "(" . implode(' OR ', $subEdu) . ")";
                 }
                 $where[] = "(" . implode(' OR ', $eduOrs) . ")";
             }
@@ -13757,23 +14067,26 @@ class AgentToolRegistry {
                 $campOrs = [];
                 foreach ($campList as $cp) {
                     $likeCp = '%' . $cp . '%';
-                    $campOrs[] = "(
-                        {$p}utm_campaign LIKE ?
-                        OR {$p}utm_source LIKE ?
-                        OR {$p}utm_medium LIKE ?
-                        OR {$p}utm_content LIKE ?
-                        OR {$p}form_name LIKE ?
-                        OR {$p}platform LIKE ?
-                        OR EXISTS (SELECT 1 FROM marketing_campaigns mc_f WHERE mc_f.id = {$p}campaign_id AND mc_f.name LIKE ?)
-                        OR EXISTS (
-                            SELECT 1 FROM leads l_f
-                            LEFT JOIN distribution_logs dl_f ON dl_f.lead_id = l_f.id
-                            LEFT JOIN distribution_rounds dr_f ON (dr_f.id = dl_f.round_id OR dr_f.id = l_f.target_round_id)
-                            WHERE ((l_f.person_id IS NOT NULL AND l_f.person_id = {$p}person_id) OR (l_f.phone IS NOT NULL AND l_f.phone = {$p}phone))
-                              AND (l_f.campaign_name LIKE ? OR dr_f.round_name LIKE ?)
-                        )
+                    $subCp = [];
+                    foreach (['utm_campaign', 'utm_source', 'utm_medium', 'utm_content', 'form_name', 'platform', 'source'] as $uCol) {
+                        if (isset($contactCols[$uCol])) {
+                            $subCp[] = "{$p}{$uCol} LIKE ?";
+                            $params[] = $likeCp;
+                        }
+                    }
+                    if (isset($contactCols['campaign_id'])) {
+                        $subCp[] = "EXISTS (SELECT 1 FROM marketing_campaigns mc_f WHERE mc_f.id = {$p}campaign_id AND mc_f.name LIKE ?)";
+                        $params[] = $likeCp;
+                    }
+                    $subCp[] = "EXISTS (
+                        SELECT 1 FROM leads l_f
+                        LEFT JOIN distribution_logs dl_f ON dl_f.lead_id = l_f.id
+                        LEFT JOIN distribution_rounds dr_f ON (dr_f.id = dl_f.round_id OR dr_f.id = l_f.target_round_id)
+                        WHERE ((l_f.person_id IS NOT NULL AND l_f.person_id = {$p}person_id) OR (l_f.phone IS NOT NULL AND l_f.phone = {$p}phone))
+                          AND (l_f.campaign_name LIKE ? OR dr_f.round_name LIKE ?)
                     )";
-                    array_push($params, $likeCp, $likeCp, $likeCp, $likeCp, $likeCp, $likeCp, $likeCp, $likeCp, $likeCp);
+                    array_push($params, $likeCp, $likeCp);
+                    $campOrs[] = "(" . implode(' OR ', $subCp) . ")";
                 }
                 $where[] = "(" . implode(' OR ', $campOrs) . ")";
             }
@@ -13782,12 +14095,17 @@ class AgentToolRegistry {
         // 12. Temperature & Lead Score Range
         $tempParam = strtolower(trim((string)($args['temperature'] ?? ($args['lead_temperature'] ?? ''))));
         if (!empty($tempParam) && $tempParam !== 'all') {
-            $tempList = array_filter(array_map('trim', explode(',', $tempParam)));
+            $tempList = array_values(array_filter(array_map('trim', explode(',', $tempParam))));
             if (!empty($tempList)) {
                 $tempPh = implode(',', array_fill(0, count($tempList), '?'));
-                $where[] = "(LOWER(TRIM(COALESCE({$p}temperature, ''))) IN ($tempPh) OR LOWER(TRIM(COALESCE({$p}lead_temperature, ''))) IN ($tempPh))";
-                foreach ($tempList as $tp) $params[] = $tp;
-                foreach ($tempList as $tp) $params[] = $tp;
+                if (isset($contactCols['lead_temperature'])) {
+                    $where[] = "(LOWER(TRIM(COALESCE({$p}temperature, ''))) IN ($tempPh) OR LOWER(TRIM(COALESCE({$p}lead_temperature, ''))) IN ($tempPh))";
+                    foreach ($tempList as $tp) $params[] = $tp;
+                    foreach ($tempList as $tp) $params[] = $tp;
+                } elseif (isset($contactCols['temperature'])) {
+                    $where[] = "LOWER(TRIM(COALESCE({$p}temperature, ''))) IN ($tempPh)";
+                    foreach ($tempList as $tp) $params[] = $tp;
+                }
             }
         }
         if (isset($args['min_lead_score']) && $args['min_lead_score'] !== '' && $args['min_lead_score'] !== null) {
@@ -13801,7 +14119,7 @@ class AgentToolRegistry {
 
         // 13. Academic Status (study_status), Student Code & Expected Intake
         $studyStatusParam = trim((string)($args['study_status'] ?? ($args['study_statuses'] ?? '')));
-        if (!empty($studyStatusParam) && strtolower($studyStatusParam) !== 'all') {
+        if (!empty($studyStatusParam) && strtolower($studyStatusParam) !== 'all' && isset($contactCols['study_status'])) {
             $ssList = array_filter(array_map('trim', explode(',', $studyStatusParam)));
             if (!empty($ssList)) {
                 $ssOrs = [];
@@ -13826,7 +14144,7 @@ class AgentToolRegistry {
             }
         }
         $studentCodeParam = trim((string)($args['student_code'] ?? ''));
-        if (!empty($studentCodeParam) && strtolower($studentCodeParam) !== 'all') {
+        if (!empty($studentCodeParam) && strtolower($studentCodeParam) !== 'all' && isset($contactCols['student_id'])) {
             $scLow = strtolower($studentCodeParam);
             if ($scLow === 'has_code') {
                 $where[] = "({$p}student_id IS NOT NULL AND TRIM({$p}student_id) != '')";
@@ -13839,14 +14157,20 @@ class AgentToolRegistry {
         }
         $expectedIntakeParam = trim((string)($args['expected_intake'] ?? ''));
         if (!empty($expectedIntakeParam) && strtolower($expectedIntakeParam) !== 'all') {
-            $where[] = "{$p}expected_intake LIKE ?";
-            $params[] = '%' . $expectedIntakeParam . '%';
+            if (isset($contactCols['expected_intake'])) {
+                $where[] = "{$p}expected_intake LIKE ?";
+                $params[] = '%' . $expectedIntakeParam . '%';
+            } else {
+                $where[] = "({$p}admission_date LIKE ? OR {$p}notes LIKE ?)";
+                array_push($params, '%' . $expectedIntakeParam . '%', '%' . $expectedIntakeParam . '%');
+            }
         }
 
         // 14. Missing Document / Profile Completeness Filter (cloud_files + citizen_id)
         $missingDoc = strtolower(trim((string)($args['missing_document'] ?? ($args['missing_doc'] ?? ''))));
         if (!empty($missingDoc) && $missingDoc !== 'all') {
-            $hasIdCardSql = "(({$p}citizen_id IS NOT NULL AND TRIM({$p}citizen_id) != '') OR EXISTS (SELECT 1 FROM cloud_files cf_id WHERE cf_id.contact_id = {$p}id AND (cf_id.name LIKE '%cccd%' OR cf_id.name LIKE '%cmnd%' OR cf_id.name LIKE '%passport%' OR cf_id.name LIKE '%ho_chieu%' OR cf_id.category LIKE '%cccd%' OR cf_id.category LIKE '%hộ chiếu%')))";
+            $citizenCheck = isset($contactCols['citizen_id']) ? "({$p}citizen_id IS NOT NULL AND TRIM({$p}citizen_id) != '') OR " : '';
+            $hasIdCardSql = "({$citizenCheck}EXISTS (SELECT 1 FROM cloud_files cf_id WHERE cf_id.contact_id = {$p}id AND (cf_id.name LIKE '%cccd%' OR cf_id.name LIKE '%cmnd%' OR cf_id.name LIKE '%passport%' OR cf_id.name LIKE '%ho_chieu%' OR cf_id.category LIKE '%cccd%' OR cf_id.category LIKE '%hộ chiếu%')))";
             $hasDegreeSql = "EXISTS (SELECT 1 FROM cloud_files cf_deg WHERE cf_deg.contact_id = {$p}id AND (cf_deg.name LIKE '%bang%' OR cf_deg.name LIKE '%diploma%' OR cf_deg.name LIKE '%degree%' OR cf_deg.category LIKE '%bằng%'))";
             $hasTransSql = "EXISTS (SELECT 1 FROM cloud_files cf_tr WHERE cf_tr.contact_id = {$p}id AND (cf_tr.name LIKE '%dich%' OR cf_tr.name LIKE '%translation%' OR cf_tr.name LIKE '%cong_chung%' OR cf_tr.category LIKE '%dịch%'))";
             $hasContractSql = "EXISTS (SELECT 1 FROM cloud_files cf_ct WHERE cf_ct.contact_id = {$p}id AND (cf_ct.name LIKE '%hop_dong%' OR cf_ct.name LIKE '%contract%' OR cf_ct.category LIKE '%hợp đồng%'))";
@@ -13888,7 +14212,7 @@ class AgentToolRegistry {
                           AND dm_om.expected_pay_date < CURDATE()
                     )";
                 } elseif ($ft === 'has_revenue') {
-                    $finExtraOrs[] = "(EXISTS (SELECT 1 FROM deposits dep_rv WHERE dep_rv.contact_id = {$p}id AND dep_rv.status IN ('approved', 'completed') AND dep_rv.price > 0) OR EXISTS (SELECT 1 FROM invoices inv_rv WHERE inv_rv.contact_id = {$p}id AND inv_rv.deleted_at IS NULL AND inv_rv.status IN ('paid', 'partially_paid') AND inv_rv.amount_paid > 0))";
+                    $finExtraOrs[] = "(EXISTS (SELECT 1 FROM deposits dep_rv WHERE dep_rv.contact_id = {$p}id AND dep_rv.status IN ('approved', 'completed') AND dep_rv.price > 0) OR EXISTS (SELECT 1 FROM invoices inv_rv WHERE inv_rv.contact_id = {$p}id AND inv_rv.deleted_at IS NULL AND inv_rv.status IN ('paid', 'partially_paid') AND COALESCE(inv_rv.total, 0) > 0))";
                 } elseif ($ft === 'has_commission') {
                     $finExtraOrs[] = "EXISTS (SELECT 1 FROM deposits dep_cm WHERE dep_cm.contact_id = {$p}id AND dep_cm.status NOT IN ('cancelled', 'rejected') AND COALESCE(dep_cm.expected_commission, 0) > 0)";
                 }
@@ -13898,9 +14222,9 @@ class AgentToolRegistry {
             }
         }
 
-        // 15B. Omnichannel Marketing & Automation Engagement Filters (engagement_status, automation_flow, voucher_status, marketing_status, min/max_engagement_score)
+        // 15B. Omnichannel Marketing & Automation Engagement Filters
         $engStatusRaw = trim((string)($args['engagement_status'] ?? ''));
-        if ($engStatusRaw !== '' && strtolower($engStatusRaw) !== 'all') {
+        if ($engStatusRaw !== '' && strtolower($engStatusRaw) !== 'all' && isset($contactCols['engagement_score'])) {
             $engTokens = array_filter(array_map('trim', preg_split('/[,;|]+/u', strtolower($engStatusRaw))));
             $engOrs = [];
             foreach ($engTokens as $et) {
@@ -13930,7 +14254,7 @@ class AgentToolRegistry {
         }
 
         $autoFlowRaw = trim((string)($args['automation_flow'] ?? ''));
-        if ($autoFlowRaw !== '' && strtolower($autoFlowRaw) !== 'all') {
+        if ($autoFlowRaw !== '' && strtolower($autoFlowRaw) !== 'all' && isset($contactCols['active_flow_names'])) {
             $where[] = "({$p}active_flow_names LIKE ? OR EXISTS (SELECT 1 FROM subscriber_flow_states sfs_af INNER JOIN flows f_af ON f_af.id = sfs_af.flow_id WHERE sfs_af.subscriber_id = {$p}subscriber_id AND (f_af.id = ? OR f_af.name LIKE ?)))";
             $params[] = '%' . $autoFlowRaw . '%';
             $params[] = $autoFlowRaw;
@@ -13938,7 +14262,7 @@ class AgentToolRegistry {
         }
 
         $voucherStatusRaw = trim((string)($args['voucher_status'] ?? ''));
-        if ($voucherStatusRaw !== '' && strtolower($voucherStatusRaw) !== 'all') {
+        if ($voucherStatusRaw !== '' && strtolower($voucherStatusRaw) !== 'all' && isset($contactCols['active_voucher_code'])) {
             $vsLow = strtolower($voucherStatusRaw);
             if ($vsLow === 'has_voucher' || $vsLow === 'yes' || $vsLow === 'true') {
                 $where[] = "({$p}active_voucher_code IS NOT NULL AND TRIM({$p}active_voucher_code) != '')";
@@ -13951,18 +14275,18 @@ class AgentToolRegistry {
         }
 
         $mktStatusRaw = strtolower(trim((string)($args['marketing_status'] ?? '')));
-        if ($mktStatusRaw !== '' && $mktStatusRaw !== 'all') {
+        if ($mktStatusRaw !== '' && $mktStatusRaw !== 'all' && isset($contactCols['marketing_status'])) {
             $where[] = "{$p}marketing_status = ?";
             $params[] = $mktStatusRaw;
         }
 
         $minEngScore = isset($args['min_engagement_score']) && $args['min_engagement_score'] !== '' ? (int)$args['min_engagement_score'] : null;
-        if ($minEngScore !== null && $minEngScore > 0) {
+        if ($minEngScore !== null && $minEngScore > 0 && isset($contactCols['engagement_score'])) {
             $where[] = "COALESCE({$p}engagement_score, 0) >= ?";
             $params[] = $minEngScore;
         }
         $maxEngScore = isset($args['max_engagement_score']) && $args['max_engagement_score'] !== '' ? (int)$args['max_engagement_score'] : null;
-        if ($maxEngScore !== null && $maxEngScore >= 0) {
+        if ($maxEngScore !== null && $maxEngScore >= 0 && isset($contactCols['engagement_score'])) {
             $where[] = "COALESCE({$p}engagement_score, 0) <= ?";
             $params[] = $maxEngScore;
         }
@@ -13995,7 +14319,24 @@ class AgentToolRegistry {
                     $op = strtolower(trim((string)($rule['operator'] ?? ($rule['op'] ?? 'eq'))));
                     $val = $rule['value'] ?? '';
                     $valTo = $rule['valueTo'] ?? ($rule['value_to'] ?? null);
-                    $col = "{$p}{$field}";
+                    if (isset($contactCols[$field])) {
+                        $col = "{$p}{$field}";
+                    } elseif (in_array($field, ['utm_source', 'platform'], true) && isset($contactCols['source'])) {
+                        $col = "{$p}source";
+                    } elseif (in_array($field, ['utm_campaign', 'utm_medium', 'utm_content', 'utm_term', 'form_name'], true)) {
+                        $col = "(SELECT l_cr.campaign_name FROM leads l_cr WHERE (l_cr.person_id = {$p}person_id OR l_cr.phone = {$p}phone) ORDER BY l_cr.id DESC LIMIT 1)";
+                    } elseif (in_array($field, ['company', 'industry', 'tax_code'], true)) {
+                        $coCol = $field === 'company' ? 'name' : $field;
+                        $col = "(SELECT co_cr.{$coCol} FROM companies co_cr WHERE co_cr.id = {$p}company_id LIMIT 1)";
+                    } elseif ($field === 'lead_temperature' && isset($contactCols['temperature'])) {
+                        $col = "{$p}temperature";
+                    } elseif ($field === 'birthday' && isset($contactCols['dob'])) {
+                        $col = "{$p}dob";
+                    } elseif (isset($contactCols['notes'])) {
+                        $col = "{$p}notes";
+                    } else {
+                        continue;
+                    }
 
                     if (in_array($op, ['is_empty', 'empty', 'is_null', 'null'], true)) {
                         $ruleClauses[] = "({$col} IS NULL OR TRIM(CAST({$col} AS CHAR)) = '')";
@@ -14046,14 +14387,14 @@ class AgentToolRegistry {
                             $params[] = $bMax;
                         }
                     } elseif ($op === 'in') {
-                        $inList = is_array($val) ? $val : array_filter(array_map('trim', explode(',', (string)$val)));
+                        $inList = array_values(is_array($val) ? $val : array_filter(array_map('trim', explode(',', (string)$val))));
                         if (!empty($inList)) {
                             $ph = implode(',', array_fill(0, count($inList), '?'));
                             $ruleClauses[] = "{$col} IN ({$ph})";
                             foreach ($inList as $item) $params[] = $item;
                         }
                     } elseif ($op === 'not_in') {
-                        $inList = is_array($val) ? $val : array_filter(array_map('trim', explode(',', (string)$val)));
+                        $inList = array_values(is_array($val) ? $val : array_filter(array_map('trim', explode(',', (string)$val))));
                         if (!empty($inList)) {
                             $ph = implode(',', array_fill(0, count($inList), '?'));
                             $ruleClauses[] = "({$col} IS NULL OR {$col} NOT IN ({$ph}))";

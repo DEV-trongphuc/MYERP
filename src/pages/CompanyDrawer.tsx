@@ -682,11 +682,12 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
+            transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] as any }}
             style={{
-              zIndex: 2147483600,
-              background: 'rgba(0,0,0,0.45)',
-              backdropFilter: 'blur(8px)',
+              zIndex: 2147483620,
+              background: 'rgba(0, 0, 0, 0.6)',
+              backdropFilter: 'blur(6px)',
+              WebkitBackdropFilter: 'blur(6px)',
               position: 'fixed',
               inset: 0,
               cursor: 'pointer'
@@ -697,8 +698,8 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
             initial={isMobileOrTablet ? { y: '100%' } : { opacity: 0, x: '250px' }}
             animate={{ y: 0, x: 0, opacity: 1 }}
             exit={isMobileOrTablet ? { y: '60%', opacity: 0 } : { x: '60%', opacity: 0 }}
-            transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
-            style={{ zIndex: 2147483605 }}
+            transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] as any }}
+            style={{ zIndex: 2147483625 }}
           >
             {/* Header / Sticky Top Bar */}
             {isMobileOrTablet ? (
@@ -3296,7 +3297,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                   className="overlay-backdrop" 
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
                   onClick={() => setHelpModal(null)} 
-                  style={{ position: 'absolute', inset: 0, background: 'rgba(0, 0, 0, 0.82)', backdropFilter: 'blur(4px)' }}
+                  style={{ position: 'absolute', inset: 0, background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
                 />
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -3330,7 +3331,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                   className="overlay-backdrop" 
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
                   onClick={() => setShowDealModal(false)}
-                  style={{ position: 'absolute', inset: 0, background: 'rgba(0, 0, 0, 0.82)', backdropFilter: 'blur(4px)' }}
+                  style={{ position: 'absolute', inset: 0, background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
                 />
                 <motion.div
                   className="modal-sheet"

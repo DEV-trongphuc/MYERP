@@ -144,7 +144,7 @@ const buildSaaSWelcome = (): Template => {
     return {
         id: 'sys_saas_welcome',
         name: 'Chào mừng Học viên / Khách hàng (IDEAS Welcome)',
-        thumbnail: 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=600&q=80',
+        thumbnail: '/uploads/template_thumbs/tpl_sys_saas_welcome.webp?v=1',
         category: 'welcome',
         lastModified: new Date().toISOString(),
         blocks,
@@ -203,7 +203,7 @@ const buildProductLaunch = (): Template => {
     return {
         id: 'sys_prod_launch',
         name: 'Giới thiệu Chương trình / Sản phẩm (Luxury)',
-        thumbnail: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+        thumbnail: '/uploads/template_thumbs/tpl_sys_prod_launch.webp?v=1',
         category: 'promotional',
         lastModified: new Date().toISOString(),
         blocks,
@@ -248,7 +248,7 @@ const buildEventInvite = (): Template => {
     return {
         id: 'sys_event_summit',
         name: 'Thư mời Sự kiện & Hội thảo (Executive Summit)',
-        thumbnail: 'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?auto=format&fit=crop&w=600&q=80',
+        thumbnail: '/uploads/template_thumbs/tpl_sys_event_summit.webp?v=1',
         category: 'event',
         lastModified: new Date().toISOString(),
         blocks,
@@ -300,7 +300,7 @@ const buildPortfolioReview = (): Template => {
     return {
         id: 'sys_portfolio',
         name: 'Đánh giá & Thành tựu Học viên (Portfolio)',
-        thumbnail: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=600&q=80',
+        thumbnail: '/uploads/template_thumbs/tpl_sys_portfolio.webp?v=1',
         category: 'promotional',
         lastModified: new Date().toISOString(),
         blocks,
@@ -343,7 +343,7 @@ const buildNewsletterDigest = (): Template => {
     return {
         id: 'sys_newsletter_digest',
         name: 'Bản tin tuần (Weekly Digest)',
-        thumbnail: 'https://images.unsplash.com/photo-1504711331083-9c895941bf81?auto=format&fit=crop&w=600&q=80',
+        thumbnail: '/uploads/template_thumbs/tpl_sys_newsletter_digest.webp?v=1',
         category: 'newsletter',
         lastModified: new Date().toISOString(),
         blocks,

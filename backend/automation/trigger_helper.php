@@ -226,6 +226,25 @@ if (!function_exists('doesSubscriberMatchErpFilters')) {
 if (!function_exists('processSubscriberTrigger')) {
     function processSubscriberTrigger($pdo, $subscriberId, $triggerType, $targetValue = null, $workspaceId = null, array $extraData = [])
     {
+        // Defensive guard if caller passed legacy signature ($pdo, $workspaceId, $subscriberId, 'erp_event', array $payload)
+        if (is_int($subscriberId) && is_array($workspaceId) && ($triggerType === 'erp_event' || is_int($triggerType) || is_string($triggerType))) {
+            if ($targetValue === 'erp_event') {
+                $legacyWsId = (int)$subscriberId;
+                $legacySubId = $triggerType;
+                $legacyPayload = $workspaceId;
+                $subscriberId = $legacySubId;
+                $triggerType = 'erp_event';
+                $targetValue = $legacyPayload['event'] ?? $legacyPayload['erp_event_name'] ?? null;
+                $workspaceId = $legacyWsId;
+                $extraData = $legacyPayload;
+            }
+        }
+        if (is_array($workspaceId)) {
+            if (empty($extraData)) {
+                $extraData = $workspaceId;
+            }
+            $workspaceId = isset($extraData['workspace_id']) && is_scalar($extraData['workspace_id']) ? (int)$extraData['workspace_id'] : null;
+        }
         if (empty($subscriberId)) {
             return 0;
         }
@@ -263,6 +282,20 @@ function enrollSubscribersBulk($pdo, array $subscriberIds, $triggerType, $target
     if (empty($subscriberIds))
         return 0;
 
+    if (is_array($workspaceId)) {
+        if (empty($extraData)) {
+            $extraData = $workspaceId;
+        }
+        $workspaceId = isset($extraData['workspace_id']) && is_scalar($extraData['workspace_id']) ? (int)$extraData['workspace_id'] : null;
+    }
+
+    if (is_array($targetValue)) {
+        if (empty($extraData)) {
+            $extraData = $targetValue;
+        }
+        $targetValue = $extraData['event'] ?? $extraData['erp_event_name'] ?? $extraData['target_id'] ?? json_encode($targetValue, JSON_UNESCAPED_UNICODE);
+    }
+
     $myerpEvents = [
         'round_distributed', 'lead_assigned', 'lead_held_queue', 'lead_created',
         'stage_changed', 'temperature_changed', 'sla_uncontacted',
@@ -278,13 +311,13 @@ function enrollSubscribersBulk($pdo, array $subscriberIds, $triggerType, $target
     }
 
     // [AUTO-DETECT WORKSPACE] If not provided, fetch from the first subscriber
-    if ($workspaceId === null) {
+    if ($workspaceId === null || !is_scalar($workspaceId)) {
         $stmtW = $pdo->prepare("SELECT workspace_id FROM subscribers WHERE id = ? LIMIT 1");
         $stmtW->execute([$subscriberIds[0]]);
         $workspaceId = $stmtW->fetchColumn();
     }
 
-    if ($workspaceId === null) {
+    if ($workspaceId === null || $workspaceId === false) {
         return 0; // Could not determine workspace
     }
 
@@ -322,6 +355,9 @@ function enrollSubscribersBulk($pdo, array $subscriberIds, $triggerType, $target
         $flowTriggerType = $tConfig['type'] ?? 'segment';
         $flowTargetSubtype = $tConfig['targetSubtype'] ?? ''; 
         $flowTargetId = $tConfig['targetId'] ?? ($tConfig['event_name'] ?? '');
+        if (is_array($flowTargetId)) {
+            $flowTargetId = json_encode($flowTargetId, JSON_UNESCAPED_UNICODE);
+        }
 
         // Match "list" or "added_to_list" trigger against flows that are "list" or "segment" with list/sync subtype
         $isMatch = false;
@@ -558,6 +594,9 @@ function checkDynamicTriggers($pdo, $subscriberId)
             continue;
         $tType = $trigger['config']['type'] ?? '';
         $tTargetId = $trigger['config']['targetId'] ?? '';
+        if (is_array($tTargetId)) {
+            $tTargetId = json_encode($tTargetId, JSON_UNESCAPED_UNICODE);
+        }
 
         // A. Segment Trigger
         if ($tType === 'segment') {
@@ -756,7 +795,11 @@ function checkDynamicTriggers($pdo, $subscriberId)
                 if (!is_array($attrs) || !isset($attrs[$customFieldKey]))
                     continue;
 
-                $rawDate = trim($attrs[$customFieldKey]);
+                $attrVal = $attrs[$customFieldKey];
+                if (is_array($attrVal)) {
+                    $attrVal = json_encode($attrVal, JSON_UNESCAPED_UNICODE);
+                }
+                $rawDate = trim((string)$attrVal);
                 if (empty($rawDate))
                     continue;
 
@@ -810,10 +853,10 @@ function checkDynamicTriggers($pdo, $subscriberId)
 // [EVENT-DRIVEN ARCHITECTURE] Wake up subscriber waiting in flows
 if (!function_exists('wakeupWaitingSubscribers')) {
     function wakeupWaitingSubscribers($pdo, $subscriberId, $workspaceId = null) {
-        if (!$subscriberId) return;
+        if (!$subscriberId || !is_scalar($subscriberId)) return;
 
-        // [FIX] Ensure workspaceId is present
-        if ($workspaceId === null) {
+        // [FIX] Ensure workspaceId is present and scalar
+        if ($workspaceId === null || !is_scalar($workspaceId)) {
             $stmtW = $pdo->prepare("SELECT workspace_id FROM subscribers WHERE id = ? LIMIT 1");
             $stmtW->execute([$subscriberId]);
             $workspaceId = $stmtW->fetchColumn();
@@ -884,12 +927,12 @@ if (!class_exists('DomationEventDispatcher')) {
                             ->execute([$contactId, $sub['id']]);
                     } else {
                         $wsStmt = $pdo->query("SELECT id FROM workspaces ORDER BY id ASC LIMIT 1");
-                        $defaultWs = $wsStmt ? ($wsStmt->fetchColumn() ?: 'ws_default') : 'ws_default';
+                        $defaultWs = $wsStmt ? (int)($wsStmt->fetchColumn() ?: 1) : 1;
                         $subId = 'sub_erp_' . $contactId . '_' . substr(md5((string) microtime(true)), 0, 6);
                         $safeEmail = $email !== '' ? $email : ("contact_{$contactId}@myerp.local");
                         $pdo->prepare("
-                            INSERT IGNORE INTO subscribers (id, workspace_id, contact_id, email, first_name, phone_number, source, status, stage_id, lead_status, temperature, owner_id, city, district, joined_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, 'customer', ?, ?, ?, ?, ?, ?, NOW())
+                            INSERT IGNORE INTO subscribers (id, workspace_id, contact_id, email, first_name, phone_number, source, status, stage_id, lead_status, owner_id, city, district, joined_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, 'customer', ?, ?, ?, ?, ?, NOW())
                         ")->execute([
                             $subId,
                             $defaultWs,
@@ -900,7 +943,6 @@ if (!class_exists('DomationEventDispatcher')) {
                             $cRow['source'] ?? 'MYERP CRM',
                             $cRow['stage_id'] ?? null,
                             $cRow['lead_status'] ?? 'active',
-                            $cRow['temperature'] ?? 'hot',
                             $cRow['owner_id'] ?? null,
                             $cRow['city'] ?? null,
                             $cRow['district'] ?? null

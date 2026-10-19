@@ -150,16 +150,12 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
                 width: 100% !important;
                 max-width: 100% !important;
                 box-sizing: border-box !important;
-                padding-left: 16px !important;
-                padding-right: 16px !important;
             }
             .section-content {
                 width: 100% !important;
                 max-width: 100% !important;
                 margin: 0 auto !important;
                 box-sizing: border-box !important;
-                padding-left: 0 !important;
-                padding-right: 0 !important;
             }
             .row-resp { 
                 display: table !important; 
@@ -173,11 +169,6 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
                 width: 100% !important; 
                 min-width: 100% !important; 
                 max-width: 100% !important; 
-                /* Compact safety padding for stacked columns on mobile */
-                padding-left: 4px !important; 
-                padding-right: 4px !important; 
-                padding-top: 2px !important;
-                padding-bottom: 2px !important;
                 margin-bottom: 10px !important; 
                 margin-left: auto !important; 
                 margin-right: auto !important;
@@ -189,19 +180,17 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
                 box-sizing: border-box !important;
             }
             .timeline-date {
-                width: 50px !important;
-                padding-right: 6px !important;
+                width: 55px !important;
+                padding-right: 8px !important;
                 font-size: 11px !important;
             }
             .btn-nostack { 
-                font-size: 10px !important; 
+                font-size: 11px !important; 
             }
             .btn-nostack a {
                 padding: 6px 10px !important;
-                font-size: 10px !important;
+                font-size: 11px !important;
             }
-            h1 { font-size: 24px !important; }
-            h2 { font-size: 20px !important; }
             
             .image-block img {
                 height: auto !important;
@@ -214,16 +203,6 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
                 width: auto !important;
                 max-width: none !important;
                 height: auto !important;
-            }
-            .image-block {
-                padding-left: 0 !important;
-                padding-right: 0 !important;
-                padding-top: 4px !important;
-                padding-bottom: 4px !important;
-            }
-            .mobile-padding-y {
-                padding-top: 4px !important;
-                padding-bottom: 4px !important;
             }
             .center-on-narrow {
                 text-align: center !important;
@@ -287,11 +266,12 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
     };
 
     const renderBlock = (b: EmailBlock, parentAlign: string = 'center', parentNoStack: boolean = false): string => {
+        if (!b || typeof b !== 'object' || !(b as any).type) return '';
         const rawStyle = b.style || {};
         const s = { ...rawStyle, lineHeight: sanitizeLineHeight(rawStyle.lineHeight) } as EmailBlockStyle;
 
         // Custom mobile style overrides generator
-        const cleanId = b.id.replace(/[^a-zA-Z0-9]/g, '');
+        const cleanId = String(b.id || '').replace(/[^a-zA-Z0-9]/g, '');
         const customClassName = `el-${cleanId}`;
         const mob = { ...(rawStyle.mobile || {}) };
         let hasMobileOverrides = false;
@@ -304,6 +284,37 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
 
         Object.entries(mob).forEach(([key, val]) => {
             if (val !== undefined && val !== null && val !== '') {
+                if (key === 'contentBackgroundColor') {
+                    if (b.type === 'section') {
+                        responsiveRules.push(`.${customClassName} .section-content { background-color: ${val} !important; }`);
+                    } else if (b.type === 'button') {
+                        responsiveRules.push(`.${customClassName}-btn { background-color: ${val} !important; background: ${val} !important; }`);
+                    }
+                    return;
+                }
+                if (b.type === 'button' && ['fontSize', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'width', 'height', 'borderRadius', 'backgroundColor', 'color'].includes(key)) {
+                    let btnVal = val;
+                    if (['fontSize', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'width', 'height'].includes(key)) {
+                        btnVal = toPx(val as string | number);
+                    } else if (key === 'borderRadius') {
+                        btnVal = sanitizeRadius(val as string);
+                    }
+                    responsiveRules.push(`.${customClassName}-btn { ${camelToKebab(key)}: ${btnVal} !important; }`);
+                    if (key === 'width') {
+                        responsiveRules.push(`.${customClassName}-tbl { width: ${btnVal} !important; }`);
+                    }
+                    return;
+                }
+                if (b.type === 'image' && ['width', 'height', 'borderRadius'].includes(key)) {
+                    let imgVal = val;
+                    if (['width', 'height'].includes(key)) {
+                        imgVal = toPx(val as string | number);
+                    } else if (key === 'borderRadius') {
+                        imgVal = sanitizeRadius(val as string);
+                    }
+                    responsiveRules.push(`.${customClassName}-img { ${camelToKebab(key)}: ${imgVal} !important; }`);
+                    return;
+                }
                 hasMobileOverrides = true;
                 let cssVal = val;
                 if (['fontSize', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'marginTop', 'marginBottom', 'width', 'height'].includes(key)) {
@@ -340,8 +351,9 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
         // Alignment logic: use own if specified, else parent
         const align = s.textAlign || parentAlign || 'left';
 
-        const fontFamily = bodyStyle.fontFamily || "'Roboto', Arial, sans-serif";
-        const commonStyle = `font-family: ${fontFamily}; color: ${s.color || 'inherit'}; text-align: ${align}; font-weight: ${s.fontWeight || 'normal'}; font-style: ${s.fontStyle || 'normal'}; text-decoration: ${s.textDecoration || 'none'}; text-transform: ${s.textTransform || 'none'};`;
+        const fontFamily = s.fontFamily || bodyStyle.fontFamily || "'Roboto', Arial, sans-serif";
+        const letterSpacingCss = s.letterSpacing ? `letter-spacing: ${s.letterSpacing};` : '';
+        const commonStyle = `font-family: ${fontFamily}; color: ${s.color || 'inherit'}; text-align: ${align}; font-weight: ${s.fontWeight || 'normal'}; font-style: ${s.fontStyle || 'normal'}; text-decoration: ${s.textDecoration || 'none'}; text-transform: ${s.textTransform || 'none'}; ${letterSpacingCss}`;
         const radiusStyle = s.borderRadius ? `border-radius: ${sanitizeRadius(s.borderRadius)};` : '';
 
         const wrapWithMargin = (innerTdHtml: string): string => {
@@ -391,8 +403,12 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
                 const colCleanId = col.id.replace(/[^a-zA-Z0-9]/g, '');
                 const colCustomClassName = `el-${colCleanId}`;
 
-                // Process column-specific mobile overrides
-                const colMob = cs.mobile || {};
+                // Process column-specific mobile overrides (and remove horizontal gap when stacked)
+                const colMob: Record<string, any> = { ...(cs.mobile || {}) };
+                if (!noStack && halfGap > 0) {
+                    if (colMob.paddingLeft === undefined) colMob.paddingLeft = toPx(cs.paddingLeft);
+                    if (colMob.paddingRight === undefined) colMob.paddingRight = toPx(cs.paddingRight);
+                }
                 let colHasMobileOverrides = false;
                 let colMobileCssRule = '';
                 Object.entries(colMob).forEach(([key, val]) => {
@@ -425,6 +441,9 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
 
         if (b.type === 'button') {
             const btnBg = s.contentBackgroundColor || (s as any).buttonBackgroundColor || s.backgroundColor || '#BD1D2D';
+            const btnBgCss = (s.backgroundImage && s.backgroundImage !== 'none')
+                ? getBackgroundStyle({ ...s, backgroundColor: btnBg })
+                : `background: ${btnBg}; background-color: ${btnBg};`;
             const btnWidth = s.width || 'auto';
             const tableWidthAttr = (btnWidth && btnWidth !== 'auto') ? `width="${btnWidth.replace('px', '')}"` : '';
             const inlineWidth = btnWidth === 'auto' ? '' : `width: ${btnWidth};`;
@@ -441,6 +460,7 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
             const btnRadius = sanitizeRadius(s.borderRadius || '4px');
             const btnHeight = s.height ? `height: ${s.height}; ` : '';
             const btnLineHeight = s.lineHeight ? `line-height: ${s.lineHeight}; ` : '';
+            const btnLetterSpacing = s.letterSpacing ? `letter-spacing: ${s.letterSpacing}; ` : '';
 
             const tableMarginCss = `margin-top: ${btnMarginTop}; margin-bottom: ${btnMarginBottom}; margin-left: ${btnMarginLeft}; margin-right: ${btnMarginRight};`;
             const normalizeBlockLink = (raw?: string) => {
@@ -456,7 +476,7 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
 
             const msoPad = `mso-padding-alt: ${s.paddingTop || '12px'} ${s.paddingRight || '24px'} ${s.paddingBottom || '12px'} ${s.paddingLeft || '24px'};`;
 
-            return `<tr><td align="${btnAlign}" class="${customClassName}" style="width: 100%; text-align: ${btnAlign} !important; ${hideOnDesktopCss}"><!--[if mso]><table role="presentation" border="0" cellspacing="0" cellpadding="0" align="${btnAlign}" ${tableWidthAttr} style="${tableMarginCss} ${inlineWidth}"><tr><td align="center" style="background: ${btnBg}; border-radius: ${btnRadius}; ${msoPad}"><![endif]--><!--[if !mso]><!--><table border="0" cellspacing="0" cellpadding="0" align="${btnAlign}" ${tableWidthAttr} style="${tableMarginCss} display: table; border-collapse: separate; ${inlineWidth}"><!--<![endif]--><tr><td align="center" class="${parentNoStack ? 'btn-nostack' : ''}" style="${getBorderStyle(s)} border-radius: ${btnRadius}; ${msoPad}"><a class="btn-link ${customClassName} ${parentNoStack ? 'btn-nostack' : ''}" href="${btnHref}"${dataFallbackAttr} target="_blank" style="font-family: ${bodyStyle.fontFamily || "'Roboto', Arial, sans-serif"}; font-size: ${s.fontSize || '16px'}; font-weight: ${s.fontWeight || 'bold'}; font-style: ${s.fontStyle || 'normal'}; text-decoration: ${s.textDecoration || 'none'} !important; text-transform: ${s.textTransform || 'none'}; color: ${btnColor} !important; border-radius: ${btnRadius}; -webkit-border-radius: ${btnRadius}; -moz-border-radius: ${btnRadius}; ${btnPadding} ${btnHeight}${btnLineHeight}display: block; background: ${btnBg}; ${inlineWidth} box-sizing: border-box; text-align: center; overflow: hidden;">${b.content || 'BUTTON'}</a></td></tr></table><!--[if mso]></td></tr></table><![endif]--></td></tr>`;
+            return `<tr><td align="${btnAlign}" class="${customClassName}" style="width: 100%; text-align: ${btnAlign} !important; ${hideOnDesktopCss}"><!--[if mso]><table role="presentation" border="0" cellspacing="0" cellpadding="0" align="${btnAlign}" ${tableWidthAttr} style="${tableMarginCss} ${inlineWidth}"><tr><td align="center" style="${btnBgCss} border-radius: ${btnRadius}; ${msoPad}"><![endif]--><!--[if !mso]><!--><table class="${customClassName}-tbl" border="0" cellspacing="0" cellpadding="0" align="${btnAlign}" ${tableWidthAttr} style="${tableMarginCss} display: table; border-collapse: separate; ${inlineWidth}"><!--<![endif]--><tr><td align="center" class="${parentNoStack ? 'btn-nostack' : ''}" style="${getBorderStyle(s)} border-radius: ${btnRadius}; ${msoPad}"><a class="btn-link ${customClassName}-btn ${parentNoStack ? 'btn-nostack' : ''}" href="${btnHref}"${dataFallbackAttr} target="_blank" style="font-family: ${fontFamily}; font-size: ${s.fontSize || '16px'}; font-weight: ${s.fontWeight || 'bold'}; font-style: ${s.fontStyle || 'normal'}; text-decoration: ${s.textDecoration || 'none'} !important; text-transform: ${s.textTransform || 'none'}; ${btnLetterSpacing}color: ${btnColor} !important; border-radius: ${btnRadius}; -webkit-border-radius: ${btnRadius}; -moz-border-radius: ${btnRadius}; ${btnPadding} ${btnHeight}${btnLineHeight}display: block; ${btnBgCss} ${inlineWidth} box-sizing: border-box; text-align: center; overflow: hidden;">${b.content || 'BUTTON'}</a></td></tr></table><!--[if mso]></td></tr></table><![endif]--></td></tr>`;
         }
 
         if (b.type === 'header') {
@@ -516,12 +536,14 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
             const lineColor = s.timelineLineColor || '#e2e8f0';
             const lineStyle = s.timelineLineStyle || 'solid';
             const dotRadius = s.timelineDotShape === 'square' ? '3px' : '50%';
+            const titleColor = s.color || '#1e293b';
+            const descColor = (s as any).timelineDescColor || '#64748b';
             const items = b.items || [];
 
             return wrapWithMargin(`<td class="${customClassName}" style="${paddingCss} ${getBackgroundStyle(s)} ${radiusStyle} ${getBorderStyle(s)} ${hideOnDesktopCss} overflow: hidden;"><table role="presentation" border="0" cellspacing="0" cellpadding="0" width="100%" style="border-collapse: collapse;">${items.map((item, i) => {
                 const isLast = i === items.length - 1;
                 const dateWidth = item.date ? 80 : 0;
-                return `<tr><td class="timeline-date ${customClassName}" width="${dateWidth}" valign="top" style="padding: 6px ${item.date ? '15' : '0'}px 30px 0; text-align: right; font-family: ${bodyStyle.fontFamily || "'Roboto', Arial, sans-serif"}; font-size: 12px; color: ${s.color || 'inherit'}; width: ${dateWidth}px;"><strong>${sanitizeHtmlLineHeight(item.date || '')}</strong></td><td width="24" valign="top" align="center" style="width: 24px; padding: 0;"><div style="width: 12px; height: 12px; border-radius: ${dotRadius}; background-color: ${dotColor}; border: 2px solid #ffffff; margin: 6px auto 0; box-sizing: content-box;"></div>${!isLast ? `<div style="width: 0px; min-height: 40px; height: 100%; border-left: 2px ${lineStyle} ${lineColor}; margin: 4px auto 0 auto;"></div>` : ''}</td><td class="${customClassName}" valign="top" style="padding: 6px 0 40px 20px; font-family: ${bodyStyle.fontFamily || "'Roboto', Arial, sans-serif"};"><h4 class="${customClassName}" style="margin: 0 0 5px; font-size: 16px; color: ${bodyStyle.fontFamily ? 'inherit' : '#1e293b'}; font-weight: bold; text-align: left;">${sanitizeHtmlLineHeight(item.title || '')}</h4><div class="${customClassName}" style="margin: 0; font-size: 14px; color: #64748b; text-align: left; line-height: 1.5;">${sanitizeHtmlLineHeight(item.description || '')}</div></td></tr>`;
+                return `<tr><td class="timeline-date" width="${dateWidth}" valign="top" style="padding: 6px ${item.date ? '15' : '0'}px 30px 0; text-align: right; font-family: ${fontFamily}; font-size: 12px; color: ${dotColor}; width: ${dateWidth}px;"><strong>${sanitizeHtmlLineHeight(item.date || '')}</strong></td><td width="24" valign="top" align="center" style="width: 24px; padding: 0;"><div style="width: 12px; height: 12px; border-radius: ${dotRadius}; background-color: ${dotColor}; border: 2px solid #ffffff; margin: 6px auto 0; box-sizing: content-box;"></div>${!isLast ? `<div style="width: 0px; min-height: 48px; height: 100%; border-left: 2px ${lineStyle} ${lineColor}; margin: 4px auto 0 auto;"></div>` : ''}</td><td valign="top" style="padding: 6px 0 ${isLast ? '10px' : '32px'} 20px; font-family: ${fontFamily};"><h4 style="margin: 0 0 5px; font-family: ${fontFamily}; font-size: ${s.fontSize || '16px'}; color: ${titleColor}; font-weight: bold; text-align: left;">${sanitizeHtmlLineHeight(item.title || '')}</h4><div style="margin: 0; font-family: ${fontFamily}; font-size: 14px; color: ${descColor}; text-align: left; line-height: 1.5;">${sanitizeHtmlLineHeight(item.description || '')}</div></td></tr>`;
             }).join('')}</table></td>`);
         }
 
@@ -535,7 +557,7 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
 
             return wrapWithMargin(`
                 <td align="${videoAlign}" class="video-block ${customClassName}" style="${paddingCss} ${getBackgroundStyle(s)} ${radiusStyle} ${getBorderStyle(s)} ${hideOnDesktopCss}">
-                    <table role="presentation" border="0" cellspacing="0" cellpadding="0" width="100%" align="${videoAlign}" style="max-width: 100%; border-collapse: separate; margin: 0 ${videoAlign === 'center' ? 'auto' : (videoAlign === 'right' ? '0 0 auto' : 'auto 0')};">
+                    <table role="presentation" border="0" cellspacing="0" cellpadding="0" width="100%" align="${videoAlign}" style="max-width: 100%; border-collapse: separate; margin: ${videoAlign === 'center' ? '0 auto' : (videoAlign === 'right' ? '0 0 0 auto' : '0 auto 0 0')};">
                         <tr>
                             <td align="${videoAlign}" style="padding: 0;">
                                 <a href="${b.videoUrl || '#'}" target="_blank" style="display: block; text-decoration: none; width: 100%; max-width: 100%; border-radius: ${radius}; overflow: hidden;">
@@ -563,22 +585,26 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
                                             <td width="24" valign="middle" style="padding-right: 8px;">
                                                 <img src="${getIconUrl('ShoppingBag', '#64748b')}" width="16" height="16" style="display: block; width: 16px; height: 16px;" />
                                             </td>
-                                            <td valign="middle" style="font-family: ${bodyStyle.fontFamily || "'Roboto', Arial, sans-serif"}; font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Danh sách sản phẩm</td>
+                                            <td valign="middle" style="font-family: ${fontFamily}; font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Danh sách sản phẩm</td>
                                         </tr>
                                     </table>
                                     <table role="presentation" border="0" cellspacing="0" cellpadding="0" width="100%">
                                         ${[1, 2].map(i => `
                                             <tr>
                                                 <td width="70" valign="top" style="padding-bottom: 15px;">
-                                                    <div style="width: 60px; height: 60px; background-color: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center;">
-                                                        <img src="${getIconUrl('Package', '#cbd5e1')}" width="24" height="24" style="display: block; width: 24px; height: 24px;" />
-                                                    </div>
+                                                    <table role="presentation" border="0" cellspacing="0" cellpadding="0" width="60" height="60" style="width: 60px; height: 60px; background-color: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+                                                        <tr>
+                                                            <td align="center" valign="middle">
+                                                                <img src="${getIconUrl('Package', '#cbd5e1')}" width="24" height="24" style="display: block; width: 24px; height: 24px; margin: 0 auto;" />
+                                                            </td>
+                                                        </tr>
+                                                    </table>
                                                 </td>
-                                                <td valign="top" style="padding: 0 10px 15px 10px; font-family: ${bodyStyle.fontFamily || "'Roboto', Arial, sans-serif"};">
+                                                <td valign="top" style="padding: 0 10px 15px 10px; font-family: ${fontFamily};">
                                                     <div style="font-size: 14px; font-weight: bold; color: #1e293b; margin-bottom: 4px;">Sản phẩm mẫu #${i}</div>
                                                     <div style="font-size: 12px; color: #64748b; line-height: 1.4;">Chi tiết về sản phẩm này sẽ được hiển thị tại đây. Đây là mẫu thiết kế.</div>
                                                 </td>
-                                                <td width="80" valign="top" align="right" style="padding-bottom: 15px; font-family: ${bodyStyle.fontFamily || "'Roboto', Arial, sans-serif"};">
+                                                <td width="80" valign="top" align="right" style="padding-bottom: 15px; font-family: ${fontFamily};">
                                                     <div style="font-size: 14px; font-weight: bold; color: #2563eb;">$99.00</div>
                                                     <div style="font-size: 11px; color: #94a3b8; text-decoration: line-through;">$149.00</div>
                                                 </td>
@@ -587,8 +613,8 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
                                     </table>
                                     <table role="presentation" border="0" cellspacing="0" cellpadding="0" width="100%" style="border-top: 1px solid #f1f5f9; margin-top: 10px; padding-top: 15px;">
                                         <tr>
-                                            <td style="font-family: ${bodyStyle.fontFamily || "'Roboto', Arial, sans-serif"}; font-size: 13px; font-weight: bold; color: #1e293b;">TỔNG CỘNG</td>
-                                            <td align="right" style="font-family: ${bodyStyle.fontFamily || "'Roboto', Arial, sans-serif"}; font-size: 15px; font-weight: 800; color: #2563eb;">$198.00</td>
+                                            <td style="font-family: ${fontFamily}; font-size: 13px; font-weight: bold; color: #1e293b;">TỔNG CỘNG</td>
+                                            <td align="right" style="font-family: ${fontFamily}; font-size: 15px; font-weight: 800; color: #2563eb;">$198.00</td>
                                         </tr>
                                     </table>
                                 </td>
@@ -621,10 +647,10 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
                                     <!-- Labels Table -->
                                     <table role="presentation" border="0" cellspacing="0" cellpadding="0" width="100%">
                                         <tr>
-                                            <td width="25%" align="center" class="${customClassName}" style="font-family: ${bodyStyle.fontFamily || "'Roboto', Arial, sans-serif"}; font-size: 13px; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; color: #${labelColor};">NGÀY</td>
-                                            <td width="25%" align="center" class="${customClassName}" style="font-family: ${bodyStyle.fontFamily || "'Roboto', Arial, sans-serif"}; font-size: 13px; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; color: #${labelColor};">GIỜ</td>
-                                            <td width="25%" align="center" class="${customClassName}" style="font-family: ${bodyStyle.fontFamily || "'Roboto', Arial, sans-serif"}; font-size: 13px; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; color: #${labelColor};">PHÚT</td>
-                                            <td width="25%" align="center" class="${customClassName}" style="font-family: ${bodyStyle.fontFamily || "'Roboto', Arial, sans-serif"}; font-size: 13px; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; color: #${labelColor};">GIÂY</td>
+                                            <td width="25%" align="center" style="font-family: ${fontFamily}; font-size: 13px; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; color: #${labelColor};">NGÀY</td>
+                                            <td width="25%" align="center" style="font-family: ${fontFamily}; font-size: 13px; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; color: #${labelColor};">GIỜ</td>
+                                            <td width="25%" align="center" style="font-family: ${fontFamily}; font-size: 13px; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; color: #${labelColor};">PHÚT</td>
+                                            <td width="25%" align="center" style="font-family: ${fontFamily}; font-size: 13px; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; color: #${labelColor};">GIÂY</td>
                                         </tr>
                                     </table>
                                 </td>
@@ -643,7 +669,7 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
             const quoteBorderRight = s.borderRightWidth ? `border-right: ${s.borderRightWidth} ${s.borderStyle || 'solid'} ${quoteBorderColor}; ` : '';
             const quoteBorderBottom = s.borderBottomWidth ? `border-bottom: ${s.borderBottomWidth} ${s.borderStyle || 'solid'} ${quoteBorderColor}; ` : '';
             // [FIX] Gmail-safe: use table instead of div for quote block, remove double padding by zeroing outer td padding
-            return wrapWithMargin(`<td class="quote-block ${customClassName}" style="padding: 0; ${hideOnDesktopCss}"><table role="presentation" border="0" cellspacing="0" cellpadding="0" width="100%" style="border-left: ${quoteBorderLeft}; ${quoteBorderTop}${quoteBorderRight}${quoteBorderBottom}border-radius: ${sanitizeRadius(s.borderRadius || '0')}; background-color: ${s.backgroundColor || 'transparent'};"><tr><td class="${customClassName}" style="padding: ${paddingVertical} ${s.paddingRight || '25px'} ${s.paddingBottom || '15px'} ${paddingHorizontal}; font-family: ${bodyStyle.fontFamily || "'Roboto', Arial, sans-serif"}; font-size: ${s.fontSize || '15px'}; font-style: ${s.fontStyle || 'italic'}; line-height: 1.6; color: ${s.color || 'inherit'}; text-align: ${s.textAlign || 'left'}; font-weight: ${s.fontWeight || 'normal'};">${sanitizeHtmlLineHeight(b.content)}</td></tr></table></td>`);
+            return wrapWithMargin(`<td class="quote-block ${customClassName}" style="padding: 0; ${hideOnDesktopCss}"><table role="presentation" border="0" cellspacing="0" cellpadding="0" width="100%" style="border-left: ${quoteBorderLeft}; ${quoteBorderTop}${quoteBorderRight}${quoteBorderBottom}border-radius: ${sanitizeRadius(s.borderRadius || '0')}; ${getBackgroundStyle(s)}"><tr><td class="${customClassName}" style="padding: ${paddingVertical} ${s.paddingRight || '25px'} ${s.paddingBottom || '15px'} ${paddingHorizontal}; font-family: ${fontFamily}; font-size: ${s.fontSize || '15px'}; font-style: ${s.fontStyle || 'italic'}; line-height: ${s.lineHeight || '1.6'}; color: ${s.color || 'inherit'}; text-align: ${s.textAlign || 'left'}; font-weight: ${s.fontWeight || 'normal'}; ${letterSpacingCss}">${sanitizeHtmlLineHeight(b.content)}</td></tr></table></td>`);
         }
 
         if (b.type === 'check_list') {
@@ -664,11 +690,11 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
             const vAlignGlobal = s.checkIconVerticalAlign || 'middle';
 
             return wrapWithMargin(`
-                    <td class="mobile-padding-y ${customClassName}" style="${paddingCss} ${getBackgroundStyle(s)} border-radius: ${sanitizeRadius(s.borderRadius || '0')}; ${getBorderStyle(s)} ${hideOnDesktopCss} overflow: hidden;">
+                    <td class="${customClassName}" style="${paddingCss} ${getBackgroundStyle(s)} border-radius: ${sanitizeRadius(s.borderRadius || '0')}; ${getBorderStyle(s)} ${hideOnDesktopCss} overflow: hidden;">
                         <table role="presentation" border="0" cellspacing="0" cellpadding="0" width="100%" style="${maxW}">
                         <tbody><tr><td style="text-align: ${s.textAlign || 'left'};">
-                        ${showTitle ? `<h3 class="${customClassName}" style="margin: 0 0 15px; font-family: ${titleFont}; font-size: ${titleSize}; font-weight: bold; color: ${titleColor}; text-align: ${s.textAlign || 'left'};">${sanitizeHtmlLineHeight(title)}</h3>` : ''}
-                        <table role="presentation" border="0" cellspacing="0" cellpadding="0" width="100%">
+                        ${showTitle ? `<h3 style="margin: 0 0 15px; font-family: ${titleFont}; font-size: ${titleSize}; font-weight: bold; color: ${titleColor}; text-align: ${s.textAlign || 'left'};">${sanitizeHtmlLineHeight(title)}</h3>` : ''}
+                        <table role="presentation" border="0" cellspacing="0" cellpadding="0" width="100%" style="width: 100%; table-layout: fixed;">
                             ${items.map(item => {
                 const showItemTitle = s.showItemTitle !== false;
                 const showItemDesc = s.showItemDescription !== false;
@@ -695,7 +721,7 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
 
                 return `
                                     <tr>
-                                        <td width="${checkIconSize + 10}" valign="${vAlignGlobal}" style="padding: ${vAlignGlobal === 'top' ? iconPaddingTop : '0'} 0 12px 0;">
+                                        <td width="${checkIconSize + 10}" valign="${vAlignGlobal}" style="width: ${checkIconSize + 10}px; padding: ${vAlignGlobal === 'top' ? iconPaddingTop : '0'} 0 12px 0;">
                                             <table role="presentation" border="0" cellspacing="0" cellpadding="0" align="${iconAlign}" style="background-color: ${iconBg}; border-radius: ${iconRadius}; border: ${iconBorder}; border-collapse: separate;">
                                                 <tr>
                                                     <td style="padding: ${iconPadding}; font-size: 0; line-height: 0;">
@@ -704,9 +730,9 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
                                                 </tr>
                                             </table>
                                         </td>
-                                        <td valign="${vAlignGlobal}" class="${customClassName}" style="padding: ${textPaddingTop} 0 12px 10px; font-family: ${fontFamily}; text-align: left;">
-                                            ${showItemTitle ? `<div class="${customClassName}" style="font-size: ${itemSize}; font-weight: bold; color: ${itemColor}; margin-bottom: ${showItemDesc ? '2' : '0'}px;">${sanitizeHtmlLineHeight(item.title || '')}</div>` : ''}
-                                            ${showItemDesc ? `<div class="${customClassName}" style="font-size: ${descSize}; color: ${descColor}; line-height: 1.4;">${sanitizeHtmlLineHeight(item.description || '')}</div>` : ''}
+                                        <td valign="${vAlignGlobal}" style="padding: ${textPaddingTop} 0 12px 10px; font-family: ${fontFamily}; text-align: left; white-space: normal; word-break: break-word; overflow-wrap: break-word;">
+                                            ${showItemTitle ? `<div style="font-size: ${itemSize}; font-weight: bold; color: ${itemColor}; margin-bottom: ${showItemDesc ? '2' : '0'}px; white-space: normal; word-break: break-word; overflow-wrap: break-word;">${sanitizeHtmlLineHeight(item.title || '')}</div>` : ''}
+                                            ${showItemDesc ? `<div style="font-size: ${descSize}; color: ${descColor}; line-height: 1.4; white-space: normal; word-break: break-word; overflow-wrap: break-word;">${sanitizeHtmlLineHeight(item.description || '')}</div>` : ''}
                                         </td>
                                     </tr>
                                 `;
@@ -783,12 +809,12 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
                     const bg = getCellBg(ri, ci);
                     const color = getCellColor(ri, ci);
                     const formattedContent = cell.content || '&nbsp;';
-                    return `<td align="${cellAlign}" valign="middle" style="padding: ${cellPad}; border: ${borderStyle}; font-family: ${bodyStyle.fontFamily || "'Roboto', Arial, sans-serif"}; font-size: ${fontSize}; font-weight: ${isHeader ? 'bold' : 'normal'}; color: ${color}; text-align: ${cellAlign}; background-color: ${bg}; white-space: pre-wrap; word-break: break-word;">${formattedContent}</td>`;
+                    return `<td align="${cellAlign}" valign="middle" style="padding: ${cellPad}; border: ${borderStyle}; font-family: ${fontFamily}; font-size: ${fontSize}; font-weight: ${isHeader ? 'bold' : 'normal'}; color: ${color}; text-align: ${cellAlign}; background-color: ${bg}; white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word;">${formattedContent}</td>`;
                 }).join('');
                 return `<tr>${tds}</tr>`;
             }).join('');
 
-            return wrapWithMargin(`\n                    <td style="${paddingCss} ${getBackgroundStyle(s)} ${radiusStyle} ${getBorderStyle(s)} overflow: hidden;">\n                        <!--[if mso]><table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0"><tr><td><![endif]-->
+            return wrapWithMargin(`\n                    <td class="${customClassName}" style="${paddingCss} ${getBackgroundStyle(s)} ${radiusStyle} ${getBorderStyle(s)} ${hideOnDesktopCss} overflow: hidden;">\n                        <!--[if mso]><table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0"><tr><td><![endif]-->
                         <div style="overflow-x: auto;">
                         <table role="presentation" border="0" cellspacing="0" cellpadding="0" width="100%" style="border-collapse: collapse; width: 100%; table-layout: fixed;">
                             ${colgroup}
@@ -801,7 +827,7 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
         if (b.type === 'voucher') {
             const vStyle = s.voucherStyle || 'ticket';
             const vBorderColor = s.voucherBorderColor || '#BD1D2D';
-            const vBorderStyle = s.voucherBorderStyle || 'dashed';
+            const vBorderStyle = vStyle === 'modern' ? 'solid' : (s.voucherBorderStyle || 'dashed');
             const vBg = s.voucherBg || '#fffbe1';
             const vTextColor = s.voucherTextColor || '#b45309';
             const btnBg = s.voucherButtonBg || '#BD1D2D';
@@ -812,8 +838,6 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
             let previewImgUrl = '';
             if (linkId) {
                 try {
-                    // [FIX BUG-COMPILER-1] localStorage is not available in SSR/Node contexts.
-                    // Guard with typeof window to prevent ReferenceError when compileHTML is called server-side.
                     if (typeof window !== 'undefined' && window.localStorage) {
                         const stored = JSON.parse(localStorage.getItem('mailflow_voucher_campaigns') || '[]');
                         const camp = stored.find((c: any) => c.id === linkId);
@@ -860,7 +884,7 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
                                 <tr>
                                     <td align="center" style="border-radius: 8px; mso-padding-alt: 12px 32px;" bgcolor="${btnBg}">
                                         <a class="btn-link" href="${b.url || '#'}" target="_blank" style="font-size: 14px; font-weight: bold; font-family: ${fontFamily}; color: ${btnText} !important; text-decoration: none !important; border-radius: 8px; padding: 12px 32px; border: 1px solid ${btnBg}; display: inline-block; text-transform: uppercase;">
-                                            LƯU MÃ NGAY
+                                            ${(s as any).buttonText || (s as any).voucherButtonText || 'LƯU MÃ NGAY'}
                                         </a>
                                     </td>
                                 </tr>
@@ -871,7 +895,7 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
             `;
 
             return wrapWithMargin(`
-                <td align="center" style="${paddingCss} ${getBackgroundStyle(s)}">
+                <td align="center" class="${customClassName}" style="${paddingCss} ${getBackgroundStyle(s)} ${hideOnDesktopCss}">
                     ${innerHtml}
                 </td>
             `);
@@ -882,11 +906,11 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
             return wrapWithMargin(`\n                    <td align="center" class="${customClassName}" style="${hideOnDesktopCss}">\n                        <table border="0" cellpadding="0" cellspacing="0" width="${s.width || '100%'}" style="display: inline-table; max-width: 100%; border-radius: ${sanitizeRadius(s.borderRadius || '8px')}; overflow: hidden; border-collapse: separate;">
                             <tbody>
                                 <tr>
-                                    <td class="${customClassName}" style="background-color: ${s.backgroundColor || 'transparent'}; border-top: ${s.borderTopWidth || '1px'} ${(s.borderStyle && s.borderStyle !== 'none') ? s.borderStyle : 'solid'} ${s.borderColor || '#e2e8f0'}; border-right: ${s.borderRightWidth || s.borderTopWidth || '1px'} ${(s.borderStyle && s.borderStyle !== 'none') ? s.borderStyle : 'solid'} ${s.borderColor || '#e2e8f0'}; border-bottom: ${s.borderBottomWidth || s.borderTopWidth || '1px'} ${(s.borderStyle && s.borderStyle !== 'none') ? s.borderStyle : 'solid'} ${s.borderColor || '#e2e8f0'}; border-left: ${s.borderLeftWidth || s.borderTopWidth || '1px'} ${(s.borderStyle && s.borderStyle !== 'none') ? s.borderStyle : 'solid'} ${s.borderColor || '#e2e8f0'}; border-radius: ${sanitizeRadius(s.borderRadius || '8px')}; padding: ${s.paddingTop || '20px'} ${s.paddingRight || '20px'} ${s.paddingBottom || '20px'} ${s.paddingLeft || '20px'}; box-sizing: border-box;">
+                                    <td class="${customClassName}" style="${getBackgroundStyle(s) || 'background-color: transparent;'} border-top: ${s.borderTopWidth || '1px'} ${(s.borderStyle && s.borderStyle !== 'none') ? s.borderStyle : 'solid'} ${s.borderColor || '#e2e8f0'}; border-right: ${s.borderRightWidth || s.borderTopWidth || '1px'} ${(s.borderStyle && s.borderStyle !== 'none') ? s.borderStyle : 'solid'} ${s.borderColor || '#e2e8f0'}; border-bottom: ${s.borderBottomWidth || s.borderTopWidth || '1px'} ${(s.borderStyle && s.borderStyle !== 'none') ? s.borderStyle : 'solid'} ${s.borderColor || '#e2e8f0'}; border-left: ${s.borderLeftWidth || s.borderTopWidth || '1px'} ${(s.borderStyle && s.borderStyle !== 'none') ? s.borderStyle : 'solid'} ${s.borderColor || '#e2e8f0'}; border-radius: ${sanitizeRadius(s.borderRadius || '8px')}; padding: ${s.paddingTop || '20px'} ${s.paddingRight || '20px'} ${s.paddingBottom || '20px'} ${s.paddingLeft || '20px'}; box-sizing: border-box;">
                                         <div style="margin-bottom: 15px; text-align: center; font-size: 0;">
                                             ${starsHtml}
                                         </div>
-                                        <div class="${customClassName}" style="${commonStyle} font-size: ${s.fontSize || '14px'}; line-height: ${s.lineHeight || '1.5'};">${sanitizeHtmlLineHeight(b.content)}</div>
+                                        <div style="${commonStyle} font-size: ${s.fontSize || '14px'}; line-height: ${s.lineHeight || '1.5'};">${sanitizeHtmlLineHeight(b.content)}</div>
                                     </td>
                                 </tr>
                             </tbody>
@@ -900,13 +924,13 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
                 <table role="presentation" border="0" cellspacing="0" cellpadding="0" ${isFullWidth ? 'width="100%"' : ''} align="${align}" style="${isFullWidth ? 'width: 100%; ' : ''}text-align: ${align};">
                     <tr>
                         <td align="center" class="${customClassName}" style="
-                            background-color: ${s.backgroundColor || '#f0fdf4'};
+                            ${getBackgroundStyle(s) || 'background-color: #f0fdf4;'}
                             border: ${s.borderTopWidth || '2px'} ${s.borderStyle || 'dashed'} ${s.borderColor || '#86efac'};
                             border-radius: ${sanitizeRadius(s.borderRadius || '12px')};
                             padding: ${s.paddingTop || '24px'} ${s.paddingRight || '24px'} ${s.paddingBottom || '24px'} ${s.paddingLeft || '24px'};
                             text-align: center;
                         ">
-                            <span class="${customClassName}" style="
+                            <span style="
                                 font-family: ${fontFamily};
                                 font-size: ${s.fontSize || '36px'};
                                 font-weight: ${s.fontWeight || 'bold'};
@@ -920,19 +944,21 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
                     </tr>
                 </table>
             `;
-            return wrapWithMargin(`<td align="${align}" class="${customClassName}" style="padding: 0; text-align: ${align}; ${hideOnDesktopCss}">${innerHtml}</td>`);
+            return wrapWithMargin(`<td align="${align}" style="padding: 0; text-align: ${align}; ${hideOnDesktopCss}">${innerHtml}</td>`);
         }
 
         if (b.type === 'survey_card') {
-            const accent = s.surveyAccentColor || '#2563EB';
-            const cardBg = s.surveyCardBgColor || '#F8FAFC';
-            const borderCol = s.surveyBorderColor || '#BFDBFE';
+            const accent = s.surveyAccentColor || '#BD1D2D';
+            const cardBg = s.surveyCardBgColor || '#FFFFFF';
+            const borderCol = s.surveyBorderColor || '#E2E8F0';
+            const btnBg = (s as any).surveyButtonBgColor || accent;
             const btnTextColor = s.surveyButtonTextColor || '#FFFFFF';
-            const badgeText = s.surveyBadgeText || 'KHẢO SÁT NHANH';
+            const badgeText = s.surveyBadgeText ?? 'KHẢO SÁT NHANH';
             const titleText = s.surveyTitle || b.content || 'Khảo sát mức độ hài lòng của bạn';
             const descText = s.surveyDescription || 'Ý kiến của bạn giúp chúng tôi nâng cao chất lượng dịch vụ mỗi ngày.';
             const btnText = s.surveyButtonText || 'Tham gia khảo sát ngay →';
-            const radius = sanitizeRadius(s.borderRadius || '14px');
+            const radius = sanitizeRadius(s.borderRadius || '16px');
+            const badgeBg = /^#[0-9A-Fa-f]{6}$/.test(accent) ? `${accent}15` : '#FEF2F2';
             const rawUrl = (b.url || '#').trim();
             const href = (!rawUrl || rawUrl === '#')
                 ? '#'
@@ -941,26 +967,26 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
             const innerHtml = `
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: separate; width: 100%;">
                     <tr>
-                        <td align="${align}" style="background-color: ${cardBg}; border: 1.5px solid ${borderCol}; border-radius: ${radius}; padding: 24px; text-align: ${align};">
+                        <td align="${align}" style="background-color: ${cardBg}; border: 1.5px solid ${borderCol}; border-top: 3.5px solid ${accent}; border-radius: ${radius}; padding: 26px 24px; text-align: ${align}; box-shadow: 0 4px 16px -4px rgba(15, 23, 42, 0.06);">
                             ${badgeText ? `
                             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="${align}" style="margin: ${align === 'left' ? '0 0 12px 0' : align === 'right' ? '0 0 12px auto' : '0 auto 12px auto'};">
                                 <tr>
-                                    <td style="background-color: #DBEAFE; color: ${accent}; font-family: ${fontFamily}; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 12px; border-radius: 999px;">
+                                    <td style="background-color: ${badgeBg}; border: 1px solid ${borderCol}; color: ${accent}; font-family: ${fontFamily}; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 5px 14px; border-radius: 999px;">
                                         ${badgeText}
                                     </td>
                                 </tr>
                             </table>
                             ` : ''}
-                            <div style="margin: 0 0 8px 0; font-family: ${fontFamily}; font-size: 18px; font-weight: 800; color: #0F172A; line-height: 1.4; text-align: ${align};">
+                            <div style="margin: 0 0 8px 0; font-family: ${fontFamily}; font-size: 18px; font-weight: 700; color: #0F172A; line-height: 1.4; text-align: ${align};">
                                 ${sanitizeHtmlLineHeight(titleText)}
                             </div>
-                            <div style="margin: 0 0 18px 0; font-family: ${fontFamily}; font-size: 14px; color: #475569; line-height: 1.6; text-align: ${align};">
+                            <div style="margin: 0 0 20px 0; font-family: ${fontFamily}; font-size: 14px; color: #475569; line-height: 1.6; text-align: ${align};">
                                 ${sanitizeHtmlLineHeight(descText)}
                             </div>
                             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="${align}" style="margin: ${align === 'left' ? '0' : align === 'right' ? '0 0 0 auto' : '0 auto'};">
                                 <tr>
-                                    <td align="center" bgcolor="${accent}" style="background-color: ${accent}; border-radius: 10px; mso-padding-alt: 12px 28px;">
-                                        <a href="${href}" class="btn-link" target="_blank" style="display: inline-block; padding: 12px 28px; font-family: ${fontFamily}; font-size: 14px; font-weight: 700; color: ${btnTextColor} !important; text-decoration: none !important; border-radius: 10px;">
+                                    <td align="center" bgcolor="${btnBg}" style="background-color: ${btnBg}; border-radius: 10px; mso-padding-alt: 12px 28px;">
+                                        <a href="${href}" class="btn-link" target="_blank" style="display: inline-block; background-color: ${btnBg}; padding: 12px 28px; font-family: ${fontFamily}; font-size: 14px; font-weight: 700; color: ${btnTextColor} !important; text-decoration: none !important; border-radius: 10px;">
                                             ${btnText}
                                         </a>
                                     </td>
@@ -1026,7 +1052,7 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
             
             const imgAlign = s.textAlign || align || 'center';
             const marginCss = imgAlign === 'center' ? 'margin: 0 auto;' : (imgAlign === 'right' ? 'margin-left: auto; margin-right: 0;' : 'margin-right: auto; margin-left: 0;');
-            const imgClass = (isPercent || imgWidth === '100%') ? 'full-width' : '';
+            const imgClass = imgWidth === '100%' ? 'full-width' : '';
 
             // Handle aspect ratio proxy for email client compatibility (Gmail, Outlook, Yahoo strip aspect-ratio & object-fit)
             let finalSrc = b.content || '';
@@ -1068,17 +1094,17 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
 
             let imgHtml: string;
             if (isPercent) {
-                imgHtml = `<img src="${finalSrc}"${dataFallbackSrcAttr} class="${imgClass} ${customClassName}" style="display: block; width: 100%; max-width: 100%; height: ${imgHeight}; object-fit: ${objectFit}; ${ratioCss} ${marginCss} border-radius: ${sanitizeRadius(s.borderRadius || '0')};" alt="${b.altText || ''}" />`;
+                imgHtml = `<img src="${finalSrc}"${dataFallbackSrcAttr} width="${imgWidth}" class="${imgClass} ${customClassName}-img" style="display: block; width: ${imgWidth}; max-width: 100%; height: ${imgHeight}; object-fit: ${objectFit}; ${ratioCss} ${marginCss} border-radius: ${sanitizeRadius(s.borderRadius || '0')};" alt="${b.altText || ''}" />`;
             } else {
                 const pxVal = imgWidth.replace('px', '') || '600';
                 const pxHeight = imgHeight !== 'auto' ? imgHeight.replace('px', '') : '';
-                imgHtml = `<img src="${finalSrc}"${dataFallbackSrcAttr} width="${pxVal}" ${pxHeight ? `height="${pxHeight}"` : ''} class="${imgClass} ${customClassName}" style="display: block; width: ${imgWidth}; max-width: 100%; height: ${imgHeight}; object-fit: ${objectFit}; ${ratioCss} ${marginCss} border-radius: ${sanitizeRadius(s.borderRadius || '0')};" alt="${b.altText || ''}" />`;
+                imgHtml = `<img src="${finalSrc}"${dataFallbackSrcAttr} width="${pxVal}" ${pxHeight ? `height="${pxHeight}"` : ''} class="${imgClass} ${customClassName}-img" style="display: block; width: ${imgWidth}; max-width: 100%; height: ${imgHeight}; object-fit: ${objectFit}; ${ratioCss} ${marginCss} border-radius: ${sanitizeRadius(s.borderRadius || '0')};" alt="${b.altText || ''}" />`;
             }
 
             if (cleanImgLink) {
                 return wrapWithMargin(`<td align="${imgAlign}" class="image-block ${customClassName}" width="100%" style="width: 100%; ${paddingCss} ${getBackgroundStyle(s)} ${radiusStyle} ${borderCss} ${hideOnDesktopCss} text-align: ${imgAlign};"><a href="${cleanImgLink}"${dataFallbackLinkAttr} target="_blank" style="display: block; text-decoration: none; width: 100%;">${imgHtml}</a></td>`);
             }
-            return wrapWithMargin(`<td align="${imgAlign}" class="image-block ${customClassName}" width="100%" style="width: 100%; ${paddingCss} ${getBackgroundStyle(s)} ${radiusStyle} ${borderCss} ${hideOnDesktopCss} text-align: ${imgAlign};">${imgHtml}</td>`);
+            return wrapWithMargin(`<td align="${imgAlign}" class="image-block ${customClassName}" width="100%" style="width: 100%; ${paddingCss} ${getBackgroundStyle(s)} ${radiusStyle} ${borderCss} ${hideOnDesktopCss} text-align: ${imgAlign};">${imgHtml}</a></td>`.replace('</a></td>', '</td>'));
         }
 
 
@@ -1133,9 +1159,10 @@ export const compileHTML = (blocks: EmailBlock[], bodyStyle: EmailBodyStyle, tit
     // ── [NEW] Auto-inject unsubscribe safety net ─────────────────────────────
     // If no block in the layout contains {{unsubscribe_url}}, append a
     // minimal legal-compliance footer row to prevent accidental spam flagging.
-    const allBlocksHtml = blocks.map(b => renderBlock(b).trim()).join('');
+    const safeBlocks = (Array.isArray(blocks) ? blocks : []).filter(b => b && typeof b === 'object' && (b as any).type);
+    const allBlocksHtml = safeBlocks.map(b => renderBlock(b).trim()).join('');
     const hasUnsubTag = /\{\{\s*unsubscribe_url\s*\}\}/i.test(
-        blocks.map(b => JSON.stringify(b)).join('')
+        safeBlocks.map(b => JSON.stringify(b)).join('')
     );
     const unsubFallbackRow = !hasUnsubTag
         ? `<tr><td align="center" style="padding: 24px 20px 16px; font-family: ${bodyStyle.fontFamily || "'Roboto', Arial, sans-serif"}; font-size: 12px; color: #94a3b8; text-align: center;">` +

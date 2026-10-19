@@ -319,52 +319,46 @@ class CloudFileController {
                     $uploaderName = $uRow['full_name'];
                 }
                 
-                // Get target user details to verify
-                $stmtTarget = $this->db->prepare("SELECT id FROM users WHERE id = ?");
-                $stmtTarget->execute([$targetUserId]);
-                $targetExists = $stmtTarget->fetch();
-                if ($targetExists) {
-                    $link = '/account';
-                    $chkStmt = $this->db->prepare("
-                        SELECT id, title, body 
-                        FROM notifications 
-                        WHERE user_id = ? 
-                          AND tenant_id = ? 
-                          AND type = 'mention' 
-                          AND link = ? 
-                          AND is_read = 0 
-                          AND title LIKE 'Tài liệu nhân sự mới%'
-                          AND created_at >= (NOW() - INTERVAL 30 MINUTE)
-                        ORDER BY id DESC 
-                        LIMIT 1
-                    ");
-                    $chkStmt->execute([$targetUserId, $tid, $link]);
-                    $existing = $chkStmt->fetch(\PDO::FETCH_ASSOC);
+                // Get target user details to verify (Zero Self-Notification: only notify if uploading for another user)
+                if ((int)$uid !== (int)$targetUserId) {
+                    $stmtTarget = $this->db->prepare("SELECT id FROM users WHERE id = ?");
+                    $stmtTarget->execute([$targetUserId]);
+                    $targetExists = $stmtTarget->fetch();
+                    if ($targetExists) {
+                        $link = '/account';
+                        $chkStmt = $this->db->prepare("
+                            SELECT id, title, body 
+                            FROM notifications 
+                            WHERE user_id = ? 
+                              AND tenant_id = ? 
+                              AND type = 'mention' 
+                              AND link = ? 
+                              AND is_read = 0 
+                              AND title LIKE 'Tài liệu nhân sự mới%'
+                              AND created_at >= (NOW() - INTERVAL 30 MINUTE)
+                            ORDER BY id DESC 
+                            LIMIT 1
+                        ");
+                        $chkStmt->execute([$targetUserId, $tid, $link]);
+                        $existing = $chkStmt->fetch(\PDO::FETCH_ASSOC);
 
-                    if ($existing) {
-                        $count = 2;
-                        if (preg_match('/tải lên\s+(\d+)\s+tài liệu/ui', $existing['body'], $m)) {
-                            $count = (int)$m[1] + 1;
-                        }
-                        $title = "Tài liệu nhân sự mới đã được tải lên ($count tệp)";
-                        if ($uid === $targetUserId) {
-                            $body = "Bạn đã tải lên $count tài liệu mới (gần nhất: \"$name\")";
-                        } else {
+                        if ($existing) {
+                            $count = 2;
+                            if (preg_match('/tải lên\s+(\d+)\s+tài liệu/ui', $existing['body'], $m)) {
+                                $count = (int)$m[1] + 1;
+                            }
+                            $title = "Tài liệu nhân sự mới đã được tải lên ($count tệp)";
                             $body = "$uploaderName đã tải lên $count tài liệu mới cho bạn (gần nhất: \"$name\")";
-                        }
-                        $updStmt = $this->db->prepare("UPDATE notifications SET title = ?, body = ?, is_read = 0, created_at = NOW() WHERE id = ?");
-                        $updStmt->execute([$title, $body, $existing['id']]);
-                    } else {
-                        $title = "Tài liệu nhân sự mới đã được tải lên";
-                        if ($uid === $targetUserId) {
-                            $body = "Bạn đã tải lên tài liệu mới: \"$name\"";
+                            $updStmt = $this->db->prepare("UPDATE notifications SET title = ?, body = ?, is_read = 0, created_at = NOW() WHERE id = ?");
+                            $updStmt->execute([$title, $body, $existing['id']]);
                         } else {
+                            $title = "Tài liệu nhân sự mới đã được tải lên";
                             $body = "$uploaderName đã tải lên tài liệu mới cho bạn: \"$name\"";
+                            
+                            // Insert notification
+                            $stmtNotif = $this->db->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, ?, ?, ?, 'mention', ?)");
+                            $stmtNotif->execute([$targetUserId, $tid, $title, $body, $link]);
                         }
-                        
-                        // Insert notification
-                        $stmtNotif = $this->db->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, ?, ?, ?, 'mention', ?)");
-                        $stmtNotif->execute([$targetUserId, $tid, $title, $body, $link]);
                     }
                 }
             }

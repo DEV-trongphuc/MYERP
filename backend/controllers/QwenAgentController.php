@@ -34,7 +34,8 @@ require_once __DIR__ . '/AgentToolRegistry.php';
 
 class QwenAgentController {
     private PDO $db;
-    private const DEFAULT_MODEL = 'qwen/qwen3.8-27b';
+    private const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
+    // private const DEFAULT_MODEL = 'qwen/qwen3.8-27b';
     private const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
     public function __construct(PDO $db) {
@@ -42,10 +43,29 @@ class QwenAgentController {
     }
 
     /**
+     * Resolve Gemini API Key securely from environment (.env.local / .env) or system_settings table.
+     */
+    private function getGeminiApiKey(): string {
+        $dbKey = '';
+        try {
+            $stmt = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'gemini_api_key' LIMIT 1");
+            $stmt->execute();
+            $dbKey = trim((string)($stmt->fetchColumn() ?: ''));
+        } catch (\Throwable $e) {
+            // Ignore DB read error
+        }
+        if ($dbKey !== '') {
+            return $dbKey;
+        }
+        return trim((string)($_ENV['GEMINI_API_KEY'] ?? getenv('GEMINI_API_KEY') ?: ''));
+    }
+
+    /**
      * Resolve Groq API Key securely from environment (.env.local / .env) or system_settings table.
      * Never exposes the raw key to the frontend.
      */
     private function getGroqApiKey(): string {
+        /*
         $envKey = trim((string)($_ENV['GROQ_API_KEY'] ?? getenv('GROQ_API_KEY') ?: ''));
         $dbKey = '';
         try {
@@ -61,35 +81,25 @@ class QwenAgentController {
         }
 
         if ($envKey !== '') {
-            // Auto-seed into system_settings so remote/local DB persists it safely
-            try {
-                $stmtUpsert = $this->db->prepare("
-                    INSERT INTO system_settings (setting_key, setting_value)
-                    VALUES ('groq_api_key', ?)
-                    ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
-                ");
-                $stmtUpsert->execute([$envKey]);
-            } catch (\Throwable $e) {
-                // Ignore if read-only
-            }
             return $envKey;
         }
-
+        */
         return '';
     }
 
     private function getActiveModel(?string $requestedModel = null): string {
         $allowedModels = [
-            'qwen/qwen3.8-27b',
-            'openai/gpt-oss-120b',
-            'openai/gpt-oss-20b',
-            'allam-2-7b',
+            'gemini-3.5-flash-lite',
+            // 'qwen/qwen3.8-27b',
+            // 'openai/gpt-oss-120b',
+            // 'openai/gpt-oss-20b',
+            // 'allam-2-7b',
         ];
         if ($requestedModel && in_array($requestedModel, $allowedModels, true)) {
             return $requestedModel;
         }
         try {
-            $stmt = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'groq_model' LIMIT 1");
+            $stmt = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'gemini_model' LIMIT 1");
             $stmt->execute();
             $saved = trim((string)($stmt->fetchColumn() ?: ''));
             if ($saved !== '' && in_array($saved, $allowedModels, true)) {
@@ -98,7 +108,7 @@ class QwenAgentController {
         } catch (\Throwable $e) {
             // Ignore
         }
-        $envModel = trim((string)($_ENV['GROQ_MODEL'] ?? getenv('GROQ_MODEL') ?: ''));
+        $envModel = trim((string)($_ENV['GEMINI_MODEL'] ?? getenv('GEMINI_MODEL') ?: ''));
         if ($envModel !== '' && in_array($envModel, $allowedModels, true)) {
             return $envModel;
         }
@@ -108,7 +118,7 @@ class QwenAgentController {
     private function maskApiKey(string $key): string {
         $len = strlen($key);
         if ($len <= 12) {
-            return $len > 0 ? 'gsk_••••••••' : 'Chưa cấu hình';
+            return $len > 0 ? 'AIza••••••••' : 'Chưa cấu hình';
         }
         return substr($key, 0, 8) . '••••••••••••' . substr($key, -6);
     }
@@ -117,7 +127,7 @@ class QwenAgentController {
      * GET /qwen-agent/status
      */
     public function status(array $auth): void {
-        $apiKey = $this->getGroqApiKey();
+        $apiKey = $this->getGeminiApiKey();
         $activeModel = $this->getActiveModel($_GET['model'] ?? null);
 
         $allToolsDecl = AgentToolRegistry::getGeminiToolsDeclaration(null);
@@ -127,8 +137,15 @@ class QwenAgentController {
             'has_key' => $apiKey !== '',
             'masked_key' => $this->maskApiKey($apiKey),
             'active_model' => $activeModel,
-            'engine' => 'Turnio 3.8 27B • Groq Cloud LPU (Zero Gemini)',
+            'engine' => 'Gemini 3.5 Flash Lite • Enterprise Multi-Agent Engine',
             'available_models' => [
+                [
+                    'id' => 'gemini-3.5-flash-lite',
+                    'name' => 'Gemini 3.5 Flash Lite (Primary)',
+                    'context_window' => 1048576,
+                    'badge' => 'Mặc định • Tối ưu Tiếng Việt & Tool Calling',
+                ],
+                /*
                 [
                     'id' => 'qwen/qwen3.8-27b',
                     'name' => 'Turnio 3.8 27B (LPU Engine)',
@@ -147,10 +164,11 @@ class QwenAgentController {
                     'context_window' => 131072,
                     'badge' => '20B • Tốc độ siêu thanh',
                 ],
+                */
             ],
             'total_tools' => count($declarations),
             'tool_names' => array_values(array_map(fn($d) => $d['name'] ?? '', $declarations)),
-        ], 'Trạng thái Turnio 3.8 27B Agent Lab');
+        ], 'Trạng thái SI IDEAS Agent Lab (Gemini 3.5 Flash Lite)');
     }
 
     /**
@@ -158,14 +176,14 @@ class QwenAgentController {
      */
     public function updateSettings(array $auth): void {
         $body = getBody();
-        $newKey = isset($body['groq_api_key']) ? trim((string)$body['groq_api_key']) : null;
-        $newModel = isset($body['groq_model']) ? trim((string)$body['groq_model']) : null;
+        $newKey = isset($body['gemini_api_key']) ? trim((string)$body['gemini_api_key']) : (isset($body['groq_api_key']) ? trim((string)$body['groq_api_key']) : null);
+        $newModel = isset($body['gemini_model']) ? trim((string)$body['gemini_model']) : (isset($body['groq_model']) ? trim((string)$body['groq_model']) : null);
 
         try {
             if ($newKey !== null && $newKey !== '') {
                 $stmt = $this->db->prepare("
                     INSERT INTO system_settings (setting_key, setting_value)
-                    VALUES ('groq_api_key', ?)
+                    VALUES ('gemini_api_key', ?)
                     ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
                 ");
                 $stmt->execute([$newKey]);
@@ -173,17 +191,17 @@ class QwenAgentController {
             if ($newModel !== null && $newModel !== '') {
                 $stmt = $this->db->prepare("
                     INSERT INTO system_settings (setting_key, setting_value)
-                    VALUES ('groq_model', ?)
+                    VALUES ('gemini_model', ?)
                     ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
                 ");
                 $stmt->execute([$newModel]);
             }
-            $currentKey = $this->getGroqApiKey();
+            $currentKey = $this->getGeminiApiKey();
             respond(200, [
                 'has_key' => $currentKey !== '',
                 'masked_key' => $this->maskApiKey($currentKey),
                 'active_model' => $this->getActiveModel($newModel),
-            ], 'Đã lưu cấu hình Turnio 3.8 27B thành công');
+            ], 'Đã lưu cấu hình Gemini 3.5 Flash Lite thành công');
         } catch (\Throwable $e) {
             respond(500, null, 'Lỗi lưu cấu hình: ' . $e->getMessage(), false);
         }
@@ -191,7 +209,7 @@ class QwenAgentController {
 
     /**
      * POST /qwen-agent/chat
-     * Clones the complete SI IDEAS Multi-Agent Orchestrator + AgentToolRegistry using 100% Turnio 3.8 27B on Groq Cloud.
+     * Runs the SI IDEAS Multi-Agent Orchestrator + AgentToolRegistry on Gemini 3.5 Flash Lite (with Groq code commented out).
      */
     public function chat(array $auth): void {
         $startWallMs = microtime(true);
@@ -202,9 +220,9 @@ class QwenAgentController {
             return;
         }
 
-        $apiKey = $this->getGroqApiKey();
+        $apiKey = $this->getGeminiApiKey();
         if ($apiKey === '') {
-            respond(422, null, 'Chưa cấu hình GROQ_API_KEY trên hệ thống.', false);
+            respond(422, null, 'Chưa cấu hình GEMINI_API_KEY trên hệ thống.', false);
             return;
         }
 
@@ -218,7 +236,7 @@ class QwenAgentController {
         $uid = (int)($auth['user_id'] ?? $auth['id'] ?? 1);
         $userName = (string)($auth['full_name'] ?? $auth['name'] ?? 'Anh/Chị');
         $userRole = (string)($auth['role'] ?? 'superadmin');
-        // Grant full omniscient tool permissions on the dedicated Turnio 3.8 Lab page
+        // Grant full omniscient tool permissions on the dedicated Lab page
         $labAuth = array_merge($auth, [
             'user_id' => $uid,
             'id' => $uid,
@@ -243,12 +261,12 @@ class QwenAgentController {
                 . "• Hãy ưu tiên gọi công cụ tra cứu chi tiết 360 hoặc xử lý trực tiếp trên ID `#{$eId}` này!\n";
         }
 
-        // 1. Retrieve RAG Knowledge Context (Pure MySQL — Zero Gemini)
+        // 1. Retrieve RAG Knowledge Context
         $ragData = $this->retrieveRagContext($tid, $userMessage);
         $knowledgeText = $ragData['context_text'];
         $matchedArticles = $ragData['matched_articles'];
 
-        // 2. Multi-Agent Swarm Resolution (with Turnio Micro-Router when ambiguous)
+        // 2. Multi-Agent Swarm Resolution
         $collaboratingAgents = $this->resolveCollaboratingAgents($userMessage, $apiKey, $model, $pinnedAgentId);
         $primaryAgent = $collaboratingAgents[0];
 
@@ -270,9 +288,9 @@ class QwenAgentController {
         $recentEntitiesBlock = $this->loadRecentEntityContext($uid, $tid);
         $proactiveRisksBlock = $this->detectProactiveOperationalRisks($uid, $tid, 'superadmin');
 
-        // 4. Build Compact Conversation History for Groq LPU (Keep last 4 turns, max 500 chars each to preserve 7,000 ITPM budget)
+        // 4. Build Compact Conversation History
         $historyMessages = [];
-        $recentHistory = array_slice($historyInput, -4);
+        $recentHistory = array_slice($historyInput, -6);
         foreach ($recentHistory as $hItem) {
             if (!is_array($hItem)) continue;
             $hRole = ($hItem['role'] ?? '') === 'assistant' ? 'assistant' : 'user';
@@ -283,17 +301,17 @@ class QwenAgentController {
             if ($hContent !== '') {
                 $historyMessages[] = [
                     'role' => $hRole,
-                    'content' => mb_substr($hContent, 0, 500),
+                    'content' => mb_substr($hContent, 0, 700),
                 ];
             }
         }
 
-        // 5. System Instruction (Compact & Token-Efficient for Groq 7,000 ITPM Free Tier)
+        // 5. System Instruction
         $ragBlock = $knowledgeText !== ''
-            ? "\n4. **TRI THỨC NỘI BỘ (RAG)**:\n" . mb_substr($knowledgeText, 0, 900) . "\n"
+            ? "\n4. **TRI THỨC NỘI BỘ (RAG)**:\n" . mb_substr($knowledgeText, 0, 1200) . "\n"
             : "";
 
-        $systemPrompt = "Bạn là **SI IDEAS (Turnio 3.8 27B)** — Hệ thống Quản trị Đa Tác Tử của **MYERP (IDEAS Institute)**.\n" .
+        $systemPrompt = "Bạn là **SI IDEAS (Gemini 3.5 Flash Lite)** — Hệ thống Quản trị Đa Tác Tử của **MYERP (IDEAS Institute)**.\n" .
             "1. **CHUYÊN GIA ĐANG PHỐI HỢP**:\n" . $swarmRosterText . "\n" .
             "2. **NGỮ CẢNH PHIÊN LÀM VIỆC**:\n" .
             "   - Thời gian: $curDate ($curDayOfWeek, GMT+7) | Người dùng: **$userName** (ID: `$uid`, Toàn quyền `Full Access`, Tenant: `$tid`)\n" .
@@ -310,8 +328,20 @@ class QwenAgentController {
             "   - Cuối câu trả lời, đính kèm 2-3 gợi ý tiếp theo: `<<<NEXT_BEST_ACTIONS: [{\"label\":\"Tên ngắn\",\"prompt\":\"Câu lệnh đầy đủ\",\"icon\":\"chart|check|alert|user|file\"}]>>>`." .
             $ragBlock;
 
-        // 6. Execute Multi-Turn Tool Loop on Groq Cloud (Turnio 3.8 27B)
+        // 6. Execute Multi-Turn Tool Loop on Gemini 3.5 Flash Lite (Groq free tier commented out)
+        /*
         $result = $this->callGroqQwenWithTools(
+            $apiKey,
+            $model,
+            $systemPrompt,
+            $historyMessages,
+            $userMessage,
+            $labAuth,
+            $allowedToolNames,
+            $temperature
+        );
+        */
+        $result = $this->callGeminiWithTools(
             $apiKey,
             $model,
             $systemPrompt,
@@ -326,10 +356,10 @@ class QwenAgentController {
 
         if (!$result['ok']) {
             respond(502, [
-                'error_detail' => $result['error'] ?? 'Turnio Engine Error',
+                'error_detail' => $result['error'] ?? 'Gemini Engine Error',
                 'telemetry' => $result['telemetry'] ?? [],
                 'collaborating_agents' => $collaboratingAgents,
-            ], 'Lỗi kết nối Turnio 3.8 27B (' . $model . '): ' . ($result['error'] ?? 'Không xác định'), false);
+            ], 'Lỗi kết nối Gemini (' . $model . '): ' . ($result['error'] ?? 'Không xác định'), false);
             return;
         }
 
@@ -347,7 +377,7 @@ class QwenAgentController {
                 $uid,
                 $userRole,
                 mb_substr($userMessage, 0, 2000),
-                json_encode(array_map(fn($a) => '[TURNIO-LAB] ' . $a['badge'], $collaboratingAgents), JSON_UNESCAPED_UNICODE),
+                json_encode(array_map(fn($a) => '[GEMINI-LAB] ' . $a['badge'], $collaboratingAgents), JSON_UNESCAPED_UNICODE),
                 json_encode($toolsCalledNames, JSON_UNESCAPED_UNICODE),
                 count($matchedArticles),
                 $hasActionProposal,
@@ -366,14 +396,14 @@ class QwenAgentController {
             'reply' => $result['reply'],
             'reasoning_trace' => $result['reasoning_trace'] ?? '',
             'model' => $model,
-            'engine' => 'Turnio 3.8 27B • LPU Engine',
+            'engine' => 'Gemini 3.5 Flash Lite',
             'primary_agent' => $primaryAgent,
             'collaborating_agents' => $collaboratingAgents,
             'executed_steps' => $result['executed_steps'] ?? [],
             'matched_articles' => $matchedArticles,
             'telemetry' => $telemetry,
             'created_at' => date('Y-m-d H:i:s'),
-        ], 'Phản hồi từ Turnio 3.8 27B thành công');
+        ], 'Phản hồi từ Gemini 3.5 Flash Lite thành công');
     }
 
     /**
@@ -546,6 +576,221 @@ class QwenAgentController {
             }
         }
         return $out;
+    }
+
+    /**
+     * Execute multi-turn native function calling against Gemini (`gemini-3.5-flash-lite`)
+     * with Slim Turn-2 Synthesis and full AgentToolRegistry integration.
+     */
+    private function callGeminiWithTools(
+        string $apiKey,
+        string $model,
+        string $systemPrompt,
+        array $historyMessages,
+        string $userMessage,
+        array $auth,
+        ?array $allowedToolNames = null,
+        float $temperature = 0.15
+    ): array {
+        $geminiTools = AgentToolRegistry::getGeminiToolsDeclaration($allowedToolNames);
+        $toolsCount = count($geminiTools[0]['functionDeclarations'] ?? []);
+
+        $contents = [];
+        foreach ($historyMessages as $hm) {
+            $contents[] = [
+                'role' => ($hm['role'] ?? '') === 'assistant' ? 'model' : 'user',
+                'parts' => [['text' => (string)($hm['content'] ?? '')]],
+            ];
+        }
+        $contents[] = [
+            'role' => 'user',
+            'parts' => [['text' => $userMessage]],
+        ];
+
+        $synthesisSystemPrompt = "Bạn là **SI IDEAS (Gemini 3.5 Flash Lite)** của MYERP. Hãy tổng hợp dữ liệu thực tế từ `tool` vừa thực thi thành câu trả lời tiếng Việt chuyên nghiệp, rõ ràng.\n" .
+            "- Nếu có >= 2 bản ghi: trình bày **Bảng Markdown** đầy đủ cột quan trọng (ID `#ID`, Họ tên, SĐT, Chương trình/Phòng ban, Trạng thái, Người phụ trách), KHÔNG chèn thẻ `<<<ERP_CARD:...>>>` lẻ dưới bảng.\n" .
+            "- Nếu chỉ có 1 hồ sơ: có thể đính kèm `<<<ERP_CARD: {\"type\":\"contact|deal|expense|deposit|project|employee|task\",\"id\":123,\"code\":\"#123\",\"title\":\"Tên\",\"subtitle\":\"Chi tiết\",\"status\":\"Trạng thái\"}>>>`.\n" .
+            "- Giữ nguyên 100% link tải `[📥 Tải danh sách ...](/export?...)`, `<<<DYNAMIC_CHART: {...}>>>`, `<<<ACTION_PROPOSAL: {...}>>>`.\n" .
+            "- Cuối câu trả lời, đính kèm 2-3 gợi ý tiếp theo: `<<<NEXT_BEST_ACTIONS: [{\"label\":\"Tên ngắn\",\"prompt\":\"Câu lệnh đầy đủ\",\"icon\":\"chart|check|alert|user|file\"}]>>>`.";
+
+        $maxTurns = 4;
+        $executedSteps = [];
+        $deterministicExports = [];
+        $deterministicTags = [];
+        $hasMultiRowResult = false;
+        $totalPromptTokens = 0;
+        $totalCompletionTokens = 0;
+        $turnsUsed = 0;
+        $lastError = '';
+        $startTime = microtime(true);
+
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key=" . urlencode($apiKey);
+
+        for ($turn = 0; $turn < $maxTurns; $turn++) {
+            $turnsUsed++;
+            $isSynthesisTurn = !empty($executedSteps) && $turn >= 1;
+
+            $payload = [
+                'systemInstruction' => [
+                    'parts' => [['text' => $isSynthesisTurn ? $synthesisSystemPrompt : $systemPrompt]],
+                ],
+                'contents' => $contents,
+                'generationConfig' => [
+                    'temperature' => $temperature,
+                    'maxOutputTokens' => 8192,
+                ],
+            ];
+
+            if (!$isSynthesisTurn && !empty($geminiTools)) {
+                $payload['tools'] = $geminiTools;
+                $payload['toolConfig'] = ['functionCallingConfig' => ['mode' => 'AUTO']];
+            }
+
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+                CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
+                CURLOPT_TIMEOUT => 45,
+                CURLOPT_CONNECTTIMEOUT => 10,
+                CURLOPT_SSL_VERIFYPEER => true,
+            ]);
+            $rawResp = curl_exec($ch);
+            $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlErr = curl_error($ch);
+            curl_close($ch);
+
+            if ($rawResp === false || $httpCode >= 400) {
+                $errJson = is_string($rawResp) ? json_decode($rawResp, true) : null;
+                $lastError = $errJson['error']['message'] ?? ($curlErr ?: "HTTP $httpCode");
+                break;
+            }
+
+            $data = json_decode((string)$rawResp, true);
+            $usage = $data['usageMetadata'] ?? [];
+            $totalPromptTokens += (int)($usage['promptTokenCount'] ?? 0);
+            $totalCompletionTokens += (int)($usage['candidatesTokenCount'] ?? 0);
+
+            $candidate = $data['candidates'][0] ?? null;
+            $parts = $candidate['content']['parts'] ?? [];
+            $functionCalls = [];
+            $directText = '';
+
+            foreach ($parts as $p) {
+                if (isset($p['functionCall'])) {
+                    $functionCalls[] = $p['functionCall'];
+                }
+                if (isset($p['text'])) {
+                    $directText .= $p['text'];
+                }
+            }
+
+            if (empty($functionCalls)) {
+                $cleanText = trim($directText);
+                if ($cleanText !== '') {
+                    $finalText = $this->appendMissingDeterministicArtifacts(
+                        $cleanText,
+                        $deterministicExports,
+                        $deterministicTags,
+                        $hasMultiRowResult
+                    );
+                    $elapsedSec = max(0.001, microtime(true) - $startTime);
+                    return [
+                        'ok' => true,
+                        'reply' => $finalText,
+                        'reasoning_trace' => '',
+                        'executed_steps' => $executedSteps,
+                        'telemetry' => [
+                            'model' => $model,
+                            'provider' => 'Google Gemini 3.5 Flash Lite',
+                            'turns_used' => $turnsUsed,
+                            'tools_loaded_count' => $toolsCount,
+                            'tools_called_count' => count($executedSteps),
+                            'prompt_tokens' => $totalPromptTokens,
+                            'completion_tokens' => $totalCompletionTokens,
+                            'total_tokens' => $totalPromptTokens + $totalCompletionTokens,
+                            'groq_time_ms' => (int)round($elapsedSec * 1000),
+                            'tokens_per_second' => round($totalCompletionTokens / $elapsedSec, 1),
+                        ],
+                    ];
+                }
+                break;
+            }
+
+            $contents[] = $candidate['content'];
+            $fnResponseParts = [];
+            foreach ($functionCalls as $fc) {
+                $fnName = (string)($fc['name'] ?? '');
+                $fnArgs = is_array($fc['args'] ?? null) ? $fc['args'] : [];
+                $t0 = microtime(true);
+                $toolResult = AgentToolRegistry::executeTool($this->db, $fnName, $fnArgs, $auth);
+                $toolLatencyMs = (int)round((microtime(true) - $t0) * 1000);
+
+                $ctxUid = (int)($auth['user_id'] ?? $auth['id'] ?? 1);
+                $ctxTid = (int)($auth['tenant_id'] ?? 1);
+                if ($ctxUid > 0 && is_array($toolResult)) {
+                    $this->autoRecordEntityFromTool($ctxUid, $ctxTid, $fnName, $fnArgs, $toolResult);
+                }
+
+                if (is_array($toolResult)) {
+                    $rowCount = (int)($toolResult['total_matching'] ?? $toolResult['total_matching_records'] ?? $toolResult['total_processed'] ?? $toolResult['matched_count'] ?? $toolResult['total'] ?? 0);
+                    if ($rowCount > 1) {
+                        $hasMultiRowResult = true;
+                    }
+                    foreach (['export_link_markdown', 'export_markdown'] as $expField) {
+                        if (!empty($toolResult[$expField]) && is_string($toolResult[$expField])) {
+                            $deterministicExports[] = trim($toolResult[$expField]);
+                        }
+                    }
+                    if (!empty($toolResult['dynamic_chart']) && is_array($toolResult['dynamic_chart'])) {
+                        $deterministicTags[] = '<<<DYNAMIC_CHART: ' . json_encode($toolResult['dynamic_chart'], JSON_UNESCAPED_UNICODE) . '>>>';
+                    }
+                }
+
+                $summaryText = 'Đã thực thi thành công';
+                if (is_array($toolResult)) {
+                    if (isset($toolResult['error'])) {
+                        $summaryText = 'Lỗi: ' . (string)$toolResult['error'];
+                    } elseif (isset($toolResult['total_matching'])) {
+                        $summaryText = 'Tìm thấy ' . (int)$toolResult['total_matching'] . ' bản ghi';
+                    } elseif (isset($toolResult['message']) && is_string($toolResult['message'])) {
+                        $summaryText = mb_substr($toolResult['message'], 0, 120);
+                    }
+                }
+
+                $executedSteps[] = [
+                    'tool' => $fnName,
+                    'args' => $fnArgs,
+                    'latency_ms' => $toolLatencyMs,
+                    'summary' => $summaryText,
+                    'has_error' => isset($toolResult['error']),
+                ];
+
+                $fnResponseParts[] = [
+                    'functionResponse' => [
+                        'name' => $fnName,
+                        'response' => (object)(is_array($toolResult) ? $toolResult : ['result' => $toolResult]),
+                    ],
+                ];
+            }
+
+            $contents[] = [
+                'role' => 'user',
+                'parts' => $fnResponseParts,
+            ];
+        }
+
+        return [
+            'ok' => false,
+            'error' => $lastError ?: 'Không nhận được phản hồi hợp lệ từ Gemini API',
+            'telemetry' => [
+                'model' => $model,
+                'turns_used' => $turnsUsed,
+                'prompt_tokens' => $totalPromptTokens,
+                'completion_tokens' => $totalCompletionTokens,
+            ],
+        ];
     }
 
     /**
@@ -1151,6 +1396,7 @@ class QwenAgentController {
             return [];
         }
 
+        /*
         try {
             $payload = [
                 'model' => 'openai/gpt-oss-20b',
@@ -1184,6 +1430,7 @@ class QwenAgentController {
         } catch (\Throwable $e) {
             // Ignore router timeout
         }
+        */
 
         return [];
     }
@@ -1265,7 +1512,7 @@ class QwenAgentController {
                 $stmtExp->execute([$tid]);
                 $pendingExp = (int)$stmtExp->fetchColumn();
 
-                $stmtDep = $this->db->prepare("SELECT COUNT(*) FROM deposits WHERE tenant_id = ? AND status = 'pending' AND deleted_at IS NULL");
+                $stmtDep = $this->db->prepare("SELECT COUNT(*) FROM deposits d LEFT JOIN contacts c ON d.contact_id = c.id LEFT JOIN users u ON d.created_by = u.id WHERE COALESCE(c.tenant_id, u.tenant_id, 1) = ? AND d.status = 'pending' AND d.deleted_at IS NULL");
                 $stmtDep->execute([$tid]);
                 $pendingDep = (int)$stmtDep->fetchColumn();
 

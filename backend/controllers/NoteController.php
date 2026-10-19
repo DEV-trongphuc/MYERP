@@ -150,6 +150,11 @@ class NoteController {
             respond(201, ['id' => (int)$this->db->lastInsertId(), 'message' => 'Transition logged as activity instead of internal note']);
         }
         
+        $attachmentUrl = $b['attachment_url'] ?? $b['attachments'] ?? null;
+        if (is_array($attachmentUrl)) {
+            $attachmentUrl = json_encode($attachmentUrl, JSON_UNESCAPED_UNICODE);
+        }
+
         $this->db->prepare("
             INSERT INTO notes (
                 tenant_id, user_id, entity_type, entity_id, body, type, parent_id, is_pinned, attachment_url,
@@ -160,7 +165,7 @@ class NoteController {
             $auth['tenant_id'], $auth['user_id'], $type, $entityId,
             $b['body'], $b['type'] ?? 'internal',
             $b['parent_id'] ?? null, $b['is_pinned'] ?? 0,
-            $b['attachment_url'] ?? null,
+            $attachmentUrl,
             $b['channel'] ?? null,
             $b['note_type'] ?? 'regular',
             (int)($b['duration_minutes'] ?? 0),

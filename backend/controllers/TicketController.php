@@ -19,6 +19,12 @@ class TicketController {
         
         $where = ['t.tenant_id=?'];
         $params = [$tid];
+        try {
+            $tCols = $this->db->query("SHOW COLUMNS FROM tickets LIKE 'deleted_at'")->fetch();
+            if ($tCols) {
+                $where[] = 't.deleted_at IS NULL';
+            }
+        } catch (\Throwable $eCol) {}
         
         if ($contactId) {
             $where[] = "JSON_CONTAINS(t.related_contacts, ?)";
@@ -79,6 +85,12 @@ class TicketController {
             $params[] = $status;
         }
 
+        $priority = $_GET['priority'] ?? '';
+        if ($priority && $priority !== 'all') {
+            $where[] = 't.priority=?';
+            $params[] = $priority;
+        }
+
         if ($search) {
             $where[] = '(t.subject LIKE ? OR t.customer_name LIKE ? OR t.description LIKE ?)';
             $params[] = "%$search%";
@@ -132,7 +144,7 @@ class TicketController {
         ");
         $stmt->execute([$id, $auth['tenant_id']]);
         $ticket = $stmt->fetch();
-        if (!$ticket) respond(404, null, 'Không tìm thấy ticket', false);
+        if (!$ticket || !empty($ticket['deleted_at'])) respond(404, null, 'Không tìm thấy ticket', false);
         $ticket['related_contacts'] = json_decode($ticket['related_contacts'] ?? '[]');
         $ticket['related_users'] = json_decode($ticket['related_users'] ?? '[]');
         $ticket['attachments'] = !empty($ticket['attachments']) ? json_decode($ticket['attachments'], true) : [];
@@ -180,8 +192,11 @@ class TicketController {
     public function store(array $auth): void {
         if ($auth['role'] === 'viewer') respond(403, null, 'Bạn không có quyền tạo ticket', false);
         $data = getBody();
-        if (empty($data['subject']) || empty($data['customer_name'])) {
-            respond(400, null, 'Thiếu tiêu đề hoặc tên khách hàng', false);
+        if (empty($data['subject']) && !empty($data['title'])) {
+            $data['subject'] = $data['title'];
+        }
+        if (empty($data['subject'])) {
+            respond(400, null, 'Thiếu tiêu đề ticket', false);
         }
 
         $assigneeId = $data['assignee_id'] ?? $auth['user_id'];
@@ -203,11 +218,25 @@ class TicketController {
         // Check direct contact_id/customer_id parameter in payload as fallback
         $rawContactId = $data['contact_id'] ?? $data['customer_id'] ?? null;
         if ($rawContactId && (empty($validContacts) || !in_array((int)$rawContactId, $validContacts, true))) {
-            $checkC = $this->db->prepare("SELECT id FROM contacts WHERE id=? AND tenant_id=? AND deleted_at IS NULL");
+            $checkC = $this->db->prepare("SELECT id, full_name FROM contacts WHERE id=? AND tenant_id=? AND deleted_at IS NULL");
             $checkC->execute([(int)$rawContactId, $auth['tenant_id']]);
-            if ($checkC->fetch()) {
+            $cRow = $checkC->fetch(PDO::FETCH_ASSOC);
+            if ($cRow) {
                 $validContacts[] = (int)$rawContactId;
+                if (empty($data['customer_name']) && !empty($cRow['full_name'])) {
+                    $data['customer_name'] = $cRow['full_name'];
+                }
             }
+        }
+
+        if (empty($data['customer_name']) && !empty($validContacts)) {
+            $stmtCN = $this->db->prepare("SELECT full_name FROM contacts WHERE id=? AND tenant_id=?");
+            $stmtCN->execute([(int)$validContacts[0], $auth['tenant_id']]);
+            $cn = $stmtCN->fetchColumn();
+            if ($cn) $data['customer_name'] = $cn;
+        }
+        if (empty($data['customer_name'])) {
+            $data['customer_name'] = $auth['full_name'] ?? 'Khách hàng';
         }
 
         // Báo lỗi data business rule check
@@ -299,9 +328,11 @@ class TicketController {
         if ($data['subject'] === 'Báo lỗi data' && $contactId) {
             try {
                 // Check if is_error_ticket column exists in contacts, otherwise add it safely
-                $chkCol = $this->db->query("SHOW COLUMNS FROM contacts LIKE 'is_error_ticket'");
-                if (!$chkCol || !$chkCol->fetch()) {
-                    $this->db->query("ALTER TABLE contacts ADD COLUMN is_error_ticket TINYINT(1) DEFAULT 0");
+                if (!$this->db->inTransaction()) {
+                    $chkCol = $this->db->query("SHOW COLUMNS FROM contacts LIKE 'is_error_ticket'");
+                    if (!$chkCol || !$chkCol->fetch()) {
+                        $this->db->query("ALTER TABLE contacts ADD COLUMN is_error_ticket TINYINT(1) DEFAULT 0");
+                    }
                 }
                 $this->db->prepare("UPDATE contacts SET is_error_ticket = 1 WHERE id = ?")->execute([$contactId]);
 
@@ -547,7 +578,7 @@ class TicketController {
                         'user_id' => $nUid,
                         'task_title' => "Cập nhật Ticket #{$id}: {$statusLabel}",
                         'reason' => "Ticket #{$id} [{$oldTicket['subject']}] đã được chuyển sang trạng thái: {$statusLabel}",
-                        'link' => "/tickets?id={$id}"
+                        'link' => "/support-tickets?id={$id}"
                     ]);
 
                     $stmtUser = $this->db->prepare("SELECT email, full_name FROM users WHERE id=?");
@@ -627,16 +658,16 @@ class TicketController {
             respond(403, null, 'Không tìm thấy ticket hoặc bạn không có quyền xóa ticket này', false);
         }
 
-        // Delete ticket comments physical files
-        $tcStmt = $this->db->prepare("SELECT body FROM ticket_comments WHERE ticket_id = ?");
-        $tcStmt->execute([$id]);
-        $tcRows = $tcStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-        foreach ($tcRows as $r) {
-            if (!empty($r['body'])) deleteAttachmentFiles($r['body']);
-        }
-        $this->db->prepare("DELETE FROM ticket_comments WHERE ticket_id = ?")->execute([$id]);
+        try {
+            if (!$this->db->inTransaction()) {
+                $tCols = $this->db->query("SHOW COLUMNS FROM tickets LIKE 'deleted_at'")->fetch();
+                if (!$tCols) {
+                    $this->db->exec("ALTER TABLE tickets ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL");
+                }
+            }
+        } catch (\Throwable $eCol) {}
 
-        $delStmt = $this->db->prepare("DELETE FROM tickets WHERE id=? AND tenant_id=?");
+        $delStmt = $this->db->prepare("UPDATE tickets SET deleted_at = NOW(), updated_at = NOW() WHERE id = ? AND tenant_id = ?");
         $delStmt->execute([$id, $auth['tenant_id']]);
         respond(200, null, 'Đã xóa ticket thành công');
     }
@@ -669,7 +700,7 @@ class TicketController {
             respond(403, null, 'Bạn không có quyền phản hồi ticket này', false);
         }
         $data = getBody();
-        $rawBody = $data['body'] ?? '';
+        $rawBody = $data['body'] ?? $data['content'] ?? $data['message'] ?? '';
         $cleanBody = str_ireplace(['&amp;nbsp;', '&nbsp;', "\xc2\xa0"], ' ', (string)$rawBody);
         if (trim($cleanBody) === '') respond(400, null, 'Nội dung ghi chú không được để trống', false);
 
@@ -731,7 +762,7 @@ class TicketController {
                     'recipients' => [$userRow],
                     'author_name' => $commenterName,
                     'comment' => $bodyText,
-                    'link' => "/tickets?id=" . $ticketId . "&highlight_comment_id=" . $newId
+                    'link' => "/support-tickets?id=" . $ticketId . "&highlight_comment_id=" . $newId
                 ]);
             }
         }
@@ -749,7 +780,7 @@ class TicketController {
                     'author_name' => $commenterName,
                     'task_title' => "Ticket #$ticketId",
                     'comment' => "Đã trả lời bình luận của bạn trong ticket #" . $ticketId . ": \"" . mb_substr(strip_tags($bodyText), 0, 120) . "\"",
-                    'link' => "/tickets?id=" . $ticketId . "&highlight_comment_id=" . $newId
+                    'link' => "/support-tickets?id=" . $ticketId . "&highlight_comment_id=" . $newId
                 ]);
             }
         }

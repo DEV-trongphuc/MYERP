@@ -116,7 +116,7 @@ if (!empty($crmContactIds)) {
     }
 
     // Fallback: look up directly from MYERP contacts table for any contact not yet in subscribers
-    $stmtContacts = $pdo->prepare("SELECT id as contact_id, name, email, phone as phone_number, city, district, ward, address, gender, program, stage_id, owner_id FROM contacts WHERE id IN ($phCrm) AND deleted_at IS NULL");
+    $stmtContacts = $pdo->prepare("SELECT id as contact_id, full_name as name, email, phone as phone_number, city, district, ward, address, gender, program, stage_id, owner_id FROM contacts WHERE id IN ($phCrm) AND deleted_at IS NULL");
     $stmtContacts->execute($crmContactIds);
     foreach ($stmtContacts->fetchAll(PDO::FETCH_ASSOC) as $cRow) {
         $e = strtolower(trim($cRow['email'] ?? ''));
@@ -130,7 +130,7 @@ if (!empty($crmContactIds)) {
 
 // From direct subscriber IDs
 if (!empty($input['subscriber_ids']) && is_array($input['subscriber_ids'])) {
-    $cleanIds = array_filter(array_map('trim', $input['subscriber_ids']));
+    $cleanIds = array_values(array_unique(array_filter(array_map('trim', $input['subscriber_ids']))));
     if (!empty($cleanIds)) {
         $placeholders = implode(',', array_fill(0, count($cleanIds), '?'));
         $stmt = $pdo->prepare("SELECT $subSelectCols FROM subscribers WHERE id IN ($placeholders) AND workspace_id = ?");

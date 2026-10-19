@@ -1,5 +1,5 @@
-// MYERP Service Worker for PWA Omnibox Install & Desktop Push Notifications
-const SW_VERSION = 'myerp-sw-v1792306427648';
+﻿// MYERP Service Worker for PWA Omnibox Install & Desktop Push Notifications
+const SW_VERSION = 'myerp-sw-v1792422774212';
 
 self.addEventListener('install', (event) => {
   // Force new service worker to activate immediately without waiting
@@ -54,9 +54,9 @@ self.addEventListener('push', (event) => {
   if (!event.data) return;
   try {
     const data = event.data.json();
-    const title = data.title || 'MYERP Thông Báo';
+    const title = data.title || 'MYERP ThÃ´ng BÃ¡o';
     const options = {
-      body: data.body || 'Bạn có thông báo mới từ hệ thống.',
+      body: data.body || 'Báº¡n cÃ³ thÃ´ng bÃ¡o má»›i tá»« há»‡ thá»‘ng.',
       icon: '/LOGO.jpg',
       badge: '/LOGO.jpg',
       vibrate: [100, 50, 100],
@@ -68,7 +68,7 @@ self.addEventListener('push', (event) => {
   } catch (err) {
     const text = event.data.text();
     event.waitUntil(
-      self.registration.showNotification('MYERP Thông Báo', {
+      self.registration.showNotification('MYERP ThÃ´ng BÃ¡o', {
         body: text,
         icon: '/LOGO.jpg'
       })

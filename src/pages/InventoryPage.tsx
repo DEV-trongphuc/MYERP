@@ -102,6 +102,7 @@ export default function InventoryPage() {
   const inFlightRef = useRef(false);
 
   useEffect(() => {
+    if (!location.pathname.startsWith('/inventory') && !location.pathname.startsWith('/purchase-orders')) return;
     const params = new URLSearchParams(location.search);
     const tabParam = params.get('tab');
     if (tabParam === 'purchase_orders' || tabParam === 'history' || tabParam === 'batches') {
@@ -114,8 +115,14 @@ export default function InventoryPage() {
       if (location.state?.defaultSupplierId || params.get('supplier_id')) {
         setDefaultSupplierId(String(location.state?.defaultSupplierId || params.get('supplier_id')));
       }
+      if (params.has('create_po') || params.has('supplier_id')) {
+        params.delete('create_po');
+        params.delete('supplier_id');
+        const cleanUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+        window.history.replaceState({}, '', cleanUrl);
+      }
     }
-  }, [location.state, location.search]);
+  }, [location.pathname, location.state, location.search]);
 
   useEffect(() => {
     if (!showPOModal) {
@@ -162,9 +169,9 @@ export default function InventoryPage() {
       const res = await api.get('/inventory', { params, signal });
       if (signal.aborted) return;
       const data = res.data.data;
-      setBatches(data.items || []);
-      setTotal(data.total || 0);
-      if (data.summary) setSummary(data.summary);
+      setBatches(Array.isArray(data?.items) ? data.items : []);
+      setTotal(data?.total || 0);
+      if (data?.summary) setSummary(data.summary);
     } catch (err: any) {
       if (err?.name === 'AbortError' || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED' || signal.aborted) return;
       console.error(err);
@@ -184,7 +191,10 @@ export default function InventoryPage() {
     try {
       const res = await api.get(`/inventory/logs/${batchId}`, { signal });
       if (signal.aborted) return;
-      if (res.data.success) setLogs(res.data.data);
+      if (res.data.success) {
+        const raw = res.data.data;
+        setLogs(Array.isArray(raw) ? raw : (Array.isArray(raw?.items) ? raw.items : []));
+      }
     } catch (err: any) {
       if (err?.name === 'AbortError' || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED' || signal.aborted) return;
       console.error(err);
@@ -202,7 +212,10 @@ export default function InventoryPage() {
     try {
       const res = await api.get('/inventory/global-logs', { signal });
       if (signal.aborted) return;
-      if (res.data.success) setGlobalLogs(res.data.data);
+      if (res.data.success) {
+        const raw = res.data.data;
+        setGlobalLogs(Array.isArray(raw) ? raw : (Array.isArray(raw?.items) ? raw.items : []));
+      }
     } catch (err: any) {
       if (err?.name === 'AbortError' || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED' || signal.aborted) return;
       console.error(err);

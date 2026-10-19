@@ -1460,13 +1460,16 @@ class AgentTaskProjectTools {
 
             $stmtRevStats = $db->prepare("
                 SELECT COUNT(d.id) as deposit_count,
-                       COALESCE(SUM(CASE WHEN d.status IN ('approved', 'completed', 'paid') THEN d.amount ELSE 0 END), 0) as approved_revenue
+                       COALESCE(SUM(CASE WHEN d.status IN ('approved', 'confirmed', 'completed', 'paid') THEN d.price ELSE 0 END), 0) as approved_revenue
                 FROM deposits d
-                LEFT JOIN contacts c ON d.contact_id = c.id AND c.deleted_at IS NULL
-                WHERE d.tenant_id = ? AND d.deleted_at IS NULL
-                  AND (d.program LIKE ? OR (? != '' AND d.program LIKE ?) OR c.program LIKE ?)
+                LEFT JOIN projects p_dep ON d.project_id = p_dep.id
+                LEFT JOIN contacts c_dep ON d.contact_id = c_dep.id AND c_dep.deleted_at IS NULL
+                WHERE COALESCE(c_dep.tenant_id, p_dep.tenant_id, 1) = ?
+                  AND d.status IN ('approved', 'confirmed', 'completed', 'paid')
+                  AND d.deleted_at IS NULL
+                  AND (LOWER(p_dep.name) = LOWER(?) OR LOWER(p_dep.code) = LOWER(?) OR LOWER(d.unit_code) = LOWER(?))
             ");
-            $stmtRevStats->execute([$tid, '%' . $pName . '%', $pCode, '%' . $pCode . '%', '%' . $pName . '%']);
+            $stmtRevStats->execute([$tid, $pName, $pCode !== '' ? $pCode : $pName, $pCode !== '' ? $pCode : $pName]);
             $revStats = $stmtRevStats->fetch(PDO::FETCH_ASSOC) ?: [];
 
             $projectUrl = "/projects?id={$projectId}";

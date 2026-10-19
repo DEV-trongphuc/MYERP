@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { fetchAPI } from '../utils/api';
 import api from '../api/axios';
 import { useAuth } from '../contexts/AuthContext';
@@ -531,7 +531,10 @@ export default function ProjectsPage() {
     navigate(`${window.location.pathname}?${params.toString()}`);
   };
 
+  const location = useLocation();
+
   useEffect(() => {
+    if (!location.pathname.startsWith('/projects')) return;
     const params = new URLSearchParams(window.location.search);
     const taskId = params.get('open_task_id') || params.get('task_id');
     if (taskId) {
@@ -547,7 +550,7 @@ export default function ProjectsPage() {
         });
       }
     }
-  }, [window.location.search]);
+  }, [location.pathname, location.search]);
 
   const copySubjectInFlightRef = useRef(false);
   const saveSubjectsConfigInFlightRef = useRef(false);
@@ -558,6 +561,7 @@ export default function ProjectsPage() {
   const openedUrlTargetRef = useRef<string | null>(null);
 
   const clearEntityParamsFromUrl = () => {
+    if (!window.location.pathname.startsWith('/projects')) return;
     const newParams = new URLSearchParams(window.location.search);
     if (newParams.has('open_id') || newParams.has('id') || newParams.has('project_id') || newParams.has('campaign_id')) {
       newParams.delete('open_id');
@@ -570,6 +574,7 @@ export default function ProjectsPage() {
   };
 
   useEffect(() => {
+    if (!location.pathname.startsWith('/projects')) return;
     const params = new URLSearchParams(window.location.search);
     const isCampaigns = params.get('tab') === 'campaigns' || params.get('sub') === 'campaigns' || Boolean(params.get('campaign_id'));
     if (isCampaigns) {
@@ -611,7 +616,7 @@ export default function ProjectsPage() {
         }
       }
     }
-  }, [window.location.search, projects, campaigns]);
+  }, [location.pathname, location.search, projects, campaigns]);
 
   const [projectPage, setProjectPage] = useState(1);
   const [projectPageSize, setProjectPageSize] = useState(12);
