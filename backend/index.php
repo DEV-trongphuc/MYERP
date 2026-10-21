@@ -2089,6 +2089,18 @@ switch ($resource) {
         else respond(404, null, 'Route không tồn tại', false);
         break;
 
+    // META ADS FULL-FUNNEL ATTRIBUTION
+    case 'marketing':
+    case 'meta-ads':
+    case 'meta_ads':
+        if ($resource === 'marketing' && $resourceId === 'meta' && in_array($subResource, ['overview', 'analytics', null, ''], true) && $method === 'GET') {
+            require_once __DIR__ . '/controllers/MetaAdsController.php';
+            (new MetaAdsController($db))->getOverview($auth);
+        } elseif (in_array($resource, ['meta-ads', 'meta_ads'], true) && in_array($resourceId, ['overview', 'analytics', null, ''], true) && $method === 'GET') {
+            require_once __DIR__ . '/controllers/MetaAdsController.php';
+            (new MetaAdsController($db))->getOverview($auth);
+        }
+        // Fallthrough to domation / marketing-automation if not /marketing/meta/*
     // DOMATION / MARKETING AUTOMATION SUITE
     case 'domation':
     case 'marketing-automation':

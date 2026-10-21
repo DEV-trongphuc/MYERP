@@ -59,7 +59,7 @@ try {
         // Fetch logs with Admin Name
         $sql = "SELECT l.*, u.full_name as admin_name, u.email as admin_email 
                 FROM admin_logs l 
-                LEFT JOIN ai_org_users u ON l.admin_id = u.id 
+                LEFT JOIN ai_org_users u ON l.account_id = u.id 
                 $where
                 ORDER BY l.created_at DESC 
                 LIMIT $limit OFFSET $offset";
@@ -119,7 +119,7 @@ try {
         // Total Conversations (In period)
         if ($chatbotId) {
             $sql = "SELECT (SELECT COUNT(*) FROM domation_ai_conversations WHERE property_id = ? AND created_at BETWEEN ? AND ?) + 
-                           (SELECT COUNT(*) FROM ai_org_conversations WHERE property_id = ? AND status != 'deleted' AND created_at BETWEEN ? AND ?)";
+                           (SELECT COUNT(*) FROM ai_org_conversations WHERE chatbot_id = ? AND created_at BETWEEN ? AND ?)";
             $stmtConvs = $pdo->prepare($sql);
             $stmtConvs->execute([
                 $chatbotId,
@@ -136,8 +136,8 @@ try {
                         WHERE b.category_id = ? AND c.created_at BETWEEN ? AND ?
                     ) + (
                         SELECT COUNT(*) FROM ai_org_conversations oc 
-                        JOIN ai_chatbots b2 ON oc.property_id = b2.id 
-                        WHERE b2.category_id = ? AND oc.status != 'deleted' AND oc.created_at BETWEEN ? AND ?
+                        JOIN ai_chatbots b2 ON oc.chatbot_id = b2.id 
+                        WHERE b2.category_id = ? AND oc.created_at BETWEEN ? AND ?
                     )";
             $stmtConvs = $pdo->prepare($sql);
             $stmtConvs->execute([
@@ -152,7 +152,7 @@ try {
             $sql = "SELECT (
                         SELECT COUNT(*) FROM domation_ai_conversations WHERE created_at BETWEEN ? AND ?
                     ) + (
-                        SELECT COUNT(*) FROM ai_org_conversations WHERE status != 'deleted' AND created_at BETWEEN ? AND ?
+                        SELECT COUNT(*) FROM ai_org_conversations WHERE created_at BETWEEN ? AND ?
                     )";
             $stmtConvs = $pdo->prepare($sql);
             $stmtConvs->execute([
@@ -216,8 +216,8 @@ try {
                     UNION ALL
                     SELECT b2.name as display_name, b2.id, COUNT(oc.id) as cnt
                     FROM ai_org_conversations oc 
-                    JOIN ai_chatbots b2 ON oc.property_id = b2.id
-                    WHERE oc.created_at BETWEEN ? AND ? AND oc.status != 'deleted' $where
+                    JOIN ai_chatbots b2 ON oc.chatbot_id = b2.id
+                    WHERE oc.created_at BETWEEN ? AND ? $where
                     GROUP BY b2.id
                 ) as combined
                 GROUP BY id, display_name
@@ -246,7 +246,7 @@ try {
             ? "(
                 SELECT COUNT(DISTINCT property_id) 
                 FROM (
-                    SELECT property_id, user_id, created_at FROM ai_org_conversations WHERE status != 'deleted'
+                    SELECT chatbot_id as property_id, user_id, created_at FROM ai_org_conversations
                     UNION ALL
                     SELECT property_id, visitor_id as user_id, created_at FROM domation_ai_conversations
                 ) as combined_convs
@@ -258,7 +258,7 @@ try {
             : "(
                 SELECT COUNT(DISTINCT property_id) 
                 FROM (
-                    SELECT property_id, user_id, created_at FROM ai_org_conversations WHERE status != 'deleted'
+                    SELECT chatbot_id as property_id, user_id, created_at FROM ai_org_conversations
                     UNION ALL
                     SELECT property_id, visitor_id as user_id, created_at FROM domation_ai_conversations
                 ) as combined_convs
@@ -269,19 +269,19 @@ try {
         // Subquery for Conversation counts (Sum of internal and matching guest chats)
         $convoSubquery = $categoryId
             ? "(
-                (SELECT COUNT(*) FROM ai_org_conversations aoc JOIN ai_chatbots b4 ON aoc.property_id = b4.id WHERE (aoc.user_id = CAST(u.id AS CHAR) OR (u.id = 1 AND aoc.user_id = 'admin-001')) AND aoc.status != 'deleted' AND b4.category_id = ? AND aoc.created_at BETWEEN ? AND ?) +
+                (SELECT COUNT(*) FROM ai_org_conversations aoc JOIN ai_chatbots b4 ON aoc.chatbot_id = b4.id WHERE (aoc.user_id = CAST(u.id AS CHAR) OR (u.id = 1 AND aoc.user_id = 'admin-001')) AND b4.category_id = ? AND aoc.created_at BETWEEN ? AND ?) +
                 (SELECT COUNT(*) FROM domation_ai_conversations ac JOIN ai_chatbots b5 ON ac.property_id = b5.id WHERE (ac.visitor_id = u.email OR ac.visitor_id = CAST(u.id AS CHAR)) AND b5.category_id = ? AND ac.created_at BETWEEN ? AND ?)
                )"
             : "(
-                (SELECT COUNT(*) FROM ai_org_conversations aoc WHERE (aoc.user_id = CAST(u.id AS CHAR) OR (u.id = 1 AND aoc.user_id = 'admin-001')) AND aoc.status != 'deleted' AND aoc.created_at BETWEEN ? AND ?) +
+                (SELECT COUNT(*) FROM ai_org_conversations aoc WHERE (aoc.user_id = CAST(u.id AS CHAR) OR (u.id = 1 AND aoc.user_id = 'admin-001')) AND aoc.created_at BETWEEN ? AND ?) +
                 (SELECT COUNT(*) FROM domation_ai_conversations ac WHERE (ac.visitor_id = u.email OR ac.visitor_id = CAST(u.id AS CHAR)) AND ac.created_at BETWEEN ? AND ?)
                )";
 
         // Action count filtered by category if provided
-        $actionSubquery = $categoryId ? "(SELECT COUNT(*) FROM admin_logs l WHERE (l.admin_id = u.id OR (u.id = 1 AND l.admin_id = 0)) AND l.created_at BETWEEN ? AND ? 
+        $actionSubquery = $categoryId ? "(SELECT COUNT(*) FROM admin_logs l WHERE (l.account_id = u.id OR (u.id = 1 AND l.account_id = 0)) AND l.created_at BETWEEN ? AND ? 
                                           AND ((l.target_type = 'category' AND l.target_id = ?) 
                                                 OR (l.target_type = 'chatbot' AND l.target_id IN (SELECT id FROM ai_chatbots WHERE category_id = ?))))"
-            : "(SELECT COUNT(*) FROM admin_logs l WHERE (l.admin_id = u.id OR (u.id = 1 AND l.admin_id = 0)) AND l.created_at BETWEEN ? AND ?)";
+            : "(SELECT COUNT(*) FROM admin_logs l WHERE (l.account_id = u.id OR (u.id = 1 AND l.account_id = 0)) AND l.created_at BETWEEN ? AND ?)";
 
         // Filter users by category: user_categories + categoryAdminId + sessionAdminId
         if ($categoryId) {
@@ -407,8 +407,8 @@ try {
                         UNION ALL
                         SELECT DATE(oc.created_at) as date, CAST(oc.user_id AS CHAR) as visitor_id
                         FROM ai_org_conversations oc
-                        JOIN ai_chatbots b ON oc.property_id = b.id
-                        WHERE oc.created_at >= ? AND oc.created_at <= ? AND oc.status != 'deleted' $where
+                        JOIN ai_chatbots b ON oc.chatbot_id = b.id
+                        WHERE oc.created_at >= ? AND oc.created_at <= ? $where
                     ) as combined
                     GROUP BY date";
         } else {
@@ -421,8 +421,8 @@ try {
                         UNION ALL
                         SELECT DATE(oc.created_at) as date, COUNT(*) as cnt
                         FROM ai_org_conversations oc
-                        JOIN ai_chatbots b ON oc.property_id = b.id
-                        WHERE oc.created_at >= ? AND oc.created_at <= ? AND oc.status != 'deleted' $where
+                        JOIN ai_chatbots b ON oc.chatbot_id = b.id
+                        WHERE oc.created_at >= ? AND oc.created_at <= ? $where
                         GROUP BY date
                     ) as combined
                     GROUP BY date";
@@ -450,7 +450,7 @@ try {
         $sql = "SELECT b.id, b.name, b.is_enabled,
                     (SELECT is_enabled FROM ai_chatbot_settings s WHERE s.property_id = b.id LIMIT 1) as ai_enabled,
                     (SELECT COUNT(*) FROM domation_ai_conversations c WHERE c.property_id = b.id AND c.created_at BETWEEN ? AND ?) + 
-                    (SELECT COUNT(*) FROM ai_org_conversations oc WHERE oc.property_id = b.id AND oc.status != 'deleted' AND oc.created_at BETWEEN ? AND ?) as convo_count,
+                    (SELECT COUNT(*) FROM ai_org_conversations oc WHERE oc.chatbot_id = b.id AND oc.created_at BETWEEN ? AND ?) as convo_count,
                     (SELECT COUNT(*) FROM domation_ai_training_docs d WHERE d.property_id = b.id AND d.source_type != 'folder') as doc_count
                 FROM ai_chatbots b
                 $where

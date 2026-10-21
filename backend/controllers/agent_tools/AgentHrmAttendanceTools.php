@@ -1104,7 +1104,7 @@ class AgentHrmAttendanceTools
                                WHEN NOT EXISTS (
                                    SELECT 1 FROM hrm_leave_requests lr
                                    WHERE lr.user_id = c.user_id AND lr.status = 'approved'
-                                     AND lr.leave_type = 'late_early' AND DATE(lr.start_date) = c.check_in_date
+                                     AND lr.leave_type = 'late_early' AND lr.start_date >= c.check_in_date AND lr.start_date < DATE_ADD(c.check_in_date, INTERVAL 1 DAY)
                                ) THEN COALESCE(c.late_minutes, 0)
                                ELSE 0
                            END), 0) AS late_minutes

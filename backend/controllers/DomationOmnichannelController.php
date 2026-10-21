@@ -267,6 +267,25 @@ class DomationOmnichannelController
             $subscriberRow
         );
 
+        // Fetch real Meta Ads attribution record from contact_meta_attribution if present
+        $metaAttribution = null;
+        try {
+            $stmtMeta = $this->db->prepare("
+                SELECT *
+                FROM contact_meta_attribution
+                WHERE contact_id = ? AND deleted_at IS NULL
+                ORDER BY COALESCE(lead_created_time, created_at) DESC, id DESC
+                LIMIT 1
+            ");
+            $stmtMeta->execute([$contactId]);
+            $metaAttribution = $stmtMeta->fetch(PDO::FETCH_ASSOC) ?: null;
+            if ($metaAttribution && !empty($metaAttribution['form_answers_json'])) {
+                $metaAttribution['form_answers'] = json_decode((string)$metaAttribution['form_answers_json'], true) ?: [];
+            }
+        } catch (\Throwable $eMeta) {
+            $metaAttribution = null;
+        }
+
         $summary = [
             'contact_id'             => (int)$contact['id'],
             'subscriber_id'          => $primarySubId,
@@ -292,10 +311,12 @@ class DomationOmnichannelController
             'subscriber_tags'        => $subscriberTags,
             'subscriber_lists'       => $subscriberLists,
             'subscriber'             => $subscriberRow,
+            'meta_attribution'       => $metaAttribution,
         ];
 
         respond(200, [
             'summary'             => $summary,
+            'meta_attribution'    => $metaAttribution,
             'timeline'            => $timeline,
             'unified_timeline'    => $timeline,
             'active_flows'        => $activeFlowsData['active_flows'],

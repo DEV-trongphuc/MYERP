@@ -6132,8 +6132,11 @@ class HRMController {
         }
 
         // 4. Lịch thuế & Kê khai TNCN
-        $quarter = ceil($m / 3);
-        $taxDueQuarter = date('d/m/Y', strtotime(date("Y-m-t", strtotime("$y-" . ($quarter * 3) . "-01") . " +1 month")));
+        $quarter = (int)ceil($m / 3);
+        $qEndMonth = $quarter * 3;
+        $dueYear = ($qEndMonth === 12) ? ($y + 1) : $y;
+        $dueMonth = ($qEndMonth === 12) ? 1 : ($qEndMonth + 1);
+        $taxDueQuarter = date('t/m/Y', (int)mktime(0, 0, 0, $dueMonth, 1, $dueYear));
         $taxDueMonth = sprintf('20/%02d/%d', ($m == 12 ? 1 : $m + 1), ($m == 12 ? $y + 1 : $y));
 
         // 5. Checklist Quy trình Đóng kỳ Kế toán - Nhân sự hàng tháng
@@ -6908,7 +6911,7 @@ class HRMController {
                 (SELECT start_date FROM hrm_contracts c WHERE c.user_id = u.id ORDER BY c.id DESC LIMIT 1) as contract_start_date,
                 (SELECT end_date FROM hrm_contracts c WHERE c.user_id = u.id ORDER BY c.id DESC LIMIT 1) as contract_end_date,
                 (SELECT contract_code FROM hrm_contracts c WHERE c.user_id = u.id ORDER BY c.id DESC LIMIT 1) as contract_code,
-                (SELECT COALESCE(SUM(overtime_hours), 0) FROM monthly_payslips mp WHERE mp.user_id = u.id AND mp.month_year LIKE '{$year}-%') as total_ot_hours
+                (SELECT COALESCE(SUM(COALESCE(mp.overtime_days, 0) * 8), 0) FROM monthly_payslips mp WHERE mp.user_id = u.id AND mp.month_year LIKE '{$year}-%') as total_ot_hours
             FROM users u
             LEFT JOIN hrm_profiles p ON u.id = p.user_id
             WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'

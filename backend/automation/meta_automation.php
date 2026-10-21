@@ -17,39 +17,64 @@ $route = $_GET['route'] ?? '';
 try {
     if ($method === 'GET') {
         if ($route === 'list') {
-            // -------------------------------------------------------------
-            // LIST SCENARIOS
-            // -------------------------------------------------------------
-            $configId = $_GET['meta_config_id'] ?? null;
+            $configId = $_GET['meta_config_id'] ?? $_GET['page_id'] ?? null;
 
-            $sql = "SELECT s.*, b.bot_name as ai_bot_name 
+            $sql = "SELECT
+                        s.id,
+                        s.workspace_id,
+                        s.page_id,
+                        s.page_id AS meta_config_id,
+                        s.name,
+                        s.name AS title,
+                        s.trigger_type,
+                        s.trigger_type AS type,
+                        s.keywords,
+                        s.keywords AS trigger_text,
+                        s.match_type,
+                        s.response_type,
+                        s.response_type AS message_type,
+                        s.response_content,
+                        s.is_active,
+                        CASE WHEN s.is_active = 1 THEN 'active' ELSE 'inactive' END AS status,
+                        s.priority,
+                        s.priority AS priority_override,
+                        s.created_at,
+                        s.updated_at
                     FROM meta_automation_scenarios s
-                    
-                    LEFT JOIN ai_chatbot_settings b ON s.ai_chatbot_id = b.property_id
-                    WHERE c.workspace_id = ?";
+                    WHERE s.workspace_id = ?";
 
             if ($configId) {
-                $stmt = $pdo->prepare("$sql AND s.meta_config_id = ? ORDER BY s.created_at DESC");
+                $stmt = $pdo->prepare("$sql AND s.page_id = ? ORDER BY s.priority DESC, s.created_at DESC");
                 $stmt->execute([$workspace_id, $configId]);
             } else {
-                $stmt = $pdo->prepare("$sql ORDER BY s.created_at DESC");
+                $stmt = $pdo->prepare("$sql ORDER BY s.priority DESC, s.created_at DESC");
                 $stmt->execute([$workspace_id]);
             }
 
             $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            // Decode JSON fields
             foreach ($data as &$row) {
-                $row['buttons'] = json_decode($row['buttons'] ?? '[]', true);
+                $rawContent = $row['response_content'] ?? '';
+                $decoded = is_string($rawContent) ? json_decode($rawContent, true) : null;
+                if (is_array($decoded)) {
+                    $row['content'] = $decoded['content'] ?? ($decoded['text'] ?? '');
+                    $row['buttons'] = $decoded['buttons'] ?? [];
+                    $row['image_url'] = $decoded['image_url'] ?? '';
+                    $row['attachment_id'] = $decoded['attachment_id'] ?? '';
+                    $row['ai_chatbot_id'] = $decoded['ai_chatbot_id'] ?? null;
+                } else {
+                    $row['content'] = (string)$rawContent;
+                    $row['buttons'] = [];
+                    $row['image_url'] = '';
+                    $row['attachment_id'] = '';
+                    $row['ai_chatbot_id'] = null;
+                }
             }
 
             jsonResponse(true, $data);
 
         } elseif ($route === 'check_conflicts') {
-            // -------------------------------------------------------------
-            // CHECK KEYWORD CONFLICTS
-            // -------------------------------------------------------------
-            $configId = $_GET['meta_config_id'] ?? '';
+            $configId = $_GET['meta_config_id'] ?? $_GET['page_id'] ?? '';
             $triggerText = $_GET['trigger_text'] ?? '';
             $excludeId = $_GET['id'] ?? '';
 
@@ -61,20 +86,18 @@ try {
             $keywords = array_map('trim', explode(',', $triggerText));
 
             foreach ($keywords as $kw) {
-                if (empty($kw))
+                if (empty($kw)) {
                     continue;
+                }
 
-                // Check if this keyword is part of any OTHER active scenario
-                // (Using simple LIKE for containment or exact match)
-                $sql = "SELECT s.title 
+                $sql = "SELECT s.name
                         FROM meta_automation_scenarios s
-                        
-                        WHERE s.meta_config_id = ? 
-                        AND c.workspace_id = ?
-                        AND s.status = 'active' 
-                        AND s.type = 'keyword' 
-                        AND s.id != ?
-                        AND (FIND_IN_SET(?, s.trigger_text) OR ? LIKE CONCAT('%', s.trigger_text, '%'))";
+                        WHERE s.page_id = ?
+                          AND s.workspace_id = ?
+                          AND s.is_active = 1
+                          AND s.trigger_type = 'keyword'
+                          AND s.id != ?
+                          AND (FIND_IN_SET(?, s.keywords) OR ? LIKE CONCAT('%', s.keywords, '%'))";
 
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute([$configId, $workspace_id, $excludeId, $kw, $kw]);
@@ -87,124 +110,77 @@ try {
                 }
             }
 
-            jsonResponse(true, ['conflicts' => array_unique($conflicts)]);
+            jsonResponse(true, ['conflicts' => array_values(array_unique($conflicts))]);
         }
 
     } elseif ($method === 'POST') {
-        // -------------------------------------------------------------
-        // SAVE (CREATE / UPDATE)
-        // -------------------------------------------------------------
         $input = getJsonInput();
 
         if ($route === 'save') {
-            $id = !empty($input['id']) ? $input['id'] : bin2hex(random_bytes(16));
-            $configId = $input['meta_config_id'] ?? '';
+            $id = !empty($input['id']) ? $input['id'] : null;
+            $configId = $input['meta_config_id'] ?? $input['page_id'] ?? '';
 
             if (!$configId) {
                 jsonResponse(false, null, 'Meta Config ID is required');
             }
 
-            // [SECURITY] Validate Config ID ownership
-            $stmtOwn = $pdo->prepare("SELECT id FROM meta_app_configs WHERE id = ? AND workspace_id = ?");
-            $stmtOwn->execute([$configId, $workspace_id]);
-            if (!$stmtOwn->fetchColumn()) {
-                jsonResponse(false, null, 'Config not found or unauthorized');
-            }
-
-            $type = $input['type'] ?? 'keyword';
-            $triggerText = $input['trigger_text'] ?? '';
+            $type = $input['type'] ?? $input['trigger_type'] ?? 'keyword';
+            $triggerText = $input['trigger_text'] ?? $input['keywords'] ?? '';
             $matchType = $input['match_type'] ?? 'contains';
-            $title = $input['title'] ?? 'New Scenario';
+            $title = $input['title'] ?? $input['name'] ?? 'New Scenario';
             $content = $input['content'] ?? '';
-            $messageType = $input['message_type'] ?? 'text';
-            $imageUrl = $input['image_url'] ?? '';
-            $attachmentId = $input['attachment_id'] ?? '';
-            $buttons = isset($input['buttons']) ? json_encode($input['buttons']) : '[]';
-            $status = $input['status'] ?? 'active';
-            $aiChatbotId = $input['ai_chatbot_id'] ?? null;
+            $messageType = $input['message_type'] ?? $input['response_type'] ?? 'text';
+            $status = ($input['status'] ?? 'active') === 'inactive' ? 0 : 1;
+            $priority = (int)($input['priority_override'] ?? $input['priority'] ?? 0);
 
-            // Scheduling
-            $scheduleType = $input['schedule_type'] ?? 'full';
-            $startTime = $input['start_time'] ?? '00:00:00';
-            $endTime = $input['end_time'] ?? '23:59:59';
-            $activeDays = $input['active_days'] ?? '0,1,2,3,4,5,6';
-            if (strpos($activeDays, '{') === 0) {
-                $test = json_decode($activeDays, true);
-                if (json_last_error() !== JSON_ERROR_NONE || !is_array($test)) {
-                    jsonResponse(false, null, 'Invalid structure for active_days');
-                }
+            $responsePayload = json_encode([
+                'content' => $content,
+                'image_url' => $input['image_url'] ?? '',
+                'attachment_id' => $input['attachment_id'] ?? '',
+                'buttons' => $input['buttons'] ?? [],
+                'ai_chatbot_id' => $input['ai_chatbot_id'] ?? null,
+                'schedule_type' => $input['schedule_type'] ?? 'full',
+                'start_time' => $input['start_time'] ?? '00:00:00',
+                'end_time' => $input['end_time'] ?? '23:59:59',
+                'active_days' => $input['active_days'] ?? '0,1,2,3,4,5,6',
+            ], JSON_UNESCAPED_UNICODE);
+
+            if ($id) {
+                $stmt = $pdo->prepare("
+                    UPDATE meta_automation_scenarios
+                    SET page_id = ?, name = ?, trigger_type = ?, keywords = ?, match_type = ?,
+                        response_type = ?, response_content = ?, is_active = ?, priority = ?, updated_at = NOW()
+                    WHERE id = ? AND workspace_id = ?
+                ");
+                $stmt->execute([
+                    $configId, $title, $type, $triggerText, $matchType,
+                    $messageType, $responsePayload, $status, $priority, $id, $workspace_id
+                ]);
+            } else {
+                $stmt = $pdo->prepare("
+                    INSERT INTO meta_automation_scenarios (
+                        workspace_id, page_id, name, trigger_type, keywords, match_type,
+                        response_type, response_content, is_active, priority, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                ");
+                $stmt->execute([
+                    $workspace_id, $configId, $title, $type, $triggerText, $matchType,
+                    $messageType, $responsePayload, $status, $priority
+                ]);
+                $id = $pdo->lastInsertId();
             }
-            $priorityOverride = $input['priority_override'] ?? 0;
-            $holidayStartAt = !empty($input['holiday_start_at']) ? $input['holiday_start_at'] : null;
-            $holidayEndAt = !empty($input['holiday_end_at']) ? $input['holiday_end_at'] : null;
-
-            $sql = "INSERT INTO meta_automation_scenarios (
-                    id, meta_config_id, type, trigger_text, match_type, title, content, 
-                    message_type, image_url, attachment_id, buttons, status, ai_chatbot_id,
-                    schedule_type, start_time, end_time, active_days, priority_override, 
-                    holiday_start_at, holiday_end_at, updated_at
-                ) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-                ON DUPLICATE KEY UPDATE 
-                    meta_config_id=VALUES(meta_config_id),
-                    type=VALUES(type), trigger_text=VALUES(trigger_text), match_type=VALUES(match_type),
-                    title=VALUES(title), content=VALUES(content), message_type=VALUES(message_type), 
-                    image_url=VALUES(image_url), attachment_id=VALUES(attachment_id), buttons=VALUES(buttons), status=VALUES(status), 
-                    ai_chatbot_id=VALUES(ai_chatbot_id), schedule_type=VALUES(schedule_type), 
-                    start_time=VALUES(start_time), end_time=VALUES(end_time), active_days=VALUES(active_days),
-                    priority_override=VALUES(priority_override), 
-                    holiday_start_at=VALUES(holiday_start_at), holiday_end_at=VALUES(holiday_end_at), updated_at=NOW()";
-
-            // If ID already exists, ensure it belongs to the same config (indirectly workspace)
-            if (!empty($input['id'])) {
-                $stmtOwn = $pdo->prepare("SELECT meta_config_id FROM meta_automation_scenarios WHERE id = ?");
-                $stmtOwn->execute([$input['id']]);
-                $oldConfigId = $stmtOwn->fetchColumn();
-                if ($oldConfigId && $oldConfigId !== $configId) {
-                    jsonResponse(false, null, 'Cannot update scenario belonging to another config');
-                }
-            }
-
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([
-                $id,
-                $configId,
-                $type,
-                $triggerText,
-                $matchType,
-                $title,
-                $content,
-                $messageType,
-                $imageUrl,
-                $attachmentId,
-                $buttons,
-                $status,
-                $aiChatbotId,
-                $scheduleType,
-                $startTime,
-                $endTime,
-                $activeDays,
-                $priorityOverride,
-                $holidayStartAt,
-                $holidayEndAt
-            ]);
 
             jsonResponse(true, ['id' => $id], 'Scenario saved successfully');
         }
 
     } elseif ($method === 'DELETE') {
-        // -------------------------------------------------------------
-        // DELETE SCENARIO
-        // -------------------------------------------------------------
         $id = $_GET['id'] ?? '';
         if (!$id) {
             jsonResponse(false, null, 'ID required');
         }
 
-        // [SECURITY] Validate Ownership
         $stmtDel = $pdo->prepare("
             SELECT s.id FROM meta_automation_scenarios s
-            
             WHERE s.id = ? AND s.workspace_id = ?
         ");
         $stmtDel->execute([$id, $workspace_id]);
@@ -212,8 +188,8 @@ try {
             jsonResponse(false, null, 'Scenario not found or unauthorized');
         }
 
-        $stmt = $pdo->prepare("DELETE FROM meta_automation_scenarios WHERE id = ?");
-        $stmt->execute([$id]);
+        $stmt = $pdo->prepare("DELETE FROM meta_automation_scenarios WHERE id = ? AND workspace_id = ?");
+        $stmt->execute([$id, $workspace_id]);
 
         jsonResponse(true, null, 'Deleted successfully');
     }
@@ -221,4 +197,3 @@ try {
 } catch (Exception $e) {
     jsonResponse(false, null, 'Lỗi hệ thống, vui lòng thử lại.');
 }
-?>

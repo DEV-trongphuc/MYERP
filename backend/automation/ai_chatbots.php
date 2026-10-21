@@ -166,7 +166,7 @@ $where
 GROUP BY ac.id
 ORDER BY ac.created_at DESC";
 
-    try { $stmt = $pdo->prepare($sql); $stmt->execute($params); } catch (\Throwable $eQ) { $sqlFb = str_replace(["COUNT(DISTINCT aoc.id) as queries_count", "LEFT JOIN ai_org_conversations aoc ON aoc.property_id = ac.id AND aoc.status != 'deleted'"], ["0 as queries_count", ""], $sql); $stmt = $pdo->prepare($sqlFb); $stmt->execute($params); }
+    try { $stmt = $pdo->prepare($sql); $stmt->execute($params); } catch (\Throwable $eQ) { $sqlFb = str_replace(["COUNT(DISTINCT aoc.id) as queries_count", "LEFT JOIN ai_org_conversations aoc ON aoc.chatbot_id = ac.id"], ["0 as queries_count", ""], $sql); $stmt = $pdo->prepare($sqlFb); $stmt->execute($params); }
     // executed above with fallback
     $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -336,7 +336,7 @@ FROM ai_chatbots ac
 LEFT JOIN ai_chatbot_categories acc ON ac.category_id = acc.id
 LEFT JOIN ai_chatbot_settings ads ON ads.property_id = ac.id
 LEFT JOIN domation_ai_training_docs atd ON atd.property_id = ac.id AND atd.source_type != 'folder'
-LEFT JOIN ai_org_conversations aoc ON aoc.property_id = ac.id AND aoc.status != 'deleted'
+LEFT JOIN ai_org_conversations aoc ON aoc.chatbot_id = ac.id
 WHERE 1=1";
 
     $params = [];
@@ -357,7 +357,7 @@ WHERE 1=1";
 
     $sql .= " GROUP BY ac.id ORDER BY ac.created_at DESC";
 
-    try { $stmt = $pdo->prepare($sql); $stmt->execute($params); } catch (\Throwable $eQ) { $sqlFb = str_replace(["COUNT(DISTINCT aoc.id) as queries_count", "LEFT JOIN ai_org_conversations aoc ON aoc.property_id = ac.id AND aoc.status != 'deleted'"], ["0 as queries_count", ""], $sql); $stmt = $pdo->prepare($sqlFb); $stmt->execute($params); }
+    try { $stmt = $pdo->prepare($sql); $stmt->execute($params); } catch (\Throwable $eQ) { $sqlFb = str_replace(["COUNT(DISTINCT aoc.id) as queries_count", "LEFT JOIN ai_org_conversations aoc ON aoc.chatbot_id = ac.id"], ["0 as queries_count", ""], $sql); $stmt = $pdo->prepare($sqlFb); $stmt->execute($params); }
     // executed above with fallback
 
     $chatbots = [];
@@ -497,7 +497,7 @@ function getChatbot($pdo, $id, $adminId)
         $params[] = $adminId;
     }
 
-    try { $stmt = $pdo->prepare($sql); $stmt->execute($params); } catch (\Throwable $eQ) { $sqlFb = str_replace(["COUNT(DISTINCT aoc.id) as queries_count", "LEFT JOIN ai_org_conversations aoc ON aoc.property_id = ac.id AND aoc.status != 'deleted'"], ["0 as queries_count", ""], $sql); $stmt = $pdo->prepare($sqlFb); $stmt->execute($params); }
+    try { $stmt = $pdo->prepare($sql); $stmt->execute($params); } catch (\Throwable $eQ) { $sqlFb = str_replace(["COUNT(DISTINCT aoc.id) as queries_count", "LEFT JOIN ai_org_conversations aoc ON aoc.chatbot_id = ac.id"], ["0 as queries_count", ""], $sql); $stmt = $pdo->prepare($sqlFb); $stmt->execute($params); }
     // executed above with fallback
 
     if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {

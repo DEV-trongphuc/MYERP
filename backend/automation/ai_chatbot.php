@@ -612,9 +612,9 @@ try {
             if ($source === 'web') {
                 // Web: Join web_visitors, subscribers, contacts, users
                 $selectFields = "$baseFields,
-                    COALESCE(NULLIF(s.first_name, ''), ct.name) as first_name,
+                    COALESCE(NULLIF(s.first_name, ''), ct.full_name) as first_name,
                     s.last_name,
-                    COALESCE(NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), ''), ct.name, 'Web Visitor') as visitor_name,
+                    COALESCE(NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), ''), ct.full_name, 'Web Visitor') as visitor_name,
                     s.avatar,
                     s.avatar as visitor_avatar,
                     COALESCE(NULLIF(s.phone_number, ''), NULLIF(s.phone, ''), NULLIF(v.phone, ''), ct.phone) as phone,
@@ -639,9 +639,9 @@ try {
             } elseif ($source === 'zalo') {
                 // Zalo: Join zalo_subscribers, subscribers, contacts, users
                 $selectFields = "$baseFields,
-                    COALESCE(NULLIF(s.first_name, ''), NULLIF(zs.display_name, ''), ct.name) as first_name,
+                    COALESCE(NULLIF(s.first_name, ''), NULLIF(zs.display_name, ''), ct.full_name) as first_name,
                     s.last_name,
-                    COALESCE(NULLIF(zs.display_name, ''), NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), ''), ct.name, 'Zalo User') as visitor_name,
+                    COALESCE(NULLIF(zs.display_name, ''), NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), ''), ct.full_name, 'Zalo User') as visitor_name,
                     COALESCE(zs.avatar, s.avatar) as avatar,
                     COALESCE(zs.avatar, s.avatar) as visitor_avatar,
                     COALESCE(NULLIF(zs.phone_number, ''), NULLIF(s.phone_number, ''), NULLIF(s.phone, ''), ct.phone) as phone,
@@ -668,9 +668,9 @@ try {
             } elseif ($source === 'meta') {
                 // Meta: Join meta_subscribers, subscribers, contacts, users
                 $selectFields = "$baseFields,
-                    COALESCE(NULLIF(s.first_name, ''), NULLIF(ms.first_name, ''), NULLIF(ms.name, ''), ct.name) as first_name,
+                    COALESCE(NULLIF(s.first_name, ''), NULLIF(ms.first_name, ''), NULLIF(ms.name, ''), ct.full_name) as first_name,
                     COALESCE(s.last_name, ms.last_name) as last_name,
-                    COALESCE(NULLIF(ms.name, ''), NULLIF(TRIM(CONCAT_WS(' ', ms.first_name, ms.last_name)), ''), NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), ''), ct.name, 'Facebook User') as visitor_name,
+                    COALESCE(NULLIF(ms.name, ''), NULLIF(TRIM(CONCAT_WS(' ', ms.first_name, ms.last_name)), ''), NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), ''), ct.full_name, 'Facebook User') as visitor_name,
                     COALESCE(ms.profile_pic, ms.avatar_url, s.avatar) as avatar,
                     COALESCE(ms.profile_pic, ms.avatar_url, s.avatar) as visitor_avatar,
                     COALESCE(NULLIF(ms.phone, ''), NULLIF(s.phone_number, ''), NULLIF(s.phone, ''), ct.phone) as phone,
@@ -697,9 +697,9 @@ try {
             } else {
                 // 'all': Join web_visitors, meta_subscribers, zalo_subscribers, subscribers, contacts, users
                 $selectFields = "$baseFields,
-                    COALESCE(NULLIF(s.first_name, ''), NULLIF(ms.first_name, ''), NULLIF(ms.name, ''), NULLIF(zs.display_name, ''), ct.name) as first_name,
+                    COALESCE(NULLIF(s.first_name, ''), NULLIF(ms.first_name, ''), NULLIF(ms.name, ''), NULLIF(zs.display_name, ''), ct.full_name) as first_name,
                     COALESCE(s.last_name, ms.last_name) as last_name,
-                    COALESCE(NULLIF(zs.display_name, ''), NULLIF(ms.name, ''), NULLIF(TRIM(CONCAT_WS(' ', ms.first_name, ms.last_name)), ''), NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), ''), ct.name, 'Visitor') as visitor_name,
+                    COALESCE(NULLIF(zs.display_name, ''), NULLIF(ms.name, ''), NULLIF(TRIM(CONCAT_WS(' ', ms.first_name, ms.last_name)), ''), NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), ''), ct.full_name, 'Visitor') as visitor_name,
                     COALESCE(s.avatar, ms.profile_pic, ms.avatar_url, zs.avatar) as avatar,
                     COALESCE(s.avatar, ms.profile_pic, ms.avatar_url, zs.avatar) as visitor_avatar,
                     COALESCE(NULLIF(s.phone_number, ''), NULLIF(s.phone, ''), NULLIF(v.phone, ''), NULLIF(zs.phone_number, ''), NULLIF(ms.phone, ''), ct.phone) as phone,
@@ -1195,9 +1195,9 @@ try {
 
                 if ($isZalo) {
                     $sql = "SELECT c.id, c.visitor_id, c.property_id, c.last_message, c.last_message_at, c.status,
-                        COALESCE(NULLIF(s.first_name, ''), NULLIF(zs.display_name, ''), ct.name) as first_name,
+                        COALESCE(NULLIF(s.first_name, ''), NULLIF(zs.display_name, ''), ct.full_name) as first_name,
                         s.last_name,
-                        COALESCE(NULLIF(zs.display_name, ''), NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), ''), ct.name, 'Zalo User') as visitor_name,
+                        COALESCE(NULLIF(zs.display_name, ''), NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), ''), ct.full_name, 'Zalo User') as visitor_name,
                         COALESCE(zs.avatar, s.avatar) as avatar,
                         COALESCE(zs.avatar, s.avatar) as visitor_avatar,
                         COALESCE(NULLIF(zs.phone_number, ''), NULLIF(s.phone_number, ''), NULLIF(s.phone, ''), ct.phone) as phone,
@@ -1224,9 +1224,9 @@ try {
                         LIMIT 1";
                 } elseif ($isMeta) {
                     $sql = "SELECT c.id, c.visitor_id, c.property_id, c.last_message, c.last_message_at, c.status,
-                        COALESCE(NULLIF(s.first_name, ''), NULLIF(ms.first_name, ''), NULLIF(ms.name, ''), ct.name) as first_name,
+                        COALESCE(NULLIF(s.first_name, ''), NULLIF(ms.first_name, ''), NULLIF(ms.name, ''), ct.full_name) as first_name,
                         COALESCE(s.last_name, ms.last_name) as last_name,
-                        COALESCE(NULLIF(ms.name, ''), NULLIF(TRIM(CONCAT_WS(' ', ms.first_name, ms.last_name)), ''), NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), ''), ct.name, 'Facebook User') as visitor_name,
+                        COALESCE(NULLIF(ms.name, ''), NULLIF(TRIM(CONCAT_WS(' ', ms.first_name, ms.last_name)), ''), NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), ''), ct.full_name, 'Facebook User') as visitor_name,
                         COALESCE(ms.profile_pic, ms.avatar_url, s.avatar) as avatar,
                         COALESCE(ms.profile_pic, ms.avatar_url, s.avatar) as visitor_avatar,
                         COALESCE(NULLIF(ms.phone, ''), NULLIF(s.phone_number, ''), NULLIF(s.phone, ''), ct.phone) as phone,
@@ -1253,9 +1253,9 @@ try {
                         LIMIT 1";
                 } else {
                     $sql = "SELECT c.id, c.visitor_id, c.property_id, c.last_message, c.last_message_at, c.status,
-                        COALESCE(NULLIF(s.first_name, ''), ct.name) as first_name,
+                        COALESCE(NULLIF(s.first_name, ''), ct.full_name) as first_name,
                         s.last_name,
-                        COALESCE(NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), ''), ct.name, 'Web Visitor') as visitor_name,
+                        COALESCE(NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), ''), ct.full_name, 'Web Visitor') as visitor_name,
                         s.avatar,
                         s.avatar as visitor_avatar,
                         COALESCE(NULLIF(s.phone_number, ''), NULLIF(s.phone, ''), NULLIF(v.phone, ''), ct.phone) as phone,
@@ -1679,7 +1679,7 @@ try {
             }
 
             if ($source === 'all' || $source === 'org') {
-                $q = "SELECT m.message as content, m.created_at, 'org' as platform, c.visitor_id 
+                $q = "SELECT m.message as content, m.created_at, 'org' as platform, CONCAT('org_user_', COALESCE(c.user_id, 0)) as visitor_id 
                       FROM ai_org_messages m 
                       JOIN ai_org_conversations c ON m.conversation_id = c.id 
                       WHERE c.$propCheck AND m.sender = 'visitor'";

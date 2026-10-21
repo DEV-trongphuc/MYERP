@@ -1866,30 +1866,21 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [showLiveAdPreviewModal, setShowLiveAdPreviewModal] = useState<boolean>(false);
 
   const hasMetaAttribution = useMemo(() => {
-    const src = String(formData?.source || contact?.source || '').toLowerCase();
-    const camp = String(formData?.utm_campaign || contact?.utm_campaign || '').toLowerCase();
-    const med = String(formData?.utm_medium || contact?.utm_medium || '').toLowerCase();
-    const tagStr = Array.isArray(formData?.tags)
-      ? formData.tags.join(' ').toLowerCase()
-      : Array.isArray(contact?.tags)
-      ? contact.tags.join(' ').toLowerCase()
-      : String(formData?.tags || contact?.tags || '').toLowerCase();
-    const cf = String(formData?.custom_fields || contact?.custom_fields || '');
-    return (
-      src.includes('facebook') ||
-      src.includes('meta') ||
-      src.includes('fb') ||
-      camp.includes('lead') ||
-      camp.includes('fb') ||
-      camp.includes('mba') ||
-      med.includes('cpc') ||
-      med.includes('feed') ||
-      tagStr.includes('meta') ||
-      tagStr.includes('fb') ||
-      cf.includes('meta') ||
-      Boolean(contact?.meta_psid || formData?.meta_psid)
+    return Boolean(
+      formData?.meta_lead_id ||
+      contact?.meta_lead_id ||
+      formData?.meta_campaign_name ||
+      contact?.meta_campaign_name ||
+      formData?.meta_ad_id ||
+      contact?.meta_ad_id ||
+      formData?.meta_ad_name ||
+      contact?.meta_ad_name ||
+      formData?.meta_form_name ||
+      contact?.meta_form_name ||
+      formData?.utm_campaign ||
+      contact?.utm_campaign
     );
-  }, [formData?.source, formData?.utm_campaign, formData?.utm_medium, formData?.tags, formData?.custom_fields, formData?.meta_psid, contact]);
+  }, [formData, contact]);
 
   // Program & Admission Date state & suggestions
   const [programSuggestions, setProgramSuggestions] = useState<string[]>([]);
@@ -10145,106 +10136,63 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 }}
                               >
                                 <Eye size={13} />
-                                <span>Xem Live Ad Preview</span>
+                                <span>Chi tiết Attribution</span>
                               </button>
                             </div>
                           </div>
 
                           <div
                             style={{
+                              padding: '10px 14px',
+                              borderRadius: 10,
+                              background: '#f8fafc',
+                              border: '1px solid #e2e8f0',
                               display: 'grid',
-                              gridTemplateColumns: isMobileOrTablet ? '1fr' : '1.2fr 0.8fr',
-                              gap: '12px',
-                              alignItems: 'center'
+                              gridTemplateColumns: isMobileOrTablet ? '1fr' : 'repeat(2, 1fr)',
+                              gap: '10px',
+                              fontSize: '0.76rem'
                             }}
                           >
-                            <div
-                              style={{
-                                padding: '10px 14px',
-                                borderRadius: 10,
-                                background: '#f8fafc',
-                                border: '1px solid #e2e8f0',
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(2, 1fr)',
-                                gap: '8px',
-                                fontSize: '0.76rem'
-                              }}
-                            >
-                              <div>
-                                <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Chiến dịch (Campaign):</span>
-                                <strong style={{ color: '#0f172a', fontWeight: 700 }}>
-                                  {formData.utm_campaign || contact?.utm_campaign || 'Lead_Form_6CT (MBA Tuyển Sinh)'}
-                                </strong>
-                              </div>
-                              <div>
-                                <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Nhóm QC (AdSet / Medium):</span>
-                                <strong style={{ color: '#0f172a', fontWeight: 700 }}>
-                                  {formData.utm_medium || contact?.utm_medium || 'AdSet_MBA_HN_HCM_28-45'}
-                                </strong>
-                              </div>
-                              <div>
-                                <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Mẫu Form / Nội dung (Ad):</span>
-                                <strong style={{ color: '#0f172a', fontWeight: 700 }}>
-                                  {formData.utm_content || contact?.utm_content || formData.form_name || contact?.form_name || 'Lead_Form_MBA_6CT'}
-                                </strong>
-                              </div>
-                              <div>
-                                <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Nguồn gốc &amp; Thiết bị:</span>
-                                <strong style={{ color: '#0f172a', fontWeight: 700 }}>
-                                  {formData.source || contact?.source || 'Facebook Ads'} • Mobile Feed
-                                </strong>
-                              </div>
-
-                              <div style={{ gridColumn: 'span 2', borderTop: '1px solid #f1f5f9', paddingTop: '6px', marginTop: '2px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <Avatar src={ownerAvatarUrl || formData.owner_avatar} name={formData.owner_name} size={22} />
-                                  <span style={{ color: '#64748b', fontSize: '0.73rem' }}>
-                                    Tư vấn viên tiếp nhận: <strong style={{ color: '#0f172a' }}>{formData.owner_name || 'Chưa gán'}</strong>
-                                  </span>
-                                </div>
-                                <span style={{ color: '#10b981', fontWeight: 700, fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                  <CheckCircle2 size={12} /> CAPI Verified
-                                </span>
-                              </div>
+                            <div>
+                              <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Chiến dịch (Campaign):</span>
+                              <strong style={{ color: '#0f172a', fontWeight: 700 }}>
+                                {formData.meta_campaign_name || contact?.meta_campaign_name || formData.utm_campaign || contact?.utm_campaign || 'Chưa ghi nhận'}
+                              </strong>
                             </div>
-
-                            <div
-                              onClick={() => setShowLiveAdPreviewModal(true)}
-                              style={{
-                                padding: '10px 12px',
-                                borderRadius: 10,
-                                background: '#f8fafc',
-                                border: '1px solid #e2e8f0',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '6px'
-                              }}
-                              title="Bấm để xem phóng to mẫu quảng cáo"
-                            >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#1877f2', color: '#fff', fontSize: '0.65rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                  f
-                                </div>
-                                <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#0f172a' }}>
-                                  Viện Đào Tạo Quản Trị MBA
-                                </span>
-                                <span style={{ fontSize: '0.66rem', color: '#64748b', marginLeft: 'auto' }}>
-                                  Được tài trợ
-                                </span>
-                              </div>
-                              <div style={{ fontSize: '0.74rem', color: '#334155', lineHeight: 1.3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                                Chương trình Thạc sĩ Quản trị Kinh doanh chuẩn quốc tế. Hỗ trợ học bổng 30% kỳ tuyển sinh cuối năm.
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px', borderRadius: 6, background: '#ffffff', border: '1px solid #e2e8f0', marginTop: '2px' }}>
-                                <span style={{ fontSize: '0.71rem', fontWeight: 700, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {formData.utm_campaign || 'MBA Quốc Tế — Khai Giảng Tháng 11'}
-                                </span>
-                                <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#ffffff', background: '#0f172a', padding: '2px 8px', borderRadius: 4, flexShrink: 0 }}>
-                                  Đăng ký
-                                </span>
-                              </div>
+                            <div>
+                              <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Nhóm QC (AdSet):</span>
+                              <strong style={{ color: '#0f172a', fontWeight: 700 }}>
+                                {formData.meta_adset_name || contact?.meta_adset_name || formData.utm_medium || contact?.utm_medium || 'Chưa ghi nhận'}
+                              </strong>
                             </div>
+                            <div>
+                              <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Bài Quảng Cáo (Ad Name):</span>
+                              <strong style={{ color: '#0f172a', fontWeight: 700 }}>
+                                {formData.meta_ad_name || contact?.meta_ad_name || formData.utm_content || contact?.utm_content || 'Chưa ghi nhận'}
+                              </strong>
+                            </div>
+                            <div>
+                              <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Biểu mẫu Instant Form &amp; Nền tảng:</span>
+                              <strong style={{ color: '#0f172a', fontWeight: 700 }}>
+                                {formData.meta_form_name || contact?.meta_form_name || 'Form Meta'} • {String(formData.meta_platform || contact?.meta_platform || 'fb').toUpperCase()}
+                              </strong>
+                            </div>
+                            {(formData.meta_degree || contact?.meta_degree) && (
+                              <div>
+                                <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Bằng cấp cao nhất khai báo:</span>
+                                <strong style={{ color: '#0f172a', fontWeight: 700 }}>
+                                  {formData.meta_degree || contact?.meta_degree}
+                                </strong>
+                              </div>
+                            )}
+                            {(formData.meta_consultation_time || contact?.meta_consultation_time) && (
+                              <div>
+                                <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Khung giờ hẹn tư vấn 1-1:</span>
+                                <strong style={{ color: '#BD1D2D', fontWeight: 700 }}>
+                                  {formData.meta_consultation_time || contact?.meta_consultation_time}
+                                </strong>
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
@@ -16364,58 +16312,53 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                 </button>
               </div>
 
-              <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <Avatar
-                    src="https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=100&auto=format&fit=crop&q=80"
-                    name="Viện Đào Tạo Quản Trị MBA"
-                    size={38}
-                  />
+              <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.8rem' }}>
+                <div style={{ padding: '10px 12px', borderRadius: 10, background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <div>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>
-                      Viện Đào Tạo Quản Trị MBA
-                    </div>
-                    <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
-                      Được tài trợ • 🌐 Facebook Mobile Feed
-                    </div>
+                    <span style={{ fontSize: '0.7rem', color: '#64748b', display: 'block' }}>Chiến dịch (Campaign):</span>
+                    <strong style={{ color: '#0f172a' }}>{formData.meta_campaign_name || contact?.meta_campaign_name || formData.utm_campaign || contact?.utm_campaign || 'Chưa ghi nhận'}</strong>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.7rem', color: '#64748b', display: 'block' }}>Nhóm Quảng Cáo (AdSet):</span>
+                    <strong style={{ color: '#0f172a' }}>{formData.meta_adset_name || contact?.meta_adset_name || formData.utm_medium || contact?.utm_medium || 'Chưa ghi nhận'}</strong>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.7rem', color: '#64748b', display: 'block' }}>Bài Quảng Cáo (Ad Name &amp; ID):</span>
+                    <strong style={{ color: '#0f172a' }}>
+                      {formData.meta_ad_name || contact?.meta_ad_name || 'Chưa ghi nhận'}{' '}
+                      {(formData.meta_ad_id || contact?.meta_ad_id) ? `(${formData.meta_ad_id || contact?.meta_ad_id})` : ''}
+                    </strong>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.7rem', color: '#64748b', display: 'block' }}>Biểu mẫu Instant Form &amp; Lead ID:</span>
+                    <strong style={{ color: '#BD1D2D' }}>
+                      {formData.meta_form_name || contact?.meta_form_name || 'Form Meta'}{' '}
+                      {(formData.meta_lead_id || contact?.meta_lead_id) ? `• ${formData.meta_lead_id || contact?.meta_lead_id}` : ''}
+                    </strong>
                   </div>
                 </div>
-
-                <div style={{ fontSize: '0.8rem', color: '#0f172a', lineHeight: 1.45 }}>
-                  Chương trình Thạc sĩ Quản trị Kinh doanh chuẩn quốc tế dành cho Nhà quản lý. Hỗ trợ 30% học phí kỳ tuyển sinh cuối năm. Đăng ký nhận lịch tư vấn 1-1 ngay hôm nay!
-                </div>
-
-                <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid #e2e8f0', background: '#f1f5f9' }}>
-                  <img
-                    src="https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=600&auto=format&fit=crop&q=80"
-                    alt="Creative Preview"
-                    style={{ width: '100%', height: '220px', objectFit: 'cover', display: 'block' }}
-                  />
-                  <div style={{ padding: '10px 14px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                    <div>
-                      <span style={{ fontSize: '0.67rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                        myerp.edu.vn/tuyen-sinh-mba
-                      </span>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a' }}>
-                        {formData.utm_campaign || 'MBA Quốc Tế — Bằng Cấp Toàn Cầu'}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      style={{
-                        padding: '6px 14px',
-                        borderRadius: 6,
-                        border: 'none',
-                        background: '#0f172a',
-                        color: '#ffffff',
-                        fontSize: '0.78rem',
-                        fontWeight: 700
-                      }}
-                    >
-                      Đăng ký ngay
-                    </button>
-                  </div>
-                </div>
+                {(formData.meta_ad_id || contact?.meta_ad_id) && (
+                  <a
+                    href={`https://www.facebook.com/ads/library/?id=${encodeURIComponent(String(formData.meta_ad_id || contact?.meta_ad_id))}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      padding: '8px 14px',
+                      borderRadius: 8,
+                      background: '#0f172a',
+                      color: '#ffffff',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      textDecoration: 'none'
+                    }}
+                  >
+                    <span>Mở xem trên Meta Ad Library</span>
+                  </a>
+                )}
               </div>
 
               <div style={{ padding: '10px 16px', borderTop: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', justifyContent: 'flex-end' }}>
