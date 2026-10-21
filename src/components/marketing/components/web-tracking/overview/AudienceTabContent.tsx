@@ -8,12 +8,12 @@ interface AudienceTabContentProps {
 }
 
 const COLORS = [
-    '#3b82f6', // Blue-500
-    '#10b981', // Emerald-500
-    '#6366f1', // Indigo-500
-    '#f43f5e', // Rose-500
-    '#fbbf24', // amber-600
-    '#8b5cf6'  // Violet-500
+    '#C6333D', // Executive Red
+    '#0f172a', // Deep Slate
+    '#334155', // Body Slate
+    '#64748b', // Muted Slate
+    '#94a3b8', // Light Slate
+    '#cbd5e1'  // Border Slate
 ];
 
 const AudienceTabContent: React.FC<AudienceTabContentProps> = ({ stats }) => {

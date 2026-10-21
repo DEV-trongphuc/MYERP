@@ -103,7 +103,22 @@ export function MktSegmented<T extends string>({ value, onChange, options }: {
     options: { id: T; label?: string; icon?: LucideIcon; title?: string }[];
 }) {
     return (
-        <div className="inline-flex items-center h-9 p-0.5 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg)]">
+        <div
+            className="mobile-horizontal-strip touch-scroll-x"
+            style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
+                padding: '3px',
+                borderRadius: '12px',
+                background: '#f1f5f9',
+                border: '1px solid #e2e8f0',
+                maxWidth: '100%',
+                overflowX: 'auto',
+                scrollbarWidth: 'none',
+                WebkitOverflowScrolling: 'touch',
+            }}
+        >
             {options.map((o) => {
                 const active = o.id === value;
                 const Icon = o.icon;
@@ -113,11 +128,26 @@ export function MktSegmented<T extends string>({ value, onChange, options }: {
                         type="button"
                         title={o.title || o.label}
                         onClick={() => onChange(o.id)}
-                        className={`h-full inline-flex items-center gap-1.5 px-2.5 rounded-[calc(var(--radius-md)-2px)] text-[13px] font-semibold transition-colors ${active
-                            ? 'bg-[var(--color-surface)] text-[var(--color-primary)] shadow-[var(--shadow-xs)]'
-                            : 'text-[var(--color-text-light)] hover:text-[var(--color-text)]'}`}
+                        style={{
+                            flexShrink: 0,
+                            whiteSpace: 'nowrap',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '6px 12px',
+                            borderRadius: '9px',
+                            fontSize: '12.5px',
+                            fontWeight: active ? 700 : 600,
+                            background: active ? '#ffffff' : 'transparent',
+                            color: active ? '#C6333D' : '#64748b',
+                            border: 'none',
+                            boxShadow: active ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                        }}
+                        className="select-none outline-none hover:text-[#0f172a]"
                     >
-                        {Icon && <Icon className="w-4 h-4" />}
+                        {Icon && <Icon style={{ width: 14, height: 14, color: active ? '#C6333D' : '#64748b' }} />}
                         {o.label && <span>{o.label}</span>}
                     </button>
                 );

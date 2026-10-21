@@ -1315,10 +1315,37 @@ switch ($resource) {
         elseif ($resourceId === 'approvals' && $subResource === 'following' && $method === 'GET') $ctrl->getFollowingRequests($auth);
         elseif ($resourceId === 'approvals' && $subResource === 'all' && $method === 'GET') $ctrl->getAllApprovals($auth);
         elseif ($resourceId === 'approvals' && $subResource === 'update-related-users' && in_array($method, ['POST', 'PUT', 'PATCH'], true)) $ctrl->updateRelatedUsers($auth);
+        elseif ($resourceId === 'accounting-az') {
+            if ($subResource === 'overview' && $method === 'GET') $ctrl->getAccountingAzOverview($auth);
+            elseif (in_array($subResource, ['simulate-payroll', 'simulator'], true) && in_array($method, ['POST', 'GET'], true)) $ctrl->simulatePayroll($auth);
+            elseif (in_array($subResource, ['general-journal', 'journal'], true) && $method === 'GET') $ctrl->getGeneralJournal($auth);
+            elseif (in_array($subResource, ['tax-declaration', 'tax'], true) && $method === 'GET') $ctrl->getTaxDeclaration($auth);
+            elseif (in_array($subResource, ['generate-htkk-xml', 'htkk-xml'], true) && $method === 'POST') $ctrl->generateHtkkXml($auth);
+            elseif (in_array($subResource, ['labor-book', 'soqlld'], true) && $method === 'GET') $ctrl->getLaborBook($auth);
+            elseif (in_array($subResource, ['calculate-benefits', 'benefits'], true) && in_array($method, ['POST', 'GET'], true)) $ctrl->calculateBenefits($auth);
+            elseif (in_array($subResource, ['summary', 'financial-summary'], true) && $method === 'GET') {
+                $fCtrl = new FinanceController($db);
+                $fCtrl->getAccountingFinancialSummary($auth);
+            }
+            else respond(404, null, 'Route kế toán & nhân sự A-Z không tồn tại', false);
+        }
         else respond(404, null, 'Route không tồn tại', false);
         break;
 
     // TEAMS
+    // FINANCE GENERAL & ACCOUNTING A-Z
+    case 'finance':
+        $auth = requireAuth();
+        $ctrl = new FinanceController($db);
+        if ($resourceId === 'accounting-az' && in_array($subResource, ['summary', 'financial-summary', 'pnl'], true) && $method === 'GET') {
+            $ctrl->getAccountingFinancialSummary($auth);
+        } elseif ($resourceId === 'summary' && $method === 'GET') {
+            $ctrl->summary($auth);
+        } else {
+            respond(404, null, 'Route finance không tồn tại', false);
+        }
+        break;
+
     case 'teams':
         $auth = requireAuth();
         $ctrl = new TeamController($db);
@@ -1720,6 +1747,12 @@ switch ($resource) {
         elseif ($resourceId && $subResource === 'comments' && isset($segments[3]) && $method === 'DELETE') $ctrl->deleteComment($auth, (int)$segments[3]);
         elseif ($resourceId === 'comments' && $subResource && $method === 'DELETE') $ctrl->deleteComment($auth, (int)$subResource);
         elseif ($resourceId && $subResource === 'stats' && $method === 'GET') $ctrl->getStats($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'duplicate' && $method === 'POST') $ctrl->duplicateProject($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'archive' && in_array($method, ['POST', 'PUT'], true)) $ctrl->archiveProject($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'unarchive' && in_array($method, ['POST', 'PUT'], true)) $ctrl->unarchiveProject($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'tasks' && isset($segments[3]) && ($segments[4] ?? '') === 'duplicate' && $method === 'POST') $ctrl->duplicateTask($auth, (int)$segments[3]);
+        elseif ($resourceId && $subResource === 'tasks' && $method === 'GET') $ctrl->listProjectTasks($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'tasks' && $method === 'POST') $ctrl->createProjectTask($auth, (int)$resourceId);
         elseif (!$resourceId && $method === 'GET')    $ctrl->index($auth);
         elseif (!$resourceId && $method === 'POST')   $ctrl->store($auth);
         elseif ($resourceId  && $method === 'GET')    $ctrl->show($auth, (int)$resourceId);
@@ -1933,14 +1966,26 @@ switch ($resource) {
 
     // TASKS (Standalone REST endpoints)
     case 'tasks':
+    case 'project-tasks':
         $auth = requireAuth();
         $pCtrl = new ProjectController($db);
         if (!$resourceId && $method === 'GET') $pCtrl->listAllTasks($auth);
         elseif (!$resourceId && $method === 'POST') $pCtrl->createStandaloneTask($auth);
+        elseif ($resourceId && $subResource === 'duplicate' && $method === 'POST') $pCtrl->duplicateTask($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'archive' && in_array($method, ['POST', 'PUT'], true)) $pCtrl->archiveTask($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'unarchive' && in_array($method, ['POST', 'PUT'], true)) $pCtrl->unarchiveTask($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'toggle-hide' && $method === 'POST') $pCtrl->toggleTaskHide($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'hide-status' && $method === 'GET') $pCtrl->getTaskHideStatus($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'attachments' && $method === 'GET') $pCtrl->getTaskAttachments($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'attachments' && $method === 'POST') $pCtrl->uploadTaskAttachment($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'attachments' && isset($segments[3]) && $method === 'DELETE') $pCtrl->deleteTaskAttachment($auth, (int)$resourceId, (int)$segments[3]);
         elseif ($resourceId && $subResource === 'status' && in_array($method, ['PUT', 'PATCH', 'POST'], true)) $pCtrl->updateTaskStatus($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'comments' && $method === 'GET') $pCtrl->getTaskComments($auth, (int)$resourceId);
         elseif ($resourceId && $subResource === 'comments' && $method === 'POST') $pCtrl->addTaskComment($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'comments' && isset($segments[3]) && $method === 'DELETE') $pCtrl->deleteTaskComment($auth, (int)$resourceId, (int)$segments[3]);
+        elseif ($resourceId === 'comments' && $subResource && $method === 'DELETE') $pCtrl->deleteTaskComment($auth, 0, (int)$subResource);
         elseif ($resourceId && $method === 'GET') $pCtrl->getTaskDetail($auth, (int)$resourceId);
-        elseif ($resourceId && $method === 'PUT') $pCtrl->updateTaskDetail($auth, (int)$resourceId);
+        elseif ($resourceId && in_array($method, ['PUT', 'PATCH'], true)) $pCtrl->updateTaskDetail($auth, (int)$resourceId);
         elseif ($resourceId && $method === 'DELETE') $pCtrl->deleteTaskDetail($auth, (int)$resourceId);
         else respond(404, null, 'Route không tồn tại', false);
         break;

@@ -398,17 +398,28 @@ const TABS = [
   { id: 'tickets', label: 'Helpdesk', icon: <LifeBuoy size={16} /> },
 ];
 
-const renderColoredTabIcon = (tabId: string, _IconComponent?: any, tabLabel?: string) => {
+const renderTabIcon = (tabId: string, iconElement: React.ReactNode, isActive: boolean) => {
   return (
     <div style={{
-      width: '28px',
-      height: '28px',
+      width: '30px',
+      height: '30px',
+      borderRadius: '8px',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      flexShrink: 0
+      flexShrink: 0,
+      background: isActive ? '#C6333D' : '#f8fafc',
+      border: isActive ? 'none' : '1px solid #e2e8f0',
+      color: isActive ? '#ffffff' : '#64748b',
+      transition: 'all 0.15s ease'
     }}>
-      <AppIcon name={tabLabel || tabId} size={28} />
+      {React.isValidElement(iconElement)
+        ? React.cloneElement(iconElement as React.ReactElement<any>, {
+            size: 15,
+            color: isActive ? '#ffffff' : '#64748b',
+            strokeWidth: 2.2
+          })
+        : iconElement}
     </div>
   );
 };
@@ -5209,8 +5220,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         className="connected-profiles-bar"
         style={{
           padding: '8px 16px',
-          background: '#f1f5f9',
-          borderBottom: '1px solid var(--color-border)',
+          background: '#f8fafc',
+          borderBottom: '1px solid #e2e8f0',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -5265,29 +5276,27 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
-                  padding: isCurrent ? '4px 12px' : '4px 10px',
+                  padding: '5px 12px',
                   borderRadius: '20px',
                   fontSize: '0.75rem',
                   fontWeight: isCurrent ? 800 : 600,
                   cursor: isCurrent ? 'default' : 'pointer',
-                  border: isCurrent ? `2px solid ${stageColor}` : '1px solid var(--color-border)',
-                  background: isCurrent ? `${stageColor}18` : '#ffffff',
-                  color: isCurrent ? stageColor : 'var(--color-text)',
-                  boxShadow: isCurrent ? `0 2px 8px ${stageColor}33` : '0 1px 2px rgba(0,0,0,0.03)',
+                  border: 'none',
+                  background: isCurrent ? '#fff1f2' : '#f1f5f9',
+                  color: isCurrent ? '#C6333D' : '#0f172a',
+                  boxShadow: isCurrent ? '0 1px 3px rgba(198, 51, 61, 0.12)' : 'none',
                   transition: 'all 0.15s ease',
                   whiteSpace: 'nowrap',
                   flexShrink: 0
                 }}
                 onMouseEnter={(e) => {
                   if (!isCurrent) {
-                    e.currentTarget.style.borderColor = stageColor;
-                    e.currentTarget.style.background = '#ffffff';
+                    e.currentTarget.style.background = '#e2e8f0';
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (!isCurrent) {
-                    e.currentTarget.style.borderColor = 'var(--color-border)';
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.9)';
+                    e.currentTarget.style.background = '#f1f5f9';
                   }
                 }}
                 title={`Hồ sơ #${p.id} - ${programTitle}\nTrạng thái: ${p.stage_name || p.pipeline_status || 'Giai đoạn 1'}\nPhụ trách: ${p.owner_name || 'Chưa gán'}`}
@@ -5296,16 +5305,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   width: '7px',
                   height: '7px',
                   borderRadius: '50%',
-                  background: stageColor,
+                  background: isCurrent ? '#C6333D' : '#64748b',
                   flexShrink: 0
                 }} />
-                <span style={{ fontWeight: 800 }}>{programTitle}</span>
+                <span style={{ fontWeight: isCurrent ? 800 : 600 }}>{programTitle}</span>
                 <span style={{
                   fontSize: '0.65rem',
                   padding: '1px 6px',
                   borderRadius: '8px',
-                  background: isNewLeadProfile ? '#dc2626' : `${stageColor}18`,
-                  color: isNewLeadProfile ? '#ffffff' : stageColor,
+                  background: isCurrent ? '#fee2e2' : '#e2e8f0',
+                  color: isCurrent ? '#C6333D' : '#475569',
                   fontWeight: 700,
                 }}>
                   {p.stage_name || p.pipeline_status || 'Giai đoạn 1'}
@@ -7443,7 +7452,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       {/* Main Stepper Row with Out-of-Pipeline Action Buttons on Left & 14 Stages */}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', background: 'var(--color-surface)', overflow: 'hidden', width: '100%' }}>
         {/* Quick Out-of-Pipeline Action Buttons on LEFT: Nurture & Lost */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0, paddingLeft: isMobileOrTablet ? '0.75rem' : '1.25rem', paddingRight: '10px', borderRight: '1px solid var(--color-border-light)', zIndex: 11, background: 'var(--color-surface)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0, paddingLeft: isMobileOrTablet ? '0.75rem' : '1.25rem', paddingRight: '10px', borderRight: '1px solid #e2e8f0', zIndex: 11, background: '#ffffff' }}>
           <button
             type="button"
             onClick={() => handleStageTransition(currentActiveStage?.id || 'new_lead', currentActiveStage?.name || 'Giai đoạn hiện tại', 'nurture')}
@@ -7452,17 +7461,17 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               height: '32px',
               padding: '0 12px',
               borderRadius: '10px',
-              border: `1.5px ${isCurrentlyNurture ? 'solid' : 'dashed'} #f59e0b`,
-              background: isCurrentlyNurture ? 'rgba(245, 158, 11, 0.2)' : 'rgba(245, 158, 11, 0.08)',
-              color: '#d97706',
-              fontWeight: 800,
+              border: isCurrentlyNurture ? 'none' : '1px solid #e2e8f0',
+              background: isCurrentlyNurture ? '#fff1f2' : '#f8fafc',
+              color: isCurrentlyNurture ? '#C6333D' : '#475569',
+              fontWeight: 700,
               fontSize: '0.75rem',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: '5px',
               whiteSpace: 'nowrap',
-              transition: 'all 0.2s'
+              transition: 'all 0.15s ease'
             }}
           >
             <Clock size={13} /> Nurture
@@ -7476,17 +7485,17 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               height: '32px',
               padding: '0 12px',
               borderRadius: '10px',
-              border: `1.5px ${isCurrentlyLost ? 'solid' : 'dashed'} #ef4444`,
-              background: isCurrentlyLost ? 'rgba(239, 68, 68, 0.2)' : 'rgba(239, 68, 68, 0.08)',
-              color: '#dc2626',
-              fontWeight: 800,
+              border: isCurrentlyLost ? 'none' : '1px solid #e2e8f0',
+              background: isCurrentlyLost ? '#fff1f2' : '#f8fafc',
+              color: isCurrentlyLost ? '#C6333D' : '#475569',
+              fontWeight: 700,
               fontSize: '0.75rem',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: '5px',
               whiteSpace: 'nowrap',
-              transition: 'all 0.2s'
+              transition: 'all 0.15s ease'
             }}
           >
             <Ban size={13} /> Lost
@@ -7534,17 +7543,17 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                 >
                   <div style={{
                     position: 'relative', zIndex: 2, flex: 1,
-                    background: isActiveNewLead ? '#dc2626' : (isCurrent ? 'var(--color-primary)' : (isPrecedingOfHocVien ? '#f1f5f9' : (isBackward ? 'rgba(163, 20, 34, 0.03)' : 'var(--color-surface)'))),
-                    color: (isActiveNewLead || isCurrent) ? '#ffffff' : (isPrecedingOfHocVien ? '#94a3b8' : (isBackward ? 'rgba(163, 20, 34, 0.65)' : 'var(--color-text-muted)')),
-                    border: isActiveNewLead ? '2px solid #b91c1c' : (isCurrent ? '2px solid var(--color-primary)' : (isPrecedingOfHocVien ? '1px solid #cbd5e1' : (isBackward ? '1px solid rgba(163, 20, 34, 0.25)' : '1px solid var(--color-border-light)'))),
-                    padding: '4px 10px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 800,
+                    background: isCurrent ? '#fff1f2' : (isBackward ? '#f8fafc' : '#ffffff'),
+                    color: isCurrent ? '#C6333D' : (isBackward ? '#334155' : '#64748b'),
+                    border: isCurrent ? 'none' : '1px solid #e2e8f0',
+                    padding: '5px 12px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: isCurrent ? 800 : 600,
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
                     whiteSpace: 'nowrap',
-                    boxShadow: isActiveNewLead ? '0 4px 12px rgba(220, 38, 38, 0.35)' : (isCurrent ? '0 4px 12px rgba(189, 29, 45, 0.2)' : 'none'),
-                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    boxShadow: isCurrent ? '0 1px 3px rgba(198, 51, 61, 0.12)' : 'none',
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                     pointerEvents: isPrecedingOfHocVien ? 'none' : 'auto'
                   }}>
-                    {isCurrent && <UserCheck size={12} />}
+                    {isCurrent && <UserCheck size={13} color="#C6333D" />}
                     {st.name}
                   </div>
                 </div>
@@ -9400,7 +9409,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       {group.title}
                                     </div>
                                     <div className="os-list-group">
-                                      {allowedTabs.map(tab => (
+                                      {allowedTabs.map(tab => {
+                                        const isActive = activeTab === tab.id;
+                                        return (
                                         <button
                                           key={tab.id}
                                           className="os-list-item"
@@ -9411,10 +9422,14 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                               fetchContactDocs(effectiveContactId);
                                             }
                                           }}
+                                          style={{
+                                            background: isActive ? '#fff1f2' : 'transparent',
+                                            borderRadius: '10px'
+                                          }}
                                         >
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                            {renderColoredTabIcon(tab.id, tab.icon, tab.label)}
-                                            <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>{tab.label}</span>
+                                            {renderTabIcon(tab.id, tab.icon, isActive)}
+                                            <span style={{ fontSize: '0.875rem', fontWeight: isActive ? 700 : 600, color: isActive ? '#0f172a' : '#475569' }}>{tab.label}</span>
                                           </div>
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                             {tab.id === 'journey360' && journeyBadgeCount > 0 && (
@@ -9468,7 +9483,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                             <ChevronRight size={16} style={{ color: 'var(--color-text-light)' }} />
                                           </div>
                                         </button>
-                                      ))}
+                                      );
+                                    })}
                                     </div>
                                   </div>
                                 );
@@ -9626,21 +9642,38 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                     }}>
                                       {group.title}
                                     </div>
-                                    {allowedTabs.map(tab => (
+                                    {allowedTabs.map(tab => {
+                                      const isActive = activeTab === tab.id;
+                                      return (
                                       <button
                                         key={tab.id}
-                                        className={`${styles.sidebarTabBtn} ${activeTab === tab.id ? styles.sidebarTabActive : ''}`}
+                                        className={`${styles.sidebarTabBtn} ${isActive ? styles.sidebarTabActive : ''}`}
                                         onClick={() => {
                                           setActiveTab(tab.id);
                                           if (tab.id === 'docs' && effectiveContactId) {
                                             fetchContactDocs(effectiveContactId);
                                           }
                                         }}
-                                        style={{ padding: '11px 0.875rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '8px' }}
+                                        style={{
+                                          padding: '8px 12px',
+                                          borderRadius: '10px',
+                                          fontSize: '0.85rem',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'space-between',
+                                          width: '100%',
+                                          gap: '8px',
+                                          background: isActive ? '#fff1f2' : 'transparent',
+                                          color: isActive ? '#0f172a' : '#475569',
+                                          fontWeight: isActive ? 700 : 600,
+                                          border: 'none',
+                                          cursor: 'pointer',
+                                          transition: 'all 0.15s ease'
+                                        }}
                                       >
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                          {renderColoredTabIcon(tab.id, tab.icon, tab.label)}
-                                          <span>{tab.label}</span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                          {renderTabIcon(tab.id, tab.icon, isActive)}
+                                          <span style={{ fontSize: '0.85rem' }}>{tab.label}</span>
                                         </div>
                                         {tab.id === 'journey360' && journeyBadgeCount > 0 && (
                                           <span style={{
@@ -9713,7 +9746,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                           </span>
                                         )}
                                       </button>
-                                    ))}
+                                    );
+                                  })}
 
                                   </div>
                                 );
@@ -9913,126 +9947,111 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         />
                       )}
 
-                      {/* Quick Stats Dashboard */}
+                      {/* Quick Stats Dashboard — Executive Brand Red & Slate */}
                       <div style={{ display: 'grid', gridTemplateColumns: isMobileOrTablet ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '0.75rem' }}>
                         <div className="card-panel stat-card hover-lift" style={{ 
                           padding: isMobileOrTablet ? '0.75rem 0.875rem' : '1rem 1.125rem', 
                           display: 'flex', 
                           flexDirection: 'column', 
-                          borderRadius: '14px', 
-                          background: 'var(--color-surface)',
-                          border: '1px solid var(--color-border-light)',
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                          borderRadius: '16px', 
+                          background: 'var(--color-surface, #ffffff)',
+                          border: '1px solid var(--color-border-light, #e2e8f0)',
+                          boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
                           position: 'relative',
                           overflow: 'hidden',
                           transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
                         }}>
-                          <div className="decor-svg" style={{ color: '#3b82f6' }}>
-                            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                              <path d="M20 70 L 45 45 L 60 60 L 85 30 M 85 30 H 65 M 85 30 V 50" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" opacity="0.3" />
-                            </svg>
-                          </div>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#3b82f6', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>DỰ KIẾN DOANH THU</span>
-                            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted, #64748b)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>DỰ KIẾN DOANH THU</span>
+                            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                               <TrendingUp size={16} />
                             </div>
                           </div>
-                          <span style={{ fontSize: isMobileOrTablet ? '0.8rem' : '0.95rem', fontWeight: 800, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{FMT(formData.expected_revenue || 0)}</span>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><span style={{ color: '#3b82f6', fontWeight: 700 }}>{formData.win_probability || 0}%</span> xác suất</span>
+                          <span style={{ fontSize: isMobileOrTablet ? '0.95rem' : '1.2rem', fontWeight: 800, color: 'var(--color-text, #0f172a)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{FMT(formData.expected_revenue || 0)}</span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted, #64748b)', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><span style={{ color: 'var(--color-primary, #C6333D)', fontWeight: 700 }}>{formData.win_probability || 0}%</span> xác suất</span>
                         </div>
 
                         <div className="card-panel stat-card hover-lift" style={{ 
                           padding: isMobileOrTablet ? '0.75rem 0.875rem' : '1rem 1.125rem', 
                           display: 'flex', 
                           flexDirection: 'column', 
-                          borderRadius: '14px', 
-                          background: 'var(--color-surface)',
-                          border: '1px solid var(--color-border-light)',
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                          borderRadius: '16px', 
+                          background: 'var(--color-surface, #ffffff)',
+                          border: '1px solid var(--color-border-light, #e2e8f0)',
+                          boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
                           position: 'relative',
                           overflow: 'hidden',
                           transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
                         }}>
-                          <div className="decor-svg" style={{ color: '#10b981' }}>
-                            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                              <circle cx="50" cy="50" r="35" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-                              <path d="M30 50 L 45 65 L 75 35" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                          </div>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>DOANH THU THỰC TẾ</span>
-                            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-primary, #C6333D)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>DOANH THU THỰC TẾ</span>
+                            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(198, 51, 61, 0.08)', color: 'var(--color-primary, #C6333D)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                               <CheckCircle2 size={16} />
                             </div>
                           </div>
-                          <span style={{ fontSize: isMobileOrTablet ? '0.8rem' : '0.95rem', fontWeight: 800, color: '#10b981', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{FMT(formData.actual_revenue || 0)}</span>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><span style={{ color: '#10b981', fontWeight: 700 }}>{deals.reduce((sum, d) => sum + (d.milestones?.length || 0), 0)}</span> hóa đơn</span>
+                          <span style={{ fontSize: isMobileOrTablet ? '0.95rem' : '1.2rem', fontWeight: 800, color: 'var(--color-primary, #C6333D)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{FMT(formData.actual_revenue || 0)}</span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted, #64748b)', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><span style={{ color: 'var(--color-primary, #C6333D)', fontWeight: 700 }}>{deals.reduce((sum, d) => sum + (d.milestones?.length || 0), 0)}</span> hóa đơn</span>
                         </div>
 
                         <div className="card-panel stat-card hover-lift" style={{ 
                           padding: isMobileOrTablet ? '0.75rem 0.875rem' : '1rem 1.125rem', 
                           display: 'flex', 
                           flexDirection: 'column', 
-                          borderRadius: '14px', 
-                          background: 'var(--color-surface)',
-                          border: '1px solid var(--color-border-light)',
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                          borderRadius: '16px', 
+                          background: 'var(--color-surface, #ffffff)',
+                          border: '1px solid var(--color-border-light, #e2e8f0)',
+                          boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
                           position: 'relative',
                           overflow: 'hidden',
                           transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
                         }}>
-                          <div className="decor-svg" style={{ color: '#f59e0b' }}>
-                            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                              <circle cx="50" cy="50" r="35" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-                              <path d="M50 30 V 50 H 65" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                            </svg>
-                          </div>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>CHI TIÊU</span>
-                            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted, #64748b)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>CHI TIÊU</span>
+                            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                               <Wallet size={16} />
                             </div>
                           </div>
-                          <span style={{ fontSize: isMobileOrTablet ? '0.8rem' : '0.95rem', fontWeight: 800, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{FMT(formData.total_spent || 0)}</span>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><span style={{ color: '#f59e0b', fontWeight: 700 }}>{formData.expense_count || 0}</span> khoản chi</span>
+                          <span style={{ fontSize: isMobileOrTablet ? '0.95rem' : '1.2rem', fontWeight: 800, color: 'var(--color-text, #0f172a)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{FMT(formData.total_spent || 0)}</span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted, #64748b)', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><span style={{ color: '#0f172a', fontWeight: 700 }}>{formData.expense_count || 0}</span> khoản chi</span>
                         </div>
 
                         <div className="card-panel stat-card hover-lift" style={{ 
                           padding: isMobileOrTablet ? '0.75rem 0.875rem' : '1rem 1.125rem', 
                           display: 'flex', 
                           flexDirection: 'column', 
-                          borderRadius: '14px', 
-                          background: 'var(--color-surface)',
-                          border: '1px solid var(--color-border-light)',
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                          borderRadius: '16px', 
+                          background: 'var(--color-surface, #ffffff)',
+                          border: '1px solid var(--color-border-light, #e2e8f0)',
+                          boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
                           position: 'relative',
                           overflow: 'hidden',
                           transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
                         }}>
-                          <div className="decor-svg" style={{ color: 'var(--color-text-muted)' }}>
-                            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                              <rect x="25" y="25" width="50" height="50" rx="6" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-                              <path d="M25 40 H 75 M 40 20 V 30 M 60 20 V 30" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.3" />
-                            </svg>
-                          </div>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>LẦN TƯƠNG TÁC CUỐI</span>
-                            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(100, 116, 139, 0.1)', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted, #64748b)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>LẦN TƯƠNG TÁC CUỐI</span>
+                            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                               <Clock size={16} />
                             </div>
                           </div>
-                          <span style={{ fontSize: isMobileOrTablet ? '0.8rem' : '0.95rem', fontWeight: 800, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <span style={{ fontSize: isMobileOrTablet ? '0.95rem' : '1.2rem', fontWeight: 800, color: 'var(--color-text, #0f172a)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {formData.last_contact ? formatDateTime(formData.last_contact) : 'Chưa có'}
                           </span>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted, #64748b)', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {formData.last_contact ? AGO(formData.last_contact) : 'Cần tương tác ngay'}
                           </span>
                         </div>
                       </div>
 
                       {/* Ghi chú học viên / ban đầu (Dạng Toggle, mặc định mở) */}
-                      <div className="card-panel" style={{ marginBottom: '1.25rem', overflow: 'hidden' }}>
+                      <div className="card-panel" style={{ 
+                        marginBottom: '1.25rem', 
+                        overflow: 'hidden',
+                        borderRadius: '16px',
+                        background: 'var(--color-surface, #ffffff)',
+                        border: '1px solid var(--color-border-light, #e2e8f0)',
+                        boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+                        padding: '1.25rem 1.5rem'
+                      }}>
                         <div 
                           style={{ 
                             display: 'flex', 
@@ -10045,8 +10064,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             onClick={() => setIsInitialNotesExpanded(!isInitialNotesExpanded)}
                             style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', flex: 1 }}
                           >
-                            <FileText size={18} style={{ color: '#eab308' }} />
-                            <h4 className="panel-title" style={{ margin: 0 }}>Ghi chú ban đầu</h4>
+                            <FileText size={18} style={{ color: 'var(--color-primary, #C6333D)' }} />
+                            <h4 className="panel-title" style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text, #0f172a)' }}>Ghi chú ban đầu</h4>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <button
@@ -10170,9 +10189,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         </AnimatePresence>
                       </div>
 
-                      <div className="card-panel">
+                      <div className="card-panel" style={{ 
+                        borderRadius: '16px',
+                        background: 'var(--color-surface, #ffffff)',
+                        border: '1px solid var(--color-border-light, #e2e8f0)',
+                        boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+                        padding: '1.25rem 1.5rem',
+                        marginBottom: '1.25rem'
+                      }}>
                         <div className="flex items-center justify-between mb-4" style={{ flexWrap: 'wrap', gap: '8px' }}>
-                          <h4 className="panel-title" style={{ margin: 0 }}>Thông tin liên hệ & Công việc</h4>
+                          <h4 className="panel-title" style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text, #0f172a)' }}>Thông tin liên hệ & Công việc</h4>
                           {isOwnerOrAdmin && (
                             <button
                               type="button"
@@ -15712,72 +15738,80 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         </div>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                          {/* Invoice Summary */}
+                          {/* Invoice Summary — Executive Brand Red & Slate */}
                           <div style={{ display: 'grid', gridTemplateColumns: isMobileOrTablet ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '1rem' }}>
-                            <div className="card-panel stat-card hover-lift" style={{ padding: '1rem 1.125rem', borderRadius: '14px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', boxShadow: '0 2px 8px rgba(0,0,0,0.02)', position: 'relative', overflow: 'hidden' }}>
-                              <div className="decor-svg" style={{ color: 'var(--color-text-muted)' }}>
-                                <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                                  <rect x="25" y="25" width="50" height="50" rx="6" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-                                  <path d="M35 40 H 65 M 35 52 H 65 M 35 64 H 55" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                                </svg>
-                              </div>
+                            <div className="card-panel stat-card hover-lift" style={{ 
+                              padding: '1rem 1.125rem', 
+                              borderRadius: '16px', 
+                              background: 'var(--color-surface, #ffffff)', 
+                              border: '1px solid var(--color-border-light, #e2e8f0)', 
+                              boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)', 
+                              position: 'relative', 
+                              overflow: 'hidden' 
+                            }}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>TỔNG HÓA ĐƠN</span>
-                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(100, 116, 139, 0.1)', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted, #64748b)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>TỔNG HÓA ĐƠN</span>
+                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                   <FileText size={16} />
                                 </div>
                               </div>
-                              <h4 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text)', margin: 0 }}>
+                              <h4 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text, #0f172a)', margin: 0 }}>
                                 {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(drawerInvoices.reduce((acc: number, inv: any) => acc + inv.total, 0))}
                               </h4>
                             </div>
 
-                            <div className="card-panel stat-card hover-lift" style={{ padding: '1rem 1.125rem', borderRadius: '14px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', boxShadow: '0 2px 8px rgba(0,0,0,0.02)', position: 'relative', overflow: 'hidden' }}>
-                              <div className="decor-svg" style={{ color: '#10b981' }}>
-                                <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                                  <circle cx="50" cy="50" r="35" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-                                  <path d="M30 50 L 45 65 L 75 35" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                              </div>
+                            <div className="card-panel stat-card hover-lift" style={{ 
+                              padding: '1rem 1.125rem', 
+                              borderRadius: '16px', 
+                              background: 'var(--color-surface, #ffffff)', 
+                              border: '1px solid var(--color-border-light, #e2e8f0)', 
+                              boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)', 
+                              position: 'relative', 
+                              overflow: 'hidden' 
+                            }}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ĐÃ THU</span>
-                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-primary, #C6333D)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>ĐÃ THU</span>
+                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(198, 51, 61, 0.08)', color: 'var(--color-primary, #C6333D)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                   <CheckCircle2 size={16} />
                                 </div>
                               </div>
-                              <h4 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#10b981', margin: 0 }}>
+                              <h4 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-primary, #C6333D)', margin: 0 }}>
                                 {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(drawerInvoices.filter((i: any) => i.status === 'paid').reduce((acc: number, inv: any) => acc + inv.total, 0))}
                               </h4>
                             </div>
 
-                            <div className="card-panel stat-card hover-lift" style={{ padding: '1rem 1.125rem', borderRadius: '14px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', boxShadow: '0 2px 8px rgba(0,0,0,0.02)', position: 'relative', overflow: 'hidden' }}>
-                              <div className="decor-svg" style={{ color: '#f59e0b' }}>
-                                <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                                  <circle cx="50" cy="50" r="35" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-                                  <path d="M50 30 V 50 H 65" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                                </svg>
-                              </div>
+                            <div className="card-panel stat-card hover-lift" style={{ 
+                              padding: '1rem 1.125rem', 
+                              borderRadius: '16px', 
+                              background: 'var(--color-surface, #ffffff)', 
+                              border: '1px solid var(--color-border-light, #e2e8f0)', 
+                              boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)', 
+                              position: 'relative', 
+                              overflow: 'hidden' 
+                            }}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>CHỜ XỬ LÝ</span>
-                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted, #64748b)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>CHỜ XỬ LÝ</span>
+                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                   <Clock size={16} />
                                 </div>
                               </div>
-                              <h4 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f59e0b', margin: 0 }}>
+                              <h4 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text, #0f172a)', margin: 0 }}>
                                 {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(drawerInvoices.filter((i: any) => i.status === 'pending').reduce((acc: number, inv: any) => acc + inv.total, 0))}
                               </h4>
                             </div>
 
-                            <div className="card-panel stat-card hover-lift" style={{ padding: '1rem 1.125rem', borderRadius: '14px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', boxShadow: '0 2px 8px rgba(0,0,0,0.02)', position: 'relative', overflow: 'hidden' }}>
-                              <div className="decor-svg" style={{ color: '#ef4444' }}>
-                                <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                                  <circle cx="50" cy="50" r="35" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-                                  <path d="M35 35 L 65 65 M 65 35 L 35 65" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-                                </svg>
-                              </div>
+                            <div className="card-panel stat-card hover-lift" style={{ 
+                              padding: '1rem 1.125rem', 
+                              borderRadius: '16px', 
+                              background: 'var(--color-surface, #ffffff)', 
+                              border: '1px solid var(--color-border-light, #e2e8f0)', 
+                              boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)', 
+                              position: 'relative', 
+                              overflow: 'hidden' 
+                            }}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#ef4444', textTransform: 'uppercase', letterSpacing: '0.05em' }}>QUÁ HẠN NỢ</span>
-                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#ef4444', textTransform: 'uppercase', letterSpacing: '0.04em' }}>QUÁ HẠN NỢ</span>
+                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                   <AlertCircle size={16} />
                                 </div>
                               </div>

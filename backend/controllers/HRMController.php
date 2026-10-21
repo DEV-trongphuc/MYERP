@@ -5857,5 +5857,1159 @@ class HRMController {
 
         respond(404, null, 'Bình luận không tồn tại', false);
     }
+
+    // =========================================================================
+    // PHÂN HỆ KẾ TOÁN & NHÂN SỰ - LƯƠNG A-Z (SYNCHRONIZED ENTERPRISE ENGINE)
+    // =========================================================================
+
+    /**
+     * Tham số pháp lý & cấu hình mặc định theo chuẩn lao động, thuế & BHXH Việt Nam
+     */
+    private function getLegalParameters(?int $year = null, ?int $month = null): array {
+        $now = new DateTime();
+        $y = $year ?? (int)$now->format('Y');
+        $m = $month ?? (int)$now->format('n');
+
+        // Lương cơ sở: trước 07/2026: 2.340.000đ; từ 07/2026: 2.530.000đ
+        $isPostJuly2026 = ($y * 12 + $m) >= (2026 * 12 + 7);
+        $luongCoSo = $isPostJuly2026 ? 2530000 : 2340000;
+
+        // Lương tối thiểu vùng (Vùng 1 -> 4)
+        $isYear2026OrLater = ($y >= 2026);
+        $vung = $isYear2026OrLater 
+            ? [1 => 5310000, 2 => 4730000, 3 => 4140000, 4 => 3680000]
+            : [1 => 4960000, 2 => 4410000, 3 => 3860000, 4 => 3450000];
+
+        // Tỷ lệ trích đóng BHXH, BHYT, BHTN, KPCĐ
+        $rateNLD = ['bhxh' => 0.08, 'bhyt' => 0.015, 'bhtn' => 0.01];
+        $rateDN  = ['bhxh' => 0.175, 'huu' => 0.14, 'om' => 0.03, 'tnld' => 0.005, 'bhyt' => 0.03, 'bhtn' => 0.01, 'kpcd' => 0.02];
+
+        // Giảm trừ thuế TNCN
+        $selfDeduction = $isYear2026OrLater ? 15500000 : 11000000;
+        $depDeduction  = $isYear2026OrLater ? 6200000 : 4400000;
+
+        // Biểu thuế lũy tiến
+        $brackets = $isYear2026OrLater
+            ? [
+                ['cap' => 10000000,  'rate' => 0.05, 'sub' => 0],
+                ['cap' => 30000000,  'rate' => 0.10, 'sub' => 500000],
+                ['cap' => 60000000,  'rate' => 0.20, 'sub' => 3500000],
+                ['cap' => 100000000, 'rate' => 0.30, 'sub' => 9500000],
+                ['cap' => PHP_FLOAT_MAX, 'rate' => 0.35, 'sub' => 14500000],
+            ]
+            : [
+                ['cap' => 5000000,   'rate' => 0.05, 'sub' => 0],
+                ['cap' => 10000000,  'rate' => 0.10, 'sub' => 250000],
+                ['cap' => 18000000,  'rate' => 0.15, 'sub' => 750000],
+                ['cap' => 32000000,  'rate' => 0.20, 'sub' => 1650000],
+                ['cap' => 52000000,  'rate' => 0.25, 'sub' => 3250000],
+                ['cap' => 80000000,  'rate' => 0.30, 'sub' => 5850000],
+                ['cap' => PHP_FLOAT_MAX, 'rate' => 0.35, 'sub' => 9850000],
+            ];
+
+        // Mức ăn trưa miễn thuế & vãng lai 10%
+        $anTruaCap = $isPostJuly2026 ? 1200000 : 730000;
+        $casualCap = $isPostJuly2026 ? 5000000 : 2000000;
+
+        return [
+            'year'            => $y,
+            'month'           => $m,
+            'luong_co_so'     => $luongCoSo,
+            'vung'            => $vung,
+            'rate_nld'        => $rateNLD,
+            'rate_dn'         => $rateDN,
+            'self_deduction'  => $selfDeduction,
+            'dep_deduction'   => $depDeduction,
+            'brackets'        => $brackets,
+            'an_trua_cap'     => $anTruaCap,
+            'casual_cap'      => $casualCap,
+            'cap_bhxh_bhyt'   => 20 * $luongCoSo,
+            'cap_bhtn_vung1'  => 20 * $vung[1],
+        ];
+    }
+
+    /**
+     * Tính thuế TNCN lũy tiến từng phần
+     */
+    private function calculateProgressiveTax(float $taxableIncome, array $brackets): float {
+        if ($taxableIncome <= 0) return 0.0;
+        foreach ($brackets as $b) {
+            if ($taxableIncome <= $b['cap']) {
+                $tax = ($taxableIncome * $b['rate']) - $b['sub'];
+                return max(0.0, round($tax));
+            }
+        }
+        $last = end($brackets);
+        return max(0.0, round(($taxableIncome * $last['rate']) - $last['sub']));
+    }
+
+    /**
+     * Quy đổi Net sang TNTT theo Phụ lục 02 Thông tư 111/2013/TT-BTC
+     */
+    private function netConvertedToTaxableIncome(float $convertedIncome, bool $is2026OrLater = false): float {
+        if ($convertedIncome <= 0) return 0.0;
+        if ($is2026OrLater) {
+            if ($convertedIncome <= 9500000)   return round($convertedIncome / 0.95);
+            if ($convertedIncome <= 27500000)  return round(($convertedIncome - 500000) / 0.90);
+            if ($convertedIncome <= 51500000)  return round(($convertedIncome - 3500000) / 0.80);
+            if ($convertedIncome <= 79500000)  return round(($convertedIncome - 9500000) / 0.70);
+            return round(($convertedIncome - 14500000) / 0.65);
+        } else {
+            if ($convertedIncome <= 4750000)   return round($convertedIncome / 0.95);
+            if ($convertedIncome <= 9250000)   return round(($convertedIncome - 250000) / 0.90);
+            if ($convertedIncome <= 16050000)  return round(($convertedIncome - 750000) / 0.85);
+            if ($convertedIncome <= 27250000)  return round(($convertedIncome - 1650000) / 0.80);
+            if ($convertedIncome <= 42250000)  return round(($convertedIncome - 3250000) / 0.75);
+            if ($convertedIncome <= 61850000)  return round(($convertedIncome - 5850000) / 0.70);
+            return round(($convertedIncome - 9850000) / 0.65);
+        }
+    }
+
+    /**
+     * GET /api/hrm/accounting-az/overview
+     * Tổng quan KPI, Cảnh báo hợp đồng (Khoản 2 Điều 20 BLLĐ 2019), Thiếu thông tin và Lịch thuế
+     */
+    public function getAccountingAzOverview(array $auth): void {
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $month = trim($_GET['month'] ?? date('Y-m'));
+        if (!preg_match('/^\d{4}-\d{2}$/', $month)) $month = date('Y-m');
+        [$y, $m] = array_map('intval', explode('-', $month));
+        $params = $this->getLegalParameters($y, $m);
+
+        // 1. Thống kê nhân sự thực tế
+        $uStmt = $this->db->prepare("
+            SELECT id, full_name, email, phone, role, status, is_active, citizen_id, bank_name, bank_account, created_at
+            FROM users
+            WHERE tenant_id = ?
+        ");
+        $uStmt->execute([$tid]);
+        $allUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $activeUsers = array_filter($allUsers, fn($u) => ($u['is_active'] ?? 0) == 1 && ($u['status'] ?? 'active') !== 'leave');
+        $inactiveUsers = array_filter($allUsers, fn($u) => ($u['is_active'] ?? 0) == 0 || ($u['status'] ?? '') === 'leave');
+
+        // Thiếu thông tin CCCD, MST, STK
+        $missingInfoUsers = [];
+        foreach ($activeUsers as $u) {
+            $missFields = [];
+            if (empty(trim((string)($u['citizen_id'] ?? '')))) $missFields[] = 'CCCD';
+            if (empty(trim((string)($u['bank_account'] ?? '')))) $missFields[] = 'STK Ngân hàng';
+            if (!empty($missFields)) {
+                $missingInfoUsers[] = [
+                    'id'          => (int)$u['id'],
+                    'full_name'   => $u['full_name'],
+                    'email'       => $u['email'],
+                    'miss_fields' => $missFields
+                ];
+            }
+        }
+
+        // 2. Thống kê bảng lương thực tế của tháng
+        $pStmt = $this->db->prepare("
+            SELECT 
+                COUNT(*) as total_slips,
+                COALESCE(SUM(salary_basic_calculated + allowance_total + kpi_bonus + overtime_salary + diligence_bonus), 0) as total_gross,
+                COALESCE(SUM(insurance_bhxh + insurance_bhyt + insurance_bhtn), 0) as total_insurance_nld,
+                COALESCE(SUM(tax_pit), 0) as total_tax_pit,
+                COALESCE(SUM(advance_deduction), 0) as total_advance_deduction,
+                COALESCE(SUM(net_salary), 0) as total_net
+            FROM monthly_payslips mp
+            JOIN users u ON mp.user_id = u.id
+            WHERE u.tenant_id = ? AND mp.month_year = ?
+        ");
+        $pStmt->execute([$tid, $month]);
+        $payStat = $pStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $totalGross = (float)($payStat['total_gross'] ?? 0);
+        $totalNet   = (float)($payStat['total_net'] ?? 0);
+        $totalPIT   = (float)($payStat['total_tax_pit'] ?? 0);
+        $totalInsNLD = (float)($payStat['total_insurance_nld'] ?? 0);
+        $totalAdvance = (float)($payStat['total_advance_deduction'] ?? 0);
+        $totalSlips = (int)($payStat['total_slips'] ?? 0);
+
+        // 2b. Quỹ lương & bảo hiểm dự kiến (tính từ hồ sơ nhân sự hrm_profiles đang làm việc)
+        $profStmt = $this->db->prepare("
+            SELECT 
+                COUNT(u.id) as active_count,
+                COALESCE(SUM(COALESCE(p.base_salary, 0) + COALESCE(p.deal_salary, 0) + COALESCE(p.allowance_meal, 0) + COALESCE(p.allowance_travel, 0) + COALESCE(p.allowance_phone, 0)), 0) as projected_gross,
+                COALESCE(SUM(CASE WHEN COALESCE(p.has_insurance, 1) = 1 THEN COALESCE(p.base_salary, 0) ELSE 0 END), 0) as projected_ins_salary
+            FROM users u
+            LEFT JOIN hrm_profiles p ON u.id = p.user_id
+            WHERE u.tenant_id = ? AND u.is_active = 1 AND (u.status IS NULL OR u.status != 'leave')
+        ");
+        $profStmt->execute([$tid]);
+        $profData = $profStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $projectedGross  = (float)($profData['projected_gross'] ?? 0);
+        $projectedInsSal = (float)($profData['projected_ins_salary'] ?? 0);
+        $projectedInsNLD = round($projectedInsSal * 0.105);
+        $projectedInsDN  = round($projectedInsSal * 0.235);
+        $projectedKPCD   = round($projectedInsSal * 0.02);
+        $projectedNet    = max(0, $projectedGross - $projectedInsNLD);
+
+        $isProjected = ($totalSlips === 0 && $projectedGross > 0);
+
+        // Ước tính bảo hiểm DN (23.5% gồm BHXH 17.5%, BHYT 3%, BHTN 1%, KPCĐ 2%)
+        $totalInsDN = $totalGross > 0 ? round($totalGross * 0.235) : $projectedInsDN;
+        $totalKPCD  = $totalGross > 0 ? round($totalGross * 0.02) : $projectedKPCD;
+
+        // 3. Cảnh báo Hợp đồng lao động thực tế
+        $cStmt = $this->db->prepare("
+            SELECT c.*, u.full_name, u.email
+            FROM hrm_contracts c
+            JOIN users u ON c.user_id = u.id
+            WHERE u.tenant_id = ?
+            ORDER BY c.end_date ASC
+        ");
+        $cStmt->execute([$tid]);
+        $contracts = $cStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $nowDate = date('Y-m-d');
+        $contractAlerts = [];
+        $contractsByUser = [];
+
+        foreach ($contracts as $c) {
+            $contractsByUser[$c['user_id']][] = $c;
+            if (empty($c['end_date'])) continue;
+            $diffDays = (int)round((strtotime($c['end_date']) - strtotime($nowDate)) / 86400);
+
+            if ($diffDays < 0 && ($c['status'] ?? '') === 'active') {
+                $contractAlerts[] = [
+                    'severity'   => 'bad',
+                    'user_id'    => (int)$c['user_id'],
+                    'full_name'  => $c['full_name'],
+                    'contract_code' => $c['contract_code'],
+                    'contract_type' => $c['contract_type'],
+                    'end_date'   => $c['end_date'],
+                    'days_left'  => $diffDays,
+                    'message'    => "Hợp đồng {$c['contract_code']} đã hết hạn " . abs($diffDays) . " ngày ({$c['end_date']}), chưa gia hạn."
+                ];
+            } elseif ($diffDays >= 0 && $diffDays <= 30 && ($c['status'] ?? '') === 'active') {
+                $contractAlerts[] = [
+                    'severity'   => 'warn',
+                    'user_id'    => (int)$c['user_id'],
+                    'full_name'  => $c['full_name'],
+                    'contract_code' => $c['contract_code'],
+                    'contract_type' => $c['contract_type'],
+                    'end_date'   => $c['end_date'],
+                    'days_left'  => $diffDays,
+                    'message'    => "Hợp đồng {$c['contract_code']} còn {$diffDays} ngày sẽ hết hạn ({$c['end_date']})."
+                ];
+            }
+        }
+
+        // Kiểm tra quy định khoản 2 Điều 20 BLLĐ 2019: đã ký >= 2 HĐ xác định thời hạn
+        foreach ($contractsByUser as $uid => $userCts) {
+            $xdCount = count(array_filter($userCts, fn($x) => in_array(strtolower($x['contract_type'] ?? ''), ['xd', 'definite', 'fixed_term'], true)));
+            if ($xdCount >= 2) {
+                $lastCt = end($userCts);
+                if (in_array(strtolower($lastCt['contract_type'] ?? ''), ['xd', 'definite', 'fixed_term'], true)) {
+                    $contractAlerts[] = [
+                        'severity'   => 'info',
+                        'user_id'    => (int)$uid,
+                        'full_name'  => $lastCt['full_name'] ?? "Nhân viên #$uid",
+                        'contract_code' => $lastCt['contract_code'] ?? '',
+                        'contract_type' => $lastCt['contract_type'] ?? '',
+                        'end_date'   => $lastCt['end_date'] ?? null,
+                        'days_left'  => null,
+                        'message'    => "Đã ký {$xdCount} lần HĐ xác định thời hạn. HĐ tiếp theo bắt buộc phải là HĐ không xác định thời hạn (khoản 2 Điều 20 BLLĐ 2019)."
+                    ];
+                }
+            }
+        }
+
+        // 4. Lịch thuế & Kê khai TNCN
+        $quarter = ceil($m / 3);
+        $taxDueQuarter = date('d/m/Y', strtotime(date("Y-m-t", strtotime("$y-" . ($quarter * 3) . "-01") . " +1 month")));
+        $taxDueMonth = sprintf('20/%02d/%d', ($m == 12 ? 1 : $m + 1), ($m == 12 ? $y + 1 : $y));
+
+        // 5. Checklist Quy trình Đóng kỳ Kế toán - Nhân sự hàng tháng
+        $hasPayslips = ((int)($payStat['total_slips'] ?? 0)) > 0;
+        $sopChecklist = [
+            ['id' => 'profile',  'title' => '1. Rà soát hồ sơ nhân viên mới, hợp đồng & người phụ thuộc', 'done' => count($missingInfoUsers) === 0],
+            ['id' => 'timesheet','title' => '2. Chốt dữ liệu chấm công, phê duyệt đơn nghỉ phép & OT',   'done' => true],
+            ['id' => 'payroll',  'title' => '3. Tính toán bảng lương, bảo hiểm xã hội & thuế TNCN',       'done' => $hasPayslips],
+            ['id' => 'slips',    'title' => '4. Gửi phiếu lương điện tử cho nhân sự kiểm tra & xác nhận', 'done' => $hasPayslips],
+            ['id' => 'bank',     'title' => '5. Xuất danh sách chi lương qua ngân hàng & thanh toán',     'done' => $hasPayslips && $totalNet > 0],
+            ['id' => 'journal',  'title' => '6. Hạch toán sổ nhật ký chung (TK 334, 338, 3335, 642)',     'done' => $hasPayslips],
+            ['id' => 'tax',      'title' => '7. Lập tờ khai thuế TNCN 05/KK & nộp tiền bảo hiểm/thuế',    'done' => false],
+        ];
+
+        respond(200, [
+            'month'             => $month,
+            'legal_parameters'  => $params,
+            'kpis'              => [
+                'active_employees'   => count($activeUsers),
+                'resigned_employees' => count($inactiveUsers),
+                'total_employees'    => count($allUsers),
+                'total_gross'        => $totalGross,
+                'total_net'          => $totalNet,
+                'total_tax_pit'      => $totalPIT,
+                'total_advance'      => $totalAdvance,
+                'total_insurance_nld'=> $totalGross > 0 ? $totalInsNLD : $projectedInsNLD,
+                'total_insurance_dn' => $totalInsDN,
+                'total_insurance_all'=> ($totalGross > 0 ? $totalInsNLD : $projectedInsNLD) + $totalInsDN,
+                'total_kpcd'         => $totalKPCD,
+                'total_payslips'     => $totalSlips,
+                'projected_gross'    => $projectedGross,
+                'projected_net'      => $projectedNet,
+                'projected_ins_nld'  => $projectedInsNLD,
+                'projected_ins_dn'   => $projectedInsDN,
+                'is_projected'       => $isProjected,
+            ],
+            'alerts'            => [
+                'contract_alerts'    => $contractAlerts,
+                'missing_info_users' => $missingInfoUsers,
+            ],
+            'tax_schedule'      => [
+                'quarter'        => $quarter,
+                'due_monthly'    => $taxDueMonth,
+                'due_quarterly'  => $taxDueQuarter,
+                'suggested_type' => 'Q', // Quý
+            ],
+            'sop_checklist'     => $sopChecklist
+        ], 'Lấy tổng quan kế toán & lương A-Z thành công');
+    }
+
+    /**
+     * POST /api/hrm/accounting-az/simulate-payroll
+     * Bộ chuyển đổi & mô phỏng tính lương Gross ⇄ Net, BHXH, Thuế TNCN
+     */
+    public function simulatePayroll(array $auth): void {
+        $body = getBody();
+        $salary = (float)($body['salary'] ?? 0);
+        $mode   = trim((string)($body['mode'] ?? 'gross_to_net')); // 'gross_to_net' | 'net_to_gross'
+        $deps   = max(0, (int)($body['dependents'] ?? 0));
+        $region = max(1, min(4, (int)($body['region'] ?? 1)));
+        $year   = (int)($body['year'] ?? date('Y'));
+        $month  = (int)($body['month'] ?? date('n'));
+        $ctType = trim((string)($body['contract_type'] ?? 'labour_resident')); // 'labour_resident' | 'probation_casual' | 'non_resident'
+        $hasIns = (bool)($body['has_insurance'] ?? true);
+        $hasUnion = (bool)($body['has_union'] ?? false);
+        $customInsSalary = (float)($body['insurance_salary'] ?? 0);
+
+        // Phụ cấp
+        $pcMeal   = (float)($body['allowance_meal'] ?? 0);
+        $pcPhone  = (float)($body['allowance_phone'] ?? 0);
+        $pcTravel = (float)($body['allowance_travel'] ?? 0);
+        $pcOther  = (float)($body['allowance_other'] ?? 0);
+        $totalAllowances = $pcMeal + $pcPhone + $pcTravel + $pcOther;
+
+        $params = $this->getLegalParameters($year, $month);
+        $capXH  = $params['cap_bhxh_bhyt'];
+        $capTN  = 20 * $params['vung'][$region];
+
+        // 1. Nếu mode === 'gross_to_net'
+        if ($mode !== 'net_to_gross') {
+            $gross = $salary;
+            $insSalary = $customInsSalary > 0 ? $customInsSalary : ($gross - $pcMeal);
+            if (!$hasIns || $ctType === 'probation_casual') {
+                $insSalary = 0;
+            }
+
+            $bXH = min($insSalary, $capXH);
+            $bTN = ($ctType === 'non_resident') ? 0 : min($insSalary, $capTN);
+
+            // Bảo hiểm NLĐ
+            $insNLD = [
+                'bhxh'  => round($bXH * $params['rate_nld']['bhxh']),
+                'bhyt'  => round($bXH * $params['rate_nld']['bhyt']),
+                'bhtn'  => round($bTN * $params['rate_nld']['bhtn']),
+            ];
+            $totalInsNLD = $insNLD['bhxh'] + $insNLD['bhyt'] + $insNLD['bhtn'];
+
+            // Bảo hiểm DN
+            $insDN = [
+                'bhxh'  => round($bXH * $params['rate_dn']['bhxh']),
+                'bhyt'  => round($bXH * $params['rate_dn']['bhyt']),
+                'bhtn'  => round($bTN * $params['rate_dn']['bhtn']),
+                'kpcd'  => round($bXH * $params['rate_dn']['kpcd']),
+            ];
+            $totalInsDN = $insDN['bhxh'] + $insDN['bhyt'] + $insDN['bhtn'] + $insDN['kpcd'];
+
+            // Đoàn phí công đoàn (1% lương BH, tối đa 10% lương cơ sở)
+            $doanPhi = $hasUnion ? min(round($bXH * 0.01), round($params['luong_co_so'] * 0.1)) : 0;
+
+            // Miễn thuế: ăn trưa trong mức quy định
+            $exemptMeal = min($pcMeal, $params['an_trua_cap']);
+            $totalExempt = $exemptMeal;
+
+            // Thu nhập chịu thuế (TNCT)
+            $tnct = max(0.0, $gross - $totalExempt);
+
+            // Giảm trừ gia cảnh
+            $selfReduction = $params['self_deduction'];
+            $depReduction  = $deps * $params['dep_deduction'];
+            $totalReduction = $selfReduction + $depReduction;
+
+            // Thuế TNCN
+            if ($ctType === 'non_resident') {
+                $method = 'Không cư trú 20%';
+                $tntt = $tnct;
+                $taxPIT = round($tnct * 0.20);
+            } elseif ($ctType === 'probation_casual') {
+                $method = 'Khấu trừ 10% tại nguồn';
+                $tntt = $tnct;
+                $taxPIT = ($tnct >= $params['casual_cap']) ? round($tnct * 0.10) : 0.0;
+            } else {
+                $method = ($year >= 2026) ? 'Biểu lũy tiến 5 bậc' : 'Biểu lũy tiến 7 bậc';
+                $tntt = max(0.0, $tnct - $totalReduction - $totalInsNLD);
+                $taxPIT = $this->calculateProgressiveTax($tntt, $params['brackets']);
+            }
+
+            $net = max(0.0, $gross - $totalInsNLD - $doanPhi - $taxPIT);
+            $totalCostDN = $gross + $totalInsDN;
+
+            respond(200, [
+                'mode'            => 'gross_to_net',
+                'gross'           => round($gross),
+                'net'             => round($net),
+                'insurance_nld'   => [
+                    'bhxh'  => $insNLD['bhxh'],
+                    'bhyt'  => $insNLD['bhyt'],
+                    'bhtn'  => $insNLD['bhtn'],
+                    'total' => $totalInsNLD
+                ],
+                'insurance_dn'    => [
+                    'bhxh'  => $insDN['bhxh'],
+                    'bhyt'  => $insDN['bhyt'],
+                    'bhtn'  => $insDN['bhtn'],
+                    'kpcd'  => $insDN['kpcd'],
+                    'total' => $totalInsDN
+                ],
+                'union_fee'       => $doanPhi,
+                'tax'             => [
+                    'method'          => $method,
+                    'tnct'            => round($tnct),
+                    'exempt'          => round($totalExempt),
+                    'self_deduction'  => $selfReduction,
+                    'dep_deduction'   => $depReduction,
+                    'total_reduction' => $totalReduction,
+                    'tntt'            => round($tntt),
+                    'pit'             => round($taxPIT),
+                ],
+                'employer_total_cost' => round($totalCostDN),
+                'parameters'      => $params
+            ], 'Mô phỏng lương Gross sang Net thành công');
+        } else {
+            // 2. Mode === 'net_to_gross'
+            $targetNet = $salary;
+            $selfReduction = $params['self_deduction'];
+            $depReduction  = $deps * $params['dep_deduction'];
+            $totalReduction = $selfReduction + $depReduction;
+            $exemptMeal = min($pcMeal, $params['an_trua_cap']);
+
+            if ($ctType === 'non_resident') {
+                $gross = round($targetNet / 0.80);
+                $taxPIT = round($gross * 0.20);
+                $totalInsNLD = 0;
+            } elseif ($ctType === 'probation_casual') {
+                if ($targetNet >= $params['casual_cap'] * 0.9) {
+                    $gross = round($targetNet / 0.90);
+                    $taxPIT = round($gross * 0.10);
+                } else {
+                    $gross = $targetNet;
+                    $taxPIT = 0;
+                }
+                $totalInsNLD = 0;
+            } else {
+                // Thu nhập quy đổi = Net - Giảm trừ gia cảnh
+                $convertedIncome = max(0.0, $targetNet - $totalReduction);
+                $is2026 = ($year >= 2026);
+                $tntt = $this->netConvertedToTaxableIncome($convertedIncome, $is2026);
+                $taxPIT = $this->calculateProgressiveTax($tntt, $params['brackets']);
+
+                // Approximate Gross
+                $interimGross = $targetNet + $taxPIT;
+                if ($hasIns) {
+                    $insBase = $customInsSalary > 0 ? $customInsSalary : $interimGross;
+                    $bXH = min($insBase, $capXH);
+                    $bTN = min($insBase, $capTN);
+                    $totalInsNLD = round($bXH * $params['rate_nld']['bhxh'] + $bXH * $params['rate_nld']['bhyt'] + $bTN * $params['rate_nld']['bhtn']);
+                } else {
+                    $totalInsNLD = 0;
+                }
+                $gross = $targetNet + $taxPIT + $totalInsNLD;
+            }
+
+            // Recalculate employer side
+            $insSalary = $customInsSalary > 0 ? $customInsSalary : $gross;
+            $bXH = min($insSalary, $capXH);
+            $bTN = min($insSalary, $capTN);
+            $insDN = [
+                'bhxh'  => round($bXH * $params['rate_dn']['bhxh']),
+                'bhyt'  => round($bXH * $params['rate_dn']['bhyt']),
+                'bhtn'  => round($bTN * $params['rate_dn']['bhtn']),
+                'kpcd'  => round($bXH * $params['rate_dn']['kpcd']),
+            ];
+            $totalInsDN = $insDN['bhxh'] + $insDN['bhyt'] + $insDN['bhtn'] + $insDN['kpcd'];
+
+            respond(200, [
+                'mode'            => 'net_to_gross',
+                'net'             => round($targetNet),
+                'gross'           => round($gross),
+                'insurance_nld'   => ['total' => $totalInsNLD],
+                'insurance_dn'    => array_merge($insDN, ['total' => $totalInsDN]),
+                'tax'             => [
+                    'pit'             => round($taxPIT),
+                    'self_deduction'  => $selfReduction,
+                    'dep_deduction'   => $depReduction,
+                    'total_reduction' => $totalReduction,
+                ],
+                'employer_total_cost' => round($gross + $totalInsDN),
+                'parameters'      => $params
+            ], 'Quy đổi lương Net sang Gross thành công');
+        }
+    }
+
+    /**
+     * GET /api/hrm/accounting-az/general-journal
+     * Sổ Nhật Ký Chung & Bút toán Hạch toán Kép (TT200 / TT133)
+     */
+    public function getGeneralJournal(array $auth): void {
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $month = trim($_GET['month'] ?? date('Y-m'));
+        if (!preg_match('/^\d{4}-\d{2}$/', $month)) $month = date('Y-m');
+        [$y, $m] = array_map('intval', explode('-', $month));
+
+        // 1. Lấy dữ liệu bảng lương thực tế
+        $pStmt = $this->db->prepare("
+            SELECT 
+                COALESCE(SUM(salary_basic_calculated + allowance_total + kpi_bonus + overtime_salary + diligence_bonus), 0) as total_gross,
+                COALESCE(SUM(insurance_bhxh), 0) as ins_bhxh_nld,
+                COALESCE(SUM(insurance_bhyt), 0) as ins_bhyt_nld,
+                COALESCE(SUM(insurance_bhtn), 0) as ins_bhtn_nld,
+                COALESCE(SUM(tax_pit), 0) as total_pit,
+                COALESCE(SUM(advance_deduction), 0) as total_advance,
+                COALESCE(SUM(net_salary), 0) as total_net
+            FROM monthly_payslips mp
+            JOIN users u ON mp.user_id = u.id
+            WHERE u.tenant_id = ? AND mp.month_year = ?
+        ");
+        $pStmt->execute([$tid, $month]);
+        $pay = $pStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $gross       = (float)($pay['total_gross'] ?? 0);
+        $bhxhNLD     = (float)($pay['ins_bhxh_nld'] ?? 0);
+        $bhytNLD     = (float)($pay['ins_bhyt_nld'] ?? 0);
+        $bhtnNLD     = (float)($pay['ins_bhtn_nld'] ?? 0);
+        $totalInsNLD = $bhxhNLD + $bhytNLD + $bhtnNLD;
+        $pit         = (float)($pay['total_pit'] ?? 0);
+        $advance     = (float)($pay['total_advance'] ?? 0);
+        $net         = (float)($pay['total_net'] ?? 0);
+
+        // Bảo hiểm & KPCĐ phía DN
+        $bhxhDN = round($gross * 0.175);
+        $bhytDN = round($gross * 0.03);
+        $bhtnDN = round($gross * 0.01);
+        $kpcdDN = round($gross * 0.02);
+        $totalInsDN = $bhxhDN + $bhytDN + $bhtnDN + $kpcdDN;
+
+        // 1b. Lấy dữ liệu dự kiến từ hrm_profiles nếu chưa chốt bảng lương thực tế
+        $profStmt = $this->db->prepare("
+            SELECT 
+                COUNT(u.id) as active_count,
+                COALESCE(SUM(COALESCE(p.base_salary, 0) + COALESCE(p.deal_salary, 0) + COALESCE(p.allowance_meal, 0) + COALESCE(p.allowance_travel, 0) + COALESCE(p.allowance_phone, 0)), 0) as projected_gross,
+                COALESCE(SUM(CASE WHEN COALESCE(p.has_insurance, 1) = 1 THEN COALESCE(p.base_salary, 0) ELSE 0 END), 0) as projected_ins_salary
+            FROM users u
+            LEFT JOIN hrm_profiles p ON u.id = p.user_id
+            WHERE u.tenant_id = ? AND u.is_active = 1 AND (u.status IS NULL OR u.status != 'leave')
+        ");
+        $profStmt->execute([$tid]);
+        $profData = $profStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $projectedGross  = (float)($profData['projected_gross'] ?? 0);
+        $projectedInsSal = (float)($profData['projected_ins_salary'] ?? 0);
+        $projectedInsNLD = round($projectedInsSal * 0.105);
+        $projectedInsDN  = round($projectedInsSal * 0.235);
+        $projectedKPCD   = round($projectedInsSal * 0.02);
+        $projectedNet    = max(0, $projectedGross - $projectedInsNLD);
+
+        $isProjectedSalary = ($gross == 0 && $projectedGross > 0);
+        $effGross   = $gross > 0 ? $gross : $projectedGross;
+        $effNet     = $gross > 0 ? $net : $projectedNet;
+        $effInsNLD  = $gross > 0 ? $totalInsNLD : $projectedInsNLD;
+        $effInsDN   = $gross > 0 ? $totalInsDN : $projectedInsDN;
+        $effBhxhNLD = $gross > 0 ? $bhxhNLD : round($projectedInsSal * 0.08);
+        $effBhytNLD = $gross > 0 ? $bhytNLD : round($projectedInsSal * 0.015);
+        $effBhtnNLD = $gross > 0 ? $bhtnNLD : round($projectedInsSal * 0.01);
+        $effBhxhDN  = $gross > 0 ? $bhxhDN : round($projectedInsSal * 0.175);
+        $effBhytDN  = $gross > 0 ? $bhytDN : round($projectedInsSal * 0.03);
+        $effBhtnDN  = $gross > 0 ? $bhtnDN : round($projectedInsSal * 0.01);
+        $effKpcdDN  = $gross > 0 ? $kpcdDN : $projectedKPCD;
+
+        // 2. Lấy dữ liệu Doanh thu Học phí/Cọc (deposits + invoices)
+        $dStmt = $this->db->prepare("
+            SELECT COALESCE(SUM(price), 0) as total_deposit
+            FROM deposits d
+            JOIN contacts c ON d.contact_id = c.id
+            WHERE c.tenant_id = ? AND d.status = 'approved' AND DATE_FORMAT(d.created_at, '%Y-%m') = ?
+        ");
+        $dStmt->execute([$tid, $month]);
+        $depRow = $dStmt->fetch(PDO::FETCH_ASSOC);
+        $depositRevenue = (float)($depRow['total_deposit'] ?? 0);
+
+        $iStmt = $this->db->prepare("
+            SELECT COALESCE(SUM(total), 0) as total_invoice
+            FROM invoices
+            WHERE tenant_id = ? AND status = 'paid' AND deleted_at IS NULL AND DATE_FORMAT(paid_at, '%Y-%m') = ?
+        ");
+        $iStmt->execute([$tid, $month]);
+        $invRow = $iStmt->fetch(PDO::FETCH_ASSOC);
+        $invoiceRevenue = (float)($invRow['total_invoice'] ?? 0);
+        $totalRevenue = $depositRevenue + $invoiceRevenue;
+
+        // 3. Lấy dữ liệu Chi phí vận hành (expenses)
+        $eStmt = $this->db->prepare("
+            SELECT COALESCE(SUM(amount), 0) as total_expense, COALESCE(SUM(vat_amount), 0) as total_vat
+            FROM expenses
+            WHERE tenant_id = ? AND status = 'approved' AND deleted_at IS NULL AND DATE_FORMAT(date, '%Y-%m') = ?
+        ");
+        $eStmt->execute([$tid, $month]);
+        $expRow = $eStmt->fetch(PDO::FETCH_ASSOC);
+        $totalExpense = (float)($expRow['total_expense'] ?? 0);
+        $totalExpVAT  = (float)($expRow['total_vat'] ?? 0);
+
+        // TỔNG HỢP CÁC BÚT TOÁN KÉP (DOUBLE-ENTRY GENERAL JOURNAL ENTRIES)
+        $journalEntries = [];
+        $seq = 1;
+        $docDate = date('Y-m-t', strtotime("$month-01"));
+
+        // BT 1: Hạch toán chi phí lương phải trả NLĐ
+        if ($effGross > 0) {
+            $prefix = $isProjectedSalary ? 'PKT-EST' : 'PKT-SAL';
+            $suffix = $isProjectedSalary ? ' (Dự kiến)' : '';
+            $journalEntries[] = [
+                'seq'        => $seq++,
+                'date'       => $docDate,
+                'doc_no'     => "{$prefix}-{$month}-01",
+                'desc'       => "Tính tiền lương phải trả nhân viên tháng {$month}{$suffix}",
+                'debit_acc'  => '6422',
+                'credit_acc' => '3341',
+                'amount'     => $effGross,
+                'type'       => $isProjectedSalary ? 'projected_payroll_salary' : 'payroll_salary'
+            ];
+        }
+
+        // BT 2: Trích BHXH, BHYT, BHTN, KPCĐ tính vào chi phí doanh nghiệp (23.5%)
+        if ($effInsDN > 0) {
+            $prefix = $isProjectedSalary ? 'PKT-EST' : 'PKT-SAL';
+            $suffix = $isProjectedSalary ? ' (Dự kiến)' : '';
+            $journalEntries[] = [
+                'seq'        => $seq++,
+                'date'       => $docDate,
+                'doc_no'     => "{$prefix}-{$month}-02A",
+                'desc'       => "Trích KPCĐ (2%) tính vào CP DN tháng {$month}{$suffix}",
+                'debit_acc'  => '6422',
+                'credit_acc' => '3382',
+                'amount'     => $effKpcdDN,
+                'type'       => 'payroll_insurance_dn'
+            ];
+            $journalEntries[] = [
+                'seq'        => $seq++,
+                'date'       => $docDate,
+                'doc_no'     => "{$prefix}-{$month}-02B",
+                'desc'       => "Trích BHXH (17.5%) tính vào CP DN tháng {$month}{$suffix}",
+                'debit_acc'  => '6422',
+                'credit_acc' => '3383',
+                'amount'     => $effBhxhDN,
+                'type'       => 'payroll_insurance_dn'
+            ];
+            $journalEntries[] = [
+                'seq'        => $seq++,
+                'date'       => $docDate,
+                'doc_no'     => "{$prefix}-{$month}-02C",
+                'desc'       => "Trích BHYT (3%) tính vào CP DN tháng {$month}{$suffix}",
+                'debit_acc'  => '6422',
+                'credit_acc' => '3384',
+                'amount'     => $effBhytDN,
+                'type'       => 'payroll_insurance_dn'
+            ];
+            $journalEntries[] = [
+                'seq'        => $seq++,
+                'date'       => $docDate,
+                'doc_no'     => "{$prefix}-{$month}-02D",
+                'desc'       => "Trích BHTN (1%) tính vào CP DN tháng {$month}{$suffix}",
+                'debit_acc'  => '6422',
+                'credit_acc' => '3386',
+                'amount'     => $effBhtnDN,
+                'type'       => 'payroll_insurance_dn'
+            ];
+        }
+
+        // BT 3: Trích các khoản bảo hiểm trừ vào lương người lao động (10.5%)
+        if ($effInsNLD > 0) {
+            $prefix = $isProjectedSalary ? 'PKT-EST' : 'PKT-SAL';
+            $suffix = $isProjectedSalary ? ' (Dự kiến)' : '';
+            if ($effBhxhNLD > 0) {
+                $journalEntries[] = [
+                    'seq'        => $seq++,
+                    'date'       => $docDate,
+                    'doc_no'     => "{$prefix}-{$month}-03A",
+                    'desc'       => "Trích BHXH (8%) trừ vào lương NLĐ tháng {$month}{$suffix}",
+                    'debit_acc'  => '3341',
+                    'credit_acc' => '3383',
+                    'amount'     => $effBhxhNLD,
+                    'type'       => 'payroll_deduction_nld'
+                ];
+            }
+            if ($effBhytNLD > 0) {
+                $journalEntries[] = [
+                    'seq'        => $seq++,
+                    'date'       => $docDate,
+                    'doc_no'     => "{$prefix}-{$month}-03B",
+                    'desc'       => "Trích BHYT (1.5%) trừ vào lương NLĐ tháng {$month}{$suffix}",
+                    'debit_acc'  => '3341',
+                    'credit_acc' => '3384',
+                    'amount'     => $effBhytNLD,
+                    'type'       => 'payroll_deduction_nld'
+                ];
+            }
+            if ($effBhtnNLD > 0) {
+                $journalEntries[] = [
+                    'seq'        => $seq++,
+                    'date'       => $docDate,
+                    'doc_no'     => "{$prefix}-{$month}-03C",
+                    'desc'       => "Trích BHTN (1%) trừ vào lương NLĐ tháng {$month}{$suffix}",
+                    'debit_acc'  => '3341',
+                    'credit_acc' => '3386',
+                    'amount'     => $effBhtnNLD,
+                    'type'       => 'payroll_deduction_nld'
+                ];
+            }
+        }
+
+        // BT 4: Khấu trừ thuế TNCN của NLĐ
+        if ($pit > 0) {
+            $journalEntries[] = [
+                'seq'        => $seq++,
+                'date'       => $docDate,
+                'doc_no'     => "PKT-SAL-{$month}-04",
+                'desc'       => "Khấu trừ thuế TNCN người lao động tháng {$month}",
+                'debit_acc'  => '3341',
+                'credit_acc' => '3335',
+                'amount'     => $pit,
+                'type'       => 'payroll_tax'
+            ];
+        }
+
+        // BT 5: Khấu trừ tạm ứng lương
+        if ($advance > 0) {
+            $journalEntries[] = [
+                'seq'        => $seq++,
+                'date'       => $docDate,
+                'doc_no'     => "PKT-SAL-{$month}-05",
+                'desc'       => "Khấu trừ tạm ứng lương đã nhận trong tháng {$month}",
+                'debit_acc'  => '3341',
+                'credit_acc' => '141',
+                'amount'     => $advance,
+                'type'       => 'payroll_advance'
+            ];
+        }
+
+        // BT 6: Chi trả lương thực lĩnh qua tài khoản Ngân hàng
+        if ($effNet > 0) {
+            $prefix = $isProjectedSalary ? 'UNC-EST' : 'UNC-SAL';
+            $suffix = $isProjectedSalary ? ' (Dự kiến)' : '';
+            $journalEntries[] = [
+                'seq'        => $seq++,
+                'date'       => date('Y-m-d', strtotime("$docDate +5 days")),
+                'doc_no'     => "{$prefix}-{$month}-06",
+                'desc'       => "Thanh toán lương thực lĩnh tháng {$month} qua Ngân hàng{$suffix}",
+                'debit_acc'  => '3341',
+                'credit_acc' => '1121',
+                'amount'     => $effNet,
+                'type'       => 'bank_payment'
+            ];
+        }
+
+        // BT 7: Doanh thu Học phí / Đặt cọc
+        if ($totalRevenue > 0) {
+            $journalEntries[] = [
+                'seq'        => $seq++,
+                'date'       => $docDate,
+                'doc_no'     => "PT-REV-{$month}-01",
+                'desc'       => "Thu tiền học phí & cọc dịch vụ tháng {$month}",
+                'debit_acc'  => '1121',
+                'credit_acc' => '5113',
+                'amount'     => $totalRevenue,
+                'type'       => 'revenue'
+            ];
+        }
+
+        // BT 8: Chi phí vận hành & VAT đầu vào
+        if ($totalExpense > 0) {
+            $netExp = $totalExpense - $totalExpVAT;
+            $journalEntries[] = [
+                'seq'        => $seq++,
+                'date'       => $docDate,
+                'doc_no'     => "PC-EXP-{$month}-01",
+                'desc'       => "Chi phí vận hành & hoạt động doanh nghiệp tháng {$month}",
+                'debit_acc'  => '6422',
+                'credit_acc' => '1121',
+                'amount'     => $netExp > 0 ? $netExp : $totalExpense,
+                'type'       => 'expense'
+            ];
+            if ($totalExpVAT > 0) {
+                $journalEntries[] = [
+                    'seq'        => $seq++,
+                    'date'       => $docDate,
+                    'doc_no'     => "PC-EXP-{$month}-02",
+                    'desc'       => "Thuế GTGT đầu vào được khấu trừ tháng {$month}",
+                    'debit_acc'  => '1331',
+                    'credit_acc' => '1121',
+                    'amount'     => $totalExpVAT,
+                    'type'       => 'vat_in'
+                ];
+            }
+        }
+
+        $totalDebit = array_reduce($journalEntries, fn($s, $e) => $s + $e['amount'], 0.0);
+        $totalCredit = $totalDebit;
+
+        respond(200, [
+            'month'        => $month,
+            'entries'      => $journalEntries,
+            'summary'      => [
+                'total_entries' => count($journalEntries),
+                'total_debit'   => $totalDebit,
+                'total_credit'  => $totalCredit,
+                'is_balanced'   => true,
+                'total_gross'   => $effGross,
+                'total_net'     => $effNet,
+                'total_tax_pit' => $pit,
+                'total_ins_nld' => $effInsNLD,
+                'total_ins_dn'  => $effInsDN,
+                'total_revenue' => $totalRevenue,
+                'total_expense' => $totalExpense,
+                'is_projected'  => $isProjectedSalary,
+            ]
+        ], 'Lấy sổ nhật ký chung và bút toán hạch toán thành công');
+    }
+
+    /**
+     * GET /api/hrm/accounting-az/tax-declaration
+     * Tờ khai TNCN 05/KK (tháng/quý) và 05/QTT (năm) chuẩn HTKK
+     */
+    public function getTaxDeclaration(array $auth): void {
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $type = trim($_GET['type'] ?? 'Q'); // 'M' | 'Q' | 'Y' (Quyết toán)
+        $num  = (int)($_GET['num'] ?? 3);   // Quý 1-4 hoặc Tháng 1-12
+        $year = (int)($_GET['year'] ?? date('Y'));
+
+        // Lấy toàn bộ payslip của kỳ kê khai
+        $monthCondition = "";
+        $binds = [$tid];
+        if ($type === 'M') {
+            $targetMonth = sprintf('%04d-%02d', $year, $num);
+            $monthCondition = "mp.month_year = ?";
+            $binds[] = $targetMonth;
+        } elseif ($type === 'Q') {
+            $mStart = ($num - 1) * 3 + 1;
+            $mEnd   = $num * 3;
+            $months = [];
+            for ($i = $mStart; $i <= $mEnd; $i++) {
+                $months[] = sprintf('%04d-%02d', $year, $i);
+            }
+            $inClause = implode(',', array_fill(0, count($months), '?'));
+            $monthCondition = "mp.month_year IN ($inClause)";
+            $binds = array_merge($binds, $months);
+        } else {
+            // Cả năm
+            $monthCondition = "mp.month_year LIKE ?";
+            $binds[] = "{$year}-%";
+        }
+
+        $sql = "
+            SELECT 
+                u.id as user_id, u.full_name, u.citizen_id, u.email,
+                COALESCE(SUM(mp.salary_basic_calculated + mp.allowance_total + mp.kpi_bonus + mp.overtime_salary + mp.diligence_bonus), 0) as gross,
+                COALESCE(SUM(mp.tax_pit), 0) as pit,
+                COALESCE(SUM(mp.insurance_bhxh + mp.insurance_bhyt + mp.insurance_bhtn), 0) as ins_nld
+            FROM monthly_payslips mp
+            JOIN users u ON mp.user_id = u.id
+            WHERE u.tenant_id = ? AND {$monthCondition}
+            GROUP BY u.id, u.full_name, u.citizen_id, u.email
+        ";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($binds);
+        $employees = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $ct16 = count($employees);
+        $ct17 = $ct16;
+        $taxPayerEmps = array_filter($employees, fn($e) => ((float)($e['pit'] ?? 0)) > 0);
+        $ct18 = count($taxPayerEmps);
+        $ct19 = $ct18;
+        $ct20 = 0;
+
+        $ct21 = array_reduce($employees, fn($s, $e) => $s + (float)$e['gross'], 0.0);
+        $ct22 = $ct21;
+        $ct23 = 0.0;
+
+        $ct26 = array_reduce($taxPayerEmps, fn($s, $e) => $s + (float)$e['gross'], 0.0);
+        $ct27 = $ct26;
+        $ct28 = 0.0;
+
+        $ct29 = array_reduce($employees, fn($s, $e) => $s + (float)$e['pit'], 0.0);
+        $ct30 = $ct29;
+        $ct31 = 0.0;
+
+        $indicators = [
+            'ct16' => $ct16,
+            'ct17' => $ct17,
+            'ct18' => $ct18,
+            'ct19' => $ct19,
+            'ct20' => $ct20,
+            'ct21' => round($ct21),
+            'ct22' => round($ct22),
+            'ct23' => round($ct23),
+            'ct24' => 0,
+            'ct25' => 0,
+            'ct26' => round($ct26),
+            'ct27' => round($ct27),
+            'ct28' => round($ct28),
+            'ct29' => round($ct29),
+            'ct30' => round($ct30),
+            'ct31' => round($ct31),
+            'ct32' => 0,
+            'ct15' => 0,
+        ];
+
+        $qttIndicators = array_merge($indicators, [
+            'ct35' => $ct16,
+            'ct36' => round($ct29),
+            'ct37' => 0,
+            'ct38' => round($ct29),
+            'ct39' => 0,
+            'ct40' => 0,
+            'ct41' => 0,
+        ]);
+
+        respond(200, [
+            'type'        => $type,
+            'num'         => $num,
+            'year'        => $year,
+            'indicators'  => ($type === 'Y') ? $qttIndicators : $indicators,
+            'employees'   => $employees,
+            'employee_count' => count($employees)
+        ], 'Lấy số liệu tờ khai thuế TNCN thành công');
+    }
+
+    /**
+     * POST /api/hrm/accounting-az/generate-htkk-xml
+     * Xuất file XML chuẩn HTKK 05/KK-TNCN hoặc 05/QTT-TNCN
+     */
+    public function generateHtkkXml(array $auth): void {
+        $body = getBody();
+        $type = trim((string)($body['type'] ?? 'Q'));
+        $num  = (int)($body['num'] ?? 3);
+        $year = (int)($body['year'] ?? date('Y'));
+        $taxInd = $body['indicators'] ?? [];
+
+        $mst = trim((string)($body['company_mst'] ?? '0101234567'));
+        $tenNNT = htmlspecialchars(trim((string)($body['company_name'] ?? 'CÔNG TY TNHH MYERP')), ENT_XML1);
+        $nguoiKy = htmlspecialchars(trim((string)($body['signer'] ?? 'NGUYEN VAN A')), ENT_XML1);
+        $cqtMa   = trim((string)($body['cqt_code'] ?? '70711'));
+        $cqtTen  = htmlspecialchars(trim((string)($body['cqt_name'] ?? 'Chi cục Thuế')), ENT_XML1);
+        $today   = date('Y-m-d');
+
+        if ($type === 'Y') {
+            $xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+            $xml .= "<HSoThueDTu xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns=\"http://kekhaithue.gdt.gov.vn/TKhaiThue\">\n";
+            $xml .= "  <HSoKhaiThue id=\"ID_1\">\n";
+            $xml .= "    <TTinChung>\n";
+            $xml .= "      <TTinDVu><maDVu>HTKK</maDVu><tenDVu>HỖ TRỢ KÊ KHAI THUẾ</tenDVu><pbanDVu>5.7.9</pbanDVu></TTinDVu>\n";
+            $xml .= "      <TTinTKhaiThue>\n";
+            $xml .= "        <TKhaiThue>\n";
+            $xml .= "          <maTKhai>953</maTKhai>\n";
+            $xml .= "          <tenTKhai>TỜ KHAI QUYẾT TOÁN THUẾ THU NHẬP CÁ NHÂN (Mẫu số 05/QTT-TNCN)</tenTKhai>\n";
+            $xml .= "          <pbanTKhaiXML>2.9.3</pbanTKhaiXML>\n";
+            $xml .= "          <loaiTKhai>C</loaiTKhai><soLan>0</soLan>\n";
+            $xml .= "          <KyKKhaiThue><kieuKy>Y</kieuKy><kyKKhai>{$year}</kyKKhai></KyKKhaiThue>\n";
+            $xml .= "          <maCQTNoiNop>{$cqtMa}</maCQTNoiNop><tenCQTNoiNop>{$cqtTen}</tenCQTNoiNop>\n";
+            $xml .= "          <ngayLapTKhai>{$today}</ngayLapTKhai><nguoiKy>{$nguoiKy}</nguoiKy><ngayKy>{$today}</ngayKy>\n";
+            $xml .= "        </TKhaiThue>\n";
+            $xml .= "        <NNT><mst>{$mst}</mst><tenNNT>{$tenNNT}</tenNNT></NNT>\n";
+            $xml .= "      </TTinTKhaiThue>\n";
+            $xml .= "    </TTinChung>\n";
+            $xml .= "    <CTieuTKhaiChinh>\n";
+            for ($i = 16; $i <= 41; $i++) {
+                $val = (int)($taxInd["ct{$i}"] ?? 0);
+                $xml .= "      <ct{$i}>{$val}</ct{$i}>\n";
+            }
+            $xml .= "    </CTieuTKhaiChinh>\n";
+            $xml .= "  </HSoKhaiThue>\n";
+            $xml .= "</HSoThueDTu>";
+            $filename = "{$mst}-05-QTT-TNCN-{$year}.xml";
+        } else {
+            $kyStr = ($type === 'Q') ? "{$num}/{$year}" : sprintf('%02d/%d', $num, $year);
+            $xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+            $xml .= "<HSoThueDTu xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns=\"http://kekhaithue.gdt.gov.vn/TKhaiThue\">\n";
+            $xml .= "  <HSoKhaiThue id=\"ID_1\">\n";
+            $xml .= "    <TTinChung>\n";
+            $xml .= "      <TTinDVu><maDVu>HTKK</maDVu><tenDVu>HỖ TRỢ KÊ KHAI THUẾ</tenDVu><pbanDVu>5.7.8</pbanDVu></TTinDVu>\n";
+            $xml .= "      <TTinTKhaiThue>\n";
+            $xml .= "        <TKhaiThue>\n";
+            $xml .= "          <maTKhai>864</maTKhai>\n";
+            $xml .= "          <tenTKhai>TK khấu trừ thuế thu nhập cá nhân Mẫu 05/KK-TNCN (TT80/2021)</tenTKhai>\n";
+            $xml .= "          <pbanTKhaiXML>2.9.3</pbanTKhaiXML>\n";
+            $xml .= "          <loaiTKhai>C</loaiTKhai><soLan>0</soLan>\n";
+            $xml .= "          <KyKKhaiThue><kieuKy>{$type}</kieuKy><kyKKhai>{$kyStr}</kyKKhai></KyKKhaiThue>\n";
+            $xml .= "          <maCQTNoiNop>{$cqtMa}</maCQTNoiNop><tenCQTNoiNop>{$cqtTen}</tenCQTNoiNop>\n";
+            $xml .= "          <ngayLapTKhai>{$today}</ngayLapTKhai><nguoiKy>{$nguoiKy}</nguoiKy><ngayKy>{$today}</ngayKy>\n";
+            $xml .= "        </TKhaiThue>\n";
+            $xml .= "        <NNT><mst>{$mst}</mst><tenNNT>{$tenNNT}</tenNNT></NNT>\n";
+            $xml .= "      </TTinTKhaiThue>\n";
+            $xml .= "    </TTinChung>\n";
+            $xml .= "    <CTieuTKhaiChinh>\n";
+            for ($i = 15; $i <= 32; $i++) {
+                $val = (int)($taxInd["ct{$i}"] ?? 0);
+                $xml .= "      <ct{$i}>{$val}</ct{$i}>\n";
+            }
+            $xml .= "    </CTieuTKhaiChinh>\n";
+            $xml .= "  </HSoKhaiThue>\n";
+            $xml .= "</HSoThueDTu>";
+            $filename = "{$mst}-05-KK-TNCN-" . str_replace('/', '_', $kyStr) . ".xml";
+        }
+
+        respond(200, [
+            'filename' => $filename,
+            'xml'      => $xml,
+            'size'     => strlen($xml)
+        ], 'Tạo tệp XML HTKK thành công');
+    }
+
+    /**
+     * GET /api/hrm/accounting-az/labor-book
+     * Sổ Quản Lý Lao Động (Khoản 2 Điều 3 Nghị định 145/2020/NĐ-CP)
+     */
+    public function getLaborBook(array $auth): void {
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $year = (int)($_GET['year'] ?? date('Y'));
+
+        $sql = "
+            SELECT 
+                u.id, u.full_name, u.gender, u.dob, u.citizen_id, u.address, u.phone, u.email,
+                u.job_title, u.created_at as joined_date, u.status,
+                p.base_salary, p.annual_leave_used, p.annual_leave_total,
+                (SELECT contract_type FROM hrm_contracts c WHERE c.user_id = u.id ORDER BY c.id DESC LIMIT 1) as last_contract_type,
+                (SELECT start_date FROM hrm_contracts c WHERE c.user_id = u.id ORDER BY c.id DESC LIMIT 1) as contract_start_date,
+                (SELECT end_date FROM hrm_contracts c WHERE c.user_id = u.id ORDER BY c.id DESC LIMIT 1) as contract_end_date,
+                (SELECT contract_code FROM hrm_contracts c WHERE c.user_id = u.id ORDER BY c.id DESC LIMIT 1) as contract_code,
+                (SELECT COALESCE(SUM(overtime_days), 0) FROM monthly_payslips mp WHERE mp.user_id = u.id AND mp.month_year LIKE '{$year}-%') as total_ot_days
+            FROM users u
+            LEFT JOIN hrm_profiles p ON u.id = p.user_id
+            WHERE u.tenant_id = ?
+            ORDER BY u.id ASC
+        ";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$tid]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $headers = [
+            'STT', 'Họ và tên', 'Giới tính', 'Ngày sinh', 'Quốc tịch', 'Nơi cư trú', 'Số CCCD/Hộ chiếu',
+            'Trình độ CMKT', 'Bậc kỹ năng nghề', 'Vị trí việc làm', 'Loại HĐLĐ', 'Ngày bắt đầu HĐ',
+            'Ngày chấm dứt HĐ', 'Lý do chấm dứt', 'Mức lương theo HĐ', 'Số sổ BHXH',
+            'Số ngày phép đã nghỉ', 'Số giờ làm thêm trong năm', 'Nâng lương/bậc', 'Đào tạo/bồi dưỡng', 'Kỷ luật/TNLĐ'
+        ];
+
+        $laborBookRecords = [];
+        foreach ($rows as $i => $r) {
+            $ctTypeStr = match (strtolower((string)($r['last_contract_type'] ?? ''))) {
+                'kxd', 'indefinite' => 'HĐ không xác định thời hạn',
+                'xd', 'definite', 'fixed_term' => 'HĐ xác định thời hạn',
+                'tv', 'probation'   => 'Hợp đồng thử việc',
+                'dv', 'service'     => 'HĐ dịch vụ / CTV',
+                default             => 'Chưa ký HĐ'
+            };
+
+            $laborBookRecords[] = [
+                'stt'              => $i + 1,
+                'full_name'        => $r['full_name'],
+                'gender'           => !empty($r['gender']) ? $r['gender'] : 'Nam',
+                'dob'              => $r['dob'] ? date('d/m/Y', strtotime($r['dob'])) : '',
+                'nationality'      => 'Việt Nam',
+                'address'          => $r['address'] ?? '',
+                'citizen_id'       => $r['citizen_id'] ?? '',
+                'qualification'    => 'Đại học / Cao đẳng',
+                'skill_level'      => '',
+                'job_title'        => $r['job_title'] ?? 'Nhân viên',
+                'contract_type'    => $ctTypeStr,
+                'contract_start'   => $r['contract_start_date'] ? date('d/m/Y', strtotime($r['contract_start_date'])) : date('d/m/Y', strtotime($r['joined_date'])),
+                'contract_end'     => $r['contract_end_date'] ? date('d/m/Y', strtotime($r['contract_end_date'])) : '—',
+                'termination_reason'=> (($r['status'] ?? '') === 'leave') ? 'Hết hạn HĐ / Thỏa thuận chấm dứt' : '',
+                'salary'           => (float)($r['base_salary'] ?? 0),
+                'insurance_book_no'=> '',
+                'annual_leave_used'=> (float)($r['annual_leave_used'] ?? 0),
+                'total_ot_hours'   => ((float)($r['total_ot_days'] ?? 0)) * 8,
+                'salary_raise'     => '',
+                'training'         => '',
+                'discipline'       => ''
+            ];
+        }
+
+        respond(200, [
+            'year'    => $year,
+            'headers' => $headers,
+            'records' => $laborBookRecords,
+            'total'   => count($laborBookRecords)
+        ], 'Lấy sổ quản lý lao động thành công');
+    }
+
+    /**
+     * POST /api/hrm/accounting-az/calculate-benefits
+     * Máy tính chế độ Thai sản & Trợ cấp thôi việc/mất việc
+     */
+    public function calculateBenefits(array $auth): void {
+        $body = getBody();
+        $type = trim((string)($body['benefit_type'] ?? 'maternity'));
+        $avgSalary = (float)($body['average_salary'] ?? 0);
+        $workYears = (float)($body['work_years'] ?? 0);
+        $unemploymentYears = (float)($body['unemployment_insured_years'] ?? 0);
+
+        $params = $this->getLegalParameters();
+        $lcs = $params['luong_co_so'];
+
+        if ($type === 'maternity') {
+            $maternityAllowance = $avgSalary * 6;
+            $oneTimeAllowance = 2 * $lcs;
+            $totalBenefit = $maternityAllowance + $oneTimeAllowance;
+
+            respond(200, [
+                'benefit_type'         => 'maternity',
+                'average_salary'       => $avgSalary,
+                'luong_co_so'          => $lcs,
+                'maternity_allowance'  => round($maternityAllowance),
+                'one_time_allowance'   => round($oneTimeAllowance),
+                'total_benefit'        => round($totalBenefit),
+                'notes'                => 'Mức hưởng thai sản 6 tháng + Trợ cấp 1 lần bằng 2 lần lương cơ sở (Điều 38 Luật BHXH).'
+            ], 'Tính chế độ thai sản thành công');
+        } elseif ($type === 'severance') {
+            $eligibleYears = max(0.0, $workYears - $unemploymentYears);
+            $eligibleMonths = ceil($eligibleYears * 2) / 2;
+            $allowance = $eligibleMonths * 0.5 * $avgSalary;
+
+            respond(200, [
+                'benefit_type'         => 'severance',
+                'work_years'           => $workYears,
+                'unemployment_years'   => $unemploymentYears,
+                'eligible_years'       => $eligibleYears,
+                'average_salary'       => $avgSalary,
+                'total_allowance'      => round($allowance),
+                'notes'                => 'Trợ cấp thôi việc: Mỗi năm làm việc không tham gia BHTN tính bằng 1/2 tháng lương bình quân 6 tháng liền kề (Điều 46 BLLĐ 2019).'
+            ], 'Tính trợ cấp thôi việc thành công');
+        } else {
+            $eligibleYears = max(0.0, $workYears - $unemploymentYears);
+            $allowance = max(2.0 * $avgSalary, $eligibleYears * $avgSalary);
+
+            respond(200, [
+                'benefit_type'         => 'job_loss',
+                'work_years'           => $workYears,
+                'unemployment_years'   => $unemploymentYears,
+                'eligible_years'       => $eligibleYears,
+                'average_salary'       => $avgSalary,
+                'total_allowance'      => round($allowance),
+                'notes'                => 'Trợ cấp mất việc làm: Mỗi năm làm việc không tham gia BHTN tính bằng 1 tháng lương, tối thiểu 2 tháng lương (Điều 47 BLLĐ 2019).'
+            ], 'Tính trợ cấp mất việc làm thành công');
+        }
+    }
 }
 

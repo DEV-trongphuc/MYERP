@@ -78,7 +78,7 @@ const GeneralTabContent: React.FC<GeneralTabContentProps> = ({ stats, formatDura
             yaxis: { lines: { show: true } },
             padding: { top: 10, right: 15, bottom: 5, left: 5 }
         },
-        colors: ['#6366f1', '#8b5cf6'],
+        colors: ['#C6333D', '#334155'],
         legend: {
             show: true,
             position: 'top',

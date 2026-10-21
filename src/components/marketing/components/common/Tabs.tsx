@@ -21,29 +21,11 @@ export interface TabsProps {
   size?: 'sm' | 'md' | 'lg';
 }
 
-const SIZE_CONFIG = {
-  sm: {
-    padding: 'h-7 px-2.5 text-xs',
-    icon: 'w-3.5 h-3.5',
-    gap: 'gap-1.5',
-  },
-  md: {
-    padding: 'h-8 px-3.5 text-[13px]',
-    icon: 'w-4 h-4',
-    gap: 'gap-1.5',
-  },
-  lg: {
-    padding: 'h-9 px-4 text-sm',
-    icon: 'w-4 h-4',
-    gap: 'gap-2',
-  },
-} as const;
-
 const Tabs: React.FC<TabsProps> = ({
   items,
   activeId,
   onChange,
-  variant = 'underline',
+  variant = 'segmented',
   className = '',
   size = 'md',
 }) => {
@@ -60,18 +42,25 @@ const Tabs: React.FC<TabsProps> = ({
 
   if (visibleItems.length === 0) return null;
 
-  const sizeConfig = SIZE_CONFIG[size] ?? SIZE_CONFIG.md;
   const cleanClassName = stripLegacyClasses(className);
 
-  // Segmented / Glass: single-row container matching /approvals top toolbar
-  if (variant === 'segmented' || variant === 'glass') {
+  // Modern Segmented Pill Control for all pill, segmented, sub-segmented, and glass variants
+  if (variant === 'segmented' || variant === 'pill' || variant === 'sub-segmented' || variant === 'glass') {
+    const isSmall = size === 'sm';
     return (
       <div
         role="tablist"
-        className={cn(
-          'inline-flex items-center gap-1 bg-[var(--color-bg-secondary,#f1f5f9)] p-1 rounded-[8px] border border-[var(--color-border)]/60 overflow-x-auto scrollbar-hide flex-nowrap max-w-full',
-          cleanClassName,
-        )}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px',
+          padding: '4px',
+          borderRadius: '12px',
+          background: '#f1f5f9',
+          border: '1px solid #e2e8f0',
+          maxWidth: '100%',
+        }}
+        className={cn('overflow-x-auto scrollbar-hide flex-nowrap shrink-0', cleanClassName)}
       >
         {visibleItems.map((item) => {
           const isActive = activeId === item.id;
@@ -85,96 +74,59 @@ const Tabs: React.FC<TabsProps> = ({
               role="tab"
               aria-selected={isActive}
               onClick={() => onChange(item.id)}
-              className={cn(
-                'relative rounded-[6px] font-semibold text-xs transition-all duration-150 inline-flex items-center whitespace-nowrap shrink-0 outline-none select-none cursor-pointer',
-                sizeConfig.padding,
-                sizeConfig.gap,
-                isActive
-                  ? 'bg-[var(--color-surface,#ffffff)] text-[var(--color-text)] font-bold shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] border border-[var(--color-border-light,#e2e8f0)]/80'
-                  : 'bg-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-black/5',
-              )}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: isSmall ? '5px' : '7px',
+                padding: isSmall ? '5px 10px' : '7px 14px',
+                borderRadius: '9px',
+                fontSize: isSmall ? '11.5px' : '12.5px',
+                fontWeight: isActive ? 700 : 600,
+                background: isActive ? '#ffffff' : 'transparent',
+                color: isActive ? '#C6333D' : '#64748b',
+                border: 'none',
+                boxShadow: isActive ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              className="whitespace-nowrap shrink-0 outline-none select-none hover:text-[#0f172a]"
             >
               {Icon && (
                 <Icon
-                  className={cn(
-                    sizeConfig.icon,
-                    'shrink-0 transition-colors',
-                    isActive ? 'text-[var(--color-text)]' : 'text-[var(--color-text-muted)]',
-                  )}
+                  style={{
+                    width: isSmall ? 13 : 15,
+                    height: isSmall ? 13 : 15,
+                    color: isActive ? '#C6333D' : '#64748b',
+                    flexShrink: 0,
+                    transition: 'color 0.15s ease',
+                  }}
                 />
               )}
               <span>{typeof item.label === 'string' ? item.label.trim() : item.label}</span>
               {hasCount && (
                 <span
-                  className={cn(
-                    'ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none',
-                    isActive
-                      ? 'bg-[var(--color-bg-secondary,#f1f5f9)] text-[var(--color-text)]'
-                      : 'bg-black/5 text-[var(--color-text-muted)]',
-                  )}
-                >
-                  {item.count !== undefined ? item.count.toLocaleString() : item.badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-    );
-  }
-
-  // Sub-segmented / Pill: single-row rounded-full pills matching /approvals Row 2
-  if (variant === 'pill' || variant === 'sub-segmented') {
-    return (
-      <div
-        role="tablist"
-        className={cn(
-          'flex items-center gap-2 overflow-x-auto scrollbar-hide flex-nowrap max-w-full',
-          cleanClassName,
-        )}
-      >
-        {visibleItems.map((item) => {
-          const isActive = activeId === item.id;
-          const Icon = item.icon;
-          const hasCount = item.count !== undefined || item.badge !== undefined;
-
-          return (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              aria-selected={isActive}
-              onClick={() => onChange(item.id)}
-              className={cn(
-                'h-8 px-3.5 rounded-full text-xs transition-all duration-150 inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 outline-none select-none cursor-pointer',
-                isActive
-                  ? 'border-[1.5px] border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)] font-bold shadow-xs'
-                  : 'border border-[var(--color-border)] bg-[var(--color-surface,#ffffff)] text-[var(--color-text-muted)] font-semibold hover:text-[var(--color-text)] hover:border-[var(--color-border-hover)]',
-              )}
-            >
-              {Icon && (
-                <Icon
-                  className={cn(
-                    'w-3.5 h-3.5 shrink-0 transition-colors',
-                    isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-muted)]',
-                  )}
-                />
-              )}
-              <span>{typeof item.label === 'string' ? item.label.trim() : item.label}</span>
-              {hasCount && (
-                <span
-                  className={cn(
-                    'ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none',
-                    isActive
-                      ? 'bg-[var(--color-primary)] text-white'
-                      : 'bg-[var(--color-bg-secondary,#f1f5f9)] text-[var(--color-text-muted)]',
-                  )}
+                  style={{
+                    marginLeft: '4px',
+                    padding: '1px 6px',
+                    borderRadius: '999px',
+                    fontSize: '10.5px',
+                    fontWeight: 700,
+                    lineHeight: '1.2',
+                    background: isActive ? '#fef2f2' : '#e2e8f0',
+                    color: isActive ? '#C6333D' : '#475569',
+                  }}
                 >
                   {item.count !== undefined ? item.count.toLocaleString() : item.badge}
                 </span>
               )}
               {item.countLabel && (
-                <span className={cn('text-[10px] font-medium', isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-muted)]')}>
+                <span
+                  style={{
+                    fontSize: '10px',
+                    fontWeight: 500,
+                    color: isActive ? '#C6333D' : '#94a3b8',
+                  }}
+                >
                   {item.countLabel}
                 </span>
               )}
@@ -185,14 +137,18 @@ const Tabs: React.FC<TabsProps> = ({
     );
   }
 
-  // Underline (Default): single-row overflow-x-auto, active tab uses border-b-2 border-[var(--color-primary)]
+  // Underline variant fallback: Executive Red active border
   return (
     <div
       role="tablist"
-      className={cn(
-        'flex items-center gap-1 border-b border-[var(--color-border)] relative overflow-x-auto scrollbar-hide flex-nowrap max-w-full',
-        cleanClassName,
-      )}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        borderBottom: '1px solid #e2e8f0',
+        maxWidth: '100%',
+      }}
+      className={cn('relative overflow-x-auto scrollbar-hide flex-nowrap', cleanClassName)}
     >
       {visibleItems.map((item) => {
         const isActive = activeId === item.id;
@@ -206,40 +162,59 @@ const Tabs: React.FC<TabsProps> = ({
             role="tab"
             aria-selected={isActive}
             onClick={() => onChange(item.id)}
-            className={cn(
-              'relative py-2.5 px-3 text-[13px] font-semibold normal-case inline-flex items-center gap-2 border-b-2 -mb-px transition-colors duration-150 whitespace-nowrap shrink-0 outline-none select-none cursor-pointer',
-              isActive
-                ? 'border-[var(--color-primary)] text-[var(--color-primary)]'
-                : 'border-transparent text-[var(--color-text-light)] hover:text-[var(--color-text)] hover:border-[var(--color-border)]',
-            )}
+            style={{
+              position: 'relative',
+              padding: '10px 14px',
+              fontSize: '13px',
+              fontWeight: isActive ? 700 : 600,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              borderBottom: isActive ? '2px solid #C6333D' : '2px solid transparent',
+              marginBottom: '-1px',
+              color: isActive ? '#C6333D' : '#64748b',
+              background: 'transparent',
+              borderTop: 'none',
+              borderLeft: 'none',
+              borderRight: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            className="whitespace-nowrap shrink-0 outline-none select-none hover:text-[#0f172a]"
           >
             {Icon && (
               <Icon
-                className={cn(
-                  'w-4 h-4 shrink-0',
-                  isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-muted)]',
-                )}
+                style={{
+                  width: 15,
+                  height: 15,
+                  flexShrink: 0,
+                  color: isActive ? '#C6333D' : '#64748b',
+                }}
               />
             )}
             <span>{typeof item.label === 'string' ? item.label.trim() : item.label}</span>
             {hasCount && (
               <span
-                className={cn(
-                  'ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none',
-                  isActive
-                    ? 'bg-[var(--color-primary-light)] text-[var(--color-primary)]'
-                    : 'bg-[var(--color-bg)] text-[var(--color-text-muted)]',
-                )}
+                style={{
+                  marginLeft: '2px',
+                  padding: '1px 6px',
+                  borderRadius: '999px',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  background: isActive ? '#fef2f2' : '#f1f5f9',
+                  color: isActive ? '#C6333D' : '#64748b',
+                }}
               >
                 {item.count !== undefined ? item.count.toLocaleString() : item.badge}
               </span>
             )}
             {item.countLabel && (
               <span
-                className={cn(
-                  'text-[10px] font-medium',
-                  isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-muted)]',
-                )}
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 500,
+                  color: isActive ? '#C6333D' : '#64748b',
+                }}
               >
                 {item.countLabel}
               </span>
@@ -256,5 +231,3 @@ export default Tabs;
 // Dual value declarations for verbatimModuleSyntax compatibility
 export const TabItem: any = undefined;
 export const TabsProps: any = undefined;
-
-

@@ -184,8 +184,7 @@ export const SystemOverviewModal: React.FC<Props> = ({ isOpen, onClose, isDarkTh
                                     value={(data.summary?.total_ai || 0).toLocaleString()}
                                     growth={data.summary?.growth_ai || 0}
                                     icon={<Bot className="w-5 h-5" />}
-                                    gradient="from-rose-500 to-pink-600 shadow-rose-500/25"
-                                    trendColor={(data.summary?.growth_ai || 0) >= 0 ? 'text-emerald-500' : 'text-rose-500'}
+                                    isPrimary={true}
                                     isDarkTheme={isDarkTheme}
                                 />
                                 <StatCard
@@ -193,8 +192,7 @@ export const SystemOverviewModal: React.FC<Props> = ({ isOpen, onClose, isDarkTh
                                     value={(data.summary?.total_web || 0).toLocaleString()}
                                     growth={data.summary?.growth_web || 0}
                                     icon={<Globe className="w-5 h-5" />}
-                                    gradient="from-blue-500 to-indigo-600 shadow-blue-500/25"
-                                    trendColor={(data.summary?.growth_web || 0) >= 0 ? 'text-emerald-500' : 'text-rose-500'}
+                                    isPrimary={false}
                                     isDarkTheme={isDarkTheme}
                                 />
                                 <StatCard
@@ -202,8 +200,7 @@ export const SystemOverviewModal: React.FC<Props> = ({ isOpen, onClose, isDarkTh
                                     value={(data.summary?.total_leads || 0).toLocaleString()}
                                     growth={data.summary?.growth_leads || 0}
                                     icon={<Users className="w-5 h-5" />}
-                                    gradient="from-blue-500 to-indigo-600 shadow-indigo-500/25"
-                                    trendColor={(data.summary?.growth_leads || 0) >= 0 ? 'text-emerald-500' : 'text-rose-500'}
+                                    isPrimary={false}
                                     isDarkTheme={isDarkTheme}
                                 />
                             </div>
@@ -570,21 +567,27 @@ const EmailSentChart: React.FC = () => {
 };
 // ─────────────────────────────────────────────────────────────────────────────
 
-const StatCard = ({ title, value, growth, icon, gradient, isDarkTheme }: any) => {
+const StatCard = ({ title, value, growth, icon, isPrimary, isDarkTheme }: any) => {
+    const iconBg = isPrimary ? '#fef2f2' : '#f8fafc';
+    const iconColor = isPrimary ? '#C6333D' : '#334155';
+    const iconBorder = isPrimary ? '#fecdd3' : '#e2e8f0';
+
     return (
-        <div className={`p-5 rounded-[18px] shadow-[0_4px_20px_rgba(0,0,0,0.015)] border transition-all duration-300 relative overflow-hidden group hover:shadow-[0_12px_36px_rgba(0,0,0,0.035)] hover:-translate-y-1 ${isDarkTheme ? 'bg-[#11151d] border-slate-800/80' : 'bg-white border-slate-100/70'}`}>
-            <div className={`absolute top-0 right-0 w-24 h-24 rounded-full -mr-10 -mt-10 opacity-30 group-hover:scale-110 transition-transform ${isDarkTheme ? 'bg-slate-800' : 'bg-slate-50'}`} />
-            <div className="flex items-start justify-between mb-4 relative z-10">
-                <div className={`w-11 h-11 rounded-[14px] bg-gradient-to-br ${gradient} flex items-center justify-center text-white shadow-lg`}>
+        <div className={`p-5 rounded-[16px] shadow-xs border transition-all duration-300 relative overflow-hidden group hover:shadow-md ${isDarkTheme ? 'bg-[#11151d] border-slate-800/80' : 'bg-white border-slate-200'}`}>
+            <div className="flex items-start justify-between mb-3 relative z-10">
+                <div
+                    style={{ backgroundColor: iconBg, color: iconColor, borderColor: iconBorder }}
+                    className="w-10 h-10 rounded-[10px] border flex items-center justify-center shrink-0"
+                >
                     {icon}
                 </div>
-                <div className={`flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md ${growth >= 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                <div className={`flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full ${growth >= 0 ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-rose-50 text-rose-600 border border-rose-200'}`}>
                     <TrendingUp className={`w-3 h-3 ${growth < 0 ? 'rotate-180' : ''}`} />
                     {growth > 0 ? '+' : ''}{growth}%
                 </div>
             </div>
-            <h4 className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">{title}</h4>
-            <div className="text-xl md:text-2xl font-black text-slate-800 dark:text-slate-100">{value}</div>
+            <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">{title}</h4>
+            <div className="text-2xl font-black text-slate-900 dark:text-slate-100 tabular-nums">{value}</div>
         </div>
     );
 };

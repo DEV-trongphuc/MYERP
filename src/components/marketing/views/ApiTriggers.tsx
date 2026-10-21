@@ -94,7 +94,7 @@ const ApiTriggers: React.FC = () => {
                     title="Biểu mẫu thu thập"
                     value={stats.forms !== null ? String(stats.forms) : '0'}
                     icon={<FileText />}
-                    color="#a31422"
+                    color="#334155"
                     breakdown="Forms Landing Page"
                 />
                 <StatCard
@@ -102,7 +102,7 @@ const ApiTriggers: React.FC = () => {
                     title="Đơn hàng Webhook"
                     value={stats.purchases !== null ? String(stats.purchases) : '0'}
                     icon={<ShoppingCart />}
-                    color="#3b82f6"
+                    color="#0f172a"
                     breakdown="Sự kiện mua hàng tự động"
                 />
                 <StatCard
@@ -110,7 +110,7 @@ const ApiTriggers: React.FC = () => {
                     title="Sự kiện Custom"
                     value={stats.customEvents !== null ? String(stats.customEvents) : '0'}
                     icon={<Zap />}
-                    color="#10b981"
+                    color="#C6333D"
                     breakdown="App & Web Custom Triggers"
                 />
                 <StatCard
@@ -118,7 +118,7 @@ const ApiTriggers: React.FC = () => {
                     title="Luồng & OTP Active"
                     value={stats.activeFlows !== null ? String(stats.activeFlows) : '0'}
                     icon={<ShieldCheck />}
-                    color="#f59e0b"
+                    color="#64748b"
                     breakdown="Automation Flows đang chạy"
                 />
             </MktStatGrid>

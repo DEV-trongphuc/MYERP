@@ -224,9 +224,9 @@ const MetaCustomers: React.FC = () => {
             <div className="p-4 flex flex-col gap-4">
                 {stats && (
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <StatCard title="Tổng khách hàng" value={(stats.all || 0).toLocaleString('vi-VN')} icon={<Users />} color="var(--color-primary)" />
-                        <StatCard title="Đã định danh" value={(stats.identified || 0).toLocaleString('vi-VN')} icon={<BadgeCheck />} color="#10b981" />
-                        <StatCard title="Chờ xử lý" value={(stats.unsynced || 0).toLocaleString('vi-VN')} icon={<RefreshCw />} color="#f59e0b" />
+                        <StatCard title="Tổng khách hàng" value={(stats.all || 0).toLocaleString('vi-VN')} icon={<Users />} color="#C6333D" />
+                        <StatCard title="Đã định danh" value={(stats.identified || 0).toLocaleString('vi-VN')} icon={<BadgeCheck />} color="#0f172a" />
+                        <StatCard title="Chờ xử lý" value={(stats.unsynced || 0).toLocaleString('vi-VN')} icon={<RefreshCw />} color="#64748b" />
                     </div>
                 )}
 
@@ -612,34 +612,68 @@ const MetaCustomers: React.FC = () => {
                         <div
                             key={page.id}
                             onClick={() => handlePageClick(page)}
-                            className="bg-[var(--color-surface)] p-5 rounded-[var(--radius-lg)] border border-[var(--color-border)] shadow-[var(--shadow-xs)] hover:shadow-[var(--shadow-md)] hover:border-[var(--color-primary)] transition-all cursor-pointer flex flex-col justify-between group"
+                            style={{
+                                background: '#ffffff',
+                                border: '1px solid #e2e8f0',
+                                borderRadius: '16px',
+                                padding: '18px 20px',
+                                boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                            }}
+                            className="hover:shadow-[0_4px_16px_rgba(15,23,42,0.08)] hover:border-[#cbd5e1] flex flex-col justify-between group"
                         >
                             <div>
                                 <div className="flex items-start justify-between mb-4">
-                                    <Avatar
-                                        name={page.page_name || page.name || 'Meta Page'}
-                                        src={page.avatar_url}
-                                        size={40}
-                                    />
-                                    <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[11px] font-semibold rounded-full flex items-center gap-1.5 border border-emerald-200">
+                                    {page.avatar_url ? (
+                                        <img
+                                            src={page.avatar_url}
+                                            alt=""
+                                            className="w-10 h-10 rounded-[12px] object-cover border border-[#e2e8f0]"
+                                            onError={(e) => {
+                                                (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                            }}
+                                        />
+                                    ) : (
+                                        <div
+                                            style={{
+                                                width: 40,
+                                                height: 40,
+                                                borderRadius: '12px',
+                                                background: '#fef2f2',
+                                                border: '1px solid #fecdd3',
+                                                color: '#C6333D',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                fontWeight: 800,
+                                                fontSize: '13px',
+                                                letterSpacing: '-0.02em',
+                                                flexShrink: 0
+                                            }}
+                                        >
+                                            {((page.page_name || page.name || 'FB').slice(0, 2)).toUpperCase()}
+                                        </div>
+                                    )}
+                                    <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 text-[11px] font-bold rounded-full flex items-center gap-1.5 border border-emerald-200">
                                         <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> Live Sync
                                     </span>
                                 </div>
 
                                 <div className="mb-4">
-                                    <h4 className="text-sm font-semibold text-[var(--color-text)] group-hover:text-[var(--color-primary)] transition-colors line-clamp-1">{page.page_name || page.name}</h4>
-                                    <p className="text-xs text-[var(--color-text-muted)] mt-0.5 flex items-center gap-1">
+                                    <h4 className="text-sm font-bold text-[#0f172a] group-hover:text-[#C6333D] transition-colors line-clamp-1">{page.page_name || page.name}</h4>
+                                    <p className="text-xs text-[#64748b] mt-0.5 flex items-center gap-1">
                                         <Minus className="w-3 h-3" /> Page ID: {page.page_id}
                                     </p>
                                 </div>
                             </div>
 
-                            <div className="flex items-center justify-between border-t border-[var(--color-border-light)] pt-3">
+                            <div className="flex items-center justify-between border-t border-[#e2e8f0] pt-3.5">
                                 <div>
-                                    <span className="text-[11px] font-medium text-[var(--color-text-muted)] block">Khách hàng Meta</span>
-                                    <span className="text-lg font-extrabold tabular-nums text-[var(--color-text)]">{(page.subscriber_count || 0).toLocaleString('vi-VN')}</span>
+                                    <span className="text-[11px] font-semibold text-[#64748b] block">Khách hàng Meta</span>
+                                    <span className="text-xl font-extrabold tabular-nums text-[#0f172a]">{(page.subscriber_count || 0).toLocaleString('vi-VN')}</span>
                                 </div>
-                                <div className="w-8 h-8 bg-[var(--color-bg)] text-[var(--color-text-muted)] rounded-full group-hover:bg-[var(--color-primary-light)] group-hover:text-[var(--color-primary)] transition-colors flex items-center justify-center shrink-0">
+                                <div className="w-8 h-8 rounded-full border border-[#e2e8f0] bg-[#f8fafc] text-[#64748b] group-hover:bg-[#fef2f2] group-hover:text-[#C6333D] group-hover:border-[#fecdd3] transition-colors flex items-center justify-center shrink-0">
                                     <ArrowLeft className="w-4 h-4 rotate-180" />
                                 </div>
                             </div>

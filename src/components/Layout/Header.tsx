@@ -1716,11 +1716,11 @@ export const Header = ({
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      padding: '0 1.25rem',
+      padding: isMobile ? '0 0.625rem' : '0 1.25rem',
       flexShrink: 0,
       zIndex: 40
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '0.45rem' : '0.875rem' }}>
         {/* Mobile menu trigger */}
         <button 
           onClick={() => setIsAppLauncherOpen(true)}
@@ -1866,7 +1866,7 @@ export const Header = ({
         </button>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
+      <div className="header-actions-right" style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '0.35rem' : '0.875rem' }}>
         {isDemo && (
           <div className="responsive-hide-mobile" style={{
             background: 'linear-gradient(to right, #f59e0b, #d97706)',

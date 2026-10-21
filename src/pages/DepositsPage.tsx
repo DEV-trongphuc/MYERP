@@ -1831,11 +1831,6 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                     borderRadius: '16px'
                   }}
                 >
-                  {/* Decorative Background SVG */}
-                  <div className="decor-svg" style={{ color: k.color, opacity: 0.05, position: 'absolute', right: -10, bottom: -10, width: 70, height: 70, pointerEvents: 'none' }}>
-                    {k.decor}
-                  </div>
-
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
                     <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{k.label}</span>
                     <div className="stat-icon" style={{
@@ -2489,9 +2484,6 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
             {/* Card 1: Dự thu 7 ngày tới */}
             <div className="stat-card hover-lift" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
-              <div className="decor-svg" style={{ color: '#2563eb', opacity: 0.05, position: 'absolute', right: -10, bottom: -10, pointerEvents: 'none' }}>
-                <DollarSign size={70} />
-              </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Dự thu 7 ngày tới</span>
                 <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(37, 99, 235, 0.08)', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -2524,9 +2516,6 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
 
             {/* Card 2: Dự thu 30 ngày tới */}
             <div className="stat-card hover-lift" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
-              <div className="decor-svg" style={{ color: '#10b981', opacity: 0.05, position: 'absolute', right: -10, bottom: -10, pointerEvents: 'none' }}>
-                <Calendar size={70} />
-              </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Dự thu 30 ngày tới</span>
                 <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(16, 185, 129, 0.08)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -2554,9 +2543,6 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
 
             {/* Card 3: Dự chi 7 ngày tới */}
             <div className="stat-card hover-lift" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
-              <div className="decor-svg" style={{ color: '#d97706', opacity: 0.05, position: 'absolute', right: -10, bottom: -10, pointerEvents: 'none' }}>
-                <CreditCard size={70} />
-              </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Dự chi 7 ngày tới</span>
                 <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(245, 158, 11, 0.08)', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -2581,9 +2567,6 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
 
             {/* Card 4: Dự chi 30 ngày tới */}
             <div className="stat-card hover-lift" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
-              <div className="decor-svg" style={{ color: '#ef4444', opacity: 0.05, position: 'absolute', right: -10, bottom: -10, pointerEvents: 'none' }}>
-                <AlertCircle size={70} />
-              </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Dự chi 30 ngày tới</span>
                 <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -2679,20 +2662,21 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
               </div>
 
               {/* Filter Tabs */}
-              <div style={{ display: 'flex', gap: '6px', background: 'var(--color-bg)', padding: '4px', borderRadius: '10px', border: '1px solid var(--color-border-light)' }}>
+              <div style={{ display: 'flex', gap: '3px', background: 'var(--color-border-light, #f1f5f9)', padding: '3px', borderRadius: '8px', border: '1px solid var(--color-border, #e2e8f0)' }}>
                 <button
                   type="button"
                   onClick={() => handleTimelineFilterChange('upcoming')}
                   style={{
                     padding: '6px 12px',
-                    borderRadius: '8px',
+                    borderRadius: '6px',
                     border: 'none',
                     fontSize: '0.75rem',
                     fontWeight: 700,
                     cursor: 'pointer',
-                    background: timelineFilter === 'upcoming' ? 'var(--color-primary)' : 'transparent',
-                    color: timelineFilter === 'upcoming' ? '#ffffff' : 'var(--color-text-muted)',
-                    transition: 'all 0.2s ease',
+                    background: timelineFilter === 'upcoming' ? 'var(--color-surface, #ffffff)' : 'transparent',
+                    color: timelineFilter === 'upcoming' ? '#C6333D' : 'var(--color-text-muted, #64748b)',
+                    boxShadow: timelineFilter === 'upcoming' ? '0 1px 3px rgba(15,23,42,0.08)' : 'none',
+                    transition: 'all 0.15s ease',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px'
@@ -2703,8 +2687,8 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                     padding: '1px 6px',
                     borderRadius: '10px',
                     fontSize: '0.7rem',
-                    background: timelineFilter === 'upcoming' ? 'rgba(255,255,255,0.2)' : 'var(--color-border)',
-                    color: timelineFilter === 'upcoming' ? '#fff' : 'var(--color-text)'
+                    background: timelineFilter === 'upcoming' ? 'rgba(198, 51, 61, 0.1)' : 'var(--color-border, #e2e8f0)',
+                    color: timelineFilter === 'upcoming' ? '#C6333D' : 'var(--color-text-muted, #64748b)'
                   }}>
                     {upcomingTimelineCount}
                   </span>
@@ -2715,14 +2699,15 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                   onClick={() => handleTimelineFilterChange('overdue')}
                   style={{
                     padding: '6px 12px',
-                    borderRadius: '8px',
+                    borderRadius: '6px',
                     border: 'none',
                     fontSize: '0.75rem',
                     fontWeight: 700,
                     cursor: 'pointer',
-                    background: timelineFilter === 'overdue' ? 'var(--color-danger)' : 'transparent',
-                    color: timelineFilter === 'overdue' ? '#ffffff' : 'var(--color-text-muted)',
-                    transition: 'all 0.2s ease',
+                    background: timelineFilter === 'overdue' ? 'var(--color-surface, #ffffff)' : 'transparent',
+                    color: timelineFilter === 'overdue' ? '#C6333D' : 'var(--color-text-muted, #64748b)',
+                    boxShadow: timelineFilter === 'overdue' ? '0 1px 3px rgba(15,23,42,0.08)' : 'none',
+                    transition: 'all 0.15s ease',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px'
@@ -2733,8 +2718,8 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                     padding: '1px 6px',
                     borderRadius: '10px',
                     fontSize: '0.7rem',
-                    background: timelineFilter === 'overdue' ? 'rgba(255,255,255,0.2)' : 'rgba(239,68,68,0.1)',
-                    color: timelineFilter === 'overdue' ? '#fff' : 'var(--color-danger)'
+                    background: timelineFilter === 'overdue' ? 'rgba(198, 51, 61, 0.1)' : 'rgba(239,68,68,0.1)',
+                    color: timelineFilter === 'overdue' ? '#C6333D' : 'var(--color-danger, #ef4444)'
                   }}>
                     {overdueTimelineCount}
                   </span>
@@ -2745,14 +2730,15 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                   onClick={() => handleTimelineFilterChange('all')}
                   style={{
                     padding: '6px 12px',
-                    borderRadius: '8px',
+                    borderRadius: '6px',
                     border: 'none',
                     fontSize: '0.75rem',
                     fontWeight: 700,
                     cursor: 'pointer',
-                    background: timelineFilter === 'all' ? 'var(--color-text)' : 'transparent',
-                    color: timelineFilter === 'all' ? 'var(--color-surface)' : 'var(--color-text-muted)',
-                    transition: 'all 0.2s ease',
+                    background: timelineFilter === 'all' ? 'var(--color-surface, #ffffff)' : 'transparent',
+                    color: timelineFilter === 'all' ? '#C6333D' : 'var(--color-text-muted, #64748b)',
+                    boxShadow: timelineFilter === 'all' ? '0 1px 3px rgba(15,23,42,0.08)' : 'none',
+                    transition: 'all 0.15s ease',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px'
@@ -2763,8 +2749,8 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                     padding: '1px 6px',
                     borderRadius: '10px',
                     fontSize: '0.7rem',
-                    background: timelineFilter === 'all' ? 'rgba(255,255,255,0.2)' : 'var(--color-border)',
-                    color: timelineFilter === 'all' ? 'var(--color-surface)' : 'var(--color-text)'
+                    background: timelineFilter === 'all' ? 'rgba(198, 51, 61, 0.1)' : 'var(--color-border, #e2e8f0)',
+                    color: timelineFilter === 'all' ? '#C6333D' : 'var(--color-text-muted, #64748b)'
                   }}>
                     {allTimelineItems.length}
                   </span>

@@ -33,13 +33,14 @@ const MetaMessenger: React.FC = () => {
             <div className="bg-[var(--color-surface)] rounded-[18px] border border-[var(--color-border)] shadow-xs overflow-hidden min-h-[500px]">
                 <div className="px-4 py-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] flex items-center justify-between">
                     <Tabs
-                        variant="pill"
+                        variant="segmented"
                         activeId={activeTab}
                         onChange={setActiveTab as any}
                         items={[
                             { id: 'customers', label: 'Khách hàng', icon: Users },
                             { id: 'automation', label: 'Kịch bản Chatbot', icon: Zap },
-                            { id: 'report', label: 'Báo cáo', icon: BarChart3 }
+                            { id: 'report', label: 'Báo cáo', icon: BarChart3 },
+                            { id: 'config', label: 'Cấu hình Fanpage & Ad Account', icon: Settings }
                         ]}
                     />
                 </div>

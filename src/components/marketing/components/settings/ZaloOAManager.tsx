@@ -218,6 +218,15 @@ const ZaloOAManager: React.FC<ZaloOAManagerProps> = ({ onSelect }) => {
     };
 
     const getStatusBadge = (oa: ZaloOA) => {
+        const expired = isTokenExpired(oa.token_expires_at);
+        if (expired && oa.status === 'active') {
+            return (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-rose-50 text-rose-700 rounded-lg text-[10px] font-bold uppercase tracking-wider border border-rose-200">
+                    <AlertTriangle className="w-3 h-3 text-rose-600" />
+                    Hết hạn kết nối
+                </div>
+            );
+        }
         if (oa.status === 'active') {
             return (
                 <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-wider border border-emerald-500/10">
@@ -334,7 +343,7 @@ const ZaloOAManager: React.FC<ZaloOAManagerProps> = ({ onSelect }) => {
                     {oas.map((oa) => (
                         <div
                             key={oa.id}
-                            className="relative group bg-white border border-slate-100/80 rounded-[18px] p-7 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04)] hover:shadow-[0_30px_70px_-15px_rgba(59,130,246,0.15)] hover:-translate-y-1.5 transition-all duration-500 overflow-hidden"
+                            className={`relative group bg-white rounded-[16px] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.04)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.08)] transition-all duration-300 overflow-hidden ${isTokenExpired(oa.token_expires_at) ? 'border border-[#fecdd3]' : 'border border-[#e2e8f0]'}`}
                         >
                             {/* Decorative Background Elements */}
                             <div className="absolute -top-12 -right-12 w-40 h-40 bg-[var(--color-primary)]/5 blur-[60px] rounded-full group-hover:bg-[var(--color-primary)]/10 transition-all duration-700" />
@@ -354,7 +363,7 @@ const ZaloOAManager: React.FC<ZaloOAManagerProps> = ({ onSelect }) => {
                                                     <div className="absolute inset-0 rounded-[14px] shadow-inner" />
                                                 </div>
                                             ) : (
-                                                <div className="w-16 h-16 rounded-[14px] bg-gradient-to-br from-[#BD1D2D] to-[#9A1523] flex items-center justify-center shadow-lg shadow-[var(--color-primary)]/20">
+                                                <div className="w-16 h-16 rounded-[14px] bg-[#fef2f2] border border-[#fecdd3] flex items-center justify-center text-[#C6333D]">
                                                     <Users className="w-8 h-8 !text-white" />
                                                 </div>
                                             )}

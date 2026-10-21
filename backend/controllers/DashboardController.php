@@ -2289,6 +2289,189 @@ class DashboardController {
         $stmtLost->execute(array_merge([$tid, $fromTs, $toTs], $extraContactParams));
         $lostReasons = $stmtLost->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
+        // 8. Daily Velocity: Lead Mới vs Đã Tương Tác vs Qualified theo Ngày
+        $stmtDaily = $this->db->prepare("
+            SELECT 
+                DATE(c.created_at) as log_date,
+                COUNT(1) as total_leads,
+                SUM(CASE WHEN NOT $ucCondC THEN 1 ELSE 0 END) as contacted_leads,
+                SUM(CASE WHEN ($qCondC OR $wCondC) THEN 1 ELSE 0 END) as qualified_leads,
+                SUM(CASE WHEN $ucCondC THEN 1 ELSE 0 END) as uncontacted_leads
+            FROM contacts c
+            WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND $notClonedC AND c.created_at BETWEEN ? AND ?
+              AND NOT $pCondC AND NOT $eCondC AND $sRoleC
+              $extraContactSql
+            GROUP BY log_date
+            ORDER BY log_date ASC
+        ");
+        $stmtDaily->execute(array_merge([$tid, $fromTs, $toTs], $extraContactParams));
+        $rawDaily = $stmtDaily->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $dailyVelocity = [];
+        foreach ($rawDaily as $d) {
+            $dTot = (int)$d['total_leads'];
+            $dCont = (int)$d['contacted_leads'];
+            $dQual = (int)$d['qualified_leads'];
+            $dUnc = (int)$d['uncontacted_leads'];
+            $dateStr = (string)$d['log_date'];
+            $parts = explode('-', $dateStr);
+            $shortLabel = count($parts) === 3 ? "{$parts[2]}/{$parts[1]}" : $dateStr;
+            $dailyVelocity[] = [
+                'date' => $dateStr,
+                'label' => $shortLabel,
+                'total_leads' => $dTot,
+                'contacted_leads' => $dCont,
+                'qualified_leads' => $dQual,
+                'uncontacted_leads' => $dUnc,
+                'contact_rate' => $dTot > 0 ? round(($dCont / $dTot) * 100, 1) : 0.0,
+                'qualified_rate' => $dTot > 0 ? round(($dQual / $dTot) * 100, 1) : 0.0
+            ];
+        }
+
+        // 9. Lead & Revenue Breakdown by Program / School
+        $stmtPrograms = $this->db->prepare("
+            SELECT 
+                COALESCE(NULLIF(TRIM(c.program), ''), 'Chưa phân loại') as program_name,
+                COUNT(c.id) as total_leads,
+                SUM(CASE WHEN NOT $ucCondC THEN 1 ELSE 0 END) as contacted_leads,
+                SUM(CASE WHEN $ucCondC THEN 1 ELSE 0 END) as uncontacted_leads,
+                SUM(CASE WHEN ($qCondC OR $wCondC) THEN 1 ELSE 0 END) as qualified_leads
+            FROM contacts c
+            WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND $notClonedC AND c.created_at BETWEEN ? AND ?
+              AND NOT $pCondC AND NOT $eCondC AND $sRoleC
+              $extraContactSql
+            GROUP BY program_name
+            ORDER BY total_leads DESC
+            LIMIT 15
+        ");
+        $stmtPrograms->execute(array_merge([$tid, $fromTs, $toTs], $extraContactParams));
+        $rawPrograms = $stmtPrograms->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $stmtProgDeps = $this->db->prepare("
+            SELECT 
+                COALESCE(NULLIF(TRIM(d.unit_code), ''), NULLIF(TRIM(c_dep.program), ''), 'Chưa phân loại') as program_name,
+                COUNT(DISTINCT d.id) as won_count,
+                COALESCE(SUM(d.price), 0) as won_value,
+                COALESCE(SUM($depCollectedExpr), 0) as approved_value
+            FROM deposits d
+            LEFT JOIN contacts c_dep ON c_dep.id = d.contact_id
+            LEFT JOIN users u_cr ON u_cr.id = d.created_by
+            LEFT JOIN users u_own ON u_own.id = c_dep.owner_id
+            WHERE d.deleted_at IS NULL
+              AND d.status NOT IN ('cancelled', 'rejected', 'deleted')
+              AND COALESCE(c_dep.tenant_id, u_cr.tenant_id, 1) = ?
+              AND d.created_at BETWEEN ? AND ?
+              AND EXISTS (
+                  SELECT 1 FROM users u_chk
+                  WHERE u_chk.id = ($depSaleExpr)
+                    AND LOWER(u_chk.role) IN ('sale', 'sales')
+              )
+              $extraDepSql
+            GROUP BY program_name
+        ");
+        $stmtProgDeps->execute(array_merge([$tid, $fromTs, $toTs], $extraDepParams));
+        $progDepMap = [];
+        while ($pdr = $stmtProgDeps->fetch(PDO::FETCH_ASSOC)) {
+            $progDepMap[(string)$pdr['program_name']] = $pdr;
+        }
+
+        $byProgramBreakdown = [];
+        $seenProgs = [];
+        foreach ($rawPrograms as $p) {
+            $pName = (string)$p['program_name'];
+            $seenProgs[$pName] = true;
+            $pTotal = (int)$p['total_leads'];
+            $pContacted = (int)$p['contacted_leads'];
+            $pUncontacted = (int)$p['uncontacted_leads'];
+            $pQualified = (int)$p['qualified_leads'];
+            $depData = $progDepMap[$pName] ?? null;
+            $pWon = (int)($depData['won_count'] ?? 0);
+            $pWonVal = (float)($depData['won_value'] ?? 0);
+            $pAppVal = (float)($depData['approved_value'] ?? 0);
+            $byProgramBreakdown[] = [
+                'program' => $pName,
+                'total_leads' => $pTotal,
+                'contacted_leads' => $pContacted,
+                'uncontacted_leads' => $pUncontacted,
+                'qualified_leads' => $pQualified,
+                'won_count' => $pWon,
+                'won_value' => $pWonVal,
+                'approved_value' => $pAppVal,
+                'contact_rate' => $pTotal > 0 ? round(($pContacted / $pTotal) * 100, 1) : 0.0,
+                'qualified_rate' => $pTotal > 0 ? round(($pQualified / $pTotal) * 100, 1) : 0.0,
+                'win_rate' => $pTotal > 0 ? round(($pWon / $pTotal) * 100, 1) : 0.0
+            ];
+        }
+        foreach ($progDepMap as $pName => $depData) {
+            if (isset($seenProgs[$pName])) continue;
+            $pWon = (int)($depData['won_count'] ?? 0);
+            $pWonVal = (float)($depData['won_value'] ?? 0);
+            $pAppVal = (float)($depData['approved_value'] ?? 0);
+            if ($pWon <= 0 && $pWonVal <= 0) continue;
+            $byProgramBreakdown[] = [
+                'program' => $pName,
+                'total_leads' => $pWon,
+                'contacted_leads' => $pWon,
+                'uncontacted_leads' => 0,
+                'qualified_leads' => $pWon,
+                'won_count' => $pWon,
+                'won_value' => $pWonVal,
+                'approved_value' => $pAppVal,
+                'contact_rate' => 100.0,
+                'qualified_rate' => 100.0,
+                'win_rate' => 100.0
+            ];
+        }
+
+        // 10. SLA Speed Breakdown: Phản hồi siêu tốc (<15p), Chuẩn (15p-2h), Chậm (>2h), Chưa tương tác
+        $stmtSla = $this->db->prepare("
+            SELECT 
+                SUM(CASE WHEN $ucCondC THEN 1 ELSE 0 END) as uncontacted_cnt,
+                SUM(CASE WHEN NOT $ucCondC AND c.last_contact IS NOT NULL AND TIMESTAMPDIFF(MINUTE, c.created_at, c.last_contact) BETWEEN 0 AND 15 THEN 1 ELSE 0 END) as fast_cnt,
+                SUM(CASE WHEN NOT $ucCondC AND c.last_contact IS NOT NULL AND TIMESTAMPDIFF(MINUTE, c.created_at, c.last_contact) > 15 AND TIMESTAMPDIFF(MINUTE, c.created_at, c.last_contact) <= 120 THEN 1 ELSE 0 END) as standard_cnt,
+                SUM(CASE WHEN NOT $ucCondC AND (c.last_contact IS NULL OR TIMESTAMPDIFF(MINUTE, c.created_at, c.last_contact) < 0 OR TIMESTAMPDIFF(MINUTE, c.created_at, c.last_contact) > 120) THEN 1 ELSE 0 END) as slow_cnt
+            FROM contacts c
+            WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND $notClonedC AND c.created_at BETWEEN ? AND ?
+              AND NOT $pCondC AND NOT $eCondC AND $sRoleC
+              $extraContactSql
+        ");
+        $stmtSla->execute(array_merge([$tid, $fromTs, $toTs], $extraContactParams));
+        $slaRow = $stmtSla->fetch(PDO::FETCH_ASSOC) ?: [];
+        $slaUncontacted = (int)($slaRow['uncontacted_cnt'] ?? 0);
+        $slaFast = (int)($slaRow['fast_cnt'] ?? 0);
+        $slaStandard = (int)($slaRow['standard_cnt'] ?? 0);
+        $slaSlow = (int)($slaRow['slow_cnt'] ?? 0);
+        $slaTotalSafe = max(1, $totalLeads);
+        $slaSpeedBreakdown = [
+            'fast_15m' => [
+                'label' => 'Siêu tốc (< 15 phút)',
+                'count' => $slaFast,
+                'pct' => $totalLeads > 0 ? round(($slaFast / $slaTotalSafe) * 100, 1) : 0.0,
+                'status' => 'excellent',
+                'color' => '#10b981'
+            ],
+            'standard_2h' => [
+                'label' => 'Tiêu chuẩn (15p – 2 giờ)',
+                'count' => $slaStandard,
+                'pct' => $totalLeads > 0 ? round(($slaStandard / $slaTotalSafe) * 100, 1) : 0.0,
+                'status' => 'good',
+                'color' => '#f59e0b'
+            ],
+            'slow_2h' => [
+                'label' => 'Chậm (> 2 giờ)',
+                'count' => $slaSlow,
+                'pct' => $totalLeads > 0 ? round(($slaSlow / $slaTotalSafe) * 100, 1) : 0.0,
+                'status' => 'warning',
+                'color' => '#ef4444'
+            ],
+            'uncontacted' => [
+                'label' => 'Chưa tương tác',
+                'count' => $slaUncontacted,
+                'pct' => $totalLeads > 0 ? round(($slaUncontacted / $slaTotalSafe) * 100, 1) : 0.0,
+                'status' => 'danger',
+                'color' => '#C6333D'
+            ]
+        ];
+
         respond(200, [
             'month' => $month,
             'period_label' => $periodLabel,
@@ -2356,7 +2539,10 @@ class DashboardController {
             'sources' => $sources,
             'sales_leaderboard' => $sales,
             'recent_orders' => $recentOrders,
-            'lost_reasons' => $lostReasons
+            'lost_reasons' => $lostReasons,
+            'daily_velocity' => $dailyVelocity,
+            'by_program_breakdown' => $byProgramBreakdown,
+            'sla_speed_breakdown' => $slaSpeedBreakdown
         ], 'Lấy báo cáo hiệu suất Sales & Lead thành công');
     }
 }

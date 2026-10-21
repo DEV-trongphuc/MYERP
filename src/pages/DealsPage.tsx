@@ -4321,23 +4321,23 @@ export const DealsPage: React.FC = () => {
             {loading ? (
               <>
                 {(isMobile ? [1] : [1, 2, 3, 4]).map(i => (
-                  <div key={i} style={{ minWidth: isMobile ? '100%' : 320, width: isMobile ? '100%' : 320, flexShrink: 0, background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border-light)', overflow: 'hidden', height: '100%' }}>
-                    <div style={{ padding: '1rem 1.25rem', borderBottom: '3px solid var(--color-border)' }}>
-                      <div style={{ height: 18, width: 120, background: '#e9ecef', borderRadius: 6, marginBottom: 8 }} />
-                      <div style={{ height: 14, width: 60, background: '#f1f3f5', borderRadius: 6 }} />
+                  <div key={i} className="skeleton-card" style={{ minWidth: isMobile ? '100%' : 320, width: isMobile ? '100%' : 320, flexShrink: 0, background: 'var(--color-surface)', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden', height: '100%' }}>
+                    <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f1f5f9' }}>
+                      <div className="skeleton" style={{ height: 18, width: 120, borderRadius: 6, marginBottom: 8 }} />
+                      <div className="skeleton" style={{ height: 14, width: 60, borderRadius: 6 }} />
                     </div>
                     <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                       {[1, 2].map(j => (
-                        <div key={j} style={{ background: '#f8f9fa', borderRadius: 'var(--radius-lg)', padding: '1.25rem', animation: 'pulse 1.5s ease-in-out infinite' }}>
+                        <div key={j} className="deal-skeleton-card" style={{ background: 'var(--color-surface)', borderRadius: 14, padding: '1.25rem', border: '1px solid #e2e8f0' }}>
                           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '1rem' }}>
-                            <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#e9ecef' }} />
+                            <div className="skeleton" style={{ width: 36, height: 36, borderRadius: '50%' }} />
                             <div style={{ flex: 1 }}>
-                              <div style={{ height: 14, width: '70%', background: '#dee2e6', borderRadius: 4, marginBottom: 6 }} />
-                              <div style={{ height: 11, width: '50%', background: '#e9ecef', borderRadius: 4 }} />
+                              <div className="skeleton" style={{ height: 14, width: '70%', borderRadius: 4, marginBottom: 6 }} />
+                              <div className="skeleton" style={{ height: 11, width: '50%', borderRadius: 4 }} />
                             </div>
                           </div>
-                          <div style={{ height: 11, width: '60%', background: '#e9ecef', borderRadius: 4, marginBottom: 6 }} />
-                          <div style={{ height: 11, width: '80%', background: '#e9ecef', borderRadius: 4 }} />
+                          <div className="skeleton" style={{ height: 11, width: '60%', borderRadius: 4, marginBottom: 6 }} />
+                          <div className="skeleton" style={{ height: 11, width: '80%', borderRadius: 4 }} />
                         </div>
                       ))}
                     </div>

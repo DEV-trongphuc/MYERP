@@ -1051,50 +1051,48 @@ const AccountsInner = () => {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', background: 'var(--color-border-light)', borderRadius: '12px', padding: '4px', alignSelf: 'flex-start', marginBottom: '1.5rem', width: 'fit-content', gap: '4px' }}>
+      <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '10px', padding: '3px', alignSelf: 'flex-start', marginBottom: '1.5rem', width: 'fit-content', gap: '3px', border: '1px solid #e2e8f0' }}>
         <button 
           onClick={() => setActiveTab('accounts')}
           style={{
-            padding: '8px 20px',
-            borderRadius: '10px',
-            fontSize: '0.85rem',
-            fontWeight: 700,
+            padding: '7px 18px',
+            borderRadius: '7px',
+            fontSize: '0.84rem',
+            fontWeight: activeTab === 'accounts' ? 700 : 500,
             cursor: 'pointer',
             border: 'none',
-            background: activeTab === 'accounts' ? 'var(--color-surface)' : 'transparent',
-            color: activeTab === 'accounts' ? 'var(--color-primary)' : 'var(--color-text-light)',
-            boxShadow: activeTab === 'accounts' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none',
-            transition: 'all 0.2s',
+            background: activeTab === 'accounts' ? '#ffffff' : 'transparent',
+            color: activeTab === 'accounts' ? '#C6333D' : '#64748b',
+            boxShadow: activeTab === 'accounts' ? '0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04)' : 'none',
+            transition: 'all 0.15s ease',
             display: 'flex',
             alignItems: 'center',
             gap: 8,
             flexShrink: 0
           }}
-          className={activeTab === 'accounts' ? '' : 'hover-lift'}
         >
-          <UserCog size={16} /> <span><span className="hide-on-mobile">{t('Danh sách')} </span>{t('Tài khoản')}</span>
+          <UserCog size={15} color={activeTab === 'accounts' ? '#C6333D' : '#64748b'} /> <span><span className="hide-on-mobile">{t('Danh sách')} </span>{t('Tài khoản')}</span>
         </button>
         <button 
           onClick={() => setActiveTab('logs')}
           style={{
-            padding: '8px 20px',
-            borderRadius: '10px',
-            fontSize: '0.85rem',
-            fontWeight: 700,
+            padding: '7px 18px',
+            borderRadius: '7px',
+            fontSize: '0.84rem',
+            fontWeight: activeTab === 'logs' ? 700 : 500,
             cursor: 'pointer',
             border: 'none',
-            background: activeTab === 'logs' ? 'var(--color-surface)' : 'transparent',
-            color: activeTab === 'logs' ? 'var(--color-primary)' : 'var(--color-text-light)',
-            boxShadow: activeTab === 'logs' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none',
-            transition: 'all 0.2s',
+            background: activeTab === 'logs' ? '#ffffff' : 'transparent',
+            color: activeTab === 'logs' ? '#C6333D' : '#64748b',
+            boxShadow: activeTab === 'logs' ? '0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04)' : 'none',
+            transition: 'all 0.15s ease',
             display: 'flex',
             alignItems: 'center',
             gap: 8,
             flexShrink: 0
           }}
-          className={activeTab === 'logs' ? '' : 'hover-lift'}
         >
-          <History size={16} /> <span>{t('Nhật ký')}<span className="hide-on-mobile"> {t('hoạt động Admin')}</span></span>
+          <History size={15} color={activeTab === 'logs' ? '#C6333D' : '#64748b'} /> <span>{t('Nhật ký')}<span className="hide-on-mobile"> {t('hoạt động Admin')}</span></span>
         </button>
       </div>
  

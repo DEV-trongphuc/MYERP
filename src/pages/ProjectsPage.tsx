@@ -17,7 +17,7 @@ import { Pagination } from '../components/ui/Pagination';
 import { Skeleton } from '../components/ui/Skeleton';
 import { Avatar } from '../components/ui/Avatar';
 import { CopyButton } from '../components/ui/CopyButton';
-import { Mail, Phone, Copy, ChevronLeft, Save } from 'lucide-react';
+import { Mail, Phone, Copy, ChevronLeft, Save, Archive } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MentionInput } from '../components/ui/MentionInput';
 const WorkspaceTaskDrawer = lazy(() => import('./WorkspaceTaskDrawer').then(module => ({ default: module.WorkspaceTaskDrawer })));
@@ -93,6 +93,9 @@ interface Project {
   created_by?: number;
   reference_url?: string;
   campaign_sharing_mode?: string;
+  is_archived?: boolean | number;
+  is_hidden?: boolean | number;
+  deleted_at?: string | null;
 }
 
 interface RosterMember {
@@ -559,6 +562,97 @@ export default function ProjectsPage() {
   const quickUploadInFlightRef = useRef(false);
   const renameDocInFlightRef = useRef(false);
   const openedUrlTargetRef = useRef<string | null>(null);
+
+  const duplicateProjectInFlightRef = useRef(false);
+  const handleDuplicateProject = async (projectId: number) => {
+    if (duplicateProjectInFlightRef.current) return;
+    duplicateProjectInFlightRef.current = true;
+    try {
+      const res = await api.post(`/projects/${projectId}/duplicate`);
+      if (res.data?.success) {
+        addToast(t('Đã nhân bản chương trình thành công!'), 'success');
+        loadProjects();
+      } else {
+        addToast(res.data?.message || t('Lỗi nhân bản chương trình'), 'error');
+      }
+    } catch (err: any) {
+      addToast(err.response?.data?.message || err.message || t('Lỗi nhân bản chương trình'), 'error');
+    } finally {
+      duplicateProjectInFlightRef.current = false;
+    }
+  };
+
+  const archiveProjectInFlightRef = useRef(false);
+  const handleToggleArchiveProject = async (projectId: number, shouldArchive: boolean) => {
+    if (archiveProjectInFlightRef.current) return;
+    archiveProjectInFlightRef.current = true;
+    try {
+      const endpoint = shouldArchive ? `/projects/${projectId}/archive` : `/projects/${projectId}/unarchive`;
+      const res = await api.post(endpoint);
+      if (res.data?.success) {
+        addToast(shouldArchive ? t('Đã lưu trữ chương trình') : t('Đã bỏ lưu trữ chương trình'), 'success');
+        loadProjects();
+      } else {
+        addToast(res.data?.message || t('Lỗi lưu trữ chương trình'), 'error');
+      }
+    } catch (err: any) {
+      addToast(err.response?.data?.message || err.message || t('Lỗi lưu trữ chương trình'), 'error');
+    } finally {
+      archiveProjectInFlightRef.current = false;
+    }
+  };
+
+  const quickTaskActionInFlightRef = useRef(false);
+  const handleQuickToggleTaskStatus = async (taskId: number, currentStatus: string) => {
+    if (quickTaskActionInFlightRef.current) return;
+    quickTaskActionInFlightRef.current = true;
+    const nextStatus = currentStatus === 'done' ? 'planned' : 'done';
+    try {
+      await api.put(`/tasks/${taskId}/status`, { status: nextStatus });
+      setLinkedTasks(prev => prev.map(t => Number(t.id) === Number(taskId) ? { ...t, status: nextStatus } : t));
+      addToast(nextStatus === 'done' ? t('Đã đánh dấu hoàn thành nhiệm vụ') : t('Đã mở lại nhiệm vụ'), 'success');
+      window.dispatchEvent(new CustomEvent('task-updated'));
+    } catch (err: any) {
+      addToast(t('Lỗi cập nhật trạng thái nhiệm vụ: ') + (err.response?.data?.message || err.message), 'error');
+    } finally {
+      quickTaskActionInFlightRef.current = false;
+    }
+  };
+
+  const handleQuickDuplicateTask = async (taskId: number) => {
+    if (quickTaskActionInFlightRef.current) return;
+    quickTaskActionInFlightRef.current = true;
+    try {
+      const res = await api.post(`/tasks/${taskId}/duplicate`);
+      if (res.data?.success && res.data?.data) {
+        addToast(t('Đã nhân bản nhiệm vụ thành công!'), 'success');
+        setLinkedTasks(prev => [res.data.data, ...prev]);
+        window.dispatchEvent(new CustomEvent('task-updated'));
+      }
+    } catch (err: any) {
+      addToast(t('Lỗi nhân bản nhiệm vụ: ') + (err.response?.data?.message || err.message), 'error');
+    } finally {
+      quickTaskActionInFlightRef.current = false;
+    }
+  };
+
+  const handleQuickDeleteTask = async (taskId: number) => {
+    if (quickTaskActionInFlightRef.current) return;
+    if (!window.confirm(t('Bạn có chắc chắn muốn xóa nhiệm vụ này?'))) return;
+    quickTaskActionInFlightRef.current = true;
+    try {
+      const res = await api.delete(`/tasks/${taskId}`);
+      if (res.data?.success) {
+        addToast(t('Đã xóa nhiệm vụ thành công'), 'success');
+        setLinkedTasks(prev => prev.filter(t => Number(t.id) !== Number(taskId)));
+        window.dispatchEvent(new CustomEvent('task-updated'));
+      }
+    } catch (err: any) {
+      addToast(t('Lỗi xóa nhiệm vụ: ') + (err.response?.data?.message || err.message), 'error');
+    } finally {
+      quickTaskActionInFlightRef.current = false;
+    }
+  };
 
   const clearEntityParamsFromUrl = () => {
     if (!window.location.pathname.startsWith('/projects')) return;
@@ -2454,15 +2548,9 @@ export default function ProjectsPage() {
                     overflow: 'hidden'
                   }}
                 >
-                  <div className="decor-svg" style={{ color: '#ef4444' }}>
-                    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                      <path d="M50 45 C 58 45, 65 38, 65 30 C 65 22, 58 15, 50 15 C 42 15, 35 22, 35 30 C 35 38, 42 45, 50 45 Z" stroke="currentColor" strokeWidth="2" />
-                      <path d="M20 80 C 20 65, 33 55, 50 55 C 67 55, 80 65, 80 80" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                    </svg>
-                  </div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                     <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tổng Học Viên</span>
-                    <div className="stat-icon" style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Users size={14} /></div>
+                    <div className="stat-icon" style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(198, 51, 61, 0.08)', color: '#C6333D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Users size={14} /></div>
                   </div>
                   <div>
                     <div className="stat-value" style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1 }}>
@@ -2487,13 +2575,6 @@ export default function ProjectsPage() {
                     overflow: 'hidden'
                   }}
                 >
-                  <div className="decor-svg" style={{ color: '#3b82f6' }}>
-                    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                      <path d="M50 20 L 80 35 L 50 50 L 20 35 Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-                      <path d="M20 50 L 50 65 L 80 50" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      <path d="M20 65 L 50 80 L 80 65" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                     <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cơ Hội Tuyển Sinh</span>
                     <div className="stat-icon" style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.08)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Layers size={14} /></div>
@@ -2521,12 +2602,6 @@ export default function ProjectsPage() {
                     overflow: 'hidden'
                   }}
                 >
-                  <div className="decor-svg" style={{ color: '#10b981' }}>
-                    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                      <rect x="25" y="20" width="50" height="60" rx="4" stroke="currentColor" strokeWidth="2" />
-                      <path d="M35 35 H 45 M 55 35 H 65 M 35 50 H 45 M 55 50 H 65 M 35 65 H 45 M 55 65 H 65" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                    </svg>
-                  </div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                     <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Học Phí Thực Thu</span>
                     <div className="stat-icon" style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.08)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Building2 size={14} /></div>
@@ -2556,12 +2631,6 @@ export default function ProjectsPage() {
                     overflow: 'hidden'
                   }}
                 >
-                  <div className="decor-svg" style={{ color: '#f59e0b' }}>
-                    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                      <rect x="25" y="25" width="50" height="50" rx="6" stroke="currentColor" strokeWidth="2" />
-                      <path d="M40 50 L 47 57 L 62 42" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                     <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tỷ Lệ Nhập Học</span>
                     <div className="stat-icon" style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.08)', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CheckSquare size={14} /></div>
@@ -3029,7 +3098,14 @@ export default function ProjectsPage() {
                                   title={t('Click để xem chi tiết nhiệm vụ')}
                                 >
                                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                                    <div style={{ marginTop: '3px' }}>
+                                    <div
+                                      style={{ marginTop: '3px', cursor: 'pointer', padding: '2px', borderRadius: '4px' }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleQuickToggleTaskStatus(task.id, task.status);
+                                      }}
+                                      title={task.status === 'done' ? t('Đánh dấu chưa xong') : t('Đánh dấu hoàn thành')}
+                                    >
                                       <CheckSquare size={18} color={task.status === 'done' ? 'var(--color-success)' : 'var(--color-text-muted)'} style={{ opacity: 0.85 }} />
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -3046,18 +3122,76 @@ export default function ProjectsPage() {
                                       </div>
                                     </div>
                                   </div>
-                                  <span style={{
-                                    fontSize: '0.72rem',
-                                    fontWeight: 700,
-                                    padding: '4px 10px',
-                                    borderRadius: '100px',
-                                    background: sc.bg,
-                                    color: sc.text,
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.03em'
-                                  }}>
-                                    {task.status === 'done' ? 'Đã xong' : task.status === 'cancelled' ? 'Đã hủy' : 'Chưa xong'}
-                                  </span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleQuickToggleTaskStatus(task.id, task.status);
+                                      }}
+                                      style={{
+                                        fontSize: '0.72rem',
+                                        fontWeight: 700,
+                                        padding: '4px 10px',
+                                        borderRadius: '100px',
+                                        background: sc.bg,
+                                        color: sc.text,
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.03em',
+                                        cursor: 'pointer'
+                                      }}
+                                      title={t('Click để đổi trạng thái')}
+                                    >
+                                      {task.status === 'done' ? 'Đã xong' : task.status === 'cancelled' ? 'Đã hủy' : 'Chưa xong'}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleQuickDuplicateTask(task.id);
+                                      }}
+                                      style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        padding: '4px',
+                                        borderRadius: '6px',
+                                        color: 'var(--color-text-muted)',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        transition: 'color 0.15s ease'
+                                      }}
+                                      onMouseEnter={e => e.currentTarget.style.color = 'var(--color-primary)'}
+                                      onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-muted)'}
+                                      title={t('Nhân bản nhiệm vụ')}
+                                    >
+                                      <Copy size={14} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleQuickDeleteTask(task.id);
+                                      }}
+                                      style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        padding: '4px',
+                                        borderRadius: '6px',
+                                        color: 'var(--color-text-muted)',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        transition: 'color 0.15s ease'
+                                      }}
+                                      onMouseEnter={e => e.currentTarget.style.color = 'var(--color-danger)'}
+                                      onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-muted)'}
+                                      title={t('Xóa nhiệm vụ')}
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -4451,12 +4585,6 @@ export default function ProjectsPage() {
                       overflow: 'hidden'
                     }}
                   >
-                    <div className="decor-svg" style={{ color: '#ef4444' }}>
-                      <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                        <path d="M50 45 C 58 45, 65 38, 65 30 C 65 22, 58 15, 50 15 C 42 15, 35 22, 35 30 C 35 38, 42 45, 50 45 Z" stroke="currentColor" strokeWidth="2" />
-                        <path d="M20 80 C 20 65, 33 55, 50 55 C 67 55, 80 65, 80 80" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                      </svg>
-                    </div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                       <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tổng Học Viên</span>
                       <div className="stat-icon" style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Users size={14} /></div>
@@ -4486,13 +4614,6 @@ export default function ProjectsPage() {
                       overflow: 'hidden'
                     }}
                   >
-                    <div className="decor-svg" style={{ color: '#3b82f6' }}>
-                      <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                        <path d="M20 35 L 50 20 L 80 35 L 50 50 Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-                        <path d="M20 50 L 50 65 L 80 50" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                        <path d="M20 65 L 50 80 L 80 65" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                       <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tổng Môn Học</span>
                       <div className="stat-icon" style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.08)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><BookOpen size={14} /></div>
@@ -4522,12 +4643,6 @@ export default function ProjectsPage() {
                       overflow: 'hidden'
                     }}
                   >
-                    <div className="decor-svg" style={{ color: '#10b981' }}>
-                      <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                        <rect x="25" y="20" width="50" height="60" rx="4" stroke="currentColor" strokeWidth="2" />
-                        <path d="M35 35 H 45 M 55 35 H 65 M 35 50 H 45 M 55 50 H 65 M 35 65 H 45 M 55 65 H 65" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                      </svg>
-                    </div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                       <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tiến Độ Môn Học</span>
                       <div className="stat-icon" style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.08)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Calendar size={14} /></div>
@@ -4557,12 +4672,6 @@ export default function ProjectsPage() {
                       overflow: 'hidden'
                     }}
                   >
-                    <div className="decor-svg" style={{ color: '#f59e0b' }}>
-                      <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                        <rect x="25" y="25" width="50" height="50" rx="6" stroke="currentColor" strokeWidth="2" />
-                        <path d="M40 50 L 47 57 L 62 42" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                       <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Học Phí Thực Thu</span>
                       <div className="stat-icon" style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.08)', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GraduationCap size={14} /></div>
@@ -4963,7 +5072,14 @@ export default function ProjectsPage() {
                                   title={t('Click để xem chi tiết nhiệm vụ')}
                                 >
                                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                                    <div style={{ marginTop: '3px' }}>
+                                    <div
+                                      style={{ marginTop: '3px', cursor: 'pointer', padding: '2px', borderRadius: '4px' }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleQuickToggleTaskStatus(task.id, task.status);
+                                      }}
+                                      title={task.status === 'done' ? t('Đánh dấu chưa xong') : t('Đánh dấu hoàn thành')}
+                                    >
                                       <CheckSquare size={18} color={task.status === 'done' ? 'var(--color-success)' : 'var(--color-text-muted)'} style={{ opacity: 0.85 }} />
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -4980,18 +5096,76 @@ export default function ProjectsPage() {
                                       </div>
                                     </div>
                                   </div>
-                                  <span style={{
-                                    fontSize: '0.72rem',
-                                    fontWeight: 700,
-                                    padding: '4px 10px',
-                                    borderRadius: '100px',
-                                    background: sc.bg,
-                                    color: sc.text,
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.03em'
-                                  }}>
-                                    {task.status === 'done' ? 'Đã xong' : task.status === 'cancelled' ? 'Đã hủy' : 'Chưa xong'}
-                                  </span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleQuickToggleTaskStatus(task.id, task.status);
+                                      }}
+                                      style={{
+                                        fontSize: '0.72rem',
+                                        fontWeight: 700,
+                                        padding: '4px 10px',
+                                        borderRadius: '100px',
+                                        background: sc.bg,
+                                        color: sc.text,
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.03em',
+                                        cursor: 'pointer'
+                                      }}
+                                      title={t('Click để đổi trạng thái')}
+                                    >
+                                      {task.status === 'done' ? 'Đã xong' : task.status === 'cancelled' ? 'Đã hủy' : 'Chưa xong'}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleQuickDuplicateTask(task.id);
+                                      }}
+                                      style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        padding: '4px',
+                                        borderRadius: '6px',
+                                        color: 'var(--color-text-muted)',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        transition: 'color 0.15s ease'
+                                      }}
+                                      onMouseEnter={e => e.currentTarget.style.color = 'var(--color-primary)'}
+                                      onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-muted)'}
+                                      title={t('Nhân bản nhiệm vụ')}
+                                    >
+                                      <Copy size={14} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleQuickDeleteTask(task.id);
+                                      }}
+                                      style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        padding: '4px',
+                                        borderRadius: '6px',
+                                        color: 'var(--color-text-muted)',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        transition: 'color 0.15s ease'
+                                      }}
+                                      onMouseEnter={e => e.currentTarget.style.color = 'var(--color-danger)'}
+                                      onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-muted)'}
+                                      title={t('Xóa nhiệm vụ')}
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -6517,32 +6691,80 @@ export default function ProjectsPage() {
                       {isManagerOrLeader && (
                         <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                           {canEditProject(proj) && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingProject(proj);
-                                setAutoCode(false);
-                                setProjectModalMode('edit');
-                                setIsEditModalOpen(true);
-                              }}
-                              className="btn secondary sm"
-                              style={{
-                                borderRadius: '8px',
-                                width: '30px',
-                                height: '30px',
-                                padding: 0,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                background: 'var(--color-bg)',
-                                border: '1px solid var(--color-border-light)',
-                                color: 'var(--color-text)',
-                                transition: 'all 0.15s ease'
-                              }}
-                              title="Sửa chương trình"
-                            >
-                              <Edit size={12} />
-                            </button>
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDuplicateProject(proj.id);
+                                }}
+                                className="btn secondary sm"
+                                style={{
+                                  borderRadius: '8px',
+                                  width: '30px',
+                                  height: '30px',
+                                  padding: 0,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  background: 'var(--color-bg)',
+                                  border: '1px solid var(--color-border-light)',
+                                  color: 'var(--color-text)',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                title="Nhân bản chương trình"
+                              >
+                                <Copy size={12} />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleArchiveProject(proj.id, !proj.is_archived);
+                                }}
+                                className="btn secondary sm"
+                                style={{
+                                  borderRadius: '8px',
+                                  width: '30px',
+                                  height: '30px',
+                                  padding: 0,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  background: proj.is_archived ? 'rgba(234, 179, 8, 0.12)' : 'var(--color-bg)',
+                                  border: proj.is_archived ? '1px solid rgba(234, 179, 8, 0.3)' : '1px solid var(--color-border-light)',
+                                  color: proj.is_archived ? '#eab308' : 'var(--color-text)',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                title={proj.is_archived ? "Bỏ lưu trữ chương trình" : "Lưu trữ chương trình"}
+                              >
+                                <Archive size={12} />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingProject(proj);
+                                  setAutoCode(false);
+                                  setProjectModalMode('edit');
+                                  setIsEditModalOpen(true);
+                                }}
+                                className="btn secondary sm"
+                                style={{
+                                  borderRadius: '8px',
+                                  width: '30px',
+                                  height: '30px',
+                                  padding: 0,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  background: 'var(--color-bg)',
+                                  border: '1px solid var(--color-border-light)',
+                                  color: 'var(--color-text)',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                title="Sửa chương trình"
+                              >
+                                <Edit size={12} />
+                              </button>
+                            </>
                           )}
                           {canDeleteProject(proj) && (
                             <button
@@ -7133,7 +7355,14 @@ export default function ProjectsPage() {
                                   title={t('Click để xem chi tiết nhiệm vụ')}
                                 >
                                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                                    <div style={{ marginTop: '3px' }}>
+                                    <div
+                                      style={{ marginTop: '3px', cursor: 'pointer', padding: '2px', borderRadius: '4px' }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleQuickToggleTaskStatus(task.id, task.status);
+                                      }}
+                                      title={task.status === 'done' ? t('Đánh dấu chưa xong') : t('Đánh dấu hoàn thành')}
+                                    >
                                       <CheckSquare size={18} color={task.status === 'done' ? 'var(--color-success)' : 'var(--color-text-muted)'} style={{ opacity: 0.85 }} />
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -7150,18 +7379,76 @@ export default function ProjectsPage() {
                                       </div>
                                     </div>
                                   </div>
-                                  <span style={{
-                                    fontSize: '0.72rem',
-                                    fontWeight: 700,
-                                    padding: '4px 10px',
-                                    borderRadius: '100px',
-                                    background: sc.bg,
-                                    color: sc.text,
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.03em'
-                                  }}>
-                                    {task.status === 'done' ? 'Đã xong' : task.status === 'cancelled' ? 'Đã hủy' : 'Chưa xong'}
-                                  </span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleQuickToggleTaskStatus(task.id, task.status);
+                                      }}
+                                      style={{
+                                        fontSize: '0.72rem',
+                                        fontWeight: 700,
+                                        padding: '4px 10px',
+                                        borderRadius: '100px',
+                                        background: sc.bg,
+                                        color: sc.text,
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.03em',
+                                        cursor: 'pointer'
+                                      }}
+                                      title={t('Click để đổi trạng thái')}
+                                    >
+                                      {task.status === 'done' ? 'Đã xong' : task.status === 'cancelled' ? 'Đã hủy' : 'Chưa xong'}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleQuickDuplicateTask(task.id);
+                                      }}
+                                      style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        padding: '4px',
+                                        borderRadius: '6px',
+                                        color: 'var(--color-text-muted)',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        transition: 'color 0.15s ease'
+                                      }}
+                                      onMouseEnter={e => e.currentTarget.style.color = 'var(--color-primary)'}
+                                      onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-muted)'}
+                                      title={t('Nhân bản nhiệm vụ')}
+                                    >
+                                      <Copy size={14} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleQuickDeleteTask(task.id);
+                                      }}
+                                      style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        padding: '4px',
+                                        borderRadius: '6px',
+                                        color: 'var(--color-text-muted)',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        transition: 'color 0.15s ease'
+                                      }}
+                                      onMouseEnter={e => e.currentTarget.style.color = 'var(--color-danger)'}
+                                      onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-muted)'}
+                                      title={t('Xóa nhiệm vụ')}
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -8833,7 +9120,14 @@ export default function ProjectsPage() {
                                   title={t('Click để xem chi tiết nhiệm vụ')}
                                 >
                                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                                    <div style={{ marginTop: '3px' }}>
+                                    <div
+                                      style={{ marginTop: '3px', cursor: 'pointer', padding: '2px', borderRadius: '4px' }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleQuickToggleTaskStatus(task.id, task.status);
+                                      }}
+                                      title={task.status === 'done' ? t('Đánh dấu chưa xong') : t('Đánh dấu hoàn thành')}
+                                    >
                                       <CheckSquare size={18} color={task.status === 'done' ? 'var(--color-success)' : 'var(--color-text-muted)'} style={{ opacity: 0.85 }} />
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -8850,18 +9144,76 @@ export default function ProjectsPage() {
                                       </div>
                                     </div>
                                   </div>
-                                  <span style={{
-                                    fontSize: '0.72rem',
-                                    fontWeight: 700,
-                                    padding: '4px 10px',
-                                    borderRadius: '100px',
-                                    background: sc.bg,
-                                    color: sc.text,
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.03em'
-                                  }}>
-                                    {task.status === 'done' ? 'Đã xong' : task.status === 'cancelled' ? 'Đã hủy' : 'Chưa xong'}
-                                  </span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleQuickToggleTaskStatus(task.id, task.status);
+                                      }}
+                                      style={{
+                                        fontSize: '0.72rem',
+                                        fontWeight: 700,
+                                        padding: '4px 10px',
+                                        borderRadius: '100px',
+                                        background: sc.bg,
+                                        color: sc.text,
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.03em',
+                                        cursor: 'pointer'
+                                      }}
+                                      title={t('Click để đổi trạng thái')}
+                                    >
+                                      {task.status === 'done' ? 'Đã xong' : task.status === 'cancelled' ? 'Đã hủy' : 'Chưa xong'}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleQuickDuplicateTask(task.id);
+                                      }}
+                                      style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        padding: '4px',
+                                        borderRadius: '6px',
+                                        color: 'var(--color-text-muted)',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        transition: 'color 0.15s ease'
+                                      }}
+                                      onMouseEnter={e => e.currentTarget.style.color = 'var(--color-primary)'}
+                                      onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-muted)'}
+                                      title={t('Nhân bản nhiệm vụ')}
+                                    >
+                                      <Copy size={14} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleQuickDeleteTask(task.id);
+                                      }}
+                                      style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        padding: '4px',
+                                        borderRadius: '6px',
+                                        color: 'var(--color-text-muted)',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        transition: 'color 0.15s ease'
+                                      }}
+                                      onMouseEnter={e => e.currentTarget.style.color = 'var(--color-danger)'}
+                                      onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-muted)'}
+                                      title={t('Xóa nhiệm vụ')}
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -9701,7 +10053,7 @@ export default function ProjectsPage() {
               onUpdate={() => {
                 window.dispatchEvent(new CustomEvent('contact-updated'));
               }}
-              zIndex={selectedTaskForDrawer ? 1000300 : undefined}
+              zIndex={selectedTaskForDrawer ? 2147483647 : undefined}
             />
           </Suspense>
         )}
@@ -10622,7 +10974,7 @@ export default function ProjectsPage() {
               onUpdate={() => {
                 window.dispatchEvent(new CustomEvent('contact-updated'));
               }}
-              zIndex={selectedTaskForDrawer ? 1000300 : undefined}
+              zIndex={selectedTaskForDrawer ? 2147483647 : undefined}
             />
           </Suspense>
         )}

@@ -2480,4 +2480,171 @@ class FinanceController
             respond(500, null, 'Lỗi khi xác nhận chi trả hoa hồng: ' . $e->getMessage(), false);
         }
     }
+
+    /**
+     * GET /api/finance/accounting-az/summary
+     * Báo cáo Tài chính P&L, Dòng tiền & Cân đối nghĩa vụ Thuế tổng hợp (Kế toán A-Z)
+     */
+    public function getAccountingFinancialSummary(array $auth): void
+    {
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $month = trim($_GET['month'] ?? date('Y-m'));
+        if (!preg_match('/^\d{4}-\d{2}$/', $month)) $month = date('Y-m');
+
+        // 1. DOANH THU THỰC TẾ
+        // Doanh thu Đặt cọc
+        $depStmt = $this->db->prepare("
+            SELECT COALESCE(SUM(d.price), 0) as total_deposit
+            FROM deposits d
+            JOIN contacts c ON d.contact_id = c.id
+            WHERE c.tenant_id = ? AND d.status = 'approved' AND DATE_FORMAT(d.created_at, '%Y-%m') = ?
+        ");
+        $depStmt->execute([$tid, $month]);
+        $depRev = (float)($depStmt->fetch(PDO::FETCH_ASSOC)['total_deposit'] ?? 0);
+
+        // Doanh thu Hóa đơn (Invoices Paid)
+        $invStmt = $this->db->prepare("
+            SELECT 
+                COALESCE(SUM(total), 0) as total_inv,
+                COALESCE(SUM(tax), 0) as vat_out
+            FROM invoices
+            WHERE tenant_id = ? AND status = 'paid' AND deleted_at IS NULL AND DATE_FORMAT(paid_at, '%Y-%m') = ?
+        ");
+        $invStmt->execute([$tid, $month]);
+        $invData = $invStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $invRev  = (float)($invData['total_inv'] ?? 0);
+        $vatOut  = (float)($invData['vat_out'] ?? 0);
+        $totalRevenue = $depRev + $invRev;
+
+        // 2. CHI PHÍ NHÂN SỰ & QUỸ LƯƠNG
+        $payStmt = $this->db->prepare("
+            SELECT 
+                COALESCE(SUM(salary_basic_calculated + allowance_total + kpi_bonus + overtime_salary + diligence_bonus), 0) as total_gross,
+                COALESCE(SUM(tax_pit), 0) as total_pit,
+                COALESCE(SUM(net_salary), 0) as total_net
+            FROM monthly_payslips mp
+            JOIN users u ON mp.user_id = u.id
+            WHERE u.tenant_id = ? AND mp.month_year = ?
+        ");
+        $payStmt->execute([$tid, $month]);
+        $payData = $payStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $payrollGross = (float)($payData['total_gross'] ?? 0);
+        $payrollNet   = (float)($payData['total_net'] ?? 0);
+        $taxPit       = (float)($payData['total_pit'] ?? 0);
+
+        // Fallback: nếu chưa chốt bảng lương thực tế cho tháng này, dự toán quỹ lương từ hrm_profiles
+        if ($payrollGross <= 0) {
+            $profStmt = $this->db->prepare("
+                SELECT 
+                    COALESCE(SUM(COALESCE(p.base_salary, 0) + COALESCE(p.deal_salary, 0) + COALESCE(p.allowance_meal, 0) + COALESCE(p.allowance_travel, 0) + COALESCE(p.allowance_phone, 0)), 0) as projected_gross,
+                    COALESCE(SUM(CASE WHEN COALESCE(p.has_insurance, 1) = 1 THEN COALESCE(p.base_salary, 0) ELSE 0 END), 0) as projected_ins_salary
+                FROM users u
+                LEFT JOIN hrm_profiles p ON u.id = p.user_id
+                WHERE u.tenant_id = ? AND u.is_active = 1 AND (u.status IS NULL OR u.status != 'leave')
+            ");
+            $profStmt->execute([$tid]);
+            $profRow = $profStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+            $profGross = (float)($profRow['projected_gross'] ?? 0);
+            $profIns   = (float)($profRow['projected_ins_salary'] ?? 0);
+            if ($profGross > 0) {
+                $payrollGross = $profGross;
+                $payrollNet   = max(0.0, $profGross - round($profIns * 0.105));
+            }
+        }
+
+        $insuranceDN  = round($payrollGross * 0.235); // 23.5% BHXH, BHYT, BHTN, KPCĐ
+        $totalHRMCost = $payrollGross + $insuranceDN;
+
+        // 3. CHI PHÍ VẬN HÀNH & MARKETING (Expenses)
+        $expStmt = $this->db->prepare("
+            SELECT 
+                category,
+                COALESCE(SUM(amount), 0) as cat_amount,
+                COALESCE(SUM(vat_amount), 0) as cat_vat
+            FROM expenses
+            WHERE tenant_id = ? AND status = 'approved' AND deleted_at IS NULL AND DATE_FORMAT(date, '%Y-%m') = ?
+            GROUP BY category
+        ");
+        $expStmt->execute([$tid, $month]);
+        $expCategories = $expStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $totalOperatingExp = 0.0;
+        $totalMarketingExp = 0.0;
+        $vatIn = 0.0;
+
+        foreach ($expCategories as $cat) {
+            $amt = (float)$cat['cat_amount'];
+            $vatIn += (float)$cat['cat_vat'];
+            $catName = mb_strtolower($cat['category'] ?? '');
+            if (str_contains($catName, 'market') || str_contains($catName, 'quang cao') || str_contains($catName, 'hoa hong')) {
+                $totalMarketingExp += $amt;
+            } else {
+                $totalOperatingExp += $amt;
+            }
+        }
+        $totalOtherExpense = $totalOperatingExp + $totalMarketingExp;
+
+        // 4. MUA HÀNG & GIÁ VỐN (Purchase Orders Paid/Received)
+        $poStmt = $this->db->prepare("
+            SELECT COALESCE(SUM(paid_amount), 0) as po_paid, COALESCE(SUM(total), 0) as po_total
+            FROM purchase_orders
+            WHERE tenant_id = ? AND status IN ('ordered', 'received') AND payment_status IN ('partial', 'paid') AND DATE_FORMAT(order_date, '%Y-%m') = ?
+        ");
+        $poStmt->execute([$tid, $month]);
+        $poData = $poStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $cogsPO = (float)($poData['po_paid'] ?? 0);
+
+        // 5. TÍNH TOÁN BÁO CÁO KẾT QUẢ KINH DOANH (P&L)
+        $grossProfit = max(0.0, $totalRevenue - $cogsPO);
+        $operatingProfit = $grossProfit - ($totalHRMCost + $totalOtherExpense);
+        $citRate = 0.20; // Thuế TNDN 20%
+        $citTax = ($operatingProfit > 0) ? round($operatingProfit * $citRate) : 0.0;
+        $netProfit = $operatingProfit - $citTax;
+
+        // 6. DÒNG TIỀN THỰC THU - THỰC CHI (CASHFLOW)
+        $cashIn = $depRev + $invRev;
+        $cashOut = $payrollNet + $insuranceDN + $taxPit + $totalOtherExpense + $cogsPO;
+        $netCashflow = $cashIn - $cashOut;
+
+        // 7. CÂN ĐỐI NGHĨA VỤ THUẾ (TAX BALANCE)
+        $vatPayable = max(0.0, $vatOut - $vatIn);
+        $vatDeductible = max(0.0, $vatIn - $vatOut);
+
+        respond(200, [
+            'month'     => $month,
+            'pnl'       => [
+                'revenue'            => $totalRevenue,
+                'deposit_revenue'    => $depRev,
+                'invoice_revenue'    => $invRev,
+                'cogs'               => $cogsPO,
+                'gross_profit'       => $grossProfit,
+                'gross_margin_pct'   => $totalRevenue > 0 ? round(($grossProfit / $totalRevenue) * 100, 1) : 0.0,
+                'hrm_cost'           => $totalHRMCost,
+                'payroll_gross'      => $payrollGross,
+                'insurance_dn'       => $insuranceDN,
+                'operating_expense'  => $totalOperatingExp,
+                'marketing_expense'  => $totalMarketingExp,
+                'total_expense'      => $totalHRMCost + $totalOtherExpense,
+                'operating_profit'   => $operatingProfit,
+                'cit_tax_20pct'      => $citTax,
+                'net_profit'         => $netProfit,
+                'net_margin_pct'     => $totalRevenue > 0 ? round(($netProfit / $totalRevenue) * 100, 1) : 0.0,
+            ],
+            'cashflow'  => [
+                'cash_in'     => $cashIn,
+                'cash_out'    => $cashOut,
+                'net_cashflow'=> $netCashflow,
+                'is_positive' => $netCashflow >= 0
+            ],
+            'tax_balance' => [
+                'vat_output'      => $vatOut,
+                'vat_input'       => $vatIn,
+                'vat_payable'     => $vatPayable,
+                'vat_deductible'  => $vatDeductible,
+                'pit_withheld'    => $taxPit,
+                'cit_estimated'   => $citTax,
+                'total_tax_to_pay'=> $vatPayable + $taxPit + $citTax
+            ]
+        ], 'Lấy báo cáo tài chính P&L, dòng tiền và thuế thành công');
+    }
 }

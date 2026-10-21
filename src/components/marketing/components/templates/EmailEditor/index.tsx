@@ -13,7 +13,7 @@ import toast from 'react-hot-toast';
 import Modal from '../../common/Modal';
 import Input from '../../common/Input';
 import Button from '../../common/Button';
-import { Box, Save, Sparkles } from 'lucide-react';
+import { Box, Save, Sparkles, Layers, SlidersHorizontal, X } from 'lucide-react';
 const AIEmailGeneratorModal = React.lazy(() => import('./AIEmailGeneratorModal'));
 
 // Import constants and utilities
@@ -344,6 +344,16 @@ const applyCtaTracking = (currentUrl: string, index: number): string => {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onCancel, customMergeTags = [], canSetShared = true }) => {
+    const [isMobileOrTablet, setIsMobileOrTablet] = useState(() =>
+        typeof window !== 'undefined' ? window.innerWidth < 1024 : false
+    );
+    useEffect(() => {
+        const handleResize = () => setIsMobileOrTablet(window.innerWidth < 1024);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+    const [isToolboxOpen, setIsToolboxOpen] = useState(false);
+    const [isPropertiesOpen, setIsPropertiesOpen] = useState(false);
     const hasInitialBlockObjects = Boolean(
         template?.blocks && template.blocks.length > 0 && typeof template.blocks[0] === 'object'
     );
@@ -797,6 +807,83 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
         }
     };
 
+    const renderEmailToolbox = () => (
+        <EmailToolbox
+            blocks={blocks}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={(id) => {
+                setSelectedBlockId(id);
+                if (isMobileOrTablet) setIsToolboxOpen(false);
+            }}
+            savedSections={savedSections}
+            onLoadTemplate={(tpl) => {
+                updateBlocks(tpl);
+                if (isMobileOrTablet) setIsToolboxOpen(false);
+            }}
+            onDeleteSavedSection={handleDeleteSavedSection}
+            onDragStart={(e, type, layout) => {
+                if (type === 'saved' && layout) {
+                    e.dataTransfer.setData('type', 'saved');
+                    e.dataTransfer.setData('payload', layout);
+                } else {
+                    e.dataTransfer.setData('type', type);
+                    if (layout) e.dataTransfer.setData('layout', layout);
+                }
+                e.dataTransfer.effectAllowed = 'copyMove';
+            }}
+        />
+    );
+
+    const renderEmailProperties = () => (
+        <EmailProperties
+            selectedBlock={(function find(list: EmailBlock[]): EmailBlock | null {
+                for (let b of list) {
+                    if (b.id === selectedBlockId) return b;
+                    if (b.children) {
+                        const f = find(b.children);
+                        if (f) return f;
+                    }
+                }
+                return null;
+            })(blocks)}
+            bodyStyle={bodyStyle}
+            deviceMode={viewMode}
+            blocks={blocks}
+            customMergeTags={customMergeTags}
+            onUpdateBlock={(id, data) => {
+                const updateDeep = (list: EmailBlock[]): EmailBlock[] => {
+                    return list.map(b => {
+                        if (b.id === id) {
+                            const newStyle = { ...b.style, ...(data.style || {}) };
+                            if (data.style?.mobile) { newStyle.mobile = { ...b.style.mobile, ...data.style.mobile }; }
+                            return { ...b, ...data, style: newStyle };
+                        }
+                        if (b.children) return { ...b, children: updateDeep(b.children) };
+                        return b;
+                    });
+                };
+                updateBlocks(updateDeep(blocks));
+            }}
+            onUpdateBodyStyle={setBodyStyle}
+            onDeleteBlock={(id) => { updateBlocks(deleteBlockDeep(blocks, id)); setSelectedBlockId(null); }}
+            onDuplicateBlock={(block) => {
+                const newBlock = duplicateBlockDeep(block);
+                const insertAfter = (list: EmailBlock[]): EmailBlock[] => {
+                    const idx = list.findIndex(x => x.id === block.id);
+                    if (idx !== -1) {
+                        const copy = [...list];
+                        copy.splice(idx + 1, 0, newBlock);
+                        return copy;
+                    }
+                    return list.map(item => item.children ? { ...item, children: insertAfter(item.children) } : item);
+                };
+                updateBlocks(insertAfter(blocks));
+                setSelectedBlockId(newBlock.id);
+            }}
+            onDeselect={() => setSelectedBlockId(null)}
+        />
+    );
+
     const editorContent = (
         <div className="fixed inset-0 z-[2147483630] bg-[#f1f5f9] flex flex-col animate-in zoom-in-[0.98] fade-in slide-in-from-bottom-4 duration-300 font-sans shadow-2xl" style={{ zIndex: 2147483630 }}>
             <EmailTopBar
@@ -820,27 +907,9 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
                 setAccessConfig={setAccessConfig}
                 canSetShared={canSetShared}
             />
-            <div className="flex-1 flex overflow-hidden">
-                {editorMode === 'visual' && (
-                    <EmailToolbox
-                        blocks={blocks}
-                        selectedBlockId={selectedBlockId}
-                        onSelectBlock={setSelectedBlockId}
-                        savedSections={savedSections}
-                        onLoadTemplate={updateBlocks}
-                        onDeleteSavedSection={handleDeleteSavedSection}
-                        onDragStart={(e, type, layout) => {
-                            if (type === 'saved' && layout) {
-                                e.dataTransfer.setData('type', 'saved');
-                                e.dataTransfer.setData('payload', layout);
-                            } else {
-                                e.dataTransfer.setData('type', type);
-                                if (layout) e.dataTransfer.setData('layout', layout);
-                            }
-                            e.dataTransfer.effectAllowed = 'copyMove';
-                        }}
-                    />
-                )}
+            <div className="flex-1 flex overflow-hidden relative">
+                {editorMode === 'visual' && !isMobileOrTablet && renderEmailToolbox()}
+
                 {/* Canvas wrapper — button nằm sticky góc dưới phải canvas */}
                 <div className="relative flex-1 flex overflow-hidden">
                     <EmailCanvas
@@ -850,7 +919,10 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
                         viewMode={viewMode}
                         customHtml={customHtml}
                         selectedBlockId={selectedBlockId}
-                        onSelectBlock={setSelectedBlockId}
+                        onSelectBlock={(id) => {
+                            setSelectedBlockId(id);
+                            if (isMobileOrTablet && id) setIsPropertiesOpen(true);
+                        }}
                         onUpdateBlocks={updateBlocks}
                         setCustomHtml={setCustomHtml}
                         onSaveSection={handleSaveSection}
@@ -891,6 +963,7 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
                         </button>
                     )}
                 </div>
+
                 {editorMode === 'visual' && showValidation && validationIssues !== undefined ? (
                     <EmailValidationPanel
                         issues={validationIssues}
@@ -900,42 +973,96 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
                         onAutoFixDuplicates={handleAutoFixDuplicates}
                         onAutoFixUnsubscribe={handleAutoFixUnsubscribe}
                     />
-                ) : editorMode === 'visual' && (
-                    <EmailProperties selectedBlock={(function find(list: EmailBlock[]): EmailBlock | null { for (let b of list) { if (b.id === selectedBlockId) return b; if (b.children) { const f = find(b.children); if (f) return f; } } return null; })(blocks)} bodyStyle={bodyStyle} deviceMode={viewMode}
-                        blocks={blocks}
-                        customMergeTags={customMergeTags}
-                        onUpdateBlock={(id, data) => {
-                            const updateDeep = (list: EmailBlock[]): EmailBlock[] => {
-                                return list.map(b => {
-                                    if (b.id === id) {
-                                        const newStyle = { ...b.style, ...(data.style || {}) };
-                                        if (data.style?.mobile) { newStyle.mobile = { ...b.style.mobile, ...data.style.mobile }; }
-                                        return { ...b, ...data, style: newStyle };
-                                    }
-                                    if (b.children) return { ...b, children: updateDeep(b.children) };
-                                    return b;
-                                });
-                            };
-                            updateBlocks(updateDeep(blocks));
-                        }}
-                        onUpdateBodyStyle={setBodyStyle}
-                        onDeleteBlock={(id) => { updateBlocks(deleteBlockDeep(blocks, id)); setSelectedBlockId(null); }}
-                        onDuplicateBlock={(block) => {
-                            const newBlock = duplicateBlockDeep(block);
-                            const insertAfter = (list: EmailBlock[]): EmailBlock[] => {
-                                const idx = list.findIndex(x => x.id === block.id);
-                                if (idx !== -1) {
-                                    const copy = [...list];
-                                    copy.splice(idx + 1, 0, newBlock);
-                                    return copy;
-                                }
-                                return list.map(item => item.children ? { ...item, children: insertAfter(item.children) } : item);
-                            };
-                            updateBlocks(insertAfter(blocks));
-                            setSelectedBlockId(newBlock.id);
-                        }}
-                        onDeselect={() => setSelectedBlockId(null)}
-                    />
+                ) : editorMode === 'visual' && !isMobileOrTablet ? (
+                    renderEmailProperties()
+                ) : null}
+
+                {/* Mobile / Tablet Drawer: Left Toolbox */}
+                {isMobileOrTablet && isToolboxOpen && (
+                    <div className="fixed inset-0 z-[2147483620] flex" style={{ zIndex: 2147483620 }}>
+                        <div
+                            className="fixed inset-0 bg-black/40 backdrop-blur-xs drawer-backdrop"
+                            onClick={() => setIsToolboxOpen(false)}
+                        />
+                        <div
+                            className="relative z-10 w-[320px] max-w-[90vw] h-full bg-white shadow-2xl flex flex-col drawer-panel"
+                            style={{ zIndex: 2147483625 }}
+                        >
+                            <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-slate-200 bg-slate-50">
+                                <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                                    <Layers className="w-3.5 h-3.5 text-[#BD1D2D]" />
+                                    Khối nội dung Email
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsToolboxOpen(false)}
+                                    className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-200 border-none bg-transparent cursor-pointer"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto">
+                                {renderEmailToolbox()}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Mobile / Tablet Drawer: Right Properties */}
+                {isMobileOrTablet && isPropertiesOpen && (
+                    <div className="fixed inset-0 z-[2147483620] flex justify-end" style={{ zIndex: 2147483620 }}>
+                        <div
+                            className="fixed inset-0 bg-black/40 backdrop-blur-xs drawer-backdrop"
+                            onClick={() => setIsPropertiesOpen(false)}
+                        />
+                        <div
+                            className="relative z-10 w-[360px] max-w-[92vw] h-full bg-white shadow-2xl flex flex-col drawer-panel"
+                            style={{ zIndex: 2147483625 }}
+                        >
+                            <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-slate-200 bg-slate-50">
+                                <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                                    <SlidersHorizontal className="w-3.5 h-3.5 text-[#BD1D2D]" />
+                                    Thuộc tính khối
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsPropertiesOpen(false)}
+                                    className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-200 border-none bg-transparent cursor-pointer"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto">
+                                {renderEmailProperties()}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Mobile Floating Bottom Action Dock */}
+                {isMobileOrTablet && editorMode === 'visual' && (
+                    <div
+                        className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/90 text-white backdrop-blur-md shadow-2xl border border-white/10"
+                        style={{ zIndex: 1000 }}
+                    >
+                        <button
+                            type="button"
+                            onClick={() => setIsToolboxOpen(true)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white border-none cursor-pointer"
+                        >
+                            <Layers className="w-3.5 h-3.5 text-red-400" />
+                            <span>Khối</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setIsPropertiesOpen(true)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white border-none cursor-pointer"
+                        >
+                            <SlidersHorizontal className="w-3.5 h-3.5 text-blue-400" />
+                            <span>Thuộc tính</span>
+                            {selectedBlockId && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+                        </button>
+                    </div>
                 )}
             </div>
 

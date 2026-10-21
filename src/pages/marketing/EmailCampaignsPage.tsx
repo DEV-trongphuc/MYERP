@@ -676,11 +676,11 @@ const Campaigns: React.FC = () => {
                         title="Tổng chiến dịch"
                         value={stats.totalCampaigns.toLocaleString('vi-VN')}
                         icon={<PieChart />}
-                        color="#6366f1"
+                        color="#334155"
                         loading={loading}
                         breakdown={
                             <>
-                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Đang chạy: {stats.running.toLocaleString('vi-VN')}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-600" />Đang chạy: {stats.running.toLocaleString('vi-VN')}</span>
                                 <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-400" />Bản nháp: {stats.draft.toLocaleString('vi-VN')}</span>
                             </>
                         }
@@ -689,12 +689,12 @@ const Campaigns: React.FC = () => {
                         title="Tổng đã gửi"
                         value={stats.totalSent.toLocaleString('vi-VN')}
                         icon={<Send />}
-                        color="#3b82f6"
+                        color="#0f172a"
                         loading={loading}
                         breakdown={
                             <>
-                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />Email: {stats.emailSent.toLocaleString('vi-VN')}</span>
-                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-cyan-500" />Zalo: {stats.zaloSent.toLocaleString('vi-VN')}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-700" />Email: {stats.emailSent.toLocaleString('vi-VN')}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#0f172a]" />Zalo: {stats.zaloSent.toLocaleString('vi-VN')}</span>
                             </>
                         }
                     />
@@ -702,11 +702,11 @@ const Campaigns: React.FC = () => {
                         title="Tỷ lệ mở"
                         value={`${stats.openRate}%`}
                         icon={<MailOpen />}
-                        color="#10b981"
+                        color="#64748b"
                         loading={loading}
                         breakdown={
                             <>
-                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Lượt mở: {stats.totalOpened.toLocaleString('vi-VN')}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-600" />Lượt mở: {stats.totalOpened.toLocaleString('vi-VN')}</span>
                                 <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-400" />Chưa mở: {Math.max(0, stats.totalSent - stats.totalOpened).toLocaleString('vi-VN')}</span>
                             </>
                         }
@@ -715,10 +715,10 @@ const Campaigns: React.FC = () => {
                         title="Lượt click"
                         value={stats.totalClicked.toLocaleString('vi-VN')}
                         icon={<MousePointerClick />}
-                        color="#f59e0b"
+                        color="#C6333D"
                         loading={loading}
                         breakdown={
-                            <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" />CTR: {stats.ctr}%</span>
+                            <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#C6333D]" />CTR: {stats.ctr}%</span>
                         }
                     />
                 </div>

@@ -6185,7 +6185,7 @@ export default function Approvals() {
       }}>
         {/* Left: View Mode Tabs (Mobile, Tablet & Desktop) */}
         <div
-          className="segmented-tab-container"
+          className="segmented-tab-container touch-scroll-x"
           style={{
             display: 'flex',
             gap: '2px',
@@ -6196,14 +6196,16 @@ export default function Approvals() {
             flexShrink: 0,
             width: isMobile ? '100%' : 'auto',
             maxWidth: '100%',
-            overflowX: 'auto'
+            overflowX: 'auto',
+            scrollbarWidth: 'none',
+            WebkitOverflowScrolling: 'touch'
           }}
         >
           {[
-            { id: 'all', label: isMobile ? t('Tất cả') : t('Tất cả đề xuất'), icon: FileText, count: allList.length, countBg: activeTab === 'all' ? 'var(--color-bg-secondary, #f1f5f9)' : 'rgba(0,0,0,0.06)', countColor: 'var(--color-text)' },
-            { id: 'pending', label: isMobile ? t('Chờ duyệt') : t('Chờ tôi duyệt'), icon: Activity, count: pendingList.length, countBg: '#ef4444', countColor: 'white' },
-            { id: 'my_requests', label: isMobile ? t('Của tôi') : t('Yêu cầu của tôi'), icon: User, count: (myRequestsList.length + draftApprovalItems.length), countBg: activeTab === 'my_requests' ? 'var(--color-bg-secondary, #f1f5f9)' : 'rgba(0,0,0,0.06)', countColor: 'var(--color-text)' },
-            { id: 'following', label: isMobile ? t('Theo dõi') : t('Được gắn theo dõi'), icon: Eye, count: followingList.length, countBg: '#3b82f6', countColor: 'white' }
+            { id: 'all', label: isMobile ? t('Tất cả') : t('Tất cả đề xuất'), icon: FileText, count: allList.length, countBg: activeTab === 'all' ? '#fee2e2' : 'rgba(0,0,0,0.06)', countColor: activeTab === 'all' ? '#C6333D' : 'var(--color-text)' },
+            { id: 'pending', label: isMobile ? t('Chờ duyệt') : t('Chờ tôi duyệt'), icon: Activity, count: pendingList.length, countBg: '#C6333D', countColor: 'white' },
+            { id: 'my_requests', label: isMobile ? t('Của tôi') : t('Yêu cầu của tôi'), icon: User, count: (myRequestsList.length + draftApprovalItems.length), countBg: activeTab === 'my_requests' ? '#fee2e2' : 'rgba(0,0,0,0.06)', countColor: activeTab === 'my_requests' ? '#C6333D' : 'var(--color-text)' },
+            { id: 'following', label: isMobile ? t('Theo dõi') : t('Được gắn theo dõi'), icon: Eye, count: followingList.length, countBg: '#475569', countColor: 'white' }
           ].map(tab => {
             const isActive = activeTab === tab.id;
             const Icon = tab.icon;
@@ -6224,7 +6226,7 @@ export default function Approvals() {
                   fontWeight: isActive ? 700 : 500,
                   fontSize: isMobile ? '0.74rem' : '0.78rem',
                   background: 'transparent',
-                  color: isActive ? 'var(--color-text)' : 'var(--color-text-muted)',
+                  color: isActive ? '#C6333D' : 'var(--color-text-muted)',
                   border: 'none',
                   cursor: 'pointer',
                   userSelect: 'none',

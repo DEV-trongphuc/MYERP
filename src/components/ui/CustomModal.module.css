@@ -4,7 +4,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  width: 100vw;
+  width: 100%;
   height: 100vh;
   display: flex;
   align-items: center;
@@ -124,8 +124,8 @@
     min-height: 100dvh !important;
     border-radius: 0 !important;
     border: none !important;
-    width: 100vw !important;
-    max-width: 100vw !important;
+    width: 100% !important;
+    max-width: 100% !important;
     margin: 0 !important;
     position: fixed !important;
     top: 0 !important;
@@ -169,8 +169,8 @@
     border-left: none !important;
     border-right: none !important;
     border-bottom: none !important;
-    width: 100vw !important;
-    max-width: 100vw !important;
+    width: 100% !important;
+    max-width: 100% !important;
     margin: 0 !important;
     margin-bottom: 0 !important;
     bottom: 0 !important;
@@ -235,7 +235,7 @@
     max-height: 85vh !important;
     min-height: 0 !important;
     border-radius: var(--radius-lg) !important;
-    width: calc(100vw - 2rem) !important;
+    width: calc(100% - 1.5rem) !important;
     margin: 1rem !important;
     bottom: auto !important;
     padding-bottom: 0 !important;

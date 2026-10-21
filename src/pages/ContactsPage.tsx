@@ -2902,17 +2902,23 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-              <div style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                background: 'var(--color-border-light)',
-                border: '1px solid var(--color-border)',
-                padding: '3px',
-                borderRadius: '10px',
-                gap: '3px',
-                height: '40px',
-                boxSizing: 'border-box'
-              }}>
+              <div
+                className="touch-scroll-x"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  background: 'var(--color-border-light)',
+                  border: '1px solid var(--color-border)',
+                  padding: '3px',
+                  borderRadius: '10px',
+                  gap: '3px',
+                  height: '40px',
+                  boxSizing: 'border-box',
+                  maxWidth: '100%',
+                  overflowX: 'auto',
+                  scrollbarWidth: 'none',
+                  WebkitOverflowScrolling: 'touch'
+                }}>
                 <button
                   type="button"
                   onClick={() => setActiveMainTab('list')}
@@ -2993,7 +2999,20 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
             </div>
           </div>
           {segment === 'customer' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+            <div
+              className="mobile-horizontal-strip touch-scroll-x"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                marginTop: '10px',
+                flexWrap: isMobile ? 'nowrap' : 'wrap',
+                overflowX: isMobile ? 'auto' : 'visible',
+                maxWidth: '100%',
+                scrollbarWidth: 'none',
+                WebkitOverflowScrolling: 'touch'
+              }}
+            >
               <button
                 type="button"
                 className={`btn ${studentSubTab === 'chinh_thuc' ? 'primary' : 'outline'} sm`}

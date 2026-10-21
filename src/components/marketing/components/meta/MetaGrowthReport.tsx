@@ -124,7 +124,7 @@ const MetaGrowthReport: React.FC<MetaReportProps> = ({ dateRange }) => {
                     title="Tổng cuộc chat"
                     value={(summary.total_chat || 0).toLocaleString('vi-VN')}
                     icon={<MessageSquare />}
-                    color="#6366f1"
+                    color="#C6333D"
                     breakdown={<span>Tất cả tin nhắn Messenger</span>}
                 />
                 <StatCard
@@ -132,7 +132,7 @@ const MetaGrowthReport: React.FC<MetaReportProps> = ({ dateRange }) => {
                     title="Có thông tin Lead"
                     value={(summary.has_lead || 0).toLocaleString('vi-VN')}
                     icon={<Users />}
-                    color="#10b981"
+                    color="#0f172a"
                     breakdown={<span>Đã có SĐT hoặc Email</span>}
                 />
                 <StatCard
@@ -148,7 +148,7 @@ const MetaGrowthReport: React.FC<MetaReportProps> = ({ dateRange }) => {
                     title="Kích hoạt Automation"
                     value={(summary.automation || 0).toLocaleString('vi-VN')}
                     icon={<Zap />}
-                    color="#BD1D2D"
+                    color="#334155"
                     breakdown={<span>Lượt chạy kịch bản tự động</span>}
                 />
             </div>
@@ -161,7 +161,7 @@ const MetaGrowthReport: React.FC<MetaReportProps> = ({ dateRange }) => {
                             <h3 className="text-sm font-bold text-[var(--color-text)]">Tăng trưởng & Quan tâm</h3>
                             <p className="text-xs text-[var(--color-text-muted)] mt-0.5">Số lượng người quan tâm tích lũy</p>
                         </div>
-                        <TrendingUp className="w-5 h-5 text-blue-500 opacity-40" />
+                        <TrendingUp className="w-5 h-5 text-[#C6333D]" />
                     </div>
                     <div className="h-[260px]">
                         {loading ? (
@@ -175,15 +175,15 @@ const MetaGrowthReport: React.FC<MetaReportProps> = ({ dateRange }) => {
                                 <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                     <defs>
                                         <linearGradient id="colorNew" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                                            <stop offset="5%" stopColor="#C6333D" stopOpacity={0.18} />
+                                            <stop offset="95%" stopColor="#C6333D" stopOpacity={0} />
                                         </linearGradient>
                                     </defs>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                     <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} dy={10} />
                                     <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} />
                                     <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid var(--color-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }} />
-                                    <Area type="monotone" dataKey="new_followers" name="Mới" stroke="#3b82f6" strokeWidth={2.5} fill="url(#colorNew)" />
+                                    <Area type="monotone" dataKey="new_followers" name="Mới" stroke="#C6333D" strokeWidth={2.5} fill="url(#colorNew)" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         )}
@@ -196,7 +196,7 @@ const MetaGrowthReport: React.FC<MetaReportProps> = ({ dateRange }) => {
                             <h3 className="text-sm font-bold text-[var(--color-text)]">Tương tác khách lạ</h3>
                             <p className="text-xs text-[var(--color-text-muted)] mt-0.5">Khách chưa nhắn quan tâm nhưng có nhắn tin</p>
                         </div>
-                        <MessageSquare className="w-5 h-5 text-emerald-500 opacity-40" />
+                        <MessageSquare className="w-5 h-5 text-[#334155]" />
                     </div>
                     <div className="h-[260px]">
                         {loading ? (
@@ -212,7 +212,7 @@ const MetaGrowthReport: React.FC<MetaReportProps> = ({ dateRange }) => {
                                     <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} dy={10} />
                                     <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} />
                                     <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid var(--color-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }} cursor={{ fill: 'rgba(0,0,0,0.02)' }} />
-                                    <Bar dataKey="non_follower_interactions" name="Tương tác" fill="#10b981" radius={[4, 4, 0, 0]} barSize={24} />
+                                    <Bar dataKey="non_follower_interactions" name="Tương tác" fill="#0f172a" radius={[4, 4, 0, 0]} barSize={24} />
                                 </BarChart>
                             </ResponsiveContainer>
                         )}
@@ -225,7 +225,7 @@ const MetaGrowthReport: React.FC<MetaReportProps> = ({ dateRange }) => {
                             <h3 className="text-sm font-bold text-[var(--color-text)]">Vận hành Automation</h3>
                             <p className="text-xs text-[var(--color-text-muted)] mt-0.5">Số lượt kích hoạt kịch bản tự động</p>
                         </div>
-                        <Zap className="w-5 h-5 text-[var(--color-primary)] opacity-40" />
+                        <Zap className="w-5 h-5 text-[#C6333D]" />
                     </div>
                     <div className="h-[280px]">
                         {loading ? (
@@ -241,7 +241,7 @@ const MetaGrowthReport: React.FC<MetaReportProps> = ({ dateRange }) => {
                                     <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} dy={10} />
                                     <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} />
                                     <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid var(--color-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }} />
-                                    <Area type="monotone" dataKey="automation" name="Kích hoạt" stroke="var(--color-primary)" strokeWidth={2.5} fillOpacity={0.08} fill="var(--color-primary)" />
+                                    <Area type="monotone" dataKey="automation" name="Kích hoạt" stroke="#C6333D" strokeWidth={2.5} fillOpacity={0.08} fill="#C6333D" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         )}

@@ -144,6 +144,8 @@ const FlowAnalyticsTab: React.FC<{
     const completionRate = (stats.enrolled || 0) > 0
         ? Math.round(((stats.completed || 0) / stats.enrolled) * 100)
         : 0;
+    const completionPct = Number(completionRate) || 0;
+    const completionColor = completionPct >= 80 ? '#10b981' : completionPct >= 50 ? '#f59e0b' : '#ef4444';
 
 
     // Memoize labels for unified usage
@@ -1016,13 +1018,11 @@ const FlowAnalyticsTab: React.FC<{
     };
 
     const StatItem = ({ label, value, icon: Icon, color, subText, trendText, trendType, onClick }: any) => {
-        const hexColor = (() => {
-            if (color === 'bg-blue-600') return '#3b82f6';
-            if (color === 'bg-indigo-600') return '#a31422';
-            if (color === 'bg-[#2563eb]') return '#f59e0b';
-            if (color === 'bg-rose-500') return '#10b981';
-            return '#a31422';
-        })();
+        const isHighlight = label?.includes('Click') || label?.includes('CTR') || label?.includes('Hoàn tất');
+        const isError = label?.includes('lỗi') || label?.includes('Failed');
+        const hexColor = isHighlight ? '#C6333D' : isError ? '#ef4444' : '#334155';
+        const iconBg = isHighlight || isError ? '#fef2f2' : '#f8fafc';
+        const iconBorder = isHighlight || isError ? '#fecdd3' : '#e2e8f0';
 
         const isTrendSuccess = trendType === 'success';
 
@@ -1030,18 +1030,18 @@ const FlowAnalyticsTab: React.FC<{
             <div
                 onClick={onClick}
                 style={{
-                    minHeight: '140px',
-                    '--stat-accent': hexColor,
-                    '--stat-glow': `${hexColor}26`,
-                } as React.CSSProperties}
-                className={`stat-card hover-lift relative overflow-hidden w-full min-w-0 h-full min-h-[140px] flex flex-col justify-between p-5 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[18px] shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all duration-300 ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
+                    minHeight: '136px',
+                    borderRadius: '16px',
+                    border: '1px solid #e2e8f0',
+                    background: '#ffffff',
+                    padding: '16px 18px',
+                    boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
+                }}
+                className={`stat-card w-full min-w-0 h-full flex flex-col justify-between transition-all duration-200 hover:shadow-md ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
             >
-                <div className="decor-svg" style={{ color: hexColor }}>
-                    <Icon className="w-full h-full" style={{ width: '100%', height: '100%' }} />
-                </div>
                 <div className="relative z-10 flex flex-col justify-between h-full w-full min-w-0">
                     <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', gap: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', gap: '8px' }}>
                             <div
                                 className="stat-label truncate"
                                 style={{
@@ -1049,7 +1049,7 @@ const FlowAnalyticsTab: React.FC<{
                                     fontWeight: 700,
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.05em',
-                                    color: 'var(--color-text-muted)',
+                                    color: '#64748b',
                                 }}
                             >
                                 {label}
@@ -1060,7 +1060,8 @@ const FlowAnalyticsTab: React.FC<{
                                     width: '32px',
                                     height: '32px',
                                     borderRadius: '8px',
-                                    background: `${hexColor}14`,
+                                    background: iconBg,
+                                    border: `1px solid ${iconBorder}`,
                                     color: hexColor,
                                     display: 'flex',
                                     alignItems: 'center',
@@ -1071,15 +1072,15 @@ const FlowAnalyticsTab: React.FC<{
                                 <Icon className="w-4 h-4" />
                             </div>
                         </div>
-                        <div className="stat-value tabular-nums truncate">{value}</div>
+                        <div style={{ fontSize: '1.625rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }} className="stat-value tabular-nums truncate">{value}</div>
                         {subText && (
                             <div
                                 style={{
                                     fontSize: '0.75rem',
-                                    color: 'var(--color-text-muted)',
-                                    marginTop: '4px',
-                                    marginBottom: '8px',
-                                    fontWeight: 600,
+                                    color: '#64748b',
+                                    marginTop: '6px',
+                                    marginBottom: '4px',
+                                    fontWeight: 500,
                                     display: 'flex',
                                     alignItems: 'center',
                                     gap: '10px',
@@ -1168,8 +1169,8 @@ const FlowAnalyticsTab: React.FC<{
 
                             <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                                 <div
-                                    className="h-full bg-emerald-500 rounded-full transition-all duration-1000"
-                                    style={{ width: `${completionRate}%` }}
+                                    className="h-full rounded-full transition-all duration-1000"
+                                    style={{ width: `${Math.min(100, Math.max(0, completionPct))}%`, backgroundColor: completionColor }}
                                 ></div>
                             </div>
                         </div>

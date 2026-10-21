@@ -3650,9 +3650,9 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
             <div style={{
               display: 'inline-flex',
               alignItems: 'center',
-              backgroundColor: 'var(--color-bg)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)',
+              backgroundColor: 'var(--color-border-light, #f1f5f9)',
+              border: '1px solid var(--color-border, #e2e8f0)',
+              borderRadius: '8px',
               padding: '2px',
               gap: '2px',
               height: isMobile ? '32px' : '36px'
@@ -3670,9 +3670,9 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                   borderRadius: '6px',
                   border: 'none',
                   cursor: 'pointer',
-                  background: viewMode === 'list' ? 'var(--color-surface)' : 'transparent',
-                  color: viewMode === 'list' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                  boxShadow: viewMode === 'list' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  background: viewMode === 'list' ? 'var(--color-surface, #ffffff)' : 'transparent',
+                  color: viewMode === 'list' ? '#C6333D' : 'var(--color-text-muted, #64748b)',
+                  boxShadow: viewMode === 'list' ? '0 1px 3px rgba(15,23,42,0.08)' : 'none',
                   transition: 'all 0.15s ease'
                 }}
               >
@@ -3691,9 +3691,9 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                   borderRadius: '6px',
                   border: 'none',
                   cursor: 'pointer',
-                  background: viewMode === 'calendar' ? 'var(--color-surface)' : 'transparent',
-                  color: viewMode === 'calendar' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                  boxShadow: viewMode === 'calendar' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  background: viewMode === 'calendar' ? 'var(--color-surface, #ffffff)' : 'transparent',
+                  color: viewMode === 'calendar' ? '#C6333D' : 'var(--color-text-muted, #64748b)',
+                  boxShadow: viewMode === 'calendar' ? '0 1px 3px rgba(15,23,42,0.08)' : 'none',
                   transition: 'all 0.15s ease'
                 }}
               >
@@ -3713,9 +3713,9 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                     borderRadius: '6px',
                     border: 'none',
                     cursor: 'pointer',
-                    background: (viewMode as string) === 'registrations' ? 'var(--color-surface)' : 'transparent',
-                    color: (viewMode as string) === 'registrations' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                    boxShadow: (viewMode as string) === 'registrations' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                    background: (viewMode as string) === 'registrations' ? 'var(--color-surface, #ffffff)' : 'transparent',
+                    color: (viewMode as string) === 'registrations' ? '#C6333D' : 'var(--color-text-muted, #64748b)',
+                    boxShadow: (viewMode as string) === 'registrations' ? '0 1px 3px rgba(15,23,42,0.08)' : 'none',
                     transition: 'all 0.15s ease'
                   }}
                 >
@@ -8675,14 +8675,6 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               overflow: 'hidden',
               transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
             }}>
-              {!isMobile && (
-                <div className="decor-svg" style={{ color: '#3b82f6' }}>
-                  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                    <rect x="25" y="25" width="50" height="50" rx="6" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-                    <path d="M25 40 H 75 M 40 20 V 30 M 60 20 V 30" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                  </svg>
-                </div>
-              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: isMobile ? '0.625rem' : '0.7rem', color: '#3b82f6', fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
                   {viewMode === 'calendar' ? t(`CÔNG THÁNG ${currentMonth}`) : t('NGÀY CÔNG')}
@@ -8726,14 +8718,6 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               overflow: 'hidden',
               transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
             }}>
-              {!isMobile && (
-                <div className="decor-svg" style={{ color: lateDays > 0 ? '#f59e0b' : '#10b981' }}>
-                  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                    <circle cx="50" cy="50" r="35" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-                    <path d="M50 28 V 50 L 64 58" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-                  </svg>
-                </div>
-              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: isMobile ? '0.625rem' : '0.7rem', color: lateDays > 0 ? '#f59e0b' : '#10b981', fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
                   {t('ĐI MUỘN & PHÚT TRỄ')}
@@ -8796,14 +8780,6 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               overflow: 'hidden',
               transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
             }}>
-              {!isMobile && (
-                <div className="decor-svg" style={{ color: '#10b981' }}>
-                  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                    <circle cx="50" cy="50" r="35" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-                    <path d="M30 50 L 45 65 L 75 35" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </div>
-              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: isMobile ? '0.625rem' : '0.7rem', color: '#10b981', fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
                   {t('ĐƠN TỪ & DUYỆT')}
@@ -8847,13 +8823,6 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               overflow: 'hidden',
               transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
             }}>
-              {!isMobile && (
-                <div className="decor-svg" style={{ color: '#8b5cf6' }}>
-                  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                    <path d="M50 20 C 35 20, 25 32, 25 47 C 25 62, 35 74, 50 74 C 65 74, 75 62, 75 47 C 60 47, 50 37, 50 20 Z" stroke="currentColor" strokeWidth="2" opacity="0.3" fill="none" />
-                  </svg>
-                </div>
-              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: isMobile ? '0.625rem' : '0.7rem', color: '#8b5cf6', fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
                   {t('CA TRỰC & TĂNG CA')}

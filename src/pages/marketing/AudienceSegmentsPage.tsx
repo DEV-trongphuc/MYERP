@@ -1420,12 +1420,12 @@ const Audience: React.FC = () => {
                         title="Tổng liên hệ"
                         value={stats.total.toLocaleString()}
                         icon={<Users className="w-4 h-4" />}
-                        color="#2563eb"
+                        color="#334155"
                         loading={loading && subscribers.length === 0}
                         breakdown={
                             <>
-                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />Customer: {(stats.customer || 0).toLocaleString()}</span>
-                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />Lead: {(stats.lead || 0).toLocaleString()}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-600" />Customer: {(stats.customer || 0).toLocaleString()}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-400" />Lead: {(stats.lead || 0).toLocaleString()}</span>
                             </>
                         }
                     />
@@ -1433,11 +1433,11 @@ const Audience: React.FC = () => {
                         title="Đang hoạt động"
                         value={(stats.active || 0).toLocaleString()}
                         icon={<ShieldCheck className="w-4 h-4" />}
-                        color="#10b981"
+                        color="#0f172a"
                         loading={loading && subscribers.length === 0}
                         breakdown={
                             <>
-                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Active: {(stats.active || 0).toLocaleString()}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-600" />Active: {(stats.active || 0).toLocaleString()}</span>
                                 <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-400" />Tổng: {stats.total.toLocaleString()}</span>
                             </>
                         }
@@ -1446,12 +1446,12 @@ const Audience: React.FC = () => {
                         title="Độ phủ tiếp cận"
                         value={((stats.email_reach || 0) + (stats.zalo_reach || 0)).toLocaleString()}
                         icon={<Zap className="w-4 h-4" />}
-                        color="#3b82f6"
+                        color="#C6333D"
                         loading={loading && subscribers.length === 0}
                         breakdown={
                             <>
-                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />Email: {(stats.email_reach || 0).toLocaleString()}</span>
-                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-cyan-500" />Zalo/SĐT: {(stats.zalo_reach || 0).toLocaleString()}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#C6333D]" />Email: {(stats.email_reach || 0).toLocaleString()}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#0f172a]" />Zalo/SĐT: {(stats.zalo_reach || 0).toLocaleString()}</span>
                             </>
                         }
                     />
@@ -1459,7 +1459,7 @@ const Audience: React.FC = () => {
                         title="Hủy đăng ký"
                         value={(stats.unsubscribed || 0).toLocaleString()}
                         icon={<UserMinus className="w-4 h-4" />}
-                        color="#ec4899"
+                        color="#64748b"
                         loading={loading && subscribers.length === 0}
                         breakdown={
                             <>

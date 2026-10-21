@@ -5,7 +5,7 @@ import {
   Bold, Italic, List, ListOrdered, Image as ImageIcon, 
   Users, RefreshCw, Layers, CheckSquare2, Info, Receipt, Scale, ArrowUpRight, Search, Save, Bell, BellOff,
   Eye, EyeOff, ExternalLink, UserPlus, UserCheck, Edit3, Play, Sparkles, ArrowRight, Building2, Megaphone, Loader2, RotateCcw,
-  CheckCircle2, XCircle, Camera, Target, Shield, AlertTriangle, FileSpreadsheet, Maximize2, Download, Folder, Copy
+  CheckCircle2, XCircle, Camera, Target, Shield, AlertTriangle, FileSpreadsheet, Maximize2, Download, Folder, Copy, Archive
 } from 'lucide-react';
 import { downloadFileWithName } from '../utils/fileDownloader';
 import { triggerLocalConfetti } from '../utils/confettiHelper';
@@ -587,12 +587,34 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
           setIsHidden(res.data.is_hidden);
           toast.success(res.data.message);
           if (onUpdate) onUpdate({ ...task, ...formData, is_hidden: res.data.is_hidden });
+          window.dispatchEvent(new CustomEvent('task-updated'));
         }
       })
       .catch(err => {
         toast.error(t('Lỗi cập nhật trạng thái ẩn: ') + (err.response?.data?.message || err.message));
       })
       .finally(() => setLoadingHide(false));
+  };
+
+  const archiveInFlightRef = useRef(false);
+  const handleToggleArchive = async () => {
+    if (!task?.id || isNewRef.current || archiveInFlightRef.current) return;
+    archiveInFlightRef.current = true;
+    const nextArchived = !formData.is_archived;
+    try {
+      const endpoint = nextArchived ? `/tasks/${task.id}/archive` : `/tasks/${task.id}/unarchive`;
+      const res = await api.post(endpoint);
+      if (res.data?.success) {
+        setFormData((prev: any) => ({ ...prev, is_archived: nextArchived ? 1 : 0 }));
+        toast.success(nextArchived ? t('Đã lưu trữ công việc') : t('Đã bỏ lưu trữ công việc'));
+        if (onUpdate) onUpdate({ ...task, ...formData, is_archived: nextArchived ? 1 : 0 });
+        window.dispatchEvent(new CustomEvent('task-updated'));
+      }
+    } catch (err: any) {
+      toast.error(t('Lỗi cập nhật lưu trữ: ') + (err.response?.data?.message || err.message));
+    } finally {
+      archiveInFlightRef.current = false;
+    }
   };
 
   const handleShareTask = () => {
@@ -2741,71 +2763,103 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     };
   }, [isOpen, task, embedMode]);
 
-  const handleDuplicateTask = () => {
-    // 1. Clone checklist with reset done state and reset deadline
-    const originalChecklist = Array.isArray(erpMeta.checklist) ? erpMeta.checklist : [];
-    const clonedChecklist = originalChecklist.map((item: any, idx: number) => ({
-      id: `clone_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
-      text: item.text || item.title || item.name || '',
-      title: item.text || item.title || item.name || '',
-      done: false,
-      checked: false,
-      status: 'pending',
-      deadline: null,
-      due_date: null,
-      sub_deadline: null,
-      user_id: item.user_id || item.assignee_id || null,
-      assignee_id: item.user_id || item.assignee_id || null,
-      assignee_name: item.assignee_name || null,
-      assignee_avatar: item.assignee_avatar || null
-    }));
+  const duplicateTaskInFlightRef = useRef(false);
+  const handleDuplicateTask = async () => {
+    if (duplicateTaskInFlightRef.current) return;
+    duplicateTaskInFlightRef.current = true;
 
-    // 2. Clone formData in 'new' state (not yet saved to DB)
-    const clonedFormData = {
-      ...formData,
-      id: 'new',
-      subject: formData.subject ? `${formData.subject} (Bản sao)` : 'Công việc mới',
-      status: 'open',
-      progress: 0,
-      due_date: null,
-      start_date: null,
-      deadline: null,
-      created_at: new Date().toISOString(),
-      user_id: formData.user_id || currentUser?.id,
-      participant_ids: formData.participant_ids || '',
-      priority: formData.priority || 'medium',
-      type: formData.type || 'task',
-      task_group_id: formData.task_group_id || null,
-      task_group_name: formData.task_group_name || null,
-      related_type: formData.related_type || null,
-      related_id: formData.related_id || null,
-      contact_id: formData.contact_id || null,
-      created_by: currentUser?.id,
-      created_by_name: currentUser?.name || (currentUser as any)?.full_name || '',
-      created_by_avatar: currentUser?.avatar || (currentUser as any)?.avatar_url || ''
-    };
+    // Fast-path: If task has valid ID, attempt instant server duplicate
+    if (task?.id && task.id !== 'new' && task.id !== 0 && task.id !== '0') {
+      try {
+        const res = await api.post(`/tasks/${task.id}/duplicate`);
+        if (res.data?.success && res.data?.data) {
+          const newTask = res.data.data;
+          toast.success(t('Đã nhân bản công việc thành công!'));
+          if (onUpdate) onUpdate(newTask);
+          window.dispatchEvent(new CustomEvent('task-updated'));
+          if (newTask.id) {
+            const detailRes = await api.get(`/activities/${newTask.id}`).catch(() => null);
+            if (detailRes?.data?.data) {
+              setFormData(detailRes.data.data);
+              formDataRef.current = detailRes.data.data;
+            }
+          }
+          duplicateTaskInFlightRef.current = false;
+          return;
+        }
+      } catch (err: any) {
+        console.warn("Server duplicate fallback to local draft clone:", err);
+      }
+    }
 
-    // 3. Clone erpMeta without deadlines
-    const clonedErpMeta = {
-      ...erpMeta,
-      checklist: clonedChecklist,
-      due_sla_notified: false,
-      subtask_sla_notified: false
-    };
+    try {
+      // 1. Clone checklist with reset done state and reset deadline
+      const originalChecklist = Array.isArray(erpMeta.checklist) ? erpMeta.checklist : [];
+      const clonedChecklist = originalChecklist.map((item: any, idx: number) => ({
+        id: `clone_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
+        text: item.text || item.title || item.name || '',
+        title: item.text || item.title || item.name || '',
+        done: false,
+        checked: false,
+        status: 'pending',
+        deadline: null,
+        due_date: null,
+        sub_deadline: null,
+        user_id: item.user_id || item.assignee_id || null,
+        assignee_id: item.user_id || item.assignee_id || null,
+        assignee_name: item.assignee_name || null,
+        assignee_avatar: item.assignee_avatar || null
+      }));
 
-    // 4. Update states and synchronous refs immediately so no blur/effect touches the old task.id
-    pendingFieldUpdatesRef.current = {};
-    isNewRef.current = true;
-    formDataRef.current = clonedFormData;
-    erpMetaRef.current = clonedErpMeta;
-    setIsClonedDraft(true);
-    setFormData(clonedFormData);
-    setErpMeta(clonedErpMeta);
-    setComments([]);
-    setTimeline([]);
-    setSelectedSubtask(null);
+      // 2. Clone formData in 'new' state (not yet saved to DB)
+      const clonedFormData = {
+        ...formData,
+        id: 'new',
+        subject: formData.subject ? `[Bản sao] ${formData.subject.replace(/^(\[Bản sao\]\s*)+/, '')}` : 'Công việc mới',
+        status: 'open',
+        progress: 0,
+        due_date: null,
+        start_date: null,
+        deadline: null,
+        created_at: new Date().toISOString(),
+        user_id: formData.user_id || currentUser?.id,
+        participant_ids: formData.participant_ids || '',
+        priority: formData.priority || 'medium',
+        type: formData.type || 'task',
+        task_group_id: formData.task_group_id || null,
+        task_group_name: formData.task_group_name || null,
+        related_type: formData.related_type || null,
+        related_id: formData.related_id || null,
+        contact_id: formData.contact_id || null,
+        created_by: currentUser?.id,
+        created_by_name: currentUser?.name || (currentUser as any)?.full_name || '',
+        created_by_avatar: currentUser?.avatar || (currentUser as any)?.avatar_url || ''
+      };
 
-    toast.success(t('Đã nhân bản công việc! Dữ liệu đã được điền sẵn, hãy kiểm tra và bấm "Tạo việc" để lưu.'));
+      // 3. Clone erpMeta without deadlines
+      const clonedErpMeta = {
+        ...erpMeta,
+        checklist: clonedChecklist,
+        due_sla_notified: false,
+        subtask_sla_notified: false
+      };
+
+      // 4. Update states and synchronous refs immediately so no blur/effect touches the old task.id
+      pendingFieldUpdatesRef.current = {};
+      isNewRef.current = true;
+      formDataRef.current = clonedFormData;
+      erpMetaRef.current = clonedErpMeta;
+      setIsClonedDraft(true);
+      setFormData(clonedFormData);
+      setErpMeta(clonedErpMeta);
+      setComments([]);
+      setTimeline([]);
+      setSelectedSubtask(null);
+
+      toast.success(t('Đã nhân bản công việc! Dữ liệu đã được điền sẵn, hãy kiểm tra và bấm "Tạo việc" để lưu.'));
+    } finally {
+      duplicateTaskInFlightRef.current = false;
+    }
   };
 
   const drawerMotionProps = embedMode ? {} : {
@@ -3323,8 +3377,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               </button>
             )}
 
-            {/* Delete task button - only for creator on PC */}
-            {Boolean(!isNew && !isMobileOrTablet && isCreator && task?.id && task.id !== 'new' && task.id !== 0 && task.id !== '0') && (
+            {/* Delete task button */}
+            {Boolean(!isNew && canDelete && task?.id && task.id !== 'new' && task.id !== 0 && task.id !== '0') && (
               <button
                 type="button"
                 onClick={handleDeleteTask}
@@ -3333,8 +3387,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  width: '36px',
-                  height: '36px',
+                  width: isMobileOrTablet ? '32px' : '36px',
+                  height: isMobileOrTablet ? '32px' : '36px',
                   borderRadius: '8px',
                   border: '1px solid var(--color-border)',
                   background: 'var(--color-surface)',
@@ -3346,7 +3400,34 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 }}
                 title={t("Xóa công việc")}
               >
-                <Trash2 size={18} />
+                <Trash2 size={isMobileOrTablet ? 15 : 18} />
+              </button>
+            )}
+
+            {/* Archive Task Button */}
+            {Boolean(!isNew && formData?.id && formData.id !== 'new' && formData.id !== 0 && formData.id !== '0') && (
+              <button
+                type="button"
+                onClick={handleToggleArchive}
+                className="hover-lift"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: isMobileOrTablet ? '32px' : '36px',
+                  height: isMobileOrTablet ? '32px' : '36px',
+                  borderRadius: '8px',
+                  border: formData.is_archived ? '1.5px solid var(--color-warning, #f59e0b)' : '1px solid var(--color-border)',
+                  background: formData.is_archived ? 'rgba(245, 158, 11, 0.08)' : 'var(--color-surface)',
+                  color: formData.is_archived ? 'var(--color-warning, #f59e0b)' : 'var(--color-text-muted)',
+                  cursor: 'pointer',
+                  boxShadow: 'var(--shadow-sm)',
+                  transition: 'all 0.2s',
+                  padding: 0
+                }}
+                title={formData.is_archived ? t("Công việc đang được lưu trữ (Bấm để bỏ lưu trữ)") : t("Lưu trữ công việc")}
+              >
+                <Archive size={isMobileOrTablet ? 15 : 18} />
               </button>
             )}
 

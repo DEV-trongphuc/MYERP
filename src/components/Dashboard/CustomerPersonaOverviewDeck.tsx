@@ -191,6 +191,32 @@ const getIndustryIcon = (label: string) => {
   return Layers;
 };
 
+/** Dynamic Red / Yellow / Green color coding based on percentage */
+const getCompletenessTone = (pct: number) => {
+  if (pct >= 80) {
+    return {
+      bar: '#10b981',
+      dot: '#10b981',
+      text: '#059669',
+      bg: '#ecfdf5'
+    };
+  }
+  if (pct >= 50) {
+    return {
+      bar: '#f59e0b',
+      dot: '#f59e0b',
+      text: '#d97706',
+      bg: '#fffbeb'
+    };
+  }
+  return {
+    bar: '#ef4444',
+    dot: '#ef4444',
+    text: '#dc2626',
+    bg: '#fef2f2'
+  };
+};
+
 /** Clean flex search box so icon never overlaps placeholder text */
 const CleanSearchBox: React.FC<{
   value: string;
@@ -1190,8 +1216,8 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                           cursor: 'pointer',
                           padding: '6px 8px',
                           borderRadius: '8px',
-                          background: isSelected ? 'rgba(189, 29, 45, 0.06)' : 'transparent',
-                          border: isSelected ? '1px solid rgba(189, 29, 45, 0.22)' : '1px solid transparent',
+                          background: isSelected ? '#f8fafc' : 'transparent',
+                          border: isSelected ? '1.5px solid #0f172a' : '1px solid transparent',
                           transition: 'all 0.15s ease'
                         }}
                       >
@@ -1348,9 +1374,9 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                   style={{
                     padding: '4px 10px',
                     borderRadius: '8px',
-                    background: 'rgba(189, 29, 45, 0.06)',
-                    border: '1px solid rgba(189, 29, 45, 0.18)',
-                    color: '#BD1D2D',
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    color: '#0f172a',
                     fontSize: '0.74rem',
                     fontWeight: 700
                   }}
@@ -1440,12 +1466,13 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        padding: '5px 10px',
-                        borderRadius: '7px',
-                        background: selectedGender === 'Nam' ? 'rgba(189, 29, 45, 0.08)' : '#f8fafc',
-                        border: selectedGender === 'Nam' ? '1px solid rgba(189, 29, 45, 0.25)' : '1px solid #f1f5f9',
+                        padding: '6px 10px',
+                        borderRadius: '8px',
+                        background: selectedGender === 'Nam' ? '#f8fafc' : '#ffffff',
+                        border: selectedGender === 'Nam' ? '1.5px solid #0f172a' : '1px solid #e2e8f0',
                         cursor: 'pointer',
-                        fontSize: '0.75rem'
+                        fontSize: '0.75rem',
+                        transition: 'all 0.15s ease'
                       }}
                     >
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: 'var(--color-text, #0f172a)' }}>
@@ -1463,12 +1490,13 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        padding: '5px 10px',
-                        borderRadius: '7px',
-                        background: selectedGender === 'Nữ' ? 'rgba(51, 65, 85, 0.1)' : '#f8fafc',
-                        border: selectedGender === 'Nữ' ? '1px solid rgba(51, 65, 85, 0.28)' : '1px solid #f1f5f9',
+                        padding: '6px 10px',
+                        borderRadius: '8px',
+                        background: selectedGender === 'Nữ' ? '#f8fafc' : '#ffffff',
+                        border: selectedGender === 'Nữ' ? '1.5px solid #0f172a' : '1px solid #e2e8f0',
                         cursor: 'pointer',
-                        fontSize: '0.75rem'
+                        fontSize: '0.75rem',
+                        transition: 'all 0.15s ease'
                       }}
                     >
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: 'var(--color-text, #0f172a)' }}>
@@ -1629,9 +1657,8 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                             cursor: 'pointer',
                             padding: '9px 10px',
                             borderRadius: '8px',
-                            borderBottom: isSelected ? 'none' : '1px solid #f1f5f9',
-                            border: isSelected ? '1px solid rgba(189, 29, 45, 0.3)' : undefined,
-                            background: isSelected ? 'rgba(189, 29, 45, 0.05)' : 'transparent',
+                            border: isSelected ? '1.5px solid #0f172a' : '1px solid #f1f5f9',
+                            background: isSelected ? '#f8fafc' : 'transparent',
                             transition: 'all 0.15s ease',
                             display: 'flex',
                             alignItems: 'center',
@@ -1878,9 +1905,9 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                             }
                           }}
                           style={{
-                            border: isSelected ? '1px solid #BD1D2D' : '1px solid #e2e8f0',
-                            background: isSelected ? 'rgba(189, 29, 45, 0.08)' : '#f8fafc',
-                            color: isSelected ? '#BD1D2D' : '#334155',
+                            border: isSelected ? '1.5px solid #0f172a' : '1px solid #e2e8f0',
+                            background: isSelected ? '#f1f5f9' : '#f8fafc',
+                            color: isSelected ? '#0f172a' : '#334155',
                             borderRadius: '999px',
                             padding: '3px 9px',
                             fontSize: '0.72rem',
@@ -1894,7 +1921,7 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                           }}
                         >
                           <span>{item.label}</span>
-                          <strong style={{ color: isSelected ? '#BD1D2D' : '#0f172a' }}>{item.count}</strong>
+                          <strong style={{ color: isSelected ? '#0f172a' : '#0f172a' }}>{item.count}</strong>
                         </button>
                       );
                     })}
@@ -1928,8 +1955,8 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                           cursor: clickable ? 'pointer' : 'default',
                           padding: '7px 10px',
                           borderRadius: '8px',
-                          border: isSelected ? '1.5px solid #BD1D2D' : '1px solid #e2e8f0',
-                          background: isSelected ? 'rgba(189, 29, 45, 0.06)' : '#f8fafc',
+                          border: isSelected ? '1.5px solid #0f172a' : '1px solid #e2e8f0',
+                          background: isSelected ? '#f8fafc' : '#ffffff',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
@@ -1942,7 +1969,7 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                           style={{
                             fontSize: '0.75rem',
                             fontWeight: isSelected ? 700 : 600,
-                            color: isSelected ? '#BD1D2D' : 'var(--color-text, #0f172a)',
+                            color: isSelected ? '#0f172a' : 'var(--color-text, #0f172a)',
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis'
@@ -1954,7 +1981,7 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                           style={{
                             fontSize: '0.75rem',
                             fontWeight: 800,
-                            color: isSelected ? '#BD1D2D' : '#334155',
+                            color: isSelected ? '#0f172a' : '#334155',
                             fontVariantNumeric: 'tabular-nums',
                             flexShrink: 0
                           }}
@@ -2029,8 +2056,8 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                           cursor: 'pointer',
                           padding: '7px 10px',
                           borderRadius: '8px',
-                          border: isSelected ? '1px solid rgba(189, 29, 45, 0.3)' : '1px solid transparent',
-                          background: isSelected ? 'rgba(189, 29, 45, 0.05)' : 'transparent',
+                          border: isSelected ? '1.5px solid #0f172a' : '1px solid transparent',
+                          background: isSelected ? '#f8fafc' : 'transparent',
                           transition: 'all 0.15s ease'
                         }}
                       >
@@ -2123,7 +2150,7 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
               )}
             </div>
 
-            {/* Right: Nhóm Ngành Nghề & Lĩnh Vực — Basic Brand Spectrum Bar + Full-Width Ranked List */}
+            {/* Right: Nhóm Ngành Nghề & Lĩnh Vực — Spectrum Bar + Crisp Ranked Cards */}
             <div className="card" style={{ padding: '1.35rem', display: 'flex', flexDirection: 'column', gap: '0.95rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
                 <div>
@@ -2138,9 +2165,9 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                   style={{
                     padding: '4px 10px',
                     borderRadius: '8px',
-                    background: 'rgba(189, 29, 45, 0.06)',
-                    border: '1px solid rgba(189, 29, 45, 0.18)',
-                    color: '#BD1D2D',
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    color: '#0f172a',
                     fontSize: '0.74rem',
                     fontWeight: 700
                   }}
@@ -2161,18 +2188,18 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                     {topSegments.length > 0 && (
                       <div
                         style={{
-                          padding: '10px 12px',
+                          padding: '10px 14px',
                           borderRadius: '10px',
                           background: '#f8fafc',
                           border: '1px solid #e2e8f0',
                           display: 'flex',
                           flexDirection: 'column',
-                          gap: '8px'
+                          gap: '10px'
                         }}
                       >
                         <div
                           style={{
-                            height: 9,
+                            height: 10,
                             width: '100%',
                             borderRadius: 999,
                             overflow: 'hidden',
@@ -2213,186 +2240,214 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                           )}
                         </div>
 
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 12px' }}>
-                          {topSegments.slice(0, 4).map((seg, sIdx) => (
-                            <span
-                              key={seg.label}
-                              onClick={() => {
-                                setSelectedIndustry(selectedIndustry === seg.label ? 'all' : seg.label);
-                                setMultiPage(1);
-                              }}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 5,
-                                fontSize: '0.71rem',
-                                fontWeight: 600,
-                                color: selectedIndustry === seg.label ? '#BD1D2D' : '#64748b',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              <span
-                                style={{
-                                  width: 7,
-                                  height: 7,
-                                  borderRadius: '2px',
-                                  background: spectrumColors[sIdx % spectrumColors.length],
-                                  flexShrink: 0
+                        {/* Top 4 in clean 2x2 grid */}
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(0, 1fr))',
+                            gap: '8px 16px'
+                          }}
+                        >
+                          {topSegments.slice(0, 4).map((seg, sIdx) => {
+                            const isSelected = selectedIndustry === seg.label;
+                            return (
+                              <div
+                                key={seg.label}
+                                onClick={() => {
+                                  setSelectedIndustry(isSelected ? 'all' : seg.label);
+                                  setMultiPage(1);
                                 }}
-                              />
-                              <span style={{ maxWidth: 155, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {seg.label}
-                              </span>
-                              <strong style={{ color: '#0f172a' }}>{seg.count}</strong>
-                            </span>
-                          ))}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  gap: 6,
+                                  cursor: 'pointer',
+                                  fontSize: '0.74rem'
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                                  <span
+                                    style={{
+                                      width: 8,
+                                      height: 8,
+                                      borderRadius: 2,
+                                      background: spectrumColors[sIdx % spectrumColors.length],
+                                      flexShrink: 0
+                                    }}
+                                  />
+                                  <span
+                                    style={{
+                                      color: isSelected ? '#0f172a' : '#475569',
+                                      fontWeight: isSelected ? 700 : 600,
+                                      whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis'
+                                    }}
+                                    title={seg.label}
+                                  >
+                                    {seg.label}
+                                  </span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                                  <strong style={{ color: '#0f172a', fontWeight: 700 }}>{seg.count}</strong>
+                                  <span style={{ color: '#64748b', fontSize: '0.7rem' }}>({seg.pct}%)</span>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
 
-                    {/* Full-Width Interactive Ranked List in Basic Brand & Slate */}
+                    {/* Industry List Rows with crisp cards and bottom progress track */}
                     <div
                       style={{
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: '5px',
+                        gap: '6px',
                         maxHeight: '285px',
                         overflowY: 'auto',
                         paddingRight: '4px'
                       }}
                     >
-                      {(data?.by_industry || []).map((ind, idx) => {
-                        const isUnassigned = ind.label === 'Chưa cập nhật';
-                        const isSelected = selectedIndustry === ind.label;
-                        const IndIcon = getIndustryIcon(ind.label);
-                        const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
-                        const accentColor = isUnassigned
-                          ? '#94a3b8'
-                          : idx === 0 || isSelected
-                          ? '#C6333D'
-                          : '#334155';
-                        const maxIndCount = Math.max(1, (data?.by_industry?.[0]?.count) || 1);
-                        const relWidth = isUnassigned
-                          ? Math.min(100, Math.max(4, ind.pct))
-                          : Math.min(100, Math.max(6, Math.round((ind.count / maxIndCount) * 100)));
+                      {(() => {
+                        const industries = data?.by_industry || [];
+                        const maxIndCount = Math.max(1, industries[0]?.count || 1);
+                        return industries.map((ind, idx) => {
+                          const isUnassigned = ind.label === 'Chưa cập nhật';
+                          const isSelected = selectedIndustry === ind.label;
+                          const IndIcon = getIndustryIcon(ind.label);
+                          const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
+                          const pctOfMax = isUnassigned
+                            ? Math.min(100, Math.max(4, ind.pct))
+                            : Math.min(100, Math.max(4, Math.round((ind.count / maxIndCount) * 100)));
 
-                        return (
-                          <div
-                            key={ind.label}
-                            onClick={() => {
-                              setSelectedIndustry(isSelected ? 'all' : ind.label);
-                              setMultiPage(1);
-                            }}
-                            style={{
-                              position: 'relative',
-                              overflow: 'hidden',
-                              cursor: 'pointer',
-                              padding: '8px 12px',
-                              borderRadius: '8px',
-                              border: isSelected
-                                ? '1.5px solid #BD1D2D'
-                                : '1px solid #f1f5f9',
-                              background: isSelected
-                                ? 'rgba(189, 29, 45, 0.06)'
-                                : '#ffffff',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              gap: '10px',
-                              transition: 'all 0.15s ease'
-                            }}
-                          >
-                            {/* Subtle proportional background bar */}
+                          return (
                             <div
-                              style={{
-                                position: 'absolute',
-                                left: 0,
-                                top: 0,
-                                bottom: 0,
-                                width: `${relWidth}%`,
-                                background: isUnassigned
-                                  ? 'rgba(148, 163, 184, 0.06)'
-                                  : idx === 0 || isSelected
-                                  ? 'rgba(189, 29, 45, 0.06)'
-                                  : 'rgba(15, 23, 42, 0.035)',
-                                pointerEvents: 'none',
-                                transition: 'width 0.35s ease'
+                              key={ind.label}
+                              onClick={() => {
+                                setSelectedIndustry(isSelected ? 'all' : ind.label);
+                                setMultiPage(1);
                               }}
-                            />
+                              style={{
+                                cursor: 'pointer',
+                                padding: '10px 12px',
+                                borderRadius: 10,
+                                background: isSelected ? '#f8fafc' : '#ffffff',
+                                border: isSelected ? '1.5px solid #0f172a' : '1px solid #e2e8f0',
+                                boxShadow: '0 1px 2px rgba(15, 23, 42, 0.02)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              {/* Top line of row */}
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                                  <span
+                                    style={{
+                                      fontSize: idx < 3 ? '0.95rem' : '0.73rem',
+                                      fontWeight: 700,
+                                      color: 'var(--color-text-muted)',
+                                      width: 24,
+                                      textAlign: 'center',
+                                      flexShrink: 0
+                                    }}
+                                  >
+                                    {medal}
+                                  </span>
+                                  <span
+                                    style={{
+                                      width: 28,
+                                      height: 28,
+                                      borderRadius: 8,
+                                      background: '#f8fafc',
+                                      color: idx === 0 ? '#C6333D' : '#475569',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      flexShrink: 0
+                                    }}
+                                  >
+                                    <IndIcon size={14} />
+                                  </span>
+                                  <span
+                                    style={{
+                                      fontSize: '13px',
+                                      fontWeight: isSelected || idx === 0 ? 700 : 600,
+                                      color: '#0f172a',
+                                      whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis'
+                                    }}
+                                    title={ind.label}
+                                  >
+                                    {ind.label}
+                                  </span>
+                                </div>
 
-                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '9px', minWidth: 0, flex: 1 }}>
-                              <span
-                                style={{
-                                  fontSize: idx < 3 ? '0.95rem' : '0.73rem',
-                                  fontWeight: 700,
-                                  color: 'var(--color-text-muted)',
-                                  width: 24,
-                                  textAlign: 'center',
-                                  flexShrink: 0
-                                }}
-                              >
-                                {medal}
-                              </span>
-                              <span
-                                style={{
-                                  width: 26,
-                                  height: 26,
-                                  borderRadius: '6px',
-                                  background: idx === 0 || isSelected ? 'rgba(189, 29, 45, 0.1)' : '#f1f5f9',
-                                  color: idx === 0 || isSelected ? '#BD1D2D' : '#475569',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  flexShrink: 0
-                                }}
-                              >
-                                <IndIcon size={13.5} />
-                              </span>
-                              <span
-                                style={{
-                                  fontSize: '0.81rem',
-                                  fontWeight: isSelected || idx === 0 ? 700 : 600,
-                                  color: isSelected ? '#BD1D2D' : 'var(--color-text, #0f172a)',
-                                  whiteSpace: 'nowrap',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis'
-                                }}
-                                title={ind.label}
-                              >
-                                {ind.label}
-                              </span>
-                            </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                                  <span
+                                    style={{
+                                      fontSize: '13px',
+                                      fontWeight: 700,
+                                      color: '#0f172a',
+                                      fontVariantNumeric: 'tabular-nums'
+                                    }}
+                                  >
+                                    {ind.count.toLocaleString('vi-VN')} HV
+                                  </span>
+                                  <span
+                                    style={{
+                                      padding: '2px 8px',
+                                      borderRadius: 6,
+                                      background: '#f1f5f9',
+                                      color: '#334155',
+                                      fontSize: '11.5px',
+                                      fontWeight: 700,
+                                      border: 'none',
+                                      minWidth: '46px',
+                                      textAlign: 'center',
+                                      fontVariantNumeric: 'tabular-nums'
+                                    }}
+                                  >
+                                    {ind.pct}%
+                                  </span>
+                                </div>
+                              </div>
 
-                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                              <span
+                              {/* Bottom line: crisp 5px full-width progress track */}
+                              <div
                                 style={{
-                                  fontSize: '0.84rem',
-                                  fontWeight: 800,
-                                  color: 'var(--color-text, #0f172a)',
-                                  fontVariantNumeric: 'tabular-nums'
+                                  height: 5,
+                                  borderRadius: 999,
+                                  background: '#f1f5f9',
+                                  marginTop: 7,
+                                  marginLeft: 32,
+                                  overflow: 'hidden'
                                 }}
                               >
-                                {ind.count.toLocaleString('vi-VN')}
-                              </span>
-                              <span
-                                style={{
-                                  fontSize: '0.71rem',
-                                  fontWeight: 700,
-                                  color: isUnassigned ? '#64748b' : accentColor,
-                                  background: isUnassigned ? '#f1f5f9' : idx === 0 || isSelected ? 'rgba(189, 29, 45, 0.1)' : '#f1f5f9',
-                                  padding: '2px 7px',
-                                  borderRadius: '999px',
-                                  minWidth: '46px',
-                                  textAlign: 'center',
-                                  fontVariantNumeric: 'tabular-nums'
-                                }}
-                              >
-                                {ind.pct}%
-                              </span>
+                                <div
+                                  style={{
+                                    width: `${Math.max(4, pctOfMax)}%`,
+                                    height: '100%',
+                                    borderRadius: 999,
+                                    background: isUnassigned
+                                      ? '#cbd5e1'
+                                      : idx === 0
+                                      ? '#C6333D'
+                                      : idx < 3
+                                      ? '#334155'
+                                      : '#94a3b8',
+                                    transition: 'width 0.35s ease'
+                                  }}
+                                />
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        });
+                      })()}
                     </div>
                   </>
                 );
@@ -2421,25 +2476,23 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                 />
               </div>
 
-              {/* Top 1, 2, 3 Medal Podium Cards in Clean Brand & Slate */}
+              {/* Top 1, 2, 3 Medal Podium Cards — Uniform neutral border, NO colored borders/stripes */}
               {!companySearch && filteredCompanies.length >= 3 && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '10px' }}>
                   {filteredCompanies.slice(0, 3).map((topComp, idx) => {
-                    const podiumStyles = [
-                      { medal: '🥇', badge: 'TOP 1', border: 'rgba(189, 29, 45, 0.3)', topBar: '#BD1D2D', bg: 'rgba(189, 29, 45, 0.03)', accent: '#BD1D2D' },
-                      { medal: '🥈', badge: 'TOP 2', border: '#e2e8f0', topBar: '#334155', bg: '#f8fafc', accent: '#334155' },
-                      { medal: '🥉', badge: 'TOP 3', border: '#e2e8f0', topBar: '#64748b', bg: '#f8fafc', accent: '#475569' }
-                    ];
-                    const st = podiumStyles[idx] || podiumStyles[0];
+                    const podiumMedals = ['🥇', '🥈', '🥉'];
+                    const podiumBadges = ['TOP 1', 'TOP 2', 'TOP 3'];
+                    const medal = podiumMedals[idx] || `#${idx + 1}`;
+                    const badge = podiumBadges[idx] || `TOP ${idx + 1}`;
                     return (
                       <div
                         key={topComp.label}
                         style={{
-                          padding: '0.75rem 0.85rem',
-                          borderRadius: '10px',
-                          background: st.bg,
-                          border: `1px solid ${st.border}`,
-                          borderTop: `3px solid ${st.topBar}`,
+                          padding: '12px 14px',
+                          borderRadius: 12,
+                          background: '#ffffff',
+                          border: '1px solid #e2e8f0',
+                          boxShadow: '0 1px 2px rgba(15, 23, 42, 0.03)',
                           display: 'flex',
                           flexDirection: 'column',
                           gap: '6px',
@@ -2447,9 +2500,9 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
-                          <span style={{ fontSize: '0.72rem', fontWeight: 800, color: st.accent, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ fontSize: '0.95rem' }}>{st.medal}</span>
-                            <span>{st.badge}</span>
+                          <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#334155', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                            <span style={{ fontSize: '1rem' }}>{medal}</span>
+                            <span>{badge}</span>
                           </span>
                           <span style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--color-text, #0f172a)', fontVariantNumeric: 'tabular-nums' }}>
                             {topComp.count} HV
@@ -2457,7 +2510,7 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                         </div>
                         <div
                           style={{
-                            fontSize: '0.82rem',
+                            fontSize: '0.84rem',
                             fontWeight: 700,
                             color: 'var(--color-text, #0f172a)',
                             whiteSpace: 'nowrap',
@@ -2474,12 +2527,12 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                 </div>
               )}
 
-              {/* Remaining Companies Grid (#4 onwards with minmax(0, 1fr) so right column never clips!) */}
+              {/* Remaining Companies Grid (#4 onwards with crisp card border) */}
               <div
                 style={{
                   display: 'grid',
                   gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(0, 1fr))',
-                  gap: '7px',
+                  gap: '8px',
                   maxHeight: '265px',
                   overflowY: 'auto',
                   paddingRight: '4px'
@@ -2501,21 +2554,22 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                           alignItems: 'center',
                           justifyContent: 'space-between',
                           gap: '8px',
-                          padding: '7px 10px',
-                          borderRadius: '8px',
-                          border: '1px solid #f1f5f9',
-                          background: '#f8fafc',
+                          padding: '10px 12px',
+                          borderRadius: 10,
+                          border: '1px solid #e2e8f0',
+                          background: '#ffffff',
+                          boxShadow: '0 1px 2px rgba(15, 23, 42, 0.02)',
                           minWidth: 0
                         }}
                         title={`${comp.label}: ${comp.count} HV`}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, flex: 1 }}>
-                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', minWidth: 24, flexShrink: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+                          <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748b', minWidth: 24, textAlign: 'center', flexShrink: 0 }}>
                             {rankBadge}
                           </span>
                           <span
                             style={{
-                              fontSize: '0.78rem',
+                              fontSize: '0.8125rem',
                               fontWeight: 600,
                               color: 'var(--color-text, #0f172a)',
                               whiteSpace: 'nowrap',
@@ -2531,10 +2585,10 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                             fontSize: '0.74rem',
                             fontWeight: 700,
                             color: '#334155',
-                            background: '#ffffff',
-                            border: '1px solid #e2e8f0',
-                            padding: '1px 7px',
-                            borderRadius: '999px',
+                            background: '#f1f5f9',
+                            border: 'none',
+                            padding: '2px 8px',
+                            borderRadius: 6,
                             flexShrink: 0,
                             fontVariantNumeric: 'tabular-nums'
                           }}
@@ -2548,7 +2602,7 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
               </div>
             </div>
 
-            {/* Right: Độ Đầy Đủ Dữ Liệu Chân Dung — Basic Brand & Executive Slate */}
+            {/* Right: Độ Đầy Đủ Dữ Liệu Chân Dung — Dynamic Red / Yellow / Green by Percentage */}
             <div className="card" style={{ padding: '1.35rem', display: 'flex', flexDirection: 'column', gap: '0.95rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
                 <div>
@@ -2559,49 +2613,85 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                     Tỷ lệ điền đầy đủ của 8 trường thông tin trên tập dữ liệu đang lọc
                   </p>
                 </div>
-                <span
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: '8px',
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0',
-                    color: '#0f172a',
-                    fontSize: '0.74rem',
-                    fontWeight: 700
-                  }}
-                >
-                  TB: {avgCompletenessPct}% đầy đủ
-                </span>
+                {(() => {
+                  const avgTone = getCompletenessTone(avgCompletenessPct);
+                  return (
+                    <span
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '8px',
+                        background: avgTone.bg,
+                        border: 'none',
+                        color: avgTone.text,
+                        fontSize: '0.74rem',
+                        fontWeight: 700
+                      }}
+                    >
+                      TB: {avgCompletenessPct}% đầy đủ
+                    </span>
+                  );
+                })()}
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
                 {(data?.data_completeness || []).map((c) => {
                   const missing = Math.max(0, c.total - c.filled);
-                  // Basic Brand & Executive Slate: >= 80% is solid dark slate (#334155), < 80% is Brand Red (#C6333D) to highlight enrichment targets
-                  const color = c.pct >= 80 ? '#334155' : '#C6333D';
+                  const tone = getCompletenessTone(c.pct);
                   return (
-                    <div key={c.field}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ width: 7, height: 7, borderRadius: '2px', background: color, flexShrink: 0 }} />
-                          <span style={{ fontSize: '0.81rem', fontWeight: 600, color: 'var(--color-text, #0f172a)' }}>
+                    <div
+                      key={c.field}
+                      style={{
+                        padding: '9px 12px',
+                        borderRadius: 10,
+                        background: '#f8fafc',
+                        border: '1px solid #f1f5f9',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: tone.dot, flexShrink: 0 }} />
+                          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {c.label}
                           </span>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.76rem', fontVariantNumeric: 'tabular-nums' }}>
-                          <span style={{ color: 'var(--color-text-muted)' }}>
-                            Có: <strong style={{ color: 'var(--color-text, #0f172a)' }}>{c.filled.toLocaleString('vi-VN')}</strong>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+                          <span style={{ color: '#64748b' }}>
+                            Có: <strong style={{ color: '#0f172a' }}>{c.filled.toLocaleString('vi-VN')}</strong>
                           </span>
-                          <span style={{ color: 'var(--color-text-muted)' }}>
-                            Thiếu: <strong>{missing.toLocaleString('vi-VN')}</strong>
+                          <span style={{ color: '#cbd5e1' }}>•</span>
+                          <span style={{ color: '#64748b' }}>
+                            Thiếu: <strong style={{ color: '#0f172a' }}>{missing.toLocaleString('vi-VN')}</strong>
                           </span>
-                          <span style={{ fontWeight: 800, color, minWidth: '44px', textAlign: 'right' }}>
+                          <span
+                            style={{
+                              fontWeight: 700,
+                              color: tone.text,
+                              background: tone.bg,
+                              padding: '2px 8px',
+                              borderRadius: 6,
+                              fontSize: '0.72rem',
+                              minWidth: '44px',
+                              textAlign: 'center',
+                              border: 'none'
+                            }}
+                          >
                             {c.pct}%
                           </span>
                         </div>
                       </div>
-                      <div style={{ marginLeft: 15, height: 6, background: '#f1f5f9', borderRadius: 4, overflow: 'hidden' }}>
-                        <div style={{ width: `${Math.max(2, c.pct)}%`, height: '100%', background: color, borderRadius: 4, transition: 'width 0.35s ease' }} />
+                      <div style={{ width: '100%', height: 6, background: '#e2e8f0', borderRadius: 999, overflow: 'hidden' }}>
+                        <div
+                          style={{
+                            width: `${Math.max(2, c.pct)}%`,
+                            height: '100%',
+                            background: tone.bar,
+                            borderRadius: 999,
+                            transition: 'width 0.35s ease'
+                          }}
+                        />
                       </div>
                     </div>
                   );
@@ -2702,9 +2792,9 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                               gap: '6px',
                               padding: '6px 12px',
                               borderRadius: '8px',
-                              background: 'rgba(189, 29, 45, 0.06)',
-                              border: '1px solid rgba(189, 29, 45, 0.22)',
-                              color: '#BD1D2D',
+                              background: '#f8fafc',
+                              border: '1px solid #e2e8f0',
+                              color: '#0f172a',
                               fontSize: '0.78rem',
                               fontWeight: 700,
                               cursor: 'pointer',
@@ -2713,7 +2803,7 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                             }}
                             title="Bấm để xem chi tiết các khóa đã học"
                           >
-                            <GraduationCap size={14} />
+                            <GraduationCap size={14} style={{ color: '#BD1D2D' }} />
                             <span>{st.course_count} khóa học</span>
                             <span style={{ fontSize: '0.7rem', fontWeight: 600, opacity: 0.85 }}>• Xem chi tiết</span>
                           </button>
@@ -3069,7 +3159,7 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                   style={{
                     position: 'relative',
                     width: '100%',
-                    maxWidth: isMobile ? '100vw' : 'min(95vw, 780px)',
+                    maxWidth: isMobile ? '100%' : 'min(95vw, 780px)',
                     height: '100%',
                     background: 'var(--color-surface, #ffffff)',
                     boxShadow: '-8px 0 36px rgba(0, 0, 0, 0.28)',

@@ -6,7 +6,99 @@ class ProjectController {
 
     public function __construct(PDO $db) {
         $this->db = $db;
+        $this->ensureSchema();
     }
+
+    private function ensureSchema(): void {
+        if ($this->db->inTransaction()) {
+            return;
+        }
+        try {
+            // 1. projects: deleted_at, is_archived
+            try {
+                $this->db->exec("ALTER TABLE projects ADD COLUMN deleted_at DATETIME NULL DEFAULT NULL AFTER updated_at");
+            } catch (\Throwable $e) {}
+            try {
+                $this->db->exec("ALTER TABLE projects ADD COLUMN is_archived TINYINT(1) NOT NULL DEFAULT 0 AFTER deleted_at");
+            } catch (\Throwable $e) {}
+
+            // 2. activities: deleted_at, is_archived, is_hidden, priority ENUM
+            try {
+                $this->db->exec("ALTER TABLE activities ADD COLUMN deleted_at DATETIME NULL DEFAULT NULL AFTER updated_at");
+            } catch (\Throwable $e) {}
+            try {
+                $this->db->exec("ALTER TABLE activities ADD COLUMN is_archived TINYINT(1) NOT NULL DEFAULT 0 AFTER deleted_at");
+            } catch (\Throwable $e) {}
+            try {
+                $this->db->exec("ALTER TABLE activities ADD COLUMN is_hidden TINYINT(1) NOT NULL DEFAULT 0 AFTER is_archived");
+            } catch (\Throwable $e) {}
+            try {
+                $this->db->exec("ALTER TABLE activities MODIFY COLUMN priority ENUM('low','medium','high','urgent') NOT NULL DEFAULT 'medium'");
+            } catch (\Throwable $e) {}
+
+            // 3. Ensure project_tasks table exists so any query to project_tasks never fails
+            $this->db->exec("
+                CREATE TABLE IF NOT EXISTS project_tasks (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    tenant_id INT NOT NULL DEFAULT 1,
+                    project_id INT NULL,
+                    parent_task_id INT NULL,
+                    title VARCHAR(255) NOT NULL,
+                    description TEXT NULL,
+                    status VARCHAR(50) NOT NULL DEFAULT 'todo',
+                    priority VARCHAR(50) NOT NULL DEFAULT 'medium',
+                    assignee_id INT NULL,
+                    position INT NOT NULL DEFAULT 0,
+                    tags VARCHAR(255) NULL,
+                    attachments LONGTEXT NULL,
+                    due_date DATETIME NULL,
+                    is_archived TINYINT(1) NOT NULL DEFAULT 0,
+                    is_hidden TINYINT(1) NOT NULL DEFAULT 0,
+                    created_by INT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    deleted_at DATETIME NULL,
+                    KEY idx_pt_tenant (tenant_id),
+                    KEY idx_pt_project (project_id),
+                    KEY idx_pt_status (status),
+                    KEY idx_pt_deleted (deleted_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ");
+
+            // 4. Ensure task_attachments table exists
+            $this->db->exec("
+                CREATE TABLE IF NOT EXISTS task_attachments (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    tenant_id INT NOT NULL DEFAULT 1,
+                    task_id INT NOT NULL,
+                    file_name VARCHAR(255) NOT NULL,
+                    file_url VARCHAR(500) NOT NULL,
+                    file_size INT NOT NULL DEFAULT 0,
+                    file_type VARCHAR(100) NULL,
+                    uploaded_by INT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    deleted_at DATETIME NULL,
+                    KEY idx_ta_task (task_id),
+                    KEY idx_ta_tenant (tenant_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ");
+
+            // 5. Ensure task_hidden_users table exists
+            $this->db->exec("
+                CREATE TABLE IF NOT EXISTS task_hidden_users (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    task_id INT NOT NULL,
+                    user_id INT NOT NULL,
+                    hidden_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_task_user (task_id, user_id),
+                    KEY idx_thu_user (user_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ");
+        } catch (\Throwable $e) {
+            // Ignore schema alter errors if DB has restricted permissions
+        }
+    }
+
 
     private function requireProjectAccess(array $auth, int $projectId): void {
         $stmtProj = $this->db->prepare("SELECT tenant_id, created_by, manager_ids FROM projects WHERE id = ?");
@@ -94,8 +186,20 @@ class ProjectController {
         $role = $auth['role'];
         $uid = (int)$auth['user_id'];
         
-        $where = "WHERE p.tenant_id = ?";
+        $where = "WHERE p.tenant_id = ? AND p.deleted_at IS NULL";
         $params = [$auth['tenant_id']];
+
+        $includeArchived = !empty($_GET['include_archived']) || ($_GET['status'] ?? '') === 'archived';
+        if (!$includeArchived) {
+            $where .= " AND (p.is_archived = 0 OR p.is_archived IS NULL)";
+        } elseif (($_GET['status'] ?? '') === 'archived') {
+            $where .= " AND p.is_archived = 1";
+        }
+
+        if (!empty($_GET['status']) && !in_array($_GET['status'], ['all', 'archived'], true)) {
+            $where .= " AND p.status = ?";
+            $params[] = $_GET['status'];
+        }
         
         $bypassRoster = (int)($_GET['bypass_roster'] ?? 0);
         $isRosterRestricted = in_array($role, ['sale', 'sales', 'manager'], true);
@@ -156,7 +260,7 @@ class ProjectController {
     public function show(array $auth, int $id): void {
         $tenantId = $auth['tenant_id'] ?? 1;
 
-        $stmt = $this->db->prepare("SELECT p.* FROM projects p WHERE p.id = ? AND p.tenant_id = ?");
+        $stmt = $this->db->prepare("SELECT p.* FROM projects p WHERE p.id = ? AND p.tenant_id = ? AND p.deleted_at IS NULL");
         $stmt->execute([$id, $tenantId]);
         $project = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -331,7 +435,7 @@ class ProjectController {
         }
 
         // Check unique code excluding this project
-        $stmtCheck = $this->db->prepare("SELECT id FROM projects WHERE code = ? AND id != ? AND tenant_id = ?");
+        $stmtCheck = $this->db->prepare("SELECT id FROM projects WHERE code = ? AND id != ? AND tenant_id = ? AND deleted_at IS NULL");
         $stmtCheck->execute([$code, $id, $auth['tenant_id']]);
         if ($stmtCheck->fetch()) {
             respond(400, null, 'Mã dự án đã bị trùng với dự án khác', false);
@@ -348,7 +452,7 @@ class ProjectController {
         $stmt = $this->db->prepare("
             UPDATE projects 
             SET name = ?, code = ?, description = ?, status = ?, location = ?, developer = ?, document_ids = ?, campaign_ids = ?, progress_percent = ?, construction_status = ?, legal_status = ?, scale_block_count = ?, scale_unit_count = ?, handover_year = ?, manager_ids = ?, folder_path = ?, reference_url = ?, campaign_sharing_mode = ? 
-            WHERE id = ? AND tenant_id = ?
+            WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
         ");
         $stmt->execute([$name, $code, $desc, $status, $location, $developer, $document_ids, $campaign_ids, $progress_percent, $construction_status, $legal_status, $scale_block_count, $scale_unit_count, $handover_year, $manager_ids, $folder_path, $reference_url, $campaign_sharing_mode, $id, $auth['tenant_id']]);
 
@@ -386,55 +490,172 @@ class ProjectController {
     public function destroy(array $auth, int $id): void {
         requireRole($auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'marketing']);
         
-        $stmtProj = $this->db->prepare("SELECT created_by FROM projects WHERE id = ? AND tenant_id = ?");
+        $stmtProj = $this->db->prepare("SELECT created_by, name FROM projects WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
         $stmtProj->execute([$id, $auth['tenant_id']]);
-        $creatorId = $stmtProj->fetchColumn();
-            $isAdminOrDirector = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'marketing'], true);
-            if (!$isAdminOrDirector && (int)$creatorId !== (int)$auth['user_id']) {
-                respond(403, null, 'Chỉ Admin, Director hoặc người tạo dự án mới được xóa', false);
+        $proj = $stmtProj->fetch(PDO::FETCH_ASSOC);
+        if (!$proj) {
+            respond(404, null, 'Dự án không tồn tại hoặc đã bị xóa', false);
+        }
+
+        $isAdminOrDirector = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'marketing'], true);
+        if (!$isAdminOrDirector && (int)$proj['created_by'] !== (int)$auth['user_id']) {
+            respond(403, null, 'Chỉ Admin, Director hoặc người tạo dự án mới được xóa', false);
+        }
+
+        $this->db->beginTransaction();
+        try {
+            // 100% Soft-Delete Mandate: Soft-delete project
+            $this->db->prepare("UPDATE projects SET deleted_at = NOW(), updated_at = NOW() WHERE id = ? AND tenant_id = ?")
+                ->execute([$id, $auth['tenant_id']]);
+
+            // Soft-delete linked activities
+            $this->db->prepare("UPDATE activities SET deleted_at = NOW(), updated_at = NOW() WHERE related_type = 'project' AND related_id = ? AND tenant_id = ? AND deleted_at IS NULL")
+                ->execute([$id, $auth['tenant_id']]);
+
+            // Soft-delete project_tasks if table exists
+            try {
+                $this->db->prepare("UPDATE project_tasks SET deleted_at = NOW(), updated_at = NOW() WHERE project_id = ? AND tenant_id = ? AND deleted_at IS NULL")
+                    ->execute([$id, $auth['tenant_id']]);
+            } catch (\Throwable $e) {}
+
+            // Unset project_id from child campaigns without hard deleting campaigns
+            $this->db->prepare("UPDATE marketing_campaigns SET project_id = NULL WHERE project_id = ? AND tenant_id = ?")
+                ->execute([$id, $auth['tenant_id']]);
+
+            $this->db->commit();
+            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'DELETE_PROJECT', 'project', $id, "Xóa mềm dự án ID: $id (" . ($proj['name'] ?? '') . ")");
+            respond(200, ['id' => $id], 'Xóa dự án thành công');
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
             }
-        
-        // Delete project physical documents
-        $docsStmt = $this->db->prepare("SELECT file_path FROM project_documents WHERE project_id = ?");
-        $docsStmt->execute([$id]);
-        $docs = $docsStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-        foreach ($docs as $d) {
-            if (!empty($d['file_path'])) deleteServerFile($d['file_path']);
+            respond(500, null, 'Lỗi xóa dự án: ' . $e->getMessage(), false);
         }
-        $this->db->prepare("DELETE FROM project_documents WHERE project_id = ?")->execute([$id]);
+    }
 
-        // Delete project comments physical attachments
-        $commentsStmt = $this->db->prepare("SELECT attachments, body FROM comments WHERE entity_type = 'project' AND entity_id = ? AND tenant_id = ?");
-        $commentsStmt->execute([$id, $auth['tenant_id']]);
-        $comments = $commentsStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-        foreach ($comments as $c) {
-            if (!empty($c['attachments'])) deleteAttachmentFiles($c['attachments']);
-            if (!empty($c['body'])) deleteAttachmentFiles($c['body']);
+    public function duplicateProject(array $auth, int $id): void {
+        requireRole($auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'marketing', 'academic', 'hoc_vu']);
+        $stmtProj = $this->db->prepare("SELECT * FROM projects WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $stmtProj->execute([$id, $auth['tenant_id']]);
+        $proj = $stmtProj->fetch(PDO::FETCH_ASSOC);
+        if (!$proj) {
+            respond(404, null, 'Dự án nguồn không tồn tại', false);
         }
-        $this->db->prepare("DELETE FROM comments WHERE entity_type = 'project' AND entity_id = ? AND tenant_id = ?")->execute([$id, $auth['tenant_id']]);
 
-        // Cascade delete child campaigns, their comments and attachments
-        $campStmt = $this->db->prepare("SELECT id FROM marketing_campaigns WHERE project_id = ? AND tenant_id = ?");
-        $campStmt->execute([$id, $auth['tenant_id']]);
-        $campIds = $campStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
-        foreach ($campIds as $cid) {
-            $cCommStmt = $this->db->prepare("SELECT attachments, body FROM comments WHERE entity_type = 'campaign' AND entity_id = ?");
-            $cCommStmt->execute([$cid]);
-            $cComms = $cCommStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-            foreach ($cComms as $cc) {
-                if (!empty($cc['attachments'])) deleteAttachmentFiles($cc['attachments']);
-                if (!empty($cc['body'])) deleteAttachmentFiles($cc['body']);
+        $newName = "[Bản sao] " . preg_replace('/^(\[Bản sao\]\s*)+/', '', $proj['name']);
+        $newCode = $this->generateUniqueCode($newName);
+
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare("
+                INSERT INTO projects (
+                    tenant_id, name, code, description, status, location, developer,
+                    document_ids, campaign_ids, progress_percent, construction_status,
+                    legal_status, scale_block_count, scale_unit_count, handover_year,
+                    manager_ids, folder_path, reference_url, campaign_sharing_mode, created_by, created_at, updated_at
+                ) VALUES (
+                    ?, ?, ?, ?, 'active', ?, ?,
+                    ?, ?, 0, ?,
+                    ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, NOW(), NOW()
+                )
+            ");
+            $stmt->execute([
+                $auth['tenant_id'], $newName, $newCode, $proj['description'],
+                $proj['location'], $proj['developer'], $proj['document_ids'],
+                $proj['campaign_ids'], $proj['construction_status'], $proj['legal_status'],
+                $proj['scale_block_count'], $proj['scale_unit_count'], $proj['handover_year'],
+                $proj['manager_ids'], $proj['folder_path'], $proj['reference_url'],
+                $proj['campaign_sharing_mode'] ?? 'independent', $auth['user_id']
+            ]);
+            $newId = (int)$this->db->lastInsertId();
+
+            // Copy roster
+            $stmtRoster = $this->db->prepare("SELECT user_id FROM project_roster WHERE project_id = ?");
+            $stmtRoster->execute([$id]);
+            $rosterUsers = $stmtRoster->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            if (!empty($rosterUsers)) {
+                $insRoster = $this->db->prepare("INSERT INTO project_roster (project_id, user_id) VALUES (?, ?)");
+                foreach ($rosterUsers as $rUid) {
+                    $insRoster->execute([$newId, (int)$rUid]);
+                }
             }
-            $this->db->prepare("DELETE FROM comments WHERE entity_type = 'campaign' AND entity_id = ?")->execute([$cid]);
+
+            $this->db->commit();
+            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'DUPLICATE_PROJECT', 'project', $newId, "Nhân bản dự án từ #$id sang #$newId: $newName");
+            respond(201, ['id' => $newId, 'name' => $newName, 'code' => $newCode], 'Nhân bản dự án thành công');
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi nhân bản dự án: ' . $e->getMessage(), false);
         }
-        $this->db->prepare("DELETE FROM marketing_campaigns WHERE project_id = ? AND tenant_id = ?")->execute([$id, $auth['tenant_id']]);
-        $this->db->prepare("DELETE FROM project_roster WHERE project_id = ?")->execute([$id]);
+    }
 
-        $stmt = $this->db->prepare("DELETE FROM projects WHERE id = ? AND tenant_id = ?");
-        $stmt->execute([$id, $auth['tenant_id']]);
+    public function archiveProject(array $auth, int $id): void {
+        $this->requireProjectEditPermission($auth, $id);
+        $this->db->prepare("UPDATE projects SET is_archived = 1, updated_at = NOW() WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL")
+            ->execute([$id, $auth['tenant_id']]);
+        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'ARCHIVE_PROJECT', 'project', $id, "Lưu trữ dự án ID: $id");
+        respond(200, ['id' => $id, 'is_archived' => 1], 'Lưu trữ dự án thành công');
+    }
 
-        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'DELETE_PROJECT', 'project', $id, "Xóa dự án ID: $id");
-        respond(200, null, 'Xóa dự án thành công');
+    public function unarchiveProject(array $auth, int $id): void {
+        $this->requireProjectEditPermission($auth, $id);
+        $this->db->prepare("UPDATE projects SET is_archived = 0, updated_at = NOW() WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL")
+            ->execute([$id, $auth['tenant_id']]);
+        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'UNARCHIVE_PROJECT', 'project', $id, "Bỏ lưu trữ dự án ID: $id");
+        respond(200, ['id' => $id, 'is_archived' => 0], 'Bỏ lưu trữ dự án thành công');
+    }
+
+    public function listProjectTasks(array $auth, int $projectId): void {
+        $this->requireProjectAccess($auth, $projectId);
+        $tid = (int)$auth['tenant_id'];
+        $where = "a.tenant_id = ? AND a.related_type = 'project' AND a.related_id = ? AND a.type = 'task' AND a.deleted_at IS NULL";
+        $params = [$tid, $projectId];
+
+        if (!empty($_GET['status']) && $_GET['status'] !== 'all') {
+            $where .= " AND a.status = ?";
+            $params[] = $_GET['status'];
+        }
+        if (empty($_GET['include_archived'])) {
+            $where .= " AND (a.is_archived = 0 OR a.is_archived IS NULL)";
+        }
+        $stmt = $this->db->prepare("
+            SELECT a.id, a.subject as title, a.body as description, a.status, a.priority, 
+                   a.progress, a.due_date, a.user_id as assignee_id, a.created_by, a.created_at, a.updated_at,
+                   a.is_archived, a.is_hidden, a.tags,
+                   u.full_name as assignee_name, u.avatar_url as assignee_avatar
+            FROM activities a
+            LEFT JOIN users u ON a.user_id = u.id
+            WHERE $where
+            ORDER BY a.id DESC
+        ");
+        $stmt->execute($params);
+        $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        respond(200, $tasks, 'Lấy danh sách nhiệm vụ dự án thành công');
+    }
+
+    public function createProjectTask(array $auth, int $projectId): void {
+        $this->requireProjectEditPermission($auth, $projectId);
+        $tid = (int)$auth['tenant_id'];
+        $b = getBody();
+        $title = trim($b['title'] ?? $b['subject'] ?? 'Nhiệm vụ mới');
+        $desc = trim($b['description'] ?? $b['body'] ?? '');
+        $status = in_array($b['status'] ?? '', ['planned', 'done', 'cancelled'], true) ? $b['status'] : 'planned';
+        $priority = in_array($b['priority'] ?? '', ['low', 'medium', 'high', 'urgent'], true) ? $b['priority'] : 'medium';
+        $dueDate = !empty($b['due_date']) ? $b['due_date'] : null;
+        $assigneeId = !empty($b['assignee_id']) ? (int)$b['assignee_id'] : (int)($auth['user_id'] ?? 0);
+
+        $stmt = $this->db->prepare("
+            INSERT INTO activities (
+                tenant_id, related_type, related_id, type, subject, body, status, priority,
+                user_id, due_date, created_by, is_archived, is_hidden, created_at, updated_at
+            ) VALUES (?, 'project', ?, 'task', ?, ?, ?, ?, ?, ?, ?, 0, 0, NOW(), NOW())
+        ");
+        $stmt->execute([$tid, $projectId, $title, $desc, $status, $priority, $assigneeId, $dueDate, $auth['user_id']]);
+        $id = (int)$this->db->lastInsertId();
+        respond(201, ['id' => $id, 'title' => $title, 'status' => $status], 'Tạo nhiệm vụ dự án thành công');
     }
 
     public function getRoster(array $auth, int $projectId): void {
@@ -1113,17 +1334,29 @@ class ProjectController {
             $where .= " AND a.related_type = 'project' AND a.related_id = ?";
             $params[] = (int)$_GET['project_id'];
         }
+        if (empty($_GET['include_archived'])) {
+            $where .= " AND (a.is_archived = 0 OR a.is_archived IS NULL)";
+        }
+        if (empty($_GET['include_hidden'])) {
+            $where .= " AND NOT EXISTS (SELECT 1 FROM task_hidden_users thu WHERE thu.task_id = a.id AND thu.user_id = ?)";
+            $params[] = $uid;
+        }
+
+        $limit = isset($_GET['limit']) ? max(1, min(500, (int)$_GET['limit'])) : 100;
+        $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+        $offset = ($page - 1) * $limit;
 
         $stmt = $this->db->prepare("
             SELECT a.id, a.subject as title, a.body as description, a.status, a.priority, 
                    a.due_date, a.user_id as assignee_id, a.created_by, a.created_at, a.updated_at,
+                   a.progress, a.is_archived, a.is_hidden, a.tags,
                    p.name as project_name, u.full_name as assignee_name, u.avatar_url as assignee_avatar
             FROM activities a
             LEFT JOIN projects p ON (a.related_type = 'project' AND a.related_id = p.id)
             LEFT JOIN users u ON a.user_id = u.id
             WHERE $where
             ORDER BY a.id DESC
-            LIMIT 100
+            LIMIT $offset, $limit
         ");
         $stmt->execute($params);
         $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -1161,11 +1394,13 @@ class ProjectController {
             }
         }
 
+        $tags = !empty($b['tags']) ? (is_array($b['tags']) ? implode(',', $b['tags']) : trim($b['tags'])) : null;
+
         $stmt = $this->db->prepare("
-            INSERT INTO activities (tenant_id, related_type, related_id, type, subject, body, status, priority, user_id, due_date, created_by, created_at, updated_at)
-            VALUES (?, 'project', ?, 'task', ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+            INSERT INTO activities (tenant_id, related_type, related_id, type, subject, body, status, priority, user_id, due_date, tags, created_by, is_archived, is_hidden, created_at, updated_at)
+            VALUES (?, 'project', ?, 'task', ?, ?, ?, ?, ?, ?, ?, 0, 0, NOW(), NOW())
         ");
-        $stmt->execute([$tid, $projectId, $title, $desc, $status, $priority, $assigneeId, $dueDate, $creatorId]);
+        $stmt->execute([$tid, $projectId, $title, $desc, $status, $priority, $assigneeId, $dueDate, $tags, $creatorId]);
         $id = (int)$this->db->lastInsertId();
 
         respond(201, ['id' => $id, 'title' => $title, 'status' => $status], 'Tạo công việc thành công');
@@ -1177,6 +1412,7 @@ class ProjectController {
             SELECT a.id, a.subject as title, a.body as description, a.status, a.priority, 
                    a.due_date, a.user_id, a.user_id as assignee_id, a.created_by, a.approver_id,
                    a.participant_ids, a.tags, a.related_type, a.related_id, a.created_at, a.updated_at,
+                   a.progress, a.is_archived, a.is_hidden,
                    p.name as project_name, u.full_name as assignee_name, u.avatar_url as assignee_avatar
             FROM activities a
             LEFT JOIN projects p ON (a.related_type = 'project' AND a.related_id = p.id)
@@ -1226,14 +1462,30 @@ class ProjectController {
             $params[] = trim($b['description'] ?? $b['body']);
         }
         if (isset($b['status'])) {
-            $status = in_array($b['status'], ['planned', 'done', 'cancelled'], true) ? $b['status'] : 'planned';
+            $rawStatus = trim($b['status']);
+            $status = in_array($rawStatus, ['planned', 'done', 'cancelled'], true) ? $rawStatus : ($rawStatus === 'completed' ? 'done' : 'planned');
             $sets[] = "status = ?";
             $params[] = $status;
+            if ($status === 'done') {
+                $sets[] = "done_at = NOW()";
+            } else {
+                $sets[] = "done_at = NULL";
+            }
         }
         if (isset($b['priority'])) {
-            $priority = in_array($b['priority'], ['low', 'medium', 'high', 'urgent'], true) ? $b['priority'] : 'medium';
+            $rawP = strtolower(trim($b['priority']));
+            $priority = in_array($rawP, ['low', 'medium', 'high', 'urgent'], true) ? $rawP : 'medium';
             $sets[] = "priority = ?";
             $params[] = $priority;
+        }
+        if (isset($b['progress'])) {
+            $prog = max(0, min(100, (int)$b['progress']));
+            $sets[] = "progress = ?";
+            $params[] = $prog;
+            if ($prog >= 100) {
+                $sets[] = "status = 'done'";
+                $sets[] = "done_at = NOW()";
+            }
         }
         if (isset($b['assignee_id']) || isset($b['user_id'])) {
             $sets[] = "user_id = ?";
@@ -1241,7 +1493,19 @@ class ProjectController {
         }
         if (isset($b['due_date'])) {
             $sets[] = "due_date = ?";
-            $params[] = $b['due_date'];
+            $params[] = !empty($b['due_date']) ? $b['due_date'] : null;
+        }
+        if (isset($b['tags'])) {
+            $sets[] = "tags = ?";
+            $params[] = is_array($b['tags']) ? implode(',', $b['tags']) : $b['tags'];
+        }
+        if (isset($b['is_archived'])) {
+            $sets[] = "is_archived = ?";
+            $params[] = (int)$b['is_archived'];
+        }
+        if (isset($b['is_hidden'])) {
+            $sets[] = "is_hidden = ?";
+            $params[] = (int)$b['is_hidden'];
         }
         if (empty($sets)) respond(422, null, 'Không có dữ liệu cần cập nhật', false);
         $params[] = $id;
@@ -1262,9 +1526,19 @@ class ProjectController {
             respond(403, null, 'Bạn không có quyền xóa công việc này', false);
         }
 
-        $this->db->prepare("UPDATE activities SET deleted_at = NOW() WHERE id = ? AND tenant_id = ? AND type = 'task' AND deleted_at IS NULL")
-            ->execute([$id, $tid]);
-        respond(200, null, 'Xóa công việc thành công');
+        $this->db->beginTransaction();
+        try {
+            $this->db->prepare("UPDATE activities SET deleted_at = NOW(), updated_at = NOW() WHERE id = ? AND tenant_id = ? AND type = 'task' AND deleted_at IS NULL")
+                ->execute([$id, $tid]);
+            $this->db->commit();
+            logActivity($this->db, $tid, $auth['user_id'], 'DELETE_TASK', 'activity', $id, "Xóa mềm công việc: " . ($task['subject'] ?? $id));
+            respond(200, ['id' => $id], 'Xóa công việc thành công');
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi xóa công việc: ' . $e->getMessage(), false);
+        }
     }
 
     public function updateTaskStatus(array $auth, int $id): void {
@@ -1281,9 +1555,321 @@ class ProjectController {
         $b = getBody();
         $rawStatus = trim($b['status'] ?? 'done');
         $status = in_array($rawStatus, ['planned', 'done', 'cancelled'], true) ? $rawStatus : ($rawStatus === 'completed' ? 'done' : 'planned');
-        $this->db->prepare("UPDATE activities SET status = ?, done_at = IF(? = 'done', NOW(), NULL), updated_at = NOW() WHERE id = ? AND tenant_id = ? AND type = 'task' AND deleted_at IS NULL")
-            ->execute([$status, $status, $id, $tid]);
-        respond(200, ['id' => $id, 'status' => $status], 'Cập nhật trạng thái công việc thành công');
+        $progress = $status === 'done' ? 100 : ($status === 'cancelled' ? 0 : ($task['progress'] >= 100 ? 50 : $task['progress']));
+        $this->db->prepare("UPDATE activities SET status = ?, progress = ?, done_at = IF(? = 'done', NOW(), NULL), updated_at = NOW() WHERE id = ? AND tenant_id = ? AND type = 'task' AND deleted_at IS NULL")
+            ->execute([$status, $progress, $status, $id, $tid]);
+        respond(200, ['id' => $id, 'status' => $status, 'progress' => $progress], 'Cập nhật trạng thái công việc thành công');
+    }
+
+    public function duplicateTask(array $auth, int $id): void {
+        if (strtolower($auth['role'] ?? '') === 'viewer') respond(403, null, 'Bạn không có quyền nhân bản công việc', false);
+        $tid = (int)$auth['tenant_id'];
+        $chk = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ? AND type = 'task' AND deleted_at IS NULL");
+        $chk->execute([$id, $tid]);
+        $source = $chk->fetch(PDO::FETCH_ASSOC);
+        if (!$source) {
+            respond(404, null, 'Công việc không tồn tại hoặc đã bị xóa', false);
+        }
+        if (!$this->canAccessTaskRow($auth, $source)) {
+            respond(403, null, 'Bạn không có quyền truy cập công việc này', false);
+        }
+
+        $newSubject = "[Bản sao] " . preg_replace('/^(\[Bản sao\]\s*)+/', '', $source['subject'] ?? 'Công việc');
+
+        // Parse and reset checklist in body
+        $rawBody = $source['body'] ?? '';
+        $bodyData = null;
+        if (!empty($rawBody)) {
+            $decoded = json_decode($rawBody, true);
+            if (is_array($decoded)) {
+                $bodyData = $decoded;
+                if (!empty($bodyData['erp_task']['checklist']) && is_array($bodyData['erp_task']['checklist'])) {
+                    foreach ($bodyData['erp_task']['checklist'] as &$item) {
+                        $item['id'] = 'sub_' . round(microtime(true) * 1000) . '_' . substr(md5(uniqid('', true)), 0, 5);
+                        $item['done'] = false;
+                        $item['checked'] = false;
+                        $item['status'] = 'pending';
+                        $item['deadline'] = null;
+                        $item['due_date'] = null;
+                        $item['sub_deadline'] = null;
+                    }
+                    unset($item);
+                }
+                $rawBody = json_encode($bodyData, JSON_UNESCAPED_UNICODE);
+            }
+        }
+
+        $creatorId = (int)$auth['user_id'];
+        $assigneeId = (int)($source['user_id'] ?? $creatorId);
+        $priority = in_array($source['priority'] ?? '', ['low', 'medium', 'high', 'urgent'], true) ? $source['priority'] : 'medium';
+
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare("
+                INSERT INTO activities (
+                    tenant_id, user_id, task_group_id, created_by, type, subject, body,
+                    status, priority, start_date, due_date, done_at, related_type, related_id,
+                    contact_id, tags, participant_ids, progress, require_approval, approver_id,
+                    approval_status, link, is_archived, is_hidden, created_at, updated_at
+                ) VALUES (
+                    ?, ?, ?, ?, 'task', ?, ?,
+                    'planned', ?, NULL, NULL, NULL, ?, ?,
+                    ?, ?, ?, 0, ?, ?,
+                    NULL, ?, 0, 0, NOW(), NOW()
+                )
+            ");
+            $stmt->execute([
+                $tid, $assigneeId, $source['task_group_id'] ?? null, $creatorId,
+                $newSubject, $rawBody, $priority,
+                $source['related_type'] ?? null, $source['related_id'] ?? null,
+                $source['contact_id'] ?? null, $source['tags'] ?? null,
+                $source['participant_ids'] ?? null,
+                (int)($source['require_approval'] ?? 0),
+                $source['approver_id'] ?? null,
+                $source['link'] ?? null
+            ]);
+            $newTaskId = (int)$this->db->lastInsertId();
+
+            $this->db->commit();
+
+            logActivity($this->db, $tid, $creatorId, 'DUPLICATE_TASK', 'activity', $newTaskId, "Nhân bản công việc từ #$id sang #$newTaskId: $newSubject");
+
+            $fetchStmt = $this->db->prepare("
+                SELECT a.id, a.subject as title, a.body as description, a.status, a.priority, 
+                       a.due_date, a.user_id, a.user_id as assignee_id, a.created_by, a.approver_id,
+                       a.participant_ids, a.tags, a.related_type, a.related_id, a.created_at, a.updated_at,
+                       a.is_archived, a.is_hidden, a.progress,
+                       p.name as project_name, u.full_name as assignee_name, u.avatar_url as assignee_avatar
+                FROM activities a
+                LEFT JOIN projects p ON (a.related_type = 'project' AND a.related_id = p.id)
+                LEFT JOIN users u ON a.user_id = u.id
+                WHERE a.id = ?
+                LIMIT 1
+            ");
+            $fetchStmt->execute([$newTaskId]);
+            $newTaskRow = $fetchStmt->fetch(PDO::FETCH_ASSOC) ?: ['id' => $newTaskId, 'title' => $newSubject];
+            $newTaskRow['comments'] = [];
+
+            respond(201, $newTaskRow, 'Nhân bản công việc thành công');
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi nhân bản công việc: ' . $e->getMessage(), false);
+        }
+    }
+
+    public function archiveTask(array $auth, int $id): void {
+        if (strtolower($auth['role'] ?? '') === 'viewer') respond(403, null, 'Bạn không có quyền lưu trữ công việc', false);
+        $tid = (int)$auth['tenant_id'];
+        $chk = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ? AND type = 'task' AND deleted_at IS NULL");
+        $chk->execute([$id, $tid]);
+        $task = $chk->fetch(PDO::FETCH_ASSOC);
+        if (!$task) respond(404, null, 'Không tìm thấy công việc', false);
+        if (!$this->canAccessTaskRow($auth, $task)) respond(403, null, 'Không có quyền truy cập công việc', false);
+
+        $this->db->prepare("UPDATE activities SET is_archived = 1, updated_at = NOW() WHERE id = ? AND tenant_id = ? AND type = 'task'")
+            ->execute([$id, $tid]);
+        logActivity($this->db, $tid, $auth['user_id'], 'ARCHIVE_TASK', 'activity', $id, "Lưu trữ công việc #$id");
+        respond(200, ['id' => $id, 'is_archived' => 1], 'Đã lưu trữ công việc thành công');
+    }
+
+    public function unarchiveTask(array $auth, int $id): void {
+        if (strtolower($auth['role'] ?? '') === 'viewer') respond(403, null, 'Bạn không có quyền bỏ lưu trữ công việc', false);
+        $tid = (int)$auth['tenant_id'];
+        $chk = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ? AND type = 'task' AND deleted_at IS NULL");
+        $chk->execute([$id, $tid]);
+        $task = $chk->fetch(PDO::FETCH_ASSOC);
+        if (!$task) respond(404, null, 'Không tìm thấy công việc', false);
+        if (!$this->canAccessTaskRow($auth, $task)) respond(403, null, 'Không có quyền truy cập công việc', false);
+
+        $this->db->prepare("UPDATE activities SET is_archived = 0, updated_at = NOW() WHERE id = ? AND tenant_id = ? AND type = 'task'")
+            ->execute([$id, $tid]);
+        logActivity($this->db, $tid, $auth['user_id'], 'UNARCHIVE_TASK', 'activity', $id, "Bỏ lưu trữ công việc #$id");
+        respond(200, ['id' => $id, 'is_archived' => 0], 'Đã bỏ lưu trữ công việc thành công');
+    }
+
+    public function toggleTaskHide(array $auth, int $id): void {
+        $uid = (int)($auth['user_id'] ?? 0);
+        $tid = (int)$auth['tenant_id'];
+        $chk = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ? AND type = 'task' AND deleted_at IS NULL");
+        $chk->execute([$id, $tid]);
+        $task = $chk->fetch(PDO::FETCH_ASSOC);
+        if (!$task) respond(404, null, 'Không tìm thấy công việc', false);
+
+        $stmtCheck = $this->db->prepare("SELECT 1 FROM task_hidden_users WHERE task_id = ? AND user_id = ? LIMIT 1");
+        $stmtCheck->execute([$id, $uid]);
+        $isHidden = (bool)$stmtCheck->fetchColumn();
+
+        if ($isHidden) {
+            $this->db->prepare("DELETE FROM task_hidden_users WHERE task_id = ? AND user_id = ?")->execute([$id, $uid]);
+            $newHidden = false;
+        } else {
+            $this->db->prepare("INSERT IGNORE INTO task_hidden_users (task_id, user_id, hidden_at) VALUES (?, ?, NOW())")->execute([$id, $uid]);
+            $newHidden = true;
+        }
+
+        respond(200, [
+            'id' => $id,
+            'is_hidden' => $newHidden,
+            'message' => $newHidden ? 'Đã ẩn công việc khỏi danh sách của bạn' : 'Đã hiển thị lại công việc'
+        ], $newHidden ? 'Đã ẩn công việc' : 'Đã hiển thị lại công việc');
+    }
+
+    public function getTaskHideStatus(array $auth, int $id): void {
+        $uid = (int)($auth['user_id'] ?? 0);
+        $stmtCheck = $this->db->prepare("SELECT 1 FROM task_hidden_users WHERE task_id = ? AND user_id = ? LIMIT 1");
+        $stmtCheck->execute([$id, $uid]);
+        $isHidden = (bool)$stmtCheck->fetchColumn();
+        respond(200, ['id' => $id, 'is_hidden' => $isHidden]);
+    }
+
+    public function getTaskAttachments(array $auth, int $id): void {
+        $tid = (int)$auth['tenant_id'];
+        $stmt = $this->db->prepare("
+            SELECT ta.*, u.full_name as uploader_name, u.avatar_url as uploader_avatar
+            FROM task_attachments ta
+            LEFT JOIN users u ON ta.uploaded_by = u.id
+            WHERE ta.task_id = ? AND ta.tenant_id = ? AND ta.deleted_at IS NULL
+            ORDER BY ta.created_at DESC
+        ");
+        $stmt->execute([$id, $tid]);
+        $atts = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        respond(200, $atts, 'Lấy danh sách tệp đính kèm thành công');
+    }
+
+    public function uploadTaskAttachment(array $auth, int $id): void {
+        if (strtolower($auth['role'] ?? '') === 'viewer') respond(403, null, 'Bạn không có quyền tải tệp lên công việc', false);
+        $tid = (int)$auth['tenant_id'];
+        $uid = (int)($auth['user_id'] ?? 0);
+        $chk = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ? AND type = 'task' AND deleted_at IS NULL");
+        $chk->execute([$id, $tid]);
+        $task = $chk->fetch(PDO::FETCH_ASSOC);
+        if (!$task) respond(404, null, 'Không tìm thấy công việc', false);
+        if (!$this->canAccessTaskRow($auth, $task)) respond(403, null, 'Không có quyền truy cập công việc', false);
+
+        if (!empty($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK) {
+            $f = $_FILES['file'];
+            $maxBytes = 50 * 1024 * 1024; // 50MB
+            if ($f['size'] > $maxBytes) {
+                respond(422, null, 'Dung lượng tệp không được vượt quá 50MB', false);
+            }
+
+            $origName = basename($f['name']);
+            $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+            $allowedExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip', 'rar', '7z', 'txt', 'csv'];
+            if (!in_array($ext, $allowedExts, true)) {
+                respond(422, null, 'Định dạng tệp không được hỗ trợ', false);
+            }
+
+            $uploadDir = __DIR__ . '/../../uploads/tasks/';
+            if (!is_dir($uploadDir)) {
+                @mkdir($uploadDir, 0755, true);
+            }
+
+            $safeFileName = 'task_' . $id . '_' . time() . '_' . substr(md5(uniqid('', true)), 0, 8) . '.' . $ext;
+            $destPath = $uploadDir . $safeFileName;
+
+            if (!move_uploaded_file($f['tmp_name'], $destPath)) {
+                respond(500, null, 'Không thể lưu tệp trên máy chủ', false);
+            }
+
+            $fileUrl = '/uploads/tasks/' . $safeFileName;
+            $fileSize = (int)$f['size'];
+            $fileType = mime_content_type($destPath) ?: ('application/' . $ext);
+
+            $stmtIns = $this->db->prepare("
+                INSERT INTO task_attachments (tenant_id, task_id, file_name, file_url, file_size, file_type, uploaded_by, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+            ");
+            $stmtIns->execute([$tid, $id, $origName, $fileUrl, $fileSize, $fileType, $uid]);
+            $attId = (int)$this->db->lastInsertId();
+
+            respond(201, [
+                'id' => $attId,
+                'task_id' => $id,
+                'file_name' => $origName,
+                'name' => $origName,
+                'file_url' => $fileUrl,
+                'url' => $fileUrl,
+                'file_size' => $fileSize,
+                'size' => $fileSize,
+                'file_type' => $fileType,
+                'type' => str_starts_with($fileType, 'image/') ? 'image' : ($ext === 'pdf' ? 'pdf' : 'file'),
+                'uploaded_by' => $uid,
+                'created_at' => date('Y-m-d H:i:s')
+            ], 'Tải tệp đính kèm lên thành công');
+        }
+
+        // Support JSON payload with file_url
+        $b = getBody();
+        $fileUrl = trim($b['file_url'] ?? $b['url'] ?? '');
+        $fileName = trim($b['file_name'] ?? $b['name'] ?? 'Tệp đính kèm');
+        $fileSize = (int)($b['file_size'] ?? $b['size'] ?? 0);
+        $fileType = trim($b['file_type'] ?? $b['type'] ?? 'file');
+
+        if (!$fileUrl) {
+            respond(422, null, 'Không tìm thấy tệp tải lên hoặc URL tệp', false);
+        }
+
+        $stmtIns = $this->db->prepare("
+            INSERT INTO task_attachments (tenant_id, task_id, file_name, file_url, file_size, file_type, uploaded_by, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+        ");
+        $stmtIns->execute([$tid, $id, $fileName, $fileUrl, $fileSize, $fileType, $uid]);
+        $attId = (int)$this->db->lastInsertId();
+
+        respond(201, [
+            'id' => $attId,
+            'task_id' => $id,
+            'file_name' => $fileName,
+            'name' => $fileName,
+            'file_url' => $fileUrl,
+            'url' => $fileUrl,
+            'file_size' => $fileSize,
+            'file_type' => $fileType,
+            'uploaded_by' => $uid,
+            'created_at' => date('Y-m-d H:i:s')
+        ], 'Thêm tệp đính kèm thành công');
+    }
+
+    public function deleteTaskAttachment(array $auth, int $taskId, int $attId): void {
+        if (strtolower($auth['role'] ?? '') === 'viewer') respond(403, null, 'Bạn không có quyền xóa tệp đính kèm', false);
+        $tid = (int)$auth['tenant_id'];
+        $uid = (int)($auth['user_id'] ?? 0);
+
+        $stmt = $this->db->prepare("SELECT * FROM task_attachments WHERE id = ? AND task_id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $stmt->execute([$attId, $taskId, $tid]);
+        $att = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$att) respond(404, null, 'Tệp đính kèm không tồn tại', false);
+
+        $isAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
+        if (!$isAdmin && (int)$att['uploaded_by'] !== $uid) {
+            respond(403, null, 'Bạn không có quyền xóa tệp đính kèm này', false);
+        }
+
+        $this->db->prepare("UPDATE task_attachments SET deleted_at = NOW() WHERE id = ? AND tenant_id = ?")->execute([$attId, $tid]);
+        respond(200, ['id' => $attId], 'Xóa tệp đính kèm thành công');
+    }
+
+    public function getTaskComments(array $auth, int $id): void {
+        $tid = (int)$auth['tenant_id'];
+        $chk = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ? AND type = 'task' AND deleted_at IS NULL");
+        $chk->execute([$id, $tid]);
+        $task = $chk->fetch(PDO::FETCH_ASSOC);
+        if (!$task) respond(404, null, 'Không tìm thấy công việc', false);
+        if (!$this->canAccessTaskRow($auth, $task)) respond(403, null, 'Không có quyền truy cập công việc', false);
+
+        $cStmt = $this->db->prepare("
+            SELECT c.*, c.content as body, u.full_name as user_name, u.avatar_url
+            FROM activity_comments c
+            LEFT JOIN users u ON c.user_id = u.id
+            WHERE c.tenant_id = ? AND c.activity_id = ?
+            ORDER BY c.created_at ASC
+        ");
+        $cStmt->execute([$tid, $id]);
+        $comments = $cStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        respond(200, $comments, 'Lấy bình luận công việc thành công');
     }
 
     public function addTaskComment(array $auth, int $id): void {
@@ -1299,17 +1885,133 @@ class ProjectController {
 
         $b = getBody();
         $content = trim($b['content'] ?? $b['body'] ?? $b['comment'] ?? '');
-        if (!$content) respond(422, null, 'Nội dung bình luận không được để trống', false);
+        $attachments = !empty($b['attachments']) && is_array($b['attachments']) ? json_encode($b['attachments'], JSON_UNESCAPED_UNICODE) : null;
+        if (!$content && !$attachments) {
+            respond(422, null, 'Nội dung hoặc tệp đính kèm bình luận không được để trống', false);
+        }
 
         $userId = (int)($auth['user_id'] ?? 0);
+        $parentId = !empty($b['parent_id']) ? (int)$b['parent_id'] : null;
+        $subtaskId = !empty($b['subtask_id']) ? trim($b['subtask_id']) : null;
 
         $this->db->prepare("
-            INSERT INTO activity_comments (tenant_id, activity_id, user_id, content, created_at)
-            VALUES (?, ?, ?, ?, NOW())
-        ")->execute([$tid, $id, $userId, $content]);
+            INSERT INTO activity_comments (tenant_id, activity_id, user_id, content, attachments, parent_id, subtask_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+        ")->execute([$tid, $id, $userId, $content, $attachments, $parentId, $subtaskId]);
         $commentId = (int)$this->db->lastInsertId();
 
-        respond(201, ['id' => $commentId, 'task_id' => $id, 'activity_id' => $id, 'content' => $content, 'body' => $content], 'Bình luận công việc thành công');
+        // Parse mentions in comment body: data-user-id="..." and @name
+        $mentions = [];
+        if (preg_match_all('/data-user-id=(?:&quot;|["\']|\\\\+["\'])?(\d+)/i', (string)$content, $matchesId)) {
+            $uids = array_values(array_unique(array_filter(array_map('intval', $matchesId[1]))));
+            foreach ($uids as $uid) {
+                if ($uid !== $userId) {
+                    $stmtUser = $this->db->prepare("SELECT id, full_name, email FROM users WHERE id = ? AND tenant_id = ?");
+                    $stmtUser->execute([$uid, $tid]);
+                    if ($u = $stmtUser->fetch(PDO::FETCH_ASSOC)) {
+                        $mentions[$uid] = $u;
+                    }
+                }
+            }
+        }
+        if (empty($mentions)) {
+            preg_match_all('/@([a-zA-Z0-9_\x{00C0}-\x{1EF9}()\s]+?)(?:<\/span>|<br|\n|$)/u', (string)$content, $matches);
+            $names = is_array($matches[1] ?? null) ? $matches[1] : [];
+            foreach ($names as $nameWithUnderscores) {
+                $nameClean = trim(strip_tags($nameWithUnderscores));
+                if (empty($nameClean)) continue;
+                $fullName = str_replace('_', ' ', $nameClean);
+                $stmtUser = $this->db->prepare("SELECT id, full_name, email FROM users WHERE (full_name = ? OR REPLACE(full_name, ' ', '_') = ?) AND tenant_id = ?");
+                $stmtUser->execute([$fullName, $nameClean, $tid]);
+                if ($u = $stmtUser->fetch(PDO::FETCH_ASSOC)) {
+                    $mUid = (int)$u['id'];
+                    if ($mUid !== $userId) {
+                        $mentions[$mUid] = $u;
+                    }
+                }
+            }
+        }
+
+        // NotificationService notifications obeying Zero Self-Notification & Accurate Deep-Link
+        try {
+            require_once __DIR__ . '/../NotificationService.php';
+            $authorName = $auth['full_name'] ?? 'Đồng nghiệp';
+            $deepLink = "/projects?task_id={$id}" . ($subtaskId ? "&subtask_id={$subtaskId}" : '') . "&highlight_comment_id={$commentId}";
+
+            // 1. Notify mentioned users
+            foreach ($mentions as $mUid => $u) {
+                if ((int)$mUid !== $userId) {
+                    NotificationService::send($this->db, $tid, 'MENTION_TAGGED', [
+                        'user_id' => (int)$mUid,
+                        'author_name' => $authorName,
+                        'comment' => $content,
+                        'link' => $deepLink
+                    ]);
+                }
+            }
+
+            // 2. Notify task assignee if not the author and not already mentioned
+            $assigneeId = (int)($task['user_id'] ?? 0);
+            if ($assigneeId > 0 && $assigneeId !== $userId && !isset($mentions[$assigneeId])) {
+                NotificationService::send($this->db, $tid, 'MENTION_TAGGED', [
+                    'user_id' => $assigneeId,
+                    'author_name' => $authorName,
+                    'comment' => $content,
+                    'link' => $deepLink
+                ]);
+            }
+
+            // 3. If reply, notify parent comment author
+            if ($parentId > 0) {
+                $pStmt = $this->db->prepare("SELECT user_id FROM activity_comments WHERE id = ?");
+                $pStmt->execute([$parentId]);
+                $pUid = (int)$pStmt->fetchColumn();
+                if ($pUid > 0 && $pUid !== $userId && $pUid !== $assigneeId && !isset($mentions[$pUid])) {
+                    NotificationService::send($this->db, $tid, 'MENTION_TAGGED', [
+                        'user_id' => $pUid,
+                        'author_name' => $authorName,
+                        'comment' => $content,
+                        'link' => $deepLink
+                    ]);
+                }
+            }
+        } catch (\Throwable $notifEx) {
+            error_log("Task comment notification error: " . $notifEx->getMessage());
+        }
+
+        respond(201, [
+            'id' => $commentId,
+            'task_id' => $id,
+            'activity_id' => $id,
+            'content' => $content,
+            'body' => $content,
+            'attachments' => $attachments ? json_decode($attachments, true) : [],
+            'parent_id' => $parentId,
+            'subtask_id' => $subtaskId,
+            'created_at' => date('Y-m-d H:i:s'),
+            'user_id' => $userId,
+            'user_name' => $auth['full_name'] ?? 'Bạn',
+            'avatar_url' => $auth['avatar_url'] ?? null
+        ], 'Bình luận công việc thành công');
+    }
+
+    public function deleteTaskComment(array $auth, int $taskId, int $commentId): void {
+        if (strtolower($auth['role'] ?? '') === 'viewer') respond(403, null, 'Bạn không có quyền xóa bình luận', false);
+        $tid = (int)$auth['tenant_id'];
+        $uid = (int)($auth['user_id'] ?? 0);
+
+        $stmt = $this->db->prepare("SELECT * FROM activity_comments WHERE id = ? AND tenant_id = ?");
+        $stmt->execute([$commentId, $tid]);
+        $comment = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$comment) respond(404, null, 'Bình luận không tồn tại', false);
+
+        $isAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
+        if (!$isAdmin && (int)$comment['user_id'] !== $uid) {
+            respond(403, null, 'Bạn không có quyền xóa bình luận này', false);
+        }
+
+        $this->db->prepare("DELETE FROM activity_comments WHERE id = ? OR parent_id = ?")->execute([$commentId, $commentId]);
+        respond(200, ['id' => $commentId], 'Xóa bình luận thành công');
     }
 }
 

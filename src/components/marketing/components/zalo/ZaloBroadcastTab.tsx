@@ -224,7 +224,7 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
                     label="Tin nhắn đã gửi" 
                     value={globalStats.sent} 
                     icon={Send} 
-                    color="#3b82f6" 
+                    color="#C6333D" 
                     decor={
                         <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
                             <path d="M10 50 Q 50 10 90 50 T 90 90" stroke="currentColor" strokeWidth="2" stroke-dasharray="3 3" />
@@ -239,7 +239,7 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
                     label="Tỷ lệ xem (Read)" 
                     value={`${globalStats.openRate}%`} 
                     icon={MailOpen} 
-                    color="#f59e0b" 
+                    color="#0f172a" 
                     decor={
                         <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
                             <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="2" stroke-dasharray="4 4" />
@@ -253,7 +253,7 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
                     label="Phản hồi / Chat" 
                     value={globalStats.reacted} 
                     icon={MessageCircle} 
-                    color="#10b981" 
+                    color="#334155" 
                     decor={
                         <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
                             <rect x="20" y="20" width="60" height="15" rx="7.5" fill="currentColor" fillOpacity="0.6" />
@@ -266,7 +266,7 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
                     label="Thiết bị nhận" 
                     value={globalStats.delivered} 
                     icon={CheckCircle} 
-                    color="#6366f1" 
+                    color="#64748b" 
                     decor={
                         <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
                             <circle cx="50" cy="50" r="30" stroke="currentColor" strokeWidth="2" />

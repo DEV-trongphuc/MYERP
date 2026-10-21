@@ -418,7 +418,7 @@ const WebTracking: React.FC = () => {
                             title="Tổng tên miền"
                             value={websites.length.toLocaleString('vi-VN')}
                             icon={<Globe />}
-                            color="#a31422"
+                            color="#334155"
                             breakdown="Đang kết nối hệ thống"
                         />
                         <StatCard
@@ -426,7 +426,7 @@ const WebTracking: React.FC = () => {
                             title="Bật AI Livechat"
                             value={websites.filter(w => Boolean(w.ai_enabled)).length.toLocaleString('vi-VN')}
                             icon={<Bot />}
-                            color="#10b981"
+                            color="#0f172a"
                             breakdown="Tên miền kích hoạt trợ lý AI"
                         />
                         <StatCard
@@ -434,7 +434,7 @@ const WebTracking: React.FC = () => {
                             title="Tài liệu AI"
                             value={websites.reduce((sum, w) => sum + (Number(w.docs_count ?? w.stats?.docs_count ?? 0) || 0), 0).toLocaleString('vi-VN')}
                             icon={<Sparkles />}
-                            color="#3b82f6"
+                            color="#64748b"
                             breakdown="Nguồn tri thức đã huấn luyện"
                         />
                         <StatCard
@@ -442,7 +442,7 @@ const WebTracking: React.FC = () => {
                             title="Hội thoại ghi nhận"
                             value={websites.reduce((sum, w) => sum + (Number(w.queries_count ?? w.stats?.queries_count ?? 0) || 0), 0).toLocaleString('vi-VN')}
                             icon={<MessageSquare />}
-                            color="#f59e0b"
+                            color="#C6333D"
                             breakdown="Tổng phiên tương tác trên web"
                         />
                     </MktStatGrid>

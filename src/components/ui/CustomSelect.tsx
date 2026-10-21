@@ -117,6 +117,11 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   const [search, setSearch] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const [dropdownDirection, setDropdownDirection] = useState<'up' | 'down'>(direction);
+  const [dropdownAlign, setDropdownAlign] = useState<'left' | 'right'>(align);
+
+  useEffect(() => {
+    setDropdownAlign(align);
+  }, [align]);
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -158,6 +163,13 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
       const spaceAbove = rect.top;
       
       // On mobile for multi-select (or when space below is tight), drop up
+      // Check horizontal boundary to avoid right-edge viewport clipping
+      if (align === 'right' || (isMobile && (rect.left + 240 > window.innerWidth || rect.right > window.innerWidth - 40))) {
+        setDropdownAlign('right');
+      } else {
+        setDropdownAlign('left');
+      }
+
       if (isMobile && (multiple || spaceBelow < 280) && spaceAbove > 160) {
         setDropdownDirection('up');
       } else if (spaceBelow < 260 && spaceAbove > spaceBelow) {
@@ -483,8 +495,8 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
             style={{
               top: dropdownDirection === 'down' ? 'calc(100% + 0.35rem)' : 'auto',
               bottom: dropdownDirection === 'up' ? 'calc(100% + 0.35rem)' : 'auto',
-              left: align === 'right' ? 'auto' : 0,
-              right: align === 'right' ? 0 : 'auto',
+              left: dropdownAlign === 'right' ? 'auto' : 0,
+              right: dropdownAlign === 'right' ? 0 : 'auto',
               transformOrigin: dropdownDirection === 'down' ? 'top' : 'bottom',
               willChange: 'transform, opacity',
               contain: 'layout style'

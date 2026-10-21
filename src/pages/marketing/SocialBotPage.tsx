@@ -106,7 +106,7 @@ const SocialBotPage: React.FC = () => {
                     title="Khách hàng Messenger"
                     value={stats.metaCustomers.toLocaleString('vi-VN')}
                     icon={<MessageSquare />}
-                    color="#2563eb"
+                    color="#C6333D"
                     breakdown={<span>Đồng bộ từ Fanpages</span>}
                 />
                 <StatCard
@@ -114,7 +114,7 @@ const SocialBotPage: React.FC = () => {
                     title="Người quan tâm Zalo"
                     value={stats.zaloFollowers.toLocaleString('vi-VN')}
                     icon={<Smartphone />}
-                    color="#0068FF"
+                    color="#0f172a"
                     breakdown={<span>Kết nối Zalo OA</span>}
                 />
                 <StatCard
@@ -122,7 +122,7 @@ const SocialBotPage: React.FC = () => {
                     title="Kịch bản Bot chạy"
                     value={stats.runningBots.toLocaleString('vi-VN')}
                     icon={<Bot />}
-                    color="#10b981"
+                    color="#334155"
                     breakdown={<span>Tự động phản hồi 24/7</span>}
                 />
                 <StatCard
@@ -130,7 +130,7 @@ const SocialBotPage: React.FC = () => {
                     title="Tin nhắn tự động"
                     value={stats.sentMessages.toLocaleString('vi-VN')}
                     icon={<Zap />}
-                    color="#8b5cf6"
+                    color="#64748b"
                     breakdown={<span>Messenger + ZNS/Zalo</span>}
                 />
             </MktStatGrid>
@@ -152,7 +152,7 @@ const SocialBotPage: React.FC = () => {
                     {activeChannel === 'zalo' && (
                         <div className="flex items-center gap-2">
                             <Tabs
-                                variant="pill"
+                                variant="segmented"
                                 activeId={zaloSubTab}
                                 onChange={(id) => setZaloSubTab(id as ZaloSubTab)}
                                 items={[

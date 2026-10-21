@@ -249,7 +249,7 @@ const Vouchers: React.FC = () => {
                     title="Tổng chiến dịch"
                     value={kpiStats.totalCampaigns.toLocaleString('vi-VN')}
                     icon={<Gift />}
-                    color="#a31422"
+                    color="#334155"
                     breakdown="Chương trình Voucher & Mã ưu đãi"
                 />
                 <StatCard
@@ -257,7 +257,7 @@ const Vouchers: React.FC = () => {
                     title="Đang hoạt động"
                     value={kpiStats.activeCampaigns.toLocaleString('vi-VN')}
                     icon={<Sparkles />}
-                    color="#10b981"
+                    color="#0f172a"
                     breakdown="Sẵn sàng cấp phát mã tự động"
                 />
                 <StatCard
@@ -265,7 +265,7 @@ const Vouchers: React.FC = () => {
                     title="Tổng mã phát hành"
                     value={kpiStats.totalIssued.toLocaleString('vi-VN')}
                     icon={<Ticket />}
-                    color="#3b82f6"
+                    color="#C6333D"
                     breakdown="Mã đã cấp cho khách hàng"
                 />
                 <StatCard
@@ -273,7 +273,7 @@ const Vouchers: React.FC = () => {
                     title="Đã sử dụng (Redeem)"
                     value={kpiStats.totalRedeemed.toLocaleString('vi-VN')}
                     icon={<CheckCircle2 />}
-                    color="#f59e0b"
+                    color="#64748b"
                     breakdown="Đã quy đổi ưu đãi thành công"
                 />
             </MktStatGrid>

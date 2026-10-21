@@ -2219,12 +2219,13 @@ const SettingsInner = () => {
     alignItems: 'center',
     gap: '0.5rem',
     fontSize: '0.85rem',
-    fontWeight: 600,
-    background: activeTab === tab ? 'var(--color-bg)' : 'transparent',
-    color: activeTab === tab ? 'var(--color-text)' : 'var(--color-text-muted)',
+    fontWeight: activeTab === tab ? 700 : 500,
+    background: activeTab === tab ? 'var(--color-primary-light)' : 'transparent',
+    color: activeTab === tab ? 'var(--color-primary)' : 'var(--color-text-muted)',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
+    transition: 'all 0.15s ease',
     border: 'none',
+    borderLeft: activeTab === tab ? '3px solid var(--color-primary)' : '3px solid transparent',
     flexShrink: 0,
     position: 'relative' as const,
     outline: 'none',
@@ -2232,7 +2233,7 @@ const SettingsInner = () => {
     userSelect: 'none' as const,
     width: '100%',
     textAlign: 'left' as const,
-    paddingLeft: '14px'
+    paddingLeft: '11px'
   });
 
   const showGlobalSave = true;
@@ -3384,7 +3385,7 @@ const SettingsInner = () => {
                               setImportSubTab('list');
                             }}
                             className="btn outline"
-                            style={{ gap: 6, padding: '8px 16px', height: 38, fontWeight: 700, borderColor: '#ef4444', color: '#ef4444' }}
+                            style={{ gap: 6, padding: '8px 16px', height: 38, fontWeight: 700, borderColor: '#C6333D', color: '#C6333D' }}
                           >
                             ← Quay lại Lịch sử
                           </button>
@@ -3580,21 +3581,21 @@ const SettingsInner = () => {
                               alignItems: 'center',
                               justifyContent: 'space-between',
                               padding: '10px 16px',
-                              border: '1px solid var(--color-border)',
+                              border: '1px solid #e2e8f0',
                               borderRadius: 10,
-                              background: '#f0fdf4',
-                              borderLeft: '4px solid #10b981',
+                              background: '#f8fafc',
+                              borderLeft: '4px solid #C6333D',
                               width: '100%'
                             }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <div style={{ background: '#d1fae5', padding: 8, borderRadius: 8, color: '#047857', display: 'flex', alignItems: 'center' }}>
+                                <div style={{ background: '#fee2e2', padding: 8, borderRadius: 8, color: '#C6333D', display: 'flex', alignItems: 'center' }}>
                                   <FileSpreadsheet size={18} />
                                 </div>
                                 <div style={{ minWidth: 0 }}>
                                   <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '400px' }}>
                                     {localFile.name}
                                   </div>
-                                  <div style={{ fontSize: '0.725rem', color: '#047857', fontWeight: 500 }}>
+                                  <div style={{ fontSize: '0.725rem', color: '#64748b', fontWeight: 500 }}>
                                     {(localFile.size / 1024).toFixed(1)} KB • {localRows.length} dòng dữ liệu
                                   </div>
                                 </div>

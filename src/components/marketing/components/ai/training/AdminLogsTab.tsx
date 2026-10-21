@@ -702,25 +702,21 @@ const CustomDropdown = ({ icon: Icon, label, children, isOpen, onToggle, onClose
 };
 
 const StatCard = ({ icon: Icon, label, value, color, isRatio, trend, className, isDarkTheme }: any) => {
-    const colorClasses: any = {
-        blue: isDarkTheme ? 'bg-blue-500/10 text-blue-400 shadow-blue-500/20' : 'bg-blue-50/50 text-blue-500 shadow-blue-100/50',
-        purple: isDarkTheme ? 'bg-purple-500/10 text-purple-400 shadow-purple-500/20' : 'bg-purple-50/50 text-purple-500 shadow-purple-100/50',
-        green: isDarkTheme ? 'bg-emerald-500/10 text-emerald-400 shadow-emerald-500/20' : 'bg-emerald-50/50 text-emerald-500 shadow-emerald-100/50',
-        orange: isDarkTheme ? 'bg-[var(--color-primary)]/10 text-orange-400 shadow-[var(--color-primary)]/20' : 'bg-orange-50/50 text-[var(--color-primary)] shadow-orange-100/50',
-        indigo: isDarkTheme ? 'bg-indigo-500/10 text-indigo-400 shadow-indigo-500/20' : 'bg-indigo-50/50 text-indigo-500 shadow-indigo-100/50',
-        pink: isDarkTheme ? 'bg-rose-500/10 text-rose-400 shadow-rose-500/20' : 'bg-rose-50/50 text-rose-500 shadow-rose-100/50'
-    };
+    const isHighlight = color === 'orange' || color === 'pink' || color === 'rose';
+    const iconBg = isHighlight
+        ? (isDarkTheme ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-red-50 text-[#C6333D] border border-red-200')
+        : (isDarkTheme ? 'bg-slate-800 text-slate-300 border border-slate-700' : 'bg-slate-100 text-slate-700 border border-slate-200');
+    const textAccent = isHighlight
+        ? (isDarkTheme ? 'text-red-400' : 'text-[#C6333D]')
+        : (isDarkTheme ? 'text-slate-300' : 'text-slate-700');
 
     return (
-        <div className={`p-5 rounded-[var(--radius-xl)] border transition-all duration-300 flex flex-col group relative overflow-hidden h-full ${className || ''} ${isDarkTheme ? 'bg-[rgba(13,17,23,0.6)] backdrop-blur-md border-slate-800 shadow-none' : 'bg-[var(--color-surface)] border-[var(--color-border-light)] shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-xl)] hover:-translate-y-1'}`}>
-            {/* Background Decoration */}
-            <div className={`absolute -right-2 -top-2 w-24 h-24 rounded-full opacity-0 group-hover:opacity-5 transition-all duration-700 ${colorClasses[color].split(' ')[0]}`}></div>
-
+        <div className={`p-5 rounded-[16px] border transition-all duration-200 flex flex-col group relative overflow-hidden h-full ${className || ''} ${isDarkTheme ? 'bg-[rgba(13,17,23,0.6)] backdrop-blur-md border-slate-800 shadow-none' : 'bg-white border-slate-200 shadow-xs hover:shadow-md'}`}>
             <div className={`flex items-center space-x-3 ${isRatio ? 'mb-3' : 'mb-5'}`}>
-                <div className={`p-2.5 rounded-xl group-hover:scale-105 transition-transform duration-500 ${colorClasses[color]}`}>
-                    <Icon size={isRatio ? 18 : 22} />
+                <div className={`p-2 rounded-lg transition-transform duration-300 ${iconBg}`}>
+                    <Icon size={isRatio ? 18 : 20} />
                 </div>
-                <p className={`text-[9px] font-bold uppercase tracking-wider leading-tight ${isRatio ? 'max-w-[70px]' : ''} ${isDarkTheme ? 'text-slate-500' : 'text-[var(--color-text-light)] dark:text-slate-400'}`}>{label}</p>
+                <p className={`text-[10px] font-bold uppercase tracking-wider leading-tight ${isRatio ? 'max-w-[70px]' : ''} ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>{label}</p>
             </div>
 
             <div className="mt-auto flex items-end justify-between gap-3">
@@ -748,11 +744,11 @@ const StatCard = ({ icon: Icon, label, value, color, isRatio, trend, className, 
                                 strokeWidth="3.5"
                                 strokeDasharray={119}
                                 strokeDashoffset={119 - (Math.min(value * 10, 100) / 100) * 119}
-                                className={colorClasses[color].split(' ')[1]}
+                                className={textAccent}
                                 strokeLinecap="round"
                             />
                         </svg>
-                        <span className={`absolute text-[9px] font-bold ${colorClasses[color].split(' ')[1]}`}>{value}</span>
+                        <span className={`absolute text-[9px] font-bold ${textAccent}`}>{value}</span>
                     </div>
                 )}
             </div>

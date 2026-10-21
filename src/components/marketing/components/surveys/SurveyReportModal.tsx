@@ -472,7 +472,13 @@ const RespondentsList: React.FC<{ surveyId: string; survey?: Survey | null }> = 
                                     {/* Right actions */}
                                     <div className="flex items-center gap-2 shrink-0">
                                         <div className="text-right hidden sm:block">
-                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${r.completion_rate >= 80 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-700 border border-slate-200'}`}>
+                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                                                (r.completion_rate ?? 0) >= 80
+                                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                                    : (r.completion_rate ?? 0) >= 50
+                                                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                                    : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                            }`}>
                                                 {Math.round(r.completion_rate ?? 0)}% xong
                                             </span>
                                             {r.time_spent_sec ? (
@@ -760,28 +766,31 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                             {/* KPI strip */}
                             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                                 {[
-                                    { label: 'TỔNG LƯỢT PHẢN HỒI', desc: 'Tổng lượt tham gia khảo sát', value: Number(ov.total_responses ?? 0).toLocaleString('vi-VN'), Icon: Users, color: '#a31422' },
-                                    { label: 'TỶ LỆ HOÀN THÀNH', desc: 'Hoàn tất toàn bộ câu hỏi', value: ov.avg_completion_rate ? `${Math.round(ov.avg_completion_rate)}%` : '0%', Icon: CheckCircle, color: '#10b981' },
-                                    { label: 'THỜI GIAN TB', desc: 'Thời gian làm bài trung bình', value: formatTime(+ov.avg_time_spent_sec), Icon: Clock, color: '#3b82f6' },
-                                    { label: 'TỶ LỆ DI ĐỘNG', desc: 'Truy cập trên thiết bị Mobile', value: (ov.mobile_count && ov.total_responses) ? `${pct(+ov.mobile_count, +ov.total_responses)}%` : '0%', Icon: Smartphone, color: '#f59e0b' },
+                                    { label: 'TỔNG LƯỢT PHẢN HỒI', desc: 'Tổng lượt tham gia khảo sát', value: Number(ov.total_responses ?? 0).toLocaleString('vi-VN'), Icon: Users, isPrimary: true },
+                                    { label: 'TỶ LỆ HOÀN THÀNH', desc: 'Hoàn tất toàn bộ câu hỏi', value: ov.avg_completion_rate ? `${Math.round(ov.avg_completion_rate)}%` : '0%', Icon: CheckCircle, isPrimary: false },
+                                    { label: 'THỜI GIAN TB', desc: 'Thời gian làm bài trung bình', value: formatTime(+ov.avg_time_spent_sec), Icon: Clock, isPrimary: false },
+                                    { label: 'TỶ LỆ DI ĐỘNG', desc: 'Truy cập trên thiết bị Mobile', value: (ov.mobile_count && ov.total_responses) ? `${pct(+ov.mobile_count, +ov.total_responses)}%` : '0%', Icon: Smartphone, isPrimary: false },
                                 ].map((s, idx) => {
                                     const IconComp = s.Icon;
+                                    const iconBg = s.isPrimary ? '#fef2f2' : '#f8fafc';
+                                    const iconColor = s.isPrimary ? '#C6333D' : '#334155';
+                                    const iconBorder = s.isPrimary ? '#fecdd3' : '#e2e8f0';
                                     return (
                                         <div
                                             key={idx}
                                             style={{
-                                                minHeight: '140px',
-                                                '--stat-accent': s.color,
-                                                '--stat-glow': `${s.color}26`,
-                                            } as React.CSSProperties}
-                                            className="stat-card hover-lift relative overflow-hidden w-full min-w-0 h-full min-h-[140px] flex flex-col justify-between p-5 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[18px] shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all duration-300"
+                                                minHeight: '136px',
+                                                borderRadius: '16px',
+                                                border: '1px solid #e2e8f0',
+                                                background: '#ffffff',
+                                                padding: '16px 18px',
+                                                boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
+                                            }}
+                                            className="w-full min-w-0 h-full flex flex-col justify-between transition-all duration-200 hover:shadow-md cursor-pointer"
                                         >
-                                            <div className="decor-svg" style={{ color: s.color }}>
-                                                <IconComp className="w-full h-full" style={{ width: '100%', height: '100%' }} />
-                                            </div>
                                             <div className="relative z-10 flex flex-col justify-between h-full w-full min-w-0">
                                                 <div>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', gap: '8px' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', gap: '8px' }}>
                                                         <div
                                                             className="stat-label truncate"
                                                             style={{
@@ -789,7 +798,7 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                                                                 fontWeight: 700,
                                                                 textTransform: 'uppercase',
                                                                 letterSpacing: '0.05em',
-                                                                color: 'var(--color-text-muted)',
+                                                                color: '#64748b',
                                                             }}
                                                         >
                                                             {s.label}
@@ -800,8 +809,9 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                                                                 width: '32px',
                                                                 height: '32px',
                                                                 borderRadius: '8px',
-                                                                background: `${s.color}14`,
-                                                                color: s.color,
+                                                                background: iconBg,
+                                                                border: `1px solid ${iconBorder}`,
+                                                                color: iconColor,
                                                                 display: 'flex',
                                                                 alignItems: 'center',
                                                                 justifyContent: 'center',
@@ -811,20 +821,16 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                                                             <IconComp className="w-4 h-4" />
                                                         </div>
                                                     </div>
-                                                    <div className="stat-value tabular-nums truncate">{s.value}</div>
+                                                    <div style={{ fontSize: '1.625rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }} className="stat-value tabular-nums truncate">{s.value}</div>
                                                     <div
                                                         style={{
                                                             fontSize: '0.75rem',
-                                                            color: 'var(--color-text-muted)',
-                                                            marginTop: '4px',
-                                                            marginBottom: '8px',
-                                                            fontWeight: 600,
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            gap: '8px',
+                                                            color: '#64748b',
+                                                            marginTop: '6px',
+                                                            fontWeight: 500,
                                                         }}
+                                                        className="truncate"
                                                     >
-                                                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: s.color, display: 'inline-block', flexShrink: 0 }} />
                                                         {s.desc}
                                                     </div>
                                                 </div>

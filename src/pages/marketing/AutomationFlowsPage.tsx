@@ -1971,11 +1971,11 @@ const Flows: React.FC = () => {
                             title="Tổng kịch bản"
                             value={flowStats.total.toLocaleString('vi-VN')}
                             icon={<LayoutGrid />}
-                            color="#6366f1"
+                            color="#334155"
                             loading={!hasLoaded}
                             breakdown={
                                 <>
-                                    <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Hoạt động: {flowStats.active}</span>
+                                    <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-600" />Hoạt động: {flowStats.active}</span>
                                     <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-400" />Bản nháp: {flowStats.draft}</span>
                                 </>
                             }
@@ -1984,12 +1984,12 @@ const Flows: React.FC = () => {
                             title="Đang hoạt động"
                             value={flowStats.active.toLocaleString('vi-VN')}
                             icon={<Zap />}
-                            color="#10b981"
+                            color="#0f172a"
                             loading={!hasLoaded}
                             breakdown={
                                 <>
-                                    <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Đang chạy: {flowStats.active}</span>
-                                    <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" />Tạm dừng: {flowStats.paused}</span>
+                                    <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-600" />Đang chạy: {flowStats.active}</span>
+                                    <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-400" />Tạm dừng: {flowStats.paused}</span>
                                 </>
                             }
                         />
@@ -1997,17 +1997,17 @@ const Flows: React.FC = () => {
                             title="Lượt tham gia"
                             value={flowStats.enrolled.toLocaleString('vi-VN')}
                             icon={<Users />}
-                            color="#3b82f6"
+                            color="#64748b"
                             loading={!hasLoaded}
                             breakdown={
-                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Ở flow đang chạy: {flowStats.enrolledActive.toLocaleString('vi-VN')}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-600" />Ở flow đang chạy: {flowStats.enrolledActive.toLocaleString('vi-VN')}</span>
                             }
                         />
                         <StatCard
                             title="Hoàn thành"
                             value={flowStats.completed.toLocaleString('vi-VN')}
                             icon={<CheckCircle2 />}
-                            color="#059669"
+                            color="#C6333D"
                             loading={!hasLoaded}
                             breakdown={
                                 <>

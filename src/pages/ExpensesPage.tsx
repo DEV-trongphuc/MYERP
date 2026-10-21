@@ -908,11 +908,6 @@ export const ExpensesPage: React.FC = () => {
                 cursor: k.onClick ? 'pointer' : 'default'
               }}
             >
-              {/* Decorative Background SVG */}
-              <div className="decor-svg" style={{ color: k.color }}>
-                {k.decor}
-              </div>
-
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
                 <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-light)' }}>{k.label}</span>
                 <div className="stat-icon" style={{
@@ -952,30 +947,32 @@ export const ExpensesPage: React.FC = () => {
       </div>
 
 
-      {/* Quick Status Filter Pills */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem', flexWrap: 'wrap' }}>
+      {/* Quick Status Filter Pills - Segmented Pill Control */}
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', marginBottom: '1rem', flexWrap: 'wrap', background: 'var(--color-border-light, #f1f5f9)', padding: '3px', borderRadius: '8px', border: '1px solid var(--color-border, #e2e8f0)', width: 'fit-content' }}>
         {[
-          { key: '', label: 'Tất cả', color: 'var(--color-primary)' },
-          { key: 'pending', label: 'Chờ duyệt', color: '#f59e0b' },
-          { key: 'unpaid', label: 'Chưa thanh toán', color: '#d97706' },
-          { key: 'paid', label: 'Đã thanh toán', color: '#10b981' },
+          { key: '', label: 'Tất cả' },
+          { key: 'pending', label: 'Chờ duyệt' },
+          { key: 'unpaid', label: 'Chưa thanh toán' },
+          { key: 'paid', label: 'Đã thanh toán' },
         ].map(tab => {
           const isActive = statusFilter === tab.key;
           return (
             <button
               key={tab.key}
+              type="button"
               onClick={() => { setStatusFilter(tab.key); setPage(1); }}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
-                padding: '5px 12px',
-                borderRadius: '20px',
+                padding: '6px 14px',
+                borderRadius: '6px',
                 fontSize: '0.78rem',
                 fontWeight: isActive ? 700 : 500,
-                border: isActive ? `1.5px solid ${tab.color}` : '1px solid var(--color-border)',
-                background: isActive ? `${tab.color}15` : 'var(--color-surface)',
-                color: isActive ? tab.color : 'var(--color-text-muted)',
+                border: 'none',
+                background: isActive ? 'var(--color-surface, #ffffff)' : 'transparent',
+                color: isActive ? '#C6333D' : 'var(--color-text-muted, #64748b)',
+                boxShadow: isActive ? '0 1px 3px rgba(15,23,42,0.08)' : 'none',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease'
               }}

@@ -653,7 +653,6 @@ export const CrmContactsTabSkeleton = () => {
 export const DealsKanbanTabSkeleton = () => {
   const isMobile = useResponsive();
   const cols = isMobile ? 1 : 4;
-  const borderColors = ['#3b82f6', '#f59e0b', '#8b5cf6', '#10b981'];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
       {/* Header + Filter Toolbar */}
@@ -677,7 +676,7 @@ export const DealsKanbanTabSkeleton = () => {
             style={{
               padding: '0.875rem',
               borderRadius: '14px',
-              borderTop: `3px solid ${borderColors[colIdx % borderColors.length]}`,
+              borderTop: '3px solid #e2e8f0',
               display: 'flex',
               flexDirection: 'column',
               gap: '0.75rem',
@@ -695,9 +694,10 @@ export const DealsKanbanTabSkeleton = () => {
             {Array.from({ length: 3 }).map((__, cardIdx) => (
               <div
                 key={cardIdx}
+                className="kanban-skeleton-card"
                 style={{
                   background: 'var(--color-surface)',
-                  border: '1px solid var(--color-border-light)',
+                  border: '1px solid #e2e8f0',
                   borderRadius: '12px',
                   padding: '0.875rem',
                   display: 'flex',

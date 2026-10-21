@@ -487,16 +487,16 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
     const retainedRate = (sentCount > 0 && isFinite(retainedCount / sentCount)) ? ((retainedCount / sentCount) * 100).toFixed(1) : "0.0";
 
     const funnelData = [
-        { name: isZns ? 'Tin nhắn đã gửi' : 'Đã gửi (Sent)', value: sentCount, fill: '#94a3b8', icon: Send },
-        { name: isZns ? 'Đã nhận (Delivered)' : 'Đã nhận (Delivered)', value: deliveredCount, fill: '#2563eb', icon: CheckCircle2 },
-        { name: isZns ? 'Lượt xem (Seen)' : 'Đã mở (Opened)', value: stats.opened, fill: '#10b981', icon: isZns ? BadgeCheck : MailOpen },
-        ...(isZns ? [] : [{ name: 'Đã click (Unique Click)', value: stats.clicked, fill: '#ec4899', icon: MousePointer2, subValue: (stats as any).total_clicked ? `Total: ${(stats as any).total_clicked}` : null }]),
+        { name: isZns ? 'Tin nhắn đã gửi' : 'Đã gửi (Sent)', value: sentCount, fill: '#64748b', icon: Send },
+        { name: isZns ? 'Đã nhận (Delivered)' : 'Đã nhận (Delivered)', value: deliveredCount, fill: '#334155', icon: CheckCircle2 },
+        { name: isZns ? 'Lượt xem (Seen)' : 'Đã mở (Opened)', value: stats.opened, fill: '#0f172a', icon: isZns ? BadgeCheck : MailOpen },
+        ...(isZns ? [] : [{ name: 'Đã click (Unique Click)', value: stats.clicked, fill: '#C6333D', icon: MousePointer2, subValue: (stats as any).total_clicked ? `Total: ${(stats as any).total_clicked}` : null }]),
     ];
 
     const healthData = [
         { name: isZns ? 'Đã nhận' : 'Hộp thư chính', value: retainedCount, fill: '#10b981' },
         { name: isZns ? 'Lỗi gửi' : 'Tỷ lệ (Bounce)', value: stats.bounced, fill: '#f43f5e' },
-        ...(isZns ? [] : [{ name: 'Hủy đăng ký (Unsub)', value: stats.unsubscribed, fill: '#8b5cf6' }])
+        ...(isZns ? [] : [{ name: 'Hủy đăng ký (Unsub)', value: stats.unsubscribed, fill: '#64748b' }])
     ].filter(d => d.value > 0);
 
     const targetLists = localCampaign.target?.listIds.map(id => allLists.find(l => l.id === id)).filter(Boolean) || [];
@@ -508,49 +508,47 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
         ? (stats.sent || localCampaign.totalTargetAudience || 0)
         : (localCampaign.totalTargetAudience || 0);
 
-    const StatBox = ({ label, value, subValue, icon: Icon, colorClass }: any) => {
-        const accentColor = (() => {
-            if (colorClass.includes('emerald') || colorClass.includes('green') || colorClass.includes('10b981')) return '#10b981';
-            if (colorClass.includes('rose') || colorClass.includes('pink') || colorClass.includes('ec4899')) return '#a31422';
-            if (colorClass.includes('blue')) return '#3b82f6';
-            return '#f59e0b';
-        })();
+    const StatBox = ({ label, value, subValue, icon: Icon, colorClass, isPrimary }: any) => {
+        const isHighlight = Boolean(isPrimary || (colorClass && (colorClass.includes('rose') || colorClass.includes('pink') || colorClass.includes('C6333D') || colorClass.includes('a31422'))) || label?.includes('Click') || label?.includes('CTR'));
+        const iconBg = isHighlight ? '#fef2f2' : '#f8fafc';
+        const iconColor = isHighlight ? '#C6333D' : '#334155';
+        const iconBorder = isHighlight ? '#fecdd3' : '#e2e8f0';
 
         return (
             <div
                 style={{
-                    minHeight: '140px',
-                    '--stat-accent': accentColor,
-                    '--stat-glow': `${accentColor}26`,
-                } as React.CSSProperties}
-                className="stat-card hover-lift relative overflow-hidden w-full min-w-0 h-full min-h-[140px] flex flex-col justify-between p-5 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[18px] shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all duration-300 cursor-pointer"
+                    minHeight: '136px',
+                    borderRadius: '16px',
+                    border: '1px solid #e2e8f0',
+                    background: '#ffffff',
+                    padding: '16px 18px',
+                    boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
+                }}
+                className="w-full min-w-0 h-full flex flex-col justify-between transition-all duration-200 hover:shadow-md cursor-pointer"
             >
-                <div className="decor-svg" style={{ color: accentColor }}>
-                    <Icon className="w-full h-full" style={{ width: '100%', height: '100%' }} />
-                </div>
-                <div className="relative z-10 flex flex-col justify-between h-full w-full min-w-0">
+                <div className="flex flex-col justify-between h-full w-full min-w-0">
                     <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', gap: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', gap: '8px' }}>
                             <div
-                                className="stat-label truncate"
                                 style={{
                                     fontSize: '0.75rem',
                                     fontWeight: 700,
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.05em',
-                                    color: 'var(--color-text-muted)',
+                                    color: '#64748b',
                                 }}
+                                className="truncate"
                             >
                                 {label}
                             </div>
                             <div
-                                className="stat-icon"
                                 style={{
                                     width: '32px',
                                     height: '32px',
                                     borderRadius: '8px',
-                                    background: `${accentColor}14`,
-                                    color: accentColor,
+                                    background: iconBg,
+                                    border: `1px solid ${iconBorder}`,
+                                    color: iconColor,
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
@@ -560,31 +558,17 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                 <Icon className="w-4 h-4" />
                             </div>
                         </div>
-                        <div className="stat-value tabular-nums truncate">{value}</div>
+                        <div style={{ fontSize: '1.625rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }} className="stat-value tabular-nums truncate">{value}</div>
                         {subValue && (
                             <div
                                 style={{
                                     fontSize: '0.75rem',
-                                    color: 'var(--color-text-muted)',
-                                    marginTop: '4px',
-                                    marginBottom: '8px',
-                                    fontWeight: 600,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '10px',
-                                    flexWrap: 'wrap',
+                                    color: '#64748b',
+                                    marginTop: '6px',
+                                    fontWeight: 500,
                                 }}
+                                className="truncate"
                             >
-                                <span
-                                    style={{
-                                        width: '6px',
-                                        height: '6px',
-                                        borderRadius: '50%',
-                                        background: accentColor,
-                                        display: 'inline-block',
-                                        flexShrink: 0,
-                                    }}
-                                />
                                 {subValue}
                             </div>
                         )}

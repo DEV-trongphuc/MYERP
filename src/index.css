@@ -4,6 +4,69 @@
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *, .dark, .dark *));
 
 /* ================================================
+   MOBILE & TABLET RESPONSIVE ARCHITECTURE FOUNDATION (ENTERPRISE SAAS)
+   Zero Horizontal Overflow • 3-Tier Device Rules • Desktop >= 1280px Preserved
+   ================================================ */
+
+/* 1. Global Zero-Overflow Baseline */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* 2. Touch momentum & horizontal swipe strips */
+.touch-scroll-x,
+.mobile-horizontal-strip,
+.mobile-swipe-tabs {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  scrollbar-width: none !important;
+  ms-overflow-style: none !important;
+  user-select: none;
+}
+.touch-scroll-x::-webkit-scrollbar,
+.mobile-horizontal-strip::-webkit-scrollbar,
+.mobile-swipe-tabs::-webkit-scrollbar {
+  display: none !important;
+}
+
+/* 3. Safe Area Insets for modern notch/pill displays */
+:root {
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+}
+
+/* 4. Drawer & Modal Z-Index Hierarchy (Strict Hiến Chương MYERP) */
+.drawer-backdrop {
+  z-index: 2147483620 !important;
+}
+.drawer-panel {
+  z-index: 2147483625 !important;
+}
+
+/* 5. Small Mobile (320px - 374px) Ultra-Tight Safety */
+@media (max-width: 374px) {
+  .page-container {
+    padding: 0.4rem 0.4rem calc(80px + env(safe-area-inset-bottom, 0px)) 0.4rem !important;
+  }
+  .responsive-main {
+    padding: 0.5rem 0.5rem calc(80px + env(safe-area-inset-bottom, 0px)) 0.5rem !important;
+  }
+  .btn {
+    padding: 0.35rem 0.55rem !important;
+    font-size: 0.75rem !important;
+  }
+  .header-actions-right {
+    gap: 0.25rem !important;
+  }
+}
+
+/* ================================================
    MOBILE RESPONSIVE OVERRIDES (SAFE)
    ================================================ */
 @media (max-width: 1024px) {
@@ -1762,13 +1825,19 @@ select:focus {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-/* Stat card */
+/* Stat card - Standardized Executive Brand Red & Slate */
 .stat-card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 18px !important;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 16px !important;
   padding: 1.25rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+[data-theme='dark'] .stat-card {
+  background: #1e293b !important;
+  border-color: #334155 !important;
 }
 
 .stat-label {
@@ -5355,20 +5424,12 @@ div[role="status"] {
   position: relative !important;
   overflow: hidden !important;
 }
-.decor-svg {
-  position: absolute !important;
-  bottom: -15px !important;
-  right: -15px !important;
-  width: 100px !important;
-  height: 100px !important;
-  opacity: 0.07 !important;
-  pointer-events: none !important;
-  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
-  z-index: 1 !important;
-}
-.stat-card:hover .decor-svg, .stat-kpi:hover .decor-svg {
-  transform: scale(1.2) rotate(6deg) !important;
-  opacity: 0.14 !important;
+.decor-svg,
+.stat-card .decor-svg,
+.stat-kpi .decor-svg,
+.stat-card:hover .decor-svg,
+.stat-kpi:hover .decor-svg {
+  display: none !important;
 }
 .stat-icon, .stat-kpi__icon {
   transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
@@ -5406,29 +5467,45 @@ div[role="status"] {
   border-radius: 18px !important;
   transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
-}
-.stat-card[style*="--stat-accent"]:hover {
-  border-color: var(--stat-accent) !important;
-  box-shadow: 0 6px 16px var(--stat-glow, rgba(0, 0, 0, 0.08)) !important;
-}
-.stat-card.total-card:hover {
-  box-shadow: 0 6px 16px rgba(163, 20, 34, 0.15) !important;
-  border-color: #a31422 !important;
-}
-.stat-card.distributed-card:hover {
-  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.15) !important;
-  border-color: #3b82f6 !important;
-}
-.stat-card.fair_share_equity-card:hover {
-  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.15) !important;
-  border-color: #10b981 !important;
-}
+/* Standardized Clean Hover without colored borders */
+.stat-card:hover,
+.stat-card.blue:hover,
+.stat-card.green:hover,
+.stat-card.orange:hover,
+.stat-card.purple:hover,
+.stat-card.red:hover,
+.stat-card[style*="--stat-accent"]:hover,
+.stat-card.total-card:hover,
+.stat-card.distributed-card:hover,
+.stat-card.fair_share_equity-card:hover,
 .stat-card.out_of_hours-card:hover {
-  box-shadow: 0 6px 16px rgba(245, 158, 11, 0.15) !important;
-  border-color: #f59e0b !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06) !important;
+  transform: none !important;
+}
+
+[data-theme='dark'] .stat-card:hover {
+  border-color: #475569 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Executive Brand Red & Slate Palette for Stat Icons */
+.stat-icon.blue,
+.stat-icon.green,
+.stat-icon.orange,
+.stat-icon.purple,
+.stat-icon.teal,
+.stat-icon.indigo {
+  background: #f8fafc !important;
+  color: #334155 !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+.stat-icon.red,
+.stat-icon.brand {
+  background: #fef2f2 !important;
+  color: #C6333D !important;
+  border: 1px solid #fecdd3 !important;
 }
 
 /* Responsive mobile layouts for cooperation slips detail drawer & list items */
@@ -7136,20 +7213,10 @@ tr.erp-row-focused {
   scrollbar-width: none;
 }
 
-.decor-svg {
-  position: absolute;
-  bottom: -15px;
-  right: -15px;
-  width: 100px;
-  height: 100px;
-  opacity: 0.07;
-  pointer-events: none;
-  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
+.decor-svg,
+.stat-card .decor-svg,
 .stat-card:hover .decor-svg {
-  transform: scale(1.15) rotate(6deg);
-  opacity: 0.14;
+  display: none !important;
 }
 
 @keyframes modalPopIn {

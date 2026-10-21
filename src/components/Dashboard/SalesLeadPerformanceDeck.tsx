@@ -1,5 +1,16 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense, lazy } from 'react';
 import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  Cell,
+  LabelList
+} from 'recharts';
+import {
   Users,
   PhoneCall,
   PhoneOff,
@@ -19,7 +30,13 @@ import {
   HelpCircle,
   Eye,
   Info,
-  PieChart
+  PieChart,
+  BarChart3,
+  TrendingUp,
+  Zap,
+  GraduationCap,
+  Building2,
+  Check
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
@@ -181,6 +198,35 @@ interface SalesLeadPerformanceData {
     reason: string;
     count: number;
   }>;
+  daily_velocity?: Array<{
+    date: string;
+    label: string;
+    total_leads: number;
+    contacted_leads: number;
+    qualified_leads: number;
+    uncontacted_leads: number;
+    contact_rate: number;
+    qualified_rate: number;
+  }>;
+  by_program_breakdown?: Array<{
+    program: string;
+    total_leads: number;
+    contacted_leads: number;
+    uncontacted_leads: number;
+    qualified_leads: number;
+    won_count: number;
+    won_value: number;
+    approved_value: number;
+    contact_rate: number;
+    qualified_rate: number;
+    win_rate: number;
+  }>;
+  sla_speed_breakdown?: {
+    fast_15m: { label: string; count: number; pct: number; status: string; color: string };
+    standard_2h: { label: string; count: number; pct: number; status: string; color: string };
+    slow_2h: { label: string; count: number; pct: number; status: string; color: string };
+    uncontacted: { label: string; count: number; pct: number; status: string; color: string };
+  };
 }
 
 type DrilldownType =
@@ -212,6 +258,33 @@ interface Props {
 
 const DRILLDOWN_PAGE_SIZE = 20;
 const SECTION_PAGE_SIZE = 10;
+
+const BRAND_RED = '#C6333D';
+const EXECUTIVE_SLATE = '#0f172a';
+const SLATE_MUTED = '#64748b';
+const SLATE_LIGHT = '#94a3b8';
+const BRAND_PALETTE = [
+  '#C6333D',
+  '#334155',
+  '#E11D48',
+  '#64748B',
+  '#991B1B',
+  '#475569',
+  '#FB7185',
+  '#94A3B8'
+];
+
+const getHealthColor = (pct: number): string => {
+  if (pct >= 80) return '#10b981';
+  if (pct >= 50) return '#f59e0b';
+  return '#ef4444';
+};
+
+const getHealthBg = (pct: number): string => {
+  if (pct >= 80) return '#f0fdf4';
+  if (pct >= 50) return '#fffbeb';
+  return '#fef2f2';
+};
 
 const formatVND = (val: number): string => {
   if (!val || isNaN(val)) return '0 đ';
@@ -247,6 +320,14 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
   externalDateFilter
 }) => {
   const navigate = useNavigate();
+  const [isMobile, setIsMobile] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  );
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   const [localDateFilter, setLocalDateFilter] = useState<string>('Tháng này');
   const activeDateFilter = embedInPage === 'dashboard' && externalDateFilter ? externalDateFilter : localDateFilter;
 
@@ -470,6 +551,9 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
   const sales = Array.isArray(data?.sales_leaderboard) ? data!.sales_leaderboard : [];
   const recentOrders = Array.isArray(data?.recent_orders) ? data!.recent_orders : [];
   const lostReasons = Array.isArray(data?.lost_reasons) ? data!.lost_reasons : [];
+  const dailyVelocity = Array.isArray(data?.daily_velocity) ? data!.daily_velocity : [];
+  const programBreakdown = Array.isArray(data?.by_program_breakdown) ? data!.by_program_breakdown : [];
+  const slaBreakdown = data?.sla_speed_breakdown;
 
   // Compute Funnel Donut Breakdown (1-2 Chưa connect, 3-12 Qualified, 13-14 Win)
   const funnelAnalytics = useMemo(() => {
@@ -705,7 +789,7 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
         {/* Right: Filters */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexWrap: 'wrap' }}>
           {embedInPage === 'contacts' && (
-            <div style={{ minWidth: '160px' }}>
+            <div style={{ minWidth: isMobile ? '100%' : '160px', flex: isMobile ? '1 1 100%' : 'none' }}>
               <CustomSelect
                 options={localDateOptions}
                 value={localDateFilter}
@@ -721,7 +805,7 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
             </div>
           )}
 
-          <div style={{ minWidth: '210px' }}>
+          <div style={{ minWidth: isMobile ? '100%' : '210px', flex: isMobile ? '1 1 100%' : 'none' }}>
             <CustomSelect
               options={consultantOptions}
               value={selectedConsultantId}
@@ -733,7 +817,7 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
             />
           </div>
 
-          <div style={{ minWidth: '195px' }}>
+          <div style={{ minWidth: isMobile ? '100%' : '195px', flex: isMobile ? '1 1 100%' : 'none' }}>
             <CustomSelect
               options={sourceOptions}
               value={selectedSource}
@@ -871,15 +955,17 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
       <div className="dashboard-kpi-grid sales-perf-kpi-grid" style={{ marginBottom: 0 }}>
         {/* KPI 1: TỔNG LEAD */}
         <div
-          className="stat-card hover-lift total-card"
+          className="stat-card hover-lift"
           style={{
             minHeight: '140px',
             display: 'flex',
             flexDirection: 'column',
             cursor: 'pointer',
             position: 'relative',
-            overflow: 'hidden',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
+            borderRadius: 16,
+            border: '1px solid #e2e8f0',
+            background: '#ffffff',
+            boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)'
           }}
           onClick={() =>
             openDrilldownModal({
@@ -888,26 +974,17 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
             })
           }
         >
-          <div className="decor-svg" style={{ color: 'var(--color-primary)' }}>
-            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-              <circle cx="30" cy="50" r="10" stroke="currentColor" strokeWidth="2" />
-              <circle cx="70" cy="30" r="10" stroke="currentColor" strokeWidth="2" />
-              <circle cx="70" cy="70" r="10" stroke="currentColor" strokeWidth="2" />
-              <path d="M40 50 H 55 V 30 H 60 M 55 50 V 70 H 60" stroke="currentColor" strokeWidth="2" />
-            </svg>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, color: '#64748b' }}>
               TỔNG LEAD
             </span>
             <div
-              className="stat-icon"
               style={{
                 width: '32px',
                 height: '32px',
                 borderRadius: '8px',
-                background: 'var(--color-primary-light)',
-                color: 'var(--color-primary)',
+                background: 'rgba(198, 51, 61, 0.08)',
+                color: '#C6333D',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -919,13 +996,13 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
           </div>
 
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)' }}>
+            <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a' }}>
               {summary.total_leads.toLocaleString('vi-VN')}
             </div>
             <div
               style={{
                 fontSize: '0.74rem',
-                color: 'var(--color-text-muted)',
+                color: '#64748b',
                 marginTop: '4px',
                 marginBottom: '8px',
                 fontWeight: 600,
@@ -935,14 +1012,8 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                 flexWrap: 'wrap'
               }}
             >
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', display: 'inline-block', flexShrink: 0 }} />
-                <span>Đã tương tác: {summary.contacted_leads}</span>
-              </span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', display: 'inline-block', flexShrink: 0 }} />
-                <span>Chưa tương tác: {summary.uncontacted_leads}</span>
-              </span>
+              <span>• Đã tương tác: <strong style={{ color: '#0f172a' }}>{summary.contacted_leads}</strong></span>
+              <span>• Chưa tương tác: <strong style={{ color: summary.uncontacted_leads > 0 ? '#ef4444' : '#10b981' }}>{summary.uncontacted_leads}</strong></span>
               <span
                 onClick={(e) => {
                   e.stopPropagation();
@@ -954,20 +1025,17 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '5px',
-                  padding: '2px 7px',
-                  borderRadius: '999px',
-                  background: 'rgba(124, 58, 237, 0.08)',
-                  border: '1px solid rgba(124, 58, 237, 0.2)',
-                  color: '#6d28d9',
+                  gap: '4px',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  background: '#f1f5f9',
+                  border: 'none',
+                  color: '#334155',
                   cursor: 'pointer'
                 }}
                 title={`Bấm để xem danh sách ${summary.duplicate_profile_count ?? 0} lead trùng hồ sơ (${summary.reassigned_profile_count ?? 0} hồ sơ cũ chia lại + ${summary.duplicate_blocked_count ?? 0} trùng bị chặn)`}
               >
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#7c3aed', display: 'inline-block', flexShrink: 0 }} />
-                <span>
-                  Trùng hồ sơ: {summary.duplicate_profile_count ?? 0} ({summary.reassigned_profile_count ?? 0} chia lại • {summary.duplicate_blocked_count ?? 0} chặn)
-                </span>
+                <span>Trùng: <strong>{summary.duplicate_profile_count ?? 0}</strong> ({summary.reassigned_profile_count ?? 0} chia lại • {summary.duplicate_blocked_count ?? 0} chặn)</span>
               </span>
               <span
                 onClick={(e) => {
@@ -980,25 +1048,20 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '5px',
-                  padding: '2px 7px',
-                  borderRadius: '999px',
-                  background: 'rgba(245, 158, 11, 0.1)',
-                  border: '1px solid rgba(245, 158, 11, 0.24)',
-                  color: '#b45309',
+                  gap: '4px',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  background: '#f1f5f9',
+                  border: 'none',
+                  color: '#334155',
                   cursor: 'pointer'
                 }}
                 title={`Bấm để xem danh sách ${summary.reminder_count ?? 0} lead nhắc lại (<6 tháng)`}
               >
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', display: 'inline-block', flexShrink: 0 }} />
-                <span>Nhắc lại (&lt;6T): {summary.reminder_count ?? 0}</span>
+                <span>Nhắc lại (&lt;6T): <strong>{summary.reminder_count ?? 0}</strong></span>
               </span>
-              <span
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-                title="Lead cá nhân (Self / Giới thiệu) đã tách riêng khỏi mẫu số hiệu suất Lead công ty"
-              >
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#64748b', display: 'inline-block', flexShrink: 0 }} />
-                <span>Đã tách Self/GT: {summary.excluded_personal_count || 0}</span>
+              <span style={{ color: '#94a3b8' }}>
+                Đã tách Self/GT: {summary.excluded_personal_count || 0}
               </span>
             </div>
             <div
@@ -1015,24 +1078,26 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                 </svg>
               )}
               {summary.growth_rate >= 0 ? `+${summary.growth_rate}%` : `${summary.growth_rate}%`}
-              <span className="stat-desc" style={{ color: 'var(--color-text-light)', marginLeft: '4px', fontWeight: 500 }}>
+              <span className="stat-desc" style={{ color: '#94a3b8', marginLeft: '4px', fontWeight: 500 }}>
                 so với kỳ trước • Lead công ty tạo mới
               </span>
             </div>
           </div>
         </div>
 
-        {/* KPI 2: ĐÃ TƯƠNG TÁC & QUALIFIED / WIN */}
+        {/* KPI 2: ĐÃ TƯƠNG TÁC */}
         <div
-          className="stat-card hover-lift distributed-card"
+          className="stat-card hover-lift"
           style={{
             minHeight: '140px',
             display: 'flex',
             flexDirection: 'column',
             cursor: 'pointer',
             position: 'relative',
-            overflow: 'hidden',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
+            borderRadius: 16,
+            border: '1px solid #e2e8f0',
+            background: '#ffffff',
+            boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)'
           }}
           onClick={() =>
             openDrilldownModal({
@@ -1041,25 +1106,17 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
             })
           }
         >
-          <div className="decor-svg" style={{ color: '#3b82f6' }}>
-            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-              <circle cx="45" cy="35" r="15" stroke="currentColor" strokeWidth="2" />
-              <path d="M20 75 C 20 60, 31 50, 45 50 C 59 50, 70 60, 70 75" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              <path d="M75 35 H 89 M 82 28 V 42" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, color: '#64748b' }}>
               ĐÃ TƯƠNG TÁC
             </span>
             <div
-              className="stat-icon"
               style={{
                 width: '32px',
                 height: '32px',
                 borderRadius: '8px',
-                background: 'rgba(59, 130, 246, 0.08)',
-                color: '#3b82f6',
+                background: 'rgba(198, 51, 61, 0.08)',
+                color: '#C6333D',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1071,13 +1128,13 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
           </div>
 
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)' }}>
+            <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a' }}>
               {summary.contacted_leads.toLocaleString('vi-VN')}
             </div>
             <div
               style={{
                 fontSize: '0.74rem',
-                color: 'var(--color-text-muted)',
+                color: '#64748b',
                 marginTop: '4px',
                 marginBottom: '8px',
                 fontWeight: 600,
@@ -1087,9 +1144,20 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                 flexWrap: 'wrap'
               }}
             >
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', display: 'inline-block', flexShrink: 0 }} />
-                <span>Tỷ lệ: {summary.connected_rate}%</span>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  background: getHealthBg(summary.connected_rate),
+                  border: 'none',
+                  color: getHealthColor(summary.connected_rate),
+                  fontWeight: 700
+                }}
+              >
+                Tỷ lệ: {summary.connected_rate}%
               </span>
               <span
                 onClick={(e) => {
@@ -1102,14 +1170,18 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '5px',
-                  textDecoration: 'underline',
-                  textUnderlineOffset: '2px'
+                  gap: '4px',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  background: '#f0fdf4',
+                  border: 'none',
+                  color: '#059669',
+                  fontWeight: 700,
+                  cursor: 'pointer'
                 }}
                 title="Click để mở danh sách Lead Qualified"
               >
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block', flexShrink: 0 }} />
-                <span>Qualified: {summary.qualified_leads}</span>
+                Qualified: {summary.qualified_leads} ({summary.qualified_rate}%)
               </span>
               <span
                 onClick={(e) => {
@@ -1122,23 +1194,29 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '5px',
-                  textDecoration: 'underline',
-                  textUnderlineOffset: '2px'
+                  gap: '4px',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  background: '#f1f5f9',
+                  border: 'none',
+                  color: '#334155',
+                  fontWeight: 600,
+                  cursor: 'pointer'
                 }}
                 title="Click để mở danh sách Lead Win"
               >
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ec4899', display: 'inline-block', flexShrink: 0 }} />
-                <span>Win: {summary.win_funnel_leads ?? funnelAnalytics.winCount}</span>
+                Win: {summary.win_funnel_leads ?? funnelAnalytics.winCount}
               </span>
             </div>
-            <div className="stat-change up" style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <svg viewBox="0 0 24 24" width="8" height="8" fill="currentColor" style={{ flexShrink: 0 }}>
-                <path d="M12 5l9 14H3z" />
-              </svg>
-              {summary.qualified_rate}%
-              <span className="stat-desc" style={{ color: 'var(--color-text-light)', marginLeft: '4px', fontWeight: 500 }}>
-                Qualified • Chưa connect: {summary.unconnected_leads ?? funnelAnalytics.unconnectedCount}
+            <div
+              className={`stat-change ${summary.qualified_rate >= 25 ? 'up' : 'down'}`}
+              style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}
+            >
+              <span style={{ fontWeight: 700, color: getHealthColor(summary.connected_rate) }}>
+                {summary.connected_rate}% kết nối thành công
+              </span>
+              <span className="stat-desc" style={{ color: '#94a3b8', marginLeft: '4px', fontWeight: 500 }}>
+                • Chưa connect: {summary.unconnected_leads ?? funnelAnalytics.unconnectedCount}
               </span>
             </div>
           </div>
@@ -1146,15 +1224,17 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
 
         {/* KPI 3: CHƯA TƯƠNG TÁC */}
         <div
-          className="stat-card hover-lift duplicates-card"
+          className="stat-card hover-lift"
           style={{
             minHeight: '140px',
             display: 'flex',
             flexDirection: 'column',
             cursor: 'pointer',
             position: 'relative',
-            overflow: 'hidden',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
+            borderRadius: 16,
+            border: '1px solid #e2e8f0',
+            background: '#ffffff',
+            boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)'
           }}
           onClick={() =>
             openDrilldownModal({
@@ -1163,24 +1243,17 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
             })
           }
         >
-          <div className="decor-svg" style={{ color: '#f59e0b' }}>
-            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-              <path d="M50 20 L 85 80 H 15 Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-              <path d="M50 40 V 55 M 50 67 H 50.01" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-            </svg>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, color: '#64748b' }}>
               CHƯA TƯƠNG TÁC
             </span>
             <div
-              className="stat-icon"
               style={{
                 width: '32px',
                 height: '32px',
                 borderRadius: '8px',
-                background: 'rgba(245, 158, 11, 0.08)',
-                color: '#f59e0b',
+                background: summary.uncontacted_leads === 0 ? 'rgba(16, 185, 129, 0.08)' : 'rgba(198, 51, 61, 0.08)',
+                color: summary.uncontacted_leads === 0 ? '#10b981' : '#C6333D',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1192,86 +1265,88 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
           </div>
 
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)' }}>
+            <div className="stat-value" style={{ fontWeight: 800, color: summary.uncontacted_leads === 0 ? '#10b981' : '#0f172a' }}>
               {summary.uncontacted_leads.toLocaleString('vi-VN')}
             </div>
             <div
               style={{
                 fontSize: '0.75rem',
-                color: 'var(--color-text-muted)',
+                color: '#64748b',
                 marginTop: '4px',
                 marginBottom: '8px',
                 fontWeight: 600,
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px',
+                gap: '8px 10px',
                 flexWrap: 'wrap'
               }}
             >
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', display: 'inline-block', flexShrink: 0 }} />
-                <span>Tỷ lệ chưa tương tác: {summary.uncontacted_rate}%</span>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  background: summary.uncontacted_rate <= 10 ? '#f0fdf4' : summary.uncontacted_rate <= 25 ? '#fffbeb' : '#fef2f2',
+                  border: 'none',
+                  color: summary.uncontacted_rate <= 10 ? '#10b981' : summary.uncontacted_rate <= 25 ? '#f59e0b' : '#ef4444',
+                  fontWeight: 700
+                }}
+              >
+                Tỷ lệ: {summary.uncontacted_rate}%
               </span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', display: 'inline-block', flexShrink: 0 }} />
-                <span>Chưa gọi &amp; chưa ghi chú</span>
-              </span>
+              <span style={{ color: '#64748b' }}>Chưa gọi &amp; chưa ghi chú tư vấn</span>
             </div>
             <div
               className={`stat-change ${summary.uncontacted_leads === 0 ? 'up' : 'down'}`}
               style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}
             >
               {summary.uncontacted_leads === 0 ? (
-                <svg viewBox="0 0 24 24" width="8" height="8" fill="currentColor" style={{ flexShrink: 0 }}>
-                  <path d="M12 5l9 14H3z" />
-                </svg>
+                <CheckCircle2 size={13} style={{ color: '#10b981', flexShrink: 0 }} />
               ) : (
-                <svg viewBox="0 0 24 24" width="8" height="8" fill="currentColor" style={{ flexShrink: 0 }}>
-                  <path d="M12 19L3 5h18z" />
-                </svg>
+                <AlertTriangle size={13} style={{ color: '#ef4444', flexShrink: 0 }} />
               )}
-              {summary.uncontacted_leads} lead
-              <span className="stat-desc" style={{ color: 'var(--color-text-light)', marginLeft: '4px', fontWeight: 500 }}>
-                • Click mở danh sách kiểm tra ngay
+              <span style={{ fontWeight: 700, color: summary.uncontacted_leads === 0 ? '#10b981' : '#ef4444' }}>
+                {summary.uncontacted_leads === 0 ? 'Tuyệt đối kỷ luật (0 tồn đọng)' : `${summary.uncontacted_leads} lead cần xử lý gấp`}
+              </span>
+              <span className="stat-desc" style={{ color: '#94a3b8', marginLeft: '4px', fontWeight: 500 }}>
+                • Click xem ngay
               </span>
             </div>
           </div>
         </div>
 
-        {/* KPI 4: DOANH SỐ SALE THU VỀ */}
+        {/* KPI 4: DOANH THU DỰ KIẾN & THỰC THU */}
         <div
-          className="stat-card hover-lift errors-card"
+          className="stat-card hover-lift"
           style={{
             minHeight: '140px',
             display: 'flex',
             flexDirection: 'column',
             cursor: 'pointer',
             position: 'relative',
-            overflow: 'hidden',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
+            borderRadius: 16,
+            border: '1px solid #e2e8f0',
+            background: '#ffffff',
+            boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)'
           }}
           onClick={() => {
             const el = document.getElementById('sales-orders-revenue-section');
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }}
         >
-          <div className="decor-svg" style={{ color: '#ef4444' }}>
-            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-              <path d="M55 15 L 25 55 H 50 L 45 85 L 75 45 H 50 Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-            </svg>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, color: '#64748b' }}>
               DOANH THU DỰ KIẾN &amp; THỰC THU
             </span>
             <div
-              className="stat-icon"
               style={{
                 width: '32px',
                 height: '32px',
                 borderRadius: '8px',
-                background: 'rgba(16, 185, 129, 0.08)',
-                color: '#10b981',
+                background: 'rgba(198, 51, 61, 0.08)',
+                color: '#C6333D',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1283,33 +1358,31 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
           </div>
 
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)', fontSize: '1.45rem', display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
+            <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a', fontSize: '1.45rem', display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
               <span>{formatVND(summary.won_value)}</span>
-              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b' }}>
                 (Dự kiến • {summary.won_deals} đơn SO)
               </span>
             </div>
             <div
               style={{
                 fontSize: '0.75rem',
-                color: 'var(--color-text-muted)',
+                color: '#64748b',
                 marginTop: '5px',
                 marginBottom: '8px',
                 fontWeight: 600,
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px',
+                gap: '8px 10px',
                 flexWrap: 'wrap'
               }}
             >
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#059669', fontWeight: 700 }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block', flexShrink: 0 }} />
-                <span>Thực thu: {formatVND(summary.approved_value || 0)}</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '6px', background: '#f0fdf4', border: 'none', color: '#059669', fontWeight: 700 }}>
+                Thực thu: {formatVND(summary.approved_value || 0)}
               </span>
               {Number(summary.pending_value || 0) > 0 && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', display: 'inline-block', flexShrink: 0 }} />
-                  <span>Còn thu: {formatVND(summary.pending_value || 0)}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '6px', background: '#fffbeb', border: 'none', color: '#d97706', fontWeight: 600 }}>
+                  Còn thu: {formatVND(summary.pending_value || 0)}
                 </span>
               )}
             </div>
@@ -1327,13 +1400,314 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                 </svg>
               )}
               {(summary.revenue_growth_rate ?? 0) >= 0 ? `+${summary.revenue_growth_rate ?? 0}%` : `${summary.revenue_growth_rate ?? 0}%`}
-              <span className="stat-desc" style={{ color: 'var(--color-text-light)', marginLeft: '4px', fontWeight: 500 }}>
+              <span className="stat-desc" style={{ color: '#94a3b8', marginLeft: '4px', fontWeight: 500 }}>
                 so với kỳ trước ({summary.prev_won_deals || 0} đơn)
               </span>
             </div>
           </div>
         </div>
       </div>
+
+      {/* SECTION: BIỂU ĐỒ XU HƯỚNG LEAD MỚI & XỬ LÝ THEO NGÀY */}
+      {dailyVelocity.length > 0 && (
+        <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(198, 51, 61, 0.08)', color: '#C6333D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <BarChart3 size={17} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>
+                  Xu Hướng Lead Mới &amp; Xử Lý Tương Tác Theo Ngày
+                </h3>
+                <p style={{ margin: '2px 0 0 0', fontSize: '0.78rem', color: '#64748b' }}>
+                  Đối soát lưu lượng Lead tiếp nhận vs Tốc độ xử lý của Đội ngũ Tư vấn theo từng ngày
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', fontSize: '0.78rem', fontWeight: 600 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: '#334155', display: 'inline-block' }} />
+                <span style={{ color: '#0f172a' }}>Tổng Lead mới</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: '#C6333D', display: 'inline-block' }} />
+                <span style={{ color: '#0f172a' }}>Đã tương tác</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: '#10b981', display: 'inline-block' }} />
+                <span style={{ color: '#0f172a' }}>Lead Qualified</span>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ width: '100%', height: 260 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={dailyVelocity} margin={{ top: 20, right: 10, left: -15, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }} />
+                <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                <Tooltip
+                  cursor={{ fill: 'rgba(241, 245, 249, 0.6)' }}
+                  contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)' }}
+                  labelStyle={{ fontWeight: 700, color: '#0f172a', marginBottom: 4 }}
+                />
+                <Bar dataKey="total_leads" fill="#334155" radius={[4, 4, 0, 0]} maxBarSize={32} name="Tổng Lead mới">
+                  <LabelList dataKey="total_leads" position="top" style={{ fill: '#334155', fontSize: 10, fontWeight: 700 }} offset={4} />
+                </Bar>
+                <Bar dataKey="contacted_leads" fill="#C6333D" radius={[4, 4, 0, 0]} maxBarSize={32} name="Đã tương tác">
+                  <LabelList dataKey="contacted_leads" position="top" style={{ fill: '#C6333D', fontSize: 10, fontWeight: 700 }} offset={4} />
+                </Bar>
+                <Bar dataKey="qualified_leads" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={32} name="Lead Qualified">
+                  <LabelList dataKey="qualified_leads" position="top" style={{ fill: '#10b981', fontSize: 10, fontWeight: 700 }} offset={4} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* SECTION: MA TRẬN CHUYỂN ĐỔI THEO NGUỒN + TỐC ĐỘ PHẢN HỒI SLA */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))', gap: '1.25rem', alignItems: 'stretch' }}>
+        {/* Left: Ma trận Hiệu quả Chuyển đổi theo Nguồn / Chiến dịch */}
+        <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(198, 51, 61, 0.08)', color: '#C6333D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <TrendingUp size={17} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>
+                  Ma Trận Chuyển Đổi Theo Nguồn / Kênh
+                </h3>
+                <p style={{ margin: '2px 0 0 0', fontSize: '0.76rem', color: '#64748b' }}>
+                  Xếp hạng kênh theo Tỷ lệ tương tác &amp; Lead Qualified
+                </p>
+              </div>
+            </div>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: '#f1f5f9', color: '#334155' }}>
+              {sources.length} nguồn
+            </span>
+          </div>
+
+          <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: 310, overflowY: 'auto', paddingRight: 4 }}>
+            {sources.slice(0, 8).map((src, sIdx) => {
+              const connRate = src.total_leads > 0 ? src.connected_rate : 0;
+              const qualRate = src.total_leads > 0 ? src.qualified_rate : 0;
+              const barColor = getHealthColor(connRate);
+              return (
+                <div
+                  key={src.source + sIdx}
+                  onClick={() => openDrilldownModal({ type: 'all', title: `Nguồn: ${src.source}`, source: src.source })}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 10,
+                    background: '#f8fafc',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6,
+                    transition: 'all 0.15s ease'
+                  }}
+                  className="hover-lift"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+                      <span style={{ fontSize: sIdx < 3 ? '1rem' : '0.72rem', fontWeight: 700, color: '#64748b', width: 20, textAlign: 'center' }}>
+                        {sIdx === 0 ? '🥇' : sIdx === 1 ? '🥈' : sIdx === 2 ? '🥉' : `#${sIdx + 1}`}
+                      </span>
+                      <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {src.source}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0f172a' }}>
+                        {src.total_leads} lead
+                      </span>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 700, color: barColor, padding: '2px 6px', borderRadius: 4, background: getHealthBg(connRate) }}>
+                        {connRate}% tương tác
+                      </span>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>
+                        • {src.qualified_leads} QLF ({qualRate}%)
+                      </span>
+                      {src.won_count > 0 && (
+                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#059669', padding: '2px 6px', borderRadius: 4, background: '#f0fdf4' }}>
+                          {src.won_count} won ({formatVND(src.won_value)})
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ width: '100%', height: 5, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ width: `${Math.min(100, connRate)}%`, height: '100%', background: barColor, borderRadius: 4 }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Right: Phân tích Tốc độ Phản hồi SLA & Khung giờ Vàng */}
+        <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(198, 51, 61, 0.08)', color: '#C6333D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Clock size={17} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>
+                  Tốc Độ Phản Hồi SLA &amp; Khung Giờ Vàng
+                </h3>
+                <p style={{ margin: '2px 0 0 0', fontSize: '0.76rem', color: '#64748b' }}>
+                  Thời gian kết nối cuộc gọi/tin nhắn đầu tiên sau khi nhận Data
+                </p>
+              </div>
+            </div>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: '#f1f5f9', color: '#334155' }}>
+              Tổng: {summary.total_leads} lead
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem', flex: 1, alignItems: 'center' }}>
+            {/* SLA Block 1: Fast <15m */}
+            <div style={{ padding: '12px', borderRadius: 12, background: '#f0fdf4', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#166534' }}>Siêu tốc (&lt; 15 phút)</span>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#166534', background: '#dcfce7', padding: '1px 6px', borderRadius: 4 }}>
+                  {slaBreakdown?.fast_15m?.pct ?? 0}%
+                </span>
+              </div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#15803d' }}>
+                {slaBreakdown?.fast_15m?.count ?? 0} <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>lead</span>
+              </div>
+              <div style={{ width: '100%', height: 4, background: '#bbf7d0', borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{ width: `${slaBreakdown?.fast_15m?.pct ?? 0}%`, height: '100%', background: '#16a34a', borderRadius: 4 }} />
+              </div>
+            </div>
+
+            {/* SLA Block 2: Standard 15m-2h */}
+            <div style={{ padding: '12px', borderRadius: 12, background: '#fffbeb', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#92400e' }}>Tiêu chuẩn (15p – 2h)</span>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#92400e', background: '#fef3c7', padding: '1px 6px', borderRadius: 4 }}>
+                  {slaBreakdown?.standard_2h?.pct ?? 0}%
+                </span>
+              </div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#b45309' }}>
+                {slaBreakdown?.standard_2h?.count ?? 0} <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>lead</span>
+              </div>
+              <div style={{ width: '100%', height: 4, background: '#fde68a', borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{ width: `${slaBreakdown?.standard_2h?.pct ?? 0}%`, height: '100%', background: '#d97706', borderRadius: 4 }} />
+              </div>
+            </div>
+
+            {/* SLA Block 3: Slow >2h */}
+            <div style={{ padding: '12px', borderRadius: 12, background: '#fef2f2', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#991b1b' }}>Chậm (&gt; 2 giờ)</span>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#991b1b', background: '#fee2e2', padding: '1px 6px', borderRadius: 4 }}>
+                  {slaBreakdown?.slow_2h?.pct ?? 0}%
+                </span>
+              </div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#b91c1c' }}>
+                {slaBreakdown?.slow_2h?.count ?? 0} <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>lead</span>
+              </div>
+              <div style={{ width: '100%', height: 4, background: '#fecaca', borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{ width: `${slaBreakdown?.slow_2h?.pct ?? 0}%`, height: '100%', background: '#dc2626', borderRadius: 4 }} />
+              </div>
+            </div>
+
+            {/* SLA Block 4: Uncontacted */}
+            <div
+              onClick={() => openDrilldownModal({ type: 'uncontacted', title: 'Danh sách Lead Chưa tương tác' })}
+              style={{ padding: '12px', borderRadius: 12, background: '#fff1f2', display: 'flex', flexDirection: 'column', gap: 6, cursor: 'pointer' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#C6333D' }}>Chưa tương tác</span>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#ffffff', background: '#C6333D', padding: '1px 6px', borderRadius: 4 }}>
+                  {slaBreakdown?.uncontacted?.pct ?? summary.uncontacted_rate}%
+                </span>
+              </div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#991B1B' }}>
+                {slaBreakdown?.uncontacted?.count ?? summary.uncontacted_leads} <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>lead</span>
+              </div>
+              <div style={{ width: '100%', height: 4, background: '#fecdd3', borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{ width: `${slaBreakdown?.uncontacted?.pct ?? summary.uncontacted_rate}%`, height: '100%', background: '#C6333D', borderRadius: 4 }} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION: PHÂN BỔ LEAD THEO CHƯƠNG TRÌNH / TRƯỜNG ĐÀO TẠO */}
+      {programBreakdown.length > 0 && (
+        <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(198, 51, 61, 0.08)', color: '#C6333D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <GraduationCap size={17} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>
+                  Phân Bổ Lead Theo Chương Trình / Trường Đào Tạo
+                </h3>
+                <p style={{ margin: '2px 0 0 0', fontSize: '0.78rem', color: '#64748b' }}>
+                  Theo dõi số lượng Lead, tỷ lệ Qualified và Doanh thu theo từng Trường / Viện
+                </p>
+              </div>
+            </div>
+
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: '#f1f5f9', color: '#334155' }}>
+              {programBreakdown.length} chương trình
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.75rem' }}>
+            {programBreakdown.map((prog, pIdx) => {
+              const pContactRate = prog.total_leads > 0 ? prog.contact_rate : 0;
+              const pQualRate = prog.total_leads > 0 ? prog.qualified_rate : 0;
+              const healthColor = getHealthColor(pContactRate);
+              return (
+                <div
+                  key={prog.program + pIdx}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: 12,
+                    background: '#f8fafc',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                      <Building2 size={14} color="#334155" style={{ flexShrink: 0 }} />
+                      <strong style={{ fontSize: '0.85rem', color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {prog.program}
+                      </strong>
+                    </div>
+                    <span style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0f172a', flexShrink: 0 }}>
+                      {prog.total_leads} <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>lead</span>
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.73rem', color: '#64748b' }}>
+                    <span>Tương tác: <strong style={{ color: healthColor }}>{pContactRate}%</strong></span>
+                    <span>Qualified: <strong style={{ color: '#059669' }}>{prog.qualified_leads} ({pQualRate}%)</strong></span>
+                    {prog.won_count > 0 && (
+                      <span style={{ color: '#166534', fontWeight: 700 }}>Won: {prog.won_count}</span>
+                    )}
+                  </div>
+
+                  <div style={{ width: '100%', height: 5, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ width: `${Math.min(100, pContactRate)}%`, height: '100%', background: healthColor, borderRadius: 4 }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* SECTION 1 (FULL WIDTH): BẢNG XẾP HẠNG HIỆU SUẤT ĐỘI NGŨ SALE */}
       <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -1385,7 +1759,7 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                 pagedSales.map((s) => {
                   const isTop1 = s.rank === 1 && s.won_value > 0;
                   const displayContactRate = s.assigned_leads > 0 ? s.contact_rate : 0;
-                  const rateColor = displayContactRate >= 90 ? '#10b981' : displayContactRate >= 75 ? '#f59e0b' : '#ef4444';
+                  const rateColor = displayContactRate >= 80 ? '#10b981' : displayContactRate >= 50 ? '#f59e0b' : '#ef4444';
                   const qualPct = s.assigned_leads > 0 ? Math.round((s.qualified_leads / s.assigned_leads) * 100) : 0;
 
                   return (
@@ -1399,29 +1773,30 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                     >
                       {/* Rank */}
                       <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: 26,
-                            height: 26,
-                            borderRadius: '50%',
-                            fontSize: '0.75rem',
-                            fontWeight: 800,
-                            background:
-                              s.rank === 1
-                                ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
-                                : s.rank === 2
-                                ? 'rgba(100, 116, 139, 0.15)'
-                                : s.rank === 3
-                                ? 'rgba(180, 83, 9, 0.12)'
-                                : 'var(--color-bg)',
-                            color: s.rank === 1 ? '#ffffff' : 'var(--color-text)'
-                          }}
-                        >
-                          {s.rank}
-                        </span>
+                        {s.rank === 1 ? (
+                          <span style={{ fontSize: '1.25rem' }} title="Top 1">🥇</span>
+                        ) : s.rank === 2 ? (
+                          <span style={{ fontSize: '1.25rem' }} title="Top 2">🥈</span>
+                        ) : s.rank === 3 ? (
+                          <span style={{ fontSize: '1.25rem' }} title="Top 3">🥉</span>
+                        ) : (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: 26,
+                              height: 26,
+                              borderRadius: '50%',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              background: '#f1f5f9',
+                              color: '#64748b'
+                            }}
+                          >
+                            {s.rank}
+                          </span>
+                        )}
                       </td>
 
                       {/* Consultant Info */}
@@ -1433,7 +1808,7 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                               onClick={() => handleTopConsultantChange(selectedConsultantId === s.user_id ? 0 : s.user_id)}
                               style={{
                                 fontWeight: 700,
-                                color: selectedConsultantId === s.user_id ? 'var(--color-primary)' : 'var(--color-text)',
+                                color: selectedConsultantId === s.user_id ? '#C6333D' : '#0f172a',
                                 cursor: 'pointer',
                                 display: 'flex',
                                 alignItems: 'center',
@@ -1443,12 +1818,12 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                             >
                               <span>{s.full_name}</span>
                               {isTop1 && (
-                                <span style={{ fontSize: '0.65rem', padding: '1px 6px', borderRadius: 4, background: 'rgba(245, 158, 11, 0.14)', color: '#d97706', fontWeight: 800 }}>
+                                <span style={{ fontSize: '0.65rem', padding: '1px 6px', borderRadius: 4, background: '#fffbeb', color: '#d97706', fontWeight: 800 }}>
                                   TOP 1
                                 </span>
                               )}
                             </div>
-                            <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                            <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
                               {s.job_title || 'Chuyên viên Tư vấn'}
                             </div>
                           </div>
@@ -1467,13 +1842,13 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                               })
                             }
                             style={{
-                              border: '1px solid var(--color-border-light)',
-                              background: 'var(--color-surface)',
+                              border: 'none',
+                              background: '#f1f5f9',
                               padding: '4px 10px',
                               borderRadius: 8,
                               fontWeight: 800,
                               fontSize: '0.8125rem',
-                              color: 'var(--color-text)',
+                              color: '#0f172a',
                               cursor: 'pointer'
                             }}
                             title={`Mở danh sách ${s.assigned_leads} lead mới của ${s.full_name}`}
@@ -1494,9 +1869,9 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                                     });
                                   }}
                                   style={{
-                                    border: '1px solid rgba(124, 58, 237, 0.22)',
-                                    background: 'rgba(124, 58, 237, 0.08)',
-                                    color: '#6d28d9',
+                                    border: 'none',
+                                    background: '#f8fafc',
+                                    color: '#64748b',
                                     borderRadius: 999,
                                     padding: '1px 6px',
                                     fontSize: '0.66rem',
@@ -1521,9 +1896,9 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                                     });
                                   }}
                                   style={{
-                                    border: '1px solid rgba(245, 158, 11, 0.25)',
-                                    background: 'rgba(245, 158, 11, 0.1)',
-                                    color: '#b45309',
+                                    border: 'none',
+                                    background: '#f8fafc',
+                                    color: '#64748b',
                                     borderRadius: 999,
                                     padding: '1px 6px',
                                     fontSize: '0.66rem',
@@ -1555,14 +1930,14 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                           title={`Mở danh sách ${s.contacted_leads} lead đã tương tác của ${s.full_name}`}
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                            <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>
+                            <span style={{ fontWeight: 700, color: '#0f172a' }}>
                               {s.contacted_leads}/{s.assigned_leads} lead
                             </span>
-                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: rateColor }}>
                               {displayContactRate}%
                             </span>
                           </div>
-                          <div style={{ width: '100%', height: 6, background: 'var(--color-bg)', borderRadius: 4, overflow: 'hidden' }}>
+                          <div style={{ width: '100%', height: 6, background: '#f1f5f9', borderRadius: 4, overflow: 'hidden' }}>
                             <div style={{ width: `${Math.min(100, displayContactRate)}%`, height: '100%', background: rateColor, borderRadius: 4 }} />
                           </div>
                         </div>
@@ -1580,9 +1955,9 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                               })
                             }
                             style={{
-                              border: '1px solid rgba(239, 68, 68, 0.25)',
-                              background: 'rgba(239, 68, 68, 0.08)',
-                              color: 'var(--color-danger)',
+                              border: 'none',
+                              background: '#fef2f2',
+                              color: '#ef4444',
                               padding: '4px 10px',
                               borderRadius: 8,
                               fontWeight: 700,
@@ -1603,11 +1978,11 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: 4,
-                              padding: '3px 9px',
+                              padding: '4px 10px',
                               borderRadius: 8,
-                              background: 'rgba(16, 185, 129, 0.08)',
-                              color: 'var(--color-success)',
-                              fontSize: '0.72rem',
+                              background: '#f0fdf4',
+                              color: '#10b981',
+                              fontSize: '0.74rem',
                               fontWeight: 700
                             }}
                           >
@@ -1627,9 +2002,9 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                             })
                           }
                           style={{
-                            border: '1px solid rgba(16, 185, 129, 0.25)',
-                            background: 'rgba(16, 185, 129, 0.07)',
-                            padding: '3px 10px',
+                            border: 'none',
+                            background: '#f0fdf4',
+                            padding: '4px 10px',
                             borderRadius: 8,
                             fontWeight: 700,
                             fontSize: '0.76rem',
@@ -2805,15 +3180,20 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
           {/* Modal Toolbar: Explicit Segmented Pill Switcher + Search + Sale/Source Filters */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
             <div
+              className="touch-scroll-x"
               style={{
-                display: 'inline-flex',
+                display: isMobile ? 'flex' : 'inline-flex',
                 alignItems: 'center',
                 gap: '4px',
                 padding: '4px',
                 background: 'var(--color-bg)',
                 border: '1px solid var(--color-border-light)',
                 borderRadius: '10px',
-                flexWrap: 'wrap'
+                flexWrap: isMobile ? 'nowrap' : 'wrap',
+                overflowX: isMobile ? 'auto' : 'visible',
+                width: isMobile ? '100%' : 'auto',
+                scrollbarWidth: 'none',
+                WebkitOverflowScrolling: 'touch'
               }}
             >
               {[
@@ -2862,7 +3242,7 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <div style={{ position: 'relative', minWidth: '210px' }}>
+              <div style={{ position: 'relative', minWidth: isMobile ? '100%' : '210px', flex: isMobile ? '1 1 100%' : 'none' }}>
                 <Search
                   size={14}
                   style={{
@@ -2886,7 +3266,7 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                 />
               </div>
 
-              <div style={{ minWidth: '185px' }}>
+              <div style={{ minWidth: isMobile ? '100%' : '185px', flex: isMobile ? '1 1 100%' : 'none' }}>
                 <CustomSelect
                   options={consultantOptions}
                   value={drillModal.consultantId}
@@ -2901,7 +3281,7 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                 />
               </div>
 
-              <div style={{ minWidth: '170px' }}>
+              <div style={{ minWidth: isMobile ? '100%' : '170px', flex: isMobile ? '1 1 100%' : 'none' }}>
                 <CustomSelect
                   options={sourceOptions}
                   value={drillModal.source}

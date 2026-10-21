@@ -72,7 +72,7 @@ const ZaloReportTab: React.FC<ZaloReportProps> = ({ dateRange }) => {
             label: 'THÀNH VIÊN MỚI', 
             value: totals.new_followers + totals.non_follower_interactions, 
             icon: <TrendingUp />, 
-            color: '#6366f1',
+            color: '#C6333D',
             decor: (
                 <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
                     <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
@@ -86,7 +86,7 @@ const ZaloReportTab: React.FC<ZaloReportProps> = ({ dateRange }) => {
             label: 'QUAN TÂM', 
             value: totals.total_followers, 
             icon: <Heart />, 
-            color: '#f43f5e',
+            color: '#0f172a',
             decor: (
                 <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
                     <circle cx="50" cy="50" r="38" stroke="currentColor" strokeWidth="2" />
@@ -99,7 +99,7 @@ const ZaloReportTab: React.FC<ZaloReportProps> = ({ dateRange }) => {
             label: 'TIN NHẮN ZNS/ZBS', 
             value: totals.sent_zns, 
             icon: <Send />, 
-            color: '#3b82f6',
+            color: '#334155',
             decor: (
                 <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
                     <rect x="15" y="15" width="70" height="70" rx="20" stroke="currentColor" strokeWidth="2" strokeDasharray="5 5" />
@@ -112,7 +112,7 @@ const ZaloReportTab: React.FC<ZaloReportProps> = ({ dateRange }) => {
             label: 'KÍCH HOẠT AUTOMATION', 
             value: totals.automation, 
             icon: <Zap />, 
-            color: '#8b5cf6',
+            color: '#64748b',
             decor: (
                 <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
                     <path d="M50 10 L85 50 L50 90 L15 50 Z" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
@@ -176,7 +176,7 @@ const ZaloReportTab: React.FC<ZaloReportProps> = ({ dateRange }) => {
                             <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Tăng trưởng & Quan tâm</h3>
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Số lượng người quan tâm tích lũy</p>
                         </div>
-                        <TrendingUp className="w-6 h-6 text-blue-500 opacity-20" />
+                        <TrendingUp className="w-5 h-5 text-[#C6333D]" />
                     </div>
                     <div className="h-[300px]">
                         {loading ? (
@@ -190,15 +190,15 @@ const ZaloReportTab: React.FC<ZaloReportProps> = ({ dateRange }) => {
                                 <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                     <defs>
                                         <linearGradient id="colorNew" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                                            <stop offset="5%" stopColor="#C6333D" stopOpacity={0.18} />
+                                            <stop offset="95%" stopColor="#C6333D" stopOpacity={0} />
                                         </linearGradient>
                                     </defs>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                     <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} dy={10} />
                                     <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} />
                                     <Tooltip contentStyle={{ border: 'none', borderRadius: '24px', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)', padding: '16px' }} />
-                                    <Area type="monotone" dataKey="new_followers" name="Mới" stroke="#3b82f6" strokeWidth={4} fill="url(#colorNew)" />
+                                    <Area type="monotone" dataKey="new_followers" name="Mới" stroke="#C6333D" strokeWidth={3} fill="url(#colorNew)" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         )}
@@ -211,7 +211,7 @@ const ZaloReportTab: React.FC<ZaloReportProps> = ({ dateRange }) => {
                             <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Tương tác khách lạ</h3>
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Khách chưa nhấn quan tâm nhưng có nhắn tin</p>
                         </div>
-                        <MessageSquare className="w-6 h-6 text-emerald-500 opacity-20" />
+                        <MessageSquare className="w-5 h-5 text-[#334155]" />
                     </div>
                     <div className="h-[300px]">
                         {loading ? (
@@ -227,7 +227,7 @@ const ZaloReportTab: React.FC<ZaloReportProps> = ({ dateRange }) => {
                                     <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} dy={10} />
                                     <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} />
                                     <Tooltip contentStyle={{ border: 'none', borderRadius: '24px', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)', padding: '16px' }} cursor={{ fill: '#f8fafc' }} />
-                                    <Bar dataKey="non_follower_interactions" name="Tương tác" fill="#10b981" radius={[8, 8, 0, 0]} barSize={20} />
+                                    <Bar dataKey="non_follower_interactions" name="Tương tác" fill="#0f172a" radius={[6, 6, 0, 0]} barSize={20} />
                                 </BarChart>
                             </ResponsiveContainer>
                         )}
@@ -240,7 +240,7 @@ const ZaloReportTab: React.FC<ZaloReportProps> = ({ dateRange }) => {
                             <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Vận hành Automation</h3>
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Số lượt kích hoạt kịch bản tự động</p>
                         </div>
-                        <Zap className="w-6 h-6 text-[var(--color-primary)] opacity-20" />
+                        <Zap className="w-5 h-5 text-[#C6333D]" />
                     </div>
                     <div className="h-[350px]">
                         {loading ? (
@@ -255,7 +255,7 @@ const ZaloReportTab: React.FC<ZaloReportProps> = ({ dateRange }) => {
                                     <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} dy={10} />
                                     <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} />
                                     <Tooltip contentStyle={{ border: 'none', borderRadius: '24px', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)', padding: '16px' }} />
-                                    <Area type="monotone" dataKey="automation" name="Kích hoạt" stroke="#7c3aed" strokeWidth={4} fill="none" />
+                                    <Area type="monotone" dataKey="automation" name="Kích hoạt" stroke="#C6333D" strokeWidth={3} fill="none" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         )}

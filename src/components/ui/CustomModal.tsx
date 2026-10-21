@@ -187,7 +187,7 @@ export const CustomModal: React.FC<CustomModalProps> = ({
             <div
               ref={modalContentRef}
               className={modalClass}
-              style={{ width: (isMobile && !centeredOnMobile) ? '100vw' : '100%', maxWidth: (isMobile && !centeredOnMobile) ? '100vw' : resolvedWidth }}
+              style={{ width: '100%', maxWidth: (isMobile && !centeredOnMobile) ? '100%' : resolvedWidth }}
             >
               <div className={styles.dragHandle} />
               {title && (
@@ -240,7 +240,7 @@ export const CustomModal: React.FC<CustomModalProps> = ({
             <motion.div
               ref={modalContentRef}
               className={modalClass}
-              style={{ width: (isMobile && !centeredOnMobile) ? '100vw' : '100%', maxWidth: (isMobile && !centeredOnMobile) ? '100vw' : resolvedWidth }}
+              style={{ width: '100%', maxWidth: (isMobile && !centeredOnMobile) ? '100%' : resolvedWidth }}
               {...motionProps}
               {...dragProps}
             >

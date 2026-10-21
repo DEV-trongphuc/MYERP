@@ -9839,70 +9839,36 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       <>
         <style>{`
           .stat-card {
+            border: 1px solid #e2e8f0 !important;
+            border-radius: 16px !important;
+            background: #ffffff !important;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
             position: relative;
             overflow: hidden;
-            background: linear-gradient(135deg, var(--color-surface) 0%, #f9fafb 100%) !important;
-            border: 1px solid var(--color-border) !important;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
           }
           [data-theme="dark"] .stat-card {
-            background: linear-gradient(135deg, var(--color-surface) 0%, #151517 100%) !important;
-            border: 1px solid var(--color-border-light) !important;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+            background: #1e293b !important;
+            border-color: #334155 !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
           }
-          .stat-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08) !important;
+          .stat-card:hover,
+          .stat-card.total-card:hover,
+          .stat-card.distributed-card:hover,
+          .stat-card.personal-card:hover,
+          .stat-card.error_ticket-card:hover {
+            border-color: #cbd5e1 !important;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06) !important;
+            transform: none !important;
           }
           [data-theme="dark"] .stat-card:hover {
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(255, 255, 255, 0.03) !important;
+            border-color: #475569 !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
           }
-          .stat-card.total-card:hover {
-            border-color: rgba(163, 20, 34, 0.4) !important;
-            box-shadow: 0 8px 24px rgba(163, 20, 34, 0.08), 0 0 15px rgba(163, 20, 34, 0.03) !important;
-          }
-          [data-theme="dark"] .stat-card.total-card:hover {
-            border-color: rgba(163, 20, 34, 0.6) !important;
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 20px rgba(163, 20, 34, 0.25) !important;
-          }
-          .stat-card.distributed-card:hover {
-            border-color: rgba(0, 122, 245, 0.4) !important;
-            box-shadow: 0 8px 24px rgba(0, 122, 245, 0.08), 0 0 15px rgba(0, 122, 245, 0.03) !important;
-          }
-          [data-theme="dark"] .stat-card.distributed-card:hover {
-            border-color: rgba(0, 122, 245, 0.6) !important;
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 20px rgba(0, 122, 245, 0.25) !important;
-          }
-          .stat-card.personal-card:hover {
-            border-color: rgba(16, 185, 129, 0.4) !important;
-            box-shadow: 0 8px 24px rgba(16, 185, 129, 0.08), 0 0 15px rgba(16, 185, 129, 0.03) !important;
-          }
-          [data-theme="dark"] .stat-card.personal-card:hover {
-            border-color: rgba(16, 185, 129, 0.6) !important;
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 20px rgba(16, 185, 129, 0.25) !important;
-          }
-          .stat-card.error_ticket-card:hover {
-            border-color: rgba(239, 68, 68, 0.4) !important;
-            box-shadow: 0 8px 24px rgba(239, 68, 68, 0.08), 0 0 15px rgba(239, 68, 68, 0.03) !important;
-          }
-          [data-theme="dark"] .stat-card.error_ticket-card:hover {
-            border-color: rgba(239, 68, 68, 0.6) !important;
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 20px rgba(239, 68, 68, 0.25) !important;
-          }
-          .decor-svg {
-            position: absolute;
-            bottom: -15px;
-            right: -15px;
-            width: 100px;
-            height: 100px;
-            opacity: 0.07;
-            pointer-events: none;
-            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-          }
+          .decor-svg,
+          .stat-card .decor-svg,
           .stat-card:hover .decor-svg {
-            transform: scale(1.2) rotate(6deg);
-            opacity: 0.14;
+            display: none !important;
           }
           .stat-icon {
             transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
@@ -10588,11 +10554,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   }
                 }}
               >
-                {/* Decorative Background SVG */}
-                <div className="decor-svg" style={{ color: kpi.color }}>
-                  {kpi.decor}
-                </div>
-
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '6px' : '12px', position: 'relative', zIndex: 2 }}>
                   <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: isMobile ? '0.625rem' : '0.7rem' }}>{kpi.label}</span>
                   <div className="stat-icon" style={{
@@ -17884,12 +17845,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: isMobile ? '0.75rem' : '1.25rem', marginBottom: '0.5rem' }}>
                         {/* Card 1: Ghi chú & Nhật ký */}
                         <div className="stat-card hover-lift personal-card" style={{ display: 'flex', flexDirection: 'column', padding: '1rem', minHeight: isMobile ? '105px' : '120px', borderRadius: '12px', border: '1px solid var(--color-border-light)', position: 'relative', overflow: 'hidden', background: 'var(--color-surface)', boxShadow: 'var(--shadow-sm)' }}>
-                          <div className="decor-svg" style={{ color: '#10b981' }}>
-                            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                              <circle cx="50" cy="50" r="30" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
-                            </svg>
-                          </div>
-                          
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '6px' : '12px', position: 'relative', zIndex: 2 }}>
                             <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: isMobile ? '0.625rem' : '0.7rem', color: 'var(--color-text-muted)' }}>{t('Ghi chú & Nhật ký')}</span>
                             <div className="stat-icon" style={{
@@ -17916,12 +17871,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
                         {/* Card 2: Công việc quan trọng */}
                         <div className="stat-card hover-lift distributed-card" style={{ display: 'flex', flexDirection: 'column', padding: '1rem', minHeight: isMobile ? '105px' : '120px', borderRadius: '12px', border: '1px solid var(--color-border-light)', position: 'relative', overflow: 'hidden', background: 'var(--color-surface)', boxShadow: 'var(--shadow-sm)' }}>
-                          <div className="decor-svg" style={{ color: '#3b82f6' }}>
-                            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                              <path d="M20 20 H 80 V 80 H 20 Z" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
-                            </svg>
-                          </div>
-
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '6px' : '12px', position: 'relative', zIndex: 2 }}>
                             <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: isMobile ? '0.625rem' : '0.7rem', color: 'var(--color-text-muted)' }}>{t('Công việc quan trọng')}</span>
                             <div className="stat-icon" style={{
@@ -17948,17 +17897,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
                         {/* Card 3: Lịch gặp gỡ */}
                         <div className="stat-card hover-lift" style={{ display: 'flex', flexDirection: 'column', padding: '1rem', minHeight: isMobile ? '105px' : '120px', borderRadius: '12px', border: '1px solid var(--color-border-light)', position: 'relative', overflow: 'hidden', background: 'var(--color-surface)', boxShadow: 'var(--shadow-sm)' }}>
-                          <div className="decor-svg" style={{ color: '#BD1D2D' }}>
-                            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                              <path d="M50 20 L80 80 H20 Z" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
-                            </svg>
-                          </div>
-
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '6px' : '12px', position: 'relative', zIndex: 2 }}>
                             <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: isMobile ? '0.625rem' : '0.7rem', color: 'var(--color-text-muted)' }}>{t('Lịch gặp gỡ')}</span>
                             <div className="stat-icon" style={{
-                              color: '#BD1D2D',
-                              background: 'rgba(189, 29, 45, 0.08)',
+                              color: '#C6333D',
+                              background: 'rgba(198, 51, 61, 0.08)',
                               width: isMobile ? '28px' : '36px',
                               height: isMobile ? '28px' : '36px',
                               borderRadius: '50%',
@@ -17980,12 +17923,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
                         {/* Card 4: Cuộc gọi liên hệ */}
                         <div className="stat-card hover-lift" style={{ display: 'flex', flexDirection: 'column', padding: '1rem', minHeight: isMobile ? '105px' : '120px', borderRadius: '12px', border: '1px solid var(--color-border-light)', position: 'relative', overflow: 'hidden', background: 'var(--color-surface)', boxShadow: 'var(--shadow-sm)' }}>
-                          <div className="decor-svg" style={{ color: '#f59e0b' }}>
-                            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                              <circle cx="50" cy="50" r="25" stroke="currentColor" strokeWidth="2" />
-                            </svg>
-                          </div>
-
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '6px' : '12px', position: 'relative', zIndex: 2 }}>
                             <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: isMobile ? '0.625rem' : '0.7rem', color: 'var(--color-text-muted)' }}>{t('Cuộc gọi liên hệ')}</span>
                             <div className="stat-icon" style={{
@@ -20556,14 +20493,14 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               display: 'flex', 
               gap: 12, 
               padding: '1rem', 
-              background: theme === 'dark' ? 'rgba(239, 68, 68, 0.04)' : 'rgba(239, 68, 68, 0.02)', 
-              borderLeft: '4px solid #ef4444', 
+              background: theme === 'dark' ? 'rgba(198, 51, 61, 0.04)' : 'rgba(198, 51, 61, 0.02)', 
+              borderLeft: '4px solid #C6333D', 
               borderTop: '1px solid var(--color-border-light)',
               borderRight: '1px solid var(--color-border-light)',
               borderBottom: '1px solid var(--color-border-light)',
               borderRadius: '0 8px 8px 0'
             }}>
-              <AlertCircle size={20} color="#ef4444" style={{ flexShrink: 0, marginTop: 2 }} />
+              <AlertCircle size={20} color="#C6333D" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
                 <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
                   {t("1. Gửi báo cáo lỗi (Create Ticket)")}
@@ -20578,14 +20515,14 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               display: 'flex', 
               gap: 12, 
               padding: '1rem', 
-              background: theme === 'dark' ? 'rgba(245, 158, 11, 0.04)' : 'rgba(245, 158, 11, 0.02)', 
-              borderLeft: '4px solid #f59e0b', 
+              background: theme === 'dark' ? 'rgba(198, 51, 61, 0.04)' : 'rgba(198, 51, 61, 0.02)', 
+              borderLeft: '4px solid #C6333D', 
               borderTop: '1px solid var(--color-border-light)',
               borderRight: '1px solid var(--color-border-light)',
               borderBottom: '1px solid var(--color-border-light)',
               borderRadius: '0 8px 8px 0'
             }}>
-              <Clock size={20} color="#f59e0b" style={{ flexShrink: 0, marginTop: 2 }} />
+              <Clock size={20} color="#C6333D" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
                 <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
                   {t("2. Admin xét duyệt (Review & Verification)")}
@@ -20600,14 +20537,14 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               display: 'flex', 
               gap: 12, 
               padding: '1rem', 
-              background: theme === 'dark' ? 'rgba(16, 185, 129, 0.04)' : 'rgba(16, 185, 129, 0.02)', 
-              borderLeft: '4px solid #10b981', 
+              background: theme === 'dark' ? 'rgba(198, 51, 61, 0.04)' : 'rgba(198, 51, 61, 0.02)', 
+              borderLeft: '4px solid #C6333D', 
               borderTop: '1px solid var(--color-border-light)',
               borderRight: '1px solid var(--color-border-light)',
               borderBottom: '1px solid var(--color-border-light)',
               borderRadius: '0 8px 8px 0'
             }}>
-              <CheckCircle2 size={20} color="#10b981" style={{ flexShrink: 0, marginTop: 2 }} />
+              <CheckCircle2 size={20} color="#C6333D" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
                 <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
                   {t("3. Cơ chế Đền bù (+1 Lead Credit)")}

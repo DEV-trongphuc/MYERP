@@ -19,6 +19,8 @@ const FlowSummaryModal: React.FC<FlowSummaryModalProps> = ({ isOpen, onClose, fl
     const enrolled = stats.enrolled || 0;
     const completed = stats.completed || 0;
     const completionRate = enrolled > 0 ? Math.round((completed / enrolled) * 100) : 0;
+    const completionPct = Number(completionRate) || 0;
+    const completionColor = completionPct >= 80 ? '#10b981' : completionPct >= 50 ? '#f59e0b' : '#ef4444';
 
     const totalSent = stats.totalSent || 0;
     const totalOpened = stats.totalOpened || 0;
@@ -32,81 +34,33 @@ const FlowSummaryModal: React.FC<FlowSummaryModalProps> = ({ isOpen, onClose, fl
             : 0;
 
     const StatCard = ({ label, value, icon: Icon, color, subValue }: any) => {
-        const hexColor = (() => {
-            const cStr = String(color).toLowerCase();
-            if (cStr.includes('blue') || cStr.includes('indigo')) return '#3b82f6';
-            if (cStr.includes('emerald') || cStr.includes('teal')) return '#10b981';
-            if (cStr.includes('orange') || cStr.includes('amber') || cStr.includes('red')) return '#f59e0b';
-            if (cStr.includes('rose') || cStr.includes('pink')) return '#ec4899';
-            if (cStr.includes('violet') || cStr.includes('purple') || cStr.includes('cyan')) return '#8b5cf6';
-            return '#64748b';
-        })();
-
-        const decorSvg = (() => {
-            if (hexColor === '#10b981') {
-                return (
-                    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                        <rect x="20" y="20" width="60" height="15" rx="7.5" fill="currentColor" fillOpacity="0.6" />
-                        <rect x="20" y="42" width="60" height="15" rx="7.5" fill="currentColor" fillOpacity="0.4" />
-                        <rect x="20" y="64" width="60" height="15" rx="7.5" fill="currentColor" fillOpacity="0.2" />
-                    </svg>
-                );
-            }
-            if (hexColor === '#ec4899') {
-                return (
-                    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                        <circle cx="50" cy="50" r="30" stroke="currentColor" strokeWidth="2" />
-                        <path d="M50 35 V 65 M35 50 H 65" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-                    </svg>
-                );
-            }
-            if (hexColor === '#3b82f6') {
-                return (
-                    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                        <path d="M10 50 Q 50 10 90 50 T 90 90" stroke="currentColor" strokeWidth="2" strokeDasharray="3 3" />
-                        <circle cx="10" cy="50" r="6" fill="currentColor" />
-                        <circle cx="50" cy="10" r="6" fill="currentColor" />
-                        <circle cx="90" cy="50" r="6" fill="currentColor" />
-                        <path d="M50 10 L 90 50" stroke="currentColor" strokeWidth="1.5" />
-                    </svg>
-                );
-            }
-            return (
-                <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                    <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
-                    <circle cx="35" cy="45" r="15" fill="currentColor" fillOpacity="0.2" />
-                    <circle cx="65" cy="45" r="15" fill="currentColor" fillOpacity="0.4" />
-                    <circle cx="50" cy="70" r="18" fill="currentColor" fillOpacity="0.6" />
-                </svg>
-            );
-        })();
+        const isHighlight = label?.includes('Click') || label?.includes('CTR') || label?.includes('Hoàn tất');
+        const isError = label?.includes('lỗi') || label?.includes('Failed');
+        const hexColor = isHighlight ? '#C6333D' : isError ? '#ef4444' : '#334155';
+        const iconBg = isHighlight || isError ? '#fef2f2' : '#f8fafc';
+        const iconBorder = isHighlight || isError ? '#fecdd3' : '#e2e8f0';
 
         return (
-            <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-[14px] border border-slate-100/70 dark:border-slate-800/80 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex flex-col justify-between group hover:shadow-[0_12px_36px_rgba(0,0,0,0.035)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden min-h-[145px] cursor-pointer">
-                {decorSvg && (
-                    <div className="decor-svg" style={{ color: hexColor }}>
-                        {decorSvg}
-                    </div>
-                )}
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-[16px] border border-slate-200 shadow-[0_1px_3px_rgba(15,23,42,0.04)] flex flex-col justify-between group hover:shadow-md transition-all duration-200 relative overflow-hidden min-h-[140px] cursor-pointer">
                 <div className="relative z-10 flex flex-col justify-between h-full w-full">
                     <div>
-                        <div className="flex justify-between items-center mb-3.5">
-                            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest leading-none">
+                        <div className="flex justify-between items-center mb-3">
+                            <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wider leading-none">
                                 {label}
                             </p>
                             <div
-                                className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 relative z-10"
-                                style={{ backgroundColor: `${hexColor}15`, color: hexColor }}
+                                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border"
+                                style={{ backgroundColor: iconBg, borderColor: iconBorder, color: hexColor }}
                             >
                                 <Icon className="w-4 h-4" />
                             </div>
                         </div>
-                        <h4 className="text-xl md:text-2xl font-black text-slate-850 dark:text-slate-100 tracking-tight leading-none mb-2.5">
+                        <h4 className="text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-2 tabular-nums">
                             {value.toLocaleString()}
                         </h4>
                     </div>
                     {subValue && (
-                        <div className="mt-2 text-[10px] font-bold text-slate-450 dark:text-slate-500">
+                        <div className="mt-1 text-xs font-semibold text-slate-500">
                             {subValue}
                         </div>
                     )}
@@ -155,7 +109,7 @@ const FlowSummaryModal: React.FC<FlowSummaryModalProps> = ({ isOpen, onClose, fl
                     <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-10">
                         <div className="w-full md:w-1/2 space-y-6">
                             <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-blue-500 rounded-[14px] flex items-center justify-center shadow-lg shadow-blue-500/20">
+                                <div className="w-12 h-12 rounded-[14px] flex items-center justify-center shadow-lg text-white" style={{ backgroundColor: completionColor, boxShadow: `0 10px 15px -3px ${completionColor}33` }}>
                                     <Activity className="w-6 h-6" />
                                 </div>
                                 <div>
@@ -168,8 +122,8 @@ const FlowSummaryModal: React.FC<FlowSummaryModalProps> = ({ isOpen, onClose, fl
                             <div className="space-y-2">
                                 <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
                                     <div
-                                        className="h-full bg-blue-500 transition-all duration-1000"
-                                        style={{ width: `${completionRate}%` }}
+                                        className="h-full transition-all duration-1000 rounded-full"
+                                        style={{ width: `${Math.min(100, Math.max(0, completionPct))}%`, backgroundColor: completionColor }}
                                     ></div>
                                 </div>
                                 <p className="text-[10px] text-slate-500 font-bold">

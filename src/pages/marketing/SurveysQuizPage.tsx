@@ -502,7 +502,7 @@ const SurveyCard: React.FC<{
                 {/* Metrics row: flat 2-column stats box */}
                 <div className="grid grid-cols-2 gap-2 p-2.5 bg-slate-50/80 dark:bg-white/[0.03] rounded-[14px] border border-slate-200/70 dark:border-white/[0.06] my-3">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-[10px] bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/40 flex items-center justify-center shrink-0">
+                        <div className="w-8 h-8 rounded-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 flex items-center justify-center shrink-0">
                             <Users className="w-4 h-4" />
                         </div>
                         <div className="min-w-0">
@@ -513,7 +513,7 @@ const SurveyCard: React.FC<{
                         </div>
                     </div>
                     <div className="flex items-center gap-2 border-l border-slate-200/70 dark:border-white/[0.06] pl-2">
-                        <div className="w-8 h-8 rounded-[10px] bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/40 flex items-center justify-center shrink-0">
+                        <div className="w-8 h-8 rounded-[10px] bg-red-50 dark:bg-red-950/40 text-[#C6333D] dark:text-[#f87171] border border-red-200 dark:border-red-900/50 flex items-center justify-center shrink-0">
                             <Star className="w-4 h-4" />
                         </div>
                         <div className="min-w-0">
@@ -768,11 +768,11 @@ const Surveys: React.FC = () => {
                     title="Tổng khảo sát"
                     value={surveyStats.total.toLocaleString('vi-VN')}
                     icon={<LayoutGrid />}
-                    color="#6366f1"
+                    color="#334155"
                     loading={!hasLoaded}
                     breakdown={
                         <>
-                            <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Đang chạy: {surveyStats.active}</span>
+                            <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-500" />Đang chạy: {surveyStats.active}</span>
                             <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-400" />Bản nháp: {surveyStats.draft}</span>
                         </>
                     }
@@ -781,7 +781,7 @@ const Surveys: React.FC = () => {
                     title="Đang chạy"
                     value={surveyStats.active.toLocaleString('vi-VN')}
                     icon={<Ticket />}
-                    color="#10b981"
+                    color="#0f172a"
                     loading={!hasLoaded}
                     breakdown={
                         <>
@@ -794,11 +794,11 @@ const Surveys: React.FC = () => {
                     title="Lượt trả lời"
                     value={surveyStats.totalResponses.toLocaleString('vi-VN')}
                     icon={<Users />}
-                    color="#3b82f6"
+                    color="#C6333D"
                     loading={!hasLoaded}
                     breakdown={
                         <span className="flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
                             Hoàn thành TB: {surveyStats.avgCompletion}%
                         </span>
                     }
@@ -807,7 +807,7 @@ const Surveys: React.FC = () => {
                     title="Điểm NPS TB"
                     value={surveyStats.avgNps !== null ? (surveyStats.avgNps > 0 ? `+${surveyStats.avgNps}` : String(surveyStats.avgNps)) : '—'}
                     icon={<Star />}
-                    color="#f59e0b"
+                    color="#64748b"
                     loading={!hasLoaded}
                     breakdown={
                         <span className="flex items-center gap-1.5">
