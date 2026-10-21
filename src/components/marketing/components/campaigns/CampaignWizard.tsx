@@ -770,7 +770,8 @@ const CampaignWizard: React.FC<CampaignWizardProps> = ({
             // Refresh all subscribers state to update existingEmailsSet
             const res = await api.get<Subscriber[]>('subscribers');
             if (res.success) {
-                setAllSubscribers(res.data);
+                const rawSubs = Array.isArray(res.data) ? res.data : ((res.data as any)?.data || []);
+                setAllSubscribers(rawSubs);
             }
         }
     };
@@ -1803,7 +1804,7 @@ const CampaignWizard: React.FC<CampaignWizardProps> = ({
                                     allTags={allTags}
                                     selectedTarget={formData.target as any}
                                     onTargetChange={t => setFormData({ ...formData, target: { ...formData.target!, ...t } })}
-                                    existingEmails={new Set(allSubscribers.map(s => s.email))}
+                                    existingEmails={new Set((Array.isArray(allSubscribers) ? allSubscribers : []).map(s => s.email))}
                                     onImport={handleQuickImport}
                                     campaignType={formData.type}
                                     error={!!errors.target}
@@ -1836,6 +1837,7 @@ const CampaignWizard: React.FC<CampaignWizardProps> = ({
                                     allSegments={allSegments}
                                     allTags={allTags}
                                     allTemplates={allTemplates}
+                                    templatePreviews={templatePreviews}
                                     znsTemplates={znsTemplates}
                                     allFlows={allFlows}
                                     activateFlowId={activateFlowId}
@@ -1947,11 +1949,13 @@ const CampaignWizard: React.FC<CampaignWizardProps> = ({
                                     <h4 className="text-xl font-black text-slate-900 mb-1">Chọn kịch bản kết nối</h4>
                                     <p className="text-sm font-medium text-slate-500 mb-4">Các lượt tham gia mới vào chiến dịch này sẽ tự động Kích hoạt Automation.</p>
                                     <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                                        {allFlows.filter(f => {
-                                            const trigger = f.steps?.find(s => s.type === 'trigger');
+                                        {(Array.isArray(allFlows) ? allFlows : []).filter(f => {
+                                            const steps = Array.isArray(f?.steps) ? f.steps : (typeof f?.steps === 'string' ? (() => { try { return JSON.parse(f.steps as any); } catch { return []; } })() : []);
+                                            const trigger = steps.find((s: any) => s && s.type === 'trigger');
                                             return trigger?.config?.type === 'campaign' && !trigger.config.targetId;
-                                        }).length > 0 ? allFlows.filter(f => {
-                                            const trigger = f.steps?.find(s => s.type === 'trigger');
+                                        }).length > 0 ? (Array.isArray(allFlows) ? allFlows : []).filter(f => {
+                                            const steps = Array.isArray(f?.steps) ? f.steps : (typeof f?.steps === 'string' ? (() => { try { return JSON.parse(f.steps as any); } catch { return []; } })() : []);
+                                            const trigger = steps.find((s: any) => s && s.type === 'trigger');
                                             return trigger?.config?.type === 'campaign' && !trigger.config.targetId;
                                         }).map((flow) => (
                                             <button
@@ -2155,6 +2159,7 @@ const CampaignWizard: React.FC<CampaignWizardProps> = ({
                 allSegments={allSegments}
                 allTags={allTags}
                 allTemplates={allTemplates}
+                templatePreviews={templatePreviews}
                 znsTemplates={znsTemplates}
                 allFlows={allFlows}
                 isSubmitting={isSubmitting}
@@ -2165,33 +2170,35 @@ const CampaignWizard: React.FC<CampaignWizardProps> = ({
             />
             {/* AI Email Editor Modal (Quick edit) */}
             {isEditingTemplate && activeEditTemplateId && (
-                <React.Suspense fallback={null}><EmailEditor
-                    template={allTemplates.find(t => t.id === activeEditTemplateId)!}
-                    groups={[]}
-                    onSave={async (data) => {
-                        if (activeEditTemplateId.startsWith('sys_')) {
-                            toast.error('Lỗi: Bạn không thể sửa mẫu mặc định của hệ thống.');
-                            return;
-                        }
-                        const res = await api.put(`templates/${activeEditTemplateId}`, { ...allTemplates.find(t => t.id === activeEditTemplateId), ...data, lastModified: new Date().toISOString() });
-                        if (res.success) {
-                            toast.success('Đã lưu mẫu!');
+                <div className="fixed inset-0 z-[2147483646] bg-slate-900/40 backdrop-blur-sm" style={{ zIndex: 2147483646 }}>
+                    <React.Suspense fallback={null}><EmailEditor
+                        template={allTemplates.find(t => t.id === activeEditTemplateId)!}
+                        groups={[]}
+                        onSave={async (data) => {
+                            if (activeEditTemplateId.startsWith('sys_')) {
+                                toast.error('Lỗi: Bạn không thể sửa mẫu mặc định của hệ thống.');
+                                return;
+                            }
+                            const res = await api.put(`templates/${activeEditTemplateId}`, { ...allTemplates.find(t => t.id === activeEditTemplateId), ...data, lastModified: new Date().toISOString() });
+                            if (res.success) {
+                                toast.success('Đã lưu mẫu!');
+                                setIsEditingTemplate(false);
+                                setActiveEditTemplateId(null);
+                                // Update preview
+                                const detail = await api.get<Template>(`templates?id=${activeEditTemplateId}`);
+                                if (detail.success && detail.data) {
+                                    setTemplatePreviews(prev => ({ ...prev, [activeEditTemplateId]: detail.data!.htmlContent }));
+                                }
+                            } else {
+                                toast.error('Lỗi lưu mẫu: ' + (res.message || 'Không rõ lý do'));
+                            }
+                        }}
+                        onCancel={() => {
                             setIsEditingTemplate(false);
                             setActiveEditTemplateId(null);
-                            // Update preview
-                            const detail = await api.get<Template>(`templates?id=${activeEditTemplateId}`);
-                            if (detail.success && detail.data) {
-                                setTemplatePreviews(prev => ({ ...prev, [activeEditTemplateId]: detail.data!.htmlContent }));
-                            }
-                        } else {
-                            toast.error('Lỗi lưu mẫu: ' + (res.message || 'Không rõ lý do'));
-                        }
-                    }}
-                    onCancel={() => {
-                        setIsEditingTemplate(false);
-                        setActiveEditTemplateId(null);
-                    }}
-                /></React.Suspense>
+                        }}
+                    /></React.Suspense>
+                </div>
             )}
             {/* Confirm modal when closing wizard with unsaved changes */}
             {showUnsavedConfirmModal && (

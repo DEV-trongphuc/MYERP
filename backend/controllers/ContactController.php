@@ -328,8 +328,13 @@ class ContactController {
         }
 
         if ($dataType !== '') {
+            $notClonedCond = "(COALESCE(c.duplicate_flag, 0) = 0 OR c.duplicate_with_id IS NULL)";
+            $saleRoleCond = "EXISTS (SELECT 1 FROM users u_dt WHERE u_dt.id = c.owner_id AND LOWER(u_dt.role) IN ('sale', 'sales'))";
             $errorCond = "(
-                EXISTS (SELECT 1 FROM tickets tk WHERE tk.contact_id = c.id AND tk.status IN ('open', 'in_progress'))
+                COALESCE(c.lead_status, '') IN ('error', 'ticket_pending', 'pending', 'approved', 'confirmed', 'bao_loi')
+                OR COALESCE(c.pipeline_status, '') IN ('00_error', 'error', 'bao_loi')
+                OR COALESCE(c.tags, '') LIKE '%\"Báo lỗi\"%'
+                OR EXISTS (SELECT 1 FROM tickets tk WHERE tk.contact_id = c.id AND tk.status IN ('open', 'in_progress', 'pending', 'approved', 'confirmed'))
                 OR EXISTS (
                     SELECT 1 FROM data_reports dr 
                     JOIN leads l2 ON dr.lead_id = l2.id 
@@ -337,17 +342,39 @@ class ContactController {
                 )
             )";
             $personalCond = "(
-                COALESCE(c.source, '') IN ('ca_nhan', 'gioi_thieu', 'databank', 'referral', 'ref')
+                COALESCE(c.lead_status, '') IN ('ca_nhan', 'personal', 'self', 'tu_kiem', 'gioi_thieu', 'referral', 'import', 'imported')
+                OR COALESCE(c.source, '') IN ('ca_nhan', 'gioi_thieu', 'databank', 'referral', 'ref', 'import', 'excel', 'csv')
                 OR COALESCE(c.source, '') LIKE 'ca_nhan%'
                 OR COALESCE(c.source, '') = 'Nhân viên kinh doanh tự tìm kiếm'
-                OR (c.created_by IS NOT NULL AND c.owner_id IS NOT NULL AND c.created_by = c.owner_id AND c.created_by NOT IN (1, 100009))
+                OR (c.created_by IS NOT NULL AND c.owner_id IS NOT NULL AND c.created_by = c.owner_id AND c.created_by NOT IN (1, 100009) AND LOWER(TRIM(COALESCE(c.source, ''))) IN ('', 'other', 'ca_nhan', 'gioi_thieu', 'databank', 'referral', 'ref'))
+                OR LOWER(COALESCE(c.source, '')) LIKE '%cá nhân%'
+                OR LOWER(COALESCE(c.source, '')) LIKE '%ca nhan%'
+                OR LOWER(COALESCE(c.source, '')) LIKE '%tự tìm%'
+                OR LOWER(COALESCE(c.source, '')) LIKE '%tu tim%'
+                OR LOWER(COALESCE(c.source, '')) LIKE '%tự kiếm%'
+                OR LOWER(COALESCE(c.source, '')) LIKE '%giới thiệu%'
+                OR LOWER(COALESCE(c.source, '')) LIKE '%gioi thieu%'
+                OR LOWER(COALESCE(c.source, '')) LIKE '%referral%'
+                OR LOWER(COALESCE(c.source, '')) LIKE '%import%'
+                OR LOWER(COALESCE(c.source, '')) LIKE '%nhập%'
+                OR LOWER(COALESCE(c.source, '')) LIKE '%nhap%'
+                OR LOWER(COALESCE(c.source, '')) LIKE '%excel%'
+                OR LOWER(COALESCE(c.source, '')) LIKE '%csv%'
+                OR COALESCE(c.tags, '') LIKE '%\"Cá nhân\"%'
+                OR COALESCE(c.tags, '') LIKE '%\"Giới thiệu\"%'
+                OR COALESCE(c.tags, '') LIKE '%Import%'
+                OR COALESCE(c.notes, '') LIKE '[Import]%'
             )";
             if ($dataType === 'error_ticket') {
                 $where[] = $errorCond;
             } else if ($dataType === 'personal') {
+                $where[] = $notClonedCond;
+                $where[] = $saleRoleCond;
                 $where[] = "NOT $errorCond";
                 $where[] = $personalCond;
             } else if ($dataType === 'distributed') {
+                $where[] = $notClonedCond;
+                $where[] = $saleRoleCond;
                 $where[] = "NOT $errorCond";
                 $where[] = "NOT $personalCond";
             }
@@ -377,8 +404,8 @@ class ContactController {
             switch ($segment) {
                 case 'tiem_nang':
                     // By default, exclude pipeline 14 (enrolled / customer / won) from Tiềm năng list.
-                    // If searching ($isGlobalPipelineSearch), filtering explicitly by stage, or filtering by admission/academic fields, keep them accessible.
-                    if (empty($stage) && empty($stageSlug) && empty($_GET['stage_id']) && empty($_GET['stages']) && empty($_GET['stage_ids']) && !$hasAcademicFilter) {
+                    // If searching ($isGlobalPipelineSearch), filtering explicitly by stage, filtering by data_type, or filtering by admission/academic fields, keep them accessible.
+                    if (empty($stage) && empty($stageSlug) && empty($_GET['stage_id']) && empty($_GET['stages']) && empty($_GET['stage_ids']) && !$hasAcademicFilter && $dataType === '') {
                         $where[] = "(c.stage_id != 44 AND (c.pipeline_status IS NULL OR c.pipeline_status NOT IN ('enrolled', 'hoc_vien', 'won')) AND c.status != 'customer')";
                     }
                     break;
@@ -486,13 +513,13 @@ class ContactController {
                             $stageCounts[(string)$resolvedSlug] = ($stageCounts[(string)$resolvedSlug] ?? 0) + $cnt;
                         }
                         $isEnrolledStage = ($resolvedId == 44) || in_array($resolvedSlug, ['enrolled', 'hoc_vien', 'won'], true) || (!empty($effStage['is_won']));
-                        if ($segment !== 'tiem_nang' || !$isEnrolledStage || $hasAcademicFilter) {
+                        if ($segment !== 'tiem_nang' || !$isEnrolledStage || $hasAcademicFilter || $dataType !== '') {
                             $activeTotal += $cnt;
                         }
                     }
                 }
 
-                $stageCounts['all'] = $activeTotal;
+                $stageCounts['all'] = $dataType !== '' ? ($activeTotal + $nurtureTotal + $lostTotal) : $activeTotal;
                 $stageCounts['nurture'] = $nurtureTotal;
                 $stageCounts['lost'] = $lostTotal;
 
@@ -576,9 +603,9 @@ class ContactController {
                     }
                 }
             }
-        } elseif (!$showLost && !$isGlobalPipelineSearch) {
+        } elseif (!$showLost && !$isGlobalPipelineSearch && $dataType === '') {
             // Default filter for active pipeline stages: hide both lost AND nurture
-            // (When searching, scan across all lead statuses including lost & nurture)
+            // (When searching or filtering by data_type on Tất cả tab, scan across all lead statuses including lost & nurture for 100% Dashboard parity)
             $where[] = "(c.lead_status NOT IN ('lost', 'nurture') OR c.lead_status IS NULL)";
         }
 
@@ -737,6 +764,9 @@ class ContactController {
             $grouped = [];
             foreach ($data as &$row) {
                 $row['tags'] = $this->normalizeContactTags($row['tags'] ?? '[]', (int)($tid ?: 1));
+                if (!empty($row['last_interaction'])) {
+                    $row['last_interaction'] = $this->cleanLastInteractionText((string)$row['last_interaction']);
+                }
                 $this->resolveEffectiveStageRow($row, (int)$tid);
                 $sid = (int)($row['stage_id'] ?? 0);
                 if (!isset($grouped[$sid])) {
@@ -893,6 +923,9 @@ class ContactController {
         // Parse JSON tags & reconcile effective stage
         foreach ($data as &$row) {
             $row['tags'] = $this->normalizeContactTags($row['tags'] ?? '[]', (int)($tid ?: 1));
+            if (!empty($row['last_interaction'])) {
+                $row['last_interaction'] = $this->cleanLastInteractionText((string)$row['last_interaction']);
+            }
             $this->resolveEffectiveStageRow($row, (int)($tid ?: 1));
         }
         unset($row);
@@ -5036,6 +5069,879 @@ class ContactController {
 
         respond(200, ['tags' => $tags], 'Cập nhật nhãn thành công');
     }
+
+    private function cleanLastInteractionText(string $raw): string {
+        $text = trim($raw);
+        if ($text === '') return '';
+        if (str_starts_with($text, '{') && str_contains($text, '"erp_task"')) {
+            $decoded = json_decode($text, true);
+            if (is_array($decoded)) {
+                $text = (string)($decoded['erp_task']['description'] ?? $decoded['description'] ?? '');
+            } elseif (preg_match('/"description"\s*:\s*"((?:[^"\\]|\\.)*)"/u', $text, $m)) {
+                $text = stripcslashes($m[1]);
+            }
+        }
+        $text = html_entity_decode(strip_tags($text), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = str_replace("\xC2\xA0", ' ', $text);
+        $text = preg_replace('/\s*\n?\(?Giai đoạn:.*$/isu', '', $text);
+        $text = preg_replace('/\s*\|\s*Lý do lost:.*$/isu', '', $text);
+        $text = preg_replace('/\s*\|\s*Độ nóng:.*$/isu', '', $text);
+        $text = preg_replace('/\s+/u', ' ', $text);
+        return trim((string)$text);
+    }
+
+    public function getPersonaOverview(array $auth): void {
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        respond(200, self::computePersonaOverviewData($this->db, $tid, $_GET));
+    }
+
+    public static function computePersonaOverviewData(PDO $db, int $tid, array $queryArgs = []): array {
+        $segment = strtolower(trim((string)($queryArgs['segment'] ?? 'student')));
+        $programFilter = trim((string)($queryArgs['program'] ?? $queryArgs['school'] ?? ''));
+        $intakeFilter = trim((string)($queryArgs['intake'] ?? ''));
+        $ownerFilter = trim((string)($queryArgs['owner_id'] ?? ''));
+        $genderFilter = trim((string)($queryArgs['gender'] ?? ''));
+        $jobGroupFilter = trim((string)($queryArgs['job_group'] ?? ''));
+        $industryFilter = trim((string)($queryArgs['industry'] ?? ''));
+        $multiCourseFilter = strtolower(trim((string)($queryArgs['multi_course'] ?? '')));
+
+        // Check if intake / industry columns exist on contacts
+        $colsStmt = $db->query("SHOW COLUMNS FROM contacts");
+        $colNames = [];
+        foreach ($colsStmt->fetchAll(PDO::FETCH_ASSOC) as $cRow) {
+            $colNames[strtolower((string)$cRow['Field'])] = true;
+        }
+        $hasIntakeCol = isset($colNames['intake']);
+        $hasExpectedIntakeCol = isset($colNames['expected_intake']);
+        $hasIndustryCol = isset($colNames['industry']);
+        $hasBirthDateCol = isset($colNames['birth_date']);
+        $hasBirthdayCol = isset($colNames['birthday']);
+
+        $intakeExpr = $hasIntakeCol && $hasExpectedIntakeCol
+            ? "COALESCE(NULLIF(TRIM(c.intake), ''), NULLIF(TRIM(c.expected_intake), ''), '')"
+            : ($hasIntakeCol ? "COALESCE(TRIM(c.intake), '')" : ($hasExpectedIntakeCol ? "COALESCE(TRIM(c.expected_intake), '')" : "''"));
+        $industryExpr = $hasIndustryCol ? "COALESCE(TRIM(c.industry), '')" : "''";
+        $birthdayExpr = ($hasBirthdayCol && $hasBirthDateCol)
+            ? "COALESCE(NULLIF(TRIM(c.birthday), ''), NULLIF(TRIM(c.birth_date), ''), '')"
+            : ($hasBirthdayCol ? "COALESCE(TRIM(c.birthday), '')" : ($hasBirthDateCol ? "COALESCE(TRIM(c.birth_date), '')" : "''"));
+
+        $where = ["c.tenant_id = ?", "c.deleted_at IS NULL"];
+        $params = [$tid];
+
+        if ($segment === '' || $segment === 'student' || $segment === 'customer' || $segment === 'hoc_vien' || $segment === 'students') {
+            $segment = 'student';
+            $where[] = "(c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien', '14', 'deposit_tuition_payment', '13') OR c.stage_id IN (43, 44) OR (c.student_id IS NOT NULL AND TRIM(c.student_id) != ''))";
+        } else {
+            // Tiềm năng (Leads)
+            $segment = 'lead';
+            $where[] = "NOT (c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien', '14') OR c.stage_id = 44)";
+        }
+
+        // First fetch available programs, intakes, owners for filter dropdowns before applying sub-filters
+        $baseWhereSql = implode(' AND ', $where);
+        $sqlAll = "
+            SELECT
+                c.id,
+                c.student_id,
+                c.full_name,
+                c.phone,
+                c.mobile,
+                c.phone2,
+                c.email,
+                c.gender,
+                $birthdayExpr AS birthday,
+                c.job_title,
+                c.company,
+                c.department,
+                c.city,
+                c.source,
+                c.program,
+                c.project_id,
+                c.person_id,
+                c.owner_id,
+                u.full_name AS owner_name,
+                u.email AS owner_email,
+                u.avatar_url AS owner_avatar,
+                c.study_status,
+                c.admission_date,
+                c.created_at,
+                c.tags,
+                COALESCE(p.name, NULLIF(TRIM(c.program), ''), 'Chưa phân loại') AS school_program_raw,
+                $intakeExpr AS intake_val,
+                $industryExpr AS industry_val
+            FROM contacts c
+            LEFT JOIN projects p ON c.project_id = p.id
+            LEFT JOIN users u ON c.owner_id = u.id
+            WHERE $baseWhereSql
+        ";
+        $stmt = $db->prepare($sqlAll);
+        $stmt->execute(array_values($params));
+        $allRows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $normalizeSchool = function (string $raw, string $studentId = '', string $rawIntake = '', string $rawTags = ''): string {
+            $u = mb_strtoupper(trim($raw), 'UTF-8');
+            $sid = mb_strtoupper(trim($studentId), 'UTF-8');
+            $inUpper = mb_strtoupper(trim($rawIntake), 'UTF-8');
+            $tagsUpper = mb_strtoupper(trim($rawTags), 'UTF-8');
+
+            if ($u !== '' && $u !== 'CHƯA PHÂN LOẠI') {
+                if (str_contains($u, 'UBIS')) return 'UBIS Thụy Sĩ';
+                if (str_contains($u, 'APOLLOS') || str_contains($u, 'APOLOS')) return 'Apollos Hoa Kỳ';
+                if (str_contains($u, 'SBS')) return 'SBS Thụy Sĩ';
+                if (str_contains($u, 'ASC')) return 'ASC Thụy Sĩ';
+                if (str_contains($u, 'UMEF')) return 'UMEF Thụy Sĩ';
+                if (str_contains($u, 'MSC') || str_contains($u, 'AI')) return 'MSc-AI';
+                if (str_contains($u, 'DBA') || str_contains($u, 'TIẾN SĨ')) return 'DBA / Tiến sĩ';
+                if (str_contains($u, 'EMBA') || str_contains($u, 'MBA') || str_contains($u, 'THẠC SĨ')) return 'MBA / Thạc sĩ QTKD';
+                return trim($raw);
+            }
+
+            if ($inUpper !== '') {
+                if (str_starts_with($inUpper, 'UBIS')) return 'UBIS Thụy Sĩ';
+                if (str_starts_with($inUpper, 'APOLLOS') || str_starts_with($inUpper, 'APOLOS')) return 'Apollos Hoa Kỳ';
+                if (str_starts_with($inUpper, 'SBS')) return 'SBS Thụy Sĩ';
+                if (str_starts_with($inUpper, 'ASC')) return 'ASC Thụy Sĩ';
+                if (str_starts_with($inUpper, 'UMEF')) return 'UMEF Thụy Sĩ';
+                if (str_starts_with($inUpper, 'MSC') || str_starts_with($inUpper, 'AI')) return 'MSc-AI';
+            }
+
+            if ($sid !== '') {
+                if (str_starts_with($sid, '12-') || str_starts_with($sid, '11-') || str_contains($sid, 'UBIS')) return 'UBIS Thụy Sĩ';
+                if (str_starts_with($sid, '22-') || str_contains($sid, 'APO')) return 'Apollos Hoa Kỳ';
+                if (str_starts_with($sid, '24-') || str_contains($sid, 'ASC')) return 'ASC Thụy Sĩ';
+                if (str_contains($sid, 'SBS')) return 'SBS Thụy Sĩ';
+                if (str_contains($sid, 'UMEF') || str_starts_with($sid, 'BBA-') || str_starts_with($sid, 'EMBA-') || str_starts_with($sid, 'MSC-IA-') || str_starts_with($sid, 'DBA-')) return 'UMEF Thụy Sĩ';
+                if (str_contains($sid, 'MSC') || str_contains($sid, 'AI')) return 'MSc-AI';
+            }
+
+            if ($tagsUpper !== '') {
+                if (preg_match('/\b(UBIS|APOLLOS|SBS|ASC|UMEF|MSC-AI)\b/u', $tagsUpper, $tm)) {
+                    $tk = $tm[1];
+                    if ($tk === 'UBIS') return 'UBIS Thụy Sĩ';
+                    if ($tk === 'APOLLOS') return 'Apollos Hoa Kỳ';
+                    if ($tk === 'SBS') return 'SBS Thụy Sĩ';
+                    if ($tk === 'ASC') return 'ASC Thụy Sĩ';
+                    if ($tk === 'UMEF') return 'UMEF Thụy Sĩ';
+                    if ($tk === 'MSC-AI') return 'MSc-AI';
+                }
+            }
+
+            return 'Chưa phân loại';
+        };
+
+        $getSchoolShortPrefix = function (string $schoolOrProg): string {
+            $u = mb_strtoupper(trim($schoolOrProg), 'UTF-8');
+            if (str_contains($u, 'UBIS')) return 'UBIS';
+            if (str_contains($u, 'APOLLOS') || str_contains($u, 'APOLOS')) return 'Apollos';
+            if (str_contains($u, 'SBS')) return 'SBS';
+            if (str_contains($u, 'ASC')) return 'ASC';
+            if (str_contains($u, 'UMEF')) return 'UMEF';
+            if (str_contains($u, 'MSC') || str_contains($u, 'AI')) return 'MSc-AI';
+            return '';
+        };
+
+        $normalizeIntake = function (string $raw, string $schoolName = '') use ($getSchoolShortPrefix): string {
+            $t = trim($raw);
+            if ($t === '' || $t === '-' || strtolower($t) === 'null' || strtolower($t) === 'n/a') return '';
+            $t = preg_replace('/\binatke\b/i', 'Intake', $t);
+
+            $prefix = $getSchoolShortPrefix($schoolName);
+
+            if (preg_match('/^([A-Za-z0-9-]+)\s*-\s*(?:intake|inatke|k)\s*0*(\d+)(?:\s*-\s*\d+)?$/i', $t, $m)) {
+                $inPrefix = $getSchoolShortPrefix($m[1]) ?: $m[1];
+                $num = str_pad($m[2], 2, '0', STR_PAD_LEFT);
+                return $inPrefix . ' - Intake ' . $num;
+            }
+            if (preg_match('/^(?:intake|inatke)\s*0*(\d+)(?:\s*-\s*\d+)?$/i', $t, $m)) {
+                $base = 'Intake ' . str_pad($m[1], 2, '0', STR_PAD_LEFT);
+                return $prefix !== '' ? ($prefix . ' - ' . $base) : $base;
+            }
+            if (preg_match('/^k\s*0*(\d+)$/i', $t, $m)) {
+                $base = 'Intake ' . str_pad($m[1], 2, '0', STR_PAD_LEFT);
+                return $prefix !== '' ? ($prefix . ' - ' . $base) : $base;
+            }
+            if (is_numeric($t) && (int)$t > 0 && (int)$t < 100) {
+                $base = 'Intake ' . str_pad((string)(int)$t, 2, '0', STR_PAD_LEFT);
+                return $prefix !== '' ? ($prefix . ' - ' . $base) : $base;
+            }
+            return $t;
+        };
+
+        $classifyJobGroup = function (string $job): string {
+            $u = mb_strtoupper(trim($job), 'UTF-8');
+            if ($u === '') return 'Chưa cập nhật';
+            if (preg_match('/(CHỦ TỊCH|TỔNG GIÁM ĐỐC|\bTGĐ\b|\bPTGĐ\b|PHÓ TỔNG|\bCEO\b|\bCFO\b|\bCOO\b|\bCIO\b|\bCTO\b|\bCMO\b|HĐQT|VIỆN TRƯỞNG|HIỆU TRƯỞNG)/u', $u)) {
+                return 'C-Level / Chủ tịch / Tổng Giám đốc';
+            }
+            if (preg_match('/(GIÁM ĐỐC|\bGĐ\b|\bPGĐ\b|PHÓ GIÁM ĐỐC|DIRECTOR|CHI NHÁNH TRƯỞNG)/u', $u)) {
+                return 'Giám đốc / Phó Giám đốc';
+            }
+            if (preg_match('/(TRƯỞNG PHÒNG|PHÓ PHÒNG|\bTP\b|\bPTP\b|TRƯỞNG CHI NHÁNH|TRƯỞNG BAN|TRƯỞNG KHOA|PHÓ KHOA|TRƯỞNG BỘ PHẬN|KẾ TOÁN TRƯỞNG|MANAGER|HEAD OF|LEADER|QUẢN LÝ|CHÁNH VĂN PHÒNG)/u', $u)) {
+                return 'Trưởng / Phó phòng & Quản lý cấp trung';
+            }
+            if (preg_match('/(CHỦ DOANH NGHIỆP|FOUNDER|CO-FOUNDER|CHỦ ĐẦU TƯ|CHỦ CƠ SỞ|CHỦ HỘ)/u', $u)) {
+                return 'Chủ doanh nghiệp / Founder';
+            }
+            if (preg_match('/(BÁC SĨ|DƯỢC SĨ|GIẢNG VIÊN|GIÁO VIÊN|LUẬT SƯ|KIỂM TOÁN|CHUYÊN GIA|KỸ SƯ)/u', $u)) {
+                return 'Chuyên gia / Bác sĩ / Giảng viên / Kỹ sư';
+            }
+            return 'Chuyên viên / Nhân sự nghiệp vụ';
+        };
+
+        $classifyIndustry = function (string $rawInd, string $company, string $job): string {
+            $ind = trim($rawInd);
+            $uInd = mb_strtoupper($ind, 'UTF-8');
+            $uComp = mb_strtoupper(trim($company . ' ' . $job), 'UTF-8');
+
+            $check = $uInd !== '' ? $uInd : $uComp;
+            if ($check === '') return 'Chưa cập nhật';
+
+            if (preg_match('/(NGÂN HÀNG|BANK|VIETCOMBANK|BIDV|VIETINBANK|AGRIBANK|TECHCOMBANK|SACOMBANK|ACB|MBBANK|\bMB\b|VPBANK|TPBANK|HDBANK|VIB|SHB|OCB|MSB|EXIMBANK|SEABANK|LPBANK|LIENVIET|NAM A|BAC A|PVCOMBANK|BAOVIET BANK|SHINHAN|WOORI|HSBC|UOB|PUBLIC BANK|KIENLONGBANK|SAIGONBANK|ABBNK|NCB)/u', $check)) {
+                return 'Ngân hàng (Banking)';
+            }
+            if (preg_match('/(TÀI CHÍNH|CHỨNG KHOÁN|ĐẦU TƯ|QUỸ|FINANCE|SECURITIES|CAPITAL|ASSET|SSI|VNDIRECT|HSC|MIRA|FE CREDIT|HOME CREDIT|KẾT NỐI TÀI CHÍNH)/u', $check)) {
+                return 'Tài chính - Chứng khoán - Đầu tư';
+            }
+            if (preg_match('/(BẢO HIỂM|INSURANCE|MANULIFE|PRUDENTIAL|AIA|DAI-ICHI|GENERALI|BAO VIET|BẢO VIỆT|FWD|CHUBB|HANWHA|CATHAY|PJICO|PVI|PTI)/u', $check)) {
+                return 'Bảo hiểm (Insurance)';
+            }
+            if (preg_match('/(Y TẾ|DƯỢC|BỆNH VIỆN|PHÒNG KHÁM|PHARMA|MEDICAL|HEALTH|HOSPITAL|CLINIC|SANOFI|GSK|ASTRA|PFIZER|NOVARTIS|DKSH|ZUellig|ECO PHARMA|LONG CHÂU|PHARMACITY|AN KHANG)/u', $check)) {
+                return 'Y tế - Dược phẩm - Bệnh viện';
+            }
+            if (preg_match('/(BẤT ĐỘNG SẢN|BĐS|XÂY DỰNG|KIẾN TRÚC|NỘI THẤT|REAL ESTATE|PROPERTY|CONSTRUCTION|VINHOMES|NOVALAND|ĐẤT XANH|HƯNG THỊNH|NAM LONG|KHANG ĐIỀN|COTECCONS|HÒA BÌNH|Ricons|MASTERISE|SUN GROUP|BIM GROUP)/u', $check)) {
+                return 'Bất động sản & Xây dựng';
+            }
+            if (preg_match('/(CÔNG NGHỆ|IT|PHẦN MỀM|VIỄN THÔNG|TELECOM|TECH|SOFTWARE|DIGITAL|MEDIA|MARKETING|TRUYỀN THÔNG|FPT|VIETTEL|VNPT|MOBIFONE|VNG|CMC|MISA)/u', $check)) {
+                return 'Công nghệ - Viễn thông - Media';
+            }
+            if (preg_match('/(GIÁO DỤC|ĐÀO TẠO|TRƯỜNG|ĐẠI HỌC|CAO ĐẲNG|HỌC VIỆN|EDUCATION|UNIVERSITY|SCHOOL|COLLEGE|ENGLISH|ANH NGỮ)/u', $check)) {
+                return 'Giáo dục & Đào tạo';
+            }
+            if (preg_match('/(F&B|NHÀ HÀNG|KHÁCH SẠN|DU LỊCH|RESORT|HOTEL|TRAVEL|HÀNG KHÔNG|FOOD|BEVERAGE|CAFE|COFFEE)/u', $check)) {
+                return 'F&B - Khách sạn - Du lịch';
+            }
+            if (preg_match('/(VẬN TẢI|LOGISTICS|XUẤT NHẬP KHẨU|XNK|CẢNG|HÀNG HẢI|SHIPPING|SUPPLY CHAIN|KHO VẬN|FORWARDING)/u', $check)) {
+                return 'Vận tải - Logistics - XNK';
+            }
+            if (preg_match('/(SẢN XUẤT|CÔNG NGHIỆP|NHÀ MÁY|CƠ KHÍ|ĐIỆN LỰC|NĂNG LƯỢNG|DẦU KHÍ|DỆT MAY|NHỰA|THÉP|HÓA CHẤT|NÔNG NGHIỆP|THỦY SẢN|MANUFACTURING)/u', $check)) {
+                return 'Sản xuất - Công nghiệp - Năng lượng';
+            }
+            if (preg_match('/(NHÀ NƯỚC|SỞ |UBND|BỘ |CỤC |VIỆN KIỂM SÁT|TÒA ÁN|CÔNG AN|QUÂN ĐỘI|HẢI QUAN|THUẾ|KHO BẠC)/u', $check)) {
+                return 'Cơ quan Nhà nước / Hành chính công';
+            }
+            if ($ind !== '') {
+                return $ind;
+            }
+            return 'Thương mại - Dịch vụ & Lĩnh vực khác';
+        };
+
+        // Collect all available schools, intakes, owners, job_groups, industries for filter options
+        $availableSchoolsMap = [];
+        $availableIntakesMap = [];
+        $availableOwnersMap = [];
+        $availableJobGroupsMap = [];
+        $availableIndustriesMap = [];
+
+        // Also build person-level multi-course map across the entire segment dataset!
+        $personMap = [];
+        foreach ($allRows as &$r) {
+            $rawTags = (string)($r['tags'] ?? '');
+            $school = $normalizeSchool((string)$r['school_program_raw'], (string)($r['student_id'] ?? ''), (string)($r['intake_val'] ?? ''), $rawTags);
+            $intake = $normalizeIntake((string)$r['intake_val'], $school);
+            $job = trim((string)($r['job_title'] ?? ''));
+            $comp = trim((string)($r['company'] ?: $r['department'] ?: ''));
+            $indRaw = trim((string)($r['industry_val'] ?? ''));
+            $jGroup = $classifyJobGroup($job);
+            $indGroup = $classifyIndustry($indRaw, $comp, $job);
+
+            $genderRaw = trim((string)($r['gender'] ?? ''));
+            $gUpper = mb_strtoupper($genderRaw, 'UTF-8');
+            if (in_array($gUpper, ['NAM', 'MALE', 'M', 'MR', 'MR.', 'ANH'], true)) {
+                $normGender = 'Nam';
+            } elseif (in_array($gUpper, ['NỮ', 'NU', 'FEMALE', 'F', 'MS', 'MS.', 'MRS', 'MRS.', 'CHỊ'], true)) {
+                $normGender = 'Nữ';
+            } else {
+                $normGender = 'Chưa rõ';
+            }
+
+            $ownerIdVal = !empty($r['owner_id']) ? (string)(int)$r['owner_id'] : 'unassigned';
+            $ownerNameVal = !empty($r['owner_name']) ? trim((string)$r['owner_name']) : 'Chưa phân bổ Sale';
+            $ownerEmailVal = trim((string)($r['owner_email'] ?? ''));
+            $ownerAvatarVal = trim((string)($r['owner_avatar'] ?? ''));
+
+            $r['_school'] = $school;
+            $r['_intake'] = $intake;
+            $r['_job_group'] = $jGroup;
+            $r['_industry'] = $indGroup;
+            $r['_gender'] = $normGender;
+            $r['_owner_id'] = $ownerIdVal;
+            $r['_owner_name'] = $ownerNameVal;
+            $r['_owner_email'] = $ownerEmailVal;
+            $r['_owner_avatar'] = $ownerAvatarVal;
+
+            $availableSchoolsMap[$school] = ($availableSchoolsMap[$school] ?? 0) + 1;
+            if ($intake !== '') {
+                $availableIntakesMap[$intake] = ($availableIntakesMap[$intake] ?? 0) + 1;
+            }
+            $availableJobGroupsMap[$jGroup] = ($availableJobGroupsMap[$jGroup] ?? 0) + 1;
+            $availableIndustriesMap[$indGroup] = ($availableIndustriesMap[$indGroup] ?? 0) + 1;
+
+            if (!isset($availableOwnersMap[$ownerIdVal])) {
+                $availableOwnersMap[$ownerIdVal] = [
+                    'value' => $ownerIdVal,
+                    'name' => $ownerNameVal,
+                    'email' => $ownerEmailVal,
+                    'avatar' => $ownerAvatarVal,
+                    'count' => 0
+                ];
+            }
+            $availableOwnersMap[$ownerIdVal]['count']++;
+
+            // Person key for detecting multi-course / multi-program students
+            $phoneDigits = preg_replace('/[^0-9]/', '', (string)($r['phone'] ?: $r['mobile'] ?: $r['phone2'] ?: ''));
+            $norm9 = strlen($phoneDigits) >= 9 ? substr($phoneDigits, -9) : '';
+            $emailLower = strtolower(trim((string)($r['email'] ?? '')));
+
+            $pKey = '';
+            if (!empty($r['person_id'])) {
+                $pKey = 'pid_' . (int)$r['person_id'];
+            } elseif ($norm9 !== '') {
+                $pKey = 'ph_' . $norm9;
+            } elseif ($emailLower !== '') {
+                $pKey = 'em_' . $emailLower;
+            } else {
+                $pKey = 'id_' . (int)$r['id'];
+            }
+            $r['_pKey'] = $pKey;
+
+            if (!isset($personMap[$pKey])) {
+                $personMap[$pKey] = [
+                    'person_key' => $pKey,
+                    'primary_id' => (int)$r['id'],
+                    'full_name' => (string)$r['full_name'],
+                    'phone' => (string)($r['phone'] ?: $r['mobile'] ?: ''),
+                    'email' => (string)($r['email'] ?? ''),
+                    'gender' => $normGender !== 'Chưa rõ' ? $normGender : (string)($r['gender'] ?? ''),
+                    'job_title' => (string)($r['job_title'] ?? ''),
+                    'company' => (string)($r['company'] ?: $r['department'] ?: ''),
+                    'owner_name' => $ownerNameVal,
+                    'owner_avatar' => $ownerAvatarVal,
+                    'courses' => [],
+                    'course_keys' => [],
+                    'contact_ids' => []
+                ];
+            }
+            $personMap[$pKey]['contact_ids'][] = (int)$r['id'];
+            if ($personMap[$pKey]['gender'] === '' && $normGender !== 'Chưa rõ') $personMap[$pKey]['gender'] = $normGender;
+            if ($personMap[$pKey]['job_title'] === '' && !empty($r['job_title'])) $personMap[$pKey]['job_title'] = (string)$r['job_title'];
+            if ($personMap[$pKey]['company'] === '' && (!empty($r['company']) || !empty($r['department']))) {
+                $personMap[$pKey]['company'] = (string)($r['company'] ?: $r['department']);
+            }
+
+            $courseLabel = $school . ($intake !== '' ? " ($intake)" : '');
+            $cKey = $school . '|' . $intake;
+            if (!in_array($cKey, $personMap[$pKey]['course_keys'], true)) {
+                $personMap[$pKey]['course_keys'][] = $cKey;
+                $personMap[$pKey]['courses'][] = [
+                    'contact_id' => (int)$r['id'],
+                    'student_id' => (string)($r['student_id'] ?? ''),
+                    'school' => $school,
+                    'intake' => $intake,
+                    'label' => $courseLabel
+                ];
+            }
+
+            // Also extract any additional school/intake enrollments stored in c.tags (for contacts merged across multiple sheets)
+            if ($rawTags !== '') {
+                $tagParts = array_values(array_filter(array_map('trim', explode(',', $rawTags)), fn($tp) => $tp !== ''));
+                $tagCourses = [];
+                $curTagCourse = null;
+                foreach ($tagParts as $tp) {
+                    $tpUpper = mb_strtoupper($tp, 'UTF-8');
+                    if (in_array($tpUpper, ['UBIS', 'APOLLOS', 'SBS', 'ASC', 'UMEF', 'MSC-AI'], true)) {
+                        if ($curTagCourse !== null) {
+                            $tagCourses[] = $curTagCourse;
+                        }
+                        $tSchool = $normalizeSchool($tpUpper);
+                        $curTagCourse = [
+                            'school' => $tSchool,
+                            'intake' => '',
+                            'student_id' => ''
+                        ];
+                    } elseif ($curTagCourse !== null) {
+                        if ($curTagCourse['intake'] === '' && preg_match('/^(?:[A-Za-z0-9-]+\s*-\s*)?(?:intake|inatke|k)\s*0*\d+/i', $tp)) {
+                            $curTagCourse['intake'] = $normalizeIntake($tp, $curTagCourse['school']);
+                        } elseif ($curTagCourse['student_id'] === '' && stripos($tp, 'Mã HV:') === 0) {
+                            $curTagCourse['student_id'] = trim(substr($tp, strlen('Mã HV:')));
+                        }
+                    }
+                }
+                if ($curTagCourse !== null) {
+                    $tagCourses[] = $curTagCourse;
+                }
+                if (count($tagCourses) >= 2) {
+                    foreach ($tagCourses as $tc) {
+                        $tcSchool = $tc['school'];
+                        $tcIntake = $tc['intake'];
+                        $tcSid = $tc['student_id'];
+                        $tcKey = $tcSchool . '|' . $tcIntake;
+                        $tcLabel = $tcSchool . ($tcIntake !== '' ? " ($tcIntake)" : '');
+                        if (!in_array($tcKey, $personMap[$pKey]['course_keys'], true)) {
+                            $personMap[$pKey]['course_keys'][] = $tcKey;
+                            $personMap[$pKey]['courses'][] = [
+                                'contact_id' => (int)$r['id'],
+                                'student_id' => $tcSid,
+                                'school' => $tcSchool,
+                                'intake' => $tcIntake,
+                                'label' => $tcLabel
+                            ];
+                        }
+                    }
+                }
+            }
+        }
+        unset($r);
+
+        // Identify multi-course person keys
+        $multiCoursePersonKeys = [];
+        foreach ($personMap as $pKey => $person) {
+            if (count($person['courses']) >= 2 || count($person['contact_ids']) >= 2) {
+                $multiCoursePersonKeys[$pKey] = true;
+            }
+        }
+
+        // Apply optional sub-filters (owner_id, program, intake, gender, job_group, industry, multi_course)
+        $normProgFilter = ($programFilter !== '' && $programFilter !== 'all') ? $normalizeSchool($programFilter) : '';
+        $normIntakeFilter = ($intakeFilter !== '' && $intakeFilter !== 'all') ? $normalizeIntake($intakeFilter, $normProgFilter) : '';
+        $ownerFilterArr = ($ownerFilter !== '' && $ownerFilter !== 'all')
+            ? array_values(array_filter(array_map('trim', explode(',', $ownerFilter)), fn($v) => $v !== '' && $v !== 'all'))
+            : [];
+
+        $filteredRows = array_values(array_filter($allRows, function ($r) use (
+            $programFilter,
+            $normProgFilter,
+            $intakeFilter,
+            $normIntakeFilter,
+            $ownerFilterArr,
+            $genderFilter,
+            $jobGroupFilter,
+            $industryFilter,
+            $multiCourseFilter,
+            $multiCoursePersonKeys
+        ) {
+            if (!empty($ownerFilterArr)) {
+                if (!in_array((string)$r['_owner_id'], $ownerFilterArr, true)) {
+                    return false;
+                }
+            }
+            if ($programFilter !== '' && $programFilter !== 'all') {
+                if ($r['_school'] !== $programFilter && $r['_school'] !== $normProgFilter && stripos((string)$r['_school'], $programFilter) === false && stripos((string)$r['school_program_raw'], $programFilter) === false) {
+                    return false;
+                }
+            }
+            if ($intakeFilter !== '' && $intakeFilter !== 'all') {
+                $rowIntake = (string)$r['_intake'];
+                $rowRawIntake = trim((string)($r['intake_val'] ?? ''));
+                $unprefixedRowIntake = preg_replace('/^[A-Za-z0-9-]+\s*-\s*/', '', $rowIntake);
+                if (
+                    $rowIntake !== $intakeFilter
+                    && $rowIntake !== $normIntakeFilter
+                    && $rowRawIntake !== $intakeFilter
+                    && ($normIntakeFilter === '' || $unprefixedRowIntake !== $normIntakeFilter)
+                ) {
+                    return false;
+                }
+            }
+            if ($genderFilter !== '' && $genderFilter !== 'all') {
+                if ($r['_gender'] !== $genderFilter) {
+                    return false;
+                }
+            }
+            if ($jobGroupFilter !== '' && $jobGroupFilter !== 'all') {
+                if ($r['_job_group'] !== $jobGroupFilter) {
+                    return false;
+                }
+            }
+            if ($industryFilter !== '' && $industryFilter !== 'all') {
+                if ($r['_industry'] !== $industryFilter) {
+                    return false;
+                }
+            }
+            if ($multiCourseFilter === '1' || $multiCourseFilter === 'true' || $multiCourseFilter === 'multi') {
+                if (!isset($multiCoursePersonKeys[$r['_pKey']])) {
+                    return false;
+                }
+            }
+            return true;
+        }));
+
+        $totalProfiles = count($filteredRows);
+        $uniquePersonsInFilter = [];
+        $withPhone = 0;
+        $withEmail = 0;
+        $withGender = 0;
+        $withBirthday = 0;
+        $withJobTitle = 0;
+        $withCompany = 0;
+        $withIndustry = 0;
+        $withIntake = 0;
+        $withCity = 0;
+
+        $genderMap = ['Nam' => 0, 'Nữ' => 0, 'Chưa rõ' => 0];
+        $ageGroupMap = [
+            'Dưới 25 tuổi' => 0,
+            '25 - 34 tuổi' => 0,
+            '35 - 44 tuổi' => 0,
+            '45 - 54 tuổi' => 0,
+            'Trên 55 tuổi' => 0,
+            'Chưa có ngày sinh' => 0
+        ];
+        $ageSum = 0;
+        $ageCount = 0;
+        $currentYear = (int)date('Y');
+
+        $schoolMap = [];
+        $intakeMap = [];
+        $jobGroupMap = [];
+        $jobTitleSpecificMap = [];
+        $companyMap = [];
+        $industryMap = [];
+        $cityMap = [];
+        $ownerBreakdownMap = [];
+
+        foreach ($filteredRows as $r) {
+            $phone = trim((string)($r['phone'] ?: $r['mobile'] ?: $r['phone2'] ?: ''));
+            $email = trim((string)($r['email'] ?? ''));
+            $bday = trim((string)($r['birthday'] ?? ''));
+            $job = trim((string)($r['job_title'] ?? ''));
+            $comp = trim((string)($r['company'] ?: $r['department'] ?: ''));
+            $intake = (string)$r['_intake'];
+            $school = (string)$r['_school'];
+            $city = trim((string)($r['city'] ?? ''));
+            $pKey = (string)$r['_pKey'];
+            $normGender = (string)$r['_gender'];
+            $jGroup = (string)$r['_job_group'];
+            $indGroup = (string)$r['_industry'];
+            $oId = (string)$r['_owner_id'];
+
+            $uniquePersonsInFilter[$pKey] = true;
+
+            if ($phone !== '') $withPhone++;
+            if ($email !== '') $withEmail++;
+            if ($bday !== '' && $bday !== '0000-00-00') $withBirthday++;
+            if ($job !== '') $withJobTitle++;
+            if ($comp !== '') $withCompany++;
+            if ($intake !== '') $withIntake++;
+            if ($city !== '') $withCity++;
+
+            // Gender
+            $genderMap[$normGender] = ($genderMap[$normGender] ?? 0) + 1;
+            if ($normGender !== 'Chưa rõ') {
+                $withGender++;
+            }
+
+            // Owner breakdown
+            if (!isset($ownerBreakdownMap[$oId])) {
+                $ownerBreakdownMap[$oId] = [
+                    'owner_id' => $oId,
+                    'label' => (string)$r['_owner_name'],
+                    'email' => (string)$r['_owner_email'],
+                    'avatar' => (string)$r['_owner_avatar'],
+                    'count' => 0
+                ];
+            }
+            $ownerBreakdownMap[$oId]['count']++;
+
+            // Age calculation
+            if ($bday !== '' && $bday !== '0000-00-00' && preg_match('/^(\d{4})/', $bday, $ym)) {
+                $birthYear = (int)$ym[1];
+                $age = $currentYear - $birthYear;
+                if ($age >= 16 && $age <= 90) {
+                    $ageSum += $age;
+                    $ageCount++;
+                    if ($age < 25) $ageGroupMap['Dưới 25 tuổi']++;
+                    elseif ($age <= 34) $ageGroupMap['25 - 34 tuổi']++;
+                    elseif ($age <= 44) $ageGroupMap['35 - 44 tuổi']++;
+                    elseif ($age <= 54) $ageGroupMap['45 - 54 tuổi']++;
+                    else $ageGroupMap['Trên 55 tuổi']++;
+                } else {
+                    $ageGroupMap['Chưa có ngày sinh']++;
+                }
+            } else {
+                $ageGroupMap['Chưa có ngày sinh']++;
+            }
+
+            // School / Program
+            $schoolMap[$school] = ($schoolMap[$school] ?? 0) + 1;
+
+            // Intake
+            $intakeKey = $intake !== '' ? $intake : 'Chưa gắn Intake';
+            $intakeMap[$intakeKey] = ($intakeMap[$intakeKey] ?? 0) + 1;
+
+            // Job Group & Specific Job Title
+            $jobGroupMap[$jGroup] = ($jobGroupMap[$jGroup] ?? 0) + 1;
+            if ($job !== '') {
+                $normJob = mb_convert_case(mb_strtolower($job, 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
+                $jobTitleSpecificMap[$normJob] = ($jobTitleSpecificMap[$normJob] ?? 0) + 1;
+            }
+
+            // Company
+            if ($comp !== '') {
+                $compKey = mb_strtoupper(preg_replace('/\s+/u', ' ', $comp), 'UTF-8');
+                if (!isset($companyMap[$compKey])) {
+                    $companyMap[$compKey] = ['name' => $comp, 'count' => 0];
+                }
+                $companyMap[$compKey]['count']++;
+            }
+
+            // Industry
+            if ($indGroup !== 'Chưa cập nhật') {
+                $withIndustry++;
+            }
+            $industryMap[$indGroup] = ($industryMap[$indGroup] ?? 0) + 1;
+
+            // City
+            if ($city !== '') {
+                $cityMap[$city] = ($cityMap[$city] ?? 0) + 1;
+            }
+        }
+
+        // Format sorted arrays (putting 'Chưa phân loại' / 'Chưa cập nhật' / 'Chưa có ngày sinh' at the end)
+        $unclassifiedLabels = ['Chưa phân loại', 'Chưa cập nhật', 'Chưa có ngày sinh', 'Chưa rõ', 'Chưa gắn Intake'];
+        $formatBreakdown = function (array $map, int $denom) use ($unclassifiedLabels) {
+            uksort($map, function ($a, $b) use ($map, $unclassifiedLabels) {
+                $aUn = in_array($a, $unclassifiedLabels, true);
+                $bUn = in_array($b, $unclassifiedLabels, true);
+                if ($aUn && !$bUn) return 1;
+                if (!$aUn && $bUn) return -1;
+                return ($map[$b] ?? 0) <=> ($map[$a] ?? 0);
+            });
+            $out = [];
+            foreach ($map as $k => $v) {
+                if ($v <= 0) continue;
+                $out[] = [
+                    'label' => (string)$k,
+                    'count' => (int)$v,
+                    'pct' => $denom > 0 ? round(($v / $denom) * 100, 1) : 0.0
+                ];
+            }
+            return $out;
+        };
+
+        // Sort intakes by student count descending (with intake number descending as tie-breaker, and 'Chưa gắn Intake' at the end)
+        uksort($intakeMap, function ($a, $b) use ($intakeMap) {
+            if ($a === 'Chưa gắn Intake') return 1;
+            if ($b === 'Chưa gắn Intake') return -1;
+            $cmpCnt = ($intakeMap[$b] ?? 0) <=> ($intakeMap[$a] ?? 0);
+            if ($cmpCnt !== 0) {
+                return $cmpCnt;
+            }
+            $na = preg_match('/Intake\s*0*(\d+)/i', $a, $ma) ? (int)$ma[1] : (preg_match('/(\d+)/', $a, $ma2) ? (int)$ma2[1] : -1);
+            $nb = preg_match('/Intake\s*0*(\d+)/i', $b, $mb) ? (int)$mb[1] : (preg_match('/(\d+)/', $b, $mb2) ? (int)$mb2[1] : -1);
+            if ($na !== -1 && $nb !== -1 && $na !== $nb) {
+                return $nb <=> $na;
+            }
+            return strcmp($a, $b);
+        });
+        $byIntake = [];
+        foreach ($intakeMap as $k => $v) {
+            if ($v <= 0) continue;
+            $byIntake[] = [
+                'label' => (string)$k,
+                'count' => (int)$v,
+                'pct' => $totalProfiles > 0 ? round(($v / $totalProfiles) * 100, 1) : 0.0
+            ];
+        }
+
+        // Owner breakdown sorted by count desc (unassigned at end)
+        $byOwner = array_values($ownerBreakdownMap);
+        usort($byOwner, function ($a, $b) {
+            if ($a['owner_id'] === 'unassigned') return 1;
+            if ($b['owner_id'] === 'unassigned') return -1;
+            return $b['count'] <=> $a['count'];
+        });
+        foreach ($byOwner as &$ob) {
+            $ob['pct'] = $totalProfiles > 0 ? round(($ob['count'] / $totalProfiles) * 100, 1) : 0.0;
+        }
+        unset($ob);
+
+        // Top Companies
+        $companiesList = array_values($companyMap);
+        usort($companiesList, fn($a, $b) => $b['count'] <=> $a['count']);
+        $topCompanies = array_map(fn($c) => [
+            'label' => $c['name'],
+            'count' => (int)$c['count'],
+            'pct' => $withCompany > 0 ? round(($c['count'] / $withCompany) * 100, 1) : 0.0
+        ], array_slice($companiesList, 0, 30));
+
+        // Top Specific Job Titles
+        arsort($jobTitleSpecificMap);
+        $topJobTitles = [];
+        foreach (array_slice($jobTitleSpecificMap, 0, 25, true) as $k => $v) {
+            $topJobTitles[] = [
+                'label' => (string)$k,
+                'count' => (int)$v,
+                'pct' => $withJobTitle > 0 ? round(($v / $withJobTitle) * 100, 1) : 0.0
+            ];
+        }
+
+        // Multi-course / Multi-program students
+        $multiCourseStudents = [];
+        foreach ($personMap as $pKey => $person) {
+            if (count($person['courses']) >= 2 || count($person['contact_ids']) >= 2) {
+                if (!isset($uniquePersonsInFilter[$pKey])) continue;
+                $distinctSchools = array_values(array_unique(array_map(fn($c) => $c['school'], $person['courses'])));
+                $multiCourseStudents[] = [
+                    'primary_id' => $person['primary_id'],
+                    'full_name' => $person['full_name'],
+                    'phone' => $person['phone'],
+                    'email' => $person['email'],
+                    'gender' => $person['gender'],
+                    'job_title' => $person['job_title'],
+                    'company' => $person['company'],
+                    'owner_name' => $person['owner_name'],
+                    'owner_avatar' => $person['owner_avatar'],
+                    'course_count' => max(count($person['courses']), count($person['contact_ids'])),
+                    'school_count' => count($distinctSchools),
+                    'schools' => $distinctSchools,
+                    'courses' => $person['courses'],
+                    'contact_ids' => array_values(array_unique($person['contact_ids']))
+                ];
+            }
+        }
+        usort($multiCourseStudents, fn($a, $b) => ($b['course_count'] <=> $a['course_count']) ?: ($b['school_count'] <=> $a['school_count']));
+
+        // Available filter options
+        uksort($availableSchoolsMap, function ($a, $b) use ($availableSchoolsMap) {
+            if ($a === 'Chưa phân loại') return 1;
+            if ($b === 'Chưa phân loại') return -1;
+            return ($availableSchoolsMap[$b] ?? 0) <=> ($availableSchoolsMap[$a] ?? 0);
+        });
+        $schoolOptions = [];
+        foreach ($availableSchoolsMap as $sName => $sCnt) {
+            $schoolOptions[] = ['value' => $sName, 'label' => "$sName ($sCnt)", 'count' => $sCnt];
+        }
+
+        $schoolRankMap = [
+            'UBIS' => 1,
+            'UMEF' => 2,
+            'ASC' => 3,
+            'MSc-AI' => 4,
+            'Apollos' => 5,
+            'SBS' => 6
+        ];
+        uksort($availableIntakesMap, function ($a, $b) use ($schoolRankMap) {
+            $pa = preg_match('/^([A-Za-z0-9-]+)\s*-\s*/', $a, $mpa) ? $mpa[1] : '';
+            $pb = preg_match('/^([A-Za-z0-9-]+)\s*-\s*/', $b, $mpb) ? $mpb[1] : '';
+            $ra = $schoolRankMap[$pa] ?? 99;
+            $rb = $schoolRankMap[$pb] ?? 99;
+            if ($ra !== $rb) return $ra <=> $rb;
+            $na = preg_match('/Intake\s*0*(\d+)/i', $a, $ma) ? (int)$ma[1] : (preg_match('/(\d+)/', $a, $ma2) ? (int)$ma2[1] : -1);
+            $nb = preg_match('/Intake\s*0*(\d+)/i', $b, $mb) ? (int)$mb[1] : (preg_match('/(\d+)/', $b, $mb2) ? (int)$mb2[1] : -1);
+            if ($na !== -1 && $nb !== -1 && $na !== $nb) return $nb <=> $na;
+            return strcmp($a, $b);
+        });
+        $intakeOptions = [];
+        foreach ($availableIntakesMap as $iName => $iCnt) {
+            $intakeOptions[] = ['value' => $iName, 'label' => "$iName ($iCnt)", 'count' => $iCnt];
+        }
+
+        // Owners options (with avatar + sublabel + count)
+        $ownersList = array_values($availableOwnersMap);
+        usort($ownersList, function ($a, $b) {
+            if ($a['value'] === 'unassigned') return 1;
+            if ($b['value'] === 'unassigned') return -1;
+            return $b['count'] <=> $a['count'];
+        });
+        $ownerOptions = array_map(fn($o) => [
+            'value' => (string)$o['value'],
+            'label' => $o['name'] . ' (' . $o['count'] . ')',
+            'name' => $o['name'],
+            'sublabel' => $o['email'] ?: ($o['value'] === 'unassigned' ? 'Chưa gán người phụ trách' : ''),
+            'avatar' => $o['avatar'] ?: null,
+            'count' => (int)$o['count']
+        ], $ownersList);
+
+        // Job Group options
+        uksort($availableJobGroupsMap, function ($a, $b) use ($availableJobGroupsMap) {
+            if ($a === 'Chưa cập nhật') return 1;
+            if ($b === 'Chưa cập nhật') return -1;
+            return ($availableJobGroupsMap[$b] ?? 0) <=> ($availableJobGroupsMap[$a] ?? 0);
+        });
+        $jobGroupOptions = [];
+        foreach ($availableJobGroupsMap as $jName => $jCnt) {
+            $jobGroupOptions[] = ['value' => $jName, 'label' => "$jName ($jCnt)", 'count' => $jCnt];
+        }
+
+        // Industry options
+        uksort($availableIndustriesMap, function ($a, $b) use ($availableIndustriesMap) {
+            if ($a === 'Chưa cập nhật') return 1;
+            if ($b === 'Chưa cập nhật') return -1;
+            return ($availableIndustriesMap[$b] ?? 0) <=> ($availableIndustriesMap[$a] ?? 0);
+        });
+        $industryOptions = [];
+        foreach ($availableIndustriesMap as $indName => $indCnt) {
+            $industryOptions[] = ['value' => $indName, 'label' => "$indName ($indCnt)", 'count' => $indCnt];
+        }
+
+        $completeness = [
+            ['field' => 'phone', 'label' => 'Số điện thoại', 'filled' => $withPhone, 'total' => $totalProfiles, 'pct' => $totalProfiles > 0 ? round(($withPhone / $totalProfiles) * 100, 1) : 0],
+            ['field' => 'email', 'label' => 'Địa chỉ Email', 'filled' => $withEmail, 'total' => $totalProfiles, 'pct' => $totalProfiles > 0 ? round(($withEmail / $totalProfiles) * 100, 1) : 0],
+            ['field' => 'gender', 'label' => 'Giới tính (Nam/Nữ)', 'filled' => $withGender, 'total' => $totalProfiles, 'pct' => $totalProfiles > 0 ? round(($withGender / $totalProfiles) * 100, 1) : 0],
+            ['field' => 'intake', 'label' => 'Khóa học (Intake)', 'filled' => $withIntake, 'total' => $totalProfiles, 'pct' => $totalProfiles > 0 ? round(($withIntake / $totalProfiles) * 100, 1) : 0],
+            ['field' => 'company', 'label' => 'Công ty / Đơn vị công tác', 'filled' => $withCompany, 'total' => $totalProfiles, 'pct' => $totalProfiles > 0 ? round(($withCompany / $totalProfiles) * 100, 1) : 0],
+            ['field' => 'job_title', 'label' => 'Chức vụ / Vị trí', 'filled' => $withJobTitle, 'total' => $totalProfiles, 'pct' => $totalProfiles > 0 ? round(($withJobTitle / $totalProfiles) * 100, 1) : 0],
+            ['field' => 'industry', 'label' => 'Ngành nghề / Lĩnh vực', 'filled' => $withIndustry, 'total' => $totalProfiles, 'pct' => $totalProfiles > 0 ? round(($withIndustry / $totalProfiles) * 100, 1) : 0],
+            ['field' => 'birthday', 'label' => 'Ngày sinh / Độ tuổi', 'filled' => $withBirthday, 'total' => $totalProfiles, 'pct' => $totalProfiles > 0 ? round(($withBirthday / $totalProfiles) * 100, 1) : 0],
+        ];
+
+        return [
+            'segment' => $segment,
+            'program_filter' => $programFilter ?: 'all',
+            'intake_filter' => $intakeFilter ?: 'all',
+            'owner_filter' => $ownerFilter ?: 'all',
+            'summary' => [
+                'total_profiles' => $totalProfiles,
+                'unique_persons' => count($uniquePersonsInFilter),
+                'multi_course_persons' => count($multiCourseStudents),
+                'with_phone' => $withPhone,
+                'with_email' => $withEmail,
+                'with_gender' => $withGender,
+                'male_count' => $genderMap['Nam'] ?? 0,
+                'female_count' => $genderMap['Nữ'] ?? 0,
+                'unknown_gender_count' => $genderMap['Chưa rõ'] ?? 0,
+                'avg_age' => $ageCount > 0 ? round($ageSum / $ageCount, 1) : 0,
+                'with_job_title' => $withJobTitle,
+                'with_company' => $withCompany,
+                'with_industry' => $withIndustry,
+                'with_intake' => $withIntake,
+                'with_birthday' => $withBirthday,
+                'distinct_companies' => count($companyMap),
+                'distinct_intakes' => count($availableIntakesMap),
+                'distinct_schools' => count($schoolMap)
+            ],
+            'by_school_program' => $formatBreakdown($schoolMap, $totalProfiles),
+            'by_intake' => $byIntake,
+            'by_owner' => $byOwner,
+            'by_gender' => $formatBreakdown($genderMap, $totalProfiles),
+            'by_age_group' => $formatBreakdown($ageGroupMap, $totalProfiles),
+            'by_job_group' => $formatBreakdown($jobGroupMap, $totalProfiles),
+            'top_job_titles' => $topJobTitles,
+            'by_industry' => $formatBreakdown($industryMap, $totalProfiles),
+            'top_companies' => $topCompanies,
+            'by_city' => array_slice($formatBreakdown($cityMap, $totalProfiles), 0, 15),
+            'multi_course_students' => array_slice($multiCourseStudents, 0, 200),
+            'data_completeness' => $completeness,
+            'filter_options' => [
+                'schools' => $schoolOptions,
+                'intakes' => $intakeOptions,
+                'owners' => $ownerOptions,
+                'job_groups' => $jobGroupOptions,
+                'industries' => $industryOptions
+            ]
+        ];
+    }
+
 }
 
 

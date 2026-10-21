@@ -764,7 +764,7 @@ const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
                             </div>
                             <div className="text-right flex flex-col items-end gap-1.5">
                                 <div className="text-right">
-                                    <p className="text-2xl font-black text-slate-800 tracking-tight">{(totalCount || 0).toLocaleString()}</p>
+                                    <p className="text-2xl font-black text-slate-800 tracking-tight">{((!search && activeStatusFilter === 'all' && Number(stats?.total) > 0) ? Number(stats.total) : (totalCount || Number(stats?.total) || 0)).toLocaleString()}</p>
                                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Thành viên</p>
                                 </div>
                                 {invalidCount > 0 && (

@@ -185,6 +185,14 @@ function extractMappedValues($mappingsArray, $systemField, $data) {
 }
 
 if (isLeadBlocked($conn, $phone, $email)) {
+    if (function_exists('recordBlockedIncomingLead')) {
+        $blockedLeadId = recordBlockedIncomingLead($conn, $phone, $email, $name ?? '', $source ?? '', $type ?? '', $note ?? '', 'Liên hệ nằm trong danh sách bị chặn (Blocked Leads)', null, null);
+        try {
+            $detailsJson = json_encode(['type' => 'auto', 'lead_id' => $blockedLeadId, 'phone' => $phone, 'email' => $email, 'name' => $name ?? '', 'source' => $source ?? '', 'reason' => 'Liên hệ nằm trong danh sách bị chặn (Blocked Leads)'], JSON_UNESCAPED_UNICODE);
+            $logStmt = $conn->prepare("INSERT INTO admin_logs (account_id, action, details, ip_address) VALUES (0, 'BLOCK_LEAD_BLACKLIST', ?, ?)");
+            if ($logStmt) { $ip = $_SERVER['REMOTE_ADDR'] ?? 'System'; $logStmt->bind_param('ss', $detailsJson, $ip); $logStmt->execute(); $logStmt->close(); }
+        } catch (Throwable $eLog) {}
+    }
     http_response_code(400);
     echo json_encode(["success" => false, "message" => "This contact is permanently blocked in the system."]);
     exit();
@@ -475,11 +483,10 @@ if ($isSilent == 1) {
 }
 
 // Điều kiện giữ lại cho Sale cũ:
-// 1. Trùng trong hạn định < $dupCheckMonths
-// HOẶC
-// 2. Đã ở bước Hồ sơ trở đi (chỉ thay đổi từ trước bước Hồ sơ thì mới đổi thôi)
+// 1. TVV cũ đang hoạt động / nghỉ phép (KHÔNG phải Inactive)
+// 2. Trùng trong hạn định < $dupCheckMonths HOẶC Đã ở bước Hồ sơ trở đi
 $keepForOldSale = false;
-if ($crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo'])) {
+if ($crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo']) && ($crmCheckResult['consultantStatus'] ?? '') !== 'inactive') {
     if (!empty($crmCheckResult['hasRealInteraction']) && $crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths) {
         $keepForOldSale = true;
     } else if (isset($crmCheckResult['isBeforeHoSo']) && !$crmCheckResult['isBeforeHoSo']) {
@@ -707,24 +714,24 @@ try {
         $oldSaleName = !empty($crmCheckResult['assignedName']) ? $crmCheckResult['assignedName'] : 'Không rõ';
         $oldSaleMonths = $crmCheckResult['monthsSinceLastInteraction'];
         $dupSuffix = " (Trùng số: Sale cũ $oldSaleName > $oldSaleMonths tháng).";
+    } elseif ($crmCheckResult['leadExists'] && !empty($crmCheckResult['originalAssignedTo'])) {
+        $oldSaleName = !empty($crmCheckResult['assignedName']) ? $crmCheckResult['assignedName'] : 'Không rõ';
+        $oldSaleMonths = $crmCheckResult['monthsSinceLastInteraction'];
+        if (($crmCheckResult['consultantStatus'] ?? '') === 'inactive') {
+            $dupSuffix = " (Khách cũ của TVV ngưng hoạt động: $oldSaleName - Chia lại vòng mới).";
+        } else {
+            $dupSuffix = " (Trùng số: Sale cũ $oldSaleName > $oldSaleMonths tháng).";
+        }
     }
 
     if ($targetRoundId) {
         $assignResult = getNextConsultantInRound($conn, $targetRoundId, $data);
         if ($assignResult) {
             $assignedConsultantId = $assignResult['id'];
-            $isDuplicateLead = !empty($crmCheckResult['isDuplicate']);
-            if ($isDuplicateLead) {
-                $status = $assignResult['is_compensation'] ? 'compensation' : 'reminder';
-                $message = ($assignResult['is_compensation'] 
-                    ? (isset($assignResult['is_starvation']) ? 'Được phân bổ bù lượt ngoài giờ/nghỉ phép (Starvation Prevention).' : 'Được phân bổ đền bù lượt lỗi.') 
-                    : 'Khách cũ đăng ký lại (Nhắc lại) - Phân bổ cho Sale mới qua vòng xoay.') . $dupSuffix;
-            } else {
-                $status = $assignResult['is_compensation'] ? 'compensation' : 'assigned';
-                $message = ($assignResult['is_compensation'] 
-                    ? (isset($assignResult['is_starvation']) ? 'Được phân bổ bù lượt ngoài giờ/nghỉ phép (Starvation Prevention).' : 'Được phân bổ đền bù lượt lỗi.') 
-                    : 'Được phân bổ tự động qua vòng xoay.') . $dupSuffix;
-            }
+            $status = $assignResult['is_compensation'] ? 'compensation' : 'assigned';
+            $message = ($assignResult['is_compensation'] 
+                ? (isset($assignResult['is_starvation']) ? 'Được phân bổ bù lượt ngoài giờ/nghỉ phép (Starvation Prevention).' : 'Được phân bổ đền bù lượt lỗi.') 
+                : 'Được phân bổ tự động qua vòng xoay.') . $dupSuffix;
 
             // Check working hours
             $whStmt = $conn->prepare("SELECT work_start_time, work_end_time, work_schedule FROM consultants WHERE id = ?");
@@ -755,12 +762,16 @@ try {
     }
 
     if ($crmCheckResult['leadExists']) {
-        // Existed but older than N months -> new assignment
+        // Existed but older than N months or old consultant is inactive -> new assignment
         if (!empty($crmCheckResult['originalAssignedTo'])) {
             $prevName = $crmCheckResult['assignedName'] ?? 'Sale cũ';
             $prevDate = !empty($crmCheckResult['lastInteractionDate']) ? date('d/m/Y', strtotime($crmCheckResult['lastInteractionDate'])) : 'Không rõ';
             $dupMonths = $crmCheckResult['monthsSinceLastInteraction'] ?? $dupCheckMonths;
-            $noteAppend = "\n[Lưu ý: Trùng số của $prevName trên $dupMonths tháng. Cập nhật lần cuối: $prevDate]";
+            if (($crmCheckResult['consultantStatus'] ?? '') === 'inactive') {
+                $noteAppend = "\n[Lưu ý: Khách cũ của TVV ngưng hoạt động ($prevName). Cập nhật lần cuối: $prevDate - Chia lại vòng mới]";
+            } else {
+                $noteAppend = "\n[Lưu ý: Trùng số của $prevName trên $dupMonths tháng. Cập nhật lần cuối: $prevDate]";
+            }
             $note = trim($note) === '' ? trim($noteAppend, "\n") : $note . $noteAppend;
         }
         $leadId = updateLead($conn, $phone, $email, $assignedConsultantId, $source, $type, $note, $connectionId, null, $name);

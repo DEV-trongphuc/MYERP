@@ -1534,9 +1534,15 @@ const Flows: React.FC = () => {
                 };
             }
             if (stepType === 'advanced_condition') {
+                const defaultCond = [{ field: 'crm_stage_id', operator: 'equals', value: '1' }];
                 return {
                     branches: [
-                        { id: crypto.randomUUID(), label: 'Nhánh 1', conditions: [{ field: 'stage_id', operator: 'equals', value: '1' }] }
+                        {
+                            id: crypto.randomUUID(),
+                            label: 'Nhánh 1',
+                            conditions: defaultCond,
+                            conditionGroup: { logic: 'AND', conditions: defaultCond }
+                        }
                     ]
                 };
             }
@@ -2224,7 +2230,7 @@ const Flows: React.FC = () => {
             )}
 
             {
-                selectedFlow && createPortal(
+                selectedFlow && location.pathname.startsWith('/marketing/flows') && createPortal(
                     <div data-lenis-prevent="true" style={{ zIndex: 2147483600 }} className="fixed inset-0 z-[2147483600] flex flex-col bg-white dark:bg-slate-900 animate-in fade-in duration-300 overflow-hidden">
                         <FlowHeader
                             flow={selectedFlow}

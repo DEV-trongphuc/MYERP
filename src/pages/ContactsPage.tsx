@@ -30,6 +30,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { isAcademic, isManagement, isExecutive } from '../utils/roleUtils';
 import { calculateLeadScore, getLeadHeatTier } from '../utils/leadScoring';
 import { SalesLeadPerformanceDeck } from '../components/Dashboard/SalesLeadPerformanceDeck';
+import { CustomerPersonaOverviewDeck } from '../components/Dashboard/CustomerPersonaOverviewDeck';
 import { ReportDataModal } from '../components/ui/ReportDataModal';
 import { TableContextMenu } from '../components/ui/TableContextMenu';
 import { pushOverlay, removeOverlay } from '../utils/overlayStack';
@@ -42,10 +43,28 @@ const STATUS_CLASS: Record<string,string> = { lead:'info', qualified:'warning', 
 
 const cleanInteractionText = (text: string) => {
   if (!text) return text;
-  return text
+  let raw = String(text).trim();
+  if (raw.startsWith('{') && raw.includes('"erp_task"')) {
+    try {
+      const parsed = JSON.parse(raw);
+      raw = String(parsed?.erp_task?.description || parsed?.description || '');
+    } catch {
+      const m = raw.match(/"description"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+      if (m) raw = m[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+    }
+  }
+  return raw
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
     .replace(/\s*\n?\(?Giai đoạn:.*$/si, '')
     .replace(/\s*\|\s*Lý do lost:.*$/si, '')
     .replace(/\s*\|\s*Độ nóng:.*$/si, '')
+    .replace(/\s+/g, ' ')
     .trim();
 };
 
@@ -563,6 +582,7 @@ const ContactsFloatingTooltip = React.memo(({
 
   const hc = hoveredCell.contact;
   const rect = hoveredCell.rect;
+  const hcPhone = hc.phone || hc.mobile || hc.phone2 || '';
   const stageInfo = getContactStage(hc, pipelineStages);
   const lastNote = cleanInteractionText(hc.last_interaction || '');
   const initialNote = cleanInteractionText(hc.notes || '');
@@ -612,8 +632,26 @@ const ContactsFloatingTooltip = React.memo(({
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px solid #f1f5f9' }}>
-        <div style={{ fontWeight: 800, fontSize: '0.84rem', color: '#0f172a' }}>
-          {hc.full_name || hc.name || 'Khách hàng'}
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontWeight: 800, fontSize: '0.84rem', color: '#0f172a', wordBreak: 'break-word' }}>
+            {hc.full_name || hc.name || 'Khách hàng'}
+          </div>
+          {(hcPhone || hc.email) && (
+            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '5px', marginTop: '2px', fontSize: '0.72rem', lineHeight: 1.3 }}>
+              {hcPhone && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#0f172a', fontWeight: 700 }}>
+                  <Phone size={11} style={{ color: '#64748b', flexShrink: 0 }} />
+                  <span>{hcPhone}</span>
+                </span>
+              )}
+              {hcPhone && hc.email && <span style={{ color: '#cbd5e1' }}>•</span>}
+              {hc.email && (
+                <span style={{ color: '#64748b', fontWeight: 500, wordBreak: 'break-all' }}>
+                  {hc.email}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <span
           style={{
@@ -623,7 +661,8 @@ const ContactsFloatingTooltip = React.memo(({
             borderRadius: '999px',
             background: stageInfo.isNewLead ? '#dc2626' : `${stageInfo.color}18`,
             color: stageInfo.isNewLead ? '#ffffff' : stageInfo.color,
-            whiteSpace: 'nowrap'
+            whiteSpace: 'nowrap',
+            flexShrink: 0
           }}
         >
           {stageInfo.name}
@@ -745,7 +784,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       : (p.startsWith('/contacts') || p.startsWith('/data'));
   }, [location.pathname, defaultSegment]);
   const isManagerOrAbove = useMemo(() => isManagement(user) || isExecutive(user), [user]);
-  const [activeMainTab, setActiveMainTab] = useState<'list' | 'performance'>('list');
+  const [activeMainTab, setActiveMainTab] = useState<'list' | 'performance' | 'persona'>('list');
   const { addToast, showConfirm, closeConfirm } = useUIStore();
   const [uncontactedCount, setUncontactedCount] = useState(() => {
     return Number(sessionStorage.getItem('sale-uncontacted-count')) || 0;
@@ -960,6 +999,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
   // Advanced Filter state
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [activeFilterTab, setActiveFilterTab] = useState<'basic' | 'timeline' | 'interaction' | 'profile' | 'advanced' | 'all'>('basic');
 
   useEffect(() => {
     if (!showAdvancedFilters) {
@@ -1411,7 +1451,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const [filterDateField, setFilterDateField] = useState<'created_at' | 'updated_at' | 'last_contact' | 'admission_date' | 'deposit_date' | 'next_followup_date' | 'birthday'>('created_at');
   const [dateFilterActive, setDateFilterActive] = useState(false);
   
-  const storageKey = `contacts_page_columns_v7_${segment === 'customer' ? 'student' : 'lead'}_${isSale ? 'sale' : 'admin'}`;
+  const storageKey = `contacts_page_columns_v8_${segment === 'customer' ? 'student' : 'lead'}_${isSale ? 'sale' : 'admin'}`;
 
   const getDefaultContactColumns = (seg: string, saleRole: boolean): ColumnDef[] => [
     { id: 'student_code', label: 'Mã HV / Nhập học', visible: seg === 'customer' },
@@ -1422,7 +1462,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     { id: 'tags', label: 'Phân loại (Tags)', visible: seg !== 'customer' },
     { id: 'program', label: 'Tên chương trình', visible: seg === 'customer' },
     { id: 'last_note', label: 'Nhật ký (gần nhất)', visible: seg !== 'customer' },
-    { id: 'omnichannel_journey', label: 'Hành trình', visible: true },
     { id: 'admission_date', label: 'Ngày nhập học', visible: false },
     { id: 'status', label: 'Trạng thái', visible: true },
     { id: 'contact', label: 'Liên lạc cuối', visible: false },
@@ -1432,6 +1471,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     { id: 'distribution', label: 'Nguồn phân bổ', visible: false },
     { id: 'ticket_action', label: 'Helpdesk (Ticket)', visible: false },
     { id: 'updated_at', label: 'Ngày cập nhật', visible: false },
+    { id: 'omnichannel_journey', label: 'Hành trình', visible: true },
     { id: 'created_at', label: 'Ngày tạo', visible: !saleRole },
     { id: 'score', label: 'Lead Score', visible: false },
     { id: 'source', label: 'Nguồn khách hàng', visible: false },
@@ -1701,6 +1741,32 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       if (activeFilters.teamId) params.teams = activeFilters.teamId;
     }
   };
+
+  // Sync active /contacts filters to window for AI Screen Awareness ([TRỰC GIÁC MÀN HÌNH])
+  useEffect(() => {
+    if (!isActiveInstance || typeof window === 'undefined') return;
+    const stagesToUse = (pipelineStages && pipelineStages.length > 0) ? pipelineStages : DEFAULT_PIPELINE_STAGES;
+    const stObj = (quickPipelineStage && quickPipelineStage !== 'all')
+      ? stagesToUse.find(s => String(s.id) === String(quickPipelineStage) || s.system_slug === quickPipelineStage)
+      : null;
+    const matchedProj = activeFilters.projectId && !activeFilters.projectId.includes(',')
+      ? projects.find((p: any) => String(p.id) === String(activeFilters.projectId))
+      : null;
+
+    (window as any).__MYERP_CONTACTS_ACTIVE_FILTERS__ = {
+      from_date: activeFilters.dateActive ? (activeFilters.dateType === 'after' ? activeFilters.afterDate : activeFilters.fromDate) : '',
+      to_date: activeFilters.dateActive ? (activeFilters.dateType === 'before' ? activeFilters.beforeDate : activeFilters.toDate) : '',
+      date_field: activeFilters.dateActive ? activeFilters.dateField : 'created_at',
+      data_type: (activeFilters as any).lead_type || activeFilters.dataType || filterDataType || 'all',
+      stage_id: quickPipelineStage !== 'all' ? quickPipelineStage : (activeFilters.status || ''),
+      stages: (activeFilters as any).stages || activeFilters.status || stObj?.name || (quickPipelineStage !== 'all' ? quickPipelineStage : ''),
+      owner_id: activeFilters.ownerId || '',
+      program: matchedProj?.name || activeFilters.projectId || '',
+      source: activeFilters.source || '',
+      lead_status: quickLeadStatus || activeFilters.leadStatus || 'active_only',
+      total_displayed: total
+    };
+  }, [isActiveInstance, activeFilters, filterDataType, quickPipelineStage, quickLeadStatus, total, projects, pipelineStages]);
 
   const fetchData = async (isSilent = false) => {
     if (fetchAbortRef.current) {
@@ -2823,9 +2889,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   return (
     <div className="page-container contacts-page-container">
       {/* Header */}
-      <div className="page-header" style={{ marginBottom: isMobile ? '0.75rem' : '1.5rem' }}>
-        <div style={{ width: '100%' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', width: '100%', justifyContent: 'space-between' }}>
+      <div className="page-header" style={{ marginBottom: isMobile ? '0.75rem' : '1.5rem', gap: '14px' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', width: '100%', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <h1 className="page-title" style={{ margin: 0 }}>{segment === 'customer' ? (studentSubTab === 'le_phi' ? 'Lệ phí hồ sơ' : studentSubTab === 'nop_ho_so' ? 'Nộp hồ sơ' : 'Học viên chính thức') : 'Tiềm năng'}</h1>
               {activeMainTab === 'list' && (
@@ -2835,14 +2901,17 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
               )}
             </div>
 
-            {isManagerOrAbove && segment === 'tiem_nang' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
               <div style={{
                 display: 'inline-flex',
+                alignItems: 'center',
                 background: 'var(--color-border-light)',
                 border: '1px solid var(--color-border)',
-                padding: '2px',
-                borderRadius: '9px',
-                gap: '2px'
+                padding: '3px',
+                borderRadius: '10px',
+                gap: '3px',
+                height: '40px',
+                boxSizing: 'border-box'
               }}>
                 <button
                   type="button"
@@ -2850,56 +2919,78 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '5px',
-                    padding: '5px 12px',
+                    gap: '6px',
+                    height: '32px',
+                    padding: '0 13px',
                     borderRadius: '7px',
                     border: 'none',
                     background: activeMainTab === 'list' ? 'var(--color-surface)' : 'transparent',
-                    color: activeMainTab === 'list' ? 'var(--color-text)' : 'var(--color-text-muted)',
-                    fontWeight: activeMainTab === 'list' ? 700 : 500,
-                    fontSize: '0.78rem',
+                    color: activeMainTab === 'list' ? 'var(--color-primary, #BD1D2D)' : 'var(--color-text-muted)',
+                    fontWeight: activeMainTab === 'list' ? 700 : 600,
+                    fontSize: '0.82rem',
                     cursor: 'pointer',
                     boxShadow: activeMainTab === 'list' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                     transition: 'all 0.15s ease'
                   }}
                 >
                   <Users size={14} />
-                  <span>Danh sách Tiềm năng</span>
+                  <span>{segment === 'customer' ? 'Danh sách Học viên' : 'Danh sách Tiềm năng'}</span>
                 </button>
+                {isManagerOrAbove && segment === 'tiem_nang' && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveMainTab('performance')}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      height: '32px',
+                      padding: '0 13px',
+                      borderRadius: '7px',
+                      border: 'none',
+                      background: activeMainTab === 'performance' ? 'var(--color-surface)' : 'transparent',
+                      color: activeMainTab === 'performance' ? 'var(--color-primary, #BD1D2D)' : 'var(--color-text-muted)',
+                      fontWeight: activeMainTab === 'performance' ? 700 : 600,
+                      fontSize: '0.82rem',
+                      cursor: 'pointer',
+                      boxShadow: activeMainTab === 'performance' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <BarChart3 size={14} />
+                    <span>Dashboard Hiệu suất</span>
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => setActiveMainTab('performance')}
+                  onClick={() => setActiveMainTab(activeMainTab === 'persona' ? 'list' : 'persona')}
+                  title="Tổng quan Data & Chân dung Khách hàng / Học viên"
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '5px',
-                    padding: '5px 12px',
+                    gap: '6px',
+                    height: '32px',
+                    padding: '0 13px',
                     borderRadius: '7px',
                     border: 'none',
-                    background: activeMainTab === 'performance' ? 'var(--color-surface)' : 'transparent',
-                    color: activeMainTab === 'performance' ? 'var(--color-primary, #bd1d2d)' : 'var(--color-text-muted)',
-                    fontWeight: activeMainTab === 'performance' ? 700 : 500,
-                    fontSize: '0.78rem',
+                    background: activeMainTab === 'persona' ? 'var(--color-surface)' : 'transparent',
+                    color: activeMainTab === 'persona' ? 'var(--color-primary, #BD1D2D)' : 'var(--color-text-muted)',
+                    fontWeight: activeMainTab === 'persona' ? 700 : 600,
+                    fontSize: '0.82rem',
                     cursor: 'pointer',
-                    boxShadow: activeMainTab === 'performance' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                    boxShadow: activeMainTab === 'persona' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                     transition: 'all 0.15s ease'
                   }}
                 >
-                  <BarChart3 size={14} />
-                  <span>Dashboard Hiệu suất</span>
-                  <span style={{
-                    fontSize: '0.65rem',
-                    padding: '1px 5px',
-                    borderRadius: '6px',
-                    background: 'rgba(239, 68, 68, 0.12)',
-                    color: 'var(--color-primary, #bd1d2d)',
-                    fontWeight: 700
-                  }}>
-                    Manager
-                  </span>
+                  <img
+                    src="/stickers/ideas/ideas_3.webp"
+                    alt="IDEAS"
+                    style={{ width: 18, height: 18, objectFit: 'contain', flexShrink: 0 }}
+                  />
+                  <span>Tổng quan Data</span>
                 </button>
               </div>
-            )}
+            </div>
           </div>
           {segment === 'customer' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
@@ -2957,126 +3048,160 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
         
         {/* Render header action buttons */}
         {activeMainTab === 'list' && (
-          <div className="flex gap-2" style={{ alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: '6px', flexShrink: 0 }}>
             {canAddOrAssign && (
             <>
               <button 
-                className="btn primary sm" 
+                className="btn primary" 
                 onClick={() => setShowCreateModal(true)} 
                 title="Thêm data mới"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', borderRadius: '8px', padding: '6px 12px', fontSize: '0.8rem', fontWeight: 700 }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', whiteSpace: 'nowrap', height: '40px', borderRadius: '10px', padding: '0 16px', fontSize: '0.84rem', fontWeight: 600 }}
               >
-                <Plus size={15} />
+                <Plus size={16} />
                 <span>Thêm data</span>
               </button>
               <button 
-                className="btn outline sm" 
+                className="btn outline" 
                 onClick={() => window.dispatchEvent(new CustomEvent('open-quick-add-lead'))} 
                 title="Giao data / chia data nhanh cho Sales"
                 style={{ 
                   display: 'inline-flex', 
                   alignItems: 'center', 
-                  gap: '6px', 
+                  gap: '7px', 
                   whiteSpace: 'nowrap',
-                  borderRadius: '8px',
-                  padding: '6px 12px',
-                  fontSize: '0.8rem',
-                  fontWeight: 700,
-                  background: 'rgba(219, 39, 119, 0.08)',
-                  borderColor: 'rgba(219, 39, 119, 0.3)',
-                  color: '#be185d'
+                  height: '40px',
+                  borderRadius: '10px',
+                  padding: '0 16px',
+                  fontSize: '0.84rem',
+                  fontWeight: 600,
+                  background: 'var(--color-surface, #ffffff)',
+                  boxShadow: 'var(--shadow-sm)'
                 }}
               >
-                <UserCheck size={15} />
+                <UserCheck size={16} />
                 <span>Giao data</span>
               </button>
             </>
           )}
-          {!isMobile && (
-            <>
-              {user?.role !== 'viewer' && !isSale && (
-                <button 
-                  className="btn outline sm" 
-                  onClick={() => setShowImportExport(true)} 
-                  title="Nhập dữ liệu từ Excel/CSV"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', borderRadius: '8px', padding: '6px 12px', fontSize: '0.8rem', fontWeight: 600 }}
-                >
-                  <Upload size={14} />
-                  <span className="hide-on-mobile">Nhập dữ liệu</span>
-                </button>
-              )}
-              {user?.role !== 'viewer' && (
-                <button
-                  type="button"
-                  className="btn outline sm"
-                  onClick={() => setShowFilterStaticListModal(true)}
-                  title="Đóng băng tệp khách hàng theo bộ lọc hiện tại thành Danh sách tĩnh Email / Marketing"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    whiteSpace: 'nowrap',
-                    borderRadius: '8px',
-                    padding: '6px 12px',
-                    fontSize: '0.8rem',
-                    fontWeight: 700,
-                    color: '#059669',
-                    borderColor: 'rgba(16, 185, 129, 0.35)',
-                    background: 'rgba(16, 185, 129, 0.08)'
-                  }}
-                >
-                  <List size={14} />
-                  <span className="hide-on-mobile">Tạo Danh sách tĩnh (Mkt)</span>
-                </button>
-              )}
-              {user?.role !== 'viewer' && user?.role !== 'sale' && (
-                <div style={{ position: 'relative' }} ref={exportDropdownRef}>
-                  <button 
-                    className="btn outline sm" 
-                    onClick={() => setShowExportDropdown(!showExportDropdown)} 
-                    disabled={isExporting} 
-                    title="Xuất dữ liệu ra Excel/CSV"
-                    style={{ 
-                      display: 'inline-flex', 
-                      alignItems: 'center', 
-                      gap: '6px', 
-                      whiteSpace: 'nowrap', 
-                      borderRadius: '8px', 
-                      padding: '6px 12px', 
-                      fontSize: '0.8rem', 
-                      fontWeight: 600,
-                      background: showExportDropdown ? 'var(--color-bg-light)' : undefined,
-                      borderColor: showExportDropdown ? 'var(--color-primary)' : undefined
+          {!isMobile && user?.role !== 'viewer' && (
+            <div style={{ position: 'relative' }} ref={exportDropdownRef}>
+              <button 
+                type="button"
+                className="btn outline" 
+                onClick={() => setShowExportDropdown(!showExportDropdown)} 
+                disabled={isExporting} 
+                title="Hành động dữ liệu (Nhập / Xuất / Tạo Danh sách tĩnh Marketing)"
+                style={{ 
+                  display: 'inline-flex', 
+                  alignItems: 'center', 
+                  gap: '8px', 
+                  whiteSpace: 'nowrap', 
+                  height: '40px',
+                  borderRadius: '10px', 
+                  padding: '0 16px', 
+                  fontSize: '0.84rem', 
+                  fontWeight: 600,
+                  background: showExportDropdown ? 'var(--color-bg-light)' : 'var(--color-surface, #ffffff)',
+                  borderColor: showExportDropdown ? 'var(--color-primary)' : 'var(--color-border)',
+                  boxShadow: 'var(--shadow-sm)'
+                }}
+              >
+                {isExporting ? <Loader2 size={15} className="spin" /> : <Layers size={15} />}
+                <span>{isExporting ? 'Đang xử lý...' : 'Hành động'}</span>
+                <ChevronDown size={14} style={{ opacity: 0.75, transform: showExportDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />
+              </button>
+
+              <AnimatePresence>
+                {showExportDropdown && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                    transition={{ duration: 0.15 }}
+                    style={{
+                      position: 'absolute',
+                      right: 0,
+                      top: 'calc(100% + 6px)',
+                      width: '285px',
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '12px',
+                      boxShadow: 'var(--shadow-lg, 0 12px 30px rgba(0,0,0,0.14))',
+                      padding: '6px',
+                      zIndex: 1000,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px'
                     }}
                   >
-                    {isExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
-                    <span>{isExporting ? 'Đang xuất...' : 'Xuất dữ liệu'}</span>
-                    <ChevronDown size={13} style={{ opacity: 0.7, transform: showExportDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />
-                  </button>
+                    {!isSale && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowExportDropdown(false);
+                            setShowImportExport(true);
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '10px',
+                            padding: '8px 10px',
+                            border: 'none',
+                            background: 'transparent',
+                            color: 'var(--color-text)',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            transition: 'background-color 0.15s'
+                          }}
+                          className="hover-bg-alt"
+                        >
+                          <div style={{ marginTop: '2px', color: '#2563eb' }}>
+                            <Upload size={15} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)' }}>Nhập dữ liệu (Import Excel/CSV)</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Tải lên danh sách khách hàng / học viên từ file</div>
+                          </div>
+                        </button>
+                        <div style={{ height: '1px', background: 'var(--color-border-light)', margin: '2px 0' }} />
+                      </>
+                    )}
 
-                  <AnimatePresence>
-                    {showExportDropdown && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 6, scale: 0.96 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 6, scale: 0.96 }}
-                        transition={{ duration: 0.15 }}
-                        style={{
-                          position: 'absolute',
-                          right: 0,
-                          top: 'calc(100% + 6px)',
-                          width: '270px',
-                          background: 'var(--color-surface)',
-                          border: '1px solid var(--color-border)',
-                          borderRadius: '10px',
-                          boxShadow: 'var(--shadow-lg, 0 10px 25px rgba(0,0,0,0.12))',
-                          padding: '6px',
-                          zIndex: 1000,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '2px'
-                        }}
-                      >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowExportDropdown(false);
+                        setShowFilterStaticListModal(true);
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '10px',
+                        padding: '8px 10px',
+                        border: 'none',
+                        background: 'transparent',
+                        color: 'var(--color-text)',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'background-color 0.15s'
+                      }}
+                      className="hover-bg-alt"
+                    >
+                      <div style={{ marginTop: '2px', color: '#059669' }}>
+                        <List size={15} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#059669' }}>Tạo Danh sách tĩnh (Mkt)</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Đóng băng tệp khách hàng khớp bộ lọc sang Marketing</div>
+                      </div>
+                    </button>
+
+                    {!isSale && (
+                      <>
+                        <div style={{ height: '1px', background: 'var(--color-border-light)', margin: '2px 0' }} />
                         <button
                           type="button"
                           onClick={() => {
@@ -3102,7 +3227,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                             <Filter size={15} />
                           </div>
                           <div>
-                            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text)' }}>Xuất theo bộ lọc đang xem</div>
+                            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text)' }}>Xuất dữ liệu theo bộ lọc đang xem</div>
                             <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Xuất chuẩn theo các tiêu chí & bộ lọc trên màn hình</div>
                           </div>
                         </button>
@@ -3138,50 +3263,36 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                             <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Tất cả 100% trường khách hàng (hồ sơ, đào tạo, CRM...)</div>
                           </div>
                         </button>
-
-                        <div style={{ height: '1px', background: 'var(--color-border-light)', margin: '2px 0' }} />
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowExportDropdown(false);
-                            setShowFilterStaticListModal(true);
-                          }}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'flex-start',
-                            gap: '10px',
-                            padding: '8px 10px',
-                            border: 'none',
-                            background: 'transparent',
-                            color: 'var(--color-text)',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            textAlign: 'left',
-                            transition: 'background-color 0.15s'
-                          }}
-                          className="hover-bg-alt"
-                        >
-                          <div style={{ marginTop: '2px', color: '#059669' }}>
-                            <List size={15} />
-                          </div>
-                          <div>
-                            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#059669' }}>Lưu Danh sách tĩnh (Email / Mkt)</div>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Đóng băng toàn bộ khách hàng khớp bộ lọc sang Marketing</div>
-                          </div>
-                        </button>
-                      </motion.div>
+                      </>
                     )}
-                  </AnimatePresence>
-                </div>
-              )}
-            </>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           )}
         </div>
         )}
       </div>
 
-      {activeMainTab === 'performance' && isManagerOrAbove && segment === 'tiem_nang' ? (
+      {activeMainTab === 'persona' ? (
+        <CustomerPersonaOverviewDeck
+          defaultSegment="student"
+          onOpenContact={(cid, fallbackContact) => {
+            setProfileInitialTab('info');
+            if (fallbackContact) {
+              setProfileContact({ id: cid, ...fallbackContact });
+            } else {
+              setProfileContact({ id: cid } as any);
+            }
+            api.get(`/contacts/${cid}`).then((res) => {
+              const cData = res.data?.data || res.data;
+              if (cData && cData.id) {
+                setProfileContact(cData);
+              }
+            }).catch(() => {});
+          }}
+        />
+      ) : activeMainTab === 'performance' && isManagerOrAbove && segment === 'tiem_nang' ? (
         <SalesLeadPerformanceDeck embedInPage="contacts" />
       ) : (
         <>
@@ -4670,7 +4781,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                 style={{
                   position: 'relative',
                   width: '100%',
-                  maxWidth: isMobile ? '100vw' : 'min(92vw, 580px)',
+                  maxWidth: isMobile ? '100vw' : 'min(95vw, 780px)',
                   height: '100%',
                   background: 'var(--color-surface, #ffffff)',
                   boxShadow: '-8px 0 36px rgba(0, 0, 0, 0.28)',
@@ -4753,22 +4864,299 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                 </div>
               </div>
 
+              {/* Categorized Filter Navigation Bar + Live Selected Pills */}
+              {(() => {
+                const draftCustomRulesCount = (customRules || []).filter(r => r.field && (r.operator === 'is_empty' || r.operator === 'is_not_empty' || String(r.value || '').trim() !== '')).length;
+                const hasDateFilter = Boolean(filterFromDate || filterToDate || filterBeforeDate || filterAfterDate);
+                const hasAdmissionFilter = Boolean(filterAdmissionFrom || filterAdmissionTo || filterAdmissionPreset);
+                const tabCounts = {
+                  basic: [
+                    filterLeadStatus,
+                    filterStatus,
+                    filterShowLost ? '1' : '',
+                    filterOwnerId,
+                    filterTeamId,
+                    filterProjectId,
+                    filterCampaignId,
+                    filterDataType,
+                    filterSource,
+                    filterTag
+                  ].filter(Boolean).length,
+                  timeline: [
+                    hasDateFilter ? '1' : '',
+                    hasAdmissionFilter ? '1' : '',
+                    filterMultiProgram ? '1' : '',
+                    filterStudyStatus,
+                    filterStudentCode.trim(),
+                    filterExpectedIntake.trim()
+                  ].filter(Boolean).length,
+                  interaction: [
+                    filterInteractionStatus,
+                    filterStaleDays.trim(),
+                    filterInteractedWithinDays.trim(),
+                    filterInteractionType,
+                    (filterMinCallCount.trim() || filterMaxCallCount.trim()) ? '1' : '',
+                    filterNoteKeyword.trim()
+                  ].filter(Boolean).length,
+                  profile: [
+                    filterGender,
+                    filterCity,
+                    (filterAgeMin.trim() || filterAgeMax.trim()) ? '1' : '',
+                    filterJobTitle.trim(),
+                    filterCompany.trim(),
+                    filterFinancialStatus,
+                    (filterMinDeposit.trim() || filterMaxDeposit.trim()) ? '1' : ''
+                  ].filter(Boolean).length,
+                  advanced: [
+                    filterEngagementStatus,
+                    filterAutomationFlow,
+                    filterVoucherStatus,
+                    (filterMinEngagementScore.trim() || filterMaxEngagementScore.trim()) ? '1' : '',
+                    draftCustomRulesCount > 0 ? '1' : ''
+                  ].filter(Boolean).length
+                };
+                const totalDraftCount = tabCounts.basic + tabCounts.timeline + tabCounts.interaction + tabCounts.profile + tabCounts.advanced;
+                const tabs: Array<{ id: 'basic' | 'timeline' | 'interaction' | 'profile' | 'advanced' | 'all'; label: string; count: number }> = [
+                  { id: 'basic', label: 'Cơ bản & Nguồn', count: tabCounts.basic },
+                  { id: 'timeline', label: 'Thời gian & Học vụ', count: tabCounts.timeline },
+                  { id: 'interaction', label: 'Chăm sóc', count: tabCounts.interaction },
+                  { id: 'profile', label: 'Hồ sơ & Cọc', count: tabCounts.profile },
+                  { id: 'advanced', label: 'Nâng cao', count: tabCounts.advanced },
+                  { id: 'all', label: 'Tất cả', count: totalDraftCount }
+                ];
+
+                const draftChips: Array<{ label: string; onClear: () => void }> = [];
+                if (filterLeadStatus) {
+                  draftChips.push({
+                    label: `Trạng thái: ${filterLeadStatus}`,
+                    onClear: () => setFilterLeadStatus('')
+                  });
+                }
+                if (filterStatus) {
+                  draftChips.push({
+                    label: `Pipeline (${csvToMulti(filterStatus).length})`,
+                    onClear: () => setFilterStatus('')
+                  });
+                }
+                if (filterProjectId) {
+                  draftChips.push({
+                    label: `Dự án (${csvToMulti(filterProjectId).length})`,
+                    onClear: () => setFilterProjectId('')
+                  });
+                }
+                if (filterOwnerId) {
+                  draftChips.push({
+                    label: `Sale (${csvToMulti(filterOwnerId).length})`,
+                    onClear: () => setFilterOwnerId('')
+                  });
+                }
+                if (filterTeamId) {
+                  draftChips.push({
+                    label: `Đội nhóm (${csvToMulti(filterTeamId).length})`,
+                    onClear: () => setFilterTeamId('')
+                  });
+                }
+                if (filterSource) {
+                  draftChips.push({
+                    label: `Nguồn: ${filterSource}`,
+                    onClear: () => setFilterSource('')
+                  });
+                }
+                if (filterTag) {
+                  draftChips.push({
+                    label: `Tag: ${filterTag}`,
+                    onClear: () => setFilterTag('')
+                  });
+                }
+                if (hasDateFilter) {
+                  draftChips.push({
+                    label: `Lọc ngày: ${filterFromDate || filterBeforeDate || filterAfterDate || '...'} → ${filterToDate || '...'}`,
+                    onClear: () => {
+                      setFilterFromDate('');
+                      setFilterToDate('');
+                      setFilterBeforeDate('');
+                      setFilterAfterDate('');
+                    }
+                  });
+                }
+                if (hasAdmissionFilter) {
+                  draftChips.push({
+                    label: `Nhập học: ${filterAdmissionFrom || '...'} → ${filterAdmissionTo || '...'}`,
+                    onClear: () => {
+                      setFilterAdmissionPreset('');
+                      setFilterAdmissionFrom('');
+                      setFilterAdmissionTo('');
+                    }
+                  });
+                }
+                if (filterMultiProgram) {
+                  draftChips.push({
+                    label: 'Đa chương trình (≥ 2 CT)',
+                    onClear: () => setFilterMultiProgram(false)
+                  });
+                }
+                if (filterInteractionStatus) {
+                  draftChips.push({
+                    label: filterInteractionStatus === 'uncontacted' ? 'Chưa liên hệ' : 'Đã liên hệ',
+                    onClear: () => setFilterInteractionStatus('')
+                  });
+                }
+                if (filterStaleDays.trim()) {
+                  draftChips.push({
+                    label: `Bỏ quên > ${filterStaleDays} ngày`,
+                    onClear: () => setFilterStaleDays('')
+                  });
+                }
+                if (filterGender) {
+                  draftChips.push({
+                    label: `Giới tính: ${filterGender === 'unknown' ? 'Chưa rõ' : filterGender}`,
+                    onClear: () => setFilterGender('')
+                  });
+                }
+                if (filterCity) {
+                  draftChips.push({
+                    label: `Tỉnh/TP: ${filterCity}`,
+                    onClear: () => setFilterCity('')
+                  });
+                }
+                if (filterFinancialStatus) {
+                  draftChips.push({
+                    label: `Tài chính (${csvToMulti(filterFinancialStatus).length})`,
+                    onClear: () => setFilterFinancialStatus('')
+                  });
+                }
+                if (draftCustomRulesCount > 0) {
+                  draftChips.push({
+                    label: `${draftCustomRulesCount} điều kiện nâng cao`,
+                    onClear: () => setCustomRules([])
+                  });
+                }
+
+                return (
+                  <div style={{ flexShrink: 0, borderBottom: '1px solid var(--color-border)', background: '#f8fafc' }}>
+                    <div style={{
+                      padding: '0.65rem 1.25rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      overflowX: 'auto',
+                      scrollbarWidth: 'none'
+                    }}>
+                      {tabs.map(t => {
+                        const isAct = activeFilterTab === t.id;
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => setActiveFilterTab(t.id)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '6px 11px',
+                              borderRadius: '8px',
+                              fontSize: '0.78rem',
+                              fontWeight: isAct ? 700 : 600,
+                              whiteSpace: 'nowrap',
+                              cursor: 'pointer',
+                              border: isAct ? '1px solid rgba(189, 29, 45, 0.25)' : '1px solid transparent',
+                              background: isAct ? '#ffffff' : 'transparent',
+                              color: isAct ? 'var(--color-primary, #BD1D2D)' : '#475569',
+                              boxShadow: isAct ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            <span>{t.label}</span>
+                            {t.count > 0 && (
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                minWidth: '17px',
+                                height: '17px',
+                                padding: '0 5px',
+                                borderRadius: '999px',
+                                fontSize: '0.68rem',
+                                fontWeight: 700,
+                                background: isAct ? 'var(--color-primary, #BD1D2D)' : 'rgba(15, 23, 42, 0.08)',
+                                color: isAct ? '#ffffff' : '#334155'
+                              }}>
+                                {t.count}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {draftChips.length > 0 && (
+                      <div style={{
+                        padding: '0.45rem 1.25rem 0.65rem',
+                        borderTop: '1px dashed var(--color-border-light)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '6px'
+                      }}>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b' }}>Đang chọn:</span>
+                        {draftChips.map((chip, idx) => (
+                          <span
+                            key={idx}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '2px 8px',
+                              borderRadius: '999px',
+                              background: 'rgba(189, 29, 45, 0.08)',
+                              border: '1px solid rgba(189, 29, 45, 0.18)',
+                              color: 'var(--color-primary, #BD1D2D)',
+                              fontSize: '0.72rem',
+                              fontWeight: 600
+                            }}
+                          >
+                            <span>{chip.label}</span>
+                            <button
+                              type="button"
+                              onClick={chip.onClear}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                padding: 0,
+                                display: 'inline-flex',
+                                cursor: 'pointer',
+                                color: 'inherit'
+                              }}
+                            >
+                              <X size={11} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Drawer Body */}
               <div style={{
                 flex: 1,
                 overflowY: 'auto',
-                padding: '1.25rem 1.5rem',
+                padding: '1.1rem 1.35rem',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '1.25rem'
+                gap: '1rem',
+                background: '#f8fafc'
               }}>
 
                 {/* Card 1: Học vụ & Mốc thời gian */}
                 <div style={{
+                  display: (activeFilterTab === 'timeline' || activeFilterTab === 'all') ? 'block' : 'none',
                   padding: '1.1rem',
                   borderRadius: '14px',
-                  background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
-                  border: '1px solid var(--color-border-light)'
+                  background: 'var(--color-surface, #ffffff)',
+                  border: '1px solid var(--color-border-light)',
+                  boxShadow: '0 1px 2px rgba(15,23,42,0.03)'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
                     <GraduationCap size={16} color="var(--color-text, #0f172a)" /> Mốc thời gian & Học vụ
@@ -5026,10 +5414,12 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
                 {/* Card 2: Tiến trình & Trạng thái Lead */}
                 <div style={{
+                  display: (activeFilterTab === 'basic' || activeFilterTab === 'all') ? 'block' : 'none',
                   padding: '1.1rem',
                   borderRadius: '14px',
-                  background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
-                  border: '1px solid var(--color-border-light)'
+                  background: 'var(--color-surface, #ffffff)',
+                  border: '1px solid var(--color-border-light)',
+                  boxShadow: '0 1px 2px rgba(15,23,42,0.03)'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
                     <Layers size={16} color="var(--color-text, #0f172a)" /> Tiến trình & Trạng thái Lead
@@ -5180,10 +5570,12 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
                 {/* Card 3: Phụ trách & Nguồn dữ liệu */}
                 <div style={{
+                  display: (activeFilterTab === 'basic' || activeFilterTab === 'all') ? 'block' : 'none',
                   padding: '1.1rem',
                   borderRadius: '14px',
-                  background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
-                  border: '1px solid var(--color-border-light)'
+                  background: 'var(--color-surface, #ffffff)',
+                  border: '1px solid var(--color-border-light)',
+                  boxShadow: '0 1px 2px rgba(15,23,42,0.03)'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
                     <Users size={16} color="var(--color-text, #0f172a)" /> Phụ trách & Nguồn dữ liệu
@@ -5331,10 +5723,12 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
                 {/* Card 4: Lịch sử Tương tác & Chăm sóc chuyên sâu */}
                 <div style={{
+                  display: (activeFilterTab === 'interaction' || activeFilterTab === 'all') ? 'block' : 'none',
                   padding: '1.1rem',
                   borderRadius: '14px',
-                  background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
-                  border: '1px solid var(--color-border-light)'
+                  background: 'var(--color-surface, #ffffff)',
+                  border: '1px solid var(--color-border-light)',
+                  boxShadow: '0 1px 2px rgba(15,23,42,0.03)'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
                     <Clock size={16} color="var(--color-text, #0f172a)" /> Lịch sử Tương tác & Chăm sóc chuyên sâu
@@ -5501,10 +5895,12 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
                 {/* Card 5: Nhân khẩu học, Học tập & Tài chính */}
                 <div style={{
+                  display: (activeFilterTab === 'profile' || activeFilterTab === 'all') ? 'block' : 'none',
                   padding: '1.1rem',
                   borderRadius: '14px',
-                  background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
-                  border: '1px solid var(--color-border-light)'
+                  background: 'var(--color-surface, #ffffff)',
+                  border: '1px solid var(--color-border-light)',
+                  boxShadow: '0 1px 2px rgba(15,23,42,0.03)'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
                     <BarChart3 size={16} color="var(--color-text, #0f172a)" /> Nhân khẩu học, Học tập & Tài chính
@@ -5682,10 +6078,12 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
                 {/* Card 5B: Hành trình số & Automation 360° */}
                 <div style={{
+                  display: (activeFilterTab === 'advanced' || activeFilterTab === 'all') ? 'block' : 'none',
                   padding: '1.1rem',
                   borderRadius: '14px',
-                  background: 'var(--color-bg-alt, rgba(37, 99, 235, 0.03))',
-                  border: '1px solid var(--color-border-light)'
+                  background: 'var(--color-surface, #ffffff)',
+                  border: '1px solid var(--color-border-light)',
+                  boxShadow: '0 1px 2px rgba(15,23,42,0.03)'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
                     <Sparkles size={15} color="#2563eb" /> Hành trình số & Automation 360°
@@ -5764,10 +6162,12 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
                 {/* Card 6: Bộ lọc nâng cao theo trường dữ liệu (100% DB Schema) */}
                 <div style={{
+                  display: (activeFilterTab === 'advanced' || activeFilterTab === 'all') ? 'block' : 'none',
                   padding: '1.1rem',
                   borderRadius: '14px',
-                  background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
-                  border: '1px solid var(--color-border-light)'
+                  background: 'var(--color-surface, #ffffff)',
+                  border: '1px solid var(--color-border-light)',
+                  boxShadow: '0 1px 2px rgba(15,23,42,0.03)'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '0.875rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -6116,6 +6516,22 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                 .table-wrap td span.text-muted, .table-wrap td span + span {
                   font-size: 0.7rem !important;
                 }
+                .table-wrap td.col-last-note {
+                  white-space: normal !important;
+                  max-width: 280px !important;
+                }
+                .table-wrap td.col-last-note .note-clamp-2 {
+                  display: -webkit-box !important;
+                  -webkit-line-clamp: 2 !important;
+                  -webkit-box-orient: vertical !important;
+                  white-space: normal !important;
+                  overflow: hidden !important;
+                  text-overflow: ellipsis !important;
+                  word-break: break-word !important;
+                  overflow-wrap: anywhere !important;
+                  line-height: 1.42 !important;
+                  max-height: calc(1.42em * 2) !important;
+                }
               `}</style>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead style={{ position: 'sticky', top: 0, zIndex: 20, background: 'var(--color-bg)', boxShadow: '0 1px 0 var(--color-border)' }}>
@@ -6155,13 +6571,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                       </th>
                     )}
                     {visibleColsMap['last_note'] && (
-                      <th style={{ width: '230px', maxWidth: '280px', padding: '0.85rem 0.6rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
+                      <th style={{ width: '250px', maxWidth: '280px', padding: '0.85rem 0.6rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
                         Nhật ký (gần nhất)
-                      </th>
-                    )}
-                    {visibleColsMap['omnichannel_journey'] && (
-                      <th style={{ width: '190px', maxWidth: '235px', padding: '0.85rem 0.6rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
-                        Hành trình
                       </th>
                     )}
                     {visibleColsMap['admission_date'] && (
@@ -6188,6 +6599,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                     {visibleColsMap['ticket_action'] && <th style={{ padding: '1rem', textAlign: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Helpdesk</th>}
                     {visibleColsMap['updated_at'] && (
                       <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>Cập nhật</th>
+                    )}
+                    {visibleColsMap['omnichannel_journey'] && (
+                      <th style={{ width: '190px', maxWidth: '235px', padding: '0.85rem 0.6rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
+                        Hành trình
+                      </th>
                     )}
                     {visibleColsMap['created_at'] && (
                       <th style={{ width: '130px', maxWidth: '160px', padding: '0.85rem 0.6rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
@@ -6217,7 +6633,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   {paged.map(c => {
                     const days = AGO_DAYS(c.last_contact);
                     const fullName = c.full_name || '';
-                    const isUncontacted = isLeadUncontacted(c);
                     const hasOmniSignals = Boolean(
                       c.last_web_visit_at ||
                       Number(c.web_pageviews_count || 0) > 0 ||
@@ -6237,7 +6652,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                       <motion.tr key={c.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                          style={{ transition: 'background 0.2s', cursor: 'pointer' }}
                          className="table-row-hover"
-                         title={isUncontacted ? 'Lead mới giao hoặc giao lại chưa có tương tác mới' : undefined}
+                         onMouseOver={(e) => {
+                           const cell = (e.target as HTMLElement).closest('td') || e.currentTarget;
+                           setHoveredCell({ contact: c, rect: cell.getBoundingClientRect() });
+                         }}
+                         onMouseLeave={() => setHoveredCell(null)}
                          onClick={() => {
                            setProfileInitialTab('info');
                            setProfileContact(c);
@@ -6291,12 +6710,16 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                             || '';
                           const isReferred = Boolean(c.partner_id || c.referrer_name || c.referrer_id || c.source === 'ref' || c.source === 'referral' || c.source === 'gioi_thieu' || refName);
                           return (
-                          <td style={{ width: isSale ? '260px' : '250px', maxWidth: isSale ? '320px' : '310px', padding: '0.85rem 0.5rem', borderBottom: '1px solid var(--color-border)' }}>
+                          <td
+                            style={{ width: isSale ? '260px' : '250px', maxWidth: isSale ? '320px' : '310px', padding: '0.85rem 0.5rem', borderBottom: '1px solid var(--color-border)' }}
+                            onMouseEnter={(e) => setHoveredCell({ contact: c, rect: e.currentTarget.getBoundingClientRect() })}
+                            onMouseLeave={() => setHoveredCell(null)}
+                          >
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                               <Avatar name={fullName} src={c.avatar_url || c.avatar || c.photo} size={32} />
                               <div style={{ minWidth: 0, overflow: 'hidden' }}>
                                 <p style={{ fontWeight: 700, fontSize: '0.825rem', color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center' }}>
-                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }} title={fullName}>{fullName}</span>
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{fullName}</span>
                                   {isReferred ? (
                                     <span title={refName ? `Khách hàng giới thiệu bởi: ${refName}` : 'Khách hàng được giới thiệu (Ref)'} style={{ display: 'inline-flex', marginLeft: '5px', color: refName ? getColorFromName(refName) : '#0284c7', flexShrink: 0 }}>
                                       <UserPlus size={13} />
@@ -6355,7 +6778,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                           const hasEmail = Boolean(visibleColsMap['email'] && c.email);
 
                           return (
-                          <td style={{ width: '260px', maxWidth: '320px', padding: '0.85rem 0.75rem', borderBottom: '1px solid var(--color-border)' }}>
+                          <td
+                            style={{ width: '260px', maxWidth: '320px', padding: '0.85rem 0.75rem', borderBottom: '1px solid var(--color-border)' }}
+                            onMouseEnter={(e) => setHoveredCell({ contact: c, rect: e.currentTarget.getBoundingClientRect() })}
+                            onMouseLeave={() => setHoveredCell(null)}
+                          >
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxWidth: '310px', overflow: 'hidden' }}>
                               {hasPhone && (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
@@ -6366,7 +6793,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                               )}
                               {hasEmail && (
                                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', overflow: 'hidden' }}>
-                                  <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.email}>{c.email}</span>
+                                  <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.email}</span>
                                 </div>
                               )}
                               {isReferred && (() => {
@@ -6561,27 +6988,32 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
                         {visibleColsMap['last_note'] && (
                           <td
-                            style={{ width: '230px', maxWidth: '280px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)' }}
+                            className="col-last-note"
+                            style={{ width: '250px', maxWidth: '280px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)', whiteSpace: 'normal' }}
                             onMouseEnter={(e) => setHoveredCell({ contact: c, rect: e.currentTarget.getBoundingClientRect() })}
                             onMouseLeave={() => setHoveredCell(null)}
                           >
                             {(() => {
-                              const noteText = cleanInteractionText(c.last_interaction || c.notes || '');
+                              const rawNote = cleanInteractionText(c.last_interaction || c.notes || '');
+                              const noteText = rawNote ? rawNote.replace(/\s*\r?\n\s*/g, ' • ').replace(/\s{2,}/g, ' ').trim() : '';
                               if (!noteText) {
                                 return <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Chưa có nhật ký</span>;
                               }
                               return (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: '180px', maxWidth: '265px' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: '190px', maxWidth: '268px', whiteSpace: 'normal' }}>
                                   <div
+                                    className="note-clamp-2"
                                     style={{
                                       fontSize: '0.76rem',
                                       color: 'var(--color-text)',
                                       fontWeight: 500,
-                                      lineHeight: 1.4,
+                                      lineHeight: 1.42,
                                       display: '-webkit-box',
                                       WebkitLineClamp: 2,
                                       WebkitBoxOrient: 'vertical',
+                                      whiteSpace: 'normal',
                                       overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
                                       wordBreak: 'break-word'
                                     }}
                                   >
@@ -6596,74 +7028,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 </div>
                               );
                             })()}
-                          </td>
-                        )}
-
-                        {visibleColsMap['omnichannel_journey'] && (
-                          <td
-                            style={{ width: '190px', maxWidth: '235px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)' }}
-                            onClick={hasOmniSignals ? openJourney360 : undefined}
-                          >
-                            {hasOmniSignals ? (
-                              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-                                {(c.last_web_visit_at || Number(c.web_pageviews_count || 0) > 0) && (
-                                  <span
-                                    onClick={openJourney360}
-                                    title="Xem phiên truy cập Web trong Hành trình"
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, #f1f5f9)', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, #e2e8f0)', fontSize: '0.68rem', fontWeight: 500, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
-                                  >
-                                    <Globe size={10} style={{ color: 'currentColor', opacity: 0.75, flexShrink: 0 }} />
-                                    <span>{c.last_web_visit_at ? `Web: ${formatTimeAgo(c.last_web_visit_at)}` : `Web (${c.web_pageviews_count})`}</span>
-                                  </span>
-                                )}
-                                {(Number(c.stats_email_opened || 0) > 0 || Number(c.stats_email_clicked || 0) > 0 || Number(c.stats_email_sent || 0) > 0) && (
-                                  <span
-                                    onClick={openJourney360}
-                                    title="Xem lịch sử gửi, mở & click Email trong Hành trình"
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, #f1f5f9)', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, #e2e8f0)', fontSize: '0.68rem', fontWeight: 500, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
-                                  >
-                                    <Mail size={10} style={{ color: 'currentColor', opacity: 0.75, flexShrink: 0 }} />
-                                    <span>
-                                      {Number(c.stats_email_opened || 0) > 0
-                                        ? `Mở: ${c.stats_email_opened}${Number(c.stats_email_clicked || 0) > 0 ? ` • Click: ${c.stats_email_clicked}` : ''}`
-                                        : `Đã gửi: ${c.stats_email_sent}`}
-                                    </span>
-                                  </span>
-                                )}
-                                {Number(c.active_flow_count || 0) > 0 && (
-                                  <span
-                                    onClick={openJourney360}
-                                    title={c.active_flow_names ? `Đang chạy Flow: ${c.active_flow_names}` : 'Xem luồng Automation đang chạy'}
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, #f1f5f9)', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, #e2e8f0)', fontSize: '0.68rem', fontWeight: 500, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
-                                  >
-                                    <GitBranch size={10} style={{ color: 'currentColor', opacity: 0.75, flexShrink: 0 }} />
-                                    <span>Flow ({c.active_flow_count})</span>
-                                  </span>
-                                )}
-                                {c.active_voucher_code && (
-                                  <span
-                                    onClick={openJourney360}
-                                    title={`Mã Voucher: ${c.active_voucher_code}`}
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, #f1f5f9)', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, #e2e8f0)', fontSize: '0.68rem', fontWeight: 500, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
-                                  >
-                                    <Ticket size={10} style={{ color: 'currentColor', opacity: 0.75, flexShrink: 0 }} />
-                                    <span>{c.active_voucher_code}</span>
-                                  </span>
-                                )}
-                                {Number(c.survey_completed_count || 0) > 0 && (
-                                  <span
-                                    onClick={openJourney360}
-                                    title="Xem câu trả lời Khảo sát / Quiz"
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, #f1f5f9)', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, #e2e8f0)', fontSize: '0.68rem', fontWeight: 500, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
-                                  >
-                                    <ClipboardList size={10} style={{ color: 'currentColor', opacity: 0.75, flexShrink: 0 }} />
-                                    <span>KS ({c.survey_completed_count})</span>
-                                  </span>
-                                )}
-                              </div>
-                            ) : (
-                              <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>
-                            )}
                           </td>
                         )}
 
@@ -7060,6 +7424,73 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                         {visibleColsMap['updated_at'] && (
                           <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
                             <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>{c.updated_at ? new Date(c.updated_at).toLocaleDateString('vi-VN') : '—'}</p>
+                          </td>
+                        )}
+                        {visibleColsMap['omnichannel_journey'] && (
+                          <td
+                            style={{ width: '190px', maxWidth: '235px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)' }}
+                            onClick={hasOmniSignals ? openJourney360 : undefined}
+                          >
+                            {hasOmniSignals ? (
+                              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                                {(c.last_web_visit_at || Number(c.web_pageviews_count || 0) > 0) && (
+                                  <span
+                                    onClick={openJourney360}
+                                    title="Xem phiên truy cập Web trong Hành trình"
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, #f1f5f9)', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, #e2e8f0)', fontSize: '0.68rem', fontWeight: 500, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
+                                  >
+                                    <Globe size={10} style={{ color: 'currentColor', opacity: 0.75, flexShrink: 0 }} />
+                                    <span>{c.last_web_visit_at ? `Web: ${formatTimeAgo(c.last_web_visit_at)}` : `Web (${c.web_pageviews_count})`}</span>
+                                  </span>
+                                )}
+                                {(Number(c.stats_email_opened || 0) > 0 || Number(c.stats_email_clicked || 0) > 0 || Number(c.stats_email_sent || 0) > 0) && (
+                                  <span
+                                    onClick={openJourney360}
+                                    title="Xem lịch sử gửi, mở & click Email trong Hành trình"
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, #f1f5f9)', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, #e2e8f0)', fontSize: '0.68rem', fontWeight: 500, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
+                                  >
+                                    <Mail size={10} style={{ color: 'currentColor', opacity: 0.75, flexShrink: 0 }} />
+                                    <span>
+                                      {Number(c.stats_email_opened || 0) > 0
+                                        ? `Mở: ${c.stats_email_opened}${Number(c.stats_email_clicked || 0) > 0 ? ` • Click: ${c.stats_email_clicked}` : ''}`
+                                        : `Đã gửi: ${c.stats_email_sent}`}
+                                    </span>
+                                  </span>
+                                )}
+                                {Number(c.active_flow_count || 0) > 0 && (
+                                  <span
+                                    onClick={openJourney360}
+                                    title={c.active_flow_names ? `Đang chạy Flow: ${c.active_flow_names}` : 'Xem luồng Automation đang chạy'}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, #f1f5f9)', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, #e2e8f0)', fontSize: '0.68rem', fontWeight: 500, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
+                                  >
+                                    <GitBranch size={10} style={{ color: 'currentColor', opacity: 0.75, flexShrink: 0 }} />
+                                    <span>Flow ({c.active_flow_count})</span>
+                                  </span>
+                                )}
+                                {c.active_voucher_code && (
+                                  <span
+                                    onClick={openJourney360}
+                                    title={`Mã Voucher: ${c.active_voucher_code}`}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, #f1f5f9)', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, #e2e8f0)', fontSize: '0.68rem', fontWeight: 500, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
+                                  >
+                                    <Ticket size={10} style={{ color: 'currentColor', opacity: 0.75, flexShrink: 0 }} />
+                                    <span>{c.active_voucher_code}</span>
+                                  </span>
+                                )}
+                                {Number(c.survey_completed_count || 0) > 0 && (
+                                  <span
+                                    onClick={openJourney360}
+                                    title="Xem câu trả lời Khảo sát / Quiz"
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5px', padding: '2px 6px', borderRadius: '5px', background: 'var(--color-bg-subtle, #f1f5f9)', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, #e2e8f0)', fontSize: '0.68rem', fontWeight: 500, cursor: 'pointer', lineHeight: 1.25, whiteSpace: 'nowrap' }}
+                                  >
+                                    <ClipboardList size={10} style={{ color: 'currentColor', opacity: 0.75, flexShrink: 0 }} />
+                                    <span>KS ({c.survey_completed_count})</span>
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>
+                            )}
                           </td>
                         )}
                         {visibleColsMap['created_at'] && (

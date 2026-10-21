@@ -39,6 +39,7 @@ interface Props {
   fallback?: ReactNode;
   onReset?: () => void;
   compact?: boolean;
+  resetKey?: string | number;
 }
 
 interface State {
@@ -53,6 +54,12 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
+  }
+
+  public componentDidUpdate(prevProps: Props) {
+    if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ hasError: false, error: undefined });
+    }
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {

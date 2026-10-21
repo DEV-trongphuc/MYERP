@@ -82,10 +82,28 @@ const parseCardTags = (rawTags: any): string[] => {
 
 const cleanNoteText = (text?: string | null) => {
   if (!text) return '';
-  return String(text)
+  let raw = String(text).trim();
+  if (raw.startsWith('{') && raw.includes('"erp_task"')) {
+    try {
+      const parsed = JSON.parse(raw);
+      raw = String(parsed?.erp_task?.description || parsed?.description || '');
+    } catch {
+      const m = raw.match(/"description"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+      if (m) raw = m[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+    }
+  }
+  return raw
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
     .replace(/\s*\n?\(?Giai đoạn:.*$/si, '')
     .replace(/\s*\|\s*Lý do lost:.*$/si, '')
     .replace(/\s*\|\s*Độ nóng:.*$/si, '')
+    .replace(/\s+/g, ' ')
     .trim();
 };
 
@@ -714,6 +732,7 @@ export const DealsPage: React.FC = () => {
   }, [stages]);
   
   // Filter States
+  const [activeDealFilterTab, setActiveDealFilterTab] = useState<'basic' | 'timeline' | 'interaction' | 'profile' | 'advanced' | 'all'>('basic');
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearch = useDebounce(searchTerm.trim(), 300);
   const [dateField, setDateField] = useState<'created_at' | 'updated_at' | 'last_contact' | 'admission_date' | 'deposit_date' | 'next_followup_date' | 'birthday'>('created_at');
@@ -2912,21 +2931,102 @@ export const DealsPage: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Categorized Filter Navigation Bar */}
+                {(() => {
+                  const tabCounts = {
+                    basic: [filterLeadStatus, filterStage, filterAssignee, filterTeam, filterProject, filterCampaign, filterSource, filterTag].filter(Boolean).length,
+                    timeline: [(dateFilterType || filterDateFrom || filterDateTo) ? '1' : '', (admissionFrom || admissionTo) ? '1' : '', studyStatus, studentCode.trim(), expectedIntake.trim()].filter(Boolean).length,
+                    interaction: [filterInteractionStatus, staleDays.trim(), interactedWithinDays.trim(), interactionType, (minCallCount.trim() || maxCallCount.trim()) ? '1' : '', noteKeyword.trim()].filter(Boolean).length,
+                    profile: [gender, city, (ageMin.trim() || ageMax.trim()) ? '1' : '', jobTitle.trim(), company.trim(), financialFilter, (minAmount.trim() || maxAmount.trim()) ? '1' : ''].filter(Boolean).length,
+                    advanced: [engagementStatus, automationFlow, voucherStatus, (minEngagementScore.trim() || maxEngagementScore.trim()) ? '1' : '', validCustomRules.length > 0 ? '1' : ''].filter(Boolean).length
+                  };
+                  const tabs: Array<{ id: 'basic' | 'timeline' | 'interaction' | 'profile' | 'advanced' | 'all'; label: string; count: number }> = [
+                    { id: 'basic', label: 'Cơ bản & Nguồn', count: tabCounts.basic },
+                    { id: 'timeline', label: 'Thời gian & Học vụ', count: tabCounts.timeline },
+                    { id: 'interaction', label: 'Chăm sóc', count: tabCounts.interaction },
+                    { id: 'profile', label: 'Hồ sơ & Cọc', count: tabCounts.profile },
+                    { id: 'advanced', label: 'Nâng cao', count: tabCounts.advanced },
+                    { id: 'all', label: 'Tất cả', count: activeFilterCount }
+                  ];
+                  return (
+                    <div style={{
+                      padding: '0.65rem 1.25rem',
+                      background: '#f8fafc',
+                      borderBottom: '1px solid var(--color-border)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      overflowX: 'auto',
+                      flexShrink: 0,
+                      scrollbarWidth: 'none'
+                    }}>
+                      {tabs.map(t => {
+                        const isAct = activeDealFilterTab === t.id;
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => setActiveDealFilterTab(t.id)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '6px 11px',
+                              borderRadius: '8px',
+                              fontSize: '0.78rem',
+                              fontWeight: isAct ? 700 : 600,
+                              whiteSpace: 'nowrap',
+                              cursor: 'pointer',
+                              border: isAct ? '1px solid rgba(189, 29, 45, 0.25)' : '1px solid transparent',
+                              background: isAct ? '#ffffff' : 'transparent',
+                              color: isAct ? 'var(--color-primary, #BD1D2D)' : '#475569',
+                              boxShadow: isAct ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            <span>{t.label}</span>
+                            {t.count > 0 && (
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                minWidth: '17px',
+                                height: '17px',
+                                padding: '0 5px',
+                                borderRadius: '999px',
+                                fontSize: '0.68rem',
+                                fontWeight: 700,
+                                background: isAct ? 'var(--color-primary, #BD1D2D)' : 'rgba(15, 23, 42, 0.08)',
+                                color: isAct ? '#ffffff' : '#334155'
+                              }}>
+                                {t.count}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+
                 {/* Drawer Body */}
                 <div style={{
                   flex: 1,
                   overflowY: 'auto',
-                  padding: '1.25rem 1.5rem',
+                  padding: '1.1rem 1.35rem',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '1.25rem'
+                  gap: '1rem',
+                  background: '#f8fafc'
                 }}>
                   {/* Card 1: Học vụ & Mốc thời gian */}
                   <div style={{
+                    display: (activeDealFilterTab === 'timeline' || activeDealFilterTab === 'all') ? 'block' : 'none',
                     padding: '1.1rem',
                     borderRadius: '14px',
-                    background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
-                    border: '1px solid var(--color-border-light)'
+                    background: 'var(--color-surface, #ffffff)',
+                    border: '1px solid var(--color-border-light)',
+                    boxShadow: '0 1px 2px rgba(15,23,42,0.03)'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
                       <GraduationCap size={16} color="var(--color-text, #0f172a)" /> Học vụ & Mốc thời gian
@@ -3109,10 +3209,12 @@ export const DealsPage: React.FC = () => {
 
                   {/* Card 2: Tiến trình & Trạng thái Lead */}
                   <div style={{
+                    display: (activeDealFilterTab === 'basic' || activeDealFilterTab === 'all') ? 'block' : 'none',
                     padding: '1.1rem',
                     borderRadius: '14px',
-                    background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
-                    border: '1px solid var(--color-border-light)'
+                    background: 'var(--color-surface, #ffffff)',
+                    border: '1px solid var(--color-border-light)',
+                    boxShadow: '0 1px 2px rgba(15,23,42,0.03)'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
                       <Layers size={16} color="var(--color-text, #0f172a)" /> Tiến trình & Trạng thái Lead
@@ -3278,10 +3380,12 @@ export const DealsPage: React.FC = () => {
 
                   {/* Card 3: Lịch sử Tương tác & Chăm sóc chuyên sâu */}
                   <div style={{
+                    display: (activeDealFilterTab === 'interaction' || activeDealFilterTab === 'all') ? 'block' : 'none',
                     padding: '1.1rem',
                     borderRadius: '14px',
-                    background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
-                    border: '1px solid var(--color-border-light)'
+                    background: 'var(--color-surface, #ffffff)',
+                    border: '1px solid var(--color-border-light)',
+                    boxShadow: '0 1px 2px rgba(15,23,42,0.03)'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
                       <Clock size={16} color="var(--color-text, #0f172a)" /> Lịch sử Tương tác & Chăm sóc chuyên sâu
@@ -3404,10 +3508,12 @@ export const DealsPage: React.FC = () => {
 
                   {/* Card 4: Phụ trách & Nguồn dữ liệu */}
                   <div style={{
+                    display: (activeDealFilterTab === 'basic' || activeDealFilterTab === 'all') ? 'block' : 'none',
                     padding: '1.1rem',
                     borderRadius: '14px',
-                    background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
-                    border: '1px solid var(--color-border-light)'
+                    background: 'var(--color-surface, #ffffff)',
+                    border: '1px solid var(--color-border-light)',
+                    boxShadow: '0 1px 2px rgba(15,23,42,0.03)'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
                       <Users size={16} color="var(--color-text, #0f172a)" /> Phụ trách & Nguồn dữ liệu
@@ -3523,10 +3629,12 @@ export const DealsPage: React.FC = () => {
 
                   {/* Card 5: Nhân khẩu học, Học tập & Tài chính */}
                   <div style={{
+                    display: (activeDealFilterTab === 'profile' || activeDealFilterTab === 'all') ? 'block' : 'none',
                     padding: '1.1rem',
                     borderRadius: '14px',
-                    background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
-                    border: '1px solid var(--color-border-light)'
+                    background: 'var(--color-surface, #ffffff)',
+                    border: '1px solid var(--color-border-light)',
+                    boxShadow: '0 1px 2px rgba(15,23,42,0.03)'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
                       <Briefcase size={16} color="var(--color-text, #0f172a)" /> Nhân khẩu học, Học tập & Tài chính
@@ -3698,10 +3806,12 @@ export const DealsPage: React.FC = () => {
 
                   {/* Card 5B: Hành trình số & Automation 360° */}
                   <div style={{
+                    display: (activeDealFilterTab === 'advanced' || activeDealFilterTab === 'all') ? 'block' : 'none',
                     padding: '1.1rem',
                     borderRadius: '14px',
-                    background: 'var(--color-bg-alt, rgba(37, 99, 235, 0.03))',
-                    border: '1px solid var(--color-border-light)'
+                    background: 'var(--color-surface, #ffffff)',
+                    border: '1px solid var(--color-border-light)',
+                    boxShadow: '0 1px 2px rgba(15,23,42,0.03)'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
                       <Sparkles size={15} color="#2563eb" /> Hành trình số & Automation 360°
@@ -3780,10 +3890,12 @@ export const DealsPage: React.FC = () => {
 
                   {/* Card 6: Bộ lọc theo trường dữ liệu (100% DB Schema) */}
                   <div style={{
+                    display: (activeDealFilterTab === 'advanced' || activeDealFilterTab === 'all') ? 'block' : 'none',
                     padding: '1.1rem',
                     borderRadius: '14px',
-                    background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
-                    border: '1px solid var(--color-border-light)'
+                    background: 'var(--color-surface, #ffffff)',
+                    border: '1px solid var(--color-border-light)',
+                    boxShadow: '0 1px 2px rgba(15,23,42,0.03)'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.875rem', gap: '8px', flexWrap: 'wrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>

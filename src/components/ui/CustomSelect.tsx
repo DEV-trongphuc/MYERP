@@ -387,6 +387,8 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
           {showAvatars && (
             selectedOption.value === '' ? (
               <div style={{ width: size === 'xs' ? 18 : 24, height: size === 'xs' ? 18 : 24, borderRadius: '50%', background: 'var(--color-border-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size === 'xs' ? '0.625rem' : '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', flexShrink: 0 }}>?</div>
+            ) : selectedOption.icon ? (
+              <span style={{ display: 'flex', flexShrink: 0 }}>{selectedOption.icon}</span>
             ) : selectedOption.avatarBorder ? (
               <div style={getAvatarRingStyle(selectedOption.avatarBorder)}>
                 <Avatar src={selectedOption.avatar} name={t(selectedOption.label)} size={size === 'xs' ? 16 : "sm"} />

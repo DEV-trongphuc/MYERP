@@ -890,7 +890,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
     },
     {
       id: 'distributed',
-      statusValue: 'assigned,compensation,rule_6_month,pending_work_hours,fallback,success',
+      statusValue: 'assigned,compensation,rule_6_month,pending_work_hours,fallback,success,databank_claim',
       label: t('ĐÃ CHIA VÒNG THÀNH CÔNG'),
       value: stats?.distributed_today?.toLocaleString() || '0',
       icon: UserPlus,
@@ -1936,6 +1936,26 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             />
           )}
         </React.Suspense>
+        {currentViewRole !== 'default' && (
+          <CustomModal isOpen={showDateModal} onClose={() => setShowDateModal(false)} title={t("Tùy chỉnh thời gian")} width="400px">
+            {showDateModal && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem 0' }}>
+                <div>
+                  <label className="form-label">{t('Từ ngày')}</label>
+                  <VietnameseDateInput value={startDate} onChange={val => setStartDate(val)} />
+                </div>
+                <div>
+                  <label className="form-label">{t('Đến ngày')}</label>
+                  <VietnameseDateInput value={endDate} onChange={val => setEndDate(val)} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
+                  <button className="btn outline" onClick={() => setShowDateModal(false)}>{t('Hủy')}</button>
+                  <button className="btn primary" onClick={handleCustomDateSubmit}>{t('Áp dụng')}</button>
+                </div>
+              </div>
+            )}
+          </CustomModal>
+        )}
       </div>
     );
   };
@@ -1943,8 +1963,9 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
   if (currentViewRole === 'sales_performance') {
     return renderDashboardWrapper(
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', animation: 'slideUp 0.4s ease-out both' }}>
-        {renderSubTabs()}
-        <SalesLeadPerformanceDeck embedInPage="dashboard" />
+        {renderAdminWelcomeBanner()}
+        {renderHeaderForRole(t("Hiệu suất Sales & Phân tích Chất lượng Lead"), t("Đo lường tốc độ xử lý data chia vòng, tỷ lệ kết nối, phễu chuyển đổi và doanh số thực thu của đội ngũ Sales."))}
+        <SalesLeadPerformanceDeck embedInPage="dashboard" externalDateFilter={dateFilter} />
       </div>
     );
   }
@@ -4020,15 +4041,17 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                   </div>
                 )}
                 {card.id === 'distributed' && (
-                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '8px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '8px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#2563eb', fontWeight: 700 }}>
                       <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', display: 'inline-block', flexShrink: 0 }} />
-                      <span>{t('Đã chia')}: {stats?.distributed_assigned || 0}</span>
+                      <span>{t('Được chia')}: {(stats?.distributed_assigned || 0) + (stats?.distributed_compensation || 0)} ({t('Vòng')}: {stats?.distributed_assigned || 0} • {t('Bù')}: {stats?.distributed_compensation || 0})</span>
                     </span>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block', flexShrink: 0 }} />
-                      <span>{t('Claim')}: {stats?.distributed_compensation || 0}</span>
-                    </span>
+                    {(stats?.distributed_rule_6_month || 0) > 0 && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#8b5cf6', display: 'inline-block', flexShrink: 0 }} />
+                        <span>{t('6 tháng')}: {stats?.distributed_rule_6_month || 0}</span>
+                      </span>
+                    )}
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                       <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', display: 'inline-block', flexShrink: 0 }} />
                       <span>{t('Data Self')}: {stats?.distributed_self || 0}</span>
@@ -4562,7 +4585,14 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                           <BarChart2 size={14} className="consultant-chart-icon" style={{ opacity: 0.35, color: 'var(--color-primary)' }} />
                         </span>
                       </span>
-                      <span style={{ color: 'var(--color-text)' }}>{c.data} {t('lead')}</span>
+                      <span style={{ color: 'var(--color-text)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <span>{c.data} {t('lead')}</span>
+                        {c.company_data !== undefined && (
+                          <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                            ({c.company_data} {t('chia')} • {c.self_data || 0} self)
+                          </span>
+                        )}
+                      </span>
                     </div>
                     <div style={{ height: 6, background: 'var(--color-bg)', borderRadius: 4, overflow: 'hidden', marginLeft: 24 }}>
                       <div style={{ width: `${c.percent}%`, height: '100%', background: c.color, borderRadius: 4 }} />

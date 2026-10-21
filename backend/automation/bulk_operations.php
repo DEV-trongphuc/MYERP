@@ -296,7 +296,7 @@ try {
             $pdo->prepare("
                 UPDATE lists 
                 SET subscriber_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl WHERE sl.workspace_id = ? AND sl.list_id = ?),
-                    phone_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ? WHERE sl.workspace_id = ? AND sl.list_id = ? AND s.phone_number IS NOT NULL AND TRIM(s.phone_number) != '')
+                    phone_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ? WHERE sl.workspace_id = ? AND sl.list_id = ? AND s.phone_number IS NOT NULL AND TRIM(s.phone_number) != '' AND TRIM(s.phone_number) != '0')
                 WHERE workspace_id = ? AND id = ?
             ")->execute([$workspace_id, $listId, $workspace_id, $workspace_id, $listId, $workspace_id, $listId]);
             break;
@@ -320,7 +320,7 @@ try {
             $pdo->prepare("
                 UPDATE lists 
                 SET subscriber_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl WHERE sl.workspace_id = ? AND sl.list_id = ?),
-                    phone_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ? WHERE sl.workspace_id = ? AND sl.list_id = ? AND s.phone_number IS NOT NULL AND TRIM(s.phone_number) != '')
+                    phone_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ? WHERE sl.workspace_id = ? AND sl.list_id = ? AND s.phone_number IS NOT NULL AND TRIM(s.phone_number) != '' AND TRIM(s.phone_number) != '0')
                 WHERE workspace_id = ? AND id = ?
             ")->execute([$workspace_id, $listId, $workspace_id, $workspace_id, $listId, $workspace_id, $listId]);
             break;
@@ -431,8 +431,8 @@ try {
                     if ($phone === null || $phone === '') {
                         return '';
                     }
-                    $clean = preg_replace('/[^0-9]/', '', $phone);
-                    if (empty($clean)) {
+                    $clean = preg_replace('/[^0-9]/', '', (string)$phone);
+                    if (empty($clean) || strlen($clean) < 7 || preg_match('/^0+$/', $clean)) {
                         return '';
                     }
                     if (substr($clean, 0, 3) === '084') {
@@ -642,10 +642,26 @@ try {
                         $id = $existingMap[$emailNormInput];
                     } elseif ($cleanEmail !== '' && isset($existingMap[$cleanEmail])) {
                         $id = $existingMap[$cleanEmail];
-                    } elseif ($phoneNorm9 !== '' && isset($existingPhone9Map[$phoneNorm9])) {
-                        $id = $existingPhone9Map[$phoneNorm9];
-                    } elseif ($phone !== '' && isset($existingPhoneMap[$phone])) {
-                        $id = $existingPhoneMap[$phone];
+                    } else {
+                        $phoneMatchedId = null;
+                        if ($phoneNorm9 !== '' && isset($existingPhone9Map[$phoneNorm9])) {
+                            $phoneMatchedId = $existingPhone9Map[$phoneNorm9];
+                        } elseif ($phone !== '' && isset($existingPhoneMap[$phone])) {
+                            $phoneMatchedId = $existingPhoneMap[$phone];
+                        }
+                        if ($phoneMatchedId !== null) {
+                            $existingEmForPhone = strtolower(trim((string)($existingSubEmailById[$phoneMatchedId] ?? '')));
+                            $existingEmIsPlaceholder = (
+                                $existingEmForPhone === '' ||
+                                strpos($existingEmForPhone, '@phone.local') !== false ||
+                                strpos($existingEmForPhone, '@no-email.domation') !== false ||
+                                strpos($existingEmForPhone, '@zalo-oa.vn') !== false ||
+                                strpos($existingEmForPhone, '@facebook.com') !== false
+                            );
+                            if ($cleanEmail === '' || $existingEmIsPlaceholder || $existingEmForPhone === $cleanEmail) {
+                                $id = $phoneMatchedId;
+                            }
+                        }
                     }
 
                     // Resolve matched CRM contact (if any)
@@ -716,7 +732,7 @@ try {
                     if ($phoneNorm9 !== '') $existingPhone9Map[$phoneNorm9] = $id;
                     $importedSubscriberIds[] = $id;
 
-                    $firstName = $d['firstName'] ?? $d['first_name'] ?? '';
+                    $firstName = $d['firstName'] ?? $d['first_name'] ?? $d['fullName'] ?? $d['full_name'] ?? '';
                     $lastName = $d['lastName'] ?? $d['last_name'] ?? '';
                     $status = $d['status'] ?? 'active';
                     $source = $d['source'] ?? 'Bulk Import';
@@ -872,7 +888,7 @@ try {
                 $pdo->prepare("
                     UPDATE lists 
                     SET subscriber_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl WHERE sl.workspace_id = ? AND sl.list_id = ?),
-                        phone_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ? WHERE sl.workspace_id = ? AND sl.list_id = ? AND s.phone_number IS NOT NULL AND TRIM(s.phone_number) != '')
+                        phone_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ? WHERE sl.workspace_id = ? AND sl.list_id = ? AND s.phone_number IS NOT NULL AND TRIM(s.phone_number) != '' AND TRIM(s.phone_number) != '0')
                     WHERE workspace_id = ? AND id = ?
                 ")->execute([$workspace_id, $lid, $workspace_id, $workspace_id, $lid, $workspace_id, $lid]);
             }

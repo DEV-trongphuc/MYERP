@@ -1,5 +1,5 @@
 ﻿// MYERP Service Worker for PWA Omnibox Install & Desktop Push Notifications
-const SW_VERSION = 'myerp-sw-v1792422774212';
+const SW_VERSION = 'myerp-sw-v1792586040640';
 
 self.addEventListener('install', (event) => {
   // Force new service worker to activate immediately without waiting

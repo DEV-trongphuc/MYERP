@@ -150,17 +150,33 @@ export const linkifyHtml = (html: string): string => {
 };
 
 const TaskSubjectInput: React.FC<{
+  taskKey?: string;
   initialValue: string;
   onSave: (val: string) => void;
   onSyncFormData: (val: string) => void;
   placeholder: string;
-}> = React.memo(({ initialValue, onSave, onSyncFormData, placeholder }) => {
+}> = React.memo(({ taskKey, initialValue, onSave, onSyncFormData, placeholder }) => {
   const [val, setVal] = useState(initialValue || '');
-  const syncTimeoutRef = useRef<any>(null);
+  const lastSavedValueRef = useRef(initialValue || '');
+  const prevTaskKeyRef = useRef(taskKey);
+  const isFocusedRef = useRef(false);
 
   useEffect(() => {
-    setVal(initialValue || '');
-  }, [initialValue]);
+    if (prevTaskKeyRef.current !== taskKey) {
+      prevTaskKeyRef.current = taskKey;
+      const nextInit = initialValue || '';
+      setVal(nextInit);
+      lastSavedValueRef.current = nextInit;
+    } else if (!isFocusedRef.current) {
+      const nextInit = initialValue || '';
+      setVal(nextInit);
+      lastSavedValueRef.current = nextInit;
+    }
+  }, [taskKey, initialValue]);
+
+  const handleFocus = () => {
+    isFocusedRef.current = true;
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const next = e.target.value;
@@ -169,9 +185,19 @@ const TaskSubjectInput: React.FC<{
   };
 
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-    onSyncFormData(e.target.value);
-    if (e.target.value !== initialValue) {
-      onSave(e.target.value);
+    isFocusedRef.current = false;
+    const currentVal = e.target.value;
+    onSyncFormData(currentVal);
+    if (currentVal !== lastSavedValueRef.current) {
+      lastSavedValueRef.current = currentVal;
+      onSave(currentVal);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      (e.target as HTMLInputElement).blur();
     }
   };
 
@@ -180,8 +206,10 @@ const TaskSubjectInput: React.FC<{
       type="text"
       className="form-input"
       value={val}
+      onFocus={handleFocus}
       onChange={handleChange}
       onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
       placeholder={placeholder}
       style={{ fontSize: '0.85rem', fontWeight: 700, padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--color-border)' }}
     />
@@ -295,6 +323,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   const [formData, setFormData] = useState<any>({});
   const [isClonedDraft, setIsClonedDraft] = useState<boolean>(false);
   const isNew = Boolean(isClonedDraft || formData?.id === 'new' || task?.id === 'new' || !task?.id || task?.id === 0 || task?.id === '0');
+  const formDataRef = useRef<any>(formData);
+  formDataRef.current = formData;
+  const isNewRef = useRef<boolean>(isNew);
+  isNewRef.current = isNew;
 
   const formatHeaderDate = (dateVal: any) => {
     if (!dateVal) return null;
@@ -330,6 +362,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     checklist: [],
     links: []
   });
+  const erpMetaRef = useRef<any>(erpMeta);
+  erpMetaRef.current = erpMeta;
 
   const [isCustomerLinked, setIsCustomerLinked] = useState<boolean>(false);
   const hasLinkedCustomer = Boolean(
@@ -345,7 +379,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
   const unpinIfDone = (status?: string, progress?: number) => {
     const isDone = status === 'done' || Number(progress || 0) >= 100;
-    if (isDone && currentUid && task?.id && task.id !== 'new') {
+    if (isDone && currentUid && !isNewRef.current && task?.id && task.id !== 'new') {
       try {
         const key = `pinned_tasks_${currentUid}`;
         const stored = localStorage.getItem(key);
@@ -413,9 +447,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
   // Auto-save draft for comment
   const { clearDraft: clearCommentDraft, DraftRecoveryBanner: CommentDraftRecoveryBanner } = useAutoSaveDraft<string>({
-    key: `task_comment_${task?.id || 'new'}`,
+    key: `task_comment_${isNew ? 'new' : (task?.id || 'new')}`,
     data: newCommentText,
-    enabled: isOpen && Boolean(task?.id),
+    enabled: isOpen && !isNew && Boolean(task?.id),
     isDataEmpty: (d) => !d || !d.trim()
   });
 
@@ -447,7 +481,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   const [savingCancel, setSavingCancel] = useState(false);
 
   const loadSubtaskCommentCounts = () => {
-    if (!task?.id || task.id === 'new') return;
+    if (isNewRef.current || !task?.id || task.id === 'new') return;
     api.get(`/activities/${task.id}/subtasks-comment-counts`)
       .then(res => {
         if (res.data && res.data.success) {
@@ -458,7 +492,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   };
 
   useEffect(() => {
-    if (isOpen && task?.id && task.id !== 'new') {
+    if (isOpen && !isNew && task?.id && task.id !== 'new') {
       const taskId = task.id;
       setLoadingMute(true);
       
@@ -498,7 +532,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   }, [isOpen, task?.id]);
 
   const handleBellClick = () => {
-    if (!task?.id) return;
+    if (!task?.id || isNewRef.current) return;
     if (!isMuted) {
       setShowMuteConfirmModal(true);
     } else {
@@ -518,7 +552,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   };
 
   const handleConfirmMute = () => {
-    if (!task?.id) return;
+    if (!task?.id || isNewRef.current) return;
     setShowMuteConfirmModal(false);
     setLoadingMute(true);
     api.post(`/activities/${task.id}/toggle-mute`, { mute: true })
@@ -535,7 +569,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   };
 
   const handleHideClick = () => {
-    if (!task?.id) return;
+    if (!task?.id || isNewRef.current) return;
     if (isHidden) {
       // Unhide doesn't need confirmation
       executeToggleHide();
@@ -545,7 +579,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   };
 
   const executeToggleHide = () => {
-    if (!task?.id) return;
+    if (!task?.id || isNewRef.current) return;
     setLoadingHide(true);
     api.post(`/activities/${task.id}/toggle-hide`)
       .then(res => {
@@ -1037,8 +1071,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   const [loadingContacts, setLoadingContacts] = useState(false);
   const [originalHash, setOriginalHash] = useState<string>('');
   const prevTaskIdRef = useRef<any>(null);
-  const formDataRef = useRef(formData);
-  formDataRef.current = formData;
   const taskRef = useRef(task);
   taskRef.current = task;
 
@@ -1186,7 +1218,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   };
 
   const handleDeleteComment = async (commentId: number) => {
-    if (!task?.id || task.id === 'new') return;
+    if (!task?.id || isNewRef.current || task.id === 'new') return;
     if (deleteCommentInFlightRef.current) return;
     deleteCommentInFlightRef.current = true;
     try {
@@ -1234,10 +1266,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
   // Lazy-load timeline only when user switches to 'timeline' tab
   useEffect(() => {
-    if (isOpen && activeTab === 'timeline' && task?.id && task.id !== 'new') {
+    if (isOpen && activeTab === 'timeline' && !isNew && task?.id && task.id !== 'new') {
       loadTimeline(Number(task.id));
     }
-  }, [isOpen, activeTab, task?.id]);
+  }, [isOpen, activeTab, isNew, task?.id]);
 
   const loadSubtaskComments = async (taskId: number, subtaskId: string) => {
     if (subtaskCommentsAbortRef.current) subtaskCommentsAbortRef.current.abort();
@@ -1259,7 +1291,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   };
 
   useEffect(() => {
-    if (task && task.id !== 'new' && selectedSubtask) {
+    if (task && !isNew && task.id !== 'new' && selectedSubtask) {
       loadSubtaskComments(Number(task.id), selectedSubtask.id);
     }
     return () => {
@@ -1371,12 +1403,19 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   }, [isOpen, embedMode]);
 
   useEffect(() => {
+    if (!isOpen && !embedMode) {
+      prevTaskIdRef.current = null;
+      return;
+    }
     if (task) {
-      if (isClonedDraft && prevTaskIdRef.current === task.id) {
+      const isSameTaskEarly = prevTaskIdRef.current !== null && String(prevTaskIdRef.current) === String(task?.id ?? '');
+      const wasLoadingPlaceholder = !formDataRef.current?.id || formDataRef.current?.subject === 'Đang tải công việc...';
+      if (isSameTaskEarly && (isClonedDraft || !wasLoadingPlaceholder)) {
         return;
       }
-      if (prevTaskIdRef.current !== task.id) {
+      if (!isSameTaskEarly) {
         setIsClonedDraft(false);
+        isNewRef.current = Boolean(task.id === 'new' || !task.id || task.id === 0 || task.id === '0');
       }
       const isTaskNew = task.id === 'new' || !task.id || task.id === 0 || task.id === '0';
       const isSaleRole = ['sale', 'sales'].includes(String(currentUser?.role || '').toLowerCase());
@@ -1413,6 +1452,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         }
       }
 
+      formDataRef.current = normalizedTask;
       setFormData(normalizedTask);
       setIsPinned(normalizedTask.tags?.includes('pinned') || false);
 
@@ -1445,6 +1485,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         parsedMeta.team_id = normalizedTask.related_id;
       }
 
+      erpMetaRef.current = parsedMeta;
       setErpMeta(parsedMeta);
 
       const hasInitialCustomer = Boolean(
@@ -1498,7 +1539,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         erpMeta: cleanObj(parsedMeta)
       }));
     }
-  }, [task, isFromCustomerDrawer]);
+  }, [task, isFromCustomerDrawer, isOpen, embedMode]);
 
   const validateRecurrence = (meta: any): { isValid: boolean; error?: string } => {
     const rec = meta?.recurrence;
@@ -1620,18 +1661,25 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       return;
     }
 
-    const currentProgress = overrideProgress !== undefined ? overrideProgress : (formData.progress ?? 0);
+    const curForm = formDataRef.current || formData;
+    const currentProgress = overrideProgress !== undefined ? overrideProgress : (curForm.progress ?? 0);
 
-    if (task.id === 'new') {
+    if (isNewRef.current || isClonedDraft || curForm?.id === 'new' || task.id === 'new') {
+      erpMetaRef.current = updatedMeta;
       setErpMeta(updatedMeta);
       if (overrideProgress !== undefined) {
-        setFormData((prev: any) => ({ ...prev, progress: overrideProgress }));
+        setFormData((prev: any) => {
+          const next = { ...prev, progress: overrideProgress };
+          formDataRef.current = next;
+          return next;
+        });
       }
       return;
     }
     if (saveMetaInFlightRef.current) return;
     saveMetaInFlightRef.current = true;
     try {
+      const latestForm = formDataRef.current || formData;
       const payloadObj: any = { erp_task: updatedMeta };
       if (updatedMeta.due_sla_notified || task.due_sla_notified) {
         payloadObj.due_sla_notified = true;
@@ -1640,7 +1688,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         payloadObj.subtask_sla_notified = true;
       }
       const bodyPayload = JSON.stringify(payloadObj);
-      let finalTags = task.tags || '';
+      let finalTags = latestForm.tags || task.tags || '';
 
       // Manage pinned tag
       if (updatedMeta.internal_type === 'announcement') {
@@ -1670,25 +1718,25 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       } else if (updatedMeta.team_id) {
         relType = 'team';
         relId = updatedMeta.team_id;
-      } else if (formData.related_type && ['deal', 'company', 'project', 'campaign', 'team'].includes(formData.related_type) && formData.related_id) {
-        relType = formData.related_type;
-        relId = formData.related_id;
-      } else if (formData.contact_id || formData.related_id) {
+      } else if (latestForm.related_type && ['deal', 'company', 'project', 'campaign', 'team'].includes(latestForm.related_type) && latestForm.related_id) {
+        relType = latestForm.related_type;
+        relId = latestForm.related_id;
+      } else if (latestForm.contact_id || latestForm.related_id) {
         relType = 'contact';
-        relId = formData.contact_id || formData.related_id;
+        relId = latestForm.contact_id || latestForm.related_id;
       }
 
-      const finalContactId = formData.contact_id || (formData.related_type === 'contact' ? formData.related_id : null);
+      const finalContactId = latestForm.contact_id || (latestForm.related_type === 'contact' ? latestForm.related_id : null);
 
       const payload: any = {
         body: bodyPayload,
         tags: finalTags,
         progress: currentProgress,
-        priority: formData.priority,
-        status: formData.status,
-        due_date: formData.due_date,
-        subject: formData.subject,
-        user_id: formData.user_id,
+        priority: latestForm.priority,
+        status: latestForm.status,
+        due_date: latestForm.due_date,
+        subject: latestForm.subject,
+        user_id: latestForm.user_id,
         related_type: relType,
         related_id: relId ? Number(relId) : null,
         contact_id: finalContactId ? Number(finalContactId) : null
@@ -1696,11 +1744,17 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
       const res = await api.put(`/activities/${task.id}`, payload);
       if (res.data && res.data.success) {
+        erpMetaRef.current = updatedMeta;
         setErpMeta(updatedMeta);
-        const updatedFormData = overrideProgress !== undefined ? { ...formData, progress: overrideProgress } : formData;
-        if (overrideProgress !== undefined) {
-          setFormData((prev: any) => ({ ...prev, progress: overrideProgress }));
-        }
+        const latestAfterPut = formDataRef.current || latestForm;
+        const updatedFormData = {
+          ...latestAfterPut,
+          body: bodyPayload,
+          tags: finalTags,
+          ...(overrideProgress !== undefined ? { progress: overrideProgress } : {})
+        };
+        formDataRef.current = updatedFormData;
+        setFormData(updatedFormData);
         
         const cleanObj = (obj: any) => {
           const clean: any = {};
@@ -1744,6 +1798,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     setIsSaving(true);
     try {
       const isJustSubmittedForApproval = 
+        !isNewRef.current &&
+        !isClonedDraft &&
         task.id !== 'new' &&
         formData.progress === 100 &&
         formData.require_approval === 1 &&
@@ -1815,7 +1871,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       const finalContactId = formData.contact_id || (formData.related_type === 'contact' ? formData.related_id : null);
 
       const payload: any = {
-        subject: formData.subject || formData.title || '',
+        subject: (formDataRef.current?.subject ?? formData.subject) || (formDataRef.current?.title ?? formData.title) || '',
         description: finalDesc,
         body: bodyPayload,
         tags: finalTags,
@@ -1933,7 +1989,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   };
 
   const handleCloseDrawer = () => {
-    if (task?.id === 'new') {
+    if (isNewRef.current || isClonedDraft || task?.id === 'new') {
       const hasDraftContent = Boolean(
         formData.subject?.trim() ||
         (erpMeta?.description && erpMeta.description.replace(/<[^>]*>/g, '').trim() !== '') ||
@@ -1985,7 +2041,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   };
 
   const handleDeleteTask = async () => {
-    if (!task?.id || task.id === 'new') return;
+    if (!task?.id || isNewRef.current || task.id === 'new') return;
     
     showConfirm({
       title: t('Xóa công việc?'),
@@ -2028,10 +2084,22 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       ? { [fieldOrPatch]: value }
       : { ...fieldOrPatch };
 
-    if (task.id === 'new') {
-      setFormData((prev: any) => ({ ...prev, ...incomingPatch }));
+    if (isNewRef.current || isClonedDraft || formDataRef.current?.id === 'new' || task.id === 'new') {
+      setFormData((prev: any) => {
+        const next = { ...prev, ...incomingPatch };
+        formDataRef.current = next;
+        return next;
+      });
       return;
     }
+
+    // Immediate local + optimistic board sync so subject/fields never lag or revert
+    const optimisticNext = { ...(formDataRef.current || formData), ...incomingPatch };
+    formDataRef.current = optimisticNext;
+    setFormData(optimisticNext);
+    window.dispatchEvent(new CustomEvent('task-local-updated', {
+      detail: { id: task.id, ...optimisticNext }
+    }));
 
     pendingFieldUpdatesRef.current = {
       ...pendingFieldUpdatesRef.current,
@@ -2047,31 +2115,30 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
         const res = await api.put(`/activities/${task.id}`, payload);
         if (res.data && res.data.success) {
-          setFormData((prev: any) => {
-            const nextData = { ...prev, ...payload };
+          const nextData = { ...(formDataRef.current || formData), ...payload };
+          formDataRef.current = nextData;
+          setFormData(nextData);
 
-            const cleanObj = (obj: any) => {
-              const clean: any = {};
-              Object.keys(obj || {}).forEach(key => {
-                if (['created_at', 'updated_at', 'deleted_at', 'created_by_name', 'created_by_avatar', 'contact_name', 'contact_avatar', 'user_name'].includes(key)) {
-                  return;
-                }
-                const val = obj[key];
-                clean[key] = (val === null || val === undefined) ? '' : val;
-              });
-              return clean;
-            };
-            setOriginalHash(JSON.stringify({
-              formData: cleanObj(nextData),
-              erpMeta: cleanObj(erpMeta)
-            }));
+          const cleanObj = (obj: any) => {
+            const clean: any = {};
+            Object.keys(obj || {}).forEach(key => {
+              if (['created_at', 'updated_at', 'deleted_at', 'created_by_name', 'created_by_avatar', 'contact_name', 'contact_avatar', 'user_name'].includes(key)) {
+                return;
+              }
+              const val = obj[key];
+              clean[key] = (val === null || val === undefined) ? '' : val;
+            });
+            return clean;
+          };
+          setOriginalHash(JSON.stringify({
+            formData: cleanObj(nextData),
+            erpMeta: cleanObj(erpMetaRef.current || erpMeta)
+          }));
 
-            return nextData;
-          });
-          const nextDetail = { id: task.id, ...formData, ...payload };
+          const nextDetail = { id: task.id, ...nextData };
           window.dispatchEvent(new CustomEvent('task-local-updated', { detail: nextDetail }));
           if (onUpdate) onUpdate(nextDetail);
-          loadTimeline(task.id);
+          if (activeTab === 'timeline') loadTimeline(task.id);
         }
       }
     } catch (e: any) {
@@ -2479,7 +2546,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         }
         await loadComments(Number(task.id));
         if (activeTab === 'timeline') await loadTimeline(Number(task.id));
-        if (onUpdate) onUpdate({ ...task, ...formData, comment_count: Number(formData.comment_count || task.comment_count || 0) + 1 });
+        const latestForm = formDataRef.current || formData;
+        if (onUpdate) onUpdate({ ...task, ...latestForm, comment_count: Number(latestForm.comment_count || task.comment_count || 0) + 1 });
         toast.success(t('Đã thêm bình luận!'));
       }
     } catch (e: any) {
@@ -2576,7 +2644,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         }
         loadSubtaskComments(Number(task.id), selectedSubtask.id);
         loadSubtaskCommentCounts();
-        if (onUpdate) onUpdate({ ...task, ...formData });
+        const latestForm = formDataRef.current || formData;
+        if (onUpdate) onUpdate({ ...task, ...latestForm });
         toast.success(t('Đã thêm bình luận việc con!'));
       }
     } catch (e: any) {
@@ -2724,11 +2793,17 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       subtask_sla_notified: false
     };
 
-    // 4. Update states
+    // 4. Update states and synchronous refs immediately so no blur/effect touches the old task.id
+    pendingFieldUpdatesRef.current = {};
+    isNewRef.current = true;
+    formDataRef.current = clonedFormData;
+    erpMetaRef.current = clonedErpMeta;
     setIsClonedDraft(true);
     setFormData(clonedFormData);
     setErpMeta(clonedErpMeta);
     setComments([]);
+    setTimeline([]);
+    setSelectedSubtask(null);
 
     toast.success(t('Đã nhân bản công việc! Dữ liệu đã được điền sẵn, hãy kiểm tra và bấm "Tạo việc" để lưu.'));
   };
@@ -3443,9 +3518,13 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 {t('Tên công việc')}
               </label>
               <TaskSubjectInput
+                taskKey={isNew ? `new_${isClonedDraft ? 'clone' : 'fresh'}_${task?.id || '0'}` : String(task?.id || '')}
                 initialValue={formData.subject || ''}
                 onSave={(val) => handleUpdateField('subject', val)}
-                onSyncFormData={(val) => setFormData((prev: any) => ({ ...prev, subject: val }))}
+                onSyncFormData={(val) => {
+                  formDataRef.current = { ...(formDataRef.current || {}), subject: val };
+                  setFormData((prev: any) => ({ ...prev, subject: val }));
+                }}
                 placeholder={t('Nhập tên công việc...')}
               />
             </div>
@@ -3512,7 +3591,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 {t('Mô tả chi tiết')}
               </label>
               <MentionInput
-                key={task.id}
+                key={isNew ? `new_${isClonedDraft ? 'clone' : 'fresh'}_${task?.id || '0'}` : String(task.id)}
                 value={erpMeta?.description || ''}
                 onChange={(e: any) => {
                   const html = e.target.value;
@@ -3867,7 +3946,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                         {/* Subtask Card */}
                         <div 
                           onClick={() => {
-                            if (task?.id !== 'new') {
+                            if (!isNew) {
                               setSelectedSubtask(isCommentsOpen ? null : item);
                             }
                           }}
@@ -3883,9 +3962,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                             opacity: item.done ? 0.8 : 1,
                             position: 'relative',
                             gap: '10px',
-                            cursor: task?.id !== 'new' ? 'pointer' : 'default'
+                            cursor: !isNew ? 'pointer' : 'default'
                           }}
-                          className={task?.id !== 'new' ? "hover-bg-alt" : ""}
+                          className={!isNew ? "hover-bg-alt" : ""}
                         >
                           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flex: 1, minWidth: 0 }}>
                             {/* Round & Large Custom Checkbox */}
@@ -4228,7 +4307,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                             </div>
 
                             {/* Subtask Discussion / Comments Trigger */}
-                            {task?.id !== 'new' && (() => {
+                            {!isNew && (() => {
                               const commentCount = subtaskCommentCounts[item.id] || 0;
                               return (
                                 <div style={{ position: 'relative' }}>
@@ -5130,7 +5209,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             </div>
 
             {/* Bình luận & Trao đổi hoặc Dòng thời gian */}
-            {task?.id !== 'new' && (
+            {!isNew && (
               <div className="card" style={cardStyle}>
                 <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border-light)', marginBottom: '14px', gap: '20px' }}>
                   <button 
@@ -6000,7 +6079,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                           });
                         }}
                         onBlur={() => {
-                          if (task?.id && task.id !== 'new') {
+                          if (!isNew && task?.id && task.id !== 'new') {
                             handleUpdateField('progress', Number(formData.progress || 0));
                           }
                         }}
@@ -6038,17 +6117,17 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                       });
                     }}
                     onMouseUp={() => {
-                      if (task?.id && task.id !== 'new') {
+                      if (!isNew && task?.id && task.id !== 'new') {
                         handleUpdateField('progress', Number(formData.progress || 0));
                       }
                     }}
                     onTouchEnd={() => {
-                      if (task?.id && task.id !== 'new') {
+                      if (!isNew && task?.id && task.id !== 'new') {
                         handleUpdateField('progress', Number(formData.progress || 0));
                       }
                     }}
                     onKeyUp={() => {
-                      if (task?.id && task.id !== 'new') {
+                      if (!isNew && task?.id && task.id !== 'new') {
                         handleUpdateField('progress', Number(formData.progress || 0));
                       }
                     }}
@@ -6102,7 +6181,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                       };
                       setErpMeta(updatedMeta);
 
-                      if (task.id !== 'new') {
+                      if (!isNew && task.id !== 'new') {
                         try {
                           const payloadObj: any = { erp_task: updatedMeta };
                           if (updatedMeta.due_sla_notified || task.due_sla_notified) payloadObj.due_sla_notified = true;
@@ -6265,7 +6344,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                           setFormData(nextFormData);
                           setIsCustomerLinked(true);
 
-                          if (task.id !== 'new') {
+                          if (!isNew && task.id !== 'new') {
                             try {
                               await api.put(`/activities/${task.id}`, {
                                 contact_id: contactIdVal,
@@ -6347,7 +6426,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                       const nextIds = addContactIds.filter((id: number) => id !== Number(c.id));
                                       const updatedMeta = { ...erpMeta, related_contact_ids: nextIds };
                                       setErpMeta(updatedMeta);
-                                      if (task.id !== 'new') {
+                                      if (!isNew && task.id !== 'new') {
                                         handleSaveMeta(updatedMeta);
                                       }
                                     }}
@@ -6384,7 +6463,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                               const updatedMeta = { ...erpMeta, related_contact_ids: nextIds };
                               setErpMeta(updatedMeta);
                               setIsCustomerLinked(true);
-                              if (task.id !== 'new') {
+                              if (!isNew && task.id !== 'new') {
                                 handleSaveMeta(updatedMeta);
                               }
                             }}
@@ -6504,7 +6583,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     
                     setFormData((prev: any) => ({ ...prev, ...nextData }));
 
-                    if (task.id !== 'new') {
+                    if (!isNew && task.id !== 'new') {
                       try {
                         await api.put(`/activities/${task.id}`, nextData);
                         if (onUpdate) onUpdate({ ...task, ...formData, ...nextData });
@@ -6553,7 +6632,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                       
                       setFormData((prev: any) => ({ ...prev, ...nextData }));
 
-                      if (task.id !== 'new') {
+                      if (!isNew && task.id !== 'new') {
                         try {
                           await api.put(`/activities/${task.id}`, nextData);
                           if (onUpdate) onUpdate({ ...task, ...formData, ...nextData });

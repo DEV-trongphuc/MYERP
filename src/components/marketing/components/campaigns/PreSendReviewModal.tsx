@@ -21,6 +21,7 @@ interface PreSendReviewModalProps {
     allSegments: Segment[];
     allTags: any[];
     allTemplates: Template[];
+    templatePreviews?: Record<string, string>;
     znsTemplates?: any[];
     allFlows: Flow[];
     isSubmitting: boolean;
@@ -87,6 +88,7 @@ export const PreSendReviewModal: React.FC<PreSendReviewModalProps> = ({
     allSegments,
     allTags,
     allTemplates,
+    templatePreviews = {},
     znsTemplates = [],
     allFlows,
     isSubmitting,
@@ -198,13 +200,35 @@ export const PreSendReviewModal: React.FC<PreSendReviewModalProps> = ({
 
     const currentSubscriber = sampleSubscribers[selectedSampleIndex] || DEFAULT_SAMPLE_SUBSCRIBERS[0];
 
+    const [fetchedTemplateHtml, setFetchedTemplateHtml] = useState<string>('');
+
+    useEffect(() => {
+        if (!isOpen) return;
+        let isMounted = true;
+        const tid = formData.templateId;
+        if (!isZns && tid && tid !== 'custom-html') {
+            const cached = templatePreviews?.[tid] || selectedTemplate?.htmlContent || (selectedTemplate as any)?.html_content || '';
+            if (cached) {
+                setFetchedTemplateHtml(cached);
+            } else {
+                api.get<any>(`templates?id=${encodeURIComponent(tid)}`).then(res => {
+                    if (!isMounted) return;
+                    const html = res?.data?.htmlContent || res?.data?.html_content || '';
+                    if (html) setFetchedTemplateHtml(html);
+                }).catch(() => {});
+            }
+        }
+        return () => { isMounted = false; };
+    }, [isOpen, formData.templateId, isZns, templatePreviews, selectedTemplate]);
+
     // Raw content
     const rawContent = useMemo(() => {
         if (formData.templateId === 'custom-html') {
             return formData.contentBody || '';
         }
-        return selectedTemplate?.htmlContent || formData.contentBody || '';
-    }, [formData.templateId, formData.contentBody, selectedTemplate]);
+        const tid = formData.templateId || '';
+        return (tid && templatePreviews?.[tid]) || selectedTemplate?.htmlContent || (selectedTemplate as any)?.html_content || fetchedTemplateHtml || formData.contentBody || '';
+    }, [formData.templateId, formData.contentBody, selectedTemplate, templatePreviews, fetchedTemplateHtml]);
 
     // Interpolated Subject & Content
     const previewSubject = useMemo(() => {

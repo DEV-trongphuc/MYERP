@@ -15,14 +15,15 @@ interface UpdateTagConfigProps {
 const UpdateTagConfig: React.FC<UpdateTagConfigProps> = ({ config, onChange, disabled, allFlows = [], currentFlowId }) => {
   const [globalTags, setGlobalTags] = useState<string[]>([]);
   const [search, setSearch] = useState('');
-  const tags = config.tags || [];
+  const tags: string[] = Array.isArray(config.tags) ? config.tags : [];
   const action = config.action || 'add'; // 'add' | 'remove'
 
   useEffect(() => {
     const fetchTags = async () => {
         const res = await api.get<{id: string, name: string}[]>('tags');
-        if (res.success && Array.isArray(res.data)) {
-            setGlobalTags(res.data.map(t => t.name));
+        if (res.success) {
+            const raw = Array.isArray(res.data) ? res.data : ((res.data as any)?.data || []);
+            setGlobalTags(raw.map((t: any) => String(t?.name || '')).filter(Boolean));
         }
     };
     fetchTags();
@@ -31,10 +32,13 @@ const UpdateTagConfig: React.FC<UpdateTagConfigProps> = ({ config, onChange, dis
   // Map các nhãn đang làm Trigger cho các Flow khác
   const tagTriggerMap = useMemo(() => {
     const map: Record<string, string> = {};
-    allFlows.forEach(f => {
-      if (f.id === currentFlowId || f.status === 'archived') return;
-      const trigger = f.steps?.find(s => s.type === 'trigger');
-      if (trigger?.config.type === 'tag' && trigger.config.targetId) {
+    (Array.isArray(allFlows) ? allFlows : []).forEach(f => {
+      if (!f || f.id === currentFlowId || f.status === 'archived') return;
+      const steps: any[] = Array.isArray(f.steps)
+        ? f.steps
+        : (typeof f.steps === 'string' ? (() => { try { return JSON.parse(f.steps as any); } catch { return []; } })() : []);
+      const trigger = steps.find(s => s && s.type === 'trigger');
+      if (trigger?.config?.type === 'tag' && trigger.config.targetId) {
         map[trigger.config.targetId] = f.name;
       }
     });

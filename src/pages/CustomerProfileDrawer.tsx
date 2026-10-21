@@ -6047,7 +6047,26 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     const mapped = source.map((a: any) => {
       let type = a.type;
       const title = a.subject || '';
-      const note = a.body || a.note || '';
+      let rawNoteBody = String(a.body || a.note || '').trim();
+      if (rawNoteBody.startsWith('{') && rawNoteBody.includes('"erp_task"')) {
+        try {
+          const parsedTask = JSON.parse(rawNoteBody);
+          rawNoteBody = String(parsedTask?.erp_task?.description || parsedTask?.description || a.subject || '');
+        } catch {
+          const m = rawNoteBody.match(/"description"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+          if (m) rawNoteBody = m[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+        }
+      }
+      const note = rawNoteBody
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;/gi, "'")
+        .replace(/[ \t]+/g, ' ')
+        .trim();
       const lowerTitle = title.toLowerCase();
       const lowerNote = note.toLowerCase();
 
@@ -6087,7 +6106,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         due_date: a.due_date,
         color: a.status === 'cancelled' ? '#6b7280' : (isNoConnect ? '#7c3aed' : type === 'zalo_connect' ? '#0084FF' : type === 'call' ? '#3b82f6' : type === 'meeting' ? '#BD1D2D' : type === 'task' ? '#f59e0b' : type === 'system' ? '#64748b' : type === 'note' ? '#6366f1' : '#10b981'),
         icon: isNoConnect ? <PhoneOff size={16} /> : (type === 'call' ? <Phone size={16} /> : type === 'zalo_connect' ? <img src="https://stc-zpl.zdn.vn/favicon.ico" style={{ width: 16, height: 16, objectFit: 'contain', borderRadius: '4px' }} alt="Zalo" /> : type === 'meeting' ? <User size={16} /> : type === 'task' ? <CheckSquare size={16} /> : type === 'system' ? <History size={16} /> : type === 'note' ? <FileText size={16} /> : <Mail size={16} />),
-        note: a.body || a.note || '',
+        note,
         comment_count: a.comment_count,
         expense_image_url: a.expense_image_url,
         rawActivity: a
@@ -10639,7 +10658,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             />
                           </div>
 
-                          {/* Row 7: Chức danh & Phòng ban */}
+                          {/* Row 7: Chức danh & Công ty */}
                           <div className="form-group">
                             <label className="form-label">Chức danh</label>
                             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -10654,38 +10673,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           </div>
 
                           <div className="form-group">
-                            <label className="form-label">Phòng ban</label>
+                            <label className="form-label">Công ty</label>
                             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                               <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
                                 <Layers size={16} />
                               </div>
-                              <input className="form-input form-input-icon-left" placeholder="ví dụ: Kinh doanh" value={formData.department || ''} onChange={e => {
+                              <input className="form-input form-input-icon-left" placeholder="ví dụ: Vietnam Connection Co., Ltd" value={formData.company || formData.department || ''} onChange={e => {
                                 const val = e.target.value;
-                                setFormData((prev: any) => ({ ...prev, department: val }));
+                                setFormData((prev: any) => ({ ...prev, company: val, department: val }));
                               }} />
                             </div>
-                          </div>
-
-                          {/* Row 8: Công ty (Liên kết) */}
-                          <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                            <label className="form-label">Công ty (Liên kết)</label>
-                            <CustomSelect
-                              searchable
-                              options={[
-                                { value: '', label: '— Không chọn —' },
-                                ...companiesList.map(c => ({ value: String(c.id), label: c.name }))
-                              ]}
-                              value={String(formData.company_id || '')}
-                              onChange={val => {
-                                const selectedId = val ? Number(val) : null;
-                                const selectedComp = companiesList.find(c => Number(c.id) === selectedId);
-                                setFormData((prev: any) => ({
-                                  ...prev,
-                                  company_id: selectedId,
-                                  company_name: selectedComp ? selectedComp.name : ''
-                                }));
-                              }}
-                            />
                           </div>
 
                           {/* Row 9: Zalo & Facebook */}

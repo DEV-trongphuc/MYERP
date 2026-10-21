@@ -35,6 +35,7 @@ interface LaunchPreviewProps {
     allSegments: any[];
     allTags?: any[];
     allTemplates: any[];
+    templatePreviews?: Record<string, string>;
     znsTemplates?: any[]; // Added for ZNS
     allFlows?: Flow[];
     activateFlowId?: string | null;
@@ -47,7 +48,7 @@ interface LaunchPreviewProps {
 }
 
 const LaunchPreview: React.FC<LaunchPreviewProps> = ({
-    formData, allLists, allSegments, allTags = [], allTemplates, znsTemplates = [], allFlows = [], activateFlowId, initialConnectFlow,
+    formData, allLists, allSegments, allTags = [], allTemplates, templatePreviews = {}, znsTemplates = [], allFlows = [], activateFlowId, initialConnectFlow,
     onTestEmail, onConnectFlow, onScheduleChange, onActivateFlow, onAttachmentsChange
 }) => {
     const apiUrl = window.location.origin;
@@ -363,7 +364,29 @@ const LaunchPreview: React.FC<LaunchPreviewProps> = ({
         return () => { isMounted = false; };
     }, [formData.target?.listIds, formData.target?.segmentIds, formData.target?.tagIds]);
 
-    const contentToRender = formData.templateId === 'custom-html' ? formData.contentBody : (selectedTemplate?.htmlContent || '');
+    const [fetchedTemplateHtml, setFetchedTemplateHtml] = useState<string>('');
+
+    useEffect(() => {
+        let isMounted = true;
+        const tid = formData.templateId;
+        if (!isZns && tid && tid !== 'custom-html') {
+            const cached = templatePreviews?.[tid] || selectedTemplate?.htmlContent || (selectedTemplate as any)?.html_content || '';
+            if (cached) {
+                setFetchedTemplateHtml(cached);
+            } else {
+                api.get<any>(`templates?id=${encodeURIComponent(tid)}`).then(res => {
+                    if (!isMounted) return;
+                    const html = res?.data?.htmlContent || res?.data?.html_content || '';
+                    if (html) setFetchedTemplateHtml(html);
+                }).catch(() => {});
+            }
+        }
+        return () => { isMounted = false; };
+    }, [formData.templateId, isZns, templatePreviews, selectedTemplate]);
+
+    const contentToRender = formData.templateId === 'custom-html'
+        ? (formData.contentBody || '')
+        : (templatePreviews?.[formData.templateId] || selectedTemplate?.htmlContent || (selectedTemplate as any)?.html_content || fetchedTemplateHtml || formData.contentBody || '');
 
     const interpolatedPreviewHtml = useMemo(() => {
         if (!contentToRender) return '';

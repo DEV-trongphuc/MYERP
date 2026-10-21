@@ -18,7 +18,10 @@ const ListActionConfig: React.FC<ListActionConfigProps> = ({ config, onChange, d
     useEffect(() => {
         const fetchLists = async () => {
             const res = await api.get<any[]>('lists');
-            if (res.success) setLists(res.data.filter(l => l.source !== 'Google Sheets'));
+            if (res.success) {
+                const raw = Array.isArray(res.data) ? res.data : ((res.data as any)?.data || []);
+                setLists(raw.filter((l: any) => l && l.source !== 'Google Sheets'));
+            }
         };
         fetchLists();
     }, []);

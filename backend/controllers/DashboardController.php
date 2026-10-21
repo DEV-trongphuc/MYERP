@@ -544,7 +544,7 @@ class DashboardController {
         $from = ($_GET['from'] ?? date('Y-m-01')) . ' 00:00:00';
         $to   = ($_GET['to']   ?? date('Y-m-t')) . ' 23:59:59';
         
-        $where = "u.tenant_id=? AND u.is_active=1 AND u.role IN ('admin','manager','sales','sale','director','superadmin','super_admin')";
+        $where = "u.tenant_id=? AND u.is_active=1 AND LOWER(u.role) IN ('sales','sale')";
         $params = [$tid, $from, $to, $tid];
         
         if ($isSale) {
@@ -686,8 +686,6 @@ class DashboardController {
         }
 
         // 2. Pending Approvals (Leaves + Advances + Expenses + Checkins + Bulks)
-        // Only count: (Đơn đang tới lượt tôi duyệt) + (Đơn do tôi tạo nhưng đang chờ duyệt)
-
         // A. Leaves
         $stmtLv = $this->db->prepare("
             SELECT COUNT(1) FROM hrm_leave_requests 
@@ -864,11 +862,19 @@ class DashboardController {
         ], 'Lấy danh sách badges thành công');
     }
 
+    /**
+     * Báo cáo Hiệu suất Sales & Phân tích Chất lượng Lead (Sales & Lead Performance Deck)
+     * - Loại trừ 100% Data Cá nhân / Giới thiệu / Tự kiếm và Data Báo lỗi khỏi thống kê hiệu suất.
+     * - Chỉ thống kê nhân sự role Sale (LOWER(u.role) IN ('sale', 'sales')).
+     * - Đồng bộ 100% logic Chưa tương tác (Bỏ ngâm) & Đã tương tác với /contacts (search_helpers.php).
+     * - Thống kê chuẩn Doanh số thu về & Đơn hàng (SO) từ bảng deposits (kèm deals).
+     * - Hỗ trợ đầy đủ bộ lọc thời gian toàn cục (dateFilter, month, from/to), Tư vấn viên (consultant_id), Nguồn (source).
+     */
     public function salesLeadPerformance(array $auth): void {
         $userRole = strtolower($auth['role'] ?? '');
         $allowedRoles = [
-            'admin', 'superadmin', 'super_admin', 'director', 
-            'manager', 'assistant', 'tro_ly', 'leader', 
+            'admin', 'superadmin', 'super_admin', 'director',
+            'manager', 'assistant', 'tro_ly', 'leader',
             'head_of_department', 'truongphong', 'quanly'
         ];
         $isManagerOrAbove = in_array($userRole, $allowedRoles, true);
@@ -880,10 +886,10 @@ class DashboardController {
             if ($uRow) {
                 $jobTitle = mb_strtolower((string)($uRow['job_title'] ?? ''));
                 if (
-                    str_contains($jobTitle, 'quản lý') || 
-                    str_contains($jobTitle, 'trưởng') || 
-                    str_contains($jobTitle, 'manager') || 
-                    str_contains($jobTitle, 'director') || 
+                    str_contains($jobTitle, 'quản lý') ||
+                    str_contains($jobTitle, 'trưởng') ||
+                    str_contains($jobTitle, 'manager') ||
+                    str_contains($jobTitle, 'director') ||
                     str_contains($jobTitle, 'leader') ||
                     str_contains($jobTitle, 'giám đốc')
                 ) {
@@ -906,185 +912,1210 @@ class DashboardController {
         }
 
         $tid = (int)($auth['tenant_id'] ?? 1);
-        $month = trim($_GET['month'] ?? '');
-        if (!preg_match('/^\d{4}-\d{2}$/', $month)) {
-            $month = date('Y-m');
+        $dateParam = trim((string)($_GET['date'] ?? ''));
+        $monthParam = trim((string)($_GET['month'] ?? ''));
+        $fromParam = trim((string)($_GET['from'] ?? $_GET['from_date'] ?? ''));
+        $toParam = trim((string)($_GET['to'] ?? $_GET['to_date'] ?? ''));
+        $consultantId = (int)($_GET['consultant_id'] ?? $_GET['owner_id'] ?? 0);
+        $funnelConsultantId = isset($_GET['funnel_consultant_id']) && $_GET['funnel_consultant_id'] !== ''
+            ? (int)$_GET['funnel_consultant_id']
+            : $consultantId;
+        $sourceFilter = trim((string)($_GET['source'] ?? ''));
+        $drilldownType = trim((string)($_GET['drilldown'] ?? ''));
+
+        // Resolve Date Range ($from, $to) and Previous Comparison Period ($prevFrom, $prevTo)
+        $today = date('Y-m-d');
+        $from = date('Y-m-01');
+        $to = date('Y-m-t');
+        $prevFrom = date('Y-m-01', strtotime('first day of last month'));
+        $prevTo = date('Y-m-t', strtotime('last day of last month'));
+        $periodLabel = 'Tháng này';
+
+        if ($fromParam !== '' && $toParam !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fromParam) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $toParam)) {
+            $from = $fromParam;
+            $to = $toParam;
+            $spanDays = max(1, (int)round((strtotime($to) - strtotime($from)) / 86400) + 1);
+            $prevTo = date('Y-m-d', strtotime($from . ' -1 day'));
+            $prevFrom = date('Y-m-d', strtotime($prevTo . ' -' . ($spanDays - 1) . ' days'));
+            $periodLabel = $from . ' đến ' . $to;
+        } elseif ($dateParam !== '') {
+            if ($dateParam === 'Hôm nay' || $dateParam === 'today') {
+                $from = $today;
+                $to = $today;
+                $prevFrom = date('Y-m-d', strtotime('-1 day'));
+                $prevTo = $prevFrom;
+                $periodLabel = 'Hôm nay';
+            } elseif ($dateParam === 'Hôm qua' || $dateParam === 'yesterday') {
+                $from = date('Y-m-d', strtotime('-1 day'));
+                $to = $from;
+                $prevFrom = date('Y-m-d', strtotime('-2 days'));
+                $prevTo = $prevFrom;
+                $periodLabel = 'Hôm qua';
+            } elseif ($dateParam === 'Tuần này' || $dateParam === 'this_week') {
+                $from = date('Y-m-d', strtotime('monday this week'));
+                $to = $today;
+                $prevFrom = date('Y-m-d', strtotime('monday last week'));
+                $prevTo = date('Y-m-d', strtotime('sunday last week'));
+                $periodLabel = 'Tuần này';
+            } elseif ($dateParam === 'Tuần trước' || $dateParam === 'last_week') {
+                $from = date('Y-m-d', strtotime('monday last week'));
+                $to = date('Y-m-d', strtotime('sunday last week'));
+                $prevFrom = date('Y-m-d', strtotime('monday -2 weeks'));
+                $prevTo = date('Y-m-d', strtotime('sunday -2 weeks'));
+                $periodLabel = 'Tuần trước';
+            } elseif ($dateParam === 'Tuần trước nữa') {
+                $from = date('Y-m-d', strtotime('monday -2 weeks'));
+                $to = date('Y-m-d', strtotime('sunday -2 weeks'));
+                $prevFrom = date('Y-m-d', strtotime('monday -3 weeks'));
+                $prevTo = date('Y-m-d', strtotime('sunday -3 weeks'));
+                $periodLabel = 'Tuần trước nữa';
+            } elseif ($dateParam === '7 ngày qua' || $dateParam === '7_days') {
+                $from = date('Y-m-d', strtotime('-6 days'));
+                $to = $today;
+                $prevFrom = date('Y-m-d', strtotime('-13 days'));
+                $prevTo = date('Y-m-d', strtotime('-7 days'));
+                $periodLabel = '7 ngày qua';
+            } elseif ($dateParam === '30 ngày qua' || $dateParam === '30_days') {
+                $from = date('Y-m-d', strtotime('-29 days'));
+                $to = $today;
+                $prevFrom = date('Y-m-d', strtotime('-59 days'));
+                $prevTo = date('Y-m-d', strtotime('-30 days'));
+                $periodLabel = '30 ngày qua';
+            } elseif ($dateParam === 'Tháng này' || $dateParam === 'this_month') {
+                $from = date('Y-m-01');
+                $to = date('Y-m-t');
+                $prevFrom = date('Y-m-01', strtotime('first day of last month'));
+                $prevTo = date('Y-m-t', strtotime('last day of last month'));
+                $periodLabel = 'Tháng này';
+            } elseif ($dateParam === 'Tháng trước' || $dateParam === 'last_month') {
+                $from = date('Y-m-01', strtotime('first day of last month'));
+                $to = date('Y-m-t', strtotime('last day of last month'));
+                $prevFrom = date('Y-m-01', strtotime($from . ' -1 month'));
+                $prevTo = date('Y-m-t', strtotime($prevFrom));
+                $periodLabel = 'Tháng trước';
+            } elseif ($dateParam === 'Tất cả' || $dateParam === 'all') {
+                $from = '2020-01-01';
+                $to = date('Y-m-t');
+                $prevFrom = '2019-01-01';
+                $prevTo = '2019-12-31';
+                $periodLabel = 'Tất cả thời gian';
+            } elseif (preg_match('/^(\d{4}-\d{2}-\d{2})\s*(?:đến|to|-)\s*(\d{4}-\d{2}-\d{2})$/iu', $dateParam, $m)) {
+                $from = $m[1];
+                $to = $m[2];
+                $spanDays = max(1, (int)round((strtotime($to) - strtotime($from)) / 86400) + 1);
+                $prevTo = date('Y-m-d', strtotime($from . ' -1 day'));
+                $prevFrom = date('Y-m-d', strtotime($prevTo . ' -' . ($spanDays - 1) . ' days'));
+                $periodLabel = $dateParam;
+            } elseif (preg_match('/^\d{4}-\d{2}$/', $dateParam)) {
+                $from = $dateParam . '-01';
+                $to = date('Y-m-t', strtotime($from));
+                $prevFrom = date('Y-m-01', strtotime($from . ' -1 month'));
+                $prevTo = date('Y-m-t', strtotime($prevFrom));
+                $periodLabel = 'Tháng ' . substr($dateParam, 5, 2) . '/' . substr($dateParam, 0, 4);
+            }
+        } elseif (preg_match('/^\d{4}-\d{2}$/', $monthParam)) {
+            $from = $monthParam . '-01';
+            $to = date('Y-m-t', strtotime($from));
+            $prevFrom = date('Y-m-01', strtotime($from . ' -1 month'));
+            $prevTo = date('Y-m-t', strtotime($prevFrom));
+            $periodLabel = 'Tháng ' . substr($monthParam, 5, 2) . '/' . substr($monthParam, 0, 4);
         }
 
-        $from = $month . '-01';
-        $to = date('Y-m-t', strtotime($from));
+        $month = substr($from, 0, 7);
+        $prevMonth = substr($prevFrom, 0, 7);
         $fromTs = $from . ' 00:00:00';
         $toTs = $to . ' 23:59:59';
-
-        $prevMonth = date('Y-m', strtotime($from . ' -1 month'));
-        $prevFrom = $prevMonth . '-01';
-        $prevTo = date('Y-m-t', strtotime($prevFrom));
         $prevFromTs = $prevFrom . ' 00:00:00';
         $prevToTs = $prevTo . ' 23:59:59';
 
-        // 1. Current Month Leads Summary
+        // Helper SQL expressions for 100% parity with /contacts (search_helpers.php)
+        // 0. Exclude cloned sub-program records (duplicate_flag = 1 AND duplicate_with_id IS NOT NULL) so 1 lead = 1 contact in statistics
+        $notClonedCond = function(string $alias = 'c'): string {
+            $a = $alias !== '' ? $alias . '.' : '';
+            return "(COALESCE({$a}duplicate_flag, 0) = 0 OR {$a}duplicate_with_id IS NULL)";
+        };
+
+        // 1. Personal / Self / Referral / Manual Imported leads (excluded from performance metrics — 100% NULL-safe & synced with ContactController.php)
+        $personalCond = function(string $alias = 'c'): string {
+            $a = $alias !== '' ? $alias . '.' : '';
+            return "(
+                COALESCE({$a}lead_status, '') IN ('ca_nhan', 'personal', 'self', 'tu_kiem', 'gioi_thieu', 'referral', 'import', 'imported')
+                OR COALESCE({$a}source, '') IN ('ca_nhan', 'gioi_thieu', 'databank', 'referral', 'ref', 'import', 'excel', 'csv')
+                OR COALESCE({$a}source, '') LIKE 'ca_nhan%'
+                OR COALESCE({$a}source, '') = 'Nhân viên kinh doanh tự tìm kiếm'
+                OR ({$a}created_by IS NOT NULL AND {$a}owner_id IS NOT NULL AND {$a}created_by = {$a}owner_id AND {$a}created_by NOT IN (1, 100009) AND LOWER(TRIM(COALESCE({$a}source, ''))) IN ('', 'other', 'ca_nhan', 'gioi_thieu', 'databank', 'referral', 'ref'))
+                OR LOWER(COALESCE({$a}source, '')) LIKE '%cá nhân%'
+                OR LOWER(COALESCE({$a}source, '')) LIKE '%ca nhan%'
+                OR LOWER(COALESCE({$a}source, '')) LIKE '%tự tìm%'
+                OR LOWER(COALESCE({$a}source, '')) LIKE '%tu tim%'
+                OR LOWER(COALESCE({$a}source, '')) LIKE '%tự kiếm%'
+                OR LOWER(COALESCE({$a}source, '')) LIKE '%giới thiệu%'
+                OR LOWER(COALESCE({$a}source, '')) LIKE '%gioi thieu%'
+                OR LOWER(COALESCE({$a}source, '')) LIKE '%referral%'
+                OR LOWER(COALESCE({$a}source, '')) LIKE '%import%'
+                OR LOWER(COALESCE({$a}source, '')) LIKE '%nhập%'
+                OR LOWER(COALESCE({$a}source, '')) LIKE '%nhap%'
+                OR LOWER(COALESCE({$a}source, '')) LIKE '%excel%'
+                OR LOWER(COALESCE({$a}source, '')) LIKE '%csv%'
+                OR COALESCE({$a}tags, '') LIKE '%\"Cá nhân\"%'
+                OR COALESCE({$a}tags, '') LIKE '%\"Giới thiệu\"%'
+                OR COALESCE({$a}tags, '') LIKE '%Import%'
+                OR COALESCE({$a}notes, '') LIKE '[Import]%'
+            )";
+        };
+
+        $isExcludedSourceName = function(string $srcName): bool {
+            $lower = mb_strtolower(trim($srcName), 'UTF-8');
+            if ($lower === '') return false;
+            $bannedTokens = [
+                'ca_nhan', 'cá nhân', 'ca nhan', 'personal', 'self',
+                'gioi_thieu', 'giới thiệu', 'gioi thieu', 'referral', 'databank',
+                'tự tìm', 'tu tim', 'tự kiếm', 'tu kiem',
+                'import', 'nhập', 'nhap', 'excel', 'csv'
+            ];
+            foreach ($bannedTokens as $tk) {
+                if ($lower === $tk || mb_strpos($lower, $tk, 0, 'UTF-8') !== false) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        // 2. Confirmed / Pending Error leads (excluded from performance metrics — 100% NULL-safe & synced with ContactController.php)
+        $errorCond = function(string $alias = 'c'): string {
+            $a = $alias !== '' ? $alias . '.' : '';
+            return "(
+                COALESCE({$a}lead_status, '') IN ('error', 'ticket_pending', 'pending', 'approved', 'confirmed', 'bao_loi')
+                OR COALESCE({$a}pipeline_status, '') IN ('00_error', 'error', 'bao_loi')
+                OR COALESCE({$a}tags, '') LIKE '%\"Báo lỗi\"%'
+                OR EXISTS (SELECT 1 FROM tickets tk_err WHERE tk_err.contact_id = {$a}id AND tk_err.status IN ('open', 'in_progress', 'pending', 'approved', 'confirmed'))
+                OR EXISTS (
+                    SELECT 1 FROM data_reports dr_err
+                    JOIN leads l_err ON dr_err.lead_id = l_err.id
+                    WHERE {$a}phone IS NOT NULL AND {$a}phone != '' AND l_err.phone = {$a}phone AND dr_err.status IN ('pending', 'approved')
+                )
+            )";
+        };
+
+        // Pre-fetch Sales Consultants (Strictly role IN ('sale', 'sales')) once to eliminate correlated EXISTS subqueries
+        $stmtAllSalesUsers = $this->db->prepare("
+            SELECT id, full_name, avatar_url, role, job_title, is_active
+            FROM users
+            WHERE tenant_id = ? AND LOWER(role) IN ('sale', 'sales')
+            ORDER BY full_name ASC
+        ");
+        $stmtAllSalesUsers->execute([$tid]);
+        $allSalesUsers = $stmtAllSalesUsers->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $saleUserIdList = [];
+        $availableConsultants = [];
+        foreach ($allSalesUsers as $su) {
+            $suId = (int)$su['id'];
+            if ($suId > 0) {
+                $saleUserIdList[] = $suId;
+            }
+            if ((int)($su['is_active'] ?? 1) === 1) {
+                $availableConsultants[] = [
+                    'id' => $suId,
+                    'full_name' => $su['full_name'],
+                    'avatar_url' => $su['avatar_url'],
+                    'role' => $su['role'],
+                    'job_title' => $su['job_title']
+                ];
+            }
+        }
+        $saleIdsCsv = !empty($saleUserIdList) ? implode(',', array_values(array_unique($saleUserIdList))) : '0';
+
+        // Pre-fetch Pipeline Stages once to classify Pipeline 1-2 (Chưa Connect), Pipeline 3-12 (Lead Qualified), and Pipeline 13-14 (Win) in O(1)
+        $stmtPipelineDefs = $this->db->prepare("
+            SELECT id, name, color, order_index, is_won, is_lost, system_slug
+            FROM pipeline_stages
+            WHERE tenant_id = ?
+            ORDER BY order_index ASC, id ASC
+        ");
+        $stmtPipelineDefs->execute([$tid]);
+        $pipelineStageDefs = $stmtPipelineDefs->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $qualStageIds = [];
+        $qualStageSlugs = [];
+        $winStageIds = [];
+        $winStageSlugs = [];
+        $firstStageId = 0;
+        foreach ($pipelineStageDefs as $idx => &$psd) {
+            $sName = trim((string)($psd['name'] ?? ''));
+            if (preg_match('/^0?(\d{1,2})\b/', $sName, $mNum)) {
+                $stageNum = (int)$mNum[1];
+            } else {
+                $stageNum = $idx + 1;
+            }
+            $psd['stage_number'] = $stageNum;
+            if ($stageNum === 1 || $firstStageId === 0) {
+                if ($stageNum === 1) {
+                    $firstStageId = (int)$psd['id'];
+                } elseif ($firstStageId === 0) {
+                    $firstStageId = (int)$psd['id'];
+                }
+            }
+            if ($stageNum >= 3 && $stageNum <= 12 && (int)($psd['is_lost'] ?? 0) === 0) {
+                $qualStageIds[] = (int)$psd['id'];
+                $slugStr = trim((string)($psd['system_slug'] ?? ''));
+                if ($slugStr !== '') {
+                    $qualStageSlugs[] = $this->db->quote($slugStr);
+                }
+            } elseif ($stageNum >= 13 && $stageNum <= 14 && (int)($psd['is_lost'] ?? 0) === 0) {
+                $winStageIds[] = (int)$psd['id'];
+                $slugStr = trim((string)($psd['system_slug'] ?? ''));
+                if ($slugStr !== '') {
+                    $winStageSlugs[] = $this->db->quote($slugStr);
+                }
+            }
+        }
+        unset($psd);
+        $qualStageIdsCsv = !empty($qualStageIds) ? implode(',', array_values(array_unique($qualStageIds))) : '0';
+        $qualStageSlugsCsv = !empty($qualStageSlugs) ? implode(',', array_values(array_unique($qualStageSlugs))) : "''";
+        $winStageIdsCsv = !empty($winStageIds) ? implode(',', array_values(array_unique($winStageIds))) : '0';
+        $winStageSlugsCsv = !empty($winStageSlugs) ? implode(',', array_values(array_unique($winStageSlugs))) : "''";
+
+        // 3. Strict Sales-only role condition on contact owner (Fast index lookup via IN list)
+        $saleOwnerCond = function(string $alias = 'c') use ($saleIdsCsv): string {
+            $a = $alias !== '' ? $alias . '.' : '';
+            return "{$a}owner_id IN ($saleIdsCsv)";
+        };
+
+        // 4. Exact Uncontacted (Chưa tương tác) condition — 100% NULL-safe & synced with ContactController.php & AgentToolRegistry.php
+        $uncontactedCond = function(string $alias = 'c'): string {
+            $a = $alias !== '' ? $alias . '.' : '';
+            return "(
+                COALESCE({$a}lead_status, '') NOT IN ('lost', 'nurture')
+                AND ({$a}last_contact IS NULL OR TRIM({$a}last_contact) = '' OR {$a}last_contact LIKE '0000-00-00%')
+                AND NOT EXISTS (
+                    SELECT 1 FROM activities act_uc1
+                    WHERE act_uc1.contact_id = {$a}id AND act_uc1.deleted_at IS NULL
+                      AND COALESCE(act_uc1.type, '') NOT IN ('system', 'lifecycle', 'assign', 'lead_Assign')
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM activities act_uc2
+                    WHERE act_uc2.related_type IN ('contact', 'lead') AND act_uc2.related_id = {$a}id AND act_uc2.deleted_at IS NULL
+                      AND COALESCE(act_uc2.type, '') NOT IN ('system', 'lifecycle', 'assign', 'lead_Assign')
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM notes n_uc
+                    WHERE n_uc.entity_type = 'contact' AND n_uc.entity_id = {$a}id
+                      AND COALESCE(n_uc.body, '') NOT LIKE '[Tự động]%'
+                      AND COALESCE(n_uc.body, '') NOT LIKE '[Phân bổ]%'
+                      AND COALESCE(n_uc.body, '') NOT LIKE '[Giao data]%'
+                      AND COALESCE(n_uc.body, '') NOT LIKE '[Auto]%'
+                      AND COALESCE(n_uc.body, '') NOT LIKE '[Import]%'
+                      AND COALESCE(n_uc.body, '') NOT LIKE '[Tái phân bổ]%'
+                      AND COALESCE(n_uc.body, '') NOT LIKE 'Tái phân bổ%'
+                      AND COALESCE(n_uc.body, '') NOT LIKE 'Giao lại%'
+                      AND COALESCE(n_uc.body, '') NOT LIKE '📋 [Ghi chú gốc%'
+                      AND COALESCE(n_uc.body, '') NOT LIKE '[Ghi chú gốc%'
+                      AND COALESCE(n_uc.body, '') NOT LIKE 'Khách hàng đăng ký lại%'
+                      AND COALESCE(n_uc.body, '') NOT LIKE '📌%'
+                )
+            )";
+        };
+
+        // 5. Lead Qualified condition = Strictly Pipeline 3 to 12 (03 – Connected .. 12 – Offer / Scholarship Accepted)
+        //    Win Funnel condition = Strictly Pipeline 13 to 14 (13 – Deposit / Tuition Payment .. 14 – Enrolled)
+        //    Chưa Connect = Pipeline 1 to 2 (01 – New Lead, 02 – Contact Attempted) = NOT $qualifiedCond AND NOT $winFunnelCond
+        $qualifiedCond = function(string $alias = 'c') use ($qualStageIdsCsv, $qualStageSlugsCsv): string {
+            $a = $alias !== '' ? $alias . '.' : '';
+            return "(
+                {$a}stage_id IN ($qualStageIdsCsv)
+                OR (({$a}stage_id IS NULL OR {$a}stage_id = 0) AND COALESCE({$a}pipeline_status, '') IN ($qualStageSlugsCsv))
+            )";
+        };
+
+        $winFunnelCond = function(string $alias = 'c') use ($winStageIdsCsv, $winStageSlugsCsv): string {
+            $a = $alias !== '' ? $alias . '.' : '';
+            return "(
+                {$a}stage_id IN ($winStageIdsCsv)
+                OR (({$a}stage_id IS NULL OR {$a}stage_id = 0) AND COALESCE({$a}pipeline_status, '') IN ($winStageSlugsCsv))
+            )";
+        };
+
+        $notClonedC = $notClonedCond('c');
+        $pCondC = $personalCond('c');
+        $eCondC = $errorCond('c');
+        $sRoleC = $saleOwnerCond('c');
+        $ucCondC = $uncontactedCond('c');
+        $qCondC = $qualifiedCond('c');
+        $wCondC = $winFunnelCond('c');
+
+        // Built-in Paginated Drill-Down Modal Handler (20 items/page) — Fast early return without running full dashboard queries
+        if ($drilldownType !== '') {
+            $drillPage = max(1, (int)($_GET['page'] ?? 1));
+            $drillLimit = max(1, min(100, (int)($_GET['limit'] ?? 20)));
+            $drillOffset = ($drillPage - 1) * $drillLimit;
+            $drillSearch = trim((string)($_GET['search'] ?? ''));
+            $drillStageId = (int)($_GET['stage_id'] ?? $_GET['drilldown_stage_id'] ?? 0);
+            $drillOwnerId = isset($_GET['drilldown_consultant_id']) && $_GET['drilldown_consultant_id'] !== ''
+                ? (int)$_GET['drilldown_consultant_id']
+                : $consultantId;
+            $drillSource = isset($_GET['drilldown_source']) && $_GET['drilldown_source'] !== ''
+                ? trim((string)$_GET['drilldown_source'])
+                : $sourceFilter;
+
+            if (in_array($drilldownType, ['reminder', 'duplicate_profile'], true)) {
+                $dlWhere = "dl.received_at BETWEEN ? AND ?";
+                $dlParams = [$tid, $fromTs, $toTs, $fromTs, $toTs];
+
+                if ($drilldownType === 'reminder') {
+                    $dlWhere .= " AND dl.status = 'reminder'";
+                } else {
+                    $dlWhere .= " AND (
+                        dl.status = 'duplicate'
+                        OR (
+                            dl.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'fallback', 'success', 'databank_claim')
+                            AND COALESCE(l.source, '') NOT IN ('ca_nhan', 'gioi_thieu')
+                            AND (dl.status = 'rule_6_month' OR (c.id IS NOT NULL AND c.created_at < ?))
+                        )
+                    )";
+                    $dlParams[] = $fromTs;
+                }
+
+                if ($drillOwnerId > 0) {
+                    $dlWhere .= " AND COALESCE(NULLIF(dl.assigned_to, 0), c.owner_id, l.assigned_to, 0) = ?";
+                    $dlParams[] = $drillOwnerId;
+                }
+                if ($drillSource !== '' && $drillSource !== 'all') {
+                    if ($drillSource === 'Chưa phân loại') {
+                        $dlWhere .= " AND COALESCE(NULLIF(TRIM(c.source), ''), NULLIF(TRIM(l.source), '')) IS NULL";
+                    } else {
+                        $dlWhere .= " AND COALESCE(NULLIF(TRIM(c.source), ''), NULLIF(TRIM(l.source), '')) = ?";
+                        $dlParams[] = $drillSource;
+                    }
+                }
+                if ($drillSearch !== '') {
+                    $likeVal = '%' . $drillSearch . '%';
+                    $dlWhere .= " AND (COALESCE(c.full_name, l.name, '') LIKE ? OR COALESCE(c.phone, l.phone, '') LIKE ? OR COALESCE(c.email, l.email, '') LIKE ? OR COALESCE(c.program, l.course, '') LIKE ?)";
+                    $dlParams[] = $likeVal;
+                    $dlParams[] = $likeVal;
+                    $dlParams[] = $likeVal;
+                    $dlParams[] = $likeVal;
+                }
+
+                $dlFromJoin = "
+                    FROM distribution_logs dl
+                    INNER JOIN (
+                        SELECT lead_id, MAX(id) as max_id
+                        FROM distribution_logs
+                        WHERE status != 'silent' AND lead_id IS NOT NULL AND received_at BETWEEN ? AND ?
+                        GROUP BY lead_id
+                    ) dl_max ON dl.id = dl_max.max_id
+                    LEFT JOIN leads l ON l.id = dl.lead_id
+                    LEFT JOIN contacts c ON c.id = (
+                        SELECT c_sub.id FROM contacts c_sub
+                        WHERE c_sub.tenant_id = ? AND c_sub.deleted_at IS NULL
+                          AND (
+                              (l.person_id IS NOT NULL AND l.person_id > 0 AND c_sub.person_id = l.person_id)
+                              OR (l.phone IS NOT NULL AND TRIM(l.phone) != '' AND c_sub.phone_norm9 = RIGHT(REGEXP_REPLACE(l.phone, '[^0-9]', ''), 9))
+                          )
+                        ORDER BY CASE WHEN c_sub.owner_id = dl.assigned_to THEN 0 ELSE 1 END, c_sub.id ASC
+                        LIMIT 1
+                    )
+                ";
+                // Reorder params to match $dlFromJoin placeholders: [$fromTs, $toTs, $tid, ...rest of $dlWhere]
+                $joinAndWhereParams = array_merge([$fromTs, $toTs, $tid], array_slice($dlParams, 3));
+
+                $stmtDlCnt = $this->db->prepare("SELECT COUNT(1) $dlFromJoin WHERE $dlWhere");
+                $stmtDlCnt->execute($joinAndWhereParams);
+                $drillTotal = (int)$stmtDlCnt->fetchColumn();
+
+                $stmtDlItems = $this->db->prepare("
+                    SELECT
+                        COALESCE(c.id, l.id) as id,
+                        c.id as contact_id,
+                        COALESCE(NULLIF(TRIM(c.full_name), ''), NULLIF(TRIM(l.name), ''), 'Khách hàng') as full_name,
+                        COALESCE(NULLIF(TRIM(c.phone), ''), NULLIF(TRIM(l.phone), ''), '') as phone,
+                        COALESCE(NULLIF(TRIM(c.email), ''), NULLIF(TRIM(l.email), ''), '') as email,
+                        COALESCE(NULLIF(TRIM(c.program), ''), NULLIF(TRIM(l.course), ''), '') as program,
+                        COALESCE(NULLIF(TRIM(c.source), ''), NULLIF(TRIM(l.source), ''), 'Chưa phân loại') as source,
+                        COALESCE(NULLIF(dl.assigned_to, 0), c.owner_id, l.assigned_to) as owner_id,
+                        COALESCE(u.full_name, 'Hệ thống chặn trùng') as owner_name,
+                        u.avatar_url as owner_avatar,
+                        CASE
+                            WHEN dl.status = 'reminder' THEN 'Nhắc lại (<6T)'
+                            WHEN dl.status = 'duplicate' THEN 'Trùng bị chặn'
+                            WHEN dl.status = 'rule_6_month' THEN 'Trùng HS chia lại (>6T)'
+                            ELSE CONCAT('Trùng HS cũ • ', COALESCE(ps.name, ps_slug.name, '01 – New Lead'))
+                        END as stage_name,
+                        CASE
+                            WHEN dl.status = 'reminder' THEN '#d97706'
+                            WHEN dl.status = 'duplicate' THEN '#ef4444'
+                            ELSE '#7c3aed'
+                        END as stage_color,
+                        1 as stage_order,
+                        CASE WHEN c.id IS NOT NULL AND $ucCondC THEN 1 ELSE 0 END as is_uncontacted,
+                        TIMESTAMPDIFF(HOUR, dl.received_at, NOW()) as hours_since_created,
+                        dl.received_at as created_at,
+                        c.created_at as original_contact_created_at,
+                        c.last_contact,
+                        dl.status as dist_status,
+                        COALESCE(NULLIF(TRIM(dl.message), ''), c.notes) as notes
+                    $dlFromJoin
+                    LEFT JOIN users u ON u.id = COALESCE(NULLIF(dl.assigned_to, 0), c.owner_id, l.assigned_to)
+                    LEFT JOIN pipeline_stages ps ON ps.id = c.stage_id AND ps.tenant_id = c.tenant_id
+                    LEFT JOIN pipeline_stages ps_slug ON (c.stage_id IS NULL OR c.stage_id = 0) AND ps_slug.system_slug = c.pipeline_status AND ps_slug.tenant_id = c.tenant_id
+                    WHERE $dlWhere
+                    ORDER BY dl.received_at DESC
+                    LIMIT $drillLimit OFFSET $drillOffset
+                ");
+                $stmtDlItems->execute($joinAndWhereParams);
+                $drillItems = $stmtDlItems->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            } else {
+            $drillHasPeriodDepositSql = "";
+            $drillHasPeriodDepositParams = [];
+            if ($drillSource !== '' && $drillSource !== 'all') {
+                $drillHasPeriodDepositSql = " OR EXISTS (
+                    SELECT 1 FROM deposits d_dr
+                    WHERE d_dr.contact_id = c.id
+                      AND d_dr.deleted_at IS NULL
+                      AND d_dr.status NOT IN ('cancelled', 'rejected', 'deleted')
+                      AND d_dr.created_at BETWEEN ? AND ?
+                )";
+                $drillHasPeriodDepositParams = [$fromTs, $toTs];
+            }
+
+            $drillWhere = "c.tenant_id = ? AND c.deleted_at IS NULL AND $notClonedC AND (c.created_at BETWEEN ? AND ? $drillHasPeriodDepositSql) AND NOT $pCondC AND NOT $eCondC AND $sRoleC";
+            $drillParams = array_merge([$tid, $fromTs, $toTs], $drillHasPeriodDepositParams);
+
+            if ($drillOwnerId > 0) {
+                $drillWhere .= " AND c.owner_id = ?";
+                $drillParams[] = $drillOwnerId;
+            }
+            if ($drillSource !== '' && $drillSource !== 'all') {
+                if ($drillSource === 'Chưa phân loại') {
+                    $drillWhere .= " AND (c.source IS NULL OR TRIM(c.source) = '')";
+                } else {
+                    $drillWhere .= " AND TRIM(c.source) = ?";
+                    $drillParams[] = $drillSource;
+                }
+            }
+            if ($drilldownType === 'uncontacted') {
+                $drillWhere .= " AND $ucCondC";
+            } elseif ($drilldownType === 'contacted') {
+                $drillWhere .= " AND NOT $ucCondC";
+            } elseif ($drilldownType === 'qualified') {
+                $drillWhere .= " AND $qCondC";
+            } elseif ($drilldownType === 'qualified_all') {
+                if ($drillSource !== '' && $drillSource !== 'all') {
+                    $drillWhere .= " AND ($qCondC OR $wCondC OR EXISTS (
+                        SELECT 1 FROM deposits d_qdr
+                        WHERE d_qdr.contact_id = c.id
+                          AND d_qdr.deleted_at IS NULL
+                          AND d_qdr.status NOT IN ('cancelled', 'rejected', 'deleted')
+                          AND d_qdr.created_at BETWEEN ? AND ?
+                    ))";
+                    $drillParams[] = $fromTs;
+                    $drillParams[] = $toTs;
+                } else {
+                    $drillWhere .= " AND ($qCondC OR $wCondC)";
+                }
+            } elseif ($drilldownType === 'win') {
+                $drillWhere .= " AND $wCondC";
+            } elseif ($drilldownType === 'unconnected') {
+                $drillWhere .= " AND NOT $qCondC AND NOT $wCondC";
+            } elseif ($drilldownType === 'stage' && $drillStageId > 0) {
+                $stInfo = null;
+                foreach ($pipelineStageDefs as $psd) {
+                    if ((int)$psd['id'] === $drillStageId) {
+                        $stInfo = $psd;
+                        break;
+                    }
+                }
+                if ($stInfo) {
+                    $slug = (string)($stInfo['system_slug'] ?? '');
+                    $stageNum = (int)($stInfo['stage_number'] ?? 0);
+                    if ($stageNum === 1 || (int)$stInfo['id'] === $firstStageId) {
+                        $drillWhere .= " AND (c.stage_id = ? OR ((c.stage_id IS NULL OR c.stage_id = 0) AND (COALESCE(c.pipeline_status, '') = ? OR COALESCE(c.pipeline_status, '') = '')))";
+                        $drillParams[] = $drillStageId;
+                        $drillParams[] = $slug;
+                    } else {
+                        $drillWhere .= " AND (c.stage_id = ? OR ((c.stage_id IS NULL OR c.stage_id = 0) AND COALESCE(c.pipeline_status, '') = ?))";
+                        $drillParams[] = $drillStageId;
+                        $drillParams[] = $slug;
+                    }
+                } else {
+                    $drillWhere .= " AND c.stage_id = ?";
+                    $drillParams[] = $drillStageId;
+                }
+            }
+            if ($drillSearch !== '') {
+                $likeVal = '%' . $drillSearch . '%';
+                $drillWhere .= " AND (c.full_name LIKE ? OR c.phone LIKE ? OR c.email LIKE ? OR c.program LIKE ?)";
+                $drillParams[] = $likeVal;
+                $drillParams[] = $likeVal;
+                $drillParams[] = $likeVal;
+                $drillParams[] = $likeVal;
+            }
+
+            $stmtDrillCnt = $this->db->prepare("SELECT COUNT(1) FROM contacts c WHERE $drillWhere");
+            $stmtDrillCnt->execute($drillParams);
+            $drillTotal = (int)$stmtDrillCnt->fetchColumn();
+
+            $stmtDrillItems = $this->db->prepare("
+                SELECT 
+                    c.*,
+                    u.full_name as owner_name,
+                    u.avatar_url as owner_avatar,
+                    COALESCE(ps.name, ps_slug.name, '01 – New Lead') as stage_name,
+                    COALESCE(ps.color, ps_slug.color, '#3b82f6') as stage_color,
+                    COALESCE(ps.order_index, ps_slug.order_index, 1) as stage_order,
+                    CASE WHEN $ucCondC THEN 1 ELSE 0 END as is_uncontacted,
+                    TIMESTAMPDIFF(HOUR, c.created_at, NOW()) as hours_since_created
+                FROM contacts c
+                LEFT JOIN users u ON u.id = c.owner_id
+                LEFT JOIN pipeline_stages ps ON ps.id = c.stage_id AND ps.tenant_id = c.tenant_id
+                LEFT JOIN pipeline_stages ps_slug ON (c.stage_id IS NULL OR c.stage_id = 0) AND ps_slug.system_slug = c.pipeline_status AND ps_slug.tenant_id = c.tenant_id
+                WHERE $drillWhere
+                ORDER BY c.created_at DESC
+                LIMIT $drillLimit OFFSET $drillOffset
+            ");
+            $stmtDrillItems->execute($drillParams);
+            $drillItems = $stmtDrillItems->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            }
+
+            // Batch-enrich ONLY the 20 paginated rows with latest interaction & latest manual note (avoids N*subquery overhead)
+            if (!empty($drillItems)) {
+                $pageContactIds = array_values(array_unique(array_filter(array_map(function($r) {
+                    return (int)($r['contact_id'] ?? $r['id'] ?? 0);
+                }, $drillItems))));
+
+                $latestActMap = [];
+                $latestNoteMap = [];
+                if (!empty($pageContactIds)) {
+                    $idPh = implode(',', array_fill(0, count($pageContactIds), '?'));
+                    $cleanErpText = function(?string $raw): ?string {
+                        if ($raw === null || trim($raw) === '') return null;
+                        $s = trim($raw);
+                        $prefix = '';
+                        if (preg_match('/^([a-z_]+\s*:\s*)(?=\{\s*"erp_task")/i', $s, $pm)) {
+                            $prefix = $pm[1];
+                            $s = trim(substr($s, strlen($prefix)));
+                        }
+                        if (str_starts_with($s, '{"erp_task"') || str_contains($s, '"erp_task"')) {
+                            $decoded = json_decode($s, true);
+                            if (is_array($decoded)) {
+                                $desc = $decoded['erp_task']['description'] ?? $decoded['description'] ?? '';
+                                if (is_string($desc) && trim($desc) !== '') {
+                                    $s = trim($desc);
+                                }
+                            } elseif (preg_match('/"description"\s*:\s*"((?:[^"\\\\]|\\\\.)*)/s', $s, $dm)) {
+                                $s = stripcslashes($dm[1]);
+                            }
+                        }
+                        $s = preg_replace('/<br\s*\/?>/i', "\n", $s);
+                        $s = preg_replace('/<\/(p|div|li)>/i', "\n", $s);
+                        $s = strip_tags((string)$s);
+                        $s = html_entity_decode((string)$s, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                        $s = str_replace("\xC2\xA0", ' ', $s);
+                        $s = trim((string)preg_replace('/\n{3,}/', "\n\n", $s));
+                        return $s !== '' ? ($prefix . $s) : null;
+                    };
+
+                    $stmtBatchAct = $this->db->prepare("
+                        SELECT 
+                            COALESCE(act_l.contact_id, act_l.related_id) as cid,
+                            CONCAT(COALESCE(act_l.type, 'call'), ': ', COALESCE(NULLIF(TRIM(act_l.subject), ''), act_l.body, '')) as text_val,
+                            act_l.body as raw_body,
+                            act_l.subject as raw_subject,
+                            act_l.type as act_type,
+                            act_l.created_at
+                        FROM activities act_l
+                        WHERE (act_l.contact_id IN ($idPh) OR (act_l.related_type IN ('contact', 'lead') AND act_l.related_id IN ($idPh)))
+                          AND act_l.deleted_at IS NULL
+                          AND COALESCE(act_l.type, '') NOT IN ('system', 'lifecycle', 'assign', 'lead_Assign')
+                        ORDER BY act_l.created_at DESC
+                    ");
+                    $stmtBatchAct->execute(array_merge($pageContactIds, $pageContactIds));
+                    while ($ar = $stmtBatchAct->fetch(PDO::FETCH_ASSOC)) {
+                        $cid = (int)$ar['cid'];
+                        if (!isset($latestActMap[$cid])) {
+                            $rawBody = trim((string)($ar['raw_body'] ?? ''));
+                            $rawSubj = trim((string)($ar['raw_subject'] ?? ''));
+                            $actType = trim((string)($ar['act_type'] ?? 'call')) ?: 'call';
+                            $cleanBody = $cleanErpText($rawBody);
+                            $displayContent = ($cleanBody !== null && $cleanBody !== '') ? $cleanBody : $rawSubj;
+                            $ar['text_val'] = $displayContent !== '' ? ($actType . ': ' . $displayContent) : $cleanErpText((string)($ar['text_val'] ?? ''));
+                            $latestActMap[$cid] = $ar;
+                        }
+                    }
+
+                    $stmtBatchNote = $this->db->prepare("
+                        SELECT n_l.entity_id as cid, n_l.body
+                        FROM notes n_l
+                        WHERE n_l.entity_type = 'contact' AND n_l.entity_id IN ($idPh)
+                          AND COALESCE(n_l.body, '') NOT LIKE '[Tự động]%'
+                          AND COALESCE(n_l.body, '') NOT LIKE '[Phân bổ]%'
+                          AND COALESCE(n_l.body, '') NOT LIKE '[Giao data]%'
+                          AND COALESCE(n_l.body, '') NOT LIKE '[Auto]%'
+                        ORDER BY n_l.created_at DESC
+                    ");
+                    $stmtBatchNote->execute($pageContactIds);
+                    while ($nr = $stmtBatchNote->fetch(PDO::FETCH_ASSOC)) {
+                        $cid = (int)$nr['cid'];
+                        if (!isset($latestNoteMap[$cid])) {
+                            $latestNoteMap[$cid] = $cleanErpText((string)$nr['body']) ?? (string)$nr['body'];
+                        }
+                    }
+                }
+
+                foreach ($drillItems as &$dItem) {
+                    $cid = (int)($dItem['contact_id'] ?? $dItem['id'] ?? 0);
+                    $dItem['latest_interaction'] = $latestActMap[$cid]['text_val'] ?? null;
+                    $dItem['latest_interaction_at'] = $latestActMap[$cid]['created_at'] ?? null;
+                    $dItem['latest_manual_note'] = $latestNoteMap[$cid] ?? null;
+                }
+                unset($dItem);
+            }
+
+            respond(200, [
+                'drilldown' => $drilldownType,
+                'items' => $drillItems,
+                'total' => $drillTotal,
+                'page' => $drillPage,
+                'limit' => $drillLimit,
+                'total_pages' => max(1, (int)ceil($drillTotal / $drillLimit))
+            ], 'Lấy danh sách chi tiết thành công');
+            return;
+        }
+
+        $stmtAvailSources = $this->db->prepare("
+            SELECT DISTINCT COALESCE(NULLIF(TRIM(c.source), ''), 'Chưa phân loại') as source_name
+            FROM contacts c
+            WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND NOT $pCondC AND NOT $eCondC AND $sRoleC
+            ORDER BY source_name ASC
+        ");
+        $stmtAvailSources->execute([$tid]);
+        $rawAvailSources = $stmtAvailSources->fetchAll(PDO::FETCH_COLUMN) ?: [];
+        $availableSources = array_values(array_filter($rawAvailSources, function($s) use ($isExcludedSourceName) {
+            return !$isExcludedSourceName((string)$s);
+        }));
+
+        // Optional filter clauses for Contact queries
+        $extraContactSql = "";
+        $extraContactParams = [];
+        if ($consultantId > 0) {
+            $extraContactSql .= " AND c.owner_id = ?";
+            $extraContactParams[] = $consultantId;
+        }
+        if ($sourceFilter !== '' && $sourceFilter !== 'all') {
+            if ($sourceFilter === 'Chưa phân loại') {
+                $extraContactSql .= " AND (c.source IS NULL OR TRIM(c.source) = '')";
+            } else {
+                $extraContactSql .= " AND TRIM(c.source) = ?";
+                $extraContactParams[] = $sourceFilter;
+            }
+        }
+
+        // Count how many Personal / Referral / Imported and Error leads were excluded in this period (for transparency)
+        $stmtExcludedCnt = $this->db->prepare("
+            SELECT 
+                SUM(CASE WHEN $pCondC AND NOT $eCondC THEN 1 ELSE 0 END) as personal_cnt,
+                SUM(CASE WHEN NOT $pCondC AND $eCondC THEN 1 ELSE 0 END) as error_cnt
+            FROM contacts c
+            WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND $notClonedC AND $sRoleC AND c.created_at BETWEEN ? AND ?
+              $extraContactSql
+        ");
+        $stmtExcludedCnt->execute(array_merge([$tid, $fromTs, $toTs], $extraContactParams));
+        $excludedRow = $stmtExcludedCnt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $excludedPersonalCount = (int)($excludedRow['personal_cnt'] ?? 0);
+        $excludedErrorCount = (int)($excludedRow['error_cnt'] ?? 0);
+
+        // Count Reminder (<6M) and Duplicate Profiles (Re-assigned old profiles >6M + Blocked Duplicates) from distribution_logs
+        $reminderLeadsCount = 0;
+        $reassignedProfileCount = 0;
+        $duplicateBlockedCount = 0;
+        $duplicateProfileCount = 0;
+        $saleDistMap = [];
+        try {
+            $dlStatSql = "
+                SELECT
+                    COALESCE(NULLIF(dl.assigned_to, 0), c_p.owner_id, l.assigned_to, 0) as sale_uid,
+                    SUM(CASE WHEN dl.status = 'reminder' THEN 1 ELSE 0 END) as reminder_cnt,
+                    SUM(CASE WHEN dl.status = 'duplicate' THEN 1 ELSE 0 END) as duplicate_blocked_cnt,
+                    SUM(CASE WHEN dl.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'fallback', 'success', 'databank_claim')
+                              AND COALESCE(l.source, '') NOT IN ('ca_nhan', 'gioi_thieu')
+                              AND (dl.status = 'rule_6_month' OR (c_p.id IS NOT NULL AND c_p.created_at < ?))
+                         THEN 1 ELSE 0 END) as reassigned_profile_cnt
+                FROM distribution_logs dl
+                INNER JOIN (
+                    SELECT lead_id, MAX(id) as max_id
+                    FROM distribution_logs
+                    WHERE status != 'silent' AND lead_id IS NOT NULL AND received_at BETWEEN ? AND ?
+                    GROUP BY lead_id
+                ) dl_max ON dl.id = dl_max.max_id
+                LEFT JOIN leads l ON l.id = dl.lead_id
+                LEFT JOIN contacts c_p ON c_p.id = (
+                    SELECT c_sub.id FROM contacts c_sub
+                    WHERE c_sub.tenant_id = ? AND c_sub.deleted_at IS NULL
+                      AND (
+                          (l.person_id IS NOT NULL AND l.person_id > 0 AND c_sub.person_id = l.person_id)
+                          OR (l.phone IS NOT NULL AND TRIM(l.phone) != '' AND c_sub.phone_norm9 = RIGHT(REGEXP_REPLACE(l.phone, '[^0-9]', ''), 9))
+                      )
+                    ORDER BY CASE WHEN c_sub.owner_id = dl.assigned_to THEN 0 ELSE 1 END, c_sub.id ASC
+                    LIMIT 1
+                )
+                WHERE dl.received_at BETWEEN ? AND ?
+            ";
+            $dlStatParams = [$fromTs, $fromTs, $toTs, $tid, $fromTs, $toTs];
+            if ($sourceFilter !== '' && $sourceFilter !== 'all') {
+                if ($sourceFilter === 'Chưa phân loại') {
+                    $dlStatSql .= " AND COALESCE(NULLIF(TRIM(c_p.source), ''), NULLIF(TRIM(l.source), '')) IS NULL";
+                } else {
+                    $dlStatSql .= " AND COALESCE(NULLIF(TRIM(c_p.source), ''), NULLIF(TRIM(l.source), '')) = ?";
+                    $dlStatParams[] = $sourceFilter;
+                }
+            }
+            $dlStatSql .= " GROUP BY sale_uid";
+            $stmtDlStat = $this->db->prepare($dlStatSql);
+            $stmtDlStat->execute($dlStatParams);
+            while ($dlRow = $stmtDlStat->fetch(PDO::FETCH_ASSOC)) {
+                $sUid = (int)($dlRow['sale_uid'] ?? 0);
+                $remCnt = (int)($dlRow['reminder_cnt'] ?? 0);
+                $dupBlkCnt = (int)($dlRow['duplicate_blocked_cnt'] ?? 0);
+                $reassCnt = (int)($dlRow['reassigned_profile_cnt'] ?? 0);
+                $saleDistMap[$sUid] = [
+                    'reminder_leads' => $remCnt,
+                    'duplicate_blocked_leads' => $dupBlkCnt,
+                    'reassigned_profile_leads' => $reassCnt,
+                    'duplicate_profile_leads' => $reassCnt + $dupBlkCnt
+                ];
+                if ($consultantId <= 0 || $sUid === $consultantId) {
+                    $reminderLeadsCount += $remCnt;
+                    $duplicateBlockedCount += $dupBlkCnt;
+                    $reassignedProfileCount += $reassCnt;
+                }
+            }
+            $duplicateProfileCount = $reassignedProfileCount + $duplicateBlockedCount;
+        } catch (\Throwable $e) {
+            // Keep safe defaults if distribution_logs schema differs
+        }
+
+        // 1. Current Period Leads Summary (Distributed / Company Leads for Sales Team ONLY)
         $stmtLeads = $this->db->prepare("
             SELECT 
                 COUNT(1) as total_leads,
-                SUM(CASE WHEN (lead_score >= 50 OR status IN ('qualified', 'customer')) THEN 1 ELSE 0 END) as qualified_leads,
-                SUM(CASE WHEN (last_contact IS NOT NULL AND last_contact != '') THEN 1 ELSE 0 END) as contacted_leads,
-                SUM(CASE WHEN (last_contact IS NULL OR last_contact = '') THEN 1 ELSE 0 END) as uncontacted_leads,
-                SUM(CASE WHEN (lead_score >= 80) THEN 1 ELSE 0 END) as hot_leads,
-                SUM(CASE WHEN (lead_score >= 50 AND lead_score < 80) THEN 1 ELSE 0 END) as warm_leads,
-                SUM(CASE WHEN (lead_score < 50 OR lead_score IS NULL) THEN 1 ELSE 0 END) as cold_leads
-            FROM contacts
-            WHERE tenant_id = ? AND deleted_at IS NULL AND created_at BETWEEN ? AND ?
+                SUM(CASE WHEN $qCondC THEN 1 ELSE 0 END) as qualified_leads,
+                SUM(CASE WHEN $wCondC THEN 1 ELSE 0 END) as win_funnel_leads,
+                SUM(CASE WHEN NOT $ucCondC THEN 1 ELSE 0 END) as contacted_leads,
+                SUM(CASE WHEN $ucCondC THEN 1 ELSE 0 END) as uncontacted_leads,
+                SUM(CASE WHEN (c.lead_score >= 80 OR c.temperature = 'hot') THEN 1 ELSE 0 END) as hot_leads,
+                SUM(CASE WHEN ((c.lead_score >= 50 AND c.lead_score < 80) OR (c.temperature = 'warm' AND (c.lead_score IS NULL OR c.lead_score < 80))) THEN 1 ELSE 0 END) as warm_leads,
+                SUM(CASE WHEN ((c.lead_score < 50 OR c.lead_score IS NULL) AND COALESCE(c.temperature, 'cold') NOT IN ('hot', 'warm')) THEN 1 ELSE 0 END) as cold_leads
+            FROM contacts c
+            WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND $notClonedC AND c.created_at BETWEEN ? AND ?
+              AND NOT $pCondC AND NOT $eCondC AND $sRoleC
+              $extraContactSql
         ");
-        $stmtLeads->execute([$tid, $fromTs, $toTs]);
+        $stmtLeads->execute(array_merge([$tid, $fromTs, $toTs], $extraContactParams));
         $leadRow = $stmtLeads->fetch(PDO::FETCH_ASSOC) ?: [];
 
         $totalLeads = (int)($leadRow['total_leads'] ?? 0);
         $qualifiedLeads = (int)($leadRow['qualified_leads'] ?? 0);
+        $winFunnelLeads = (int)($leadRow['win_funnel_leads'] ?? 0);
         $contactedLeads = (int)($leadRow['contacted_leads'] ?? 0);
         $uncontactedLeads = (int)($leadRow['uncontacted_leads'] ?? 0);
         $hotLeads = (int)($leadRow['hot_leads'] ?? 0);
         $warmLeads = (int)($leadRow['warm_leads'] ?? 0);
         $coldLeads = (int)($leadRow['cold_leads'] ?? 0);
 
-        // Prev Month Total Leads for Trend comparison
-        $stmtPrev = $this->db->prepare("SELECT COUNT(1) FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND created_at BETWEEN ? AND ?");
-        $stmtPrev->execute([$tid, $prevFromTs, $prevToTs]);
+        // Previous Period Total Leads for Trend comparison
+        $stmtPrev = $this->db->prepare("
+            SELECT COUNT(1)
+            FROM contacts c
+            WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND $notClonedC AND c.created_at BETWEEN ? AND ?
+              AND NOT $pCondC AND NOT $eCondC AND $sRoleC
+              $extraContactSql
+        ");
+        $stmtPrev->execute(array_merge([$tid, $prevFromTs, $prevToTs], $extraContactParams));
         $prevTotalLeads = (int)$stmtPrev->fetchColumn();
 
-        $leadGrowthRate = $prevTotalLeads > 0 
-            ? round((($totalLeads - $prevTotalLeads) / $prevTotalLeads) * 100, 1) 
+        $leadGrowthRate = $prevTotalLeads > 0
+            ? round((($totalLeads - $prevTotalLeads) / $prevTotalLeads) * 100, 1)
             : ($totalLeads > 0 ? 100.0 : 0.0);
 
-        // 2. Deals Summary for Current Month
-        $stmtDeals = $this->db->prepare("
-            SELECT 
-                COUNT(1) as total_deals,
-                COALESCE(SUM(d.value), 0) as total_deal_value,
-                SUM(CASE WHEN ps.is_won = 1 THEN 1 ELSE 0 END) as won_deals,
-                COALESCE(SUM(CASE WHEN ps.is_won = 1 THEN d.value ELSE 0 END), 0) as won_value
-            FROM deals d
-            LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id
-            WHERE d.tenant_id = ? AND d.deleted_at IS NULL AND d.created_at BETWEEN ? AND ?
-        ");
-        $stmtDeals->execute([$tid, $fromTs, $toTs]);
-        $dealRow = $stmtDeals->fetch(PDO::FETCH_ASSOC) ?: [];
+        // 2. Sales Orders (SO / Deposits) & Revenue Summary for Current Period
+        // Resolve Sale attribution for each deposit:
+        // If creator is a Sale -> d.created_by; else if contact owner is a Sale -> c.owner_id; else COALESCE(c.owner_id, d.created_by)
+        $depSaleExpr = "CASE 
+            WHEN LOWER(COALESCE(u_cr.role, '')) IN ('sale', 'sales') THEN d.created_by
+            WHEN LOWER(COALESCE(u_own.role, '')) IN ('sale', 'sales') THEN c_dep.owner_id
+            ELSE COALESCE(c_dep.owner_id, d.created_by)
+        END";
 
-        $totalDeals = (int)($dealRow['total_deals'] ?? 0);
-        $totalDealValue = (float)($dealRow['total_deal_value'] ?? 0);
-        $wonDeals = (int)($dealRow['won_deals'] ?? 0);
-        $wonValue = (float)($dealRow['won_value'] ?? 0);
+        $extraDepSql = "";
+        $extraDepParams = [];
+        if ($consultantId > 0) {
+            $extraDepSql .= " AND ($depSaleExpr) = ?";
+            $extraDepParams[] = $consultantId;
+        }
+        if ($sourceFilter !== '' && $sourceFilter !== 'all') {
+            if ($sourceFilter === 'Chưa phân loại') {
+                $extraDepSql .= " AND (c_dep.source IS NULL OR TRIM(c_dep.source) = '')";
+            } else {
+                $extraDepSql .= " AND TRIM(c_dep.source) = ?";
+                $extraDepParams[] = $sourceFilter;
+            }
+        }
+
+        $depCollectedExpr = "(CASE
+            WHEN EXISTS (SELECT 1 FROM deposit_milestones dm_ex WHERE dm_ex.deposit_id = d.id)
+            THEN COALESCE((SELECT SUM(dm_ap.expected_amount) FROM deposit_milestones dm_ap WHERE dm_ap.deposit_id = d.id AND dm_ap.status = 'approved'), 0)
+            WHEN d.status IN ('approved', 'completed', 'paid', 'confirmed')
+            THEN COALESCE(d.price, 0)
+            ELSE 0
+        END)";
+        $depPendingExpr = "GREATEST(0, COALESCE(d.price, 0) - $depCollectedExpr)";
+
+        $stmtDeposits = $this->db->prepare("
+            SELECT 
+                COUNT(DISTINCT d.id) as total_orders,
+                COALESCE(SUM(d.price), 0) as total_order_value,
+                SUM(CASE WHEN d.status IN ('approved', 'completed', 'paid', 'confirmed') THEN 1 ELSE 0 END) as approved_orders,
+                COALESCE(SUM($depCollectedExpr), 0) as approved_value,
+                SUM(CASE WHEN d.status IN ('pending', 'pending_admin') THEN 1 ELSE 0 END) as pending_orders,
+                COALESCE(SUM($depPendingExpr), 0) as pending_value
+            FROM deposits d
+            LEFT JOIN contacts c_dep ON c_dep.id = d.contact_id
+            LEFT JOIN users u_cr ON u_cr.id = d.created_by
+            LEFT JOIN users u_own ON u_own.id = c_dep.owner_id
+            WHERE d.deleted_at IS NULL
+              AND d.status NOT IN ('cancelled', 'rejected', 'deleted')
+              AND COALESCE(c_dep.tenant_id, u_cr.tenant_id, 1) = ?
+              AND d.created_at BETWEEN ? AND ?
+              AND EXISTS (
+                  SELECT 1 FROM users u_chk
+                  WHERE u_chk.id = ($depSaleExpr)
+                    AND LOWER(u_chk.role) IN ('sale', 'sales')
+              )
+              $extraDepSql
+        ");
+        $stmtDeposits->execute(array_merge([$tid, $fromTs, $toTs], $extraDepParams));
+        $depRow = $stmtDeposits->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        // Previous period deposits for revenue growth comparison
+        $stmtPrevDeposits = $this->db->prepare("
+            SELECT 
+                COUNT(DISTINCT d.id) as prev_orders,
+                COALESCE(SUM(d.price), 0) as prev_order_value,
+                COALESCE(SUM($depCollectedExpr), 0) as prev_approved_value
+            FROM deposits d
+            LEFT JOIN contacts c_dep ON c_dep.id = d.contact_id
+            LEFT JOIN users u_cr ON u_cr.id = d.created_by
+            LEFT JOIN users u_own ON u_own.id = c_dep.owner_id
+            WHERE d.deleted_at IS NULL
+              AND d.status NOT IN ('cancelled', 'rejected', 'deleted')
+              AND COALESCE(c_dep.tenant_id, u_cr.tenant_id, 1) = ?
+              AND d.created_at BETWEEN ? AND ?
+              AND EXISTS (
+                  SELECT 1 FROM users u_chk
+                  WHERE u_chk.id = ($depSaleExpr)
+                    AND LOWER(u_chk.role) IN ('sale', 'sales')
+              )
+              $extraDepSql
+        ");
+        $stmtPrevDeposits->execute(array_merge([$tid, $prevFromTs, $prevToTs], $extraDepParams));
+        $prevDepRow = $stmtPrevDeposits->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $wonDeals = (int)($depRow['total_orders'] ?? 0);
+        $wonValue = (float)($depRow['total_order_value'] ?? 0);
+        $approvedDeals = (int)($depRow['approved_orders'] ?? 0);
+        $approvedValue = (float)($depRow['approved_value'] ?? 0);
+        $pendingDeals = (int)($depRow['pending_orders'] ?? 0);
+        $pendingValue = (float)($depRow['pending_value'] ?? 0);
+        $prevWonDeals = (int)($prevDepRow['prev_orders'] ?? 0);
+        $prevWonValue = (float)($prevDepRow['prev_order_value'] ?? 0);
+
+        $revenueGrowthRate = $prevWonValue > 0
+            ? round((($wonValue - $prevWonValue) / $prevWonValue) * 100, 1)
+            : ($wonValue > 0 ? 100.0 : 0.0);
+
+        // Total Open/Active Opportunities (Leads in consultation/application stages >= 3 or qualified + closed orders)
+        $totalDeals = max($qualifiedLeads + $winFunnelLeads, $wonDeals);
+        $totalDealValue = $wonValue;
 
         $safeTotalLeads = max(1, $totalLeads);
-        $qualifiedRate = round(($qualifiedLeads / $safeTotalLeads) * 100, 1);
-        $connectedRate = round(($contactedLeads / $safeTotalLeads) * 100, 1);
-        $uncontactedRate = round(($uncontactedLeads / $safeTotalLeads) * 100, 1);
-        $dealConversionRate = round(($totalDeals / $safeTotalLeads) * 100, 1);
-        $winRate = round(($wonDeals / $safeTotalLeads) * 100, 1);
+        $unconnectedLeads = max(0, $totalLeads - $qualifiedLeads - $winFunnelLeads);
+        $qualifiedRate = $totalLeads > 0 ? round(($qualifiedLeads / $safeTotalLeads) * 100, 1) : 0.0;
+        $winFunnelRate = $totalLeads > 0 ? round(($winFunnelLeads / $safeTotalLeads) * 100, 1) : 0.0;
+        $unconnectedRate = $totalLeads > 0 ? round(($unconnectedLeads / $safeTotalLeads) * 100, 1) : 0.0;
+        $connectedRate = $totalLeads > 0 ? round(($contactedLeads / $safeTotalLeads) * 100, 1) : 0.0;
+        $uncontactedRate = $totalLeads > 0 ? round(($uncontactedLeads / $safeTotalLeads) * 100, 1) : 0.0;
+        $dealConversionRate = $totalLeads > 0 ? round(($totalDeals / $safeTotalLeads) * 100, 1) : 0.0;
+        $winRate = $totalLeads > 0 ? round(($wonDeals / $safeTotalLeads) * 100, 1) : 0.0;
 
         // 3. Pipeline Stages Conversion Funnel
+        $funnelExtraSql = "";
+        $funnelExtraParams = [];
+        if ($funnelConsultantId > 0) {
+            $funnelExtraSql .= " AND c.owner_id = ?";
+            $funnelExtraParams[] = $funnelConsultantId;
+        }
+        if ($sourceFilter !== '' && $sourceFilter !== 'all') {
+            if ($sourceFilter === 'Chưa phân loại') {
+                $funnelExtraSql .= " AND (c.source IS NULL OR TRIM(c.source) = '')";
+            } else {
+                $funnelExtraSql .= " AND TRIM(c.source) = ?";
+                $funnelExtraParams[] = $sourceFilter;
+            }
+        }
+
+        $stmtFunnelTotal = $this->db->prepare("
+            SELECT COUNT(1)
+            FROM contacts c
+            WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND $notClonedC AND c.created_at BETWEEN ? AND ?
+              AND NOT $pCondC AND NOT $eCondC AND $sRoleC
+              $funnelExtraSql
+        ");
+        $stmtFunnelTotal->execute(array_merge([$tid, $fromTs, $toTs], $funnelExtraParams));
+        $funnelTotalLeads = (int)$stmtFunnelTotal->fetchColumn();
+        $safeFunnelTotal = max(1, $funnelTotalLeads);
+
         $stmtStages = $this->db->prepare("
             SELECT 
                 ps.id, ps.name, ps.color, ps.order_index, ps.is_won, ps.is_lost, ps.system_slug,
                 COUNT(c.id) as contact_count
             FROM pipeline_stages ps
-            LEFT JOIN contacts c ON (c.stage_id = ps.id OR (c.stage_id IS NULL AND ps.system_slug = c.pipeline_status)) 
-                AND c.tenant_id = ? AND c.deleted_at IS NULL AND c.created_at BETWEEN ? AND ?
+            LEFT JOIN contacts c ON (
+                    c.stage_id = ps.id
+                    OR ((c.stage_id IS NULL OR c.stage_id = 0) AND ps.system_slug = c.pipeline_status)
+                    OR ((c.stage_id IS NULL OR c.stage_id = 0) AND (c.pipeline_status IS NULL OR TRIM(c.pipeline_status) = '') AND ps.id = ?)
+                )
+                AND c.tenant_id = ? AND c.deleted_at IS NULL AND $notClonedC AND c.created_at BETWEEN ? AND ?
+                AND NOT $pCondC AND NOT $eCondC AND $sRoleC
+                $funnelExtraSql
             WHERE ps.tenant_id = ?
             GROUP BY ps.id, ps.name, ps.color, ps.order_index, ps.is_won, ps.is_lost, ps.system_slug
-            ORDER BY ps.order_index ASC
+            ORDER BY ps.order_index ASC, ps.id ASC
         ");
-        $stmtStages->execute([$tid, $fromTs, $toTs, $tid]);
+        $stmtStages->execute(array_merge([$firstStageId, $tid, $fromTs, $toTs], $funnelExtraParams, [$tid]));
         $rawStages = $stmtStages->fetchAll(PDO::FETCH_ASSOC);
 
         $funnel = [];
-        foreach ($rawStages as $st) {
+        $funnelQualifiedLeads = 0;
+        $funnelWinLeads = 0;
+        $funnelUnconnectedLeads = 0;
+        foreach ($rawStages as $sIdx => $st) {
             $cnt = (int)$st['contact_count'];
+            $ordIdx = (int)$st['order_index'];
+            $sName = trim((string)($st['name'] ?? ''));
+            if (preg_match('/^0?(\d{1,2})\b/', $sName, $mNum)) {
+                $stageNum = (int)$mNum[1];
+            } else {
+                $stageNum = $sIdx + 1;
+            }
+            if ($stageNum >= 3 && $stageNum <= 12 && (int)($st['is_lost'] ?? 0) === 0) {
+                $funnelQualifiedLeads += $cnt;
+            } elseif ($stageNum >= 13 && $stageNum <= 14 && (int)($st['is_lost'] ?? 0) === 0) {
+                $funnelWinLeads += $cnt;
+            } else {
+                $funnelUnconnectedLeads += $cnt;
+            }
             $funnel[] = [
                 'id' => (int)$st['id'],
                 'name' => $st['name'],
                 'color' => $st['color'] ?: '#3b82f6',
-                'order_index' => (int)$st['order_index'],
+                'order_index' => $ordIdx,
+                'stage_number' => $stageNum,
                 'is_won' => (bool)$st['is_won'],
                 'is_lost' => (bool)$st['is_lost'],
+                'system_slug' => $st['system_slug'] ?? '',
                 'count' => $cnt,
-                'conversion_rate' => round(($cnt / $safeTotalLeads) * 100, 1)
+                'conversion_rate' => $funnelTotalLeads > 0 ? round(($cnt / $safeFunnelTotal) * 100, 1) : 0.0
             ];
         }
+        $funnelQualifiedRate = $funnelTotalLeads > 0 ? round(($funnelQualifiedLeads / $safeFunnelTotal) * 100, 1) : 0.0;
+        $funnelWinRate = $funnelTotalLeads > 0 ? round(($funnelWinLeads / $safeFunnelTotal) * 100, 1) : 0.0;
+        $funnelUnconnectedRate = $funnelTotalLeads > 0 ? round(($funnelUnconnectedLeads / $safeFunnelTotal) * 100, 1) : 0.0;
 
-        // 4. Source Quality Matrix (Marketing ROI)
-        // Group deals by contact_id first to eliminate duplication when a contact has multiple deals
+        // 4. Source Quality Matrix (Marketing ROI — strictly excluding personal/referral/imported/error leads)
+        // Includes leads created in period AND leads of that source that closed an SO in this period so a source with revenue never shows 0 leads / 0 qualified
+        $pCondDep = $personalCond('c_dep');
+        $eCondDep = $errorCond('c_dep');
         $stmtSources = $this->db->prepare("
             SELECT 
                 COALESCE(NULLIF(TRIM(c.source), ''), 'Chưa phân loại') as source_name,
                 COUNT(c.id) as total_leads,
-                SUM(CASE WHEN (c.last_contact IS NULL OR c.last_contact = '') THEN 1 ELSE 0 END) as uncontacted_leads,
-                SUM(CASE WHEN (c.last_contact IS NOT NULL AND c.last_contact != '') THEN 1 ELSE 0 END) as contacted_leads,
-                SUM(CASE WHEN (c.lead_score >= 50 OR c.status IN ('qualified', 'customer')) THEN 1 ELSE 0 END) as qualified_leads,
-                COALESCE(SUM(d.deal_count), 0) as deal_count,
-                COALESCE(SUM(d.won_count), 0) as won_count,
-                COALESCE(SUM(d.won_value), 0) as won_value
+                SUM(CASE WHEN c.created_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as new_leads,
+                SUM(CASE WHEN c.created_at < ? THEN 1 ELSE 0 END) as prior_closed_leads,
+                SUM(CASE WHEN $ucCondC THEN 1 ELSE 0 END) as uncontacted_leads,
+                SUM(CASE WHEN NOT $ucCondC THEN 1 ELSE 0 END) as contacted_leads,
+                SUM(CASE WHEN ($qCondC OR $wCondC OR EXISTS (
+                    SELECT 1 FROM deposits d_sq
+                    WHERE d_sq.contact_id = c.id
+                      AND d_sq.deleted_at IS NULL
+                      AND d_sq.status NOT IN ('cancelled', 'rejected', 'deleted')
+                      AND d_sq.created_at BETWEEN ? AND ?
+                )) THEN 1 ELSE 0 END) as qualified_leads
             FROM contacts c
-            LEFT JOIN (
-                SELECT 
-                    d.contact_id,
-                    COUNT(d.id) as deal_count,
-                    SUM(CASE WHEN ps.is_won = 1 THEN 1 ELSE 0 END) as won_count,
-                    COALESCE(SUM(CASE WHEN ps.is_won = 1 THEN d.value ELSE 0 END), 0) as won_value
-                FROM deals d
-                LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id
-                WHERE d.tenant_id = ? AND d.deleted_at IS NULL
-                GROUP BY d.contact_id
-            ) d ON d.contact_id = c.id
-            WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND c.created_at BETWEEN ? AND ?
+            WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND $notClonedC
+              AND (
+                  c.created_at BETWEEN ? AND ?
+                  OR EXISTS (
+                      SELECT 1 FROM deposits d_s
+                      WHERE d_s.contact_id = c.id
+                        AND d_s.deleted_at IS NULL
+                        AND d_s.status NOT IN ('cancelled', 'rejected', 'deleted')
+                        AND d_s.created_at BETWEEN ? AND ?
+                  )
+              )
+              AND NOT $pCondC AND NOT $eCondC AND $sRoleC
+              $extraContactSql
             GROUP BY source_name
             ORDER BY total_leads DESC
-            LIMIT 15
+            LIMIT 30
         ");
-        $stmtSources->execute([$tid, $tid, $fromTs, $toTs]);
+        $stmtSources->execute(array_merge(
+            [$fromTs, $toTs, $fromTs, $fromTs, $toTs, $tid, $fromTs, $toTs, $fromTs, $toTs],
+            $extraContactParams
+        ));
         $rawSources = $stmtSources->fetchAll(PDO::FETCH_ASSOC);
 
+        // Fetch deposits by Marketing source in this period (strictly excluding personal/referral/imported contacts)
+        $stmtSourceDeps = $this->db->prepare("
+            SELECT 
+                COALESCE(NULLIF(TRIM(c_dep.source), ''), 'Chưa phân loại') as source_name,
+                COUNT(DISTINCT d.id) as won_count,
+                COALESCE(SUM(d.price), 0) as won_value,
+                COALESCE(SUM($depCollectedExpr), 0) as approved_value,
+                COALESCE(SUM($depPendingExpr), 0) as pending_value
+            FROM deposits d
+            INNER JOIN contacts c_dep ON c_dep.id = d.contact_id AND c_dep.deleted_at IS NULL
+            LEFT JOIN users u_cr ON u_cr.id = d.created_by
+            LEFT JOIN users u_own ON u_own.id = c_dep.owner_id
+            WHERE d.deleted_at IS NULL
+              AND d.status NOT IN ('cancelled', 'rejected', 'deleted')
+              AND COALESCE(c_dep.tenant_id, u_cr.tenant_id, 1) = ?
+              AND d.created_at BETWEEN ? AND ?
+              AND NOT $pCondDep AND NOT $eCondDep
+              AND EXISTS (
+                  SELECT 1 FROM users u_chk
+                  WHERE u_chk.id = ($depSaleExpr)
+                    AND LOWER(u_chk.role) IN ('sale', 'sales')
+              )
+              $extraDepSql
+            GROUP BY source_name
+        ");
+        $stmtSourceDeps->execute(array_merge([$tid, $fromTs, $toTs], $extraDepParams));
+        $sourceDepRows = $stmtSourceDeps->fetchAll(PDO::FETCH_ASSOC);
+        $sourceDepMap = [];
+        foreach ($sourceDepRows as $sdr) {
+            if ($isExcludedSourceName((string)$sdr['source_name'])) continue;
+            $sourceDepMap[$sdr['source_name']] = $sdr;
+        }
+
         $sources = [];
+        $seenSources = [];
         foreach ($rawSources as $src) {
+            $sName = (string)$src['source_name'];
+            if ($isExcludedSourceName($sName)) continue;
+            $seenSources[$sName] = true;
             $srcTotal = (int)$src['total_leads'];
             $safeSrcTotal = max(1, $srcTotal);
-            $srcWon = (int)$src['won_count'];
-            $srcWinRate = round(($srcWon / $safeSrcTotal) * 100, 1);
-            $srcQualified = (int)$src['qualified_leads'];
-            $srcQualRate = round(($srcQualified / $safeSrcTotal) * 100, 1);
+            $sDep = $sourceDepMap[$sName] ?? null;
+            $srcWon = (int)($sDep['won_count'] ?? 0);
+            $srcWonVal = (float)($sDep['won_value'] ?? 0);
+            $srcApprovedVal = (float)($sDep['approved_value'] ?? 0);
+            $srcPendingVal = (float)($sDep['pending_value'] ?? 0);
+            $srcWinRate = $srcTotal > 0 ? round(($srcWon / $safeSrcTotal) * 100, 1) : 0.0;
+            $srcQualified = max((int)$src['qualified_leads'], $srcWon);
+            $srcQualRate = $srcTotal > 0 ? round((min($srcTotal, $srcQualified) / $safeSrcTotal) * 100, 1) : 0.0;
             $srcConnected = (int)$src['contacted_leads'];
-            $srcConnRate = round(($srcConnected / $safeSrcTotal) * 100, 1);
+            $srcConnRate = $srcTotal > 0 ? round(($srcConnected / $safeSrcTotal) * 100, 1) : 0.0;
 
             $tier = 'neutral';
             $tierLabel = 'Trung bình';
-            if ($srcWinRate >= 15 || ($srcQualRate >= 60 && $srcTotal >= 10)) {
+            if ($srcWon > 0 || $srcWinRate >= 10 || ($srcQualRate >= 50 && $srcTotal >= 5)) {
                 $tier = 'vip';
-                $tierLabel = 'Nguồn Vàng';
-            } elseif ($srcWinRate >= 8 || $srcQualRate >= 40) {
+                $tierLabel = 'Hiệu quả cao';
+            } elseif ($srcQualRate >= 30 || $srcConnRate >= 90) {
                 $tier = 'good';
-                $tierLabel = 'Chất lượng Tốt';
-            } elseif ($srcQualRate < 25 && $srcTotal >= 20) {
+                $tierLabel = 'Tương tác tốt';
+            } elseif ((int)$src['uncontacted_leads'] >= 3 && $srcConnRate < 80) {
                 $tier = 'warning';
-                $tierLabel = 'Cần tối ưu Ads';
+                $tierLabel = 'Cần xử lý chưa tương tác';
             }
 
             $sources[] = [
-                'source' => $src['source_name'],
+                'source' => $sName,
                 'total_leads' => $srcTotal,
+                'new_leads' => (int)($src['new_leads'] ?? $srcTotal),
+                'prior_closed_leads' => (int)($src['prior_closed_leads'] ?? 0),
                 'uncontacted_leads' => (int)$src['uncontacted_leads'],
                 'contacted_leads' => $srcConnected,
                 'connected_rate' => $srcConnRate,
                 'qualified_leads' => $srcQualified,
                 'qualified_rate' => $srcQualRate,
-                'deal_count' => (int)$src['deal_count'],
+                'deal_count' => max($srcQualified, $srcWon),
                 'won_count' => $srcWon,
-                'won_value' => (float)$src['won_value'],
+                'won_value' => $srcWonVal,
+                'approved_value' => $srcApprovedVal,
+                'pending_value' => $srcPendingVal,
                 'win_rate' => $srcWinRate,
                 'tier' => $tier,
                 'tier_label' => $tierLabel
             ];
         }
 
-        // 5. Sales Performance Leaderboard (Pre-aggregated subqueries to prevent Cartesian Product)
+        // Also include any Marketing source that had closed deposits in this period even if contact owner wasn't matched above
+        foreach ($sourceDepMap as $sName => $sDep) {
+            if (isset($seenSources[$sName]) || $isExcludedSourceName((string)$sName)) continue;
+            $srcWon = (int)($sDep['won_count'] ?? 0);
+            $srcWonVal = (float)($sDep['won_value'] ?? 0);
+            if ($srcWon <= 0 && $srcWonVal <= 0) continue;
+            $sources[] = [
+                'source' => $sName,
+                'total_leads' => $srcWon,
+                'new_leads' => 0,
+                'prior_closed_leads' => $srcWon,
+                'uncontacted_leads' => 0,
+                'contacted_leads' => $srcWon,
+                'connected_rate' => 100.0,
+                'qualified_leads' => $srcWon,
+                'qualified_rate' => 100.0,
+                'deal_count' => $srcWon,
+                'won_count' => $srcWon,
+                'won_value' => $srcWonVal,
+                'approved_value' => (float)($sDep['approved_value'] ?? 0),
+                'pending_value' => (float)($sDep['pending_value'] ?? 0),
+                'win_rate' => 100.0,
+                'tier' => 'vip',
+                'tier_label' => 'Hiệu quả cao'
+            ];
+        }
+
+        // 5. Sales Performance Leaderboard (STRICTLY u.role IN ('sale', 'sales'))
+        $saleUserWhere = "u.tenant_id = ? AND u.is_active = 1 AND LOWER(u.role) IN ('sale', 'sales')";
+        $saleUserParams = [$tid];
+        if ($consultantId > 0) {
+            $saleUserWhere .= " AND u.id = ?";
+            $saleUserParams[] = $consultantId;
+        }
+
+        $sourceCondForSaleSub = "";
+        $sourceParamsForSaleSub = [];
+        if ($sourceFilter !== '' && $sourceFilter !== 'all') {
+            if ($sourceFilter === 'Chưa phân loại') {
+                $sourceCondForSaleSub = " AND (c.source IS NULL OR TRIM(c.source) = '')";
+            } else {
+                $sourceCondForSaleSub = " AND TRIM(c.source) = ?";
+                $sourceParamsForSaleSub[] = $sourceFilter;
+            }
+        }
+
+        $sourceCondForDepSub = "";
+        $sourceParamsForDepSub = [];
+        if ($sourceFilter !== '' && $sourceFilter !== 'all') {
+            if ($sourceFilter === 'Chưa phân loại') {
+                $sourceCondForDepSub = " AND (c_dep.source IS NULL OR TRIM(c_dep.source) = '')";
+            } else {
+                $sourceCondForDepSub = " AND TRIM(c_dep.source) = ?";
+                $sourceParamsForDepSub[] = $sourceFilter;
+            }
+        }
+
         $stmtSales = $this->db->prepare("
             SELECT 
                 u.id as user_id,
@@ -1092,42 +2123,61 @@ class DashboardController {
                 u.avatar_url,
                 u.role,
                 u.job_title,
-                COALESCE(c.assigned_leads, 0) as assigned_leads,
-                COALESCE(c.contacted_leads, 0) as contacted_leads,
-                COALESCE(c.uncontacted_leads, 0) as uncontacted_leads,
-                COALESCE(c.qualified_leads, 0) as qualified_leads,
-                COALESCE(d.deal_count, 0) as deal_count,
-                COALESCE(d.pipeline_value, 0) as pipeline_value,
-                COALESCE(d.won_count, 0) as won_count,
-                COALESCE(d.won_value, 0) as won_value
+                COALESCE(c_agg.assigned_leads, 0) as assigned_leads,
+                COALESCE(c_agg.contacted_leads, 0) as contacted_leads,
+                COALESCE(c_agg.uncontacted_leads, 0) as uncontacted_leads,
+                COALESCE(c_agg.qualified_leads, 0) as qualified_leads,
+                COALESCE(c_agg.personal_leads, 0) as personal_leads,
+                COALESCE(dep_agg.won_count, 0) as won_count,
+                COALESCE(dep_agg.won_value, 0) as won_value,
+                COALESCE(dep_agg.approved_count, 0) as approved_count,
+                COALESCE(dep_agg.approved_value, 0) as approved_value,
+                COALESCE(dep_agg.pending_count, 0) as pending_count,
+                COALESCE(dep_agg.pending_value, 0) as pending_value
             FROM users u
             LEFT JOIN (
                 SELECT 
                     c.owner_id,
-                    COUNT(c.id) as assigned_leads,
-                    SUM(CASE WHEN (c.last_contact IS NOT NULL AND c.last_contact != '') THEN 1 ELSE 0 END) as contacted_leads,
-                    SUM(CASE WHEN (c.last_contact IS NULL OR c.last_contact = '') THEN 1 ELSE 0 END) as uncontacted_leads,
-                    SUM(CASE WHEN (c.lead_score >= 50 OR c.status IN ('qualified', 'customer')) THEN 1 ELSE 0 END) as qualified_leads
+                    SUM(CASE WHEN NOT $pCondC AND NOT $eCondC THEN 1 ELSE 0 END) as assigned_leads,
+                    SUM(CASE WHEN NOT $pCondC AND NOT $eCondC AND NOT $ucCondC THEN 1 ELSE 0 END) as contacted_leads,
+                    SUM(CASE WHEN NOT $pCondC AND NOT $eCondC AND $ucCondC THEN 1 ELSE 0 END) as uncontacted_leads,
+                    SUM(CASE WHEN NOT $pCondC AND NOT $eCondC AND ($qCondC OR $wCondC) THEN 1 ELSE 0 END) as qualified_leads,
+                    SUM(CASE WHEN $pCondC AND NOT $eCondC THEN 1 ELSE 0 END) as personal_leads
                 FROM contacts c
-                WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND c.created_at BETWEEN ? AND ?
+                WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND $notClonedC AND c.created_at BETWEEN ? AND ?
+                  $sourceCondForSaleSub
                 GROUP BY c.owner_id
-            ) c ON c.owner_id = u.id
+            ) c_agg ON c_agg.owner_id = u.id
             LEFT JOIN (
                 SELECT 
-                    d.owner_id,
-                    COUNT(d.id) as deal_count,
-                    COALESCE(SUM(d.value), 0) as pipeline_value,
-                    SUM(CASE WHEN ps.is_won = 1 THEN 1 ELSE 0 END) as won_count,
-                    COALESCE(SUM(CASE WHEN ps.is_won = 1 THEN d.value ELSE 0 END), 0) as won_value
-                FROM deals d
-                LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id
-                WHERE d.tenant_id = ? AND d.deleted_at IS NULL AND d.created_at BETWEEN ? AND ?
-                GROUP BY d.owner_id
-            ) d ON d.owner_id = u.id
-            WHERE u.tenant_id = ? AND u.is_active = 1 AND (c.assigned_leads > 0 OR d.deal_count > 0)
-            ORDER BY won_value DESC, contacted_leads DESC
+                    ($depSaleExpr) as sale_uid,
+                    COUNT(DISTINCT d.id) as won_count,
+                    COALESCE(SUM(d.price), 0) as won_value,
+                    SUM(CASE WHEN d.status IN ('approved', 'completed', 'paid', 'confirmed') THEN 1 ELSE 0 END) as approved_count,
+                    COALESCE(SUM($depCollectedExpr), 0) as approved_value,
+                    SUM(CASE WHEN d.status IN ('pending', 'pending_admin') THEN 1 ELSE 0 END) as pending_count,
+                    COALESCE(SUM($depPendingExpr), 0) as pending_value
+                FROM deposits d
+                LEFT JOIN contacts c_dep ON c_dep.id = d.contact_id
+                LEFT JOIN users u_cr ON u_cr.id = d.created_by
+                LEFT JOIN users u_own ON u_own.id = c_dep.owner_id
+                WHERE d.deleted_at IS NULL
+                  AND d.status NOT IN ('cancelled', 'rejected', 'deleted')
+                  AND COALESCE(c_dep.tenant_id, u_cr.tenant_id, 1) = ?
+                  AND d.created_at BETWEEN ? AND ?
+                  $sourceCondForDepSub
+                GROUP BY sale_uid
+            ) dep_agg ON dep_agg.sale_uid = u.id
+            WHERE $saleUserWhere
+            ORDER BY won_value DESC, contacted_leads DESC, assigned_leads DESC
         ");
-        $stmtSales->execute([$tid, $fromTs, $toTs, $tid, $fromTs, $toTs, $tid]);
+        $stmtSales->execute(array_merge(
+            [$tid, $fromTs, $toTs],
+            $sourceParamsForSaleSub,
+            [$tid, $fromTs, $toTs],
+            $sourceParamsForDepSub,
+            $saleUserParams
+        ));
         $rawSales = $stmtSales->fetchAll(PDO::FETCH_ASSOC);
 
         $sales = [];
@@ -1136,20 +2186,23 @@ class DashboardController {
             $assigned = (int)$s['assigned_leads'];
             $sContacted = (int)$s['contacted_leads'];
             $sUncontacted = (int)$s['uncontacted_leads'];
-            $sDeals = (int)$s['deal_count'];
+            $sQualified = (int)$s['qualified_leads'];
             $sWon = (int)$s['won_count'];
             $sWonVal = (float)$s['won_value'];
-            $contactRate = $assigned > 0 ? round(($sContacted / $assigned) * 100, 1) : 0.0;
-            $sWinRate = $assigned > 0 
-                ? round(($sWon / $assigned) * 100, 1) 
+            $sApprovedVal = (float)$s['approved_value'];
+            $sPendingVal = (float)$s['pending_value'];
+            $sDeals = max($sQualified, $sWon);
+            $contactRate = $assigned > 0 ? round(($sContacted / $assigned) * 100, 1) : 100.0;
+            $sWinRate = $assigned > 0
+                ? round(($sWon / $assigned) * 100, 1)
                 : ($sDeals > 0 ? round(($sWon / $sDeals) * 100, 1) : 0.0);
 
             $statusNote = 'Ổn định';
             if ($rank === 1 && $sWonVal > 0) {
-                $statusNote = 'Top 1 Performer';
-            } elseif ($contactRate < 70 && $assigned >= 10) {
-                $statusNote = 'Bỏ ngâm nhiều data';
-            } elseif ($contactRate >= 95 && $assigned >= 15) {
+                $statusNote = 'Top 1 Doanh số';
+            } elseif ($sUncontacted >= 5 || ($contactRate < 75 && $assigned >= 5)) {
+                $statusNote = 'Cần xử lý chưa tương tác';
+            } elseif ($contactRate >= 95 && $assigned >= 5) {
                 $statusNote = 'Kỷ luật xuất sắc';
             }
 
@@ -1164,43 +2217,118 @@ class DashboardController {
                 'contacted_leads' => $sContacted,
                 'uncontacted_leads' => $sUncontacted,
                 'contact_rate' => $contactRate,
-                'qualified_leads' => (int)$s['qualified_leads'],
+                'qualified_leads' => $sQualified,
+                'personal_leads_excluded' => (int)$s['personal_leads'],
+                'reminder_leads' => (int)($saleDistMap[(int)$s['user_id']]['reminder_leads'] ?? 0),
+                'reassigned_profile_leads' => (int)($saleDistMap[(int)$s['user_id']]['reassigned_profile_leads'] ?? 0),
+                'duplicate_blocked_leads' => (int)($saleDistMap[(int)$s['user_id']]['duplicate_blocked_leads'] ?? 0),
+                'duplicate_profile_leads' => (int)($saleDistMap[(int)$s['user_id']]['duplicate_profile_leads'] ?? 0),
                 'deal_count' => $sDeals,
-                'pipeline_value' => (float)$s['pipeline_value'],
+                'pipeline_value' => $sWonVal,
                 'won_count' => $sWon,
                 'won_value' => $sWonVal,
+                'approved_count' => (int)$s['approved_count'],
+                'approved_value' => $sApprovedVal,
+                'pending_count' => (int)$s['pending_count'],
+                'pending_value' => $sPendingVal,
                 'win_rate' => $sWinRate,
                 'status_note' => $statusNote
             ];
         }
 
-        // 6. Top Lost Reasons
+        // 6. Recent Closed Orders / Deposits in Period (so user can inspect every SO contributing to revenue)
+        $stmtOrders = $this->db->prepare("
+            SELECT 
+                d.id,
+                d.contact_id,
+                COALESCE(NULLIF(TRIM(c_dep.full_name), ''), p_dep.name, 'Học viên') as customer_name,
+                COALESCE(NULLIF(TRIM(c_dep.phone), ''), '') as phone,
+                COALESCE(NULLIF(TRIM(d.unit_code), ''), p_dep.name, c_dep.program, '') as program,
+                COALESCE(NULLIF(TRIM(c_dep.source), ''), 'Chưa phân loại') as source,
+                d.price as value,
+                $depCollectedExpr as collected_value,
+                $depPendingExpr as uncollected_value,
+                d.status,
+                d.created_at,
+                u_sale.id as sale_id,
+                u_sale.full_name as sale_name,
+                u_sale.avatar_url as sale_avatar
+            FROM deposits d
+            LEFT JOIN contacts c_dep ON c_dep.id = d.contact_id
+            LEFT JOIN projects p_dep ON p_dep.id = d.project_id
+            LEFT JOIN users u_cr ON u_cr.id = d.created_by
+            LEFT JOIN users u_own ON u_own.id = c_dep.owner_id
+            LEFT JOIN users u_sale ON u_sale.id = ($depSaleExpr)
+            WHERE d.deleted_at IS NULL
+              AND d.status NOT IN ('cancelled', 'rejected', 'deleted')
+              AND COALESCE(c_dep.tenant_id, u_cr.tenant_id, 1) = ?
+              AND d.created_at BETWEEN ? AND ?
+              AND LOWER(COALESCE(u_sale.role, '')) IN ('sale', 'sales')
+              $extraDepSql
+            ORDER BY d.created_at DESC
+            LIMIT 25
+        ");
+        $stmtOrders->execute(array_merge([$tid, $fromTs, $toTs], $extraDepParams));
+        $recentOrders = $stmtOrders->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        // 7. Top Lost Reasons (Excluding personal/referral/error leads)
         $stmtLost = $this->db->prepare("
             SELECT 
-                COALESCE(NULLIF(TRIM(lost_reason), ''), 'Không nêu lý do') as reason,
+                COALESCE(NULLIF(TRIM(c.lost_reason), ''), 'Không nêu lý do') as reason,
                 COUNT(1) as count
-            FROM contacts
-            WHERE tenant_id = ? AND deleted_at IS NULL AND lost_reason IS NOT NULL AND TRIM(lost_reason) != '' AND created_at BETWEEN ? AND ?
+            FROM contacts c
+            WHERE c.tenant_id = ? AND c.deleted_at IS NULL
+              AND c.lost_reason IS NOT NULL AND TRIM(c.lost_reason) != ''
+              AND c.created_at BETWEEN ? AND ?
+              AND NOT $pCondC AND NOT $eCondC AND $sRoleC
+              $extraContactSql
             GROUP BY reason
             ORDER BY count DESC
             LIMIT 6
         ");
-        $stmtLost->execute([$tid, $fromTs, $toTs]);
-        $lostReasons = $stmtLost->fetchAll(PDO::FETCH_ASSOC);
+        $stmtLost->execute(array_merge([$tid, $fromTs, $toTs], $extraContactParams));
+        $lostReasons = $stmtLost->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
         respond(200, [
             'month' => $month,
+            'period_label' => $periodLabel,
             'date_range' => [
                 'from' => $from,
                 'to' => $to,
+                'prev_from' => $prevFrom,
+                'prev_to' => $prevTo,
                 'prev_month' => $prevMonth
+            ],
+            'filters' => [
+                'consultant_id' => $consultantId,
+                'funnel_consultant_id' => $funnelConsultantId,
+                'source' => $sourceFilter,
+                'available_consultants' => $availableConsultants,
+                'available_sources' => $availableSources
             ],
             'summary' => [
                 'total_leads' => $totalLeads,
+                'funnel_total_leads' => $funnelTotalLeads,
                 'prev_total_leads' => $prevTotalLeads,
                 'growth_rate' => $leadGrowthRate,
+                'excluded_personal_count' => $excludedPersonalCount,
+                'excluded_error_count' => $excludedErrorCount,
+                'reminder_count' => $reminderLeadsCount,
+                'reassigned_profile_count' => $reassignedProfileCount,
+                'duplicate_blocked_count' => $duplicateBlockedCount,
+                'duplicate_profile_count' => $duplicateProfileCount,
                 'qualified_leads' => $qualifiedLeads,
                 'qualified_rate' => $qualifiedRate,
+                'win_funnel_leads' => $winFunnelLeads,
+                'win_funnel_rate' => $winFunnelRate,
+                'unconnected_leads' => $unconnectedLeads,
+                'unconnected_rate' => $unconnectedRate,
+                'funnel_qualified_leads' => $funnelQualifiedLeads,
+                'funnel_qualified_rate' => $funnelQualifiedRate,
+                'funnel_win_leads' => $funnelWinLeads,
+                'funnel_win_rate' => $funnelWinRate,
+                'funnel_unconnected_leads' => $funnelUnconnectedLeads,
+                'funnel_unconnected_rate' => $funnelUnconnectedRate,
                 'contacted_leads' => $contactedLeads,
                 'connected_rate' => $connectedRate,
                 'uncontacted_leads' => $uncontactedLeads,
@@ -1210,6 +2338,13 @@ class DashboardController {
                 'total_deal_value' => $totalDealValue,
                 'won_deals' => $wonDeals,
                 'won_value' => $wonValue,
+                'approved_deals' => $approvedDeals,
+                'approved_value' => $approvedValue,
+                'pending_deals' => $pendingDeals,
+                'pending_value' => $pendingValue,
+                'prev_won_deals' => $prevWonDeals,
+                'prev_won_value' => $prevWonValue,
+                'revenue_growth_rate' => $revenueGrowthRate,
                 'win_rate' => $winRate,
                 'quality_distribution' => [
                     'hot' => $hotLeads,
@@ -1220,6 +2355,7 @@ class DashboardController {
             'funnel' => $funnel,
             'sources' => $sources,
             'sales_leaderboard' => $sales,
+            'recent_orders' => $recentOrders,
             'lost_reasons' => $lostReasons
         ], 'Lấy báo cáo hiệu suất Sales & Lead thành công');
     }

@@ -260,7 +260,7 @@ function distributeLeadAfterAI($conn, $leadId, $targetRoundId, $aiScreenerResult
     }
 
     $isDuplicate = false;
-    if ($crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo'])) {
+    if ($crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo']) && ($crmCheckResult['consultantStatus'] ?? '') !== 'inactive') {
         if (!empty($crmCheckResult['hasRealInteraction']) && $crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths) {
             $isDuplicate = true;
         } else if (isset($crmCheckResult['isBeforeHoSo']) && !$crmCheckResult['isBeforeHoSo']) {
@@ -278,6 +278,14 @@ function distributeLeadAfterAI($conn, $leadId, $targetRoundId, $aiScreenerResult
         $oldSaleName = !empty($crmCheckResult['assignedName']) ? $crmCheckResult['assignedName'] : 'Không rõ';
         $oldSaleMonths = $crmCheckResult['monthsSinceLastInteraction'];
         $dupSuffix = " (Trùng số: Sale cũ $oldSaleName > $oldSaleMonths tháng).";
+    } elseif ($crmCheckResult['leadExists'] && !empty($crmCheckResult['originalAssignedTo'])) {
+        $oldSaleName = !empty($crmCheckResult['assignedName']) ? $crmCheckResult['assignedName'] : 'Không rõ';
+        $oldSaleMonths = $crmCheckResult['monthsSinceLastInteraction'];
+        if (($crmCheckResult['consultantStatus'] ?? '') === 'inactive') {
+            $dupSuffix = " (Khách cũ của TVV ngưng hoạt động: $oldSaleName - Chia lại vòng mới).";
+        } else {
+            $dupSuffix = " (Trùng số: Sale cũ $oldSaleName > $oldSaleMonths tháng).";
+        }
     }
 
     if ($isDuplicate) {

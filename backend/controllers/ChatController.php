@@ -269,21 +269,26 @@ class ChatController {
                 $inClause = implode(',', array_fill(0, count($directConvIds), '?'));
                 $params = array_merge($directConvIds, [$uid]);
                 $pStmt = $this->db->prepare("
-                    SELECT cp.conversation_id, u.id, u.full_name, u.email, u.avatar_url, u.job_title, u.role,
+                    SELECT cp.conversation_id, cp.user_id as participant_user_id, u.id, u.full_name, u.email, u.avatar_url, u.job_title, u.role,
                            u.is_active, u.status as user_status,
                            cp.last_read_message_id,
                            pr.status as online_status, pr.last_ping_at,
                            TIMESTAMPDIFF(SECOND, pr.last_ping_at, NOW()) as seconds_ago
                     FROM chat_participants cp
-                    JOIN users u ON cp.user_id = u.id
-                    LEFT JOIN chat_user_presence pr ON pr.user_id = u.id AND pr.tenant_id = cp.tenant_id
+                    LEFT JOIN users u ON cp.user_id = u.id
+                    LEFT JOIN chat_user_presence pr ON pr.user_id = cp.user_id AND pr.tenant_id = cp.tenant_id
                     WHERE cp.conversation_id IN ($inClause) AND cp.user_id != ?
                 ");
                 $pStmt->execute($params);
                 $otherMap = [];
                 while ($other = $pStmt->fetch(PDO::FETCH_ASSOC)) {
-                    $other['id'] = (int)$other['id'];
-                    if ($other['id'] === 9000001) {
+                    $pUid = (int)($other['participant_user_id'] ?? $other['id'] ?? 0);
+                    $other['id'] = $pUid;
+                    if ($pUid === 9000001) {
+                        $other['full_name'] = !empty($other['full_name']) ? $other['full_name'] : 'SI IDEAS';
+                        $other['email'] = !empty($other['email']) ? $other['email'] : 'ai@ideas.edu.vn';
+                        $other['avatar_url'] = !empty($other['avatar_url']) ? $other['avatar_url'] : '/stickers/ideas/ideas_3.webp';
+                        $other['job_title'] = !empty($other['job_title']) ? $other['job_title'] : 'Smart Multi Agent';
                         $other['is_active'] = true;
                         $other['is_online'] = true;
                         $other['online_status'] = 'online';
@@ -306,6 +311,22 @@ class ChatController {
                         $cv['other_user'] = $other;
                         $cv['title'] = $other['full_name'];
                         $cv['avatar_url'] = $other['avatar_url'];
+                    } elseif ($cv['type'] === 'direct' && ((int)($cv['created_by'] ?? 0) === 9000001 || in_array(strtoupper(trim((string)($cv['title'] ?? ''))), ['SI IDEAS', 'IDEAS AI', 'AI IDEAS', 'IDEAS SI'], true))) {
+                        $aiBotUser = [
+                            'id' => 9000001,
+                            'full_name' => 'SI IDEAS',
+                            'email' => 'ai@ideas.edu.vn',
+                            'avatar_url' => '/stickers/ideas/ideas_3.webp',
+                            'job_title' => 'Smart Multi Agent',
+                            'role' => 'bot',
+                            'is_active' => true,
+                            'is_online' => true,
+                            'online_status' => 'online',
+                            'last_read_message_id' => 0
+                        ];
+                        $cv['other_user'] = $aiBotUser;
+                        $cv['title'] = 'SI IDEAS';
+                        $cv['avatar_url'] = '/stickers/ideas/ideas_3.webp';
                     }
                 }
                 unset($cv);
@@ -506,8 +527,8 @@ class ChatController {
                        pr.status as online_status, pr.last_ping_at,
                        TIMESTAMPDIFF(SECOND, pr.last_ping_at, NOW()) as seconds_ago
                 FROM chat_participants cp
-                JOIN users u ON cp.user_id = u.id
-                LEFT JOIN chat_user_presence pr ON pr.user_id = u.id AND pr.tenant_id = cp.tenant_id
+                LEFT JOIN users u ON cp.user_id = u.id
+                LEFT JOIN chat_user_presence pr ON pr.user_id = cp.user_id AND pr.tenant_id = cp.tenant_id
                 WHERE cp.conversation_id = ?
                 ORDER BY FIELD(cp.role, 'owner', 'admin', 'member'), u.full_name ASC
             ");
@@ -516,8 +537,18 @@ class ChatController {
 
             foreach ($participants as &$p) {
                 $p['user_id'] = (int)$p['user_id'];
-                $p['is_online'] = !empty($p['last_ping_at']) && (int)($p['seconds_ago'] ?? 999) < 180;
-                $p['is_active'] = ($p['is_active'] === null || (int)$p['is_active'] === 1) && (($p['user_status'] ?? '') !== 'inactive');
+                if ($p['user_id'] === 9000001) {
+                    $p['full_name'] = !empty($p['full_name']) ? $p['full_name'] : 'SI IDEAS';
+                    $p['email'] = !empty($p['email']) ? $p['email'] : 'ai@ideas.edu.vn';
+                    $p['avatar_url'] = !empty($p['avatar_url']) ? $p['avatar_url'] : '/stickers/ideas/ideas_3.webp';
+                    $p['job_title'] = !empty($p['job_title']) ? $p['job_title'] : 'Smart Multi Agent';
+                    $p['system_role'] = 'bot';
+                    $p['is_online'] = true;
+                    $p['is_active'] = true;
+                } else {
+                    $p['is_online'] = !empty($p['last_ping_at']) && (int)($p['seconds_ago'] ?? 999) < 180;
+                    $p['is_active'] = ($p['is_active'] === null || (int)$p['is_active'] === 1) && (($p['user_status'] ?? '') !== 'inactive');
+                }
             }
 
             $conv['id'] = (int)$conv['id'];
@@ -2559,8 +2590,25 @@ class ChatController {
         }
 
         $file = $_FILES['file'];
-        $origName = basename($file['name']);
+        $origName = basename($file['name'] ?: 'attachment');
         $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+        if ($ext === '') {
+            $mime = strtolower((string)($file['type'] ?? ''));
+            $mimeMap = [
+                'image/webp' => 'webp',
+                'image/png' => 'png',
+                'image/jpeg' => 'jpg',
+                'image/jpg' => 'jpg',
+                'image/gif' => 'gif',
+                'image/heic' => 'heic',
+                'application/pdf' => 'pdf',
+                'video/mp4' => 'mp4',
+                'video/quicktime' => 'mov',
+                'video/webm' => 'webm',
+            ];
+            $ext = $mimeMap[$mime] ?? 'bin';
+            $origName .= '.' . $ext;
+        }
 
         // Security check on extension: block scripts, server-side executables, and HTML/SVG vectors for XSS
         $blockedExts = ['php', 'phtml', 'phar', 'exe', 'bat', 'sh', 'cmd', 'js', 'vbs', 'svg', 'html', 'htm', 'xhtml', 'xml', 'shtml', 'cgi', 'pl', 'py'];
@@ -2570,13 +2618,13 @@ class ChatController {
 
         $uploadDir = __DIR__ . "/../uploads/chat/{$tid}/" . date('Ym') . "/";
         if (!is_dir($uploadDir)) {
-            @mkdir($uploadDir, 0755, true);
+            @mkdir($uploadDir, 0775, true);
         }
 
         $uniqueName = 'chat_' . bin2hex(random_bytes(8)) . '_' . time() . '.' . $ext;
         $destPath = $uploadDir . $uniqueName;
 
-        if (!move_uploaded_file($file['tmp_name'], $destPath)) {
+        if (!move_uploaded_file($file['tmp_name'], $destPath) && !@copy($file['tmp_name'], $destPath)) {
             respond(500, null, 'Không thể lưu tệp tin lên máy chủ', false);
         }
 
@@ -3283,17 +3331,24 @@ class ChatController {
             // Guarantee user 9000001 exists with correct avatar & name in users table
             try {
                 $this->db->exec("
-                    INSERT INTO users (id, tenant_id, username, email, full_name, role, job_title, avatar_url, is_active, status)
-                    VALUES (9000001, 1, 'si_ideas', 'ai@ideas.edu.vn', 'SI IDEAS', 'bot', 'Smart Multi Agent', '/stickers/ideas/ideas_3.webp', 1, 'active')
+                    INSERT INTO users (id, tenant_id, username, email, password_hash, full_name, role, job_title, avatar_url, is_active, status)
+                    VALUES (9000001, 1, 'si_ideas', 'ai@ideas.edu.vn', '\$2y\$10\$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'SI IDEAS', 'admin', 'Smart Multi Agent', '/stickers/ideas/ideas_3.webp', 1, 'active')
                     ON DUPLICATE KEY UPDATE 
                         full_name = 'SI IDEAS',
                         job_title = 'Smart Multi Agent',
-                        role = 'bot',
                         avatar_url = '/stickers/ideas/ideas_3.webp',
                         is_active = 1,
                         status = 'active';
                 ");
-            } catch (\Throwable $eUser) {}
+            } catch (\Throwable $eUser) {
+                try {
+                    $this->db->exec("
+                        INSERT INTO users (id, tenant_id, email, password_hash, full_name, role, is_active)
+                        VALUES (9000001, 1, 'ai@ideas.edu.vn', '\$2y\$10\$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'SI IDEAS', 'admin', 1)
+                        ON DUPLICATE KEY UPDATE full_name = 'SI IDEAS', is_active = 1;
+                    ");
+                } catch (\Throwable $eUserFallback) {}
+            }
 
             $stmt = $this->db->prepare("
                 SELECT c.id 
@@ -3639,6 +3694,46 @@ class ChatController {
                 $screenContextStr = "\n--- [TRỰC GIÁC MÀN HÌNH & HỒ SƠ ĐANG MỞ (SCREEN AWARENESS)] ---\n"
                     . "• Trang người dùng đang xem trực tiếp: {$pagePath}{$pageSearch}" . ($pageTitle ? " ({$pageTitle})" : "") . "\n";
 
+                $activeFiltersCtx = $clientContext['active_filters'] ?? null;
+                if (!empty($activeFiltersCtx) && is_array($activeFiltersCtx) && strpos($pagePath, '/contacts') !== false) {
+                    $afParts = [];
+                    if (!empty($activeFiltersCtx['from_date']) || !empty($activeFiltersCtx['to_date'])) {
+                        $afParts[] = "date_field=" . ($activeFiltersCtx['date_field'] ?? 'created_at')
+                            . ", from_date=" . ($activeFiltersCtx['from_date'] ?: '...')
+                            . ", to_date=" . ($activeFiltersCtx['to_date'] ?: '...');
+                    }
+                    if (!empty($activeFiltersCtx['stages']) && $activeFiltersCtx['stages'] !== 'all') {
+                        $afParts[] = "stages=" . $activeFiltersCtx['stages'];
+                    } elseif (!empty($activeFiltersCtx['stage_id']) && $activeFiltersCtx['stage_id'] !== 'all') {
+                        $afParts[] = "stage_id=" . $activeFiltersCtx['stage_id'];
+                    }
+                    if (!empty($activeFiltersCtx['data_type']) && $activeFiltersCtx['data_type'] !== 'all') {
+                        $dtLabel = $activeFiltersCtx['data_type'] === 'distributed'
+                            ? 'distributed (Được chia)'
+                            : ($activeFiltersCtx['data_type'] === 'personal' ? 'personal (Cá nhân)' : $activeFiltersCtx['data_type']);
+                        $afParts[] = "data_type={$dtLabel}";
+                    }
+                    if (!empty($activeFiltersCtx['program'])) {
+                        $afParts[] = "program=" . $activeFiltersCtx['program'];
+                    }
+                    if (!empty($activeFiltersCtx['source'])) {
+                        $afParts[] = "source=" . $activeFiltersCtx['source'];
+                    }
+                    if (!empty($activeFiltersCtx['owner_id'])) {
+                        $afParts[] = "owner_id=" . $activeFiltersCtx['owner_id'];
+                    }
+                    if (!empty($activeFiltersCtx['lead_status'])) {
+                        $afParts[] = "lead_status=" . $activeFiltersCtx['lead_status'];
+                    }
+                    if (isset($activeFiltersCtx['total_displayed'])) {
+                        $afParts[] = "total_displayed=" . (int)$activeFiltersCtx['total_displayed'];
+                    }
+                    if (!empty($afParts)) {
+                        $screenContextStr .= "• Bộ lọc đang bật trên màn hình /contacts: " . implode(', ', $afParts) . ".\n"
+                            . "• LƯU Ý: Khi người dùng hỏi về danh sách/số liệu đang xem hoặc hỏi tiếp về các lead này, hãy đồng bộ đúng bộ lọc data_type / stages / ngày trên màn hình!\n";
+                    }
+                }
+
                 if (!empty($activeEntity) && is_array($activeEntity) && !empty($activeEntity['id'])) {
                     $eType = $activeEntity['type'] ?? 'entity';
                     $eId = (int)$activeEntity['id'];
@@ -3752,14 +3847,20 @@ class ChatController {
                 . "  - BẮT BUỘC gọi công cụ `export_crm_leads_advanced` hoặc `query_crm_leads_multitier` với các tham số tương ứng (`stages`, `gender`, `from_date`, `to_date`, `program`, `limit`).\n"
                 . "  - Khi công cụ trả về kết quả: Báo cáo rõ số lượng lead theo yêu cầu, hiển thị BẢNG XEM TRƯỚC (Preview) ĐẦY ĐỦ CÁC CỘT: `| ID | HỌ VÀ TÊN | SĐT | CHƯƠNG TRÌNH | GIAI ĐOẠN | SALE PHỤ TRÁCH | TIỀN CỌC |`. Cột HỌ VÀ TÊN dùng link `[Tên](/contacts?id=ID)`.\n"
                 . "  - Cung cấp link tải Markdown chuẩn: `[Bấm vào đây để tải danh sách Lead (File Excel/CSV)]({download_url})`.\n"
-                . "• PHÂN TÍCH NHÂN KHẨU HỌC, CƠ CẤU CHỨC VỤ & NHÓM NGÀNH NGHỀ MARKETING (DATA DEMOGRAPHICS & SENIORITY ANALYTICS):\n"
-                . "  - Khi người dùng yêu cầu: 'phân tích data', 'có chức vụ gì', 'phân tích chức vụ', 'phân tích ngành nghề', 'bao nhiêu data có chức vụ', 'cơ cấu học viên/lead', 'chức vụ của 100 lead gần đây':\n"
-                . "  - BẮT BUỘC gọi công cụ `analyze_leads_demographics_and_job_titles` (kèm `limit` nếu người dùng yêu cầu số lượng cụ thể, vd: 100).\n"
-                . "  - Trình bày câu trả lời chuẩn chỉ gồm 4 PHẦN:\n"
-                . "    1. BẢNG TỔNG QUAN ĐỘ ĐẦY ĐỦ DỮ LIỆU (Tổng lead phân tích | Có chức vụ | Chưa có chức vụ | Tỷ lệ % điền chức vụ).\n"
-                . "    2. BẢNG THÁP CẤP BẬC QUẢN LÝ (C-Level & Ban Lãnh Đạo | Quản lý cấp trung | Chuyên gia / Kỹ sư | Chủ DN / Khởi nghiệp | Chưa cập nhật).\n"
-                . "    3. BẢNG TOP NGÀNH NGHỀ KINH DOANH PHỔ BIẾN.\n"
-                . "    4. Đính kèm Smart Tag biểu đồ trực quan `<<<DYNAMIC_CHART: {...}>>>` và Link tải file: `[Bấm vào đây để tải tệp dữ liệu chi tiết kèm chức vụ]({download_export_url})`.\n"
+                . "• TỔNG QUAN DATA, CHÂN DUNG HỌC VIÊN & KHÁCH HÀNG 360° & PHÂN TÍCH NHÂN KHẨU HỌC (`query_customer_student_persona_overview`, `analyze_leads_demographics_and_job_titles`):\n"
+                . "  - KHI NGƯỜI DÙNG HỎI VỀ TỔNG QUAN DATA, THỐNG KÊ HỌC VIÊN / KHÁCH HÀNG / LEAD, TRƯỜNG / CHƯƠNG TRÌNH ĐÀO TẠO (`UBIS`, `Swiss UMEF`, `ASC`, `Apollos`, `SBS`, `MSc-AI`), ĐỢT NHẬP HỌC (`Intake 01`..`Intake 47`), HỌC VIÊN HỌC NHIỀU KHÓA (>= 2 CHƯƠNG TRÌNH), TỶ LỆ GIỚI TÍNH NAM/NỮ, ĐỘ TUỔI BÌNH QUÂN & NHÓM TUỔI, CẤP BẬC CHỨC VỤ, TOP CÔNG TY/NGÂN HÀNG CÓ NHIỀU HỌC VIÊN NHẤT, NHÓM NGÀNH NGHỀ, HOẶC ĐỘ ĐẦY ĐỦ HỒ SƠ:\n"
+                . "    * BẮT BUỘC ưu tiên gọi công cụ `query_customer_student_persona_overview` (đồng bộ 100% số liệu với bảng Dashboard 'Tổng quan Data' trên giao diện `/contacts`):\n"
+                . "      + Truyền `segment='all'` khi hỏi tổng quan toàn bộ Data (Học viên + Lead).\n"
+                . "      + Truyền `segment='students'` khi hỏi riêng về Học viên.\n"
+                . "      + Truyền `segment='leads'` khi hỏi riêng về Lead tiềm năng.\n"
+                . "      + Truyền thêm `program` (vd: `'UBIS'`, `'UMEF'`, `'ASC'`, `'Apollos'`, `'SBS'`, `'MSc-AI'`) hoặc `intake` (vd: `'Intake 43'`, `'43'`) khi người dùng hỏi xoáy vào 1 trường hoặc 1 khóa Intake cụ thể.\n"
+                . "    * Khi cần tải danh sách nhân khẩu học kèm chức vụ của N lead gần đây (vd: 'chức vụ của 100 lead gần đây'): Gọi `analyze_leads_demographics_and_job_titles`.\n"
+                . "  - Trình bày câu trả lời chuẩn mực, trích xuất đầy đủ các bảng Markdown từ kết quả `query_customer_student_persona_overview`:\n"
+                . "    1. BẢNG TỔNG QUAN DATA & ĐỘ ĐẦY ĐỦ HỒ SƠ (Tổng hồ sơ, Học viên, Lead tiềm năng, Học viên học >= 2 khóa, Tỷ lệ có Giới tính / Ngày sinh / Khóa Intake / Công ty / Chức vụ / Ngành nghề).\n"
+                . "    2. BẢNG PHÂN BỔ THEO TRƯỜNG & CHƯƠNG TRÌNH (`UBIS`, `Swiss UMEF`, `ASC`, `Apollos`, `SBS`, `MSc-AI` — nêu rõ tổng lượt học, số Học viên, số Lead, số học >= 2 khóa, tỷ lệ Nữ %, tuổi trung bình).\n"
+                . "    3. BẢNG PHÂN BỔ THEO KHÓA NHẬP HỌC (`Intake`) & DANH SÁCH HỌC VIÊN HỌC NHIỀU CHƯƠNG TRÌNH (>= 2 KHÓA).\n"
+                . "    4. BẢNG CƠ CẤU GIỚI TÍNH, ĐỘ TUỔI, THÁP CẤP BẬC CHỨC VỤ, TOP ĐƠN VỊ / TẬP ĐOÀN / NGÂN HÀNG TIÊU BIỂU & NHÓM NGÀNH NGHỀ.\n"
+                . "    5. Đính kèm nguyên vẹn thẻ biểu đồ `<<<DYNAMIC_CHART: {...}>>>` từ kết quả công cụ.\n"
                 . "• THỰC THI TRỰC TIẾP (DIRECT EXECUTION): Với việc trong thẩm quyền (tạo/phân bổ data cá nhân, chuyển giao lead cho đồng nghiệp, duyệt/từ chối đơn từ, tạo/cập nhật task & việc con, xác nhận công/phiếu lương, tạo đơn nghỉ phép/OT/WFH/tạm ứng, duyệt PO/SO/chi phí/đợt cọc, log CRM), BẮT BUỘC gọi ngay công cụ thực thi (`smart_create_or_assign_leads`, `reassign_lead_owner`, `smart_manage_tasks_and_subtasks`, `query_and_manage_projects`, `manage_my_hr_profile_and_requests`, `smart_manage_hrm_and_payroll`, `smart_manage_po_so_and_approvals`, `approve_or_reject_erp_ticket`, `update_task_progress_and_status`, `complete_task_checklist_item`, `quick_log_crm_activity`). CẤM bảo người dùng tự đi thao tác.\n"
                 . "• ĐIỀU PHỐI VÒNG LEAD & BÙ DATA: BẮT BUỘC dùng `manage_lead_round_distribution`:\n"
                 . "  - Khi hỏi tình hình vòng / giao vòng nào: Gọi action 'get_round_load_audit'.\n"
@@ -3835,7 +3936,18 @@ class ChatController {
                 . "   - 'ghi chú nhắc tới...', 'báo bận', 'chê học phí đắt', 'xin học bổng': Gọi ngay `query_crm_leads_multitier` với `note_keyword` tương ứng.\n"
                 . "   - 'quá hạn đóng học phí', 'trễ hạn đóng tiền theo đợt': Gọi ngay `query_crm_leads_multitier` với `financial_filter='overdue_milestone'` hoặc `query_deposits_and_revenue_multitier`.\n"
                 . "   - 'cháy deadline', 'trễ hạn', 'quá hạn': Với công việc, gọi `get_my_tasks` với `filter='overdue'`; với đề xuất chi phí, gọi `filter_expenses_advanced` với `deadline_status='overdue'`.\n"
-                . "   - 'leaderboard', 'top sale', 'bảng xếp hạng doanh số', 'ai bán chạy nhất': Gọi `get_sales_leaderboard` với kỳ phù hợp (this_month, last_month, this_quarter).\n"
+                . "   - 'leaderboard', 'top sale', 'bảng xếp hạng doanh số', 'ai bán chạy nhất', 'hiệu suất lead', 'đánh giá tỷ lệ chuyển đổi phễu', 'hiệu quả theo nguồn marketing': Gọi `query_sales_lead_performance_deck` hoặc `get_sales_leaderboard` hoặc `get_sales_performance_and_stale_leads` với kỳ phù hợp (this_month, last_month, this_quarter, this_year, all_time).\n"
+                . "   - 'tổng quan data', 'chân dung học viên', 'bao nhiêu học viên', 'trường ubis/umef/asc/apollos/sbs/msc-ai có bao nhiêu học viên', 'intake mấy', 'học từ 2 khóa trở lên', 'tỷ lệ nam nữ', 'độ tuổi trung bình', 'top công ty/ngân hàng học viên': Gọi ngay `query_customer_student_persona_overview` (truyền `segment='all'|'students'|'leads'`, `program`, `intake`).\n"
+                . "   - QUY TẮC CHUẨN HÓA SỐ LIỆU 'HIỆU SUẤT LEAD & ĐỘI NGŨ SALE' (ĐỒNG BỘ 100% VỚI TAB HIỆU SUẤT LEAD TRÊN DASHBOARD):\n"
+                . "     + **Tổng Lead (Hiệu suất Lead)**: Chỉ tính Lead công ty/Marketing phân bổ cho đội ngũ Sale (`role IN ('sale', 'sales')`). Tuyệt đối loại trừ nguồn Cá nhân, Giới thiệu (`referral`), Tự tìm kiếm, Import Excel/CSV và Data Báo lỗi (`error`).\n"
+                . "     + **Đã tương tác vs Chưa tương tác**: 'Chưa tương tác' là Lead chưa có `last_contact`, chưa có nhật ký chăm sóc (`activities`) và chưa có ghi chú thủ công (bỏ qua ghi chú hệ thống tự động `[Tự động]`, `[Phân bổ]`, `[Giao data]`, `[Import]`). 'Đã tương tác' = `Tổng Lead - Chưa tương tác`.\n"
+                . "     + **Phễu Chuyển Đổi 3 Tầng (Biểu đồ tròn Đánh giá Tỷ lệ Chuyển đổi Phễu — cộng lại = 100% Tổng Lead)**:\n"
+                . "       (1) **Chưa Connect**: Pipeline **Stage 1 – 2** (`01 – New Lead`, `02 – Contact Attempted`).\n"
+                . "       (2) **Lead Qualified**: Pipeline **Stage 3 – 12** (`03 – Connected` đến `12 – Offer / Scholarship Accepted`).\n"
+                . "       (3) **Win**: Pipeline **Stage 13 – 14** (`13 – Deposit / Tuition Payment`, `14 – Enrolled`).\n"
+                . "     + **Cột `Qualified` trên Bảng Xếp Hạng Đội Ngũ Sale & Bảng Hiệu Quả Theo Nguồn Marketing**: Tính tổng các Lead đạt từ **Pipeline Stage 3 đến Stage 14** (gộp cả nhóm `Qualified 3–12` và `Win 13–14` hoặc đã phát sinh đơn SO).\n"
+                . "     + **Hiệu Quả Theo Nguồn Marketing**: Tính cả Lead mới tạo trong kỳ (`new_leads`) + Lead tạo từ kỳ trước nhưng chốt đơn SO trong kỳ (`prior_closed_leads`).\n"
+                . "     + **Doanh Thu Dự Kiến vs Thực Thu vs Còn Phải Thu**: **Doanh thu dự kiến (`expected_revenue`)** = Tổng giá trị hợp đồng/đơn hàng SO (`SUM(deposits.price)`). **Thực thu (`collected_revenue`)** = Tổng số tiền thực tế đã thu và được kế toán duyệt qua các đợt đóng phí (`deposit_milestones` `status = 'approved'`). **Còn phải thu (`uncollected_revenue`)** = `Doanh thu dự kiến - Thực thu`. Luôn ghi rõ cả Doanh thu dự kiến và Thực thu khi báo cáo!\n"
                 . "   - 'sinh nhật trong tháng': Nếu hỏi nhân sự công ty -> gọi `get_staff_directory_advanced` với `birthday_month`; nếu hỏi khách hàng/học viên CRM -> gọi `query_crm_leads_multitier` với `birthday_month`.\n"
                 . "   - 'hồ sơ nhập học', 'thiếu bằng', 'thiếu dịch thuật', 'thiếu CCCD': Gọi `query_crm_leads_multitier` với `missing_document` ('id_card', 'degree', 'translation', 'contract', 'incomplete') hoặc `get_academic_students_filter`.\n"
                 . "   - 'kiểm kho', 'quà tặng tuyển sinh hết hàng', 'cảnh báo tồn kho': Gọi `get_inventory_health_check` với `alert_only=true`.\n\n";
@@ -5182,17 +5294,17 @@ class ChatController {
         if (is_array($data)) {
             $isAssoc = array_keys($data) !== range(0, count($data) - 1);
 
-            // If it's a huge sequential array at top/second level (e.g. > 15 items list), keep top 15
-            if (!$isAssoc && count($data) > 15) {
+            // If it's a huge sequential array at top/second level (e.g. > 35 items list), keep top 35
+            if (!$isAssoc && count($data) > 35) {
                 $totalCount = count($data);
-                $sliced = array_slice($data, 0, 15);
+                $sliced = array_slice($data, 0, 35);
                 $compactedList = [];
                 foreach ($sliced as $item) {
                     $compactedList[] = $this->compactToolResultForModel($item, $depth + 1);
                 }
                 if ($depth <= 1) {
                     $compactedList[] = [
-                        '_summary' => "Đã hiển thị 15 bản ghi tiêu biểu nhất trong tổng số {$totalCount} bản ghi thực tế."
+                        '_summary' => "Đã hiển thị 35 bản ghi tiêu biểu nhất trong tổng số {$totalCount} bản ghi thực tế."
                     ];
                 }
                 return $compactedList;
@@ -5287,26 +5399,26 @@ class ChatController {
         $routerSystemPrompt = "Bạn là AI Semantic Router tối cao của hệ thống MYERP (Viện IDEAS).\n"
             . "Nhiệm vụ: Phân tích ngữ nghĩa câu hỏi của người dùng để phân loại Ý định (Intent), Phân hệ nghiệp vụ (Domain) và chọn ra danh sách công cụ (selected_tools) phù hợp nhất.\n"
             . "11 Phân hệ & Công cụ chủ lực:\n"
-            . "- 'sales': Quản lý Lead, CRM, học viên theo giai đoạn (pipeline/stage), phân bổ lead, vòng xoay chia số, trùng lead, lịch hẹn, xuất file lead, nhân khẩu học.\n"
-            . "  Tools: query_crm_leads_multitier, search_contacts, get_contact_360_profile, export_crm_leads_advanced, analyze_leads_demographics_and_job_titles, get_sales_leaderboard, smart_create_or_assign_leads, reassign_lead_owner, manage_lead_round_distribution, get_consultant_shift_and_fairshare_audit, check_lead_duplicate_and_fairshare_status, get_sales_performance_and_stale_leads, schedule_contact_activity, update_contact_pipeline, add_contact_consultation_note, update_contact_profile, quick_log_crm_activity, get_my_crm_inbox, draft_action_proposal.\n"
+            . "- 'sales': Quản lý Lead, CRM, học viên theo giai đoạn (pipeline/stage), tổng quan data học viên/khách hàng, hiệu suất lead, phân bổ lead, vòng xoay chia số, trùng lead, lịch hẹn, xuất file lead, nhân khẩu học.\n"
+            . "  Tools: query_customer_student_persona_overview, query_sales_lead_performance_deck, query_crm_leads_multitier, search_contacts, get_contact_360_profile, export_crm_leads_advanced, analyze_leads_demographics_and_job_titles, get_sales_leaderboard, smart_create_or_assign_leads, reassign_lead_owner, manage_lead_round_distribution, get_consultant_shift_and_fairshare_audit, check_lead_duplicate_and_fairshare_status, get_sales_performance_and_stale_leads, schedule_contact_activity, update_contact_pipeline, add_contact_consultation_note, update_contact_profile, quick_log_crm_activity, get_my_crm_inbox, draft_action_proposal.\n"
             . "- 'finance': Thu chi, học phí, công nợ, phiếu thu SO, phiếu chi PO, đặt cọc, tạm ứng, dòng tiền, ngân sách phòng ban.\n"
             . "  Tools: query_finance_multitier_analytics, query_deposits_and_revenue_multitier, filter_expenses_advanced, get_financial_overview, get_executive_financial_pulse, lookup_recent_cash_receipts_and_deposits, get_upcoming_tuition_receivables, get_contact_financial_summary, get_my_payment_proposals, smart_manage_po_so_and_approvals, approve_or_reject_erp_ticket, draft_action_proposal.\n"
             . "- 'hrm': Nhân sự, chấm công hôm nay/theo tháng, đi trễ, về sớm, OT, WFH, nghỉ phép, ai nghỉ hôm nay, giải trình công, bảng lương, phiếu lương, danh bạ nhân sự, duyệt đơn.\n"
             . "  Tools: query_hrm_workforce_and_payroll_multitier, query_company_attendance_and_work_hours, get_company_leave_and_absence, get_staff_directory_advanced, get_company_staff_directory, get_my_attendance_summary, get_my_payslip, manage_my_hr_profile_and_requests, smart_manage_hrm_and_payroll, get_pending_approvals, trace_approval_blocker, approve_or_reject_erp_ticket, draft_action_proposal.\n"
             . "- 'tasks': Công việc cá nhân/team, tiến độ, deadline, việc con (subtask/checklist), giao việc, dự án.\n"
             . "  Tools: query_tasks_and_projects_multitier, get_my_tasks, get_task_detail, smart_manage_tasks_and_subtasks, query_and_manage_projects, update_task_progress_and_status, complete_task_checklist_item, draft_action_proposal.\n"
-            . "- 'academic': Chương trình đào tạo (EMBA, MBA, MSc AI, DBA), môn học, lịch khai giảng, danh sách học viên học vụ.\n"
-            . "  Tools: get_academic_students_filter, get_program_details, get_academic_schedule_and_intakes, search_ideas_knowledge, query_crm_leads_multitier.\n"
+            . "- 'academic': Chương trình đào tạo (EMBA, MBA, MSc AI, DBA, UBIS, Swiss UMEF, ASC, Apollos, SBS), đợt nhập học (Intake 01..47), môn học, lịch khai giảng, danh sách & chân dung học viên học vụ, học viên học nhiều khóa.\n"
+            . "  Tools: query_customer_student_persona_overview, get_academic_students_filter, get_program_details, get_academic_schedule_and_intakes, search_ideas_knowledge, query_crm_leads_multitier.\n"
             . "- 'records_legal': Hồ sơ nhập học (CCCD, bằng cấp, bảng điểm), tính hợp lệ, hợp đồng đào tạo.\n"
             . "  Tools: check_student_admission_records, get_academic_students_filter, get_contact_360_profile, attach_files_to_contact.\n"
             . "- 'assets_inventory': Tồn kho, ấn phẩm, quà tặng, balo, áo polo, tài sản, laptop thiết bị.\n"
             . "  Tools: query_inventory_and_assets_multitier, get_inventory_health_check, get_inventory_and_asset_status.\n"
             . "- 'b2b_partner': Khách hàng doanh nghiệp, đối tác B2B, cơ hội hợp tác (deals).\n"
             . "  Tools: query_deals_and_b2b_multitier, get_b2b_partner_and_contract_summary.\n"
-            . "- 'marketing_campaigns': Chiến dịch Marketing, Automation Flow, Voucher, Khảo sát, Website Tracking, Zalo/Meta đa kênh, dấu chân số 360.\n"
-            . "  Tools: query_omnichannel_journey_and_automation_analytics, get_lead_digital_footprint_360, smart_manage_automation_flows_and_campaigns, get_campaign_marketing_stats, query_crm_leads_multitier.\n"
-            . "- 'executive_bi': Báo cáo tổng hợp P&L, dòng tiền ròng, KPI toàn viện, tóm tắt đầu ngày cho Ban Giám Đốc.\n"
-            . "  Tools: query_cross_domain_executive_synthesis, get_executive_morning_brief, get_executive_financial_pulse, get_sales_leaderboard, query_crm_leads_multitier, query_finance_multitier_analytics, query_deposits_and_revenue_multitier.\n"
+            . "- 'marketing_campaigns': Chiến dịch Marketing, Automation Flow, Voucher, Khảo sát, Website Tracking, Zalo/Meta đa kênh, dấu chân số 360, hiệu quả nguồn marketing, chân dung học viên/khách hàng.\n"
+            . "  Tools: query_customer_student_persona_overview, query_sales_lead_performance_deck, query_omnichannel_journey_and_automation_analytics, get_lead_digital_footprint_360, smart_manage_automation_flows_and_campaigns, get_campaign_marketing_stats, query_crm_leads_multitier.\n"
+            . "- 'executive_bi': Báo cáo tổng hợp P&L, dòng tiền ròng, tổng quan data khách hàng & học viên, hiệu suất lead, KPI toàn viện, tóm tắt đầu ngày cho Ban Giám Đốc.\n"
+            . "  Tools: query_customer_student_persona_overview, query_sales_lead_performance_deck, query_cross_domain_executive_synthesis, get_executive_morning_brief, get_executive_financial_pulse, get_sales_leaderboard, query_crm_leads_multitier, query_finance_multitier_analytics, query_deposits_and_revenue_multitier.\n"
             . "- 'system_it': Lỗi phần mềm, ticket CNTT, giám sát SLA vi phạm, sức khỏe hệ thống.\n"
             . "  Tools: query_tickets_and_sla_multitier, get_ticket_status_and_sla_breaches, get_system_health_status.\n\n"
             . "QUY TẮC:\n"
@@ -5535,16 +5647,16 @@ class ChatController {
             require_once __DIR__ . '/AgentToolRegistry.php';
 
             $agentToolMap = [
-                'sales' => ['query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'smart_create_or_assign_leads', 'smart_manage_tasks_and_subtasks', 'query_and_manage_projects', 'manage_my_hr_profile_and_requests', 'smart_manage_po_so_and_approvals', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'manage_lead_round_distribution', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'quick_log_crm_activity', 'reassign_lead_owner', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
+                'sales' => ['query_customer_student_persona_overview', 'query_sales_lead_performance_deck', 'query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'smart_create_or_assign_leads', 'smart_manage_tasks_and_subtasks', 'query_and_manage_projects', 'manage_my_hr_profile_and_requests', 'smart_manage_po_so_and_approvals', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'manage_lead_round_distribution', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'quick_log_crm_activity', 'reassign_lead_owner', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
                 'finance' => ['query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'query_cross_domain_executive_synthesis', 'smart_manage_po_so_and_approvals', 'smart_manage_hrm_and_payroll', 'manage_my_hr_profile_and_requests', 'smart_manage_tasks_and_subtasks', 'filter_expenses_advanced', 'get_sales_leaderboard', 'get_contact_financial_summary', 'lookup_recent_cash_receipts_and_deposits', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'approve_or_reject_erp_ticket', 'draft_action_proposal', 'get_system_navigation'],
                 'hrm' => ['query_hrm_workforce_and_payroll_multitier', 'manage_my_hr_profile_and_requests', 'smart_manage_hrm_and_payroll', 'smart_manage_tasks_and_subtasks', 'get_staff_directory_advanced', 'query_company_attendance_and_work_hours', 'get_company_staff_directory', 'get_company_leave_and_absence', 'get_my_attendance_summary', 'get_my_payslip', 'get_pending_approvals', 'trace_approval_blocker', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'draft_action_proposal', 'get_system_navigation'],
                 'tasks' => ['query_tasks_and_projects_multitier', 'smart_manage_tasks_and_subtasks', 'query_and_manage_projects', 'manage_my_hr_profile_and_requests', 'smart_manage_po_so_and_approvals', 'get_my_tasks', 'get_task_detail', 'get_company_staff_directory', 'schedule_contact_activity', 'update_task_progress_and_status', 'complete_task_checklist_item', 'draft_action_proposal', 'get_system_navigation'],
-                'academic' => ['query_crm_leads_multitier', 'smart_manage_tasks_and_subtasks', 'query_and_manage_projects', 'manage_my_hr_profile_and_requests', 'get_academic_students_filter', 'get_program_details', 'get_academic_schedule_and_intakes', 'get_active_projects_and_campaigns', 'search_contacts', 'export_crm_leads_advanced', 'search_ideas_knowledge', 'draft_action_proposal', 'get_system_navigation'],
-                'records_legal' => ['check_student_admission_records', 'get_academic_students_filter', 'get_contact_360_profile', 'attach_files_to_contact', 'draft_action_proposal', 'get_system_navigation'],
+                'academic' => ['query_customer_student_persona_overview', 'query_crm_leads_multitier', 'smart_manage_tasks_and_subtasks', 'query_and_manage_projects', 'manage_my_hr_profile_and_requests', 'get_academic_students_filter', 'get_program_details', 'get_academic_schedule_and_intakes', 'get_active_projects_and_campaigns', 'search_contacts', 'export_crm_leads_advanced', 'search_ideas_knowledge', 'draft_action_proposal', 'get_system_navigation'],
+                'records_legal' => ['query_customer_student_persona_overview', 'check_student_admission_records', 'get_academic_students_filter', 'get_contact_360_profile', 'attach_files_to_contact', 'draft_action_proposal', 'get_system_navigation'],
                 'assets_inventory' => ['query_inventory_and_assets_multitier', 'get_inventory_health_check', 'get_inventory_and_asset_status', 'draft_action_proposal', 'get_system_navigation'],
                 'b2b_partner' => ['query_deals_and_b2b_multitier', 'get_b2b_partner_and_contract_summary', 'draft_action_proposal', 'get_system_navigation'],
-                'marketing_campaigns' => ['query_omnichannel_journey_and_automation_analytics', 'get_lead_digital_footprint_360', 'smart_manage_automation_flows_and_campaigns', 'query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'smart_create_or_assign_leads', 'smart_manage_tasks_and_subtasks', 'query_and_manage_projects', 'manage_my_hr_profile_and_requests', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'check_lead_duplicate_and_fairshare_status', 'get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
-                'executive_bi' => ['query_cross_domain_executive_synthesis', 'query_crm_leads_multitier', 'query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'query_tasks_and_projects_multitier', 'query_deals_and_b2b_multitier', 'query_tickets_and_sla_multitier', 'query_hrm_workforce_and_payroll_multitier', 'query_inventory_and_assets_multitier', 'smart_create_or_assign_leads', 'smart_manage_tasks_and_subtasks', 'query_and_manage_projects', 'manage_my_hr_profile_and_requests', 'smart_manage_hrm_and_payroll', 'smart_manage_po_so_and_approvals', 'get_executive_morning_brief', 'get_sales_leaderboard', 'filter_expenses_advanced', 'get_staff_directory_advanced', 'get_inventory_health_check', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'query_company_attendance_and_work_hours', 'get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'lookup_recent_cash_receipts_and_deposits', 'get_my_tasks', 'get_system_health_status', 'manage_lead_round_distribution', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'reassign_lead_owner', 'draft_action_proposal', 'get_system_navigation'],
+                'marketing_campaigns' => ['query_customer_student_persona_overview', 'query_sales_lead_performance_deck', 'query_omnichannel_journey_and_automation_analytics', 'get_lead_digital_footprint_360', 'smart_manage_automation_flows_and_campaigns', 'query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'smart_create_or_assign_leads', 'smart_manage_tasks_and_subtasks', 'query_and_manage_projects', 'manage_my_hr_profile_and_requests', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'check_lead_duplicate_and_fairshare_status', 'get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
+                'executive_bi' => ['query_customer_student_persona_overview', 'query_sales_lead_performance_deck', 'query_cross_domain_executive_synthesis', 'query_crm_leads_multitier', 'query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'query_tasks_and_projects_multitier', 'query_deals_and_b2b_multitier', 'query_tickets_and_sla_multitier', 'query_hrm_workforce_and_payroll_multitier', 'query_inventory_and_assets_multitier', 'smart_create_or_assign_leads', 'smart_manage_tasks_and_subtasks', 'query_and_manage_projects', 'manage_my_hr_profile_and_requests', 'smart_manage_hrm_and_payroll', 'smart_manage_po_so_and_approvals', 'get_executive_morning_brief', 'get_sales_leaderboard', 'filter_expenses_advanced', 'get_staff_directory_advanced', 'get_inventory_health_check', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'query_company_attendance_and_work_hours', 'get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'lookup_recent_cash_receipts_and_deposits', 'get_my_tasks', 'get_system_health_status', 'manage_lead_round_distribution', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'reassign_lead_owner', 'draft_action_proposal', 'get_system_navigation'],
                 'system_it' => ['query_tickets_and_sla_multitier', 'get_system_health_status', 'get_ticket_status_and_sla_breaches', 'draft_action_proposal', 'get_system_navigation']
             ];
             // Domain key aliases for seamless compatibility across UI and router conventions
@@ -5962,6 +6074,8 @@ class ChatController {
                     ], true);
 
                     $isReadOnlyAnalyticsTerminalTool = !$isMutationOrProposalIntent && in_array($toolName, [
+                        'query_customer_student_persona_overview',
+                        'query_sales_lead_performance_deck',
                         'query_crm_leads_multitier',
                         'query_finance_multitier_analytics',
                         'query_deposits_and_revenue_multitier',
@@ -5975,6 +6089,7 @@ class ChatController {
                         'get_executive_morning_brief',
                         'get_executive_financial_pulse',
                         'get_sales_leaderboard',
+                        'get_sales_performance_and_stale_leads',
                         'filter_expenses_advanced',
                         'export_crm_leads_advanced',
                         'analyze_leads_demographics_and_job_titles',
@@ -6538,6 +6653,8 @@ class ChatController {
                     ], true);
 
                     $isReadOnlyAnalyticsTerminalTool = !$isMutationOrProposalIntent && in_array($toolName, [
+                        'query_customer_student_persona_overview',
+                        'query_sales_lead_performance_deck',
                         'query_crm_leads_multitier',
                         'query_finance_multitier_analytics',
                         'query_deposits_and_revenue_multitier',
@@ -6551,6 +6668,7 @@ class ChatController {
                         'get_executive_morning_brief',
                         'get_executive_financial_pulse',
                         'get_sales_leaderboard',
+                        'get_sales_performance_and_stale_leads',
                         'filter_expenses_advanced',
                         'export_crm_leads_advanced',
                         'analyze_leads_demographics_and_job_titles',
@@ -6721,12 +6839,14 @@ class ChatController {
                 case 'academic':
                 case 'records_legal':
                     $domainRules[] = "• QUY TẮC CRM LEADS, HỌC VIÊN & TUYỂN SINH (Mốc thời gian chuẩn: Hôm nay='{$todayYmd}', 7 ngày qua: from_date='{$last7Ymd}' & to_date='{$todayYmd}', 30 ngày qua: from_date='{$last30Ymd}' & to_date='{$todayYmd}', Tháng này: from_date='{$monthStartYmd}' & to_date='{$todayYmd}'):\n"
-                        . "  - Khi lọc/tra cứu/thống kê lead hoặc học viên theo bất kỳ điều kiện nào (tư vấn viên `owners`, đội nhóm `teams`, chương trình `programs`, giai đoạn `stages` + `stage_op`, nguồn `sources`, địa bàn `branches_or_cities`, đặt cọc `financial_filter`, tương tác `interacted_within_days`/`min_call_count`/`note_keyword`, giới tính/tuổi/chức vụ, thiếu hồ sơ `missing_document`, hoặc so sánh kỳ trước `compare_previous_period=true`): BẮT BUỘC gọi `query_crm_leads_multitier` (truyền `record_type='all'` khi tìm data của tư vấn viên).\n"
-                        . "  - KẾ THỪA BỘ NHỚ LÀM VIỆC (`WORKING MEMORY`): Khi người dùng hỏi tiếp nối ('còn theo nguồn?', 'so với tháng trước?', 'lọc riêng MBA', 'ai phụ trách nhiều nhất?', 'trong số đó ai đã cọc?'), hãy kế thừa các bộ lọc đang áp dụng trong mục `[BỘ NHỚ LÀM VIỆC PHIÊN TRƯỚC]` bên dưới (như `from_date`, `to_date`, `programs`, `owners`) và bật `compare_previous_period=true` nếu người dùng hỏi so sánh với kỳ trước.\n"
+                        . "  - Khi lọc/tra cứu/thống kê lead hoặc học viên theo bất kỳ điều kiện nào (tư vấn viên `owners`, đội nhóm `teams`, chương trình `programs`, giai đoạn `stages` + `stage_op`, loại data `data_type` ('distributed' = Được chia, 'personal' = Cá nhân), nguồn `sources`, địa bàn `branches_or_cities`, đặt cọc `financial_filter`, tương tác `interacted_within_days`/`min_call_count`/`note_keyword`, giới tính/tuổi/chức vụ, thiếu hồ sơ `missing_document`, hoặc so sánh kỳ trước `compare_previous_period=true`): BẮT BUỘC gọi `query_crm_leads_multitier` (truyền `record_type='all'` khi tìm data của tư vấn viên).\n"
+                        . "  - CẤM TUYỆT ĐỐI BỊA `note_keyword`: Khi người dùng yêu cầu 'đọc kỹ note', 'rà soát note', 'phân tích note', 'phân loại lại theo note' hoặc 'xem danh sách lead trong giai đoạn', BẮT BUỘC ĐỂ TRỐNG `note_keyword` và truyền `limit=60` trong `query_crm_leads_multitier` để lấy toàn bộ danh sách kèm `latest_note` thực tế (không làm rớt các lead ghi tắt như 'KNM', 'kbm', 'thuê bao'). Chỉ truyền `note_keyword` khi người dùng chỉ định tìm đích danh 1 từ khóa cụ thể!\n"
+                        . "  - KẾ THỪA BỘ NHỚ LÀM VIỆC (`WORKING MEMORY`) & TRỰC GIÁC MÀN HÌNH: Khi người dùng hỏi tiếp nối ('còn theo nguồn?', 'so với tháng trước?', 'lọc riêng MBA', 'ai phụ trách nhiều nhất?', 'trong số đó ai đã cọc?', 'đọc kỹ note của các lead này'), hãy kế thừa các bộ lọc đang áp dụng trong `[BỘ NHỚ LÀM VIỆC PHIÊN TRƯỚC]` hoặc `[TRỰC GIÁC MÀN HÌNH]` (như `from_date`, `to_date`, `stages`, `data_type`, `programs`, `owners`) và bật `compare_previous_period=true` nếu người dùng hỏi so sánh với kỳ trước.\n"
                         . "  - QUAN TRỌNG VỀ NGÀY THÁNG: Khi hỏi lead có/tạo trong N ngày qua (vd: 7 ngày qua, 30 ngày qua, hôm nay), BẮT BUỘC truyền `from_date` và `to_date` (kèm `date_field='created_at'`). TUYỆT ĐỐI KHÔNG truyền `stale_days` trừ khi người dùng hỏi rõ 'lead bỏ quên / chưa chăm sóc trên N ngày'!\n"
                         . "  - Khi tra cứu 1 khách hàng/học viên cụ thể hoặc xem lịch sử ghi chú chăm sóc: Gọi `get_contact_360_profile` (mặc định trích xuất TOP 3 tương tác gần nhất).\n"
                         . "  - Khi thêm data cá nhân, tạo lead mới hoặc phân bổ/chuyển giao lead cho đồng nghiệp: Gọi `smart_create_or_assign_leads` hoặc `reassign_lead_owner`. Khi điều phối vòng chia số/bù data: Gọi `manage_lead_round_distribution`.\n"
-                        . "  - Khi hỏi nhân khẩu học/chức vụ/ngành nghề: Gọi `analyze_leads_demographics_and_job_titles`.";
+                        . "  - KHI HỎI TỔNG QUAN DATA, CHÂN DUNG HỌC VIÊN & KHÁCH HÀNG (Tổng số học viên/lead, học viên theo trường/chương trình `UBIS`, `UMEF`, `ASC`, `Apollos`, `SBS`, `MSc-AI`, khóa `Intake 01`..`Intake 47`, học viên học >= 2 khóa/chương trình, tỷ lệ Nam/Nữ, độ tuổi bình quân, tháp cấp bậc chức vụ, Top công ty/ngân hàng có nhiều học viên, ngành nghề, độ đầy đủ hồ sơ): BẮT BUỘC ưu tiên gọi `query_customer_student_persona_overview` (truyền `segment='all'|'students'|'leads'`, kèm `program` hoặc `intake` nếu có). Khi cần tải file chức vụ của N lead gần đây: Gọi `analyze_leads_demographics_and_job_titles`.\n"
+                        . "  - KHI HỎI HIỆU SUẤT LEAD, BẢNG XẾP HẠNG SALE, TỶ LỆ CHUYỂN ĐỔI PHỄU, HOẶC HIỆU QUẢ NGUỒN MARKETING: Gọi `query_sales_lead_performance_deck` hoặc `get_sales_leaderboard` / `get_sales_performance_and_stale_leads` (đồng bộ 100% với tab Hiệu Suất Lead trên Dashboard: Tổng Lead = Lead công ty chia cho Sale `role IN ('sale','sales')` loại trừ Cá nhân/Giới thiệu/Import/Báo lỗi; Chưa tương tác = chưa có `last_contact`/activities/manual note; Biểu đồ tròn Phễu 3 nhóm = 100% gồm `Chưa Connect (Stage 1-2)`, `Lead Qualified (Stage 3-12)`, `Win (Stage 13-14)`; Cột `Qualified` trên bảng = `Stage 3-14`; Nguồn Marketing gồm cả `new_leads` + `prior_closed_leads`; Luôn báo cáo rõ `Doanh thu dự kiến (tổng giá trị SO)` và `Thực thu (đã duyệt theo các đợt đóng phí deposit_milestones)`).";
                     break;
                 case 'finance':
                     $domainRules[] = "• QUY TẮC TÀI CHÍNH, THU CHI, ĐẶT CỌC & PO/SO:\n"
@@ -6837,7 +6957,12 @@ class ChatController {
         $lines = ["\n--- [BỘ NHỚ LÀM VIỆC PHIÊN TRƯỚC (WORKING MEMORY)] ---"];
         $lines[] = "• Phân hệ đang làm việc: " . ($wm['domain'] ?? 'general') . " | Công cụ gần nhất: " . ($wm['last_tool'] ?? 'none');
         if (!empty($wm['applied_filters']) && is_array($wm['applied_filters'])) {
-            $lines[] = "• Bộ lọc đang áp dụng (Active Filters): " . json_encode($wm['applied_filters'], JSON_UNESCAPED_UNICODE);
+            if (isset($wm['applied_filters']['note_keyword']) && substr_count((string)$wm['applied_filters']['note_keyword'], ',') >= 2) {
+                unset($wm['applied_filters']['note_keyword']);
+            }
+            if (!empty($wm['applied_filters'])) {
+                $lines[] = "• Bộ lọc đang áp dụng (Active Filters): " . json_encode($wm['applied_filters'], JSON_UNESCAPED_UNICODE);
+            }
         }
         if (!empty($wm['key_metrics']) && is_array($wm['key_metrics'])) {
             $lines[] = "• Số liệu Ground-Truth đã xác thực ở lượt trước: " . json_encode($wm['key_metrics'], JSON_UNESCAPED_UNICODE);
@@ -6863,6 +6988,9 @@ class ChatController {
         $cleanFilters = [];
         foreach ($args as $k => $v) {
             if ($v !== null && $v !== '' && $v !== 'all' && $v !== []) {
+                if ($k === 'note_keyword' && is_string($v) && substr_count($v, ',') >= 2) {
+                    continue;
+                }
                 $cleanFilters[$k] = $v;
             }
         }
@@ -6873,7 +7001,7 @@ class ChatController {
                 $metrics[$mk] = $compactResult[$mk];
             }
         }
-        foreach (['financial_summary', 'period_comparison', 'crm_and_funnel', 'revenue_and_deposits', 'expenses_and_cashflow', 'summary', 'deal_summary', 'ticket_summary', 'inventory_summary'] as $groupKey) {
+        foreach (['financial_summary', 'period_comparison', 'crm_and_funnel', 'revenue_and_deposits', 'expenses_and_cashflow', 'summary', 'deal_summary', 'ticket_summary', 'inventory_summary', 'persona_kpi', 'completeness', 'gender_breakdown', 'age_breakdown', 'seniority_tiers'] as $groupKey) {
             if (!empty($compactResult[$groupKey]) && is_array($compactResult[$groupKey])) {
                 $metrics[$groupKey] = $compactResult[$groupKey];
             }
@@ -6885,6 +7013,11 @@ class ChatController {
                 if (is_array($fList) && !empty($fList)) {
                     $topFacets[$fName] = array_slice($fList, 0, 5);
                 }
+            }
+        }
+        foreach (['by_school_program', 'by_intake', 'top_companies', 'by_industry', 'multi_course_students'] as $pFacetKey) {
+            if (!empty($compactResult[$pFacetKey]) && is_array($compactResult[$pFacetKey])) {
+                $topFacets[$pFacetKey] = array_slice($compactResult[$pFacetKey], 0, 8);
             }
         }
         if (!empty($compactResult['top_sales_performers']) && is_array($compactResult['top_sales_performers'])) {
@@ -6945,10 +7078,14 @@ class ChatController {
 
         if (!$primaryState) {
             $lastStep = end($agentSteps);
+            $fallbackFilters = is_array($lastStep['args'] ?? null) ? $lastStep['args'] : [];
+            if (isset($fallbackFilters['note_keyword']) && substr_count((string)$fallbackFilters['note_keyword'], ',') >= 2) {
+                unset($fallbackFilters['note_keyword']);
+            }
             return [
                 'domain' => $domain,
                 'last_tool' => $lastStep['tool_name'] ?? 'none',
-                'applied_filters' => is_array($lastStep['args'] ?? null) ? $lastStep['args'] : [],
+                'applied_filters' => $fallbackFilters,
                 'key_metrics' => [],
                 'top_facets' => [],
                 'entity_anchors' => [],
@@ -6958,10 +7095,15 @@ class ChatController {
             ];
         }
 
+        $primaryFilters = is_array($primaryState['applied_filters'] ?? null) ? $primaryState['applied_filters'] : [];
+        if (isset($primaryFilters['note_keyword']) && substr_count((string)$primaryFilters['note_keyword'], ',') >= 2) {
+            unset($primaryFilters['note_keyword']);
+        }
+
         return [
             'domain' => $domain,
             'last_tool' => $primaryState['tool_name'] ?? 'none',
-            'applied_filters' => $primaryState['applied_filters'] ?? [],
+            'applied_filters' => $primaryFilters,
             'key_metrics' => $primaryState['key_metrics'] ?? [],
             'top_facets' => $primaryState['top_facets'] ?? [],
             'entity_anchors' => $primaryState['entity_anchors'] ?? [],

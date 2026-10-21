@@ -1087,7 +1087,7 @@ if ($method === 'POST' && $route === 'send_test') {
 
         // Fetch Campaign First to Determine Type
         // [FIX P39-CAM] Explicit columns — avoids loading subscriber_data/large blobs into memory
-        $stmtCamp = $pdo->prepare("SELECT id, name, type, subject, template_id, custom_html, content_body, attachments, config FROM campaigns WHERE id = ? LIMIT 1");
+        $stmtCamp = $pdo->prepare("SELECT id, name, type, subject, template_id, content_body AS custom_html, content_body, attachments, config FROM campaigns WHERE id = ? LIMIT 1");
         $stmtCamp->execute([$campaignId]);
         $campaign = $stmtCamp->fetch();
 

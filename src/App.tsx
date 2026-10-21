@@ -138,7 +138,7 @@ const ProtectedRoute = ({ allowedRoles }: { allowedRoles?: ('superadmin' | 'admi
   if (allowedRoles && !allowedRoles.includes(user.role)) return <Navigate to="/" replace />;
   return (
     <Layout>
-      <ErrorBoundary>
+      <ErrorBoundary resetKey={location.pathname}>
         <Suspense fallback={<PageLoader />}>
           <Outlet />
         </Suspense>
@@ -355,9 +355,14 @@ const AppTabs = () => {
               contentVisibility: isActive ? 'visible' : 'hidden',
             }}
           >
-            <Suspense fallback={<RouteTabSkeleton path={path} />}>
-              {renderPageComponent(path)}
-            </Suspense>
+            <ErrorBoundary
+              resetKey={`${path}_${rKey}`}
+              onReset={() => setRefreshKeys(prev => ({ ...prev, [path]: (prev[path] || 0) + 1 }))}
+            >
+              <Suspense fallback={<RouteTabSkeleton path={path} />}>
+                {renderPageComponent(path)}
+              </Suspense>
+            </ErrorBoundary>
           </div>
         );
       })}

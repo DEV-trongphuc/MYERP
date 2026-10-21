@@ -327,7 +327,7 @@ try {
             $search = $_GET['search'] ?? null;
             if (!empty($search)) {
                 // OPTIMIZED: Using FULLTEXT search instead of LIKE
-                $where[] = "(MATCH(title, last_message) AGAINST(? IN NATURAL LANGUAGE MODE) OR id = ?)";
+                $where[] = "(INSTR(CONCAT(COALESCE(title, ''), ' ', COALESCE(last_message, '')), ?) > 0 OR id = ?)";
                 $params[] = $search;
                 $params[] = $search;
             }
@@ -500,7 +500,7 @@ try {
                 $propertyId = resolvePropertyId($pdo, $propertyId);
             }
 
-            $where = ["(MATCH(m.message) AGAINST(? IN NATURAL LANGUAGE MODE) OR m.message LIKE ?)"];
+            $where = ["(INSTR(COALESCE(m.message, ''), ?) > 0 OR m.message LIKE ?)"];
             $params = [$searchTerm, '%' . $searchTerm . '%'];
 
             if ($convId) {

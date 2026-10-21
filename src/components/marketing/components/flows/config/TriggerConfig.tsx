@@ -118,39 +118,51 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
     useEffect(() => {
         const controller = new AbortController();
+        const toArr = <T = any>(raw: any): T[] => {
+            if (Array.isArray(raw)) return raw;
+            if (Array.isArray(raw?.data)) return raw.data;
+            if (Array.isArray(raw?.items)) return raw.items;
+            return [];
+        };
         const loadInitialData = async () => {
             setLoading(true);
-            const [listRes, segRes, campRes, tagRes, formRes, purchRes, customRes, surveyRes, chatbotsRes] = await Promise.all([
-                api.get<any[]>('lists'),
-                api.get<Segment[]>('segments'),
-                api.get<Campaign[]>('campaigns'),
-                api.get<any[]>('tags'),
-                api.get<FormDefinition[]>('forms'),
-                api.get<PurchaseEvent[]>('purchase_events'),
-                api.get<CustomEvent[]>('custom_events'),
-                api.get<Survey[]>('surveys'),
-                api.get<any>('ai_chatbots?action=list')
-            ]);
-            if (listRes.success) setLists(listRes.data);
-            if (segRes.success) setSegments(segRes.data);
-            if (campRes.success) setCampaigns(campRes.data);
-            if (tagRes.success) setTags(Array.isArray(tagRes.data) ? tagRes.data : ((tagRes.data as any)?.data || []));
-            if (formRes.success) setForms(formRes.data);
-            if (purchRes.success) setPurchases(purchRes.data);
-            if (chatbotsRes.success) setChatbots(chatbotsRes.data.filter((b: any) => b.ai_enabled || b.is_enabled || b.status === 'active' || !b.status));
-            if (customRes.success) setCustomEvents(customRes.data);
-            if (surveyRes.success) setSurveys(surveyRes.data);
-
-            if (customRes) {
-                const arr = await Promise.all([api.get<VoucherCampaign[]>('voucher_campaigns')]);
-                if (arr[0].success) setVoucherCampaigns(arr[0].data);
-            }
             try {
-                const cfRes = await api.get<any>('subscribers?route=field_definitions');
-                if (cfRes.success && cfRes.data) {
-                    setCustomFieldDefs(cfRes.data.filter((f: any) => f.type === 'date' || f.type === 'datetime'));
+                const [listRes, segRes, campRes, tagRes, formRes, purchRes, customRes, surveyRes, chatbotsRes] = await Promise.all([
+                    api.get<any[]>('lists'),
+                    api.get<Segment[]>('segments'),
+                    api.get<Campaign[]>('campaigns'),
+                    api.get<any[]>('tags'),
+                    api.get<FormDefinition[]>('forms'),
+                    api.get<PurchaseEvent[]>('purchase_events'),
+                    api.get<CustomEvent[]>('custom_events'),
+                    api.get<Survey[]>('surveys'),
+                    api.get<any>('ai_chatbots?action=list')
+                ]);
+                if (listRes.success) setLists(toArr(listRes.data));
+                if (segRes.success) setSegments(toArr(segRes.data));
+                if (campRes.success) setCampaigns(toArr(campRes.data));
+                if (tagRes.success) setTags(toArr(tagRes.data));
+                if (formRes.success) setForms(toArr(formRes.data));
+                if (purchRes.success) setPurchases(toArr(purchRes.data));
+                if (chatbotsRes.success) {
+                    setChatbots(toArr(chatbotsRes.data).filter((b: any) => b && (b.ai_enabled || b.is_enabled || b.status === 'active' || !b.status)));
                 }
-            } catch (e) { /* ignore */ }
+                if (customRes.success) setCustomEvents(toArr(customRes.data));
+                if (surveyRes.success) setSurveys(toArr(surveyRes.data));
+
+                if (customRes) {
+                    const arr = await Promise.all([api.get<VoucherCampaign[]>('voucher_campaigns')]);
+                    if (arr[0].success) setVoucherCampaigns(toArr(arr[0].data));
+                }
+                try {
+                    const cfRes = await api.get<any>('subscribers?route=field_definitions');
+                    if (cfRes.success && cfRes.data) {
+                        setCustomFieldDefs(toArr(cfRes.data).filter((f: any) => f && (f.type === 'date' || f.type === 'datetime')));
+                    }
+                } catch (e) { /* ignore */ }
+            } catch (err) {
+                console.error('Failed to load trigger config options:', err);
+            }
 
             if (!cachedErpMeta) {
                 try {
@@ -558,7 +570,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                         <div className={`space-y-2 pr-1 custom-scrollbar p-0.5 ${triggerType === 'date' || triggerType === 'erp_event' ? '' : 'max-h-72 overflow-y-auto'}`}>
                             {/* CASE: SEGMENT / LIST / SYNC */}
                             {triggerType === 'segment' && targetSubtype === 'list' && lists
-                                .filter(i => isManualList(i) && i.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                                .filter(i => isManualList(i) && String(i?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
                                 .map(item => (
                                     <ConfigItem
                                         key={item.id}
@@ -572,7 +584,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                             }
 
                             {triggerType === 'segment' && targetSubtype === 'sync' && lists
-                                .filter(i => isSyncList(i) && i.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                                .filter(i => isSyncList(i) && String(i?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
                                 .map(item => (
                                     <ConfigItem
                                         key={item.id}
@@ -586,7 +598,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                             }
 
                             {triggerType === 'segment' && targetSubtype === 'segment' && segments
-                                .filter(i => i.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                                .filter(i => String(i?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
                                 .map(item => (
                                     <ConfigItem
                                         key={item.id}
@@ -647,7 +659,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
                             {/* CASE: FORM SUBMIT */}
                             {triggerType === 'form' && forms
-                                .filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                                .filter(f => String(f?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
                                 .map(f => (
                                     <ConfigItem
                                         key={f.id}
@@ -662,7 +674,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
                             {/* CASE: SURVEY SUBMIT */}
                             {triggerType === 'survey' && surveys
-                                .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                                .filter(s => String(s?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
                                 .map(s => (
                                     <ConfigItem
                                         key={s.id}
@@ -677,12 +689,12 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
                             {/* CASE: PURCHASE EVENT */}
                             {triggerType === 'purchase' && purchases
-                                .filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                                .filter(p => String(p?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
                                 .map(p => (
                                     <ConfigItem
                                         key={p.id}
                                         label={p.name}
-                                        desc={`Event ID: ${p.id.substring(0, 8)}...`}
+                                        desc={`Event ID: ${String(p.id || '').substring(0, 8)}...`}
                                         icon={ShoppingCart}
                                         isSelected={config.targetId === p.id}
                                         onClick={() => handleTargetChange(p.id)}
@@ -1024,12 +1036,12 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
                             {/* CASE: CUSTOM EVENT */}
                             {triggerType === 'custom_event' && customEvents
-                                .filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                                .filter(c => String(c?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
                                 .map(c => (
                                     <ConfigItem
                                         key={c.id}
                                         label={c.name}
-                                        desc={`ID: ${c.id.substring(0, 8)}...`}
+                                        desc={`ID: ${String(c.id || '').substring(0, 8)}...`}
                                         icon={Zap}
                                         isSelected={config.targetId === c.id}
                                         onClick={() => handleTargetChange(c.id)}
@@ -1039,7 +1051,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
                             {/* CASE: VOUCHER */}
                             {triggerType === 'voucher' && voucherCampaigns
-                                .filter(v => v.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                                .filter(v => String(v?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
                                 .map(v => (
                                     <ConfigItem
                                         key={v.id}
@@ -1054,7 +1066,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
                             {/* CASE: VOUCHER REDEEM */}
                             {triggerType === 'voucher_redeem' && voucherCampaigns
-                                .filter(v => v.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                                .filter(v => String(v?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
                                 .map(v => (
                                     <ConfigItem
                                         key={v.id}
@@ -1069,7 +1081,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
                             {/* CASE: TAG ADDED */}
                             {triggerType === 'tag' && tags
-                                .filter(t => t.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                                .filter(t => String(t?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
                                 .map(t => (
                                     <ConfigItem
                                         key={t.id}
@@ -1084,7 +1096,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
                             {/* CASE: CAMPAIGN */}
                             {triggerType === 'campaign' && campaigns
-                                .filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                                .filter(c => String(c?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
                                 .map(c => (
                                     <ConfigItem
                                         key={c.id}
@@ -1184,7 +1196,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                                 isSelected={!config.targetId || config.targetId === 'all'}
                                                 onClick={() => onChange({ ...config, targetId: 'all' }, 'Mọi AI Bot')}
                                             />
-                                            {chatbots.filter(b => b.name.toLowerCase().includes(searchTerm.toLowerCase())).map(b => (
+                                            {chatbots.filter(b => String(b?.name || '').toLowerCase().includes(searchTerm.toLowerCase())).map(b => (
                                                 <ConfigItem
                                                     key={b.id}
                                                     label={b.name}
@@ -1514,9 +1526,9 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                                     </div>
 
                                                     <div className="space-y-1 custom-scrollbar border border-slate-100 rounded-[14px] p-1 bg-slate-50/50 max-h-48 overflow-y-auto">
-                                                        {(birthdayTab === 'list' ? lists.filter(l => isManualList(l) && l.name.toLowerCase().includes(searchTerm.toLowerCase())) :
-                                                            birthdayTab === 'sync' ? lists.filter(l => isSyncList(l) && l.name.toLowerCase().includes(searchTerm.toLowerCase())) :
-                                                                segments.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))).map(item => {
+                                                        {(birthdayTab === 'list' ? lists.filter(l => isManualList(l) && String(l?.name || '').toLowerCase().includes(searchTerm.toLowerCase())) :
+                                                            birthdayTab === 'sync' ? lists.filter(l => isSyncList(l) && String(l?.name || '').toLowerCase().includes(searchTerm.toLowerCase())) :
+                                                                segments.filter(s => String(s?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))).map(item => {
                                                                     const isChecked = birthdayTab === 'segment'
                                                                         ? (config.targetSegmentIds || []).includes(item.id)
                                                                         : (config.targetListIds || []).includes(item.id);

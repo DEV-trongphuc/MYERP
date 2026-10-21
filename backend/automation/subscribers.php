@@ -333,7 +333,7 @@ if ($method === 'POST' && ($route === 'bulk-add-tag' || $route === 'bulk-add-to-
         $pdo->prepare("
             UPDATE lists 
             SET subscriber_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl WHERE sl.workspace_id = ? AND sl.list_id = ?),
-                phone_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ? WHERE sl.workspace_id = ? AND sl.list_id = ? AND s.phone_number IS NOT NULL AND TRIM(s.phone_number) != '')
+                phone_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ? WHERE sl.workspace_id = ? AND sl.list_id = ? AND s.phone_number IS NOT NULL AND TRIM(s.phone_number) != '' AND TRIM(s.phone_number) != '0')
             WHERE workspace_id = ? AND id = ?
         ")->execute([$workspace_id, $listId, $workspace_id, $workspace_id, $listId, $workspace_id, $listId]);
 
@@ -373,8 +373,8 @@ if ($method === 'POST' && $route === 'subscribers_bulk') {
             if ($phone === null || $phone === '') {
                 return '';
             }
-            $clean = preg_replace('/[^0-9]/', '', $phone);
-            if (empty($clean)) {
+            $clean = preg_replace('/[^0-9]/', '', (string)$phone);
+            if (empty($clean) || strlen($clean) < 7 || preg_match('/^0+$/', $clean)) {
                 return '';
             }
             if (substr($clean, 0, 3) === '084') {
@@ -509,7 +509,7 @@ if ($method === 'POST' && $route === 'subscribers_bulk') {
                         $stmtCrm = $pdo->prepare("
                             SELECT c.id, c.email, c.phone, c.mobile, c.domation_subscriber_id,
                                    c.owner_id, c.stage_id, c.lead_status, c.program,
-                                   u.name AS owner_name, ps.name AS stage_name
+                                   u.full_name AS owner_name, ps.name AS stage_name
                             FROM contacts c
                             LEFT JOIN users u ON u.id = c.owner_id
                             LEFT JOIN pipeline_stages ps ON ps.id = c.stage_id
@@ -548,10 +548,26 @@ if ($method === 'POST' && $route === 'subscribers_bulk') {
                 $id = null;
                 if ($cleanEmail !== '' && isset($existingMap[$cleanEmail])) {
                     $id = $existingMap[$cleanEmail];
-                } elseif ($phone !== '' && isset($existingPhoneMap[$phone])) {
-                    $id = $existingPhoneMap[$phone];
-                } elseif ($phone9 !== '' && isset($existingPhone9Map[$phone9])) {
-                    $id = $existingPhone9Map[$phone9];
+                } else {
+                    $phoneMatchedId = null;
+                    if ($phone !== '' && isset($existingPhoneMap[$phone])) {
+                        $phoneMatchedId = $existingPhoneMap[$phone];
+                    } elseif ($phone9 !== '' && isset($existingPhone9Map[$phone9])) {
+                        $phoneMatchedId = $existingPhone9Map[$phone9];
+                    }
+                    if ($phoneMatchedId !== null) {
+                        $existingEmForPhone = strtolower(trim((string)($existingSubEmailById[$phoneMatchedId] ?? '')));
+                        $existingEmIsPlaceholder = (
+                            $existingEmForPhone === '' ||
+                            strpos($existingEmForPhone, '@phone.local') !== false ||
+                            strpos($existingEmForPhone, '@no-email.domation') !== false ||
+                            strpos($existingEmForPhone, '@zalo-oa.vn') !== false ||
+                            strpos($existingEmForPhone, '@facebook.com') !== false
+                        );
+                        if ($cleanEmail === '' || $existingEmIsPlaceholder || $existingEmForPhone === $cleanEmail) {
+                            $id = $phoneMatchedId;
+                        }
+                    }
                 }
 
                 $matchedContact = null;
@@ -618,7 +634,7 @@ if ($method === 'POST' && $route === 'subscribers_bulk') {
                 if ($phone9 !== '') $existingPhone9Map[$phone9] = $id;
                 $importedSubscriberIds[] = $id;
 
-                $firstName = $data['firstName'] ?? $data['first_name'] ?? '';
+                $firstName = $data['firstName'] ?? $data['first_name'] ?? $data['fullName'] ?? $data['full_name'] ?? '';
                 $lastName = $data['lastName'] ?? $data['last_name'] ?? '';
                 $status = $data['status'] ?? 'active';
                 $source = $data['source'] ?? 'Bulk Import';
@@ -753,7 +769,7 @@ anniversary_date = COALESCE(VALUES(anniversary_date), anniversary_date)";
             $pdo->prepare("
                 UPDATE lists 
                 SET subscriber_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl WHERE sl.workspace_id = ? AND sl.list_id = ?),
-                    phone_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ? WHERE sl.workspace_id = ? AND sl.list_id = ? AND s.phone_number IS NOT NULL AND TRIM(s.phone_number) != '')
+                    phone_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ? WHERE sl.workspace_id = ? AND sl.list_id = ? AND s.phone_number IS NOT NULL AND TRIM(s.phone_number) != '' AND TRIM(s.phone_number) != '0')
                 WHERE workspace_id = ? AND id = ?
             ")->execute([$workspace_id, $lid, $workspace_id, $workspace_id, $lid, $workspace_id, $lid]);
         }
@@ -894,9 +910,10 @@ WHERE sfs.workspace_id = ? AND f.workspace_id = ? AND sfs.subscriber_id = ? AND 
                 $searchClauses = [];
                 
                 // If we have valid words for full-text search, add the MATCH AGAINST clause
-                if (!empty($ftSearch)) {
-                    $searchClauses[] = "MATCH(s.email, s.first_name, s.last_name, s.phone_number, s.company_name) AGAINST(? IN BOOLEAN MODE)";
-                    $params[] = $ftSearch;
+                if ($trimmedSearch !== '') {
+                    $likeTerm = "%" . $trimmedSearch . "%";
+                    $searchClauses[] = "(s.email LIKE ? OR s.email_norm LIKE ? OR s.first_name LIKE ? OR s.last_name LIKE ? OR CONCAT(COALESCE(s.first_name, ''), ' ', COALESCE(s.last_name, '')) LIKE ? OR CONCAT(COALESCE(s.last_name, ''), ' ', COALESCE(s.first_name, '')) LIKE ? OR s.phone_number LIKE ? OR s.phone_norm9 LIKE ? OR s.company_name LIKE ? OR s.salesperson LIKE ? OR s.program LIKE ?)";
+                    array_push($params, $likeTerm, strtolower($likeTerm), $likeTerm, $likeTerm, $likeTerm, $likeTerm, $likeTerm, $likeTerm, $likeTerm, $likeTerm, $likeTerm);
                 }
                 
                 // 2. Fallback for short name searches (e.g. "Vy", "Lê", "An" under min token size of 3)
@@ -993,7 +1010,7 @@ WHERE sfs.workspace_id = ? AND f.workspace_id = ? AND sfs.subscriber_id = ? AND 
             // Phone Filter
             $hasPhone = $_GET['has_phone'] ?? 'all';
             if ($hasPhone === '1') {
-                $whereClauses[] = "(s.phone_number IS NOT NULL AND s.phone_number != '')";
+                $whereClauses[] = "(s.phone_number IS NOT NULL AND s.phone_number != '' AND s.phone_number != '0')";
             }
 
             // Chat Filter

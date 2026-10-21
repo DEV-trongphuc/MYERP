@@ -839,7 +839,14 @@ export const validateFlow = (flowToCheck: Flow, allFlows: Flow[] = [], isStrict:
 
       // Check for empty conditions in branches
       branches.forEach((b: any, index: number) => {
-        if (!b.conditions || b.conditions.length === 0) {
+        const conds = Array.isArray(b?.conditions)
+          ? b.conditions
+          : Array.isArray(b?.conditionGroup?.conditions)
+            ? b.conditionGroup.conditions
+            : Array.isArray(b?.rules)
+              ? b.rules
+              : [];
+        if (conds.length === 0) {
           errors.push({ msg: `Bước "${s.label}" (Nhánh ${index + 1}): Phải có ít nhất 1 điều kiện.`, type: 'critical', stepId: s.id });
         }
       });
@@ -852,8 +859,8 @@ export const validateFlow = (flowToCheck: Flow, allFlows: Flow[] = [], isStrict:
       else if (s.type === 'condition') hasNextStep = !!s.yesStepId || !!s.noStepId;
       else if (s.type === 'split_test') hasNextStep = !!s.pathAStepId || !!s.pathBStepId;
       else if (s.type === 'advanced_condition') {
-        // It has next step if ANY branch has stepId OR defaultStepId exists
-        hasNextStep = (s.config.branches && s.config.branches.some((b: any) => !!b.stepId)) || !!s.config.defaultStepId;
+        // It has next step if ANY branch has stepId OR nextStepId OR defaultStepId exists
+        hasNextStep = (Array.isArray(s.config.branches) && s.config.branches.some((b: any) => !!(b.stepId || b.nextStepId))) || !!s.config.defaultStepId;
       }
 
       if (!hasNextStep) {
@@ -871,7 +878,7 @@ export const validateFlow = (flowToCheck: Flow, allFlows: Flow[] = [], isStrict:
   });
 
   // PRODUCTIVE STEP CHECK
-  const productiveTypes = ['action', 'update_tag', 'list_action', 'remove_action', 'link_flow', 'zalo_zns', 'zalo_cs'];
+  const productiveTypes = ['action', 'update_tag', 'list_action', 'remove_action', 'link_flow', 'zalo_zns', 'zalo_cs', 'crm_action'];
   const hasProductiveStep = steps.some(s => productiveTypes.includes(s.type));
 
   if (!hasProductiveStep && steps.length > 0) {

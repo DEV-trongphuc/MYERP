@@ -256,12 +256,21 @@ const ImportSubscribersModal: React.FC<ImportSubscribersModalProps> = ({
 
         dataRows.forEach((row: any) => {
             const email = row.email?.toLowerCase()?.trim() || '';
-            const phone = row.phoneNumber ? row.phoneNumber.toString().replace(/[^0-9]/g, '') : '';
+            const rawDigits = row.phoneNumber ? row.phoneNumber.toString().replace(/[^0-9]/g, '') : '';
+            const phone = (rawDigits.length < 7 || /^0+$/.test(rawDigits)) ? '' : rawDigits;
+            if (!phone) {
+                row.phoneNumber = '';
+            }
             // Simple normalization for frontend check
             let normPhone = phone;
             if (phone.startsWith('84') && phone.length > 9) normPhone = '0' + phone.substring(2);
 
-            const isDuplicateInCsv = (email && seenEmailsInCsv.has(email)) || (normPhone && seenPhonesInCsv.has(normPhone));
+            if (!email && !normPhone) {
+                return;
+            }
+
+            // Only treat phone as CSV-duplicate when the row does NOT have a distinct email
+            const isDuplicateInCsv = (email && seenEmailsInCsv.has(email)) || (!email && normPhone && seenPhonesInCsv.has(normPhone));
             
             if (isDuplicateInCsv) {
                 dupCount++;

@@ -241,7 +241,8 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
         setLoading(true);
         const res = await api.get<ZaloOA[]>('zalo_oa');
         if (res.success) {
-            setOas(res.data.filter((oa: ZaloOA) => oa.status === 'active'));
+            const raw = Array.isArray(res.data) ? res.data : ((res.data as any)?.data || []);
+            setOas(raw.filter((oa: ZaloOA) => oa && oa.status === 'active'));
         }
         setLoading(false);
     };
@@ -250,8 +251,9 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
         try {
             // Fetch custom attribute keys from subscribers - take a sample to find keys
             const res = await api.get<any>('subscribers?limit=1&fields=custom_attributes');
-            if (res.success && res.data?.length > 0) {
-                const sample = res.data[0].custom_attributes;
+            const rows = Array.isArray(res.data) ? res.data : (Array.isArray(res.data?.data) ? res.data.data : []);
+            if (res.success && rows.length > 0) {
+                const sample = rows[0].custom_attributes;
                 const attrs = typeof sample === 'string' ? JSON.parse(sample || '{}') : (sample || {});
                 const fields = Object.keys(attrs).map(k => ({ key: k, label: k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) }));
                 setCustomFields(fields);
@@ -264,7 +266,8 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
     const fetchTemplates = async (oaId: string) => {
         const res = await api.get<ZaloTemplate[]>(`zalo_templates?oa_id=${oaId}`);
         if (res.success) {
-            setTemplates(res.data.filter((t: ZaloTemplate) => t.status === 'approved'));
+            const raw = Array.isArray(res.data) ? res.data : ((res.data as any)?.data || []);
+            setTemplates(raw.filter((t: ZaloTemplate) => t && t.status === 'approved'));
         }
     };
 

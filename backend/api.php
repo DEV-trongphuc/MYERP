@@ -1452,11 +1452,10 @@ function processManualLead($conn, $leadData, $override_round_id, $override_consu
         }
 
         // Điều kiện giữ lại cho Sale cũ:
-        // 1. Trùng trong hạn định < $dupCheckMonths
-        // HOẶC
-        // 2. Đã ở bước Hồ sơ trở đi (chỉ thay đổi từ trước bước Hồ sơ thì mới đổi thôi)
+        // 1. TVV cũ đang hoạt động / nghỉ phép (KHÔNG phải Inactive)
+        // 2. Trùng trong hạn định < $dupCheckMonths HOẶC Đã ở bước Hồ sơ trở đi
         $keepForOldSale = false;
-        if (!$override_consultant_id && $crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo'])) {
+        if (!$override_consultant_id && $crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo']) && ($crmCheckResult['consultantStatus'] ?? '') !== 'inactive') {
             if (!empty($crmCheckResult['hasRealInteraction']) && $crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths) {
                 $keepForOldSale = true;
             } else if (isset($crmCheckResult['isBeforeHoSo']) && !$crmCheckResult['isBeforeHoSo']) {
@@ -6646,6 +6645,21 @@ switch ($action) {
             $stmt = $conn->prepare("UPDATE consultants SET name=?, email=?, phone=?, status=?, leave_start=?, leave_end=?, zalo_chat_id=?, work_start_time=?, work_end_time=?, work_schedule=?, avatar=?, team_id=?, dob=?, gender=?, citizen_id=?, address=?, bank_name=?, bank_account=? WHERE id=?");
             $stmt->bind_param("ssssssssssisssssssi", $name, $email, $phone, $status, $leave_start, $leave_end, $zalo_chat_id, $work_start_time, $work_end_time, $work_schedule, $avatar, $team_id, $dob, $gender, $citizen_id, $address, $bank_name, $bank_account, $id);
             if ($stmt->execute()) {
+                try {
+                    $isActiveSync = ($status === 'inactive') ? 0 : 1;
+                    $syncU = $conn->prepare("UPDATE users SET status = ?, is_active = ? WHERE id = ? OR (email != '' AND email = ?)");
+                    if ($syncU) {
+                        $syncU->bind_param("siis", $status, $isActiveSync, $id, $email);
+                        $syncU->execute();
+                        $syncU->close();
+                    }
+                    $syncA = $conn->prepare("UPDATE accounts SET status = ?, is_active = ? WHERE id = ? OR (email != '' AND email = ?)");
+                    if ($syncA) {
+                        $syncA->bind_param("siis", $status, $isActiveSync, $id, $email);
+                        $syncA->execute();
+                        $syncA->close();
+                    }
+                } catch (\Throwable $eSync) {}
                 logAdminAction($conn, $decodedUser['id'], 'EDIT_CONSULTANT', [
                     'id' => $id,
                     'old' => $oldData,
@@ -11575,7 +11589,7 @@ switch ($action) {
             }
 
             $isDuplicate = false;
-            if ($crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo'])) {
+            if ($crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo']) && ($crmCheckResult['consultantStatus'] ?? '') !== 'inactive') {
                 if (!empty($crmCheckResult['hasRealInteraction']) && $crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths) {
                     $isDuplicate = true;
                 } else if (isset($crmCheckResult['isBeforeHoSo']) && !$crmCheckResult['isBeforeHoSo']) {
@@ -11593,6 +11607,14 @@ switch ($action) {
                 $oldSaleName = !empty($crmCheckResult['assignedName']) ? $crmCheckResult['assignedName'] : 'Không rõ';
                 $oldSaleMonths = $crmCheckResult['monthsSinceLastInteraction'];
                 $dupSuffix = " (Trùng số: Sale cũ $oldSaleName > $oldSaleMonths tháng).";
+            } elseif ($crmCheckResult['leadExists'] && !empty($crmCheckResult['originalAssignedTo'])) {
+                $oldSaleName = !empty($crmCheckResult['assignedName']) ? $crmCheckResult['assignedName'] : 'Không rõ';
+                $oldSaleMonths = $crmCheckResult['monthsSinceLastInteraction'];
+                if (($crmCheckResult['consultantStatus'] ?? '') === 'inactive') {
+                    $dupSuffix = " (Khách cũ của TVV ngưng hoạt động: $oldSaleName - Chia lại vòng mới).";
+                } else {
+                    $dupSuffix = " (Trùng số: Sale cũ $oldSaleName > $oldSaleMonths tháng).";
+                }
             }
 
             // Append duplicate note if duplicate exists
@@ -15556,7 +15578,7 @@ switch ($action) {
 
             $autoBlacklistCnt = 0;
             if (!$isManager) {
-                $blacklistRes = $conn->query("SELECT COUNT(*) as cnt FROM admin_logs WHERE action = 'BLOCK_LEAD_BLACKLIST' AND log_type = 'auto' AND $dateConditionCreated");
+                $blacklistRes = $conn->query("SELECT COUNT(*) as cnt FROM admin_logs WHERE action = 'BLOCK_LEAD_BLACKLIST' AND log_type = 'auto' AND (JSON_EXTRACT(details, '$.lead_id') IS NULL OR JSON_UNQUOTE(JSON_EXTRACT(details, '$.lead_id')) IN ('0', '', 'null')) AND $dateConditionCreated");
                 if ($blacklistRes && $row = $blacklistRes->fetch_assoc()) {
                     $autoBlacklistCnt = (int) $row['cnt'];
                 }
@@ -15564,7 +15586,7 @@ switch ($action) {
 
             $prevAutoBlacklistCnt = 0;
             if (!$isManager) {
-                $prevBlacklistRes = $conn->query("SELECT COUNT(*) as cnt FROM admin_logs WHERE action = 'BLOCK_LEAD_BLACKLIST' AND log_type = 'auto' AND $prevDateConditionCreated");
+                $prevBlacklistRes = $conn->query("SELECT COUNT(*) as cnt FROM admin_logs WHERE action = 'BLOCK_LEAD_BLACKLIST' AND log_type = 'auto' AND (JSON_EXTRACT(details, '$.lead_id') IS NULL OR JSON_UNQUOTE(JSON_EXTRACT(details, '$.lead_id')) IN ('0', '', 'null')) AND $prevDateConditionCreated");
                 if ($prevBlacklistRes && $row = $prevBlacklistRes->fetch_assoc()) {
                     $prevAutoBlacklistCnt = (int) $row['cnt'];
                 }
@@ -15608,27 +15630,41 @@ switch ($action) {
 
             // ticket_errors counts only APPROVED tickets in the date range created_at (for Dashboard card details)
             $ticketErrors = 0;
-            $tktErrRes = $conn->query("SELECT COUNT(*) as cnt FROM data_reports WHERE status IN ('approved', 'approved_no_comp') AND reason != 'databank_claim' AND $dateConditionCreated $managerFilterReports");
-            if ($tktErrRes && $row = $tktErrRes->fetch_assoc()) {
-                $ticketErrors = (int) $row['cnt'];
+            $approvedNoCompErrors = 0;
+            $tktErrRes = $conn->query("SELECT status, COUNT(*) as cnt FROM data_reports WHERE status IN ('approved', 'approved_no_comp') AND reason != 'databank_claim' AND $dateConditionCreated $managerFilterReports GROUP BY status");
+            if ($tktErrRes) {
+                while ($row = $tktErrRes->fetch_assoc()) {
+                    $ticketErrors += (int) $row['cnt'];
+                    if ($row['status'] === 'approved_no_comp') {
+                        $approvedNoCompErrors += (int) $row['cnt'];
+                    }
+                }
             }
+            $ticketErrors = max($ticketErrors, (int) $statusCounts['error']);
 
             // Previous period calculations for change percentage
             $prevTicketErrors = 0;
-            $prevTktErrRes = $conn->query("SELECT COUNT(*) as cnt FROM data_reports WHERE status IN ('approved', 'approved_no_comp') AND reason != 'databank_claim' AND $prevDateConditionCreated $managerFilterReports");
-            if ($prevTktErrRes && $row = $prevTktErrRes->fetch_assoc()) {
-                $prevTicketErrors = (int) $row['cnt'];
+            $prevApprovedNoCompErrors = 0;
+            $prevTktErrRes = $conn->query("SELECT status, COUNT(*) as cnt FROM data_reports WHERE status IN ('approved', 'approved_no_comp') AND reason != 'databank_claim' AND $prevDateConditionCreated $managerFilterReports GROUP BY status");
+            if ($prevTktErrRes) {
+                while ($row = $prevTktErrRes->fetch_assoc()) {
+                    $prevTicketErrors += (int) $row['cnt'];
+                    if ($row['status'] === 'approved_no_comp') {
+                        $prevApprovedNoCompErrors += (int) $row['cnt'];
+                    }
+                }
             }
+            $prevTicketErrors = max($prevTicketErrors, (int) $prevStatusCounts['error']);
 
             // 1. Success (Distributed) Calculations
-            $raw_distributed = $statusCounts['assigned'] + $statusCounts['rule_6_month'] + $statusCounts['pending_work_hours'] + $statusCounts['fallback'] + $statusCounts['success'] + $statusCounts['compensation'] + $statusCounts['databank_claim'] + $statusCounts['released_to_kho'];
-            $distributed_today = max(0, $raw_distributed - $ticketErrors);
+            $raw_distributed = $statusCounts['assigned'] + $statusCounts['rule_6_month'] + $statusCounts['pending_work_hours'] + $statusCounts['fallback'] + $statusCounts['success'] + $statusCounts['compensation'] + $statusCounts['databank_claim'];
+            $distributed_today = max(0, $raw_distributed - $approvedNoCompErrors);
 
-            // Keep details consistent: distributed_assigned + distributed_compensation = distributed_today
+            // Keep details consistent: distributed_assigned + distributed_compensation + distributed_self = distributed_today
             $assigned_count = $statusCounts['assigned'] + $statusCounts['rule_6_month'] + $statusCounts['pending_work_hours'] + $statusCounts['fallback'] + $statusCounts['success'];
             $compensation_count = $statusCounts['compensation'] + $statusCounts['databank_claim'];
-            $assigned_adjusted = max(0, $assigned_count - $ticketErrors);
-            $rem = max(0, $ticketErrors - $assigned_count);
+            $assigned_adjusted = max(0, $assigned_count - $approvedNoCompErrors);
+            $rem = max(0, $approvedNoCompErrors - $assigned_count);
             $compensation_adjusted = max(0, $compensation_count - $rem);
 
             // Count self-entered leads (source is ca_nhan or gioi_thieu)
@@ -15638,7 +15674,7 @@ switch ($action) {
             FROM distribution_logs dl
             JOIN leads l ON dl.lead_id = l.id
             WHERE dl.status IN ('assigned', 'rule_6_month', 'pending_work_hours', 'fallback', 'success')
-              AND l.source IN ('ca_nhan', 'gioi_thieu')
+              AND l.source IN ('ca_nhan', 'gioi_thieu') AND dl.id IN (SELECT max_id FROM (SELECT MAX(id) as max_id FROM distribution_logs WHERE status != 'silent' AND $dateCondition $managerFilterDlNoAlias GROUP BY lead_id) dl_max_self)
               AND $dateConditionDl $managerFilterDl
         ");
             if ($selfRes && $row = $selfRes->fetch_assoc()) {
@@ -15652,7 +15688,7 @@ switch ($action) {
             $duplicates = $statusCounts['duplicate'] + $statusCounts['reminder'];
 
             // 3. Errors Calculations
-            $underStandard = $statusCounts['rejected'] + $statusCounts['pending_approval'] + $statusCounts['error'] + $statusCounts['no_consultant'];
+            $underStandard = $statusCounts['rejected'] + $statusCounts['pending_approval'] + $statusCounts['no_consultant'];
             $blacklistCnt = $statusCounts['blacklisted'] + $autoBlacklistCnt;
             $errors = $ticketErrors + $underStandard + $blacklistCnt;
 
@@ -15667,10 +15703,10 @@ switch ($action) {
             ];
 
             // Do the same for previous period to keep % change consistent
-            $prev_raw_distributed = $prevStatusCounts['assigned'] + $prevStatusCounts['rule_6_month'] + $prevStatusCounts['pending_work_hours'] + $prevStatusCounts['fallback'] + $prevStatusCounts['success'] + $prevStatusCounts['compensation'] + $prevStatusCounts['databank_claim'] + $prevStatusCounts['released_to_kho'];
-            $prev_distributed_today = max(0, $prev_raw_distributed - $prevTicketErrors);
+            $prev_raw_distributed = $prevStatusCounts['assigned'] + $prevStatusCounts['rule_6_month'] + $prevStatusCounts['pending_work_hours'] + $prevStatusCounts['fallback'] + $prevStatusCounts['success'] + $prevStatusCounts['compensation'] + $prevStatusCounts['databank_claim'];
+            $prev_distributed_today = max(0, $prev_raw_distributed - $prevApprovedNoCompErrors);
             $prev_duplicates = $prevStatusCounts['duplicate'] + $prevStatusCounts['reminder'];
-            $prev_underStandard = $prevStatusCounts['rejected'] + $prevStatusCounts['pending_approval'] + $prevStatusCounts['error'] + $prevStatusCounts['no_consultant'];
+            $prev_underStandard = $prevStatusCounts['rejected'] + $prevStatusCounts['pending_approval'] + $prevStatusCounts['no_consultant'];
             $prev_blacklistCnt = $prevStatusCounts['blacklisted'] + $prevAutoBlacklistCnt;
             $prev_errors = $prevTicketErrors + $prev_underStandard + $prev_blacklistCnt;
             $prev_total_today = $prev_distributed_today + $prev_duplicates + $prev_errors;
@@ -16008,7 +16044,9 @@ switch ($action) {
             }
 
             // Query Top Consultants
-            $topConsultantsSql = "SELECT c.id, c.name, c.email, c.avatar, c.status as c_status, c.vacation_mode as c_vacation_mode, dl.status as dl_status, COUNT(dl.id) as cnt 
+            $topConsultantsSql = "SELECT c.id, c.name, c.email, c.avatar, c.status as c_status, c.vacation_mode as c_vacation_mode, dl.status as dl_status,
+                                  CASE WHEN l.source IN ('ca_nhan', 'gioi_thieu') THEN 1 ELSE 0 END as is_self,
+                                  COUNT(dl.id) as cnt 
                               FROM distribution_logs dl 
                               INNER JOIN (
                                   SELECT lead_id, MAX(id) as max_id 
@@ -16017,8 +16055,9 @@ switch ($action) {
                                   GROUP BY lead_id
                               ) dl_max ON dl.id = dl_max.max_id
                               JOIN consultants c ON dl.assigned_to = c.id 
-                              WHERE $dateConditionDl $managerFilterDl AND dl.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'error', 'reminder', 'databank_claim') 
-                              GROUP BY c.id, c.name, c.email, c.avatar, c.status, c.vacation_mode, dl.status";
+                              LEFT JOIN leads l ON dl.lead_id = l.id
+                              WHERE $dateConditionDl $managerFilterDl AND dl.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'fallback', 'success', 'error', 'reminder', 'databank_claim') 
+                              GROUP BY c.id, c.name, c.email, c.avatar, c.status, c.vacation_mode, dl.status, is_self";
             $topConsultantsRes = $conn->query($topConsultantsSql);
             $consultantStats = [];
             if ($topConsultantsRes) {
@@ -16036,14 +16075,26 @@ switch ($action) {
                             'compensation' => 0,
                             'rule_6_month' => 0,
                             'pending_work_hours' => 0,
+                            'fallback' => 0,
+                            'success' => 0,
                             'error' => 0,
                             'reminder' => 0,
-                            'databank_claim' => 0
+                            'databank_claim' => 0,
+                            'self_data' => 0,
+                            'company_data' => 0
                         ];
                     }
                     $dl_status = $row['dl_status'];
+                    $cntVal = (int) $row['cnt'];
                     if (isset($consultantStats[$cId][$dl_status])) {
-                        $consultantStats[$cId][$dl_status] = (int) $row['cnt'];
+                        $consultantStats[$cId][$dl_status] += $cntVal;
+                    }
+                    if (in_array($dl_status, ['assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'fallback', 'success', 'databank_claim'], true)) {
+                        if ((int)$row['is_self'] === 1) {
+                            $consultantStats[$cId]['self_data'] += $cntVal;
+                        } else {
+                            $consultantStats[$cId]['company_data'] += $cntVal;
+                        }
                     }
                 }
             }
@@ -16103,7 +16154,7 @@ switch ($action) {
 
             $topConsultantsList = [];
             foreach ($consultantStats as $cId => $cStats) {
-                $data_count = $cStats['assigned'] + $cStats['compensation'] + $cStats['rule_6_month'] + $cStats['pending_work_hours'] + $cStats['reminder'] + $cStats['databank_claim'] + max(0, $cStats['error'] - $cStats['compensation']);
+                $data_count = $cStats['assigned'] + $cStats['compensation'] + $cStats['rule_6_month'] + $cStats['pending_work_hours'] + $cStats['fallback'] + $cStats['success'] + $cStats['databank_claim'];
 
                 $uCount = $uncontactedMap[$cId] ?? 0;
                 $rCount = $recalledMap[$cId] ?? 0;
@@ -16120,6 +16171,9 @@ switch ($action) {
                     'status' => $cStats['status'],
                     'vacation_mode' => $cStats['vacation_mode'],
                     'data' => $accCount,
+                    'company_data' => (int)($cStats['company_data'] ?? 0),
+                    'self_data' => (int)($cStats['self_data'] ?? 0),
+                    'reminder_data' => (int)($cStats['reminder'] ?? 0),
                     'uncontacted_count' => $uCount,
                     'recalled_count' => $rCount,
                     'offered_count' => $offered,
@@ -16147,6 +16201,9 @@ switch ($action) {
                     'status' => $row['status'],
                     'vacation_mode' => $row['vacation_mode'],
                     'data' => (int) $row['data'],
+                    'company_data' => (int) ($row['company_data'] ?? 0),
+                    'self_data' => (int) ($row['self_data'] ?? 0),
+                    'reminder_data' => (int) ($row['reminder_data'] ?? 0),
                     'percent' => $percent,
                     'color' => $colors[$i % 4],
                     'uncontacted_count' => $row['uncontacted_count'],
@@ -16640,6 +16697,8 @@ switch ($action) {
                     'distributed_assigned' => (int) $assigned_total,
                     'distributed_compensation' => (int) $compensation_total,
                     'distributed_self' => (int) $self_count,
+                    'distributed_rule_6_month' => (int) ($statusCounts['rule_6_month'] ?? 0),
+                    'distributed_databank_claim' => (int) ($statusCounts['databank_claim'] ?? 0),
                     'duplicates' => (int) $statsRes['duplicates'],
                     'errors' => (int) $statsRes['errors'],
                     'ticket_errors' => (int) $ticketErrors,
@@ -18547,7 +18606,7 @@ switch ($action) {
 
         // Regular duplicate checking
         $isSimDuplicate = false;
-        if ($crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo'])) {
+        if ($crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo']) && ($crmCheckResult['consultantStatus'] ?? '') !== 'inactive') {
             if (!empty($crmCheckResult['hasRealInteraction']) && $crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths) {
                 $isSimDuplicate = true;
             } else if (isset($crmCheckResult['isBeforeHoSo']) && !$crmCheckResult['isBeforeHoSo']) {
@@ -18603,22 +18662,16 @@ switch ($action) {
 
         // Check if there was a duplicate, but the consultant is inactive or on leave, or if duplicate check threshold was exceeded
         if ($crmCheckResult['originalAssignedTo']) {
-            $stmtC = $conn->prepare("SELECT name, status FROM consultants WHERE id = ?");
-            $stmtC->bind_param("i", $crmCheckResult['originalAssignedTo']);
-            $stmtC->execute();
-            $cRow = $stmtC->get_result()->fetch_assoc();
-            $stmtC->close();
-
-            $saleName = $cRow ? $cRow['name'] : 'Không rõ';
-            $saleStatus = $cRow ? $cRow['status'] : 'inactive';
+            $saleName = !empty($crmCheckResult['assignedName']) ? $crmCheckResult['assignedName'] : 'Không rõ';
+            $saleStatus = !empty($crmCheckResult['consultantStatus']) ? $crmCheckResult['consultantStatus'] : 'inactive';
 
             if ($saleStatus !== 'active') {
-                $statusText = $saleStatus === 'leave' ? 'đang nghỉ phép' : 'không hoạt động';
+                $statusText = $saleStatus === 'leave' ? 'đang nghỉ phép' : 'không hoạt động (Inactive)';
                 $trace[] = [
                     'rule_id' => 0,
                     'description' => 'Kiểm tra trùng lặp CRM',
                     'status' => 'skipped',
-                    'reason' => "Phát hiện trùng với Sale cũ: $saleName nhưng Sale này $statusText. Tiến hành quét quy tắc để chia mới."
+                    'reason' => "Phát hiện trùng với Sale cũ: $saleName nhưng Sale này $statusText. Tiến hành quét quy tắc để chia vòng mới."
                 ];
             } else if ($crmCheckResult['monthsSinceLastInteraction'] >= $dupCheckMonths) {
                 $trace[] = [

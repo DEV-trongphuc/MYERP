@@ -98,6 +98,72 @@ const COLUMN_DEFINITIONS = [
 
 const DEFAULT_VISIBLE_COLUMNS = ['name', 'phone', 'status', 'source', 'lastActivity', 'tags'];
 
+const PIPELINE_STAGE_LABELS: Record<number, string> = {
+    1: '01 – New Lead',
+    2: '02 – Contact Attempted',
+    3: '03 – Connected',
+    4: '04 – Needed',
+    5: '05 – Discovery Completed',
+    6: '06 – Program Matched',
+    7: '07 – Proposal Sent',
+    8: '08 – Evaluation / Objection',
+    9: '09 – Application Started',
+    10: '10 – Application Completed',
+    11: '11 – Admission Approved',
+    12: '12 – Offer / Scholarship Accepted',
+    13: '13 – Deposit / Tuition Payment',
+    14: '14 – Enrolled',
+};
+
+const formatSegmentCriteriaDisplay = (seg: any): string => {
+    const desc = typeof seg?.description === 'string' ? seg.description.trim() : '';
+    if (desc && desc.startsWith('Pipeline:')) {
+        return desc;
+    }
+    const raw = typeof seg?.rawCriteria === 'string' ? seg.rawCriteria : (typeof seg?.criteria === 'string' ? seg.criteria : '');
+    if (!raw || !raw.trim().startsWith('[')) {
+        return raw || desc || 'Tùy chỉnh';
+    }
+    try {
+        const parsed = JSON.parse(raw);
+        const groups = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.groups) ? parsed.groups : []);
+        const stageNums: number[] = [];
+        let onlyStageConds = groups.length > 0;
+        for (const g of groups) {
+            const conds = Array.isArray(g?.conditions) ? g.conditions : [];
+            if (conds.length === 0) {
+                onlyStageConds = false;
+                break;
+            }
+            for (const c of conds) {
+                if (c?.field === 'crm_stage_id' || c?.field === 'stage_id') {
+                    const tokens = String(c?.value ?? '').split(',').map(s => s.trim()).filter(Boolean);
+                    for (const t of tokens) {
+                        const n = Number(t);
+                        if (Number.isFinite(n)) {
+                            const normalized = n >= 31 && n <= 44 ? n - 30 : n;
+                            if (normalized >= 1 && normalized <= 14 && !stageNums.includes(normalized)) {
+                                stageNums.push(normalized);
+                            }
+                        }
+                    }
+                } else {
+                    onlyStageConds = false;
+                }
+            }
+        }
+        if (onlyStageConds && stageNums.length > 0) {
+            stageNums.sort((a, b) => a - b);
+            const first = PIPELINE_STAGE_LABELS[stageNums[0]] || `Stage ${stageNums[0]}`;
+            const last = PIPELINE_STAGE_LABELS[stageNums[stageNums.length - 1]] || `Stage ${stageNums[stageNums.length - 1]}`;
+            return stageNums.length === 1 ? `Pipeline: ${first}` : `Pipeline: ${first} → ${last}`;
+        }
+    } catch {
+        // Fallback to raw criteria
+    }
+    return raw;
+};
+
 const formatRelativeTime = (dateString?: string) => {
     if (!dateString) return 'Chưa có dữ liệu';
     const date = new Date(dateString);
@@ -1683,14 +1749,18 @@ const Audience: React.FC = () => {
                             <TabTransition>
                                 <SegmentsTab
                                     loading={loading}
-                                    segments={segments}
+                                    segments={(Array.isArray(segments) ? segments : []).map((seg: any) => ({
+                                        ...seg,
+                                        rawCriteria: seg.rawCriteria ?? seg.criteria,
+                                        criteria: formatSegmentCriteriaDisplay(seg)
+                                    }))}
                                     currentPage={segmentsPagination.page}
                                     totalPages={segmentsPagination.totalPages}
                                     totalCount={segmentsPagination.total}
                                     itemsPerPage={segmentsPagination.limit}
                                     onPageChange={(p) => setSegmentsPagination(prev => ({ ...prev, page: p }))}
                                     onView={(seg) => setViewingGroup({ id: seg.id, name: seg.name, type: 'segment', count: seg.count })}
-                                    onEdit={adminGuard((seg) => { setEditingSegment(seg); setSegmentBuilderOpen(true); }, 'sửa phân khúc')}
+                                    onEdit={adminGuard((seg: any) => { setEditingSegment({ ...seg, criteria: seg.rawCriteria ?? seg.criteria }); setSegmentBuilderOpen(true); }, 'sửa phân khúc')}
                                     onCreate={adminGuard(() => { setEditingSegment(null); setSegmentBuilderOpen(true); }, 'tạo phân khúc')}
                                     onDelete={adminGuard((id) => setConfirmModal({
                                         isOpen: true, title: 'Xóa phân khúc?', message: 'Dữ liệu phân khúc động sẽ bị xóa.', variant: 'danger', onConfirm: async () => {

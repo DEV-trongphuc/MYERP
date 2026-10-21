@@ -306,6 +306,16 @@ class UserController {
                 $this->db->prepare("UPDATE accounts SET " . implode(', ', $accSets) . " WHERE (id = ? OR (email != '' AND email = ?)) AND (tenant_id = ? OR tenant_id IS NULL)")
                     ->execute(array_values($accParams));
             }
+            if (array_key_exists('is_active', $b) && in_array('is_active', $fields, true)) {
+                $lookupEmail = $oldUser['email'] ?? ($b['email'] ?? '');
+                if ((int)$b['is_active'] === 0) {
+                    $this->db->prepare("UPDATE consultants SET status = 'inactive' WHERE id = ? OR (email != '' AND email = ?)")
+                        ->execute([$id, $lookupEmail]);
+                } else {
+                    $this->db->prepare("UPDATE consultants SET status = IF(status = 'inactive' OR status IS NULL OR status = '', 'active', status) WHERE id = ? OR (email != '' AND email = ?)")
+                        ->execute([$id, $lookupEmail]);
+                }
+            }
         } catch (\Throwable $eAcc) {}
         
         // Log changes (Masking password)
@@ -334,6 +344,10 @@ class UserController {
             try {
                 $this->db->prepare("UPDATE accounts SET is_active = 0 WHERE id = ? AND (tenant_id = ? OR tenant_id IS NULL)")->execute([$id, $auth['tenant_id']]);
             } catch (\Throwable $eAcc) {}
+
+            try {
+                $this->db->prepare("UPDATE consultants SET status = 'inactive' WHERE id = ? OR email = (SELECT email FROM users WHERE id = ? LIMIT 1)")->execute([$id, $id]);
+            } catch (\Throwable $eCons) {}
 
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'DELETE', 'user', $id);
             respond(200,null,'Đã xóa người dùng');

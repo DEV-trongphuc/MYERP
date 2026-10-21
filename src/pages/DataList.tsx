@@ -26,6 +26,7 @@ import { NotificationPreviewModal } from '../components/ui/NotificationPreviewMo
 import { RuleSettings } from './RuleSettings';
 import { TableContextMenu } from '../components/ui/TableContextMenu';
 import { getLocalDateStr } from '../utils/dateUtils';
+import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 
 const ExpenseQuickViewDrawer = lazy(() => import('../components/ExpenseQuickViewDrawer').then(m => ({ default: m.ExpenseQuickViewDrawer })));
 const ExpenseCreateDrawer = lazy(() => import('../components/ExpenseCreateDrawer').then(m => ({ default: m.ExpenseCreateDrawer })));
@@ -383,7 +384,22 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
     return localStorage.getItem('Ideas_global_date') || getDefaultDateFilter();
   });
 
+  const [showDateModal, setShowDateModal] = useState(false);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  const getDisplayDateFilterText = (filter: string) => {
+    if (filter.includes('đến')) {
+      return filter.replace(/\s*đến\s*/i, ` ${t('đến')} `);
+    }
+    return t(filter);
+  };
+
   const handleUpdateDateFilter = (val: string) => {
+    if (val === 'Tùy chỉnh') {
+      setShowDateModal(true);
+      return;
+    }
     setDateFilter(val);
     localStorage.setItem('Ideas_global_date', val);
     window.dispatchEvent(new CustomEvent('global-date-change', { detail: val }));
@@ -1898,7 +1914,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
       {/* Header */}
       <div className="page-header" style={{ marginBottom: '1.25rem', flexShrink: 0 }}>
         <div>
-          {['accountant', 'admin', 'superadmin', 'super_admin', 'director'].includes(String(user?.role).toLowerCase()) ? (
+          {(viewMode === 'calendar' || String(user?.role).toLowerCase() === 'accountant') ? (
             <>
               <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Calendar size={24} color="var(--color-primary)" /> {t('Lịch trình Tài chính')}
@@ -2175,7 +2191,11 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                   { value: '7 ngày qua', label: t('7 ngày qua') },
                   { value: '30 ngày qua', label: t('30 ngày qua') },
                   { value: 'Tháng này', label: t('Tháng này') },
-                  { value: 'Tháng trước', label: t('Tháng trước') }
+                  { value: 'Tháng trước', label: t('Tháng trước') },
+                  ...(!['all', 'Hôm nay', 'Hôm qua', 'Tuần này', 'Tuần trước', 'Tuần trước nữa', '7 ngày qua', '30 ngày qua', 'Tháng này', 'Tháng trước', 'Tùy chỉnh'].includes(dateFilter)
+                    ? [{ value: dateFilter, label: getDisplayDateFilterText(dateFilter) }]
+                    : []),
+                  { value: 'Tùy chỉnh', label: t('Tùy chỉnh...') }
                 ]}
                 value={dateFilter}
                 onChange={val => updateParams('date', val.toString())}
@@ -2348,7 +2368,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
 
             {/* Calendar Legend */}
             <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', fontSize: '0.75rem', fontWeight: 600 }}>
-              {['accountant', 'admin', 'superadmin', 'super_admin', 'director'].includes(String(user?.role).toLowerCase()) ? (
+              {(viewMode === 'calendar' || String(user?.role).toLowerCase() === 'accountant') ? (
                 <>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#3b82f6' }}></span>
@@ -7450,6 +7470,40 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
           />
         )}
       </Suspense>
+
+      <CustomModal
+        isOpen={showDateModal}
+        onClose={() => setShowDateModal(false)}
+        title={t("Tùy chỉnh thời gian")}
+        width="400px"
+      >
+        {showDateModal && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem 0' }}>
+            <div>
+              <label className="form-label">{t('Từ ngày')}</label>
+              <VietnameseDateInput value={startDate} onChange={val => setStartDate(val)} />
+            </div>
+            <div>
+              <label className="form-label">{t('Đến ngày')}</label>
+              <VietnameseDateInput value={endDate} onChange={val => setEndDate(val)} />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
+              <button className="btn outline" onClick={() => setShowDateModal(false)}>{t('Hủy')}</button>
+              <button
+                className="btn primary"
+                onClick={() => {
+                  if (!startDate || !endDate) return toast.error(t("Vui lòng chọn đầy đủ Từ ngày và Đến ngày"));
+                  if (new Date(startDate) > new Date(endDate)) return toast.error(t("Từ ngày không được lớn hơn Đến ngày"));
+                  handleUpdateDateFilter(`${startDate} đến ${endDate}`);
+                  setShowDateModal(false);
+                }}
+              >
+                {t('Áp dụng')}
+              </button>
+            </div>
+          </div>
+        )}
+      </CustomModal>
 
       <style>{`
         @media (max-width: 768px) {

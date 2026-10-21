@@ -135,14 +135,17 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
         const findParentSource = (currentId: string, visited: Set<string>): any => {
             if (visited.has(currentId)) return null;
             visited.add(currentId);
-            const parentCandidates = flow.steps.filter(s =>
-                s.nextStepId === currentId ||
-                s.yesStepId === currentId ||
-                s.noStepId === currentId ||
-                s.pathAStepId === currentId ||
-                s.pathBStepId === currentId ||
-                s.config?.defaultStepId === currentId ||
-                (Array.isArray(s.config?.branches) && s.config.branches.some((b: any) => b.nextStepId === currentId || b.stepId === currentId))
+            const safeSteps = Array.isArray(flow.steps) ? flow.steps : [];
+            const parentCandidates = safeSteps.filter(s =>
+                s && (
+                    s.nextStepId === currentId ||
+                    s.yesStepId === currentId ||
+                    s.noStepId === currentId ||
+                    s.pathAStepId === currentId ||
+                    s.pathBStepId === currentId ||
+                    s.config?.defaultStepId === currentId ||
+                    (Array.isArray(s.config?.branches) && s.config.branches.some((b: any) => b.nextStepId === currentId || b.stepId === currentId))
+                )
             );
             for (const parent of parentCandidates) {
                 if (parent.type === 'action' || parent.type === 'zalo_zns') return parent;

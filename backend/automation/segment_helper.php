@@ -57,6 +57,53 @@ if (!function_exists('getCrmTableColumnsCache')) {
     }
 }
 
+if (!function_exists('getCrmPipelineStageCatalog')) {
+    /**
+     * Load and cache the ordered catalog of pipeline stages with both DB `id`
+     * and 1-based `step_number` (1..14) for accurate stage range resolution.
+     */
+    function getCrmPipelineStageCatalog(?PDO $pdo = null): array
+    {
+        static $catalog = null;
+        if ($catalog !== null) {
+            return $catalog;
+        }
+        if (!$pdo) {
+            $pdo = $GLOBALS['pdo'] ?? null;
+        }
+        if (!$pdo) {
+            return [];
+        }
+        try {
+            $stmt = $pdo->query("SELECT id, name, order_index, system_slug, is_won, is_lost FROM pipeline_stages ORDER BY order_index ASC, id ASC");
+            $rows = $stmt ? ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: []) : [];
+            $result = [];
+            foreach ($rows as $idx => $r) {
+                $name = trim((string)($r['name'] ?? ''));
+                if (preg_match('/^0?(\d{1,2})\b/', $name, $m)) {
+                    $stepNum = (int)$m[1];
+                } else {
+                    $stepNum = $idx + 1;
+                }
+                $result[] = [
+                    'id'          => (int)$r['id'],
+                    'name'        => $name,
+                    'order_index' => (int)($r['order_index'] ?? $idx),
+                    'step_number' => $stepNum,
+                    'system_slug' => trim((string)($r['system_slug'] ?? '')),
+                    'is_won'      => (int)($r['is_won'] ?? 0),
+                    'is_lost'     => (int)($r['is_lost'] ?? 0),
+                ];
+            }
+            $catalog = $result;
+            return $catalog;
+        } catch (Throwable $e) {
+            $catalog = [];
+            return [];
+        }
+    }
+}
+
 /**
  * Fast batch synchronization of all active MYERP `/contacts` rows into `subscribers`
  * so Segment/List filter queries, estimates, previews, and campaign dispatches
@@ -73,34 +120,46 @@ function ensureAllCrmContactsSyncedForFilter(PDO $pdo, int $workspaceId = 1): vo
     $syncedWorkspaces[$wsId] = true;
 
     try {
+        $GLOBALS['pdo'] = $pdo;
         if (!class_exists('DomationContactMatcher') && file_exists(__DIR__ . '/../utils/DomationContactMatcher.php')) {
             require_once __DIR__ . '/../utils/DomationContactMatcher.php';
         }
-        if (class_exists('DomationContactMatcher')) {
-            DomationContactMatcher::ensureSchema($pdo);
+        if (class_exists('DomationContactMatcher') && method_exists('DomationContactMatcher', 'ensureColumns')) {
+            DomationContactMatcher::ensureColumns($pdo);
         }
 
-        // 1. Link existing unlinked subscribers to contacts by exact normalized email
+        // 1a. Link existing unlinked subscribers to contacts by domation_subscriber_id
         $pdo->prepare("
             UPDATE subscribers s
             INNER JOIN contacts c
                 ON c.deleted_at IS NULL
-               AND c.email IS NOT NULL
-               AND TRIM(c.email) != ''
-               AND s.email = LOWER(TRIM(c.email))
+               AND c.domation_subscriber_id = s.id
             SET s.contact_id = c.id
             WHERE s.workspace_id = ?
               AND (s.contact_id IS NULL OR s.contact_id = 0)
         ")->execute([$wsId]);
 
-        // 2. Link existing unlinked subscribers to contacts by phone
+        // 1b. Link existing unlinked subscribers to contacts by indexed email
+        $pdo->prepare("
+            UPDATE subscribers s
+            INNER JOIN contacts c
+                ON c.deleted_at IS NULL
+               AND c.email IS NOT NULL
+               AND c.email != ''
+               AND s.email = c.email
+            SET s.contact_id = c.id
+            WHERE s.workspace_id = ?
+              AND (s.contact_id IS NULL OR s.contact_id = 0)
+        ")->execute([$wsId]);
+
+        // 2. Link existing unlinked subscribers to contacts by indexed phone
         $pdo->prepare("
             UPDATE subscribers s
             INNER JOIN contacts c
                 ON c.deleted_at IS NULL
                AND c.phone IS NOT NULL
-               AND TRIM(c.phone) != ''
-               AND (s.phone_number = c.phone OR s.phone = c.phone)
+               AND c.phone != ''
+               AND s.phone_number = c.phone
             SET s.contact_id = c.id
             WHERE s.workspace_id = ?
               AND (s.contact_id IS NULL OR s.contact_id = 0)
@@ -111,9 +170,9 @@ function ensureAllCrmContactsSyncedForFilter(PDO $pdo, int $workspaceId = 1): vo
             INSERT IGNORE INTO subscribers (
                 id, workspace_id, contact_id, email, email_norm,
                 first_name, last_name, phone_number, phone, phone_norm9,
-                city, country, job_title, company,
+                city, country, job_title, company_name,
                 stage_id, pipeline_status, lead_status, program, owner_id, salesperson,
-                status, source_type, joined_at, created_at, updated_at
+                status, source, joined_at, created_at, updated_at
             )
             SELECT
                 CONCAT('crm_', c.id),
@@ -147,7 +206,7 @@ function ensureAllCrmContactsSyncedForFilter(PDO $pdo, int $workspaceId = 1): vo
                 c.owner_id,
                 u.full_name,
                 CASE
-                    WHEN c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien') THEN 'customer'
+                    WHEN c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien') OR ps.is_won = 1 THEN 'customer'
                     ELSE 'active'
                 END,
                 COALESCE(NULLIF(c.source, ''), 'crm_sync'),
@@ -158,11 +217,6 @@ function ensureAllCrmContactsSyncedForFilter(PDO $pdo, int $workspaceId = 1): vo
             LEFT JOIN users u ON u.id = c.owner_id
             LEFT JOIN pipeline_stages ps ON ps.id = c.stage_id
             WHERE c.deleted_at IS NULL
-              AND (
-                  (c.email IS NOT NULL AND TRIM(c.email) != '')
-                  OR (c.phone IS NOT NULL AND TRIM(c.phone) != '')
-                  OR (c.mobile IS NOT NULL AND TRIM(c.mobile) != '')
-              )
               AND NOT EXISTS (
                   SELECT 1 FROM subscribers s2
                   WHERE s2.contact_id = c.id AND s2.workspace_id = ?
@@ -177,7 +231,7 @@ function ensureAllCrmContactsSyncedForFilter(PDO $pdo, int $workspaceId = 1): vo
             LEFT JOIN pipeline_stages ps ON ps.id = c.stage_id
             SET
                 s.stage_id = c.stage_id,
-                s.pipeline_status = COALESCE(NULLIF(c.pipeline_status, ''), ps.system_slug, s.pipeline_status),
+                s.pipeline_status = COALESCE(NULLIF(c.pipeline_status, ''), ps.system_slug, s.pipeline_status, 'new_lead'),
                 s.lead_status = COALESCE(NULLIF(c.lead_status, ''), s.lead_status, 'active'),
                 s.program = COALESCE(NULLIF(c.program, ''), s.program),
                 s.owner_id = c.owner_id,
@@ -192,11 +246,12 @@ function ensureAllCrmContactsSyncedForFilter(PDO $pdo, int $workspaceId = 1): vo
               )
         ")->execute([$wsId]);
 
-        // 5. Backfill contacts.domation_subscriber_id where missing
+        // 5. Backfill contacts.domation_subscriber_id where missing (preserve updated_at)
         $pdo->prepare("
             UPDATE contacts c
             INNER JOIN subscribers s ON s.contact_id = c.id AND s.workspace_id = ?
-            SET c.domation_subscriber_id = s.id
+            SET c.domation_subscriber_id = s.id,
+                c.updated_at = c.updated_at
             WHERE c.deleted_at IS NULL
               AND (c.domation_subscriber_id IS NULL OR c.domation_subscriber_id = '')
         ")->execute([$wsId]);
@@ -225,6 +280,50 @@ function buildSegmentWhereClause($criteriaJson, $workspaceId, $segmentId = null)
             $groups = $groups['groups'];
         } elseif (isset($groups['conditions']) && is_array($groups['conditions'])) {
             $groups = [$groups];
+        }
+
+        // Optimization: If top-level logic is OR and all groups are single-condition positive crm_stage_id/stage_id filters,
+        // collapse them into one group with comma-separated values so MySQL executes a single IN(...) + EXISTS clause.
+        if ($topLogic === 'OR' && count($groups) > 1) {
+            $canCollapseStageGroups = true;
+            $collapsedStageVals = [];
+            foreach ($groups as $gCheck) {
+                $gConds = $gCheck['conditions'] ?? [];
+                if (!is_array($gConds) || count($gConds) !== 1) {
+                    $canCollapseStageGroups = false;
+                    break;
+                }
+                $c0 = $gConds[0];
+                $f0 = trim((string)($c0['field'] ?? ''));
+                $op0 = trim((string)($c0['operator'] ?? 'is'));
+                $v0 = $c0['value'] ?? '';
+                if (is_array($v0)) {
+                    $v0 = implode(',', array_map('strval', $v0));
+                } else {
+                    $v0 = trim((string)$v0);
+                }
+                if (
+                    !in_array($f0, ['crm_stage_id', 'crm_stage', 'stage_id', 'pipeline_status', 'crm_pipeline_status'], true) ||
+                    !in_array($op0, ['is', 'equals', 'contains', 'in'], true) ||
+                    $v0 === ''
+                ) {
+                    $canCollapseStageGroups = false;
+                    break;
+                }
+                $collapsedStageVals[] = $v0;
+            }
+            if ($canCollapseStageGroups && !empty($collapsedStageVals)) {
+                $groups = [[
+                    'id' => $groups[0]['id'] ?? 'grp_collapsed_stages',
+                    'logic' => 'AND',
+                    'conditions' => [[
+                        'id' => 'c_collapsed_stages',
+                        'field' => 'crm_stage_id',
+                        'operator' => 'is',
+                        'value' => implode(',', $collapsedStageVals)
+                    ]]
+                ]];
+            }
         }
 
         $groupSqls = [];
@@ -420,21 +519,167 @@ function buildSegmentWhereClause($criteriaJson, $workspaceId, $segmentId = null)
                         $condSqls[] = "((s.stage_id IS NOT NULL AND s.stage_id > 0) OR (s.pipeline_status IS NOT NULL AND s.pipeline_status != ''))";
                     } else if ($val !== '') {
                         $isNeg = in_array($op, ['is_not', 'not_contains', 'not_equals'], true);
-                        $tokens = array_values(array_filter(array_map('trim', explode(',', $val)), fn($t) => $t !== ''));
-                        $stOrs = [];
+                        $rawTokens = array_values(array_filter(array_map('trim', explode(',', $val)), fn($t) => $t !== ''));
+                        // Expand range tokens like "1-2", "3-12", "13-14", "31-32", "33-42", "43-44"
+                        $tokens = [];
+                        foreach ($rawTokens as $rt) {
+                            if (preg_match('/^(\d{1,3})\s*-\s*(\d{1,3})$/', $rt, $rm)) {
+                                $rStart = (int)$rm[1];
+                                $rEnd = (int)$rm[2];
+                                if ($rStart <= $rEnd && ($rEnd - $rStart) <= 50) {
+                                    for ($rIdx = $rStart; $rIdx <= $rEnd; $rIdx++) {
+                                        $tokens[] = (string)$rIdx;
+                                    }
+                                    continue;
+                                }
+                            }
+                            $tokens[] = $rt;
+                        }
+
+                        $stageCatalog = getCrmPipelineStageCatalog($pdo);
+                        $matchedStageIds = [];
+                        $matchedStageNums = [];
+                        $matchedSlugs = [];
+                        $fallbackTokens = [];
+
                         foreach ($tokens as $tok) {
+                            $tokLow = strtolower(trim($tok));
                             if (is_numeric($tok)) {
-                                $sidInt = (int)$tok;
-                                $stOrs[] = "(s.stage_id = ? OR EXISTS (SELECT 1 FROM contacts c_st LEFT JOIN pipeline_stages ps_st ON ps_st.id = c_st.stage_id WHERE c_st.id = s.contact_id AND c_st.deleted_at IS NULL AND (c_st.stage_id = ? OR ps_st.order_index = ?)))";
-                                array_push($allParams, $sidInt, $sidInt, max(0, $sidInt - 1));
+                                $num = (int)$tok;
+                                if (isset($stageCatalog['by_id'][$num])) {
+                                    $stMeta = $stageCatalog['by_id'][$num];
+                                    $matchedStageIds[] = (int)$stMeta['id'];
+                                    $matchedStageNums[] = (int)$stMeta['stage_num'];
+                                    if (!empty($stMeta['slug'])) {
+                                        $matchedSlugs[] = (string)$stMeta['slug'];
+                                    }
+                                } elseif (isset($stageCatalog['by_num'][$num])) {
+                                    $stMeta = $stageCatalog['by_num'][$num];
+                                    $matchedStageIds[] = (int)$stMeta['id'];
+                                    $matchedStageNums[] = (int)$stMeta['stage_num'];
+                                    if (!empty($stMeta['slug'])) {
+                                        $matchedSlugs[] = (string)$stMeta['slug'];
+                                    }
+                                } else {
+                                    $matchedStageIds[] = $num;
+                                    if ($num >= 1 && $num <= 14) {
+                                        $matchedStageNums[] = $num;
+                                    }
+                                }
+                            } elseif (isset($stageCatalog['by_slug'][$tokLow])) {
+                                $stMeta = $stageCatalog['by_slug'][$tokLow];
+                                $matchedStageIds[] = (int)$stMeta['id'];
+                                $matchedStageNums[] = (int)$stMeta['stage_num'];
+                                $matchedSlugs[] = (string)$stMeta['slug'];
                             } else {
-                                $likeSt = '%' . $tok . '%';
-                                $stOrs[] = "(s.pipeline_status = ? OR s.pipeline_status LIKE ? OR EXISTS (SELECT 1 FROM contacts c_st LEFT JOIN pipeline_stages ps_st ON ps_st.id = c_st.stage_id WHERE c_st.id = s.contact_id AND c_st.deleted_at IS NULL AND (c_st.pipeline_status = ? OR ps_st.system_slug = ? OR ps_st.name LIKE ?)))";
-                                array_push($allParams, $tok, $likeSt, $tok, $tok, $likeSt);
+                                // Match by stage number prefix (e.g. "01 – New Lead") or name substring
+                                $foundInCat = false;
+                                if (preg_match('/^0?(\d{1,2})\b/', $tokLow, $nm) && isset($stageCatalog['by_num'][(int)$nm[1]])) {
+                                    $stMeta = $stageCatalog['by_num'][(int)$nm[1]];
+                                    $matchedStageIds[] = (int)$stMeta['id'];
+                                    $matchedStageNums[] = (int)$stMeta['stage_num'];
+                                    if (!empty($stMeta['slug'])) {
+                                        $matchedSlugs[] = (string)$stMeta['slug'];
+                                    }
+                                    $foundInCat = true;
+                                }
+                                if (!$foundInCat) {
+                                    foreach ($stageCatalog['by_id'] as $stMeta) {
+                                        if (strpos($stMeta['name_lc'], $tokLow) !== false) {
+                                            $matchedStageIds[] = (int)$stMeta['id'];
+                                            $matchedStageNums[] = (int)$stMeta['stage_num'];
+                                            if (!empty($stMeta['slug'])) {
+                                                $matchedSlugs[] = (string)$stMeta['slug'];
+                                            }
+                                            $foundInCat = true;
+                                        }
+                                    }
+                                }
+                                if (!$foundInCat) {
+                                    $fallbackTokens[] = $tok;
+                                }
                             }
                         }
-                        if (!empty($stOrs)) {
-                            $combined = '(' . implode(' OR ', $stOrs) . ')';
+
+                        // Include both actual DB stage IDs (e.g. 31..44) and 1-based stage numbers (1..14) if legacy rows stored stage_num
+                        $allCandidateStageIds = array_values(array_unique(array_filter(
+                            array_merge($matchedStageIds, $matchedStageNums),
+                            fn($v) => (int)$v > 0
+                        )));
+                        $matchedStageNums = array_values(array_unique($matchedStageNums));
+                        $matchedSlugs = array_values(array_unique(array_filter($matchedSlugs, fn($v) => $v !== '')));
+
+                        $includesStep1 = in_array(1, $matchedStageNums, true);
+                        $includesQualifiedRange = count(array_intersect($matchedStageNums, [3, 4, 5, 6, 7, 8, 9, 10, 11, 12])) > 0;
+                        $includesStep13 = in_array(13, $matchedStageNums, true);
+                        $includesStep14 = in_array(14, $matchedStageNums, true);
+
+                        if ($includesQualifiedRange && in_array(6, $matchedStageNums, true)) {
+                            $matchedSlugs[] = 'nop_ho_so';
+                        }
+                        if ($includesStep13) {
+                            $matchedSlugs = array_merge($matchedSlugs, ['deposit_tuition_payment', 'dong_le_phi_ho_so', 'dat_coc', 'won']);
+                        }
+                        if ($includesStep14) {
+                            $matchedSlugs = array_merge($matchedSlugs, ['enrolled', 'hoc_vien']);
+                        }
+                        $matchedSlugs = array_values(array_unique(array_filter($matchedSlugs, fn($v) => $v !== '')));
+
+                        $subDirectOrs = [];
+                        $subDirectParams = [];
+                        $contactSubOrs = [];
+                        $contactSubParams = [];
+
+                        if (!empty($allCandidateStageIds)) {
+                            $phIds = implode(',', array_fill(0, count($allCandidateStageIds), '?'));
+                            $subDirectOrs[] = "s.stage_id IN ($phIds)";
+                            $subDirectParams = array_merge($subDirectParams, $allCandidateStageIds);
+
+                            $contactSubOrs[] = "c_st.stage_id IN ($phIds)";
+                            $contactSubParams = array_merge($contactSubParams, $allCandidateStageIds);
+                        }
+
+                        if (!empty($matchedSlugs)) {
+                            $phSlugs = implode(',', array_fill(0, count($matchedSlugs), '?'));
+                            $subDirectOrs[] = "((s.stage_id IS NULL OR s.stage_id = 0) AND s.pipeline_status IN ($phSlugs))";
+                            $subDirectParams = array_merge($subDirectParams, $matchedSlugs);
+
+                            $contactSubOrs[] = "((c_st.stage_id IS NULL OR c_st.stage_id = 0) AND c_st.pipeline_status IN ($phSlugs))";
+                            $contactSubParams = array_merge($contactSubParams, $matchedSlugs);
+                        }
+
+                        // Step 01 – New Lead is the default stage for CRM leads that haven't been assigned a stage_id yet
+                        if ($includesStep1) {
+                            $contactSubOrs[] = "((c_st.stage_id IS NULL OR c_st.stage_id = 0) AND COALESCE(c_st.pipeline_status, '') IN ('', 'new_lead', 'contact_attempted') AND COALESCE(c_st.status, '') != 'customer')";
+                        }
+
+                        // Step 14 – Enrolled also includes official students / customers (`status = 'customer'`)
+                        if ($includesStep14) {
+                            $subDirectOrs[] = "s.status = 'customer'";
+                            $contactSubOrs[] = "c_st.status = 'customer'";
+                        }
+
+                        foreach ($fallbackTokens as $fbTok) {
+                            $likeFb = '%' . $fbTok . '%';
+                            $subDirectOrs[] = "(s.pipeline_status = ? OR s.pipeline_status LIKE ?)";
+                            array_push($subDirectParams, $fbTok, $likeFb);
+
+                            $contactSubOrs[] = "(c_st.pipeline_status = ? OR c_st.pipeline_status LIKE ?)";
+                            array_push($contactSubParams, $fbTok, $likeFb);
+                        }
+
+                        $finalStageBranches = [];
+                        if (!empty($subDirectOrs)) {
+                            $finalStageBranches[] = '(' . implode(' OR ', $subDirectOrs) . ')';
+                            $allParams = array_merge($allParams, $subDirectParams);
+                        }
+                        if (!empty($contactSubOrs)) {
+                            $finalStageBranches[] = "EXISTS (SELECT 1 FROM contacts c_st WHERE c_st.id = s.contact_id AND c_st.deleted_at IS NULL AND (" . implode(' OR ', $contactSubOrs) . "))";
+                            $allParams = array_merge($allParams, $contactSubParams);
+                        }
+
+                        if (!empty($finalStageBranches)) {
+                            $combined = '(' . implode(' OR ', $finalStageBranches) . ')';
                             $condSqls[] = $isNeg ? "NOT $combined" : $combined;
                         }
                     }
@@ -964,10 +1209,246 @@ function buildSegmentWhereClause($criteriaJson, $workspaceId, $segmentId = null)
             $allParams[] = $segmentId;
         }
 
-        return ['sql' => $sql, 'params' => $allParams];
+        return ['sql' => $sql, 'params' => array_values($allParams)];
     } catch (Throwable $e) {
         error_log("buildSegmentWhereClause Error: " . $e->getMessage());
         return ['sql' => '1=0', 'params' => []];
+    }
+}
+
+/**
+ * Compatibility helper for callers that expect buildSegmentSql($pdo, $workspaceId, $conditionsJson, $segmentId).
+ */
+function buildSegmentSql(PDO $pdo, int $workspaceId, $conditionsJson, ?string $segmentId = null): array
+{
+    return buildSegmentWhereClause($conditionsJson, $workspaceId, $segmentId);
+}
+
+/**
+ * Idempotently ensures the `segments` table has both `criteria` and `conditions`
+ * columns (plus `description` and `phone_count`) so all endpoints (`segments.php`,
+ * `subscribers.php`, `campaigns.php`, `flows.php`) work without 1054 Unknown column errors.
+ */
+function ensureSegmentsTableSchema(PDO $pdo): void
+{
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
+
+    try {
+        $cols = [];
+        $stmt = $pdo->query("SHOW COLUMNS FROM `segments`");
+        if ($stmt) {
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                if (!empty($r['Field'])) {
+                    $cols[$r['Field']] = true;
+                }
+            }
+        }
+        if (empty($cols) || $pdo->inTransaction()) {
+            return;
+        }
+        if (!isset($cols['description'])) {
+            $pdo->exec("ALTER TABLE `segments` ADD COLUMN `description` TEXT NULL AFTER `name`");
+        }
+        if (!isset($cols['criteria'])) {
+            $pdo->exec("ALTER TABLE `segments` ADD COLUMN `criteria` LONGTEXT NULL AFTER `name`");
+        }
+        if (!isset($cols['conditions'])) {
+            $pdo->exec("ALTER TABLE `segments` ADD COLUMN `conditions` LONGTEXT NULL");
+        }
+        if (!isset($cols['phone_count'])) {
+            $pdo->exec("ALTER TABLE `segments` ADD COLUMN `phone_count` INT DEFAULT 0 AFTER `subscriber_count`");
+        }
+        // Keep criteria and conditions mirrored for any pre-existing rows
+        $pdo->exec("UPDATE `segments` SET `criteria` = `conditions` WHERE (`criteria` IS NULL OR `criteria` = '') AND `conditions` IS NOT NULL AND `conditions` != ''");
+        $pdo->exec("UPDATE `segments` SET `conditions` = `criteria` WHERE (`conditions` IS NULL OR `conditions` = '') AND `criteria` IS NOT NULL AND `criteria` != ''");
+    } catch (Throwable $e) {
+        error_log("ensureSegmentsTableSchema warning: " . $e->getMessage());
+    }
+}
+
+/**
+ * Ensures the 4 core CRM Pipeline dynamic segments exist in `segments` for the given workspace:
+ * 1. "Chưa tương tác được" (Pipeline Stage 01 -> 02)
+ * 2. "Qualified"           (Pipeline Stage 03 -> 12)
+ * 3. "Won"                 (Pipeline Stage 13 -> 14)
+ * 4. "Học viên chính thức" (Pipeline Stage 14)
+ *
+ * Idempotent: Only inserts missing default segments (never overwrites user-customized rules unless empty),
+ * and refreshes cached subscriber_count and phone_count when needed.
+ */
+function ensureDefaultPipelineSegments(PDO $pdo, int $workspaceId = 1, bool $forceSync = false): array
+{
+    static $seededWorkspaces = [];
+    $wsId = $workspaceId > 0 ? $workspaceId : 1;
+    if (!$forceSync && !empty($seededWorkspaces[$wsId])) {
+        return $seededWorkspaces[$wsId];
+    }
+
+    try {
+        $GLOBALS['pdo'] = $pdo;
+        ensureSegmentsTableSchema($pdo);
+        if (!class_exists('DomationContactMatcher') && file_exists(__DIR__ . '/../utils/DomationContactMatcher.php')) {
+            require_once __DIR__ . '/../utils/DomationContactMatcher.php';
+        }
+        if (class_exists('DomationContactMatcher') && method_exists('DomationContactMatcher', 'ensureColumns')) {
+            DomationContactMatcher::ensureColumns($pdo);
+        }
+
+        $catalog = getCrmPipelineStageCatalog($pdo);
+        $buildStageGroups = function (array $stageNums) use ($catalog): array {
+            $groups = [];
+            foreach ($stageNums as $num) {
+                $stageId = isset($catalog['by_num'][$num]) ? (int)$catalog['by_num'][$num]['id'] : (int)$num;
+                $groups[] = [
+                    'id' => 'grp_pipeline_stage_' . $num,
+                    'logic' => 'AND',
+                    'conditions' => [
+                        [
+                            'id' => 'cond_pipeline_stage_' . $num,
+                            'field' => 'crm_stage_id',
+                            'operator' => 'is',
+                            'value' => (string)$stageId
+                        ]
+                    ]
+                ];
+            }
+            return $groups;
+        };
+
+        $defaultDefs = [
+            [
+                'id' => $wsId === 1 ? 'seg_pipeline_uncontacted_01_02' : ('seg_pipeline_uncontacted_01_02_ws' . $wsId),
+                'name' => 'Chưa tương tác được',
+                'description' => 'Pipeline: 01 – New Lead → 02 – Contact Attempted',
+                'stage_nums' => [1, 2],
+                'created_at' => '2026-01-01 08:00:04'
+            ],
+            [
+                'id' => $wsId === 1 ? 'seg_pipeline_qualified_03_12' : ('seg_pipeline_qualified_03_12_ws' . $wsId),
+                'name' => 'Qualified',
+                'description' => 'Pipeline: 03 – Connected → 12 – Offer / Scholarship Accepted',
+                'stage_nums' => [3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+                'created_at' => '2026-01-01 08:00:03'
+            ],
+            [
+                'id' => $wsId === 1 ? 'seg_pipeline_won_13_14' : ('seg_pipeline_won_13_14_ws' . $wsId),
+                'name' => 'Won',
+                'description' => 'Pipeline: 13 – Deposit / Tuition Payment → 14 – Enrolled',
+                'stage_nums' => [13, 14],
+                'created_at' => '2026-01-01 08:00:02'
+            ],
+            [
+                'id' => $wsId === 1 ? 'seg_pipeline_enrolled_14' : ('seg_pipeline_enrolled_14_ws' . $wsId),
+                'name' => 'Học viên chính thức',
+                'description' => 'Pipeline: 14 – Enrolled',
+                'stage_nums' => [14],
+                'created_at' => '2026-01-01 08:00:01'
+            ],
+        ];
+
+        $stmtCheck = $pdo->prepare("SELECT id, name, COALESCE(NULLIF(criteria, ''), conditions) AS criteria, subscriber_count, phone_count FROM segments WHERE workspace_id = ?");
+        $stmtCheck->execute([$wsId]);
+        $existingRows = $stmtCheck->fetchAll(PDO::FETCH_ASSOC);
+
+        $existingById = [];
+        $existingByName = [];
+        foreach ($existingRows as $er) {
+            $existingById[(string)$er['id']] = $er;
+            $existingByName[mb_strtolower(trim((string)$er['name']), 'UTF-8')] = $er;
+        }
+
+        $needsSync = $forceSync;
+        foreach ($defaultDefs as $def) {
+            $nameKey = mb_strtolower($def['name'], 'UTF-8');
+            $matched = $existingById[$def['id']] ?? $existingByName[$nameKey] ?? null;
+            if (!$matched || (int)($matched['subscriber_count'] ?? 0) === 0) {
+                $needsSync = true;
+                break;
+            }
+        }
+
+        if ($needsSync) {
+            ensureAllCrmContactsSyncedForFilter($pdo, $wsId);
+        }
+
+        $results = [];
+        foreach ($defaultDefs as $def) {
+            $nameKey = mb_strtolower($def['name'], 'UTF-8');
+            $matchedRow = $existingById[$def['id']] ?? $existingByName[$nameKey] ?? null;
+            $groups = $buildStageGroups($def['stage_nums']);
+            $conditionsJson = json_encode($groups, JSON_UNESCAPED_UNICODE);
+
+            if (!$matchedRow) {
+                $segId = $def['id'];
+                $whereClause = buildSegmentWhereClause($groups, $wsId, $segId);
+                $cStmt = $pdo->prepare("
+                    SELECT
+                        COUNT(*),
+                        COUNT(CASE WHEN (s.phone_number IS NOT NULL AND s.phone_number != '') OR (s.phone IS NOT NULL AND s.phone != '') THEN 1 END)
+                    FROM subscribers s
+                    WHERE s.status IN ('active', 'lead', 'customer')
+                      AND s.workspace_id = ?
+                      AND (" . $whereClause['sql'] . ")
+                ");
+                $cStmt->execute(array_values(array_merge([$wsId], $whereClause['params'])));
+                [$cnt, $phoneCnt] = $cStmt->fetch(PDO::FETCH_NUM) ?: [0, 0];
+
+                $insStmt = $pdo->prepare("
+                    INSERT INTO segments (id, workspace_id, name, description, criteria, conditions, subscriber_count, phone_count, auto_cleanup_days, notify_on_join, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)
+                ");
+                $insStmt->execute([$segId, $wsId, $def['name'], $def['description'], $conditionsJson, $conditionsJson, (int)$cnt, (int)$phoneCnt, $def['created_at']]);
+                $results[$def['name']] = ['id' => $segId, 'count' => (int)$cnt, 'phone_count' => (int)$phoneCnt, 'action' => 'inserted'];
+            } else {
+                $segId = (string)$matchedRow['id'];
+                $currConds = trim((string)($matchedRow['criteria'] ?? ''));
+                $useConds = ($forceSync || $currConds === '' || $currConds === '[]') ? $conditionsJson : $currConds;
+
+                if ($forceSync || $currConds === '' || $currConds === '[]' || (int)($matchedRow['subscriber_count'] ?? 0) === 0) {
+                    $whereClause = buildSegmentWhereClause($useConds, $wsId, $segId);
+                    $cStmt = $pdo->prepare("
+                        SELECT
+                            COUNT(*),
+                            COUNT(CASE WHEN (s.phone_number IS NOT NULL AND s.phone_number != '') OR (s.phone IS NOT NULL AND s.phone != '') THEN 1 END)
+                        FROM subscribers s
+                        WHERE s.status IN ('active', 'lead', 'customer')
+                          AND s.workspace_id = ?
+                          AND (" . $whereClause['sql'] . ")
+                    ");
+                    $cStmt->execute(array_values(array_merge([$wsId], $whereClause['params'])));
+                    [$cnt, $phoneCnt] = $cStmt->fetch(PDO::FETCH_NUM) ?: [0, 0];
+
+                    $updStmt = $pdo->prepare("
+                        UPDATE segments
+                        SET description = COALESCE(NULLIF(description, ''), ?),
+                            criteria = ?,
+                            conditions = ?,
+                            subscriber_count = ?,
+                            phone_count = ?
+                        WHERE id = ? AND workspace_id = ?
+                    ");
+                    $updStmt->execute([$def['description'], $useConds, $useConds, (int)$cnt, (int)$phoneCnt, $segId, $wsId]);
+                    $results[$def['name']] = ['id' => $segId, 'count' => (int)$cnt, 'phone_count' => (int)$phoneCnt, 'action' => 'updated'];
+                } else {
+                    $results[$def['name']] = [
+                        'id' => $segId,
+                        'count' => (int)$matchedRow['subscriber_count'],
+                        'phone_count' => (int)($matchedRow['phone_count'] ?? 0),
+                        'action' => 'kept'
+                    ];
+                }
+            }
+        }
+
+        $seededWorkspaces[$wsId] = $results;
+        return $results;
+    } catch (Throwable $e) {
+        error_log("ensureDefaultPipelineSegments warning: " . $e->getMessage());
+        return [];
     }
 }
 ?>

@@ -59,11 +59,17 @@ export const getClientCurrentContext = () => {
       };
     }
 
+    const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+    const activeFilters = (typeof window !== 'undefined' && pathname.includes('/contacts'))
+      ? ((window as any).__MYERP_CONTACTS_ACTIVE_FILTERS__ || null)
+      : null;
+
     return {
-      pathname: typeof window !== 'undefined' ? window.location.pathname : '',
+      pathname,
       search: typeof window !== 'undefined' ? window.location.search : '',
       page_title: typeof document !== 'undefined' ? document.title : '',
-      active_entity: activeEntity
+      active_entity: activeEntity,
+      active_filters: activeFilters
     };
   } catch (e) {
     return null;
@@ -585,6 +591,39 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   selectConversation: async (id: number) => {
+    if (id === -9000001) {
+      const virtualAiConv: ChatConversation = {
+        id: -9000001,
+        type: 'direct',
+        title: 'SI IDEAS',
+        avatar_url: '/stickers/ideas/ideas_3.webp',
+        created_by: 9000001,
+        last_message_at: new Date().toISOString(),
+        participant_count: 2,
+        unread_count: 0,
+        is_pinned: true,
+        is_muted: false,
+        other_user: {
+          id: 9000001,
+          full_name: 'SI IDEAS',
+          avatar_url: '/stickers/ideas/ideas_3.webp',
+          job_title: 'Smart Multi Agent',
+          role: 'bot',
+          is_active: true,
+          is_online: true
+        } as any,
+        last_msg_content: 'Chào bạn! Tôi là SI IDEAS — Smart Multi Agent Viện IDEAS.',
+        last_msg_created_at: new Date().toISOString()
+      };
+      set({
+        activeConversationId: -9000001,
+        activeConversation: virtualAiConv,
+        loadingMessages: false,
+        replyingTo: null
+      });
+      await get().startDirectChat(9000001);
+      return;
+    }
     if (!id || id <= 0) {
       if (currentSelectAbortController) {
         try {
@@ -839,8 +878,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   sendMessage: async ({ content, message_type = 'text', metadata = null, reply_to_id = null, conversation_id }) => {
     const { replyingTo } = get();
-    const activeConversationId = Number(conversation_id || get().activeConversationId || 0);
-    if (!activeConversationId) return null;
+    let activeConversationId = Number(conversation_id || get().activeConversationId || 0);
+    if (activeConversationId === -9000001) {
+      await get().startDirectChat(9000001);
+      activeConversationId = Number(get().activeConversationId || 0);
+    }
+    if (!activeConversationId || activeConversationId <= 0) return null;
 
     const actualReplyId = reply_to_id !== undefined ? reply_to_id : (replyingTo ? replyingTo.id : null);
     const activeMsgs = get().messagesByConvId[activeConversationId] || [];

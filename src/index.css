@@ -762,7 +762,7 @@
 [data-theme="dark"] select,
 [data-theme="dark"] input[type="text"],
 [data-theme="dark"] input[type="date"],
-[data-theme="dark"] textarea {
+[data-theme="dark"] textarea:not(.chat-input-textarea) {
   background: #141416 !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   color: #ffffff !important;
@@ -775,7 +775,7 @@
 [data-theme="dark"] select:focus,
 [data-theme="dark"] input[type="text"]:focus,
 [data-theme="dark"] input[type="date"]:focus,
-[data-theme="dark"] textarea:focus {
+[data-theme="dark"] textarea:not(.chat-input-textarea):focus {
   border-color: var(--color-primary) !important;
   box-shadow: 0 0 0 3px rgba(255, 69, 58, 0.18), inset 0 1px 2px rgba(0,0,0,0.4) !important;
 }
@@ -4190,7 +4190,14 @@ textarea:not(.chat-input-textarea), .form-textarea, textarea.form-input, textare
 
 .chat-input-textarea:focus,
 .chat-input-textarea:focus-visible,
+.chat-input-textarea,
+.chat-input-textarea:focus,
+.chat-input-textarea:focus-visible,
 .chat-input-textarea:active {
+  background: transparent !important;
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+  caret-color: #dc2626 !important;
   outline: none !important;
   border: none !important;
   box-shadow: none !important;
@@ -4376,8 +4383,8 @@ header, .navbar {
   border-collapse: collapse !important;
 }
 
-/* Ensure single line content and ellipsis for long text in cells (excluding email editor / presentation tables) */
-table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *) td:not(.email-canvas-cell),
+/* Ensure single line content and ellipsis for long text in cells (excluding email editor / presentation tables and multi-line note cells) */
+table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *) td:not(.email-canvas-cell):not(.col-last-note),
 table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *) th:not(.email-canvas-cell) {
   white-space: nowrap !important;
   text-overflow: ellipsis !important;
@@ -7287,3 +7294,22 @@ tr.erp-row-focused {
   @tailwind utilities;
 }
 
+
+/* Global 4-Column KPI Grid for Dashboard & SalesLeadPerformanceDeck */
+.dashboard-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+@media (max-width: 1100px) {
+  .dashboard-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .dashboard-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+}

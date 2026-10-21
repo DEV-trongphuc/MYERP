@@ -166,8 +166,8 @@ $where
 GROUP BY ac.id
 ORDER BY ac.created_at DESC";
 
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
+    try { $stmt = $pdo->prepare($sql); $stmt->execute($params); } catch (\Throwable $eQ) { $sqlFb = str_replace(["COUNT(DISTINCT aoc.id) as queries_count", "LEFT JOIN ai_org_conversations aoc ON aoc.property_id = ac.id AND aoc.status != 'deleted'"], ["0 as queries_count", ""], $sql); $stmt = $pdo->prepare($sqlFb); $stmt->execute($params); }
+    // executed above with fallback
     $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     echo json_encode(['success' => true, 'data' => $categories]);
@@ -357,8 +357,8 @@ WHERE 1=1";
 
     $sql .= " GROUP BY ac.id ORDER BY ac.created_at DESC";
 
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
+    try { $stmt = $pdo->prepare($sql); $stmt->execute($params); } catch (\Throwable $eQ) { $sqlFb = str_replace(["COUNT(DISTINCT aoc.id) as queries_count", "LEFT JOIN ai_org_conversations aoc ON aoc.property_id = ac.id AND aoc.status != 'deleted'"], ["0 as queries_count", ""], $sql); $stmt = $pdo->prepare($sqlFb); $stmt->execute($params); }
+    // executed above with fallback
 
     $chatbots = [];
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -497,8 +497,8 @@ function getChatbot($pdo, $id, $adminId)
         $params[] = $adminId;
     }
 
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
+    try { $stmt = $pdo->prepare($sql); $stmt->execute($params); } catch (\Throwable $eQ) { $sqlFb = str_replace(["COUNT(DISTINCT aoc.id) as queries_count", "LEFT JOIN ai_org_conversations aoc ON aoc.property_id = ac.id AND aoc.status != 'deleted'"], ["0 as queries_count", ""], $sql); $stmt = $pdo->prepare($sqlFb); $stmt->execute($params); }
+    // executed above with fallback
 
     if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         echo json_encode(['success' => true, 'data' => $row]);

@@ -50,7 +50,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
     // Attachment States
-    const [attachments, setAttachments] = useState<Attachment[]>(config.attachments || []);
+    const [attachments, setAttachments] = useState<Attachment[]>(Array.isArray(config.attachments) ? config.attachments : []);
     const [isUploading, setIsUploading] = useState(false);
     const [isPersonalizedMode, setIsPersonalizedMode] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -71,12 +71,16 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
     useEffect(() => {
         api.get<Template[]>('templates').then(res => {
             if (res.success) {
-                const personalTemplates = res.data.filter(t => !t.id.startsWith('sys_'));
+                const raw = Array.isArray(res.data) ? res.data : ((res.data as any)?.data || []);
+                const personalTemplates = raw.filter((t: any) => t && !String(t.id || '').startsWith('sys_'));
                 setTemplates(personalTemplates);
             }
         });
         api.get<TemplateGroup[]>('template_groups').then(res => {
-            if (res.success) setGroups(res.data);
+            if (res.success) {
+                const raw = Array.isArray(res.data) ? res.data : ((res.data as any)?.data || []);
+                setGroups(raw);
+            }
         });
     }, []);  
 
@@ -592,8 +596,8 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
             {/* Overlay for Picker Backdrop via Portal */}
             {showPicker && typeof document !== 'undefined' && createPortal(
                 <>
-                    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[2147483642]" onClick={() => setShowPicker(false)}></div>
-                    <div className="bg-white rounded-xl border-2 border-slate-100 shadow-2xl animate-in fade-in zoom-in-95 duration-200 fixed inset-4 md:inset-12 lg:inset-20 z-[2147483643] overflow-hidden flex flex-col max-w-6xl mx-auto my-auto max-h-[90vh]">
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[2147483644]" style={{ zIndex: 2147483644 }} onClick={() => setShowPicker(false)}></div>
+                    <div className="bg-white rounded-xl border-2 border-slate-100 shadow-2xl animate-in fade-in zoom-in-95 duration-200 fixed inset-4 md:inset-12 lg:inset-20 z-[2147483645] overflow-hidden flex flex-col max-w-6xl mx-auto my-auto max-h-[90vh]" style={{ zIndex: 2147483645 }}>
                         <div className="p-5 border-b border-slate-100 flex justify-between items-center shrink-0">
                             <h3 className="font-bold text-slate-800 text-lg">Chọn mẫu Email</h3>
                             <button onClick={() => setShowPicker(false)} className="p-2 hover:bg-slate-100 text-slate-500 rounded-full transition-colors"><X className="w-5 h-5" /></button>
@@ -652,6 +656,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
             <FileLibraryModal
                 isOpen={isLibraryOpen}
                 onClose={() => setIsLibraryOpen(false)}
+                zIndex={2147483645}
                 onSelect={(picked) => {
                     const newAtts = picked.map(f => ({
                         id: generateId(),
@@ -668,7 +673,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
 
             {/* AI Email Editor Modal (Quick edit) */}
             {isEditingTemplate && selectedTemplate && typeof document !== 'undefined' && createPortal(
-                <div className="fixed inset-0 z-[2147483645] bg-slate-900/40 backdrop-blur-sm">
+                <div className="fixed inset-0 z-[2147483646] bg-slate-900/40 backdrop-blur-sm" style={{ zIndex: 2147483646 }}>
                     <EmailEditor
                         template={templates.find(t => t.id === selectedTemplate.id) || selectedTemplate}
                         groups={groups}

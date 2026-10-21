@@ -8,6 +8,7 @@ import {
 import Button from '../../common/Button';
 import Select from '../../common/Select';
 import { TemplateGroup } from '../../../types';
+import { getMktPortalRoot } from '../../../utils/portalRoot';
 import TemplateAccessModal, {
   type TemplateAccessConfig,
   type TemplateVisibilityMode,
@@ -405,11 +406,20 @@ const EmailTopBar: React.FC<EmailTopBarProps> = ({
       {/* Spacious Template Name & Category Modal */}
       {isNameModalOpen && createPortal(
         <div
-          className="fixed inset-0 z-[2147483647] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150"
+          className="fixed inset-0 z-[2147483646] flex items-center justify-center p-4 bg-black/60 backdrop-blur-[6px] animate-in fade-in duration-150"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 2147483646,
+            background: 'rgba(0, 0, 0, 0.6)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+          }}
           onClick={() => setIsNameModalOpen(false)}
         >
           <div
-            className="w-full max-w-lg bg-white rounded-[20px] border border-slate-200 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150"
+            className="relative z-10 w-full max-w-lg bg-white rounded-[20px] border border-slate-200 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150"
+            style={{ position: 'relative', zIndex: 10 }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -510,7 +520,7 @@ const EmailTopBar: React.FC<EmailTopBarProps> = ({
             </div>
           </div>
         </div>,
-        document.body
+        getMktPortalRoot()
       )}
     </div>
   );

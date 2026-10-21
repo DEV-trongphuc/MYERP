@@ -78,9 +78,9 @@ export const CustomModal: React.FC<CustomModalProps> = ({
     openedOverDrawerRef.current = false;
   }
 
-  const resolvedZIndex = zIndex
-    ? Math.min(Math.max(zIndex, 2147483640), 2147483646)
-    : 2147483645;
+  const resolvedZIndex = openedOverDrawerRef.current
+    ? (zIndex ? Math.min(Math.max(zIndex, 2147483640), 2147483646) : 2147483645)
+    : (zIndex ?? 2147483645);
 
   // Safe body scroll lock with reference count and LIFO Escape key handling
   useEffect(() => {

@@ -2443,15 +2443,8 @@ export const WorkChatModal: React.FC = () => {
                         role="button"
                         tabIndex={0}
                         onClick={async () => {
-                          if (c.id === -9000001) {
-                            const cid = await startDirectChat(9000001);
-                            if (cid) {
-                              selectConversation(cid);
-                              setActiveTab('chats');
-                            }
-                          } else {
-                            selectConversation(c.id);
-                          }
+                          setActiveTab('chats');
+                          await selectConversation(c.id);
                         }}
                         style={{
                           position: 'relative',

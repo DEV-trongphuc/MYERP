@@ -27,7 +27,7 @@ switch ($method) {
                 $sql = "SELECT 
                             s.status, 
                             COUNT(*) as count,
-                            SUM(CASE WHEN s.phone_number IS NOT NULL AND s.phone_number != '' THEN 1 ELSE 0 END) as phone_total
+                            SUM(CASE WHEN s.phone_number IS NOT NULL AND s.phone_number != '' AND s.phone_number != '0' THEN 1 ELSE 0 END) as phone_total
                         FROM subscriber_lists sl 
                         JOIN subscribers s ON sl.subscriber_id = s.id 
                         WHERE sl.list_id = ? AND s.workspace_id = ?
@@ -58,7 +58,7 @@ switch ($method) {
                 $reconcileList = function($pdo, $lid, $wsid) {
                     $stmtCount = $pdo->prepare("
                         SELECT COUNT(*) as total, 
-                               SUM(CASE WHEN s.phone_number IS NOT NULL AND s.phone_number != '' THEN 1 ELSE 0 END) as phone_total
+                               SUM(CASE WHEN s.phone_number IS NOT NULL AND s.phone_number != '' AND s.phone_number != '0' THEN 1 ELSE 0 END) as phone_total
                         FROM subscriber_lists sl
                         JOIN subscribers s ON sl.subscriber_id = s.id
                         WHERE sl.list_id = ? AND s.workspace_id = ?

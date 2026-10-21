@@ -402,6 +402,12 @@ const AudienceSelector: React.FC<AudienceSelectorProps> = ({
                 }
             });
 
+            if (rowObj.phone) {
+                const rawDigits = String(rowObj.phone).replace(/[^0-9]/g, '');
+                if (rawDigits.length < 7 || /^0+$/.test(rawDigits)) {
+                    rowObj.phone = '';
+                }
+            }
             // Tự động đặt tên nếu trống
             if (rowObj.email && !rowObj.fullName && !rowObj.firstName) {
                 rowObj.fullName = formatNameFromEmail(rowObj.email);

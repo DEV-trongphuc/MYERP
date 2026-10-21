@@ -53,9 +53,13 @@ const TemplateSelector: React.FC<TemplateSelectorProps> = ({ templates, selected
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
 
-  const filtered = templates.filter(t =>
-    t.name.toLowerCase().includes(search.toLowerCase()) ||
-    t.category.toLowerCase().includes(search.toLowerCase())
+  const safeTemplates = Array.isArray(templates) ? templates : [];
+  const q = (search || '').toLowerCase();
+  const filtered = safeTemplates.filter(t =>
+    t && (
+      String(t.name || '').toLowerCase().includes(q) ||
+      String(t.category || '').toLowerCase().includes(q)
+    )
   );
 
   const ITEMS_PER_PAGE = 12;

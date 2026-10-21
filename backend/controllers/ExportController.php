@@ -1,10 +1,12 @@
 <?php
+require_once __DIR__ . '/../utils/search_helpers.php';
 
 class ExportController {
     private PDO $db;
     public function __construct(PDO $db) { $this->db = $db; }
 
     public function export(array $auth): void {
+        require_once __DIR__ . '/../utils/search_helpers.php';
         require_once __DIR__ . '/AgentToolRegistry.php';
         $leadRbacTop = AgentToolRegistry::evaluateLeadReadScope($this->db, $auth);
         $allowedRoles = ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'general_director', 'sale_director', 'executive', 'ceo', 'leader', 'team_lead', 'truong_phong', 'sales', 'sale', 'consultant', 'tu_van', 'kinh_doanh', 'sale_admin', 'saleadmin', 'marketing', 'mkt', 'assistant', 'tro_ly', 'accountant', 'ke_toan', 'hr', 'nhan_su', 'cskh', 'academic_officer', 'academic', 'hoc_vu', 'hoc_thuat', 'tro_giang', 'teacher', 'giang_vien', 'viewer'];
@@ -297,7 +299,9 @@ class ExportController {
                 ];
             }
 
-            $contactSchemaCols = getCrmTableColumnsCache($this->db, 'contacts');
+            $contactSchemaCols = function_exists('getCrmTableColumnsCache')
+                ? getCrmTableColumnsCache($this->db, 'contacts')
+                : [];
             if (isset($contactSchemaCols['engagement_score'])) {
                 $baseColumns['engagement_score']       = 'Điểm tương tác (Engagement)';
                 $baseColumns['email_stats_summary']    = 'Email Đã gửi / Mở / Click';
@@ -438,7 +442,7 @@ class ExportController {
                         }
                     }
                 }
-            } elseif (!$showLost && empty($search) && $exportMode !== 'full') {
+            } elseif (!$showLost && empty($search) && $exportMode !== 'full' && $dataType === '') {
                 $where[] = "(t.lead_status NOT IN ('lost', 'nurture') OR t.lead_status IS NULL)";
             }
 
@@ -578,19 +582,18 @@ class ExportController {
                     $part = trim($part);
                     if (empty($part)) continue;
 
-                    // Handle ranges like "1-4"
-                    if (strpos($part, '-') !== false) {
-                        $rangeParts = explode('-', $part, 2);
-                        $min = (int)trim($rangeParts[0]);
-                        $max = (int)trim($rangeParts[1]);
+                    // Handle numeric ranges like "1-4" without misparsing hyphenated stage names like "02 - Contact Attempted"
+                    if (preg_match('/^(?:pipeline|pipieline|giai\s*đoạn|giai\s*doan|stage|bước|buoc)?\s*0*(\d{1,2})\s*-\s*0*(\d{1,2})$/iu', $part, $mRange)) {
+                        $min = (int)$mRange[1];
+                        $max = (int)$mRange[2];
                         if ($min > 0 && $max >= $min) {
                             for ($r = $min; $r <= $max; $r++) {
                                 if ($r <= 14) $orderIndexes[] = $r - 1;
                                 $stageIds[] = $r;
                             }
                         }
-                    } elseif (is_numeric($part)) {
-                        $n = (int)$part;
+                    } elseif (is_numeric($part) || preg_match('/^(?:pipeline|pipieline|giai\s*đoạn|giai\s*doan|stage|bước|buoc)\s*0*(\d{1,2})\b/iu', $part, $mStageNum) || preg_match('/^0*(\d{1,2})\s*[-–]/u', $part, $mStageNum)) {
+                        $n = is_numeric($part) ? (int)$part : (int)$mStageNum[1];
                         if ($n >= 1 && $n <= 14) {
                             $orderIndexes[] = $n - 1; // Pipeline order 1-14 mapped to 0-13
                         }
@@ -732,8 +735,8 @@ class ExportController {
                 $where[] = "EXISTS (SELECT 1 FROM activities act_f WHERE (act_f.contact_id = t.id OR (act_f.related_id = t.id AND act_f.related_type IN ('contact', 'lead'))) AND act_f.type = 'call' AND act_f.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) AND act_f.deleted_at IS NULL)";
             }
 
-            // Shared Multi-Tier Extended Filters (stale_days, interacted_within_days, call counts, note_keyword, age/birthday, job_titles, companies, industries, education, teams, campaign_or_utm, temperature, lead_score, study_status, missing_document, max_deposit, overdue_milestone, custom_rules)
-            AgentToolRegistry::applyMultitierExtendedContactFilters($this->db, 't.', $_GET, $where, $params);
+            // Shared Multi-Tier Extended Filters (data_type, stale_days, interacted_within_days, call counts, note_keyword, age/birthday, job_titles, companies, industries, education, teams, campaign_or_utm, temperature, lead_score, study_status, missing_document, max_deposit, overdue_milestone, custom_rules)
+            AgentToolRegistry::applyMultitierExtendedContactFilters($this->db, 't.', array_merge($_GET, ['data_type' => $dataType]), $where, $params);
 
             $omniClause = buildContactOmnichannelFilterClause($this->db, 't', $_GET, $params);
             if ($omniClause !== '') {
@@ -799,7 +802,7 @@ class ExportController {
 
             switch ($segment) {
                 case 'tiem_nang':
-                    if (empty($stage) && empty($stageSlug) && empty($_GET['stage_id']) && empty($stagesParam) && empty($_GET['stage_ids']) && $exportMode !== 'full') {
+                    if (empty($stage) && empty($stageSlug) && empty($_GET['stage_id']) && empty($stagesParam) && empty($_GET['stage_ids']) && $exportMode !== 'full' && $dataType === '') {
                         $where[] = "((t.stage_id IS NULL OR t.stage_id != 44) AND (t.pipeline_status IS NULL OR t.pipeline_status NOT IN ('enrolled', 'hoc_vien')) AND (t.status IS NULL OR t.status != 'customer'))";
                     }
                     break;
@@ -883,32 +886,6 @@ class ExportController {
                 $params[] = $auth['tenant_id'];
                 $params[] = $auth['tenant_id'];
                 $params[] = $auth['tenant_id'];
-            }
-
-            if ($dataType !== '') {
-                $errorCond = "(
-                    EXISTS (SELECT 1 FROM tickets tk WHERE tk.contact_id = t.id AND tk.status IN ('open', 'in_progress'))
-                    OR EXISTS (
-                        SELECT 1 FROM data_reports dr 
-                        JOIN leads l2 ON dr.lead_id = l2.id 
-                        WHERE t.phone IS NOT NULL AND t.phone != '' AND l2.phone = t.phone AND dr.status IN ('pending', 'approved')
-                    )
-                )";
-                $personalCond = "(
-                    t.source IN ('ca_nhan', 'gioi_thieu', 'databank', 'referral', 'ref')
-                    OR t.source LIKE 'ca_nhan%'
-                    OR t.source = 'Nhân viên kinh doanh tự tìm kiếm'
-                    OR (t.created_by = t.owner_id AND t.created_by NOT IN (1, 100009))
-                )";
-                if ($dataType === 'error_ticket') {
-                    $where[] = $errorCond;
-                } else if ($dataType === 'personal') {
-                    $where[] = "NOT $errorCond";
-                    $where[] = $personalCond;
-                } else if ($dataType === 'distributed') {
-                    $where[] = "NOT $errorCond";
-                    $where[] = "NOT $personalCond";
-                }
             }
 
             $whereStr = implode(' AND ', $where);

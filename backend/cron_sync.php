@@ -1695,6 +1695,26 @@ foreach ($connections as $connItem) {
             // Check Blocked Leads
             if (isLeadBlocked($conn, $phone, $email)) {
                 logSync("Row rejected: Lead is blocked (phone: $phone, email: $email)");
+                if (function_exists('recordBlockedIncomingLead')) {
+                    $blockedLeadId = recordBlockedIncomingLead($conn, $phone, $email, $name, $source, $type, $note, 'Liên hệ nằm trong danh sách bị chặn (Blocked Leads)', $connItem['id'] ?? null, null);
+                    try {
+                        $detailsJson = json_encode([
+                            'type' => 'auto',
+                            'lead_id' => $blockedLeadId,
+                            'phone' => $phone,
+                            'email' => $email,
+                            'name' => $name,
+                            'source' => $source,
+                            'reason' => 'Liên hệ nằm trong danh sách bị chặn (Blocked Leads)'
+                        ], JSON_UNESCAPED_UNICODE);
+                        $logStmt = $conn->prepare("INSERT INTO admin_logs (account_id, action, details, ip_address) VALUES (0, 'BLOCK_LEAD_BLACKLIST', ?, 'System')");
+                        if ($logStmt) {
+                            $logStmt->bind_param("s", $detailsJson);
+                            $logStmt->execute();
+                            $logStmt->close();
+                        }
+                    } catch (\Throwable $eLog) {}
+                }
                 $recordStmt->bind_param("is", $connItem['id'], $rowHash);
                 $recordStmt->execute();
                 $hashMap[$rowHash] = true;
@@ -1702,7 +1722,7 @@ foreach ($connections as $connItem) {
             }
 
             // --- 0. Check Global Blacklist / Exclusions ---
-            if (checkGlobalExclusion($conn, $rowData, $phone, $email, true, $name, $source, $type, $note)) {
+            if (checkGlobalExclusion($conn, $rowData, $phone, $email, true, $name, $source, $type, $note, $connItem['id'] ?? null, null)) {
                 // Record hash so we don't process this blacklisted row again
                 $recordStmt->bind_param("is", $connItem['id'], $rowHash);
                 $recordStmt->execute();
@@ -1927,7 +1947,7 @@ foreach ($connections as $connItem) {
                 // HOẶC
                 // 2. Đã ở bước Hồ sơ trở đi (chỉ thay đổi từ trước bước Hồ sơ thì mới đổi thôi)
                 $keepForOldSale = false;
-                if ($crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo'])) {
+                if ($crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo']) && ($crmCheckResult['consultantStatus'] ?? '') !== 'inactive') {
                     if (!empty($crmCheckResult['hasRealInteraction']) && $crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths) {
                         $keepForOldSale = true;
                     } else if (isset($crmCheckResult['isBeforeHoSo']) && !$crmCheckResult['isBeforeHoSo']) {

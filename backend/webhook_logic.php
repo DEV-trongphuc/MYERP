@@ -250,7 +250,7 @@ function normalizeDate($dateRaw)
     return null;
 }
 
-function checkGlobalExclusion($conn, $data, $phone, $email, $notifyAdmins = false, $name = '', $source = '', $type = '', $note = '')
+function checkGlobalExclusion($conn, $data, $phone, $email, $notifyAdmins = false, $name = '', $source = '', $type = '', $note = '', $connectionId = null, $customDate = null)
 {
     static $exclusions = null;
     static $blacklistContacts = null;
@@ -391,10 +391,17 @@ function checkGlobalExclusion($conn, $data, $phone, $email, $notifyAdmins = fals
                 error_log("Error notifying admins of blacklist match: " . $ex->getMessage());
             }
 
+            // Ghi nhận lead bị chặn vào bảng leads & distribution_logs (status='blacklisted') để hiển thị và thống kê trong DATA LỖI / DƯỚI CHUẨN
+            $blockedLeadId = 0;
+            if (function_exists('recordBlockedIncomingLead')) {
+                $blockedLeadId = recordBlockedIncomingLead($conn, $phone, $email, $name, $source, $type, $note, $reason, $connectionId, $customDate);
+            }
+
             // Ghi log hành động hệ thống tự động chặn data (blacklist) để báo cáo ngày thống kê được
             try {
                 $detailsJson = json_encode([
                     'type' => 'auto',
+                    'lead_id' => $blockedLeadId,
                     'phone' => $phone,
                     'email' => $email,
                     'name' => $name,
@@ -891,71 +898,55 @@ function checkCRMInteraction($conn, $phone, $email, $ignoreReassignIfOwnerInacti
         $months = $actualInteraction['monthsSinceLastInteraction'];
 
         // Ưu tiên owner từ lead, nếu trống lấy owner từ contact
-        $assignedOwner = !empty($leadRow['assigned_to']) ? $leadRow['assigned_to'] : ($actualInteraction['ownerId'] ?? null);
-        $consultantStatus = $leadRow['consultant_status'] ?? null;
-        $leaveStart = $leadRow['leave_start'] ?? null;
-        $leaveEnd = $leadRow['leave_end'] ?? null;
-        $consultantName = $leadRow['consultant_name'] ?? null;
-        $today = date('Y-m-d');
+        $leadAssignedTo = !empty($leadRow['assigned_to']) ? (int)$leadRow['assigned_to'] : null;
+        $contactOwnerId = !empty($actualInteraction['ownerId']) ? (int)$actualInteraction['ownerId'] : null;
+        $fromContactOwner = empty($leadAssignedTo) && !empty($contactOwnerId);
+        $rawOwnerId = $leadAssignedTo ?: $contactOwnerId;
 
-        if ($assignedOwner && (empty($consultantStatus) || empty($consultantName))) {
-            $stmtC = $conn->prepare("SELECT name, status, leave_start, leave_end, vacation_mode FROM consultants WHERE id = ?");
-            if ($stmtC) {
-                $stmtC->bind_param("i", $assignedOwner);
-                $stmtC->execute();
-                if ($cRow = $stmtC->get_result()->fetch_assoc()) {
-                    if (empty($consultantStatus)) $consultantStatus = $cRow['status'];
-                    if (empty($leaveStart)) $leaveStart = $cRow['leave_start'];
-                    if (empty($leaveEnd)) $leaveEnd = $cRow['leave_end'];
-                    if (empty($consultantName)) $consultantName = $cRow['name'];
-                    if (isset($cRow['vacation_mode']) && !isset($leadRow['vacation_mode'])) {
-                        $leadRow['vacation_mode'] = $cRow['vacation_mode'];
-                    }
-                }
-                $stmtC->close();
+        $assignedOwner = null;
+        $consultantName = $leadRow['consultant_name'] ?? 'Không rõ';
+        $effectiveStatus = null;
+        $isInactive = false;
+
+        if ($rawOwnerId) {
+            $ownerInfo = resolveConsultantActivityStatus($conn, $rawOwnerId, $fromContactOwner);
+            $assignedOwner = !empty($ownerInfo['consultantId']) ? (int)$ownerInfo['consultantId'] : (int)$rawOwnerId;
+            if (!empty($ownerInfo['name']) && $ownerInfo['name'] !== 'Không rõ') {
+                $consultantName = $ownerInfo['name'];
             }
+            $effectiveStatus = $ownerInfo['effectiveStatus'];
+            $isInactive = !empty($ownerInfo['isInactive']);
         }
 
-        $isActuallyOnLeave = false;
-        if ($consultantStatus === 'leave' || (isset($leadRow['vacation_mode']) && $leadRow['vacation_mode'] == 1)) {
-            $isActuallyOnLeave = true;
-        } else if ($consultantStatus === 'active' && !empty($leaveStart)) {
-            if ($today >= $leaveStart && (empty($leaveEnd) || $today <= $leaveEnd)) {
-                $isActuallyOnLeave = true;
-            }
-        }
-
-        $effectiveStatus = $isActuallyOnLeave ? 'leave' : $consultantStatus;
-        $isInactive = ($consultantStatus === 'inactive');
-
-        $reassignIfOwnerInactive = get_system_setting($conn, 'reassign_if_owner_inactive');
-        if ($reassignIfOwnerInactive === '') {
-            $reassignIfOwnerInactive = '1'; // Default to ON (mặc định bật)
-        }
-
-        // QUY TẮC BẢO HỘ 6 THÁNG THEO NGÀY TƯƠNG TÁC (Tuyệt đối không tính theo ngày tạo):
-        // 1. Khách đã ở bước Hồ sơ trở đi: Luôn bảo hộ giữ cho Sale cũ.
+        // QUY TẮC BẢO HỘ 6 THÁNG THEO NGÀY TƯƠNG TÁC & KIỂM TRA TVV INACTIVE:
+        // 0. Nếu TVV cũ đã Inactive (ngưng hoạt động / nghỉ việc / bị khóa / không còn tồn tại):
+        //    Data nhắc lại BẮT BUỘC chia vòng mới bình thường (trừ khi import lịch sử tĩnh có cờ $ignoreReassignIfOwnerInactive).
+        // 1. Khách đã ở bước Hồ sơ trở đi (và TVV cũ đang Active/Leave): Bảo hộ giữ cho Sale cũ.
         // 2. Chưa từng có tương tác thực tế (hasRealInteraction = false): Tuyệt đối KHÔNG tính trùng 6 tháng (cho phép chia mới).
-        // 3. Có tương tác thực tế: Nếu khoảng cách tương tác < 6 tháng (hoặc cấu hình duplicate_check_months) thì tính là Trùng bảo hộ; nếu >= 6 tháng thì hết hạn bảo hộ, chia mới.
+        // 3. Có tương tác thực tế (và TVV cũ đang Active/Leave): Nếu khoảng cách tương tác < 6 tháng (hoặc cấu hình duplicate_check_months) thì tính là Trùng bảo hộ; nếu >= 6 tháng thì hết hạn bảo hộ, chia mới.
         $dupCheckMonths = (int)get_system_setting($conn, 'duplicate_check_months');
         if ($dupCheckMonths <= 0) $dupCheckMonths = 6;
 
         $isWithinInteractionThreshold = $hasRealInteraction && ($months < $dupCheckMonths);
 
-        if (!$isBeforeHoSo) {
-            $isDuplicate = true;
-            $assignedTo = $assignedOwner;
+        if (!empty($assignedOwner) && $isInactive && !$ignoreReassignIfOwnerInactive) {
+            $isDuplicate = false;
+            $assignedTo = null;
+            $effectiveStatus = 'inactive';
+        } elseif (!$isBeforeHoSo) {
+            if (!empty($assignedOwner)) {
+                $isDuplicate = true;
+                $assignedTo = $assignedOwner;
+            } else {
+                $isDuplicate = false;
+                $assignedTo = null;
+            }
         } elseif ($isWithinInteractionThreshold) {
             if (!empty($assignedOwner)) {
-                if ($reassignIfOwnerInactive === '1' && !$ignoreReassignIfOwnerInactive) {
-                    $isDuplicate = !$isInactive;
-                    $assignedTo = $isDuplicate ? $assignedOwner : null;
-                } else {
-                    $isDuplicate = true;
-                    $assignedTo = $assignedOwner;
-                }
-            } else {
                 $isDuplicate = true;
+                $assignedTo = $assignedOwner;
+            } else {
+                $isDuplicate = false;
                 $assignedTo = null;
             }
         } else {
@@ -997,6 +988,124 @@ function checkCRMInteraction($conn, $phone, $email, $ignoreReassignIfOwnerInacti
         'contactId' => $existingContactId,
         'isBeforeHoSo' => $isBeforeHoSo,
         'hasRealInteraction' => false
+    ];
+}
+
+/**
+ * Kiểm tra toàn diện trạng thái hoạt động của Tư vấn viên / Nhân sự trên cả 3 bảng (consultants, users, accounts).
+ * Giải quyết triệt để trường hợp TVV bị ngưng hoạt động (status = 'inactive' hoặc is_active = 0) nhưng vẫn nhận data nhắc lại.
+ */
+function resolveConsultantActivityStatus($conn, $ownerId, $preferUserId = false)
+{
+    $ownerId = (int)$ownerId;
+    if ($ownerId <= 0) {
+        return [
+            'isInactive' => true,
+            'effectiveStatus' => 'inactive',
+            'consultantId' => null,
+            'userId' => null,
+            'name' => 'Không rõ'
+        ];
+    }
+
+    $row = null;
+    $sqlByConsultant = "
+        SELECT c.id AS consultant_id, c.name AS c_name, c.email AS c_email, c.status AS c_status,
+               c.leave_start AS c_leave_start, c.leave_end AS c_leave_end, c.vacation_mode AS c_vacation_mode,
+               u.id AS user_id, u.full_name AS u_name, u.status AS u_status, u.is_active AS u_is_active,
+               u.leave_start AS u_leave_start, u.leave_end AS u_leave_end, u.vacation_mode AS u_vacation_mode,
+               a.status AS a_status, a.is_active AS a_is_active
+        FROM consultants c
+        LEFT JOIN users u ON ((c.email IS NOT NULL AND c.email != '' AND u.email = c.email) OR u.id = c.id)
+        LEFT JOIN accounts a ON ((c.email IS NOT NULL AND c.email != '' AND a.email = c.email) OR a.id = c.id)
+        WHERE c.id = ?
+        ORDER BY (c.email IS NOT NULL AND c.email != '' AND u.email = c.email) DESC, (u.id = c.id) DESC
+        LIMIT 1
+    ";
+    $sqlByUser = "
+        SELECT c.id AS consultant_id, c.name AS c_name, c.email AS c_email, c.status AS c_status,
+               c.leave_start AS c_leave_start, c.leave_end AS c_leave_end, c.vacation_mode AS c_vacation_mode,
+               u.id AS user_id, u.full_name AS u_name, u.status AS u_status, u.is_active AS u_is_active,
+               u.leave_start AS u_leave_start, u.leave_end AS u_leave_end, u.vacation_mode AS u_vacation_mode,
+               a.status AS a_status, a.is_active AS a_is_active
+        FROM users u
+        LEFT JOIN consultants c ON ((u.email IS NOT NULL AND u.email != '' AND c.email = u.email) OR c.id = u.id)
+        LEFT JOIN accounts a ON ((u.email IS NOT NULL AND u.email != '' AND a.email = u.email) OR a.id = u.id)
+        WHERE u.id = ?
+        ORDER BY (u.email IS NOT NULL AND u.email != '' AND c.email = u.email) DESC, (c.id = u.id) DESC
+        LIMIT 1
+    ";
+
+    $queries = $preferUserId ? [$sqlByUser, $sqlByConsultant] : [$sqlByConsultant, $sqlByUser];
+    foreach ($queries as $sql) {
+        $stmt = $conn->prepare($sql);
+        if ($stmt) {
+            $stmt->bind_param("i", $ownerId);
+            $stmt->execute();
+            $res = $stmt->get_result();
+            if ($res && $res->num_rows > 0) {
+                $row = $res->fetch_assoc();
+            }
+            $stmt->close();
+            if ($row) {
+                break;
+            }
+        }
+    }
+
+    if (!$row) {
+        return [
+            'isInactive' => true,
+            'effectiveStatus' => 'inactive',
+            'consultantId' => null,
+            'userId' => null,
+            'name' => 'Không rõ'
+        ];
+    }
+
+    $inactiveStatuses = ['inactive', 'locked', 'resigned', 'terminated', 'disabled', 'nghi_viec', 'tam_nghi', 'suspended', 'khoa'];
+    $cStatus = strtolower(trim((string)($row['c_status'] ?? '')));
+    $uStatus = strtolower(trim((string)($row['u_status'] ?? '')));
+    $aStatus = strtolower(trim((string)($row['a_status'] ?? '')));
+    $uIsActive = isset($row['u_is_active']) && $row['u_is_active'] !== null ? (int)$row['u_is_active'] : 1;
+    $aIsActive = isset($row['a_is_active']) && $row['a_is_active'] !== null ? (int)$row['a_is_active'] : 1;
+
+    $isInactive = false;
+    if (empty($row['consultant_id'])) {
+        $isInactive = true;
+    } elseif ($cStatus === '' || !in_array($cStatus, ['active', 'leave'], true) || in_array($cStatus, $inactiveStatuses, true)) {
+        $isInactive = true;
+    } elseif ($uStatus !== '' && in_array($uStatus, $inactiveStatuses, true)) {
+        $isInactive = true;
+    } elseif ($aStatus !== '' && in_array($aStatus, $inactiveStatuses, true)) {
+        $isInactive = true;
+    } elseif ($uIsActive === 0 || $aIsActive === 0) {
+        $isInactive = true;
+    }
+
+    $leaveStart = !empty($row['c_leave_start']) ? $row['c_leave_start'] : ($row['u_leave_start'] ?? null);
+    $leaveEnd = !empty($row['c_leave_end']) ? $row['c_leave_end'] : ($row['u_leave_end'] ?? null);
+    $vacationMode = (!empty($row['c_vacation_mode']) || !empty($row['u_vacation_mode'])) ? 1 : 0;
+    $today = date('Y-m-d');
+
+    $isActuallyOnLeave = false;
+    if (!$isInactive) {
+        if ($cStatus === 'leave' || $uStatus === 'leave' || $vacationMode === 1) {
+            $isActuallyOnLeave = true;
+        } elseif (!empty($leaveStart) && $today >= $leaveStart && (empty($leaveEnd) || $today <= $leaveEnd)) {
+            $isActuallyOnLeave = true;
+        }
+    }
+
+    $effectiveStatus = $isInactive ? 'inactive' : ($isActuallyOnLeave ? 'leave' : 'active');
+    $resolvedName = !empty($row['c_name']) ? $row['c_name'] : (!empty($row['u_name']) ? $row['u_name'] : 'Không rõ');
+
+    return [
+        'isInactive' => $isInactive,
+        'effectiveStatus' => $effectiveStatus,
+        'consultantId' => !empty($row['consultant_id']) ? (int)$row['consultant_id'] : null,
+        'userId' => !empty($row['user_id']) ? (int)$row['user_id'] : null,
+        'name' => $resolvedName
     ];
 }
 
@@ -1458,6 +1567,11 @@ function getNextConsultantInRound($conn, $roundId, $lead = null, $excludeIds = [
                 WHERE rc.round_id = ? 
                   AND rc.is_active = 1 
                   AND c.status = 'active'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM users u 
+                      WHERE (u.id = c.id OR (c.email IS NOT NULL AND c.email != '' AND u.email = c.email))
+                        AND (u.is_active = 0 OR LOWER(COALESCE(u.status, '')) IN ('inactive', 'locked', 'resigned', 'terminated', 'disabled', 'nghi_viec', 'tam_nghi', 'suspended', 'khoa'))
+                  )
                 ORDER BY c.id ASC
             ");
         } else {
@@ -1473,6 +1587,11 @@ function getNextConsultantInRound($conn, $roundId, $lead = null, $excludeIds = [
                   AND c.status = 'active' 
                   AND c.vacation_mode = 0 
                   AND (c.leave_start IS NULL OR CURDATE() < c.leave_start OR (c.leave_end IS NOT NULL AND c.leave_end < CURDATE()))
+                  AND NOT EXISTS (
+                      SELECT 1 FROM users u 
+                      WHERE (u.id = c.id OR (c.email IS NOT NULL AND c.email != '' AND u.email = c.email))
+                        AND (u.is_active = 0 OR LOWER(COALESCE(u.status, '')) IN ('inactive', 'locked', 'resigned', 'terminated', 'disabled', 'nghi_viec', 'tam_nghi', 'suspended', 'khoa'))
+                  )
                 ORDER BY c.id ASC
             ");
         }
@@ -1777,6 +1896,68 @@ function isLeadBlocked($conn, $phone, $email) {
     return false;
 }
 
+function recordBlockedIncomingLead($conn, $phone, $email, $name = '', $source = '', $type = '', $note = '', $reason = 'Liên hệ nằm trong danh sách chặn (Blocklead/Blacklist)', $connectionId = null, $customDate = null)
+{
+    try {
+        $phone = sanitizePhoneNumber($phone ?? '');
+        $email = sanitizeEmailAddress($email ?? '');
+        if (empty($phone) && empty($email)) {
+            return 0;
+        }
+        $name = trim($name ?? '') ?: 'Khách hàng bị chặn';
+        $source = trim($source ?? '') ?: 'other';
+        $type = trim($type ?? '');
+        $dateVal = $customDate ?: date('Y-m-d H:i:s');
+        $blockNote = trim(($note ? $note . "\n" : '') . "[Hệ thống tự động chặn - Blocklead/Blacklist]: " . $reason);
+
+        $leadId = 0;
+        if (!empty($phone)) {
+            $sStmt = $conn->prepare("SELECT id FROM leads WHERE phone = ? LIMIT 1");
+            if ($sStmt) {
+                $sStmt->bind_param("s", $phone);
+                $sStmt->execute();
+                $leadId = (int)($sStmt->get_result()->fetch_assoc()['id'] ?? 0);
+                $sStmt->close();
+            }
+        }
+        if (!$leadId && !empty($email)) {
+            $sStmt = $conn->prepare("SELECT id FROM leads WHERE email = ? LIMIT 1");
+            if ($sStmt) {
+                $sStmt->bind_param("s", $email);
+                $sStmt->execute();
+                $leadId = (int)($sStmt->get_result()->fetch_assoc()['id'] ?? 0);
+                $sStmt->close();
+            }
+        }
+
+        if ($leadId > 0) {
+            $uStmt = $conn->prepare("UPDATE leads SET status = 'blacklisted', ai_screener_status = 'failed', note = CONCAT(IFNULL(note, ''), '\n', ?), last_interaction_date = ? WHERE id = ?");
+            if ($uStmt) {
+                $uStmt->bind_param("ssi", $blockNote, $dateVal, $leadId);
+                $uStmt->execute();
+                $uStmt->close();
+            }
+        } else {
+            $iStmt = $conn->prepare("INSERT INTO leads (phone, email, name, source, type, note, status, ai_screener_status, last_interaction_date, connection_id, created_at) VALUES (NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?, ?, 'blacklisted', 'failed', ?, ?, ?)");
+            if ($iStmt) {
+                $iStmt->bind_param("sssssssis", $phone, $email, $name, $source, $type, $blockNote, $dateVal, $connectionId, $dateVal);
+                $iStmt->execute();
+                $leadId = (int)$iStmt->insert_id;
+                $iStmt->close();
+            }
+        }
+
+        if ($leadId > 0) {
+            $logMsg = "Chặn tự động (Blocklead/Blacklist): " . $reason;
+            logDistribution($conn, $leadId, null, null, 'blacklisted', $logMsg, false, $customDate, false);
+        }
+        return $leadId;
+    } catch (Throwable $e) {
+        error_log("recordBlockedIncomingLead error: " . $e->getMessage());
+        return 0;
+    }
+}
+
 function insertLead($conn, $data, $assignedConsultantId, $phone, $email, $name, $source, $type, $note, $connectionId = null, $customDate = null, $preserveInteractionDate = false)
 {
     $phone = sanitizePhoneNumber($phone);
@@ -2011,8 +2192,9 @@ function updateLead($conn, $phone, $email, $assignedConsultantId, $source, $type
     $id = null;
     $oldSource = null;
     $oldInteractionDate = null;
+    $oldAssignedTo = null;
     if (!empty($phone)) {
-        $sStmt = $conn->prepare("SELECT id, source, last_interaction_date FROM leads WHERE phone = ? LIMIT 1");
+        $sStmt = $conn->prepare("SELECT id, source, last_interaction_date, assigned_to FROM leads WHERE phone = ? LIMIT 1");
         $sStmt->bind_param("s", $phone);
         $sStmt->execute();
         $res = $sStmt->get_result();
@@ -2021,11 +2203,12 @@ function updateLead($conn, $phone, $email, $assignedConsultantId, $source, $type
             $id = $row['id'];
             $oldSource = $row['source'];
             $oldInteractionDate = $row['last_interaction_date'];
+            $oldAssignedTo = $row['assigned_to'] ?? null;
         }
         $sStmt->close();
     }
     if (!$id && !empty($email)) {
-        $sStmt = $conn->prepare("SELECT id, source, last_interaction_date FROM leads WHERE email = ? LIMIT 1");
+        $sStmt = $conn->prepare("SELECT id, source, last_interaction_date, assigned_to FROM leads WHERE email = ? LIMIT 1");
         $sStmt->bind_param("s", $email);
         $sStmt->execute();
         $res = $sStmt->get_result();
@@ -2034,6 +2217,7 @@ function updateLead($conn, $phone, $email, $assignedConsultantId, $source, $type
             $id = $row['id'];
             $oldSource = $row['source'];
             $oldInteractionDate = $row['last_interaction_date'];
+            $oldAssignedTo = $row['assigned_to'] ?? null;
         }
         $sStmt->close();
     }
@@ -2049,16 +2233,39 @@ function updateLead($conn, $phone, $email, $assignedConsultantId, $source, $type
             $uStmt->bind_param("si", $dateVal, $id);
         } else if ($assignedConsultantId) {
             // Kiểm tra xem khách hàng này có liên hệ trong CRM đã ở bước Hồ sơ trở đi hay chưa
-            // (Chỉ thay đổi từ trước bước Hồ sơ thì mới đổi thôi nha)
+            // (Chỉ thay đổi từ trước bước Hồ sơ HOẶC khi Sale cũ đã Inactive thì mới đổi sang Sale mới)
             $existingContactId = getContactIdByPhoneOrEmail($conn, $phone, $email);
             $isBeforeHoSo = isContactBeforeHoSoStep($conn, $existingContactId);
+            $isOldOwnerInactive = false;
+            if (!$isBeforeHoSo) {
+                if (!empty($oldAssignedTo)) {
+                    $oldOwnerInfo = resolveConsultantActivityStatus($conn, (int)$oldAssignedTo, false);
+                    $isOldOwnerInactive = !empty($oldOwnerInfo['isInactive']);
+                } elseif ($existingContactId) {
+                    $stmtCO = $conn->prepare("SELECT owner_id FROM contacts WHERE id = ? LIMIT 1");
+                    if ($stmtCO) {
+                        $stmtCO->bind_param("i", $existingContactId);
+                        $stmtCO->execute();
+                        $coRow = $stmtCO->get_result()->fetch_assoc();
+                        $stmtCO->close();
+                        if (!empty($coRow['owner_id'])) {
+                            $oldOwnerInfo = resolveConsultantActivityStatus($conn, (int)$coRow['owner_id'], true);
+                            $isOldOwnerInactive = !empty($oldOwnerInfo['isInactive']);
+                        } else {
+                            $isOldOwnerInactive = true;
+                        }
+                    }
+                } else {
+                    $isOldOwnerInactive = true;
+                }
+            }
 
             // Giao là giao luôn vào tiềm năng, tự động tiếp nhận khi có người nhận
             $isAcceptedVal = ($assignedConsultantId > 0) ? 1 : 0;
             $acceptedAtVal = ($assignedConsultantId > 0) ? ($dateVal ?: date('Y-m-d H:i:s')) : null;
 
-            if ($isBeforeHoSo) {
-                // Trước bước hồ sơ -> Được phép đổi Sale mới
+            if ($isBeforeHoSo || $isOldOwnerInactive) {
+                // Trước bước hồ sơ hoặc Sale cũ đã Inactive -> Được phép đổi Sale mới
                 $uStmt = $conn->prepare("UPDATE leads SET 
                     name = IF(? != '' AND (name = '' OR name IS NULL), ?, name),
                     email = IF(? != '' AND (email = '' OR email IS NULL), ?, email),
@@ -2074,7 +2281,7 @@ function updateLead($conn, $phone, $email, $assignedConsultantId, $source, $type
                     WHERE id = ?");
                 $uStmt->bind_param("sssssssssssisiiii", $name, $name, $email, $email, $phone, $phone, $source, $type, $note, $note, $dateVal, $isAcceptedVal, $acceptedAtVal, $assignedConsultantId, $connectionId, $connectionId, $id);
             } else {
-                // Đã ở bước Hồ sơ trở đi -> Bắt buộc giữ nguyên Sale cũ, không đổi Sale mới
+                // Đã ở bước Hồ sơ trở đi và Sale cũ đang hoạt động -> Bắt buộc giữ nguyên Sale cũ, không đổi Sale mới
                 $uStmt = $conn->prepare("UPDATE leads SET 
                     name = IF(? != '' AND (name = '' OR name IS NULL), ?, name),
                     email = IF(? != '' AND (email = '' OR email IS NULL), ?, email),
@@ -2108,7 +2315,9 @@ function updateLead($conn, $phone, $email, $assignedConsultantId, $source, $type
         }
         return $id;
     }
-    return null;
+    // Trường hợp khách đã có trong bảng contacts nhưng chưa từng có bản ghi trong bảng leads:
+    // Tạo mới bản ghi leads để không bị mất $leadId khi ghi distribution_logs và đồng bộ contact
+    return insertLead($conn, [], $assignedConsultantId, $phone, $email, $name ?? '', $source, $type, $note, $connectionId, $customDate, $preserveInteractionDate);
 }
 
 function sendDirectSaleLeadNotification($conn, $leadId, $assignedToId, $roundId = null) {
@@ -2355,6 +2564,11 @@ function simulateNextConsultantInRound($conn, $roundId, $lead = null)
             WHERE rc.round_id = ? 
               AND rc.is_active = 1 
               AND c.status = 'active'
+              AND NOT EXISTS (
+                  SELECT 1 FROM users u 
+                  WHERE (u.id = c.id OR (c.email IS NOT NULL AND c.email != '' AND u.email = c.email))
+                    AND (u.is_active = 0 OR LOWER(COALESCE(u.status, '')) IN ('inactive', 'locked', 'resigned', 'terminated', 'disabled', 'nghi_viec', 'tam_nghi', 'suspended', 'khoa'))
+              )
             ORDER BY c.id ASC
         ");
     } else {
@@ -2369,6 +2583,11 @@ function simulateNextConsultantInRound($conn, $roundId, $lead = null)
               AND c.status = 'active' 
               AND c.vacation_mode = 0 
               AND (c.leave_start IS NULL OR CURDATE() < c.leave_start OR (c.leave_end IS NOT NULL AND c.leave_end < CURDATE()))
+              AND NOT EXISTS (
+                  SELECT 1 FROM users u 
+                  WHERE (u.id = c.id OR (c.email IS NOT NULL AND c.email != '' AND u.email = c.email))
+                    AND (u.is_active = 0 OR LOWER(COALESCE(u.status, '')) IN ('inactive', 'locked', 'resigned', 'terminated', 'disabled', 'nghi_viec', 'tam_nghi', 'suspended', 'khoa'))
+              )
             ORDER BY c.id ASC
         ");
     }
@@ -4467,10 +4686,29 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
             $primaryContact = $existingContacts[0];
             $primaryContactId = (int)$primaryContact['id'];
 
+            // Kiểm tra xem lead này vừa được chia vòng mới chính thức (assigned / rule_6_month / compensation...) hay chỉ là nhắc nhở (reminder)
+            $isFreshOfficialDistribution = false;
+            $freshDistTime = date('Y-m-d H:i:s');
+            if ($leadId > 0) {
+                $stmtChkDl = $conn->prepare("SELECT status, received_at FROM distribution_logs WHERE lead_id = ? ORDER BY id DESC LIMIT 1");
+                if ($stmtChkDl) {
+                    $stmtChkDl->bind_param("i", $leadId);
+                    $stmtChkDl->execute();
+                    $dlRow = $stmtChkDl->get_result()->fetch_assoc();
+                    $stmtChkDl->close();
+                    if ($dlRow && in_array(strtolower(trim((string)($dlRow['status'] ?? ''))), ['assigned', 'rule_6_month', 'compensation', 'pending_work_hours', 'fallback', 'success', 'databank_claim'], true)) {
+                        $isFreshOfficialDistribution = true;
+                        if (!empty($dlRow['received_at'])) {
+                            $freshDistTime = $dlRow['received_at'];
+                        }
+                    }
+                }
+            }
+
             $alreadyOwned = ((int)$primaryContact['owner_id'] === (int)$ownerUserId);
 
-            if ($alreadyOwned) {
-                // Đã thuộc Sale này -> Cập nhật thông tin, nối thêm ghi chú, giữ nguyên pipeline cũ (nếu chưa có pipeline thì mới gán bước 1)
+            if ($alreadyOwned && !$isFreshOfficialDistribution) {
+                // Đã thuộc Sale này (nhắc lại / reminder trong 6 tháng) -> Cập nhật thông tin, nối thêm ghi chú, giữ nguyên created_at và pipeline cũ
                 $stmtUpContact = $conn->prepare("
                     UPDATE contacts 
                     SET full_name = IF(? != '' AND (full_name = '' OR full_name IS NULL), ?, full_name),
@@ -4490,12 +4728,21 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
                     $stmtUpContact->close();
                 }
             } else {
-                // Thuộc Sale cũ -> kiểm tra điều kiện trước bước Hồ sơ
-                // (và chỉ thay đổi từ trước bước Hồ sơ thì mới đổi thôi nha)
+                // Thuộc Sale cũ HOẶC được chia vòng mới chính thức (>6 tháng) -> kiểm tra điều kiện
                 $isBeforeHoSo = isContactBeforeHoSoStep($conn, $primaryContactId);
+                $isOldContactOwnerInactive = false;
+                if (!$isBeforeHoSo) {
+                    $oldContactOwnerId = (int)($primaryContact['owner_id'] ?? 0);
+                    if ($oldContactOwnerId <= 0) {
+                        $isOldContactOwnerInactive = true;
+                    } else {
+                        $oldOwnerInfo = resolveConsultantActivityStatus($conn, $oldContactOwnerId, true);
+                        $isOldContactOwnerInactive = !empty($oldOwnerInfo['isInactive']);
+                    }
+                }
 
-                if ($isBeforeHoSo) {
-                    // Đủ điều kiện giao lại cho Sale mới: đổi sale, vẫn giữ nguyên khách hàng cũ trùng đó, không tạo thêm tiềm năng mới
+                if ($isBeforeHoSo || $isOldContactOwnerInactive || $isFreshOfficialDistribution) {
+                    // Đủ điều kiện giao lại / chia vòng mới: cập nhật created_at theo thời điểm nhận lead mới để đồng bộ 100% thống kê Vận hành & Hiệu suất Lead & /contacts
                     $stmtTransfer = $conn->prepare("
                         UPDATE contacts 
                         SET owner_id = ?,
@@ -4512,11 +4759,12 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
                             notes = IF(TRIM(?) = '', notes, CONCAT(IFNULL(notes, ''), IF(IFNULL(notes, '') = '', '', CONCAT('\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ' - Tái phân bổ cho Sale mới]\n')), ?)),
                             customer_type = IF(? != '', ?, customer_type),
                             last_contact = NULL,
+                            created_at = ?,
                             updated_at = NOW()
                         WHERE id = ?
                     ");
                     if ($stmtTransfer) {
-                        $stmtTransfer->bind_param("iissssssssssiissssi", 
+                        $stmtTransfer->bind_param("iissssssssssiisssssi", 
                             $ownerUserId, 
                             $person_id,
                             $fullName, $fullName, 
@@ -4527,7 +4775,8 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
                             $firstStageId,
                             $secExpiresTime, 
                             $note, $note, 
-                            $type, $type, 
+                            $type, $type,
+                            $freshDistTime,
                             $primaryContactId
                         );
                         $stmtTransfer->execute();

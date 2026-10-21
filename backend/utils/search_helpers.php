@@ -1635,18 +1635,25 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
         }
     }
 
-    // Expected Intake & Major
+    // Expected Intake / Intake & Major
     $intakeTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['intake'] ?? null),
+        parseCrmMultiFilterValues($input['intakes'] ?? null),
         parseCrmMultiFilterValues($input['expected_intake'] ?? null),
         parseCrmMultiFilterValues($input['expected_intakes'] ?? null)
     )));
     if (!empty($intakeTokens)) {
         $inOrs = [];
+        $hasIntakeCol = isset($contactCols['intake']);
         $hasExpectedIntakeCol = isset($contactCols['expected_intake']);
         $hasAdmissionDateCol = isset($contactCols['admission_date']);
         foreach ($intakeTokens as $itk) {
             $likeItk = '%' . $itk . '%';
             $itkParts = [];
+            if ($hasIntakeCol) {
+                $itkParts[] = "{$a}intake LIKE ?";
+                $params[] = $likeItk;
+            }
             if ($hasExpectedIntakeCol) {
                 $itkParts[] = "{$a}expected_intake LIKE ?";
                 $params[] = $likeItk;
@@ -1788,11 +1795,16 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
         applyCrmDateRangeFilter($db, $alias, $input, $where, $params);
     }
 
-    // Optional Data Type Filter (`data_type`: 'distributed' | 'personal' | 'error_ticket')
+    // Optional Data Type Filter (`data_type`: 'distributed' | 'personal' | 'error_ticket') — 100% synced with DashboardController & ContactController
     if (empty($input['_defer_data_type_filter']) && !empty($input['data_type'])) {
         $dtVal = strtolower(trim((string)$input['data_type']));
+        $notClonedCondSql = "(COALESCE({$a}duplicate_flag, 0) = 0 OR {$a}duplicate_with_id IS NULL)";
+        $saleRoleCondSql = "EXISTS (SELECT 1 FROM users u_dt WHERE u_dt.id = {$a}owner_id AND LOWER(u_dt.role) IN ('sale', 'sales'))";
         $errorCondSql = "(
-            EXISTS (SELECT 1 FROM tickets tk_dt WHERE tk_dt.contact_id = {$a}id AND tk_dt.status IN ('open', 'in_progress'))
+            COALESCE({$a}lead_status, '') IN ('error', 'ticket_pending', 'pending', 'approved', 'confirmed', 'bao_loi')
+            OR COALESCE({$a}pipeline_status, '') IN ('00_error', 'error', 'bao_loi')
+            OR COALESCE({$a}tags, '') LIKE '%\"Báo lỗi\"%'
+            OR EXISTS (SELECT 1 FROM tickets tk_dt WHERE tk_dt.contact_id = {$a}id AND tk_dt.status IN ('open', 'in_progress', 'pending', 'approved', 'confirmed'))
             OR EXISTS (
                 SELECT 1 FROM data_reports dr_dt
                 JOIN leads l_dt ON dr_dt.lead_id = l_dt.id
@@ -1800,17 +1812,39 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
             )
         )";
         $personalCondSql = "(
-            COALESCE({$a}source, '') IN ('ca_nhan', 'gioi_thieu', 'databank', 'referral', 'ref')
+            COALESCE({$a}lead_status, '') IN ('ca_nhan', 'personal', 'self', 'tu_kiem', 'gioi_thieu', 'referral', 'import', 'imported')
+            OR COALESCE({$a}source, '') IN ('ca_nhan', 'gioi_thieu', 'databank', 'referral', 'ref', 'import', 'excel', 'csv')
             OR COALESCE({$a}source, '') LIKE 'ca_nhan%'
             OR COALESCE({$a}source, '') = 'Nhân viên kinh doanh tự tìm kiếm'
-            OR ({$a}created_by IS NOT NULL AND {$a}owner_id IS NOT NULL AND {$a}created_by = {$a}owner_id AND {$a}created_by NOT IN (1, 100009))
+            OR ({$a}created_by IS NOT NULL AND {$a}owner_id IS NOT NULL AND {$a}created_by = {$a}owner_id AND {$a}created_by NOT IN (1, 100009) AND LOWER(TRIM(COALESCE({$a}source, ''))) IN ('', 'other', 'ca_nhan', 'gioi_thieu', 'databank', 'referral', 'ref'))
+            OR LOWER(COALESCE({$a}source, '')) LIKE '%cá nhân%'
+            OR LOWER(COALESCE({$a}source, '')) LIKE '%ca nhan%'
+            OR LOWER(COALESCE({$a}source, '')) LIKE '%tự tìm%'
+            OR LOWER(COALESCE({$a}source, '')) LIKE '%tu tim%'
+            OR LOWER(COALESCE({$a}source, '')) LIKE '%tự kiếm%'
+            OR LOWER(COALESCE({$a}source, '')) LIKE '%giới thiệu%'
+            OR LOWER(COALESCE({$a}source, '')) LIKE '%gioi thieu%'
+            OR LOWER(COALESCE({$a}source, '')) LIKE '%referral%'
+            OR LOWER(COALESCE({$a}source, '')) LIKE '%import%'
+            OR LOWER(COALESCE({$a}source, '')) LIKE '%nhập%'
+            OR LOWER(COALESCE({$a}source, '')) LIKE '%nhap%'
+            OR LOWER(COALESCE({$a}source, '')) LIKE '%excel%'
+            OR LOWER(COALESCE({$a}source, '')) LIKE '%csv%'
+            OR COALESCE({$a}tags, '') LIKE '%\"Cá nhân\"%'
+            OR COALESCE({$a}tags, '') LIKE '%\"Giới thiệu\"%'
+            OR COALESCE({$a}tags, '') LIKE '%Import%'
+            OR COALESCE({$a}notes, '') LIKE '[Import]%'
         )";
         if ($dtVal === 'error_ticket') {
             $where[] = $errorCondSql;
         } elseif ($dtVal === 'personal') {
+            $where[] = $notClonedCondSql;
+            $where[] = $saleRoleCondSql;
             $where[] = "NOT {$errorCondSql}";
             $where[] = $personalCondSql;
         } elseif ($dtVal === 'distributed') {
+            $where[] = $notClonedCondSql;
+            $where[] = $saleRoleCondSql;
             $where[] = "NOT {$errorCondSql}";
             $where[] = "NOT {$personalCondSql}";
         }

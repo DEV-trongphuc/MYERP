@@ -672,11 +672,10 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
         });
 
         const formData = new FormData();
-        formData.append('file', item.file);
+        formData.append('file', item.file, item.file.name || item.name || 'image.webp');
 
         try {
           const res = await api.post('/chat/upload', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
             onUploadProgress: (progressEvent) => {
               if (progressEvent.total) {
                 const filePct = Math.round((progressEvent.loaded * 100) / progressEvent.total);
@@ -1327,6 +1326,9 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
               fontFamily: 'inherit',
               lineHeight: '1.45',
               background: 'transparent',
+              color: '#0f172a',
+              WebkitTextFillColor: '#0f172a',
+              caretColor: '#dc2626',
               boxSizing: 'border-box',
               overflowY: 'auto'
             }}

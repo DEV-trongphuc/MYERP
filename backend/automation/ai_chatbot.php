@@ -477,7 +477,7 @@ try {
 
                 if (!empty($search)) {
                     // OPTIMIZED: Use FULLTEXT index
-                    $where[] = "(MATCH(c.title, c.last_message) AGAINST(? IN NATURAL LANGUAGE MODE) OR c.id = ? OR c.user_email LIKE ? OR u.email LIKE ?)";
+                    $where[] = "(INSTR(CONCAT(COALESCE(c.title, ''), ' ', COALESCE(c.last_message, '')), ?) > 0 OR c.id = ? OR c.user_email LIKE ? OR u.email LIKE ?)";
                     $params[] = $search;
                     $params[] = $search;
                     $params[] = "%$search%";
@@ -569,7 +569,7 @@ try {
             // FIXED: Removed duplicate search condition and c.title (doesn't exist in domation_ai_conversations)
             if (!empty($search)) {
                 // OPTIMIZED: Use FULLTEXT index
-                $where[] = "(MATCH(c.last_message) AGAINST(? IN NATURAL LANGUAGE MODE) OR c.id = ?)";
+                $where[] = "(INSTR(COALESCE(c.last_message, ''), ?) > 0 OR c.id = ?)";
                 $params[] = $search;
                 $params[] = $search;
             }

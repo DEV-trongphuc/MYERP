@@ -884,6 +884,7 @@ switch ($resource) {
         $auth = requireAuth();
         $ctrl = new ContactController($db);
         if ($resourceId === 'student-counts' && $method === 'GET') $ctrl->getStudentCounts($auth);
+        elseif ($resourceId === 'persona-overview' && $method === 'GET') $ctrl->getPersonaOverview($auth);
         elseif ($resourceId === 'programs' && $method === 'GET') $ctrl->getPrograms($auth);
         elseif ($resourceId === 'bulk-delete' && $method === 'POST') $ctrl->bulkDelete($auth);
         elseif ($resourceId === 'static-list' && $method === 'POST') $ctrl->createOrPopulateStaticList($auth);

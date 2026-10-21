@@ -325,6 +325,8 @@ class QwenAgentController {
             "   - Khi tạo/sửa/duyệt dữ liệu, gọi `draft_action_proposal` để sinh thẻ xác nhận `<<<ACTION_PROPOSAL: {...}>>>`.\n" .
             "   - GIỮ NGUYÊN 100% link `[📥 Tải danh sách ...](/export?...)`, thẻ `<<<DYNAMIC_CHART: {...}>>>`, `<<<ACTION_PROPOSAL: {...}>>>`, `<<<ERP_CARD: {...}>>>` từ kết quả Tool.\n" .
             "   - Từ 2 bản ghi trở lên: trình bày **Bảng Markdown** rõ ràng, KHÔNG chèn `<<<ERP_CARD:...>>>` lẻ dưới bảng. Nếu chỉ có 1 hồ sơ: đính kèm `<<<ERP_CARD: {\"type\":\"contact|deal|expense|deposit|project|employee|task\",\"id\":123,\"code\":\"#123\",\"title\":\"Tên\",\"subtitle\":\"Chi tiết\",\"status\":\"Trạng thái\"}>>>`.\n" .
+            "   - **QUY CHUẨN TỔNG QUAN DATA & CHÂN DUNG HỌC VIÊN / KHÁCH HÀNG (ĐỒNG BỘ 100% DASHBOARD TỔNG QUAN DATA)**: Khi hỏi tổng quan data, số lượng học viên/lead, học viên theo trường/chương trình (`UBIS`, `Swiss UMEF`, `ASC`, `Apollos`, `SBS`, `MSc-AI`), khóa nhập học (`Intake 01`..`Intake 47`), học viên học từ 2 khóa trở lên (`multi_course_students`), tỷ lệ giới tính Nam/Nữ, độ tuổi bình quân & nhóm tuổi, cấp bậc chức vụ, Top công ty/ngân hàng học viên, ngành nghề, hoặc độ đầy đủ dữ liệu hồ sơ: BẮT BUỘC ưu tiên gọi `query_customer_student_persona_overview` (truyền `segment='all'|'students'|'leads'`, `program`, `intake`).\n" .
+            "   - **QUY CHUẨN HIỆU SUẤT LEAD & ĐỘI NGŨ SALE (ĐỒNG BỘ 100% TAB HIỆU SUẤT LEAD DASHBOARD)**: Khi hỏi hiệu suất lead, tỷ lệ chuyển đổi phễu, bảng xếp hạng Sale hoặc hiệu quả nguồn Marketing, gọi `query_sales_lead_performance_deck` hoặc `get_sales_leaderboard` / `get_sales_performance_and_stale_leads`. Quy tắc tính: (1) Tổng Lead = Lead công ty/Marketing phân bổ cho Sale (`role IN ('sale','sales')`), loại trừ Cá nhân/Giới thiệu/Import/Báo lỗi; (2) Đã tương tác vs Chưa tương tác (chưa có `last_contact`, activities, và ghi chú thủ công); (3) Biểu đồ tròn Phễu (3 nhóm = 100%): `Chưa Connect` = Stage 1–2, `Lead Qualified` = Stage 3–12, `Win` = Stage 13–14; (4) Cột `Qualified` trên Bảng Sale & Bảng Nguồn = Stage 3–14 (gộp cả Qualified 3–12 và Win 13–14); (5) Nguồn Marketing gồm cả Lead mới tạo trong kỳ + Lead kỳ trước chốt đơn SO trong kỳ; (6) Luôn ghi rõ **Doanh thu dự kiến** (tổng giá trị đơn SO `SUM(deposits.price)`) và **Thực thu** (số tiền thực tế đã thu & được duyệt theo các đợt đóng phí `deposit_milestones`).\n" .
             "   - Cuối câu trả lời, đính kèm 2-3 gợi ý tiếp theo: `<<<NEXT_BEST_ACTIONS: [{\"label\":\"Tên ngắn\",\"prompt\":\"Câu lệnh đầy đủ\",\"icon\":\"chart|check|alert|user|file\"}]>>>`." .
             $ragBlock;
 
@@ -421,8 +423,8 @@ class QwenAgentController {
 
         // Fast keyword-to-tool boost rules so the exact needed tools are always ranked #1
         $keywordToolBoosts = [
-            '/(lead|tiềm năng|khách hàng|học viên|tuyển sinh|nguồn|source|mba|dba|emba|msc|nóng|ấm|lạnh|chưa tương tác|ngủ đông)/u' => [
-                'query_crm_leads_multitier', 'search_contacts', 'get_contact_360_profile', 'get_sales_leaderboard', 'analyze_leads_demographics_and_job_titles'
+            '/(lead|tiềm năng|khách hàng|học viên|tuyển sinh|nguồn|source|mba|dba|emba|msc|ubis|umef|asc|apollos|sbs|intake|tổng quan data|chân dung|nóng|ấm|lạnh|chưa tương tác|ngủ đông)/u' => [
+                'query_customer_student_persona_overview', 'query_sales_lead_performance_deck', 'query_crm_leads_multitier', 'search_contacts', 'get_contact_360_profile', 'get_sales_leaderboard', 'analyze_leads_demographics_and_job_titles'
             ],
             '/(doanh thu|đặt cọc|tiền cọc|sales order|\bso\b|thực thu|học phí|công nợ)/u' => [
                 'query_deposits_and_revenue_multitier', 'get_financial_overview', 'lookup_recent_cash_receipts_and_deposits', 'get_upcoming_tuition_receivables'

@@ -610,8 +610,14 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
         onUpdateGroup: (g: ConditionGroup) => void,
         depth = 0
     ) => {
+        const safeConditions: Array<ConditionRule | ConditionGroup> = Array.isArray(group?.conditions)
+            ? group.conditions
+            : Array.isArray((group as any)?.rules)
+                ? (group as any).rules
+                : [];
+
         const handleLogicToggle = () => {
-            onUpdateGroup({ ...group, logic: group.logic === 'AND' ? 'OR' : 'AND' });
+            onUpdateGroup({ ...group, conditions: safeConditions, logic: group?.logic === 'AND' ? 'OR' : 'AND' });
         };
 
         const addRule = () => {
@@ -620,7 +626,7 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                 operator: 'equals',
                 value: pipelineStages[0]?.value || '1'
             };
-            onUpdateGroup({ ...group, conditions: [...group.conditions, newRule] });
+            onUpdateGroup({ ...group, logic: group?.logic || 'AND', conditions: [...safeConditions, newRule] });
         };
 
         const addSubGroup = () => {
@@ -629,18 +635,18 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                 logic: 'OR',
                 conditions: [{ field: 'tag', operator: 'has_tag', value: '' }]
             };
-            onUpdateGroup({ ...group, conditions: [...group.conditions, newSubGroup] });
+            onUpdateGroup({ ...group, logic: group?.logic || 'AND', conditions: [...safeConditions, newSubGroup] });
         };
 
         const removeItem = (idx: number) => {
-            if (group.conditions.length <= 1 && depth === 0) return;
-            const newConds = group.conditions.filter((_, i) => i !== idx);
-            onUpdateGroup({ ...group, conditions: newConds });
+            if (safeConditions.length <= 1 && depth === 0) return;
+            const newConds = safeConditions.filter((_, i) => i !== idx);
+            onUpdateGroup({ ...group, logic: group?.logic || 'AND', conditions: newConds });
         };
 
         const updateItem = (idx: number, newItem: ConditionRule | ConditionGroup) => {
-            const newConds = group.conditions.map((c, i) => (i === idx ? newItem : c));
-            onUpdateGroup({ ...group, conditions: newConds });
+            const newConds = safeConditions.map((c, i) => (i === idx ? newItem : c));
+            onUpdateGroup({ ...group, logic: group?.logic || 'AND', conditions: newConds });
         };
 
         const renderValueInput = (rule: ConditionRule, idx: number, fieldDef: ConditionFieldOption) => {
@@ -882,16 +888,16 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                 </div>
 
                 <div className="space-y-3 relative">
-                    {group.conditions.length > 1 && (
+                    {safeConditions.length > 1 && (
                         <div
                             className={`absolute left-2.5 top-4 bottom-4 w-0.5 ${
-                                group.logic === 'AND' ? 'bg-red-200' : 'bg-indigo-200'
+                                group?.logic === 'AND' ? 'bg-red-200' : 'bg-indigo-200'
                             } -z-0`}
                         />
                     )}
 
-                    {group.conditions.map((item, idx) => {
-                        const isGroup = 'logic' in item;
+                    {safeConditions.map((item, idx) => {
+                        const isGroup = item && typeof item === 'object' && ('logic' in item || 'conditions' in item);
 
                         if (isGroup) {
                             return (

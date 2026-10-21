@@ -57,9 +57,9 @@ const Modal: React.FC<ModalProps> = ({
 
   const resolvedZIndex = (() => {
     if (zIndex) {
-      return Math.min(Math.max(zIndex, 2147483640), 2147483646);
+      return Math.min(Math.max(zIndex, 2147483630), 2147483647);
     }
-    return 2147483645;
+    return 2147483636;
   })();
 
   useEffect(() => {
