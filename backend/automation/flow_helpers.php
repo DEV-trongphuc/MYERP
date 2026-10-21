@@ -1828,7 +1828,7 @@ function getSubscriberProfileForFlow($pdo, $subscriberId)
                 $stmtCrm = $pdo->prepare("
                     SELECT c.stage_id, c.pipeline_status, c.lead_status, c.status AS contact_status,
                            c.temperature, c.program, c.project_id, c.student_id, c.study_status,
-                           c.owner_id, c.company_id, c.expected_revenue, c.total_spent, c.last_contact, c.assigned_at, c.created_at,
+                           c.owner_id, c.company_id, c.expected_revenue, c.total_spent, c.last_contact, c.created_at AS assigned_at, c.created_at,
                            c.tags, c.district, c.ward, c.city,
                            u.team_id AS owner_team_id,
                            ps.name AS stage_name, ps.system_slug AS stage_slug, ps.is_won AS stage_is_won, ps.order_index AS stage_order,

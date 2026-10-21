@@ -2613,7 +2613,7 @@ class HRMController {
         if ($monthYear === 'all') {
             if ($this->isAdmin($auth)) {
                 $stmt = $this->db->prepare("
-                    SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title, u.gender
+                    SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title, u.gender, u.avatar_url, u.avatar_url as avatar
                     FROM monthly_payslips p
                     JOIN users u ON p.user_id = u.id
                     WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'{$extraWhere}
@@ -2622,7 +2622,7 @@ class HRMController {
                 $stmt->execute(array_merge([$auth['tenant_id']], $extraParams));
             } else {
                 $stmt = $this->db->prepare("
-                    SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title, u.gender
+                    SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title, u.gender, u.avatar_url, u.avatar_url as avatar
                     FROM monthly_payslips p
                     JOIN users u ON p.user_id = u.id
                     WHERE u.tenant_id = ? AND p.user_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'{$extraWhere}
@@ -2636,7 +2636,7 @@ class HRMController {
 
         if ($this->isAdmin($auth)) {
             $stmt = $this->db->prepare("
-                SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title, u.gender
+                SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title, u.gender, u.avatar_url, u.avatar_url as avatar
                 FROM monthly_payslips p
                 JOIN users u ON p.user_id = u.id
                 WHERE u.tenant_id = ? AND p.month_year = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'{$extraWhere}
@@ -2644,7 +2644,7 @@ class HRMController {
             $stmt->execute(array_merge([$auth['tenant_id'], $monthYear], $extraParams));
         } else {
             $stmt = $this->db->prepare("
-                SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title, u.gender
+                SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title, u.gender, u.avatar_url, u.avatar_url as avatar
                 FROM monthly_payslips p
                 JOIN users u ON p.user_id = u.id
                 WHERE u.tenant_id = ? AND p.user_id = ? AND p.month_year = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'{$extraWhere}
@@ -5976,17 +5976,17 @@ class HRMController {
         [$y, $m] = array_map('intval', explode('-', $month));
         $params = $this->getLegalParameters($y, $m);
 
-        // 1. Thống kê nhân sự thực tế
+        // 1. Thống kê nhân sự thực tế (users table uses is_active, NOT status)
         $uStmt = $this->db->prepare("
-            SELECT id, full_name, email, phone, role, status, is_active, citizen_id, bank_name, bank_account, created_at
+            SELECT id, full_name, email, phone, role, is_active, citizen_id, bank_name, bank_account, avatar_url, job_title, gender, created_at
             FROM users
-            WHERE tenant_id = ?
+            WHERE tenant_id = ? AND role NOT IN ('superadmin', 'super_admin') AND email != 'info@ideas.edu.vn'
         ");
         $uStmt->execute([$tid]);
         $allUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-        $activeUsers = array_filter($allUsers, fn($u) => ($u['is_active'] ?? 0) == 1 && ($u['status'] ?? 'active') !== 'leave');
-        $inactiveUsers = array_filter($allUsers, fn($u) => ($u['is_active'] ?? 0) == 0 || ($u['status'] ?? '') === 'leave');
+        $activeUsers = array_filter($allUsers, fn($u) => ($u['is_active'] ?? 0) == 1);
+        $inactiveUsers = array_filter($allUsers, fn($u) => ($u['is_active'] ?? 0) == 0);
 
         // Thiếu thông tin CCCD, MST, STK
         $missingInfoUsers = [];
@@ -5999,6 +5999,9 @@ class HRMController {
                     'id'          => (int)$u['id'],
                     'full_name'   => $u['full_name'],
                     'email'       => $u['email'],
+                    'avatar_url'  => $u['avatar_url'] ?? null,
+                    'avatar'      => $u['avatar_url'] ?? null,
+                    'job_title'   => $u['job_title'] ?? 'Nhân viên',
                     'miss_fields' => $missFields
                 ];
             }
@@ -6035,7 +6038,7 @@ class HRMController {
                 COALESCE(SUM(CASE WHEN COALESCE(p.has_insurance, 1) = 1 THEN COALESCE(p.base_salary, 0) ELSE 0 END), 0) as projected_ins_salary
             FROM users u
             LEFT JOIN hrm_profiles p ON u.id = p.user_id
-            WHERE u.tenant_id = ? AND u.is_active = 1 AND (u.status IS NULL OR u.status != 'leave')
+            WHERE u.tenant_id = ? AND u.is_active = 1 AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
         ");
         $profStmt->execute([$tid]);
         $profData = $profStmt->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -6053,15 +6056,20 @@ class HRMController {
         $totalKPCD  = $totalGross > 0 ? round($totalGross * 0.02) : $projectedKPCD;
 
         // 3. Cảnh báo Hợp đồng lao động thực tế
-        $cStmt = $this->db->prepare("
-            SELECT c.*, u.full_name, u.email
-            FROM hrm_contracts c
-            JOIN users u ON c.user_id = u.id
-            WHERE u.tenant_id = ?
-            ORDER BY c.end_date ASC
-        ");
-        $cStmt->execute([$tid]);
-        $contracts = $cStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $contracts = [];
+        try {
+            $cStmt = $this->db->prepare("
+                SELECT c.*, u.full_name, u.email, u.avatar_url, u.avatar_url as avatar, u.job_title
+                FROM hrm_contracts c
+                JOIN users u ON c.user_id = u.id
+                WHERE u.tenant_id = ?
+                ORDER BY c.end_date ASC
+            ");
+            $cStmt->execute([$tid]);
+            $contracts = $cStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (\Throwable $e) {
+            $contracts = [];
+        }
 
         $nowDate = date('Y-m-d');
         $contractAlerts = [];
@@ -6077,6 +6085,8 @@ class HRMController {
                     'severity'   => 'bad',
                     'user_id'    => (int)$c['user_id'],
                     'full_name'  => $c['full_name'],
+                    'avatar_url' => $c['avatar_url'] ?? null,
+                    'avatar'     => $c['avatar_url'] ?? null,
                     'contract_code' => $c['contract_code'],
                     'contract_type' => $c['contract_type'],
                     'end_date'   => $c['end_date'],
@@ -6088,6 +6098,8 @@ class HRMController {
                     'severity'   => 'warn',
                     'user_id'    => (int)$c['user_id'],
                     'full_name'  => $c['full_name'],
+                    'avatar_url' => $c['avatar_url'] ?? null,
+                    'avatar'     => $c['avatar_url'] ?? null,
                     'contract_code' => $c['contract_code'],
                     'contract_type' => $c['contract_type'],
                     'end_date'   => $c['end_date'],
@@ -6107,6 +6119,8 @@ class HRMController {
                         'severity'   => 'info',
                         'user_id'    => (int)$uid,
                         'full_name'  => $lastCt['full_name'] ?? "Nhân viên #$uid",
+                        'avatar_url' => $lastCt['avatar_url'] ?? null,
+                        'avatar'     => $lastCt['avatar_url'] ?? null,
                         'contract_code' => $lastCt['contract_code'] ?? '',
                         'contract_type' => $lastCt['contract_type'] ?? '',
                         'end_date'   => $lastCt['end_date'] ?? null,
@@ -6412,7 +6426,7 @@ class HRMController {
                 COALESCE(SUM(CASE WHEN COALESCE(p.has_insurance, 1) = 1 THEN COALESCE(p.base_salary, 0) ELSE 0 END), 0) as projected_ins_salary
             FROM users u
             LEFT JOIN hrm_profiles p ON u.id = p.user_id
-            WHERE u.tenant_id = ? AND u.is_active = 1 AND (u.status IS NULL OR u.status != 'leave')
+            WHERE u.tenant_id = ? AND u.is_active = 1 AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
         ");
         $profStmt->execute([$tid]);
         $profData = $profStmt->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -6720,14 +6734,14 @@ class HRMController {
 
         $sql = "
             SELECT 
-                u.id as user_id, u.full_name, u.citizen_id, u.email,
+                u.id as user_id, u.full_name, u.citizen_id, u.email, u.avatar_url, u.avatar_url as avatar, u.job_title,
                 COALESCE(SUM(mp.salary_basic_calculated + mp.allowance_total + mp.kpi_bonus + mp.overtime_salary + mp.diligence_bonus), 0) as gross,
                 COALESCE(SUM(mp.tax_pit), 0) as pit,
                 COALESCE(SUM(mp.insurance_bhxh + mp.insurance_bhyt + mp.insurance_bhtn), 0) as ins_nld
             FROM monthly_payslips mp
             JOIN users u ON mp.user_id = u.id
             WHERE u.tenant_id = ? AND {$monthCondition}
-            GROUP BY u.id, u.full_name, u.citizen_id, u.email
+            GROUP BY u.id, u.full_name, u.citizen_id, u.email, u.avatar_url, u.job_title
         ";
         $stmt = $this->db->prepare($sql);
         $stmt->execute($binds);
@@ -6888,21 +6902,35 @@ class HRMController {
         $sql = "
             SELECT 
                 u.id, u.full_name, u.gender, u.dob, u.citizen_id, u.address, u.phone, u.email,
-                u.job_title, u.created_at as joined_date, u.status,
-                p.base_salary, p.annual_leave_used, p.annual_leave_total,
+                u.job_title, u.created_at as joined_date, u.is_active, u.avatar_url, u.avatar_url as avatar,
+                p.base_salary, p.deal_salary, p.annual_leave_used, p.annual_leave_total,
                 (SELECT contract_type FROM hrm_contracts c WHERE c.user_id = u.id ORDER BY c.id DESC LIMIT 1) as last_contract_type,
                 (SELECT start_date FROM hrm_contracts c WHERE c.user_id = u.id ORDER BY c.id DESC LIMIT 1) as contract_start_date,
                 (SELECT end_date FROM hrm_contracts c WHERE c.user_id = u.id ORDER BY c.id DESC LIMIT 1) as contract_end_date,
                 (SELECT contract_code FROM hrm_contracts c WHERE c.user_id = u.id ORDER BY c.id DESC LIMIT 1) as contract_code,
-                (SELECT COALESCE(SUM(overtime_days), 0) FROM monthly_payslips mp WHERE mp.user_id = u.id AND mp.month_year LIKE '{$year}-%') as total_ot_days
+                (SELECT COALESCE(SUM(overtime_hours), 0) FROM monthly_payslips mp WHERE mp.user_id = u.id AND mp.month_year LIKE '{$year}-%') as total_ot_hours
             FROM users u
             LEFT JOIN hrm_profiles p ON u.id = p.user_id
-            WHERE u.tenant_id = ?
+            WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
             ORDER BY u.id ASC
         ";
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute([$tid]);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$tid]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (\Throwable $e) {
+            $stmt = $this->db->prepare("
+                SELECT u.id, u.full_name, u.gender, u.dob, u.citizen_id, u.address, u.phone, u.email,
+                       u.job_title, u.created_at as joined_date, u.is_active, u.avatar_url, u.avatar_url as avatar,
+                       p.base_salary, p.deal_salary, p.annual_leave_used, p.annual_leave_total
+                FROM users u
+                LEFT JOIN hrm_profiles p ON u.id = p.user_id
+                WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
+                ORDER BY u.id ASC
+            ");
+            $stmt->execute([$tid]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        }
 
         $headers = [
             'STT', 'Họ và tên', 'Giới tính', 'Ngày sinh', 'Quốc tịch', 'Nơi cư trú', 'Số CCCD/Hộ chiếu',
@@ -6921,25 +6949,36 @@ class HRMController {
                 default             => 'Chưa ký HĐ'
             };
 
+            $rawGender = strtolower(trim((string)($r['gender'] ?? '')));
+            $genderVi = match ($rawGender) {
+                'female', 'nữ', 'nu', 'f' => 'Nữ',
+                'male', 'nam', 'm' => 'Nam',
+                default => !empty($r['gender']) ? $r['gender'] : 'Nam'
+            };
+
             $laborBookRecords[] = [
                 'stt'              => $i + 1,
+                'user_id'          => (int)$r['id'],
                 'full_name'        => $r['full_name'],
-                'gender'           => !empty($r['gender']) ? $r['gender'] : 'Nam',
-                'dob'              => $r['dob'] ? date('d/m/Y', strtotime($r['dob'])) : '',
+                'avatar_url'       => $r['avatar_url'] ?? null,
+                'avatar'           => $r['avatar_url'] ?? null,
+                'email'            => $r['email'] ?? '',
+                'gender'           => $genderVi,
+                'dob'              => !empty($r['dob']) ? date('d/m/Y', strtotime($r['dob'])) : '',
                 'nationality'      => 'Việt Nam',
                 'address'          => $r['address'] ?? '',
                 'citizen_id'       => $r['citizen_id'] ?? '',
                 'qualification'    => 'Đại học / Cao đẳng',
                 'skill_level'      => '',
-                'job_title'        => $r['job_title'] ?? 'Nhân viên',
+                'job_title'        => !empty($r['job_title']) ? $r['job_title'] : 'Nhân viên',
                 'contract_type'    => $ctTypeStr,
-                'contract_start'   => $r['contract_start_date'] ? date('d/m/Y', strtotime($r['contract_start_date'])) : date('d/m/Y', strtotime($r['joined_date'])),
-                'contract_end'     => $r['contract_end_date'] ? date('d/m/Y', strtotime($r['contract_end_date'])) : '—',
-                'termination_reason'=> (($r['status'] ?? '') === 'leave') ? 'Hết hạn HĐ / Thỏa thuận chấm dứt' : '',
-                'salary'           => (float)($r['base_salary'] ?? 0),
+                'contract_start'   => !empty($r['contract_start_date']) ? date('d/m/Y', strtotime($r['contract_start_date'])) : (!empty($r['joined_date']) ? date('d/m/Y', strtotime($r['joined_date'])) : '—'),
+                'contract_end'     => !empty($r['contract_end_date']) ? date('d/m/Y', strtotime($r['contract_end_date'])) : '—',
+                'termination_reason'=> ((int)($r['is_active'] ?? 1) === 0) ? 'Hết hạn HĐ / Thỏa thuận chấm dứt' : '',
+                'salary'           => (float)(($r['base_salary'] ?? 0) > 0 ? $r['base_salary'] : ($r['deal_salary'] ?? 0)),
                 'insurance_book_no'=> '',
                 'annual_leave_used'=> (float)($r['annual_leave_used'] ?? 0),
-                'total_ot_hours'   => ((float)($r['total_ot_days'] ?? 0)) * 8,
+                'total_ot_hours'   => (float)($r['total_ot_hours'] ?? 0),
                 'salary_raise'     => '',
                 'training'         => '',
                 'discipline'       => ''

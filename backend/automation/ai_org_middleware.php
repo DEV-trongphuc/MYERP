@@ -226,7 +226,7 @@ function requireAISpaceAuth()
                 INNER JOIN ai_org_users u ON u.id = t.user_id
                 WHERE t.token = ?
                   AND t.expires_at > NOW()
-                  AND t.is_active = 1
+                  
                 LIMIT 1
             ");
             $stmt->execute([$bearerToken]);
@@ -692,7 +692,7 @@ function verifyAccessToken()
             SELECT u.* 
             FROM ai_org_users u
             INNER JOIN ai_org_access_tokens t ON u.id = t.user_id
-            WHERE t.token = ? AND t.expires_at > NOW() AND t.is_active = 1
+            WHERE t.token = ? AND t.expires_at > NOW() 
             LIMIT 1
         ");
         $stmt->execute([$token]);

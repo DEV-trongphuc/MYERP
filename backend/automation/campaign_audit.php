@@ -53,7 +53,7 @@ try {
         $stmtSubs = $pdo->prepare("
             SELECT DISTINCT s.id, s.first_name, s.last_name, COALESCE(NULLIF(s.phone_number, ''), s.phone) AS phone
             FROM subscribers s
-            JOIN list_subscribers ls ON ls.subscriber_id = s.id
+            JOIN subscriber_lists ls ON ls.subscriber_id = s.id
             WHERE ls.list_id IN ($placeholders) AND s.workspace_id = ?
         ");
         $stmtSubs->execute($params);

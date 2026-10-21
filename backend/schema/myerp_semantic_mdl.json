@@ -1,0 +1,181 @@
+{
+  "catalog": "myerp_enterprise",
+  "schema": "vhvxoigh_myerp",
+  "version": "1.0.0",
+  "engine": "WrenAI_Vanna_Semantic_MDL_v1",
+  "isolation_rules": {
+    "tenant_id_tables": [
+      "contacts",
+      "deals",
+      "users",
+      "invoices",
+      "expenses",
+      "notifications",
+      "projects",
+      "support_tickets",
+      "purchase_orders",
+      "sales_orders"
+    ],
+    "workspace_id_tables": [
+      "subscribers",
+      "lists",
+      "subscriber_lists",
+      "segments",
+      "flows",
+      "campaigns",
+      "templates"
+    ],
+    "relational_user_join_tables": [
+      {
+        "table": "deposits",
+        "join_sql": "INNER JOIN users u ON u.id = deposits.created_by AND u.tenant_id = :tenant_id"
+      },
+      {
+        "table": "monthly_payslips",
+        "join_sql": "INNER JOIN users u ON u.id = monthly_payslips.user_id AND u.tenant_id = :tenant_id"
+      },
+      {
+        "table": "hrm_leave_requests",
+        "join_sql": "INNER JOIN users u ON u.id = hrm_leave_requests.user_id AND u.tenant_id = :tenant_id"
+      },
+      {
+        "table": "hrm_salary_advances",
+        "join_sql": "INNER JOIN users u ON u.id = hrm_salary_advances.user_id AND u.tenant_id = :tenant_id"
+      }
+    ]
+  },
+  "forbidden_column_hallucinations": {
+    "users.status": "Does NOT exist on users! Always use users.is_active = 1 AND users.deleted_at IS NULL",
+    "purchase_orders.order_number": "Does NOT exist! Always use purchase_orders.po_number",
+    "sales_orders.order_number": "Does NOT exist! Always use sales_orders.so_number",
+    "contacts.dob": "Does NOT exist! Always use contacts.birth_date",
+    "contacts.birthday": "Does NOT exist! Always use contacts.birth_date",
+    "deposits.tenant_id": "Does NOT exist! Join users u ON u.id = deposits.created_by WHERE u.tenant_id = ?"
+  },
+  "models": [
+    {
+      "name": "contacts",
+      "tableReference": "contacts",
+      "primaryKey": "id",
+      "softDeleteFilter": "deleted_at IS NULL",
+      "tenantFilter": "tenant_id = :tenant_id",
+      "columns": [
+        "id",
+        "tenant_id",
+        "full_name",
+        "email",
+        "phone",
+        "mobile",
+        "gender",
+        "birth_date",
+        "city",
+        "job_title",
+        "company",
+        "department",
+        "program",
+        "intake",
+        "student_id",
+        "stage_id",
+        "pipeline_status",
+        "lead_status",
+        "temperature",
+        "source",
+        "owner_id",
+        "created_at",
+        "deleted_at"
+      ]
+    },
+    {
+      "name": "users",
+      "tableReference": "users",
+      "primaryKey": "id",
+      "softDeleteFilter": "deleted_at IS NULL",
+      "tenantFilter": "tenant_id = :tenant_id",
+      "activeFilter": "is_active = 1 AND deleted_at IS NULL",
+      "columns": [
+        "id",
+        "tenant_id",
+        "username",
+        "email",
+        "full_name",
+        "phone",
+        "avatar_url",
+        "role_id",
+        "department",
+        "job_title",
+        "gender",
+        "base_salary",
+        "is_active",
+        "created_at",
+        "deleted_at"
+      ]
+    },
+    {
+      "name": "deposits",
+      "tableReference": "deposits",
+      "primaryKey": "id",
+      "softDeleteFilter": "deleted_at IS NULL",
+      "tenantJoin": "JOIN users u ON u.id = deposits.created_by AND u.tenant_id = :tenant_id",
+      "columns": [
+        "id",
+        "contact_id",
+        "deal_id",
+        "amount",
+        "status",
+        "created_by",
+        "approved_by",
+        "created_at",
+        "deleted_at"
+      ]
+    },
+    {
+      "name": "monthly_payslips",
+      "tableReference": "monthly_payslips",
+      "primaryKey": "id",
+      "tenantJoin": "JOIN users u ON u.id = monthly_payslips.user_id AND u.tenant_id = :tenant_id",
+      "columns": [
+        "id",
+        "user_id",
+        "month",
+        "base_salary",
+        "total_allowances",
+        "overtime_pay",
+        "commission_amount",
+        "kpi_bonus",
+        "bhxh_deduction",
+        "tax_deduction",
+        "advance_deduction",
+        "net_salary",
+        "status",
+        "created_at"
+      ]
+    }
+  ],
+  "canonical_metrics": [
+    {
+      "name": "uncontacted_leads",
+      "description": "Chưa tương tác được (Pipeline Stages 1 - 2)",
+      "sql_condition": "ps.order_index IN (1, 2) AND (c.lead_status NOT IN ('lost', 'nurture') OR c.lead_status IS NULL) AND c.deleted_at IS NULL"
+    },
+    {
+      "name": "qualified_leads",
+      "description": "Lead Qualified (Pipeline Stages 3 - 12)",
+      "sql_condition": "ps.order_index BETWEEN 3 AND 12 AND (c.lead_status NOT IN ('lost', 'nurture') OR c.lead_status IS NULL) AND c.deleted_at IS NULL"
+    },
+    {
+      "name": "won_leads",
+      "description": "Won / Chốt cọc & Nhập học (Pipeline Stages 13 - 14)",
+      "sql_condition": "ps.order_index IN (13, 14) AND c.deleted_at IS NULL"
+    },
+    {
+      "name": "official_students",
+      "description": "Học viên chính thức (Pipeline Stage 14)",
+      "sql_condition": "(ps.order_index = 14 OR c.status = 'customer') AND c.deleted_at IS NULL"
+    },
+    {
+      "name": "statutory_insurance_rates",
+      "description": "Tỷ lệ trích nộp BHXH/BHYT/BHTN/KPCĐ theo chuẩn Luật Lao động",
+      "formula": "NV đóng 10.5% (8% BHXH + 1.5% BHYT + 1% BHTN); DN đóng 23.5% (17.5% BHXH + 3% BHYT + 1% BHTN + 2% KPCĐ); Giảm trừ bản thân 11tr, NPT 4.4tr/người"
+    }
+  ]
+}

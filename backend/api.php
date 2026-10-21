@@ -16043,8 +16043,8 @@ switch ($action) {
                 }
             }
 
-            // Query Top Consultants
-            $topConsultantsSql = "SELECT c.id, c.name, c.email, c.avatar, c.status as c_status, c.vacation_mode as c_vacation_mode, dl.status as dl_status,
+            // Query Top Consultants (with users.avatar_url fallback so every consultant has their avatar)
+            $topConsultantsSql = "SELECT c.id, c.name, c.email, COALESCE(NULLIF(TRIM(c.avatar), ''), u_av.avatar_url) as avatar, c.status as c_status, c.vacation_mode as c_vacation_mode, dl.status as dl_status,
                                   CASE WHEN l.source IN ('ca_nhan', 'gioi_thieu') THEN 1 ELSE 0 END as is_self,
                                   COUNT(dl.id) as cnt 
                               FROM distribution_logs dl 
@@ -16055,9 +16055,10 @@ switch ($action) {
                                   GROUP BY lead_id
                               ) dl_max ON dl.id = dl_max.max_id
                               JOIN consultants c ON dl.assigned_to = c.id 
+                              LEFT JOIN users u_av ON u_av.email = c.email
                               LEFT JOIN leads l ON dl.lead_id = l.id
                               WHERE $dateConditionDl $managerFilterDl AND dl.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'fallback', 'success', 'error', 'reminder', 'databank_claim') 
-                              GROUP BY c.id, c.name, c.email, c.avatar, c.status, c.vacation_mode, dl.status, is_self";
+                              GROUP BY c.id, c.name, c.email, c.avatar, u_av.avatar_url, c.status, c.vacation_mode, dl.status, is_self";
             $topConsultantsRes = $conn->query($topConsultantsSql);
             $consultantStats = [];
             if ($topConsultantsRes) {
@@ -16069,6 +16070,7 @@ switch ($action) {
                             'name' => $row['name'],
                             'email' => $row['email'],
                             'avatar' => $row['avatar'],
+                            'avatar_url' => $row['avatar'],
                             'status' => $row['c_status'],
                             'vacation_mode' => (int) $row['c_vacation_mode'],
                             'assigned' => 0,
@@ -16791,24 +16793,26 @@ switch ($action) {
             $roundCondition = " AND round_id = $roundId";
         }
 
-        // Fetch consultants matching the round or all active
+        // Fetch consultants matching the round or all active (with users.avatar_url fallback)
         $consultants = [];
         if ($roundId > 0) {
-            $sql = "SELECT c.id, c.name, c.avatar, COALESCE(rc.receive_ratio, 1) as receive_ratio, rc.round_id, r.round_name,
+            $sql = "SELECT c.id, c.name, COALESCE(NULLIF(TRIM(c.avatar), ''), u_av.avatar_url) as avatar, COALESCE(rc.receive_ratio, 1) as receive_ratio, rc.round_id, r.round_name,
                            COALESCE(rc.compensation_count, 0) as pending_compensation,
                            COALESCE(rc.skip_count, 0) as skip_count,
                            COALESCE(rc.current_turn_remaining, 0) as current_turn_remaining
                     FROM consultants c
+                    LEFT JOIN users u_av ON u_av.email = c.email
                     JOIN round_consultants rc ON c.id = rc.consultant_id
                     JOIN distribution_rounds r ON rc.round_id = r.id
                     WHERE rc.round_id = $roundId AND c.status = 'active'
                     ORDER BY c.name ASC";
         } else {
-            $sql = "SELECT c.id, c.name, c.avatar, 1 as receive_ratio, 0 as round_id, 'Tất cả các Vòng' as round_name,
+            $sql = "SELECT c.id, c.name, COALESCE(NULLIF(TRIM(c.avatar), ''), u_av.avatar_url) as avatar, 1 as receive_ratio, 0 as round_id, 'Tất cả các Vòng' as round_name,
                            (SELECT COALESCE(SUM(rc2.compensation_count), 0) FROM round_consultants rc2 WHERE rc2.consultant_id = c.id) as pending_compensation,
                            0 as skip_count,
                            0 as current_turn_remaining
                     FROM consultants c
+                    LEFT JOIN users u_av ON u_av.email = c.email
                     WHERE c.status = 'active'
                     ORDER BY c.name ASC";
         }
@@ -16819,6 +16823,7 @@ switch ($action) {
                     'id' => (int) $row['id'],
                     'name' => $row['name'],
                     'avatar' => $row['avatar'],
+                    'avatar_url' => $row['avatar'],
                     'receive_ratio' => (int) $row['receive_ratio'],
                     'round_id' => (int) $row['round_id'],
                     'round_name' => $row['round_name'],

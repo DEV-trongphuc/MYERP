@@ -75,7 +75,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
         // Return raw points for client side rendering
         // In real app, we might cluster these server side
-        $stmt = $pdo->prepare("SELECT JSON_UNQUOTE(JSON_EXTRACT(meta_data, '$.x_position')) as x_pos, JSON_UNQUOTE(JSON_EXTRACT(meta_data, '$.y_position')) as y_pos, JSON_UNQUOTE(JSON_EXTRACT(meta_data, '$.viewport_width')) as viewport_width, JSON_UNQUOTE(JSON_EXTRACT(meta_data, '$.viewport_height')) as viewport_height FROM web_events WHERE property_id = ? AND event_type = 'click' LIMIT 1000");
         // Note: Filter by URL needs joining page_view or storing URL in event. 
         // To fix: In track.php, we didn't store URL in web_events, only in web_page_views. 
         // We link via page_view_id.

@@ -34,10 +34,10 @@ if ($method === 'GET' && $action === 'list') {
         
         try {
             $wsStmt = $pdo->prepare("
-                SELECT wu.user_id, w.name as workspace_name, r.name as role_name 
+                SELECT wu.user_id, w.name as workspace_name, wu.role as role_name 
                 FROM workspace_users wu
                 JOIN workspaces w ON w.id = wu.workspace_id
-                LEFT JOIN roles r ON r.id = wu.role_id
+                
                 WHERE TRIM(wu.user_id) COLLATE utf8mb4_unicode_ci IN ($placeholders)
             ");
             // Map the bound parameters to execute

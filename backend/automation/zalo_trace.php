@@ -69,10 +69,10 @@ echo "</div>";
 // 3. KIỂM TRA KỊCH BẢN AI
 echo "<div class='card'><h3>🤖 KIỂM TRA CẤU HÌNH KỊCH BẢN AI</h3>";
 $stmt = $pdo->query("
-    SELECT c.name, s.title, s.trigger_text, s.status, s.type, s.ai_chatbot_id 
+    SELECT c.name, s.name AS title, s.keywords AS trigger_text, s.is_active AS status, s.response_type AS type, s.response_content AS ai_chatbot_id 
     FROM zalo_automation_scenarios s
-    JOIN zalo_oa_configs c ON s.oa_config_id = c.id
-    WHERE s.type = 'ai_reply'
+    LEFT JOIN zalo_oa_configs c ON s.oa_id = c.id
+    WHERE s.response_type = 'ai_reply'
 ");
 $aiScenarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
 

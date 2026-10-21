@@ -1579,8 +1579,7 @@ class AgentAutomationMarketingTools
             if (self::tableExists($db, 'flow_enrollments') && self::tableExists($db, 'flows')) {
                 try {
                     $stmtFe = $db->prepare("
-                        SELECT fe.id, fe.flow_id, f.name AS flow_name, fe.current_step_id,
-                               fe.status, fe.next_run_at, fe.enrolled_at
+                        SELECT fe.id, fe.flow_id, f.name AS flow_name, fe.enrolled_at
                         FROM flow_enrollments fe
                         LEFT JOIN flows f ON f.id = fe.flow_id
                         WHERE fe.subscriber_id = ?

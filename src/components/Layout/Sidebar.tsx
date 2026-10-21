@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { AppIcon } from '../common/AppIcons';
-import { LayoutDashboard, Users, GitBranch, Settings, ChevronLeft, Webhook, Link2, Database, ShieldCheck, Ticket, Plus, Scale, Filter, Cpu, Building2, TrendingUp, FileText, Calendar, Package, Receipt, CreditCard, BarChart2, Truck, File, Boxes, Layers, Clock, Home, CheckSquare, LifeBuoy, User, Clipboard, Globe, GraduationCap, Bot, Brain } from 'lucide-react';
+import { LayoutDashboard, Users, GitBranch, Settings, ChevronLeft, Webhook, Link2, Database, ShieldCheck, Ticket, Plus, Scale, Filter, Cpu, Building2, TrendingUp, FileText, Calendar, Package, Receipt, CreditCard, BarChart2, Truck, File, Boxes, Layers, Clock, Home, CheckSquare, LifeBuoy, User, Clipboard, Globe, GraduationCap, Bot, Brain, DollarSign } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useEffect, useState, useRef, Fragment } from 'react';
@@ -92,7 +92,8 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
       { name: 'Phòng ban', href: '/consultants?tab=teams', icon: Users },
       { name: 'Nhân sự công ty', href: '/consultants', icon: Users },
       { name: 'Quản lý công', href: '/attendance', icon: Clock },
-      { name: 'Nhân sự & Lương', href: '/hrm', icon: ShieldCheck, hideForRoles: ['manager', 'assistant', 'sale', 'viewer', 'sales', 'accountant', 'marketing', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] }
+      { name: 'Nhân sự & Lương', href: '/hrm', icon: ShieldCheck, hideForRoles: ['manager', 'assistant', 'sale', 'viewer', 'sales', 'accountant', 'marketing', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] },
+      { name: 'Kế toán & Lương A-Z', href: '/accounting-az', icon: DollarSign, hideForRoles: ['manager', 'assistant', 'sale', 'viewer', 'sales', 'marketing', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] }
     ]
   },
   {
@@ -163,6 +164,7 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' }
   ],
   accountant: [
+    { name: 'Kế toán & Lương A-Z', href: '/accounting-az', icon: DollarSign },
     { name: 'Nộp hồ sơ', href: '/students?tab=nop_ho_so', icon: GraduationCap, badgeKey: 'nopHoSo' },
     { name: 'Lệ phí hồ sơ', href: '/students?tab=le_phi', icon: GraduationCap, badgeKey: 'lePhi' },
     { name: 'Học viên chính thức', href: '/students?tab=chinh_thuc', icon: GraduationCap },
@@ -173,6 +175,7 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Phiếu lương', href: '/my-payslips', icon: FileText }
   ],
   hr: [
+    { name: 'Kế toán & Lương A-Z', href: '/accounting-az', icon: DollarSign },
     { name: 'Nhân sự', href: '/hrm', icon: ShieldCheck },
     { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
     { name: 'Duyệt công', href: '/attendance', icon: Clock },

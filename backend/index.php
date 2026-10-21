@@ -720,16 +720,8 @@ if (!file_exists($dailyMaintLock)) {
             try {
                 // 1. Delete test requests from hrm_leave_requests (including #21, #8, #7, #6)
                 $db->exec("DELETE FROM hrm_leave_requests WHERE id IN (6, 7, 8, 21)");
-                try { $db->exec("DELETE FROM hrm_leave_comments WHERE leave_id IN (6, 7, 8, 21)"); } catch (\Throwable $e) {}
 
-                // 2. Delete test requests from workflow_requests if table exists
-                try {
-                    $db->exec("DELETE FROM workflow_requests WHERE id IN (6, 7, 8, 21)");
-                    $db->exec("DELETE FROM workflow_approvals WHERE request_id IN (6, 7, 8, 21) OR workflow_request_id IN (6, 7, 8, 21)");
-                    $db->exec("DELETE FROM workflow_step_logs WHERE request_id IN (6, 7, 8, 21) OR workflow_request_id IN (6, 7, 8, 21)");
-                } catch (\Throwable $e) {}
-
-                // 3. Clean audit_logs and notifications for these test requests
+                // 2. Clean audit_logs and notifications for these test requests
                 try {
                     $db->exec("DELETE FROM audit_logs WHERE resource IN ('hrm_leave_requests', 'leave', 'leave_request', 'workflow_requests', 'workflow') AND resource_id IN (6, 7, 8, 21)");
                     $db->exec("DELETE FROM notifications WHERE (link LIKE '%leave%' OR link LIKE '%approval%') AND (link LIKE '%/21' OR link LIKE '%/8' OR link LIKE '%/7' OR link LIKE '%/6')");

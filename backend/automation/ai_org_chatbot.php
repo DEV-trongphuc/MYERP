@@ -548,14 +548,11 @@ try {
             // Group by file_name to get only unique files
             // Join with global_assets to get the source if available
             // IMPORTANT: Exclude files that have been soft-deleted in global_assets
-            $stmt = $pdo->prepare("SELECT f.*, COALESCE(ga.source, 'user_attachment') as source 
+            $stmt = $pdo->prepare("SELECT f.*, 'user_attachment' as source 
                 FROM ai_workspace_files f
-                LEFT JOIN global_assets ga ON f.file_url = ga.url
-                WHERE (f.conversation_id = ? OR f.conversation_id = ?)
-                  AND (ga.id IS NULL OR ga.is_deleted = 0)
-                GROUP BY f.file_name, f.file_url
+                WHERE f.workspace_id = ?
                 ORDER BY f.created_at ASC");
-            $stmt->execute([$convId, $_GET['conversation_id']]);
+            $stmt->execute([$workspace_id]);
             echo json_encode(['success' => true, 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
             exit;
         }
@@ -861,16 +858,16 @@ try {
                     $fileId = $stmtFileId->fetchColumn();
 
                     if ($fileId) {
-                        $stmtVer = $pdo->prepare("INSERT INTO ai_workspace_versions (workspace_file_id, content) VALUES (?, ?)");
+                        $stmtVer = $pdo->prepare("INSERT INTO ai_workspace_versions (file_id, content) VALUES (?, ?)");
                         $stmtVer->execute([$fileId, $currentContent]);
 
                         // Optimization: Limit versions to the last 10 to prevent storage bloat
                         $pdo->prepare("DELETE FROM ai_workspace_versions 
-                                       WHERE workspace_file_id = ? 
+                                       WHERE file_id = ? 
                                        AND id NOT IN (
                                            SELECT id FROM (
                                                SELECT id FROM ai_workspace_versions 
-                                               WHERE workspace_file_id = ? 
+                                               WHERE file_id = ? 
                                                ORDER BY created_at DESC LIMIT 10
                                            ) tmp
                                        )")->execute([$fileId, $fileId]);
@@ -899,8 +896,8 @@ try {
             $stmt = $pdo->prepare("
         SELECT v.id, v.created_at, LENGTH(v.content) as size
         FROM ai_workspace_versions v
-        JOIN ai_workspace_files f ON v.workspace_file_id = f.id
-        WHERE f.file_url = ?
+        JOIN ai_workspace_files f ON v.file_id = f.id
+        WHERE f.id = ?
         ORDER BY v.created_at DESC
         ");
             $stmt->execute([$input['file_url']]);
@@ -913,10 +910,7 @@ try {
             // before restoring a version. Without this, any authenticated org user who
             // knows a version_id can overwrite files belonging to other users.
             $verifyStmt = $pdo->prepare("
-                SELECT f.file_url, c.user_id, c.visitor_id
-                FROM ai_workspace_versions v
-                JOIN ai_workspace_files f ON v.workspace_file_id = f.id
-                LEFT JOIN ai_org_conversations c ON f.conversation_id = c.id
+                SELECT f.id, f.created_by, f.workspace_id FROM ai_workspace_versions v JOIN ai_workspace_files f ON v.file_id = f.id
                 WHERE v.id = ?
             ");
             $verifyStmt->execute([$input['version_id']]);
@@ -1470,7 +1464,7 @@ Sử dụng tiếng Việt, chuyên nghiệp và súc tích.";
                 $stmt = $pdo->prepare("
                     SELECT f.*, u.full_name as user_name, u.email as user_email
                     FROM ai_feedback f
-                    LEFT JOIN ai_org_users u ON f.org_user_id = u.id
+                    LEFT JOIN ai_org_conversations c ON f.conversation_id = c.id LEFT JOIN ai_org_users u ON c.user_id = u.id
                     $whereSQL
                     ORDER BY f.created_at DESC
                     LIMIT ? OFFSET ?
@@ -1720,11 +1714,11 @@ Sử dụng tiếng Việt, chuyên nghiệp và súc tích.";
                 if ($pdo->inTransaction()) {
                     // Limit versions to last 10
                     $pdo->prepare("DELETE FROM ai_workspace_versions 
-                               WHERE workspace_file_id = ? 
+                               WHERE file_id = ? 
                                AND id NOT IN (
                                    SELECT id FROM (
                                        SELECT id FROM ai_workspace_versions 
-                                       WHERE workspace_file_id = ? 
+                                       WHERE file_id = ? 
                                        ORDER BY created_at DESC LIMIT 10
                                    ) tmp
                                )")->execute([$fileId, $fileId]);

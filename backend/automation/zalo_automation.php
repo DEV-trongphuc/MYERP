@@ -24,7 +24,7 @@ try {
             $oa_id = $_GET['oa_config_id'] ?? null;
             $sql = "SELECT s.*, b.bot_name as ai_bot_name 
                     FROM zalo_automation_scenarios s
-                    JOIN zalo_oa_configs oa ON s.oa_config_id = oa.id
+                    
                     LEFT JOIN ai_chatbot_settings b ON s.ai_chatbot_id = b.property_id
                     WHERE oa.workspace_id = ?";
 
@@ -159,8 +159,8 @@ try {
         // [SECURITY] Ensure scenario belongs to an OA in current workspace
         $stmtCheck = $pdo->prepare("
             SELECT s.id FROM zalo_automation_scenarios s 
-            JOIN zalo_oa_configs oa ON s.oa_config_id = oa.id 
-            WHERE s.id = ? AND oa.workspace_id = ?
+             
+            WHERE s.id = ? AND s.workspace_id = ?
         ");
         $stmtCheck->execute([$id, $workspace_id]);
         if (!$stmtCheck->fetchColumn()) throw new Exception("Scenario not found or access denied");

@@ -6883,9 +6883,12 @@ class ChatController {
         }
 
         $domainBlock = implode("\n", array_unique($domainRules));
+        require_once __DIR__ . '/../utils/SemanticMdlRegistry.php';
+        $mdlGroundingBlock = SemanticMdlRegistry::getDomainSemanticContext($primaryDomain);
 
         return $coreHeader . "\n\n"
             . $domainBlock . "\n\n"
+            . $mdlGroundingBlock . "\n\n"
             . "QUY TẮC TRÌNH BÀY & SMART UI TAGS:\n"
             . "• Từ lóng: 'củ'/'chai' = Triệu VNĐ ('5 củ' = 5.000.000 VNĐ); 'lead mồ côi' = `owners='unassigned'`; 'lead ngâm' = `stale_days`.\n"
             . "• Không dùng từ '(Zero-Trust)'. Không dùng emoji trong tiêu đề `###`. Dùng BẢNG MARKDOWN khi có >= 2 đối tượng.\n"

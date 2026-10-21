@@ -189,7 +189,7 @@ if ($method === 'GET' && ($action === 'list' || $action === '')) {
                            COALESCE(u.erp_user_id, erpu.id) as erp_user_id,
                            COALESCE(erpu.avatar_url, u.avatar) as avatar_url,
                            erpu.job_title, erpu.department, erpu.phone,
-                           IF(uc.id IS NOT NULL, 1, 0) as in_category
+                           IF(uc.user_id IS NOT NULL, 1, 0) as in_category
                     FROM ai_org_users u
                     LEFT JOIN users erpu ON (erpu.id = u.erp_user_id OR LOWER(erpu.email) = LOWER(u.email))
                     LEFT JOIN ai_org_user_categories uc ON u.id = uc.user_id AND uc.category_id = ?
@@ -204,7 +204,7 @@ if ($method === 'GET' && ($action === 'list' || $action === '')) {
                            COALESCE(u.erp_user_id, erpu.id) as erp_user_id,
                            COALESCE(erpu.avatar_url, u.avatar) as avatar_url,
                            erpu.job_title, erpu.department, erpu.phone,
-                           IF(uc.id IS NOT NULL, 1, 0) as in_category
+                           IF(uc.user_id IS NOT NULL, 1, 0) as in_category
                     FROM ai_org_users u
                     LEFT JOIN users erpu ON (erpu.id = u.erp_user_id OR LOWER(erpu.email) = LOWER(u.email))
                     LEFT JOIN ai_org_user_categories uc ON u.id = uc.user_id AND uc.category_id = ?

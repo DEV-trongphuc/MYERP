@@ -39,6 +39,29 @@ interface CustomerOmnichannelJourneyTabProps {
   onRefreshContact?: () => void;
 }
 
+const CANONICAL_CHART_PALETTE = [
+  '#C6333D',
+  '#334155',
+  '#E11D48',
+  '#64748B',
+  '#991B1B',
+  '#475569',
+  '#FB7185',
+  '#94A3B8',
+  '#1E293B',
+  '#CBD5E1'
+];
+
+const getCompletenessTone = (pct: number) => {
+  if (pct >= 80) {
+    return { bar: '#10b981', dot: '#10b981', text: '#059669', bg: '#ecfdf5' };
+  }
+  if (pct >= 50) {
+    return { bar: '#f59e0b', dot: '#f59e0b', text: '#d97706', bg: '#fffbeb' };
+  }
+  return { bar: '#ef4444', dot: '#ef4444', text: '#dc2626', bg: '#fef2f2' };
+};
+
 const formatDateTimeVN = (val?: string | null): string => {
   if (!val) return 'Chưa ghi nhận';
   const clean = String(val).replace(' ', 'T');
@@ -652,6 +675,55 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
       ? Math.min(100, Math.round((summary.stats_email_clicked / summary.stats_email_opened) * 100))
       : 0;
 
+  const channelStats = useMemo(() => {
+    const emailCount = Number(summary.stats_email_sent || 0);
+    const webCount = Number((summary.web_sessions_count || 0) + (summary.web_pageviews_count || 0));
+    const flowCount = Number((summary.active_flow_count || 0) + (summary.completed_flow_count || 0));
+    const surveyCount = Number(summary.survey_completed_count || 0);
+    const chatCount = Number(linkedConversations.length + (summary.active_voucher_code ? 1 : 0));
+    const subTotal = emailCount + webCount + flowCount + surveyCount + chatCount;
+    const crmCount = Math.max(0, allTimelineEvents.length - subTotal);
+    const total = Math.max(subTotal + crmCount, allTimelineEvents.length, 1);
+
+    const rawItems = [
+      { id: 'email', name: 'Email & ZNS', count: emailCount, color: CANONICAL_CHART_PALETTE[0] },
+      { id: 'web', name: 'Website & UTM', count: webCount, color: CANONICAL_CHART_PALETTE[1] },
+      { id: 'flow', name: 'Automation Flow', count: flowCount, color: CANONICAL_CHART_PALETTE[2] },
+      { id: 'survey', name: 'Khảo sát / Lead Form', count: surveyCount, color: CANONICAL_CHART_PALETTE[3] },
+      { id: 'chat', name: 'Hội thoại & Voucher', count: chatCount, color: CANONICAL_CHART_PALETTE[4] },
+      { id: 'crm', name: 'Tương tác CRM', count: crmCount, color: CANONICAL_CHART_PALETTE[5] }
+    ];
+
+    const items = rawItems
+      .map((item) => ({
+        ...item,
+        pct: total > 0 ? Math.round((item.count / total) * 1000) / 10 : 0
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    return { items, total };
+  }, [summary, linkedConversations.length, allTimelineEvents.length]);
+
+  const profileCompleteness = useMemo(() => {
+    const fields = [
+      contact?.full_name,
+      contact?.phone,
+      contact?.email,
+      contact?.utm_campaign || contact?.source || contact?.campaign_name,
+      contact?.program || contact?.school,
+      contact?.job_title,
+      contact?.company,
+      contact?.address || contact?.city
+    ];
+    const filled = fields.filter(Boolean).length;
+    return Math.round((filled / fields.length) * 100);
+  }, [contact]);
+
+  const engagementHealthPct = useMemo(() => {
+    const totalScore = (allTimelineEvents.length * 12) + (summary.stats_email_opened * 18) + (summary.web_pageviews_count * 6);
+    return Math.min(100, Math.max(15, Math.round(totalScore / 1.4) || (allTimelineEvents.length > 0 ? 60 : 20)));
+  }, [allTimelineEvents.length, summary.stats_email_opened, summary.web_pageviews_count]);
+
   const mktStatusBadge = (() => {
     const st = String(summary.marketing_status || 'subscribed').toLowerCase();
     if (st === 'unsubscribed' || st === 'opt_out') {
@@ -684,81 +756,102 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
   };
 
   return (
-    <div className="animate-fade" style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingBottom: '1.5rem' }}>
-      {/* Simple Clean Header Bar (No Score / Points) */}
+    <div className="animate-fade" style={{ display: 'flex', flexDirection: 'column', gap: '14px', paddingBottom: '1.5rem' }}>
+      {/* 1. TOP HEADER BAR — Clean White Executive Card */}
       <div
+        className="card"
         style={{
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: '8px',
-          padding: '8px 12px',
-          borderRadius: '8px',
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)'
+          gap: '0.75rem',
+          padding: '0.85rem 1.15rem',
+          borderRadius: 14,
+          border: '1px solid #e2e8f0',
+          background: '#ffffff',
+          boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)'
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <Activity size={15} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-          <span style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--color-text)' }}>
-            Hành trình tương tác đa kênh
+          <div
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 8,
+              background: 'rgba(189, 29, 45, 0.08)',
+              color: '#BD1D2D',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}
+          >
+            <Activity size={15} />
+          </div>
+          <span style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>
+            Hành trình tương tác đa kênh 360°
           </span>
           <span
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               padding: '2px 8px',
-              borderRadius: '999px',
-              fontSize: '0.68rem',
-              fontWeight: 600,
-              color: mktStatusBadge.color,
-              background: mktStatusBadge.bg
+              borderRadius: 6,
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              color: '#334155',
+              background: '#f1f5f9',
+              border: 'none'
             }}
           >
             {mktStatusBadge.label}
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <button
             type="button"
             onClick={openEnrollFlowModal}
             style={{
+              height: 32,
+              padding: '0 12px',
+              borderRadius: 8,
+              border: '1px solid #e2e8f0',
+              background: '#ffffff',
+              color: '#0f172a',
+              fontSize: '0.76rem',
+              fontWeight: 600,
+              cursor: 'pointer',
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '4px',
-              padding: '4px 10px',
-              borderRadius: '6px',
-              border: '1px solid var(--color-border)',
-              background: 'var(--color-bg)',
-              color: 'var(--color-text)',
-              fontSize: '0.72rem',
-              fontWeight: 600,
-              cursor: 'pointer'
+              gap: '5px',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
             }}
           >
-            <Plus size={12} />
-            <span>Gán Kịch bản</span>
+            <Plus size={13} style={{ color: '#BD1D2D' }} />
+            <span>+ Gán Kịch bản</span>
           </button>
           <button
             type="button"
             onClick={openIssueVoucherModal}
             style={{
+              height: 32,
+              padding: '0 12px',
+              borderRadius: 8,
+              border: '1px solid #e2e8f0',
+              background: '#ffffff',
+              color: '#0f172a',
+              fontSize: '0.76rem',
+              fontWeight: 600,
+              cursor: 'pointer',
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '4px',
-              padding: '4px 10px',
-              borderRadius: '6px',
-              border: '1px solid var(--color-border)',
-              background: 'var(--color-bg)',
-              color: 'var(--color-text)',
-              fontSize: '0.72rem',
-              fontWeight: 600,
-              cursor: 'pointer'
+              gap: '5px',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
             }}
           >
-            <Ticket size={12} style={{ color: 'var(--color-text-muted)' }} />
+            <Ticket size={13} style={{ color: '#334155' }} />
             <span>Cấp Voucher</span>
           </button>
           {summary.active_voucher_code && (
@@ -767,20 +860,21 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
               onClick={() => handleRedeemVoucher(summary.active_voucher_code)}
               disabled={Boolean(submittingAction)}
               style={{
+                height: 32,
+                padding: '0 12px',
+                borderRadius: 8,
+                border: '1px solid #10b981',
+                background: '#ecfdf5',
+                color: '#059669',
+                fontSize: '0.74rem',
+                fontWeight: 700,
+                cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '4px',
-                padding: '4px 10px',
-                borderRadius: '6px',
-                border: '1px solid rgba(16, 185, 129, 0.28)',
-                background: 'rgba(16, 185, 129, 0.08)',
-                color: '#059669',
-                fontSize: '0.72rem',
-                fontWeight: 700,
-                cursor: 'pointer'
+                gap: '5px'
               }}
             >
-              <CheckCircle2 size={12} />
+              <CheckCircle2 size={13} />
               <span>Redeem ({summary.active_voucher_code})</span>
             </button>
           )}
@@ -805,217 +899,613 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
         </div>
       )}
 
-      {/* SECTION 1: Simple Clean Summary Strip (No Score/Points) */}
-      <div
-        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))',
-          gap: '8px'
-        }}
-      >
-        {/* Tile 1: Tổng sự kiện */}
+      {/* 2. 4 CANONICAL TOP KPI CARDS (Matching CustomerPersonaOverviewDeck.tsx 100%) */}
+      <div className="dashboard-kpi-grid" style={{ marginBottom: 0 }}>
+        {/* KPI 1: DẤU CHÂN SỐ ĐA KÊNH */}
         <div
+          className="stat-card"
           onClick={() => {
             setActiveSubTab('timeline');
             setTimelineChannelFilter('all');
           }}
           style={{
-            padding: '8px 11px',
-            borderRadius: '8px',
-            background: 'var(--color-surface)',
+            minHeight: '132px',
+            display: 'flex',
+            flexDirection: 'column',
+            cursor: 'pointer',
             border: activeSubTab === 'timeline' && timelineChannelFilter === 'all'
-              ? '1px solid var(--color-primary)'
-              : '1px solid var(--color-border)',
-            cursor: 'pointer',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '2px'
+              ? '1.5px solid #0f172a'
+              : '1px solid #e2e8f0',
+            background: activeSubTab === 'timeline' && timelineChannelFilter === 'all'
+              ? '#f8fafc'
+              : '#ffffff',
+            borderRadius: 16,
+            padding: '1.15rem 1.25rem',
+            boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+            transition: 'all 0.15s ease'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Dấu chân số</span>
-            <Activity size={13} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '4px' }}>
-            <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.2 }}>
-              {allTimelineEvents.length} <span style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>sự kiện</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span
+              className="stat-label"
+              style={{
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                fontWeight: 700,
+                fontSize: '0.73rem',
+                color: '#64748b'
+              }}
+            >
+              DẤU CHÂN SỐ ĐA KÊNH
             </span>
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                background: 'rgba(189, 29, 45, 0.08)',
+                color: '#BD1D2D',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <Activity size={16} />
+            </div>
           </div>
-          <div style={{ fontSize: '0.67rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            Tất cả kênh tương tác
+          <div className="stat-value" style={{ fontSize: '1.85rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+            {allTimelineEvents.length.toLocaleString('vi-VN')}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <span>• Website: <strong style={{ color: '#0f172a' }}>{summary.web_sessions_count} phiên</strong></span>
+            <span>• Chat: <strong style={{ color: '#0f172a' }}>{linkedConversations.length} hội thoại</strong></span>
+          </div>
+          <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.73rem', color: '#64748b', fontWeight: 500 }}>
+            Tổng hợp toàn bộ điểm chạm đa kênh
           </div>
         </div>
 
-        {/* Tile 2: Website */}
+        {/* KPI 2: CHIẾN DỊCH EMAIL & ZNS */}
         <div
-          onClick={() => setActiveSubTab('web')}
-          style={{
-            padding: '8px 11px',
-            borderRadius: '8px',
-            background: 'var(--color-surface)',
-            border: activeSubTab === 'web'
-              ? '1px solid var(--color-primary)'
-              : '1px solid var(--color-border)',
-            cursor: 'pointer',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '2px'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Website</span>
-            <Globe size={13} style={{ color: '#0284c7', flexShrink: 0 }} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-            <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.2 }}>
-              {summary.web_sessions_count}{' '}
-              <span style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>phiên</span>
-            </span>
-          </div>
-          <div style={{ fontSize: '0.67rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {summary.web_pageviews_count} xem • {summary.max_scroll_depth}% cuộn
-          </div>
-        </div>
-
-        {/* Tile 3: Email & ZNS */}
-        <div
+          className="stat-card"
           onClick={() => {
             setActiveSubTab('timeline');
             setTimelineChannelFilter('email');
           }}
           style={{
-            padding: '8px 11px',
-            borderRadius: '8px',
-            background: 'var(--color-surface)',
-            border: activeSubTab === 'timeline' && timelineChannelFilter === 'email'
-              ? '1px solid var(--color-primary)'
-              : '1px solid var(--color-border)',
-            cursor: 'pointer',
+            minHeight: '132px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '2px'
+            cursor: 'pointer',
+            border: activeSubTab === 'timeline' && timelineChannelFilter === 'email'
+              ? '1.5px solid #0f172a'
+              : '1px solid #e2e8f0',
+            background: activeSubTab === 'timeline' && timelineChannelFilter === 'email'
+              ? '#f8fafc'
+              : '#ffffff',
+            borderRadius: 16,
+            padding: '1.15rem 1.25rem',
+            boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+            transition: 'all 0.15s ease'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Email & ZNS</span>
-            <Mail size={13} style={{ color: '#db2777', flexShrink: 0 }} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-            <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.2 }}>
-              {summary.stats_email_sent}{' '}
-              <span style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>đã gửi</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span
+              className="stat-label"
+              style={{
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                fontWeight: 700,
+                fontSize: '0.73rem',
+                color: '#64748b'
+              }}
+            >
+              CHIẾN DỊCH EMAIL &amp; ZNS
             </span>
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                background: 'rgba(189, 29, 45, 0.08)',
+                color: '#BD1D2D',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <Mail size={16} />
+            </div>
           </div>
-          <div style={{ fontSize: '0.67rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            Mở: {summary.stats_email_opened} ({openRate}%) • Click: {clickRate}%
+          <div className="stat-value" style={{ fontSize: '1.85rem', fontWeight: 800, color: '#BD1D2D', fontVariantNumeric: 'tabular-nums' }}>
+            {summary.stats_email_sent.toLocaleString('vi-VN')}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <span>• Đã mở: <strong style={{ color: '#0f172a' }}>{summary.stats_email_opened} ({openRate}%)</strong></span>
+            <span>• Click: <strong style={{ color: '#0f172a' }}>{clickRate}%</strong></span>
+          </div>
+          <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.73rem', color: '#64748b', fontWeight: 500 }}>
+            Chiến dịch gửi đi &amp; tỷ lệ tương tác email
           </div>
         </div>
 
-        {/* Tile 4: Automation */}
+        {/* KPI 3: KỊCH BẢN AUTOMATION */}
         <div
+          className="stat-card"
           onClick={() => setActiveSubTab('flows')}
           style={{
-            padding: '8px 11px',
-            borderRadius: '8px',
-            background: 'var(--color-surface)',
-            border: activeSubTab === 'flows'
-              ? '1px solid var(--color-primary)'
-              : '1px solid var(--color-border)',
-            cursor: 'pointer',
+            minHeight: '132px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '2px'
+            cursor: 'pointer',
+            border: activeSubTab === 'flows'
+              ? '1.5px solid #0f172a'
+              : '1px solid #e2e8f0',
+            background: activeSubTab === 'flows'
+              ? '#f8fafc'
+              : '#ffffff',
+            borderRadius: 16,
+            padding: '1.15rem 1.25rem',
+            boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+            transition: 'all 0.15s ease'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Automation</span>
-            <GitBranch size={13} style={{ color: '#4f46e5', flexShrink: 0 }} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-            <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.2 }}>
-              {summary.active_flow_count}{' '}
-              <span style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>đang chạy</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span
+              className="stat-label"
+              style={{
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                fontWeight: 700,
+                fontSize: '0.73rem',
+                color: '#64748b'
+              }}
+            >
+              KỊCH BẢN AUTOMATION
             </span>
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                background: 'rgba(15, 23, 42, 0.06)',
+                color: '#334155',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <GitBranch size={16} />
+            </div>
           </div>
-          <div style={{ fontSize: '0.67rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            Hoàn tất: {summary.completed_flow_count} luồng
+          <div className="stat-value" style={{ fontSize: '1.85rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+            {summary.active_flow_count.toLocaleString('vi-VN')}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <span>• Hoàn tất: <strong style={{ color: '#0f172a' }}>{summary.completed_flow_count} luồng</strong></span>
+            <span>• Đang chạy: <strong style={{ color: '#0f172a' }}>{summary.active_flow_count}</strong></span>
+          </div>
+          <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.73rem', color: '#64748b', fontWeight: 500 }}>
+            Tự động hóa luồng nuôi dưỡng &amp; chăm sóc
           </div>
         </div>
 
-        {/* Tile 5: Khảo Sát / Quiz */}
+        {/* KPI 4: KHẢO SÁT, FORM ADS & VOUCHER */}
         <div
+          className="stat-card"
           onClick={() => setActiveSubTab('surveys')}
           style={{
-            padding: '8px 11px',
-            borderRadius: '8px',
-            background: 'var(--color-surface)',
+            minHeight: '132px',
+            display: 'flex',
+            flexDirection: 'column',
+            cursor: 'pointer',
             border: activeSubTab === 'surveys'
-              ? '1px solid var(--color-primary)'
-              : '1px solid var(--color-border)',
-            cursor: 'pointer',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '2px'
+              ? '1.5px solid #0f172a'
+              : '1px solid #e2e8f0',
+            background: activeSubTab === 'surveys'
+              ? '#f8fafc'
+              : '#ffffff',
+            borderRadius: 16,
+            padding: '1.15rem 1.25rem',
+            boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+            transition: 'all 0.15s ease'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Khảo sát / Quiz</span>
-            <ClipboardCheck size={13} style={{ color: '#d97706', flexShrink: 0 }} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-            <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.2 }}>
-              {summary.survey_completed_count}{' '}
-              <span style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>đã nộp</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span
+              className="stat-label"
+              style={{
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                fontWeight: 700,
+                fontSize: '0.73rem',
+                color: '#64748b'
+              }}
+            >
+              KHẢO SÁT, FORM ADS &amp; VOUCHER
             </span>
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                background: 'rgba(15, 23, 42, 0.06)',
+                color: '#334155',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <ClipboardCheck size={16} />
+            </div>
           </div>
-          <div style={{ fontSize: '0.67rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {surveyResponses[0]?.survey_title || 'Chưa có phản hồi'}
+          <div className="stat-value" style={{ fontSize: '1.85rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+            {summary.survey_completed_count.toLocaleString('vi-VN')}
           </div>
-        </div>
-
-        {/* Tile 6: Hội thoại & Voucher */}
-        <div
-          onClick={() => setActiveSubTab('conversations')}
-          style={{
-            padding: '8px 11px',
-            borderRadius: '8px',
-            background: 'var(--color-surface)',
-            border: activeSubTab === 'conversations'
-              ? '1px solid var(--color-primary)'
-              : '1px solid var(--color-border)',
-            cursor: 'pointer',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '2px'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Chat & Voucher</span>
-            <MessageSquare size={13} style={{ color: '#059669', flexShrink: 0 }} />
+          <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <span>• Đã nộp: <strong style={{ color: '#0f172a' }}>{summary.survey_completed_count} form</strong></span>
+            <span>• Voucher: <strong style={{ color: '#0f172a' }}>{summary.active_voucher_code || 'Chưa cấp'}</strong></span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-            <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.2 }}>
-              {linkedConversations.length}{' '}
-              <span style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>hội thoại</span>
-            </span>
-          </div>
-          <div style={{ fontSize: '0.67rem', color: summary.active_voucher_code ? '#059669' : 'var(--color-text-muted)', fontWeight: summary.active_voucher_code ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {summary.active_voucher_code ? `Mã: ${summary.active_voucher_code}` : 'Voucher: Chưa cấp'}
+          <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.73rem', color: '#64748b', fontWeight: 500 }}>
+            Phản hồi khảo sát &amp; ưu đãi kích hoạt
           </div>
         </div>
       </div>
 
-      {/* SECTION 2: Unified Omnichannel Workspace Card */}
+      {/* 3. CANONICAL DASHBOARD ANALYTICS ROW (Archetype 1 Ranked List + SVG Donut & Meta Ads Attribution / Health) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1rem' }}>
+        {/* Left Card: Archetype 1 Ranked List + 148x148 SVG Donut */}
+        <div
+          className="card"
+          style={{
+            padding: '1.35rem',
+            borderRadius: '16px',
+            border: '1px solid #e2e8f0',
+            background: '#ffffff',
+            boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1rem'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>
+                Thống Kê Điểm Chạm Theo Kênh Tương Tác
+              </h3>
+              <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#64748b' }}>
+                Tỷ trọng phân bổ các điểm chạm đa kênh của khách hàng
+              </p>
+            </div>
+            <span
+              style={{
+                padding: '4px 10px',
+                borderRadius: '8px',
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                color: '#0f172a',
+                fontSize: '0.74rem',
+                fontWeight: 700
+              }}
+            >
+              {allTimelineEvents.length} điểm chạm
+            </span>
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1.15fr 0.85fr',
+              gap: '1rem',
+              alignItems: 'center'
+            }}
+          >
+            {/* Ranked List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {channelStats.items.slice(0, 5).map((ch, idx) => (
+                <div key={ch.id} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                      <span
+                        style={{
+                          width: '18px',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          color: idx === 0 ? '#BD1D2D' : '#64748b'
+                        }}
+                      >
+                        #{idx + 1}
+                      </span>
+                      <span
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: 2,
+                          background: ch.color,
+                          flexShrink: 0
+                        }}
+                      />
+                      <span
+                        style={{
+                          fontSize: '0.8rem',
+                          fontWeight: idx === 0 ? 700 : 600,
+                          color: '#0f172a',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {ch.name}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', flexShrink: 0 }}>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#0f172a' }}>
+                        {ch.count}
+                      </span>
+                      <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                        ({ch.pct}%)
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ marginLeft: 24, height: 6, borderRadius: 4, background: '#f1f5f9', overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${Math.min(100, Math.max(ch.pct, ch.count > 0 ? 5 : 0))}%`,
+                        background: idx === 0 ? '#C6333D' : ch.color,
+                        borderRadius: 4,
+                        transition: 'width 0.3s ease'
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* SVG Donut Chart */}
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderLeft: '1px solid #f1f5f9',
+                paddingLeft: '0.5rem'
+              }}
+            >
+              <div style={{ position: 'relative', width: 148, height: 148 }}>
+                <svg width="148" height="148" viewBox="0 0 148 148" style={{ transform: 'rotate(-90deg)' }}>
+                  <circle
+                    cx="74"
+                    cy="74"
+                    r="54"
+                    fill="transparent"
+                    stroke="#f1f5f9"
+                    strokeWidth="16"
+                  />
+                  {(() => {
+                    const circ = 2 * Math.PI * 54;
+                    let acc = 0;
+                    return channelStats.items
+                      .filter((it) => it.pct > 0)
+                      .map((it, i) => {
+                        const dash = (it.pct / 100) * circ;
+                        const offset = acc;
+                        acc += dash;
+                        return (
+                          <circle
+                            key={it.id || i}
+                            cx="74"
+                            cy="74"
+                            r="54"
+                            fill="transparent"
+                            stroke={it.color}
+                            strokeWidth="16"
+                            strokeDasharray={`${dash} ${circ}`}
+                            strokeDashoffset={-offset}
+                            strokeLinecap="round"
+                          />
+                        );
+                      });
+                  })()}
+                </svg>
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    pointerEvents: 'none'
+                  }}
+                >
+                  <span style={{ fontSize: '1.22rem', fontWeight: 800, color: '#0f172a', lineHeight: 1 }}>
+                    {channelStats.items[0]?.pct ? `${Math.round(channelStats.items[0].pct)}%` : '0%'}
+                  </span>
+                  <span style={{ fontSize: '0.69rem', color: '#64748b', marginTop: '3px' }}>
+                    {channelStats.items[0]?.name?.split(' ')[0] || 'Đa kênh'}
+                  </span>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', justifyContent: 'center', marginTop: '8px' }}>
+                {channelStats.items.slice(0, 3).map((it) => (
+                  <span key={it.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.68rem', color: '#64748b' }}>
+                    <span style={{ width: 7, height: 7, borderRadius: 2, background: it.color }} />
+                    <span>{it.name.split('/')[0]}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Card: Archetype 5 / Meta Ads Attribution & Engagement Health */}
+        <div
+          className="card"
+          style={{
+            padding: '1.35rem',
+            borderRadius: '16px',
+            border: '1px solid #e2e8f0',
+            background: '#ffffff',
+            boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1rem'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>
+                Chất Lượng Tương Tác &amp; Nguồn Chuyển Đổi (Attribution)
+              </h3>
+              <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#64748b' }}>
+                Nhận diện chiến dịch Meta Ads / UTM &amp; Chỉ số sức khỏe số
+              </p>
+            </div>
+            <span
+              style={{
+                padding: '4px 10px',
+                borderRadius: '8px',
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                color: '#BD1D2D',
+                fontSize: '0.74rem',
+                fontWeight: 700
+              }}
+            >
+              UTM / Meta Tracked
+            </span>
+          </div>
+
+          {/* Meta Ads & Attribution Details Box */}
+          <div
+            style={{
+              padding: '10px 12px',
+              borderRadius: '10px',
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, 1fr)',
+              gap: '8px',
+              fontSize: '0.76rem'
+            }}
+          >
+            <div>
+              <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Chiến dịch (Campaign):</span>
+              <strong style={{ color: '#0f172a', fontWeight: 700 }}>
+                {contact?.utm_campaign || contact?.campaign_name || 'Facebook Ads (Lead Form)'}
+              </strong>
+            </div>
+            <div>
+              <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Nhóm QC (AdSet / Medium):</span>
+              <strong style={{ color: '#0f172a', fontWeight: 700 }}>
+                {contact?.utm_medium || contact?.adset_name || 'cpc / fb_feed'}
+              </strong>
+            </div>
+            <div>
+              <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Mẫu Form / Nội dung (Ad):</span>
+              <strong style={{ color: '#0f172a', fontWeight: 700 }}>
+                {contact?.utm_content || contact?.form_name || contact?.ad_name || 'Lead_Form_MBA_6CT'}
+              </strong>
+            </div>
+            <div>
+              <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Nguồn gốc (Source):</span>
+              <strong style={{ color: '#0f172a', fontWeight: 700 }}>
+                {contact?.source || contact?.source_detail || 'Meta Ads'}
+              </strong>
+            </div>
+          </div>
+
+          {/* 3 Health / Completeness Bars with getCompletenessTone */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {[
+              {
+                label: 'Mức độ tương tác đa kênh',
+                pct: engagementHealthPct,
+                desc: `${allTimelineEvents.length} sự kiện tương tác ghi nhận`
+              },
+              {
+                label: 'Tỷ lệ mở Email / ZNS',
+                pct: openRate,
+                desc: `${summary.stats_email_opened}/${summary.stats_email_sent} email đã mở`
+              },
+              {
+                label: 'Độ hoàn thiện hồ sơ số',
+                pct: profileCompleteness,
+                desc: 'Thông tin nhân khẩu học & điểm chạm số'
+              }
+            ].map((metric, mIdx) => {
+              const tone = getCompletenessTone(metric.pct);
+              return (
+                <div
+                  key={mIdx}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 10,
+                    background: '#f8fafc',
+                    border: '1px solid #f1f5f9',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: tone.dot }} />
+                      <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>
+                        {metric.label}
+                      </span>
+                    </div>
+                    <span
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: '999px',
+                        background: tone.bg,
+                        color: tone.text,
+                        fontSize: '0.72rem',
+                        fontWeight: 800
+                      }}
+                    >
+                      {metric.pct}%
+                    </span>
+                  </div>
+                  <div style={{ height: 6, borderRadius: 4, background: '#e2e8f0', overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${metric.pct}%`,
+                        background: tone.bar,
+                        borderRadius: 4,
+                        transition: 'width 0.3s ease'
+                      }}
+                    />
+                  </div>
+                  <span style={{ fontSize: '0.69rem', color: '#64748b' }}>
+                    {metric.desc}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* 4. UNIFIED OMNICHANNEL WORKSPACE CARD */}
       <div
+        className="card"
         style={{
-          padding: '12px 14px',
-          borderRadius: '10px',
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)'
+          padding: '1.25rem',
+          borderRadius: 16,
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)'
         }}
       >
-        {/* Top Navigation Row: Sub-tabs on left + Contextual Filter Pills on right */}
+        {/* Top Navigation Row: Canonical Segmented Switcher */}
         <div
           style={{
             display: 'flex',
@@ -1024,12 +1514,22 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
             justifyContent: 'space-between',
             gap: '8px',
             paddingBottom: '10px',
-            marginBottom: '10px',
-            borderBottom: '1px solid var(--color-border-light)'
+            marginBottom: '12px',
+            borderBottom: '1px solid #f1f5f9'
           }}
         >
-          {/* Main Sub-Tabs */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+          {/* Main Subtabs Segmented Switcher */}
+          <div
+            style={{
+              display: 'inline-flex',
+              padding: '3px',
+              borderRadius: '10px',
+              background: '#f1f5f9',
+              border: '1px solid #e2e8f0',
+              gap: '2px',
+              flexWrap: 'wrap'
+            }}
+          >
             {[
               { id: 'timeline', label: 'Dòng thời gian', count: allTimelineEvents.length, icon: Activity },
               { id: 'conversations', label: 'Hội thoại Chat', count: linkedConversations.length, icon: MessageSquare },
@@ -1037,7 +1537,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
               { id: 'surveys', label: 'Khảo sát / Quiz', count: surveyResponses.length, icon: ClipboardCheck },
               { id: 'web', label: 'Website & UTM', count: webSessions.length, icon: Globe }
             ].map((st) => {
-              const active = activeSubTab === st.id;
+              const isAct = activeSubTab === st.id;
               const IconComp = st.icon;
               return (
                 <button
@@ -1045,29 +1545,32 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
                   type="button"
                   onClick={() => setActiveSubTab(st.id as any)}
                   style={{
+                    height: '30px',
+                    padding: '0 12px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    background: isAct ? '#ffffff' : 'transparent',
+                    color: isAct ? '#BD1D2D' : '#64748b',
+                    fontSize: '0.76rem',
+                    fontWeight: isAct ? 700 : 600,
+                    cursor: 'pointer',
+                    boxShadow: isAct ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '5px',
-                    padding: '5px 10px',
-                    borderRadius: '6px',
-                    border: active ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
-                    fontSize: '0.74rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    background: active ? 'rgba(189, 29, 45, 0.08)' : 'var(--color-bg)',
-                    color: active ? 'var(--color-primary)' : 'var(--color-text)'
+                    transition: 'all 0.15s ease'
                   }}
                 >
-                  <IconComp size={13} style={{ opacity: active ? 1 : 0.7 }} />
+                  <IconComp size={13} style={{ color: isAct ? '#BD1D2D' : '#64748b' }} />
                   <span>{st.label}</span>
                   <span
                     style={{
-                      padding: '0px 5px',
+                      background: isAct ? 'rgba(189, 29, 45, 0.1)' : '#e2e8f0',
+                      color: isAct ? '#BD1D2D' : '#475569',
                       borderRadius: '999px',
-                      fontSize: '0.66rem',
-                      fontWeight: 700,
-                      background: active ? 'rgba(189, 29, 45, 0.14)' : 'rgba(100, 116, 139, 0.12)',
-                      color: active ? 'var(--color-primary)' : 'var(--color-text-muted)'
+                      padding: '1px 6px',
+                      fontSize: '0.68rem',
+                      fontWeight: 700
                     }}
                   >
                     {st.count}
@@ -1077,9 +1580,19 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
             })}
           </div>
 
-          {/* Right-side Contextual Filter Pills */}
+          {/* Right-side Contextual Filter Pills (Canonical Segmented Switcher) */}
           {activeSubTab === 'timeline' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+            <div
+              style={{
+                display: 'inline-flex',
+                padding: '3px',
+                borderRadius: '10px',
+                background: '#f1f5f9',
+                border: '1px solid #e2e8f0',
+                gap: '2px',
+                flexWrap: 'wrap'
+              }}
+            >
               {[
                 { id: 'all', label: 'Tất cả' },
                 { id: 'web', label: 'Web' },
@@ -1095,14 +1608,17 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
                     type="button"
                     onClick={() => setTimelineChannelFilter(flt.id as any)}
                     style={{
-                      padding: '3px 8px',
+                      height: '26px',
+                      padding: '0 10px',
                       borderRadius: '6px',
                       border: 'none',
-                      fontSize: '0.69rem',
-                      fontWeight: 600,
+                      background: isFltActive ? '#ffffff' : 'transparent',
+                      color: isFltActive ? '#BD1D2D' : '#64748b',
+                      fontSize: '0.72rem',
+                      fontWeight: isFltActive ? 700 : 600,
                       cursor: 'pointer',
-                      background: isFltActive ? 'rgba(189, 29, 45, 0.1)' : 'transparent',
-                      color: isFltActive ? 'var(--color-primary)' : 'var(--color-text-muted)'
+                      boxShadow: isFltActive ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                      transition: 'all 0.15s ease'
                     }}
                   >
                     {flt.label}
@@ -1113,7 +1629,17 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
           )}
 
           {activeSubTab === 'conversations' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+            <div
+              style={{
+                display: 'inline-flex',
+                padding: '3px',
+                borderRadius: '10px',
+                background: '#f1f5f9',
+                border: '1px solid #e2e8f0',
+                gap: '2px',
+                flexWrap: 'wrap'
+              }}
+            >
               {[
                 { id: 'all', label: 'Tất cả kênh' },
                 { id: 'web_ai', label: 'Web AI' },
@@ -1127,14 +1653,17 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
                     type="button"
                     onClick={() => setConvChannel(ch.id as any)}
                     style={{
-                      padding: '3px 8px',
+                      height: '26px',
+                      padding: '0 10px',
                       borderRadius: '6px',
                       border: 'none',
-                      fontSize: '0.69rem',
-                      fontWeight: 600,
+                      background: isChActive ? '#ffffff' : 'transparent',
+                      color: isChActive ? '#BD1D2D' : '#64748b',
+                      fontSize: '0.72rem',
+                      fontWeight: isChActive ? 700 : 600,
                       cursor: 'pointer',
-                      background: isChActive ? 'rgba(189, 29, 45, 0.1)' : 'transparent',
-                      color: isChActive ? 'var(--color-primary)' : 'var(--color-text-muted)'
+                      boxShadow: isChActive ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                      transition: 'all 0.15s ease'
                     }}
                   >
                     {ch.label}
@@ -1149,20 +1678,21 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
               type="button"
               onClick={openEnrollFlowModal}
               style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '4px 10px',
-                borderRadius: '6px',
-                background: 'var(--color-primary)',
+                height: 30,
+                padding: '0 12px',
+                borderRadius: 8,
+                background: '#BD1D2D',
                 color: '#ffffff',
                 border: 'none',
-                fontSize: '0.72rem',
-                fontWeight: 600,
-                cursor: 'pointer'
+                fontSize: '0.74rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px'
               }}
             >
-              <Plus size={12} />
+              <Plus size={13} />
               <span>Đưa vào Kịch bản</span>
             </button>
           )}

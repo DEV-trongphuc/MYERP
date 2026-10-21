@@ -499,8 +499,8 @@ try {
 
                 // 2. Fetch data
                 $stmt = $pdo->prepare("SELECT 
-                    CONCAT('org_', c.id) as id, c.user_id, COALESCE(NULLIF(c.user_email, ''), u.email) as email, c.title, c.visitor_id, c.property_id, 
-                    c.created_at, c.updated_at, c.last_message, 'org' as source, 
+                    CONCAT('org_', c.id) as id, c.user_id, u.email, c.title, NULL as visitor_id, NULL as property_id, 
+                    c.created_at, c.updated_at, '' as last_message, 'org' as source, 
                     COALESCE(c.title, 'AI Consultant Conversation') as first_name, 
                     '' as last_name, 'bg-amber-100 text-amber-600' as avatar_color
                     FROM ai_org_conversations c
@@ -1155,7 +1155,7 @@ try {
                     COALESCE(c.title, 'AI Consultant Conversation') as first_name,
                     NULL as last_name, NULL as avatar, NULL as ip_address,
                     NULL as subscriber_id, NULL as contact_id, NULL as lead_score, NULL as phone, 
-                    COALESCE(NULLIF(c.user_email, ''), u.email) as email,
+                    u.email,
                     'org' as source
                     FROM ai_org_conversations c 
                     LEFT JOIN ai_org_users u ON c.user_id = u.id
@@ -2310,7 +2310,7 @@ CHÚ Ý:
                     }
                     if (!$pageId) {
                         try {
-                            $stmtPageLegacy = $pdo->prepare("SELECT c.page_id FROM meta_app_configs c INNER JOIN meta_automation_scenarios s ON s.meta_config_id = c.id WHERE s.ai_chatbot_id = ? LIMIT 1");
+                            $stmtPageLegacy = $pdo->prepare("SELECT s.page_id FROM meta_automation_scenarios s WHERE s.id = ? LIMIT 1");
                             $stmtPageLegacy->execute([$propertyId]);
                             $pageId = $stmtPageLegacy->fetchColumn() ?: null;
                         } catch (\Throwable $eMetaLegacy) {

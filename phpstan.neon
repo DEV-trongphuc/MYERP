@@ -1,0 +1,14 @@
+parameters:
+    level: 5
+    paths:
+        - backend/controllers
+        - backend/automation
+        - backend/utils
+        - backend/api.php
+        - backend/index.php
+    bootstrapFiles:
+        - backend/utils/SemanticMdlRegistry.php
+        - backend/tools/phpstan_dba_guard.php
+    excludePaths:
+        - backend/vendor/*
+        - backend/*.bak.*

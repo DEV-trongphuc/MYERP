@@ -1,0 +1,171 @@
+openapi: 3.1.0
+info:
+  title: MYERP Enterprise SaaS & AI Multi-Agent API Specification
+  version: 2.5.0
+  description: >
+    Canonical OpenAPI 3.1 contract for MYERP (CRM, Lead Distribution, Marketing Automation,
+    DOMATION Meta Ads, Academic & Students, Finance & Deposits, HRM & Accounting A-Z,
+    Workspace Projects & Tasks, and SI IDEAS AI Multi-Agent).
+    Used by Schemathesis & MYERP API Fuzzer Runner for automated boundary & chaos testing.
+servers:
+  - url: https://myerp.ideas.edu.vn/backend
+    description: Production Server
+  - url: https://myerp-stagging.ideas.edu.vn/backend
+    description: Staging Server
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    MonthParam:
+      name: month
+      in: query
+      schema:
+        type: string
+        example: "2026-10"
+    FromDateParam:
+      name: from_date
+      in: query
+      schema:
+        type: string
+        example: "2026-10-01"
+    ToDateParam:
+      name: to_date
+      in: query
+      schema:
+        type: string
+        example: "2026-10-31"
+    OwnerIdParam:
+      name: owner_id
+      in: query
+      schema:
+        type: string
+        example: "all"
+security:
+  - bearerAuth: []
+paths:
+  /index.php/dashboard:
+    get:
+      summary: Executive CRM & Sales Dashboard Analytics
+      parameters:
+        - $ref: '#/components/parameters/FromDateParam'
+        - $ref: '#/components/parameters/ToDateParam'
+        - $ref: '#/components/parameters/OwnerIdParam'
+      responses:
+        '200':
+          description: Dashboard KPIs & Charts
+  /index.php/contacts/persona-overview:
+    get:
+      summary: Student & Lead Persona Overview Deck
+      parameters:
+        - name: school
+          in: query
+          schema:
+            type: string
+        - name: intake
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Persona statistics and breakdowns
+  /index.php/contacts:
+    get:
+      summary: Paginated CRM Contacts & Leads
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/FromDateParam'
+        - $ref: '#/components/parameters/ToDateParam'
+      responses:
+        '200':
+          description: Contact list and facets
+  /index.php/hrm/accounting-az/overview:
+    get:
+      summary: HRM & Accounting A-Z Comprehensive Overview
+      parameters:
+        - $ref: '#/components/parameters/MonthParam'
+      responses:
+        '200':
+          description: Payroll, BHXH, PIT, Journal & P&L synthesis
+  /index.php/hrm/accounting-az/journal:
+    get:
+      summary: Double-Entry General Journal (TT200 / TT133)
+      parameters:
+        - $ref: '#/components/parameters/MonthParam'
+        - name: circular
+          in: query
+          schema:
+            type: string
+            enum: [TT200, TT133]
+      responses:
+        '200':
+          description: General ledger and journal entries
+  /index.php/hrm/accounting-az/tax-declaration:
+    get:
+      summary: VAT, CIT & PIT Tax Declaration Summary
+      parameters:
+        - $ref: '#/components/parameters/MonthParam'
+      responses:
+        '200':
+          description: Statutory tax declaration tables
+  /index.php/hrm/accounting-az/labor-book:
+    get:
+      summary: Statutory Employee Labor Book & HR Profile Completeness
+      parameters:
+        - $ref: '#/components/parameters/MonthParam'
+      responses:
+        '200':
+          description: Employee labor registry with avatars and insurance breakdown
+  /index.php/hrm/payslips:
+    get:
+      summary: Monthly Payslips List
+      parameters:
+        - $ref: '#/components/parameters/MonthParam'
+      responses:
+        '200':
+          description: Payslips list
+  /index.php/finance/accounting-summary:
+    get:
+      summary: Executive Finance & Accounting Summary
+      parameters:
+        - $ref: '#/components/parameters/MonthParam'
+      responses:
+        '200':
+          description: Financial statement and cashflow summary
+  /index.php/meta-ads/full-funnel-summary:
+    get:
+      summary: DOMATION Meta Ads & CRM Full-Funnel Attribution Summary
+      parameters:
+        - $ref: '#/components/parameters/FromDateParam'
+        - $ref: '#/components/parameters/ToDateParam'
+      responses:
+        '200':
+          description: Meta Ads Spend, CPL, CPQ, CPW, CPE & ROAS
+  /index.php/projects:
+    get:
+      summary: Workspace Projects & Tasks List
+      responses:
+        '200':
+          description: Projects list
+  /api.php:
+    get:
+      summary: Lead Distribution & Fair-Share API
+      parameters:
+        - name: action
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [get_dashboard_stats, get_fair_share_stats, get_consultants, get_rounds]
+      responses:
+        '200':
+          description: Distribution stats

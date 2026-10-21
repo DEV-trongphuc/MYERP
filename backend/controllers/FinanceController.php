@@ -2534,22 +2534,24 @@ class FinanceController
 
         // Fallback: nếu chưa chốt bảng lương thực tế cho tháng này, dự toán quỹ lương từ hrm_profiles
         if ($payrollGross <= 0) {
-            $profStmt = $this->db->prepare("
-                SELECT 
-                    COALESCE(SUM(COALESCE(p.base_salary, 0) + COALESCE(p.deal_salary, 0) + COALESCE(p.allowance_meal, 0) + COALESCE(p.allowance_travel, 0) + COALESCE(p.allowance_phone, 0)), 0) as projected_gross,
-                    COALESCE(SUM(CASE WHEN COALESCE(p.has_insurance, 1) = 1 THEN COALESCE(p.base_salary, 0) ELSE 0 END), 0) as projected_ins_salary
-                FROM users u
-                LEFT JOIN hrm_profiles p ON u.id = p.user_id
-                WHERE u.tenant_id = ? AND u.is_active = 1 AND (u.status IS NULL OR u.status != 'leave')
-            ");
-            $profStmt->execute([$tid]);
-            $profRow = $profStmt->fetch(PDO::FETCH_ASSOC) ?: [];
-            $profGross = (float)($profRow['projected_gross'] ?? 0);
-            $profIns   = (float)($profRow['projected_ins_salary'] ?? 0);
-            if ($profGross > 0) {
-                $payrollGross = $profGross;
-                $payrollNet   = max(0.0, $profGross - round($profIns * 0.105));
-            }
+            try {
+                $profStmt = $this->db->prepare("
+                    SELECT 
+                        COALESCE(SUM(COALESCE(p.base_salary, 0) + COALESCE(p.deal_salary, 0) + COALESCE(p.allowance_meal, 0) + COALESCE(p.allowance_travel, 0) + COALESCE(p.allowance_phone, 0)), 0) as projected_gross,
+                        COALESCE(SUM(CASE WHEN COALESCE(p.has_insurance, 1) = 1 THEN COALESCE(p.base_salary, 0) ELSE 0 END), 0) as projected_ins_salary
+                    FROM users u
+                    LEFT JOIN hrm_profiles p ON u.id = p.user_id
+                    WHERE u.tenant_id = ? AND u.is_active = 1 AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
+                ");
+                $profStmt->execute([$tid]);
+                $profRow = $profStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+                $profGross = (float)($profRow['projected_gross'] ?? 0);
+                $profIns   = (float)($profRow['projected_ins_salary'] ?? 0);
+                if ($profGross > 0) {
+                    $payrollGross = $profGross;
+                    $payrollNet   = max(0.0, $profGross - round($profIns * 0.105));
+                }
+            } catch (\Throwable $e) {}
         }
 
         $insuranceDN  = round($payrollGross * 0.235); // 23.5% BHXH, BHYT, BHTN, KPCĐ

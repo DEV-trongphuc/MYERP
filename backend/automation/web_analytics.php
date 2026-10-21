@@ -142,7 +142,7 @@ function handlePageView($pdo, $visitorId, $sessionId, $pageUrl, $pageTitle, $ref
     $stmt = $pdo->prepare("
         INSERT INTO web_page_views (session_id, visitor_id, property_id, url_hash, url, title, loaded_at) VALUES (?, ?, 'unknown', md5(?), ?, ?, ?)
     ");
-    $stmt->execute([$sessionId, $visitorId, $pageUrl, $pageTitle, $timestamp, 'unknown', md5($pageUrl)]);
+    $stmt->execute([$sessionId, $visitorId, $pageUrl, $pageUrl, $pageTitle, $timestamp]);
 }
 
 function handlePageExit($pdo, $sessionId, $pageUrl, $duration, $scrollDepth, $timestamp)

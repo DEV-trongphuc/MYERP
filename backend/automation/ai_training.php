@@ -56,7 +56,7 @@ if (!$isPublicAction) {
     $authHeader = $normalizedHeaders['authorization'] ?? $_SERVER['HTTP_AUTHORIZATION'] ?? '';
     if (!empty($authHeader) && preg_match('/Bearer\s+(.+)$/i', $authHeader, $matches)) {
         try {
-            $stmt = $pdo->prepare("SELECT u.* FROM ai_org_access_tokens t INNER JOIN ai_org_users u ON u.id = t.user_id WHERE t.token = ? AND t.expires_at > NOW() AND t.is_active = 1 LIMIT 1");
+            $stmt = $pdo->prepare("SELECT u.* FROM ai_org_access_tokens t INNER JOIN ai_org_users u ON u.id = t.user_id WHERE t.token = ? AND t.expires_at > NOW() LIMIT 1");
             $stmt->execute([trim($matches[1])]);
             $tokenUser = $stmt->fetch(PDO::FETCH_ASSOC);
             if ($tokenUser && $tokenUser['status'] !== 'banned') {

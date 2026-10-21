@@ -13,22 +13,12 @@ if ($slug === '') {
 }
 
 try {
-    $stmt = $pdo->prepare("SELECT id, name, slug FROM ai_training_categories WHERE (slug = ? OR id = ?) AND workspace_id = ? LIMIT 1");
-    $stmt->execute([$slug, $slug, $workspace_id]);
+    $stmt = $pdo->prepare("SELECT id, name, slug FROM ai_chatbot_categories WHERE (slug = ? OR id = ?) LIMIT 1");
+    $stmt->execute([$slug, $slug]);
     $cat = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($cat) {
         echo json_encode(['success' => true, 'data' => $cat]);
-        exit;
-    }
-
-    // Fallback without workspace filter if shared
-    $stmt2 = $pdo->prepare("SELECT id, name, slug FROM ai_training_categories WHERE (slug = ? OR id = ?) LIMIT 1");
-    $stmt2->execute([$slug, $slug]);
-    $cat2 = $stmt2->fetch(PDO::FETCH_ASSOC);
-
-    if ($cat2) {
-        echo json_encode(['success' => true, 'data' => $cat2]);
         exit;
     }
 

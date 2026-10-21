@@ -360,12 +360,12 @@ class DomationOmnichannelController
         // Verify flow exists by id or fuzzy name
         $flow = null;
         if ($flowId !== '') {
-            $stmtFlow = $this->db->prepare("SELECT id, name, status, steps, nodes, workspace_id FROM flows WHERE id = ? LIMIT 1");
+            $stmtFlow = $this->db->prepare("SELECT id, name, status, steps, config AS nodes, workspace_id FROM flows WHERE id = ? LIMIT 1");
             $stmtFlow->execute([$flowId]);
             $flow = $stmtFlow->fetch(PDO::FETCH_ASSOC) ?: null;
         }
         if (!$flow && $flowNameInput !== '') {
-            $stmtFlow = $this->db->prepare("SELECT id, name, status, steps, nodes, workspace_id FROM flows WHERE name LIKE ? ORDER BY updated_at DESC LIMIT 1");
+            $stmtFlow = $this->db->prepare("SELECT id, name, status, steps, config AS nodes, workspace_id FROM flows WHERE name LIKE ? ORDER BY updated_at DESC LIMIT 1");
             $stmtFlow->execute(['%' . $flowNameInput . '%']);
             $flow = $stmtFlow->fetch(PDO::FETCH_ASSOC) ?: null;
             if ($flow) {
@@ -976,7 +976,7 @@ class DomationOmnichannelController
                     f.status AS flow_status,
                     f.trigger_type,
                     f.steps,
-                    f.nodes
+                    f.config AS nodes
                 FROM subscriber_flow_states sfs
                 LEFT JOIN flows f ON f.id = sfs.flow_id
                 WHERE (" . implode(' OR ', $conds) . ")
@@ -1059,11 +1059,8 @@ class DomationOmnichannelController
                     vc.expires_at,
                     vc.created_at,
                     vcamp.name AS campaign_name,
-                    vcamp.prefix AS campaign_prefix,
-                    vcamp.discount_type,
-                    vcamp.discount_value,
-                    vcamp.min_order_value,
-                    vcamp.description AS campaign_description
+                    vcamp.description AS campaign_description,
+                    vcamp.rewards AS campaign_rewards
                 FROM voucher_codes vc
                 LEFT JOIN voucher_campaigns vcamp ON vcamp.id = vc.campaign_id
                 WHERE (" . implode(' OR ', $conds) . ")
@@ -1078,8 +1075,7 @@ class DomationOmnichannelController
         try {
             $stmtCamp = $this->db->query("
                 SELECT
-                    id, name, prefix, discount_type, discount_value, min_order_value,
-                    total_codes, claimed_count, used_count, expires_at, status
+                    id, name, description, rewards, status, start_date, end_date
                 FROM voucher_campaigns
                 WHERE status = 'active'
                 ORDER BY id DESC
@@ -1414,11 +1410,11 @@ class DomationOmnichannelController
                 SELECT
                     dam.id,
                     dam.conversation_id,
-                    dam.role,
-                    dam.content,
+                    dam.sender AS role,
+                    dam.message AS content,
                     dam.created_at,
-                    dac.visitor_name,
-                    dac.platform
+                    COALESCE(dac.visitor_id, '') AS visitor_name,
+                    'web' AS platform
                 FROM domation_ai_messages dam
                 JOIN domation_ai_conversations dac ON dac.id = dam.conversation_id
                 WHERE dac.contact_id = ?

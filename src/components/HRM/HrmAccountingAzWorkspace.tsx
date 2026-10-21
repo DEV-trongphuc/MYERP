@@ -8,7 +8,19 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  LabelList,
+  Cell
+} from 'recharts';
 import { fetchAPI } from '../../utils/api';
+import { Avatar } from '../ui/Avatar';
 
 interface LegalParams {
   year: number;
@@ -53,6 +65,8 @@ interface OverviewData {
       severity: 'bad' | 'warn' | 'info';
       user_id: number;
       full_name: string;
+      avatar_url?: string;
+      avatar?: string;
       contract_code: string;
       contract_type: string;
       end_date: string | null;
@@ -62,6 +76,8 @@ interface OverviewData {
     missing_info_users: Array<{
       id: number;
       full_name: string;
+      avatar_url?: string;
+      avatar?: string;
       email: string;
       miss_fields: string[];
     }>;
@@ -93,6 +109,9 @@ interface JournalEntry {
 interface LaborRecord {
   stt: number;
   full_name: string;
+  avatar_url?: string;
+  avatar?: string;
+  email?: string;
   gender: string;
   dob: string;
   nationality: string;
@@ -113,6 +132,24 @@ interface LaborRecord {
   training: string;
   discipline: string;
 }
+
+const PALETTE = [
+  '#C6333D',
+  '#334155',
+  '#E11D48',
+  '#64748B',
+  '#991B1B',
+  '#475569',
+  '#FB7185',
+  '#94A3B8',
+  '#1E293B',
+  '#CBD5E1'
+];
+
+const FMT_COMPACT = (n: any) => {
+  const num = Number(n || 0);
+  return num >= 1e9 ? (num / 1e9).toFixed(1) + 'B' : num >= 1e6 ? (num / 1e6).toFixed(0) + 'M' : num >= 1e3 ? (num / 1e3).toFixed(0) + 'K' : String(num);
+};
 
 interface FinancialData {
   month: string;
@@ -243,8 +280,9 @@ export const HrmAccountingAzWorkspace: React.FC<{
   currentMonth?: string;
   onNavigateToPayroll?: () => void;
   onNavigateToProfiles?: () => void;
-}> = ({ currentMonth, onNavigateToPayroll, onNavigateToProfiles }) => {
-  const [activeSubtab, setActiveSubtab] = useState<'overview' | 'calculator' | 'journal' | 'tax_reports' | 'labor_book'>('overview');
+  embedMode?: boolean;
+}> = ({ currentMonth, onNavigateToPayroll, onNavigateToProfiles, embedMode }) => {
+  const [activeSubtab, setActiveSubtab] = useState<'overview' | 'pnl_report' | 'calculator' | 'journal' | 'tax_reports' | 'labor_book'>('overview');
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonth || new Date().toISOString().slice(0, 7));
   const [loading, setLoading] = useState<boolean>(false);
 
@@ -265,6 +303,7 @@ export const HrmAccountingAzWorkspace: React.FC<{
   const [taxNum, setTaxNum] = useState<number>(() => Math.ceil((new Date().getMonth() + 1) / 3));
   const [taxYear, setTaxYear] = useState<number>(() => new Date().getFullYear());
   const [taxIndicators, setTaxIndicators] = useState<Record<string, number>>({});
+  const [taxEmployees, setTaxEmployees] = useState<any[]>([]);
   const [generatedXml, setGeneratedXml] = useState<string>('');
   const [xmlFilename, setXmlFilename] = useState<string>('');
   const [xmlModalOpen, setXmlModalOpen] = useState<boolean>(false);
@@ -343,6 +382,7 @@ export const HrmAccountingAzWorkspace: React.FC<{
       const res = await fetchAPI(`/hrm/accounting-az/tax-declaration?type=${taxType}&num=${taxNum}&year=${taxYear}`);
       if (res && res.data) {
         setTaxIndicators(res.data.indicators || {});
+        setTaxEmployees(Array.isArray(res.data.employees) ? res.data.employees : []);
       }
     } catch (err) {
       console.error('Failed to load tax declaration', err);
@@ -566,15 +606,15 @@ export const HrmAccountingAzWorkspace: React.FC<{
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexWrap: 'wrap' }}>
-          {/* Segment Switcher Tray: 5 Phân hệ chính */}
+          {/* Segment Switcher Tray: 6 Phân hệ chính */}
           <div
             className="mobile-horizontal-strip touch-scroll-x"
             style={{
               display: 'flex',
               padding: '3px',
               borderRadius: '10px',
-              background: 'var(--color-border-light)',
-              border: '1px solid var(--color-border)',
+              background: '#f1f5f9',
+              border: '1px solid #e2e8f0',
               gap: '2px',
               maxWidth: '100%',
               overflowX: 'auto',
@@ -585,9 +625,10 @@ export const HrmAccountingAzWorkspace: React.FC<{
           >
             {[
               { id: 'overview' as const, label: 'Tổng quan A-Z', icon: Layers },
+              { id: 'pnl_report' as const, label: 'Báo Cáo P&L & Dòng Tiền', icon: TrendingUp },
               { id: 'calculator' as const, label: 'Tính Lương Gross ⇄ Net', icon: Calculator },
               { id: 'journal' as const, label: 'Sổ Nhật Ký Chung', icon: FileSpreadsheet },
-              { id: 'tax_reports' as const, label: 'Tờ khai TNCN & HTKK XML', icon: TrendingUp },
+              { id: 'tax_reports' as const, label: 'Tờ khai TNCN & HTKK XML', icon: FileText },
               { id: 'labor_book' as const, label: 'Sổ QLLĐ (NĐ 145)', icon: BookOpen },
             ].map((tab) => {
               const Icon = tab.icon;
@@ -607,8 +648,8 @@ export const HrmAccountingAzWorkspace: React.FC<{
                     whiteSpace: 'nowrap',
                     borderRadius: '7px',
                     border: 'none',
-                    background: isAct ? 'var(--color-surface, #ffffff)' : 'transparent',
-                    color: isAct ? 'var(--color-primary, #BD1D2D)' : 'var(--color-text-muted)',
+                    background: isAct ? '#ffffff' : 'transparent',
+                    color: isAct ? '#BD1D2D' : '#64748b',
                     fontSize: '0.8rem',
                     fontWeight: isAct ? 700 : 600,
                     cursor: 'pointer',
@@ -846,45 +887,45 @@ export const HrmAccountingAzWorkspace: React.FC<{
         {/* KPI 1: TỔNG QUỸ LƯƠNG & NHÂN SỰ */}
         <div className="stat-card" style={{ minHeight: '132px', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: '#64748b' }}>
               TỔNG QUỸ LƯƠNG &amp; NHÂN SỰ
             </span>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(189, 29, 45, 0.08)', color: 'var(--color-primary, #BD1D2D)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <DollarSign size={16} />
             </div>
           </div>
-          <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text, #0f172a)' }}>
+          <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a' }}>
             {overview ? FMT(overview.kpis.total_gross || overview.kpis.projected_gross) : '—'}{' '}
-            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>đ</span>
+            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#64748b' }}>đ</span>
           </div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <span>• Thực tế: <strong style={{ color: 'var(--color-text)' }}>{overview ? FMT(overview.kpis.total_gross) : 0} đ</strong></span>
-            <span>• Dự kiến: <strong style={{ color: 'var(--color-text)' }}>{overview ? FMT(overview.kpis.projected_gross) : 0} đ</strong></span>
+          <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <span>• Thực tế: <strong style={{ color: '#0f172a' }}>{overview ? FMT(overview.kpis.total_gross) : 0} đ</strong></span>
+            <span>• Dự kiến: <strong style={{ color: '#0f172a' }}>{overview ? FMT(overview.kpis.projected_gross) : 0} đ</strong></span>
           </div>
-          <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.73rem', color: 'var(--color-text-light)', fontWeight: 500 }}>
-            Đang làm việc: <strong style={{ color: 'var(--color-text)' }}>{overview?.kpis.active_employees || 0}</strong> nhân sự • {overview?.kpis.total_payslips || 0} phiếu lương
+          <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.73rem', color: '#64748b', fontWeight: 500 }}>
+            Đang làm việc: <strong style={{ color: '#0f172a' }}>{overview?.kpis.active_employees || 0}</strong> nhân sự • {overview?.kpis.total_payslips || 0} phiếu lương
           </div>
         </div>
 
         {/* KPI 2: BẢO HIỂM BẮT BUỘC & KPCĐ */}
         <div className="stat-card" style={{ minHeight: '132px', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: '#64748b' }}>
               BẢO HIỂM BẮT BUỘC &amp; KPCĐ (34%)
             </span>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(245, 158, 11, 0.1)', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <ShieldCheck size={16} />
             </div>
           </div>
-          <div className="stat-value" style={{ fontWeight: 800, color: '#b45309' }}>
+          <div className="stat-value" style={{ fontWeight: 800, color: '#BD1D2D' }}>
             {overview ? FMT(overview.kpis.total_insurance_all) : '—'}{' '}
-            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>đ</span>
+            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#BD1D2D' }}>đ</span>
           </div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <span>• DN (23.5%): <strong style={{ color: 'var(--color-text)' }}>{overview ? FMT(overview.kpis.total_insurance_dn) : 0} đ</strong></span>
-            <span>• NLĐ (10.5%): <strong style={{ color: 'var(--color-text)' }}>{overview ? FMT(overview.kpis.total_insurance_nld) : 0} đ</strong></span>
+          <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <span>• DN (23.5%): <strong style={{ color: '#0f172a' }}>{overview ? FMT(overview.kpis.total_insurance_dn) : 0} đ</strong></span>
+            <span>• NLĐ (10.5%): <strong style={{ color: '#0f172a' }}>{overview ? FMT(overview.kpis.total_insurance_nld) : 0} đ</strong></span>
           </div>
-          <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.73rem', color: 'var(--color-text-light)', fontWeight: 500 }}>
+          <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.73rem', color: '#64748b', fontWeight: 500 }}>
             BHXH (25.5%) • BHYT (4.5%) • BHTN (2%) • KPCĐ (2%)
           </div>
         </div>
@@ -892,22 +933,22 @@ export const HrmAccountingAzWorkspace: React.FC<{
         {/* KPI 3: THỰC LĨNH CHI TRẢ NLĐ */}
         <div className="stat-card" style={{ minHeight: '132px', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: '#64748b' }}>
               THỰC LĨNH (NET) CHI TRẢ NLĐ
             </span>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(16, 185, 129, 0.1)', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <CheckCircle2 size={16} />
             </div>
           </div>
-          <div className="stat-value" style={{ fontWeight: 800, color: '#059669' }}>
+          <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a' }}>
             {overview ? FMT(overview.kpis.total_net || overview.kpis.projected_net) : '—'}{' '}
-            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>đ</span>
+            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#64748b' }}>đ</span>
           </div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <span>• Khấu trừ thuế TNCN: <strong style={{ color: 'var(--color-text)' }}>{overview ? FMT(overview.kpis.total_tax_pit) : 0} đ</strong></span>
-            <span>• Tạm ứng: <strong style={{ color: 'var(--color-text)' }}>{overview ? FMT(overview.kpis.total_advance) : 0} đ</strong></span>
+          <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <span>• Khấu trừ thuế TNCN: <strong style={{ color: '#0f172a' }}>{overview ? FMT(overview.kpis.total_tax_pit) : 0} đ</strong></span>
+            <span>• Tạm ứng: <strong style={{ color: '#0f172a' }}>{overview ? FMT(overview.kpis.total_advance) : 0} đ</strong></span>
           </div>
-          <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.73rem', color: 'var(--color-text-light)', fontWeight: 500 }}>
+          <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.73rem', color: '#64748b', fontWeight: 500 }}>
             Lịch chi lương Ngân hàng: Ngày 05 hàng tháng qua UNC
           </div>
         </div>
@@ -915,142 +956,676 @@ export const HrmAccountingAzWorkspace: React.FC<{
         {/* KPI 4: TUÂN THỦ BLLĐ & LỊCH THUẾ */}
         <div className="stat-card" style={{ minHeight: '132px', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: '#64748b' }}>
               TUÂN THỦ BLLĐ 2019 &amp; LỊCH THUẾ
             </span>
             <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Building2 size={16} />
             </div>
           </div>
-          <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text, #0f172a)' }}>
+          <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a' }}>
             {overview?.alerts.contract_alerts?.length || 0}{' '}
-            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>cảnh báo HĐ</span>
+            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#64748b' }}>cảnh báo HĐ</span>
           </div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <span>• Thiếu CCCD/STK: <strong style={{ color: 'var(--color-text)' }}>{overview?.alerts.missing_info_users?.length || 0}</strong></span>
-            <span>• Hạn nộp thuế: <strong style={{ color: 'var(--color-text)' }}>{overview?.tax_schedule.due_quarterly || '—'}</strong></span>
+          <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <span>• Thiếu CCCD/STK: <strong style={{ color: '#0f172a' }}>{overview?.alerts.missing_info_users?.length || 0}</strong></span>
+            <span>• Hạn nộp thuế: <strong style={{ color: '#0f172a' }}>{overview?.tax_schedule.due_quarterly || '—'}</strong></span>
           </div>
-          <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.73rem', color: 'var(--color-text-light)', fontWeight: 500 }}>
+          <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.73rem', color: '#64748b', fontWeight: 500 }}>
             Kỳ kê khai Quý {overview?.tax_schedule.quarter || 1} • Khoản 2 Điều 20 BLLĐ 2019
           </div>
         </div>
       </div>
 
       {/* SUBTAB 1: TỔNG QUAN & CHU TRÌNH KẾ TOÁN A-Z */}
-      {activeSubtab === 'overview' && (
+      {/* SUBTAB: BÁO CÁO P&L & DÒNG TIỀN (Dedicated subtab) */}
+      {activeSubtab === 'pnl_report' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          {/* ROW 1: BÁO CÁO KINH DOANH (P&L) & CẢNH BÁO BLLĐ 2019 */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: '1.25rem' }}>
-            {/* Card Left: Báo cáo Kết Quả Kinh Doanh & Dòng Tiền */}
+            {/* Left Card: Archetype 1 — Cơ Cấu Doanh Thu, Chi Phí & Lợi Nhuận (P&L) */}
             <div className="card" style={{ padding: '1.35rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
-                    Hiệu Quả Kinh Doanh (P&amp;L) &amp; Dòng Tiền
+                    Cơ Cấu Doanh Thu, Chi Phí &amp; Lợi Nhuận (P&amp;L)
                   </h3>
                   <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: 'var(--color-text-muted, #64748b)' }}>
-                    Tổng hợp từ Đặt cọc, Hóa đơn đã thu, Chi phí vận hành và Quỹ lương kỳ {selectedMonth}
+                    Doanh thu thuần, chi phí nhân sự, vận hành và lợi nhuận ròng kỳ {selectedMonth}
                   </p>
                 </div>
-                <span style={{ background: '#eff6ff', color: '#1d4ed8', fontSize: '0.72rem', fontWeight: 700, padding: '3px 8px', borderRadius: '6px' }}>
-                  TT200 / TT133
+                <span
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '8px',
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    color: '#0f172a',
+                    fontSize: '0.74rem',
+                    fontWeight: 700
+                  }}
+                >
+                  Biên LN: {financialData ? `${financialData.pnl.net_margin_pct}%` : '—'}
                 </span>
               </div>
 
-              {financialData ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {/* Metric Rows with Visual Progress Indicators */}
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '4px' }}>
-                      <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>1. Doanh thu thuần (Cọc + Hóa đơn Paid):</span>
-                      <strong style={{ fontFamily: 'JetBrains Mono, monospace', color: 'var(--color-text)' }}>
-                        {FMT(financialData.pnl.revenue)} đ
-                      </strong>
-                    </div>
-                    <div style={{ height: '6px', width: '100%', background: 'var(--color-border-light)', borderRadius: '4px', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: '100%', background: '#3b82f6', borderRadius: '4px' }} />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '4px' }}>
-                      <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>2. Chi phí nhân sự &amp; BHXH DN (23.5%):</span>
-                      <strong style={{ fontFamily: 'JetBrains Mono, monospace', color: 'var(--color-primary, #BD1D2D)' }}>
-                        {FMT(financialData.pnl.hrm_cost)} đ
-                      </strong>
-                    </div>
-                    <div style={{ height: '6px', width: '100%', background: 'var(--color-border-light)', borderRadius: '4px', overflow: 'hidden' }}>
-                      <div
-                        style={{
-                          height: '100%',
-                          width: `${financialData.pnl.revenue > 0 ? Math.min(100, Math.round((financialData.pnl.hrm_cost / financialData.pnl.revenue) * 100)) : 0}%`,
-                          background: 'var(--color-primary, #BD1D2D)',
-                          borderRadius: '4px'
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '4px' }}>
-                      <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>3. Chi phí vận hành &amp; Marketing:</span>
-                      <strong style={{ fontFamily: 'JetBrains Mono, monospace', color: '#d97706' }}>
-                        {FMT(financialData.pnl.operating_expense + financialData.pnl.marketing_expense)} đ
-                      </strong>
-                    </div>
-                    <div style={{ height: '6px', width: '100%', background: 'var(--color-border-light)', borderRadius: '4px', overflow: 'hidden' }}>
-                      <div
-                        style={{
-                          height: '100%',
-                          width: `${financialData.pnl.revenue > 0 ? Math.min(100, Math.round(((financialData.pnl.operating_expense + financialData.pnl.marketing_expense) / financialData.pnl.revenue) * 100)) : 0}%`,
-                          background: '#f59e0b',
-                          borderRadius: '4px'
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Profit Result Box */}
-                  <div
-                    style={{
-                      marginTop: '6px',
-                      padding: '12px 14px',
-                      borderRadius: '10px',
-                      background: financialData.pnl.net_profit >= 0 ? '#f0fdf4' : '#fef2f2',
-                      border: financialData.pnl.net_profit >= 0 ? '1px solid #bbf7d0' : '1px solid #fecaca',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between'
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: financialData.pnl.net_profit >= 0 ? '#166534' : '#991b1b', textTransform: 'uppercase' }}>
-                        LỢI NHUẬN RÒNG SAU THUẾ (TNDN 20%)
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1.15fr 0.85fr',
+                  gap: '1.2rem',
+                  alignItems: 'center'
+                }}
+              >
+                {/* Left: Ranked List */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                  {[
+                    { label: 'Doanh thu thuần (Cọc + HĐ)', amount: financialData?.pnl.revenue || 0, color: '#C6333D', pct: 100 },
+                    { label: 'Chi phí nhân sự & BHXH (23.5%)', amount: financialData?.pnl.hrm_cost || 0, color: '#334155', pct: financialData && financialData.pnl.revenue > 0 ? Math.min(100, Math.round((financialData.pnl.hrm_cost / financialData.pnl.revenue) * 100)) : 0 },
+                    { label: 'Chi phí vận hành & MKT', amount: (financialData?.pnl.operating_expense || 0) + (financialData?.pnl.marketing_expense || 0), color: '#64748b', pct: financialData && financialData.pnl.revenue > 0 ? Math.min(100, Math.round(((financialData.pnl.operating_expense + financialData.pnl.marketing_expense) / financialData.pnl.revenue) * 100)) : 0 },
+                    { label: 'Lợi nhuận ròng sau thuế', amount: financialData?.pnl.net_profit || 0, color: '#94a3b8', pct: financialData ? Math.round(Number(financialData.pnl.net_margin_pct || 0)) : 0 }
+                  ].map((item, idx) => (
+                    <div key={item.label} style={{ padding: '6px 8px', borderRadius: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <span style={{ fontSize: '0.73rem', fontWeight: 700, color: idx === 0 ? '#BD1D2D' : '#64748b', width: 20 }}>
+                            #{idx + 1}
+                          </span>
+                          <span style={{ width: 8, height: 8, borderRadius: '2px', background: item.color, flexShrink: 0 }} />
+                          <span style={{ fontSize: '0.82rem', fontWeight: idx === 0 ? 700 : 600, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {item.label}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, flexShrink: 0 }}>
+                          <span style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+                            {FMT(item.amount)} đ
+                          </span>
+                          <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>
+                            ({item.pct}%)
+                          </span>
+                        </div>
                       </div>
-                      <div style={{ fontSize: '0.73rem', color: financialData.pnl.net_profit >= 0 ? '#15803d' : '#dc2626' }}>
-                        Tỷ suất biên lợi nhuận ròng: <strong>{financialData.pnl.net_margin_pct}%</strong>
+                      <div style={{ marginLeft: 28, height: 6, background: '#f1f5f9', borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{ width: `${Math.max(3, Math.min(100, item.pct))}%`, height: '100%', background: item.color, borderRadius: 4, transition: 'width 0.35s ease' }} />
                       </div>
                     </div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 800, fontFamily: 'JetBrains Mono, monospace', color: financialData.pnl.net_profit >= 0 ? '#15803d' : '#dc2626' }}>
-                      {FMT(financialData.pnl.net_profit)} đ
+                  ))}
+                </div>
+
+                {/* Right: 162x162 SVG Donut */}
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '0.5rem',
+                    borderLeft: '1px solid #f1f5f9'
+                  }}
+                >
+                  <div style={{ position: 'relative', width: 162, height: 162 }}>
+                    <svg width="162" height="162" viewBox="0 0 164 164" style={{ transform: 'rotate(-90deg)' }}>
+                      <circle cx="82" cy="82" r={64} fill="transparent" stroke="#f1f5f9" strokeWidth="18" />
+                      {(() => {
+                        const hrm = Math.max(0, financialData?.pnl.hrm_cost || 0);
+                        const opex = Math.max(0, (financialData?.pnl.operating_expense || 0) + (financialData?.pnl.marketing_expense || 0));
+                        const net = Math.max(0, financialData?.pnl.net_profit || 0);
+                        const tot = hrm + opex + net || 1;
+                        const hrmArc = (hrm / tot) * 402.12;
+                        const opexArc = (opex / tot) * 402.12;
+                        const netArc = (net / tot) * 402.12;
+                        return (
+                          <>
+                            <circle cx="82" cy="82" r={64} fill="transparent" stroke="#334155" strokeWidth="18" strokeDasharray={`${hrmArc} 402.12`} strokeDashoffset={0} />
+                            <circle cx="82" cy="82" r={64} fill="transparent" stroke="#64748b" strokeWidth="18" strokeDasharray={`${opexArc} 402.12`} strokeDashoffset={-hrmArc} />
+                            <circle cx="82" cy="82" r={64} fill="transparent" stroke="#C6333D" strokeWidth="18" strokeDasharray={`${netArc} 402.12`} strokeDashoffset={-(hrmArc + opexArc)} />
+                          </>
+                        );
+                      })()}
+                    </svg>
+                    <div
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        textAlign: 'center',
+                        padding: '0 18px',
+                        pointerEvents: 'none'
+                      }}
+                    >
+                      <span style={{ fontSize: '1.22rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.1 }}>
+                        {financialData ? `${financialData.pnl.net_margin_pct}%` : '0%'}
+                      </span>
+                      <span style={{ fontSize: '0.69rem', color: '#64748b', fontWeight: 600, marginTop: '3px' }}>
+                        Biên LN ròng
+                      </span>
                     </div>
                   </div>
 
-                  {/* Cashflow Row */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--color-text-muted)', paddingTop: '4px' }}>
-                    <span>Dòng tiền vào: <strong>{FMT(financialData.cashflow.cash_in)} đ</strong></span>
-                    <span>Dòng tiền ra: <strong>{FMT(financialData.cashflow.cash_out)} đ</strong></span>
-                    <span>Net Cashflow: <strong style={{ color: financialData.cashflow.is_positive ? '#059669' : '#dc2626' }}>{FMT(financialData.cashflow.net_cashflow)} đ</strong></span>
+                  {/* Mini Legend below Donut */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '6px 10px', marginTop: '10px' }}>
+                    {[
+                      { label: 'Chi phí NS', color: '#334155' },
+                      { label: 'Vận hành/MKT', color: '#64748b' },
+                      { label: 'Lợi nhuận', color: '#C6333D' }
+                    ].map((item) => (
+                      <span key={item.label} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.7rem', fontWeight: 600, color: '#64748b' }}>
+                        <span style={{ width: 7, height: 7, borderRadius: '2px', background: item.color }} />
+                        <span>{item.label}</span>
+                      </span>
+                    ))}
                   </div>
                 </div>
-              ) : (
-                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-                  Đang tải số liệu tài chính...
-                </div>
-              )}
+              </div>
             </div>
 
-            {/* Card Right: Cảnh báo Hợp đồng & Tuân thủ BLLĐ 2019 */}
+            {/* Right Card: Archetype 2 — Dòng Tiền Thực Thu - Thực Chi & Nghĩa Vụ Thuế */}
+            <div className="card" style={{ padding: '1.35rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
+                    Dòng Tiền Thực Thu - Thực Chi &amp; Nghĩa Vụ Thuế
+                  </h3>
+                  <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: 'var(--color-text-muted, #64748b)' }}>
+                    Cân đối dòng tiền thực tế và biểu đồ nghĩa vụ thuế GTGT, TNCN, TNDN
+                  </p>
+                </div>
+                <span
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '8px',
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    color: '#0f172a',
+                    fontSize: '0.74rem',
+                    fontWeight: 700
+                  }}
+                >
+                  Net: {financialData ? FMT_COMPACT(financialData.cashflow.net_cashflow) + ' đ' : '—'}
+                </span>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '0.88fr 1.12fr',
+                  gap: '1.1rem',
+                  alignItems: 'center',
+                  flex: 1
+                }}
+              >
+                {/* Left: 154x154 Cashflow Donut */}
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    paddingRight: '0.5rem',
+                    borderRight: '1px solid #f1f5f9'
+                  }}
+                >
+                  <div style={{ position: 'relative', width: 154, height: 154 }}>
+                    <svg width="154" height="154" viewBox="0 0 168 168" style={{ transform: 'rotate(-90deg)' }}>
+                      <circle cx="84" cy="84" r={60} fill="transparent" stroke="#f1f5f9" strokeWidth="18" />
+                      {(() => {
+                        const cin = Math.max(0, financialData?.cashflow.cash_in || 0);
+                        const cout = Math.max(0, financialData?.cashflow.cash_out || 0);
+                        const tot = cin + cout || 1;
+                        const inArc = (cin / tot) * 376.99;
+                        const outArc = (cout / tot) * 376.99;
+                        return (
+                          <>
+                            <circle cx="84" cy="84" r={60} fill="transparent" stroke="#C6333D" strokeWidth="18" strokeDasharray={`${inArc} 376.99`} strokeDashoffset={0} />
+                            <circle cx="84" cy="84" r={60} fill="transparent" stroke="#334155" strokeWidth="18" strokeDasharray={`${outArc} 376.99`} strokeDashoffset={-inArc} />
+                          </>
+                        );
+                      })()}
+                    </svg>
+                    <div
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        textAlign: 'center',
+                        pointerEvents: 'none'
+                      }}
+                    >
+                      <span style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.1 }}>
+                        {financialData ? FMT_COMPACT(financialData.cashflow.cash_in) : 0}
+                      </span>
+                      <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600, marginTop: '2px' }}>
+                        Tổng thực thu
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Legend boxes */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%', maxWidth: '210px', marginTop: '10px' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '6px 10px',
+                        borderRadius: '8px',
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        fontSize: '0.75rem'
+                      }}
+                    >
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: '#0f172a' }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '2px', background: '#C6333D' }} />
+                        Thực thu
+                      </span>
+                      <span style={{ fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+                        {financialData ? FMT_COMPACT(financialData.cashflow.cash_in) : 0} đ
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '6px 10px',
+                        borderRadius: '8px',
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        fontSize: '0.75rem'
+                      }}
+                    >
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: '#0f172a' }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '2px', background: '#334155' }} />
+                        Thực chi
+                      </span>
+                      <span style={{ fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+                        {financialData ? FMT_COMPACT(financialData.cashflow.cash_out) : 0} đ
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right: Vertical BarChart of Tax Obligations */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', height: '100%', justifyContent: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>
+                      Nghĩa Vụ Thuế Cần Nộp
+                    </span>
+                    <span style={{ fontSize: '0.71rem', color: '#64748b', fontWeight: 600 }}>
+                      Hạn nộp: {overview?.tax_schedule.due_quarterly || '—'}
+                    </span>
+                  </div>
+
+                  <div style={{ width: '100%', height: 220 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={[
+                          { name: 'Thuế GTGT', amount: financialData?.tax_balance?.vat_payable || 0, color: '#C6333D' },
+                          { name: 'Thuế TNCN', amount: overview?.kpis?.total_tax_pit || financialData?.tax_balance?.pit_withheld || 0, color: '#334155' },
+                          { name: 'Thuế TNDN', amount: financialData?.pnl?.cit_tax_20pct || financialData?.tax_balance?.cit_estimated || 0, color: '#64748b' },
+                          { name: 'Tổng thuế', amount: (financialData?.tax_balance?.vat_payable || 0) + (overview?.kpis?.total_tax_pit || 0) + (financialData?.pnl?.cit_tax_20pct || 0), color: '#0f172a' }
+                        ]}
+                        margin={{ top: 22, right: 6, left: -20, bottom: 0 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#475569', fontWeight: 600 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
+                        <YAxis tick={{ fontSize: 10.5, fill: '#64748b' }} axisLine={false} tickLine={false} tickFormatter={(v) => FMT_COMPACT(v)} />
+                        <Tooltip
+                          formatter={(val: any) => [`${FMT(val)} đ`, 'Số tiền']}
+                          contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.76rem', boxShadow: '0 4px 12px rgba(15,23,42,0.08)' }}
+                        />
+                        <Bar dataKey="amount" barSize={24} radius={[6, 6, 2, 2]}>
+                          <LabelList dataKey="amount" position="top" style={{ fontSize: '10px', fontWeight: 800, fill: '#0f172a' }} formatter={(v: any) => FMT_COMPACT(v)} />
+                          {[
+                            { color: '#C6333D' },
+                            { color: '#334155' },
+                            { color: '#64748b' },
+                            { color: '#0f172a' }
+                          ].map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUBTAB 1: TỔNG QUAN & CHU TRÌNH KẾ TOÁN A-Z */}
+      {activeSubtab === 'overview' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {/* ROW 1: BÁO CÁO KINH DOANH (P&L) & DÒNG TIỀN (Archetype 1 + Archetype 2) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: '1.25rem' }}>
+            {/* Left Card: Archetype 1 — Cơ Cấu Doanh Thu, Chi Phí & Lợi Nhuận (P&L) */}
+            <div className="card" style={{ padding: '1.35rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
+                    Cơ Cấu Doanh Thu, Chi Phí &amp; Lợi Nhuận (P&amp;L)
+                  </h3>
+                  <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: 'var(--color-text-muted, #64748b)' }}>
+                    Doanh thu thuần, chi phí nhân sự, vận hành và lợi nhuận ròng kỳ {selectedMonth}
+                  </p>
+                </div>
+                <span
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '8px',
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    color: '#0f172a',
+                    fontSize: '0.74rem',
+                    fontWeight: 700
+                  }}
+                >
+                  Biên LN: {financialData ? `${financialData.pnl.net_margin_pct}%` : '—'}
+                </span>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1.15fr 0.85fr',
+                  gap: '1.2rem',
+                  alignItems: 'center'
+                }}
+              >
+                {/* Left: Ranked List */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                  {[
+                    { label: 'Doanh thu thuần (Cọc + HĐ)', amount: financialData?.pnl.revenue || 0, color: '#C6333D', pct: 100 },
+                    { label: 'Chi phí nhân sự & BHXH (23.5%)', amount: financialData?.pnl.hrm_cost || 0, color: '#334155', pct: financialData && financialData.pnl.revenue > 0 ? Math.min(100, Math.round((financialData.pnl.hrm_cost / financialData.pnl.revenue) * 100)) : 0 },
+                    { label: 'Chi phí vận hành & MKT', amount: (financialData?.pnl.operating_expense || 0) + (financialData?.pnl.marketing_expense || 0), color: '#64748b', pct: financialData && financialData.pnl.revenue > 0 ? Math.min(100, Math.round(((financialData.pnl.operating_expense + financialData.pnl.marketing_expense) / financialData.pnl.revenue) * 100)) : 0 },
+                    { label: 'Lợi nhuận ròng sau thuế', amount: financialData?.pnl.net_profit || 0, color: '#94a3b8', pct: financialData ? Math.round(Number(financialData.pnl.net_margin_pct || 0)) : 0 }
+                  ].map((item, idx) => (
+                    <div key={item.label} style={{ padding: '6px 8px', borderRadius: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <span style={{ fontSize: '0.73rem', fontWeight: 700, color: idx === 0 ? '#BD1D2D' : '#64748b', width: 20 }}>
+                            #{idx + 1}
+                          </span>
+                          <span style={{ width: 8, height: 8, borderRadius: '2px', background: item.color, flexShrink: 0 }} />
+                          <span style={{ fontSize: '0.82rem', fontWeight: idx === 0 ? 700 : 600, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {item.label}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, flexShrink: 0 }}>
+                          <span style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+                            {FMT(item.amount)} đ
+                          </span>
+                          <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>
+                            ({item.pct}%)
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ marginLeft: 28, height: 6, background: '#f1f5f9', borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{ width: `${Math.max(3, Math.min(100, item.pct))}%`, height: '100%', background: item.color, borderRadius: 4, transition: 'width 0.35s ease' }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Right: 162x162 SVG Donut */}
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '0.5rem',
+                    borderLeft: '1px solid #f1f5f9'
+                  }}
+                >
+                  <div style={{ position: 'relative', width: 162, height: 162 }}>
+                    <svg width="162" height="162" viewBox="0 0 164 164" style={{ transform: 'rotate(-90deg)' }}>
+                      <circle cx="82" cy="82" r={64} fill="transparent" stroke="#f1f5f9" strokeWidth="18" />
+                      {(() => {
+                        const hrm = Math.max(0, financialData?.pnl.hrm_cost || 0);
+                        const opex = Math.max(0, (financialData?.pnl.operating_expense || 0) + (financialData?.pnl.marketing_expense || 0));
+                        const net = Math.max(0, financialData?.pnl.net_profit || 0);
+                        const tot = hrm + opex + net || 1;
+                        const hrmArc = (hrm / tot) * 402.12;
+                        const opexArc = (opex / tot) * 402.12;
+                        const netArc = (net / tot) * 402.12;
+                        return (
+                          <>
+                            <circle cx="82" cy="82" r={64} fill="transparent" stroke="#334155" strokeWidth="18" strokeDasharray={`${hrmArc} 402.12`} strokeDashoffset={0} />
+                            <circle cx="82" cy="82" r={64} fill="transparent" stroke="#64748b" strokeWidth="18" strokeDasharray={`${opexArc} 402.12`} strokeDashoffset={-hrmArc} />
+                            <circle cx="82" cy="82" r={64} fill="transparent" stroke="#C6333D" strokeWidth="18" strokeDasharray={`${netArc} 402.12`} strokeDashoffset={-(hrmArc + opexArc)} />
+                          </>
+                        );
+                      })()}
+                    </svg>
+                    <div
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        textAlign: 'center',
+                        padding: '0 18px',
+                        pointerEvents: 'none'
+                      }}
+                    >
+                      <span style={{ fontSize: '1.22rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.1 }}>
+                        {financialData ? `${financialData.pnl.net_margin_pct}%` : '0%'}
+                      </span>
+                      <span style={{ fontSize: '0.69rem', color: '#64748b', fontWeight: 600, marginTop: '3px' }}>
+                        Biên LN ròng
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Mini Legend below Donut */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '6px 10px', marginTop: '10px' }}>
+                    {[
+                      { label: 'Chi phí NS', color: '#334155' },
+                      { label: 'Vận hành/MKT', color: '#64748b' },
+                      { label: 'Lợi nhuận', color: '#C6333D' }
+                    ].map((item) => (
+                      <span key={item.label} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.7rem', fontWeight: 600, color: '#64748b' }}>
+                        <span style={{ width: 7, height: 7, borderRadius: '2px', background: item.color }} />
+                        <span>{item.label}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Card: Archetype 2 — Dòng Tiền Thực Thu - Thực Chi & Nghĩa Vụ Thuế */}
+            <div className="card" style={{ padding: '1.35rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
+                    Dòng Tiền Thực Thu - Thực Chi &amp; Nghĩa Vụ Thuế
+                  </h3>
+                  <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: 'var(--color-text-muted, #64748b)' }}>
+                    Cân đối dòng tiền thực tế và biểu đồ nghĩa vụ thuế GTGT, TNCN, TNDN
+                  </p>
+                </div>
+                <span
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '8px',
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    color: '#0f172a',
+                    fontSize: '0.74rem',
+                    fontWeight: 700
+                  }}
+                >
+                  Net: {financialData ? FMT_COMPACT(financialData.cashflow.net_cashflow) + ' đ' : '—'}
+                </span>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '0.88fr 1.12fr',
+                  gap: '1.1rem',
+                  alignItems: 'center',
+                  flex: 1
+                }}
+              >
+                {/* Left: 154x154 Cashflow Donut */}
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    paddingRight: '0.5rem',
+                    borderRight: '1px solid #f1f5f9'
+                  }}
+                >
+                  <div style={{ position: 'relative', width: 154, height: 154 }}>
+                    <svg width="154" height="154" viewBox="0 0 168 168" style={{ transform: 'rotate(-90deg)' }}>
+                      <circle cx="84" cy="84" r={60} fill="transparent" stroke="#f1f5f9" strokeWidth="18" />
+                      {(() => {
+                        const cin = Math.max(0, financialData?.cashflow.cash_in || 0);
+                        const cout = Math.max(0, financialData?.cashflow.cash_out || 0);
+                        const tot = cin + cout || 1;
+                        const inArc = (cin / tot) * 376.99;
+                        const outArc = (cout / tot) * 376.99;
+                        return (
+                          <>
+                            <circle cx="84" cy="84" r={60} fill="transparent" stroke="#C6333D" strokeWidth="18" strokeDasharray={`${inArc} 376.99`} strokeDashoffset={0} />
+                            <circle cx="84" cy="84" r={60} fill="transparent" stroke="#334155" strokeWidth="18" strokeDasharray={`${outArc} 376.99`} strokeDashoffset={-inArc} />
+                          </>
+                        );
+                      })()}
+                    </svg>
+                    <div
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        textAlign: 'center',
+                        pointerEvents: 'none'
+                      }}
+                    >
+                      <span style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.1 }}>
+                        {financialData ? FMT_COMPACT(financialData.cashflow.cash_in) : 0}
+                      </span>
+                      <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600, marginTop: '2px' }}>
+                        Tổng thực thu
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Legend boxes */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%', maxWidth: '210px', marginTop: '10px' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '6px 10px',
+                        borderRadius: '8px',
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        fontSize: '0.75rem'
+                      }}
+                    >
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: '#0f172a' }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '2px', background: '#C6333D' }} />
+                        Thực thu
+                      </span>
+                      <span style={{ fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+                        {financialData ? FMT_COMPACT(financialData.cashflow.cash_in) : 0} đ
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '6px 10px',
+                        borderRadius: '8px',
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        fontSize: '0.75rem'
+                      }}
+                    >
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: '#0f172a' }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '2px', background: '#334155' }} />
+                        Thực chi
+                      </span>
+                      <span style={{ fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+                        {financialData ? FMT_COMPACT(financialData.cashflow.cash_out) : 0} đ
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right: Vertical BarChart of Tax Obligations */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', height: '100%', justifyContent: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>
+                      Nghĩa Vụ Thuế Cần Nộp
+                    </span>
+                    <span style={{ fontSize: '0.71rem', color: '#64748b', fontWeight: 600 }}>
+                      Hạn nộp: {overview?.tax_schedule.due_quarterly || '—'}
+                    </span>
+                  </div>
+
+                  <div style={{ width: '100%', height: 220 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={[
+                          { name: 'Thuế GTGT', amount: financialData?.tax_balance?.vat_payable || 0, color: '#C6333D' },
+                          { name: 'Thuế TNCN', amount: overview?.kpis?.total_tax_pit || financialData?.tax_balance?.pit_withheld || 0, color: '#334155' },
+                          { name: 'Thuế TNDN', amount: financialData?.pnl?.cit_tax_20pct || financialData?.tax_balance?.cit_estimated || 0, color: '#64748b' },
+                          { name: 'Tổng thuế', amount: (financialData?.tax_balance?.vat_payable || 0) + (overview?.kpis?.total_tax_pit || 0) + (financialData?.pnl?.cit_tax_20pct || 0), color: '#0f172a' }
+                        ]}
+                        margin={{ top: 22, right: 6, left: -20, bottom: 0 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#475569', fontWeight: 600 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
+                        <YAxis tick={{ fontSize: 10.5, fill: '#64748b' }} axisLine={false} tickLine={false} tickFormatter={(v) => FMT_COMPACT(v)} />
+                        <Tooltip
+                          formatter={(val: any) => [`${FMT(val)} đ`, 'Số tiền']}
+                          contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.76rem', boxShadow: '0 4px 12px rgba(15,23,42,0.08)' }}
+                        />
+                        <Bar dataKey="amount" barSize={24} radius={[6, 6, 2, 2]}>
+                          <LabelList dataKey="amount" position="top" style={{ fontSize: '10px', fontWeight: 800, fill: '#0f172a' }} formatter={(v: any) => FMT_COMPACT(v)} />
+                          {[
+                            { color: '#C6333D' },
+                            { color: '#334155' },
+                            { color: '#64748b' },
+                            { color: '#0f172a' }
+                          ].map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ROW 2: CẢNH BÁO BLLĐ 2019 & SOP CHECKLIST */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: '1.25rem' }}>
+            {/* Card Left: Cảnh báo Hợp đồng & Tuân thủ BLLĐ 2019 (with 100% Avatars) */}
             <div className="card" style={{ padding: '1.35rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
                 <div>
@@ -1087,14 +1662,20 @@ export const HrmAccountingAzWorkspace: React.FC<{
                         border: alert.severity === 'bad' ? '1px solid #fecaca' : alert.severity === 'warn' ? '1px solid #fed7aa' : '1px solid #bfdbfe',
                         background: alert.severity === 'bad' ? '#fff5f5' : alert.severity === 'warn' ? '#fffaf0' : '#eff6ff',
                         fontSize: '0.78rem',
-                        lineHeight: '1.4'
+                        lineHeight: '1.4',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px'
                       }}
                     >
-                      <div style={{ fontWeight: 700, color: alert.severity === 'bad' ? '#991b1b' : alert.severity === 'warn' ? '#9a3412' : '#1e40af' }}>
-                        {alert.full_name} ({alert.contract_code})
-                      </div>
-                      <div style={{ color: 'var(--color-text)', marginTop: '2px' }}>
-                        {alert.message}
+                      <Avatar src={alert.avatar_url || alert.avatar} name={alert.full_name} size={28} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, color: alert.severity === 'bad' ? '#991b1b' : alert.severity === 'warn' ? '#9a3412' : '#1e40af' }}>
+                          {alert.full_name} ({alert.contract_code})
+                        </div>
+                        <div style={{ color: 'var(--color-text)', marginTop: '2px' }}>
+                          {alert.message}
+                        </div>
                       </div>
                     </div>
                   ))
@@ -1125,84 +1706,90 @@ export const HrmAccountingAzWorkspace: React.FC<{
                     <span style={{ fontWeight: 700, color: '#92400e' }}>
                       Có {overview.alerts.missing_info_users.length} nhân viên còn thiếu thông tin định danh/ngân hàng:
                     </span>
-                    <ul style={{ margin: '4px 0 0', paddingLeft: '18px', color: '#78350f' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
                       {overview.alerts.missing_info_users.slice(0, 4).map(u => (
-                        <li key={u.id}>
-                          <strong>{u.full_name}</strong> (thiếu: {u.miss_fields.join(', ')})
-                        </li>
+                        <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Avatar src={u.avatar_url || u.avatar} name={u.full_name} size={26} />
+                          <div>
+                            <strong style={{ color: '#0f172a' }}>{u.full_name}</strong>{' '}
+                            <span style={{ color: '#78350f' }}>(thiếu: {u.miss_fields.join(', ')})</span>
+                          </div>
+                        </div>
                       ))}
                       {overview.alerts.missing_info_users.length > 4 && (
-                        <li>...và {overview.alerts.missing_info_users.length - 4} nhân sự khác</li>
+                        <div style={{ fontSize: '0.72rem', color: '#92400e', fontStyle: 'italic', marginLeft: '34px' }}>
+                          ...và {overview.alerts.missing_info_users.length - 4} nhân sự khác
+                        </div>
                       )}
-                    </ul>
+                    </div>
                   </div>
                 )}
               </div>
             </div>
-          </div>
 
-          {/* ROW 2: SOP CHECKLIST ĐÓNG KỲ KẾ TOÁN - NHÂN SỰ HÀNG THÁNG (7 BƯỚC) */}
-          <div className="card" style={{ padding: '1.35rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
-                  Quy Trình SOP Đóng Kỳ Kế Toán &amp; Lương (7 Bước Chuẩn)
-                </h3>
-                <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: 'var(--color-text-muted, #64748b)' }}>
-                  Theo dõi tiến độ hoàn thành từ chốt công, lập phiếu lương, hạch toán đến nộp tờ khai thuế kỳ {selectedMonth}
-                </p>
+            {/* Card Right: SOP CHECKLIST ĐÓNG KỲ KẾ TOÁN - NHÂN SỰ HÀNG THÁNG (7 BƯỚC) */}
+            <div className="card" style={{ padding: '1.35rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
+                    Quy Trình SOP Đóng Kỳ Kế Toán &amp; Lương (7 Bước Chuẩn)
+                  </h3>
+                  <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: 'var(--color-text-muted, #64748b)' }}>
+                    Theo dõi tiến độ hoàn thành từ chốt công, lập phiếu lương, hạch toán đến nộp tờ khai thuế kỳ {selectedMonth}
+                  </p>
+                </div>
+                <span style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                  Hạn chốt: <strong>Ngày 05</strong>
+                </span>
               </div>
-              <span style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
-                Hạn chốt lương: <strong>Ngày 05 hàng tháng</strong>
-              </span>
-            </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '10px' }}>
-              {overview?.sop_checklist.map((step) => (
-                <div
-                  key={step.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '10px 14px',
-                    borderRadius: '8px',
-                    background: step.done ? '#f0fdf4' : 'var(--color-border-light)',
-                    border: step.done ? '1px solid #bbf7d0' : '1px solid var(--color-border)',
-                    fontSize: '0.79rem'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {step.done ? (
-                      <CheckCircle2 size={16} color="#15803d" />
-                    ) : (
-                      <Clock size={16} style={{ color: 'var(--color-text-muted)' }} />
-                    )}
-                    <span style={{ fontWeight: step.done ? 600 : 500, color: step.done ? '#166534' : 'var(--color-text)' }}>
-                      {step.title}
-                    </span>
-                  </div>
-                  <span
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '10px' }}>
+                {overview?.sop_checklist.map((step) => (
+                  <div
+                    key={step.id}
                     style={{
-                      fontSize: '0.72rem',
-                      fontWeight: 700,
-                      padding: '2px 8px',
-                      borderRadius: '999px',
-                      background: step.done ? '#dcfce7' : 'var(--color-surface, #ffffff)',
-                      color: step.done ? '#15803d' : 'var(--color-text-muted)',
-                      border: step.done ? 'none' : '1px solid var(--color-border)'
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      background: step.done ? '#f0fdf4' : 'var(--color-border-light)',
+                      border: step.done ? '1px solid #bbf7d0' : '1px solid var(--color-border)',
+                      fontSize: '0.79rem'
                     }}
                   >
-                    {step.done ? 'Hoàn tất' : 'Chưa chốt'}
-                  </span>
-                </div>
-              ))}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {step.done ? (
+                        <CheckCircle2 size={16} color="#15803d" />
+                      ) : (
+                        <Clock size={16} style={{ color: 'var(--color-text-muted)' }} />
+                      )}
+                      <span style={{ fontWeight: step.done ? 600 : 500, color: step.done ? '#166534' : 'var(--color-text)' }}>
+                        {step.title}
+                      </span>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '999px',
+                        background: step.done ? '#dcfce7' : 'var(--color-surface, #ffffff)',
+                        color: step.done ? '#15803d' : 'var(--color-text-muted)',
+                        border: step.done ? 'none' : '1px solid var(--color-border)'
+                      }}
+                    >
+                      {step.done ? 'Xong' : 'Chờ'}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* SUBTAB 2: BỘ TÍNH LƯƠNG GROSS ⇄ NET & BHXH */}
+          {/* SUBTAB 2: BỘ TÍNH LƯƠNG GROSS ⇄ NET & BHXH */}
       {activeSubtab === 'calculator' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '1.25rem' }}>
           {/* Cột Trái: Bảng Nhập Tham Số */}
@@ -1881,6 +2468,68 @@ export const HrmAccountingAzWorkspace: React.FC<{
                 </tbody>
               </table>
             </div>
+
+            {/* Bảng Kê Chi Tiết Cá Nhân Chịu Thuế (100% Avatars) */}
+            <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: '#0f172a' }}>
+                  Bảng Kê Chi Tiết Cá Nhân Chịu Thuế (Kèm Theo Tờ Khai 05/KK &amp; 05/QTT)
+                </h4>
+                <span style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 600 }}>
+                  {taxEmployees.length} cá nhân
+                </span>
+              </div>
+              <div className="responsive-table-wrap touch-scroll-x" style={{ border: '1px solid var(--color-border)', borderRadius: '10px', overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--color-border-light)', borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)', textAlign: 'left' }}>
+                      <th style={{ padding: '8px 10px', width: '50px' }}>STT</th>
+                      <th style={{ padding: '8px 10px' }}>Họ và tên</th>
+                      <th style={{ padding: '8px 10px' }}>Số CCCD</th>
+                      <th style={{ padding: '8px 10px' }}>Chức danh</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'right' }}>Tổng thu nhập (Gross)</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'right' }}>Khấu trừ BHXH NLĐ</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'right' }}>Thuế TNCN đã khấu trừ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {taxEmployees.length > 0 ? (
+                      taxEmployees.map((emp, i) => (
+                        <tr key={emp.user_id || i} style={{ borderBottom: '1px solid var(--color-border-light)' }}>
+                          <td style={{ padding: '7px 10px', color: '#64748b' }}>{i + 1}</td>
+                          <td style={{ padding: '7px 10px', whiteSpace: 'nowrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <Avatar src={emp.avatar_url || emp.avatar} name={emp.full_name} size={28} />
+                              <div>
+                                <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.82rem' }}>{emp.full_name}</div>
+                                {emp.email && <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{emp.email}</div>}
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ padding: '7px 10px', fontFamily: 'JetBrains Mono, monospace', color: '#0f172a' }}>{emp.citizen_id || '—'}</td>
+                          <td style={{ padding: '7px 10px', color: '#475569' }}>{emp.job_title || '—'}</td>
+                          <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', color: '#0f172a' }}>
+                            {FMT(emp.gross)} đ
+                          </td>
+                          <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', color: '#64748b' }}>
+                            {FMT(emp.ins_nld)} đ
+                          </td>
+                          <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', color: Number(emp.pit) > 0 ? '#BD1D2D' : '#64748b' }}>
+                            {FMT(emp.pit)} đ
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: '#64748b' }}>
+                          Chưa có dữ liệu kê khai thuế TNCN chi tiết cho kỳ này.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1953,9 +2602,23 @@ export const HrmAccountingAzWorkspace: React.FC<{
                     {filteredLaborRecords.length > 0 ? (
                       filteredLaborRecords.map((r, i) => (
                         <tr key={i} style={{ borderBottom: '1px solid var(--color-border-light)' }}>
-                          <td style={{ padding: '6px 10px', color: 'var(--color-text-muted)' }}>{r.stt}</td>
-                          <td style={{ padding: '6px 10px', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap' }}>{r.full_name}</td>
-                          <td style={{ padding: '6px 10px', color: 'var(--color-text-muted)' }}>{r.gender}</td>
+                          <td style={{ padding: '8px 10px', color: '#64748b' }}>{r.stt}</td>
+                          <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <Avatar src={r.avatar_url || r.avatar || undefined} name={r.full_name} size={30} />
+                              <div>
+                                <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#0f172a' }}>{r.full_name}</div>
+                                {r.email && <div style={{ fontSize: '0.71rem', color: '#64748b' }}>{r.email}</div>}
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ padding: '8px 10px', color: '#64748b' }}>
+                            {String(r.gender || '').toLowerCase() === 'male' || r.gender === 'Nam'
+                              ? 'Nam'
+                              : String(r.gender || '').toLowerCase() === 'female' || r.gender === 'Nữ'
+                              ? 'Nữ'
+                              : (r.gender || '—')}
+                          </td>
                           <td style={{ padding: '6px 10px', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{r.dob}</td>
                           <td style={{ padding: '6px 10px', fontFamily: 'JetBrains Mono, monospace', color: 'var(--color-text)' }}>{r.citizen_id || '—'}</td>
                           <td style={{ padding: '6px 10px', color: 'var(--color-text)', whiteSpace: 'nowrap' }}>{r.job_title}</td>

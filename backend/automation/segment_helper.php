@@ -196,7 +196,7 @@ function ensureAllCrmContactsSyncedForFilter(PDO $pdo, int $workspaceId = 1): vo
                     ELSE NULL
                 END,
                 c.city,
-                c.country,
+                'Vietnam' AS country,
                 c.job_title,
                 c.company,
                 c.stage_id,

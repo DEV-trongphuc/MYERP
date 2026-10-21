@@ -1398,7 +1398,7 @@ class ProjectController {
 
         $stmt = $this->db->prepare("
             INSERT INTO activities (tenant_id, related_type, related_id, type, subject, body, status, priority, user_id, due_date, tags, created_by, is_archived, is_hidden, created_at, updated_at)
-            VALUES (?, 'project', ?, 'task', ?, ?, ?, ?, ?, ?, ?, 0, 0, NOW(), NOW())
+            VALUES (?, 'project', ?, 'task', ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, NOW(), NOW())
         ");
         $stmt->execute([$tid, $projectId, $title, $desc, $status, $priority, $assigneeId, $dueDate, $tags, $creatorId]);
         $id = (int)$this->db->lastInsertId();

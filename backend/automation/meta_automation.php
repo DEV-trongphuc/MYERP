@@ -24,7 +24,7 @@ try {
 
             $sql = "SELECT s.*, b.bot_name as ai_bot_name 
                     FROM meta_automation_scenarios s
-                    JOIN meta_app_configs c ON s.meta_config_id = c.id
+                    
                     LEFT JOIN ai_chatbot_settings b ON s.ai_chatbot_id = b.property_id
                     WHERE c.workspace_id = ?";
 
@@ -68,7 +68,7 @@ try {
                 // (Using simple LIKE for containment or exact match)
                 $sql = "SELECT s.title 
                         FROM meta_automation_scenarios s
-                        JOIN meta_app_configs c ON s.meta_config_id = c.id
+                        
                         WHERE s.meta_config_id = ? 
                         AND c.workspace_id = ?
                         AND s.status = 'active' 
@@ -204,8 +204,8 @@ try {
         // [SECURITY] Validate Ownership
         $stmtDel = $pdo->prepare("
             SELECT s.id FROM meta_automation_scenarios s
-            JOIN meta_app_configs c ON s.meta_config_id = c.id
-            WHERE s.id = ? AND c.workspace_id = ?
+            
+            WHERE s.id = ? AND s.workspace_id = ?
         ");
         $stmtDel->execute([$id, $workspace_id]);
         if (!$stmtDel->fetchColumn()) {

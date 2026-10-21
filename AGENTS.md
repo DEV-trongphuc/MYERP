@@ -158,3 +158,38 @@ QA Hacker độc lập kiểm tra 8 chiều tấn công:
 
 ---
 *Hiến chương này là chuẩn mực kỹ thuật tối cao và có hiệu lực bắt buộc 100% đối với mọi AI Agent, Kỹ sư Phát triển (DEV) và Chuyên gia Kiểm định (QA/Tester) trên toàn hệ thống MYERP.*
+
+
+---
+
+## 🎨 CHƯƠNG V: QUY CHUẨN UI/UX, CSS & MÀU SẮC DASHBOARD ĐỒNG BỘ TOÀN HỆ THỐNG (`CustomerPersonaOverviewDeck.tsx` DNA)
+
+Toàn bộ các màn hình Dashboard, Báo cáo, Thống kê và Tab Hành trình 360° trên MYERP (**Chân dung Học viên, Tổng quan Lead, Hiệu suất Sales, Meta Ads Full-Funnel, Kế toán & Lương A-Z, Tài chính, Nhân sự HR, Marketing, Hành trình Tương tác Đa kênh 360°**) **BẮT BUỘC** tuân thủ 100% quy chuẩn thiết kế dưới đây:
+
+1. **Bảng Màu Chuẩn Hóa (`Brand Red #C6333D / #BD1D2D & Executive Slate #0F172A`)**:
+   - **Nền thẻ (`.card`, `.stat-card`)**: `#FFFFFF`, viền duy nhất `1px solid #E2E8F0`, `borderRadius: 16px`, `boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)'`. **CẤM TUYỆT ĐỐI dùng viền màu xanh/đỏ/vàng/tím trên Card!**
+   - **Mảng màu biểu đồ (`PALETTE`)**: `['#C6333D', '#334155', '#E11D48', '#64748B', '#991B1B', '#475569', '#FB7185', '#94A3B8', '#1E293B', '#CBD5E1']`. Không dùng màu cầu vồng (xanh lá, tím, vàng, cam, xanh dương) trên biểu đồ phân bổ.
+   - **Màu ngữ nghĩa Đỏ / Vàng / Xanh theo `%` (`getCompletenessTone`)**: Chỉ dùng cho thanh Độ đầy đủ dữ liệu / Tỷ lệ hoàn thành SLA (`>= 80%`: `#10b981` xanh lá; `50% - 79.9%`: `#f59e0b` vàng cam; `< 50%`: `#ef4444` đỏ).
+
+2. **Quy Tắc 4 Thẻ KPI Đầu Trang (`dashboard-kpi-grid`)**:
+   - **Tiêu đề (`stat-label`)**: Chữ IN HOA (`uppercase`), `fontSize: '0.73rem'`, `fontWeight: 700`, `letterSpacing: '0.04em'`, `color: '#64748b'`.
+   - **Hộp Icon góc phải (`32px × 32px`, `borderRadius: 8px`)**:
+     - Card 1 & Card 2: `background: 'rgba(189, 29, 45, 0.08)'` (`#fef2f2`), `color: '#BD1D2D'`.
+     - Card 3 & Card 4 (và các Card tiếp theo): `background: 'rgba(15, 23, 42, 0.06)'` (`#f1f5f9`), `color: '#334155'`.
+     - **CẤM** dùng icon màu xanh dương, hồng, tím, cam, xanh lá không có hộp nền chuẩn!
+   - **Con số chính (`stat-value`)**: `fontSize: '1.85rem'`, `fontWeight: 800`, `fontVariantNumeric: 'tabular-nums'`.
+     - Card 1, 3, 4: Màu chữ **`#0f172a`** (Đen Slate).
+     - Card 2: Màu chữ **`#BD1D2D`** (`#C6333D` Đỏ thương hiệu).
+     - **CẤM** tô màu xanh lá, xanh dương, nâu/cam lên con số KPI!
+   - **2 dòng mô tả dưới đáy Card**: Chữ `#64748b` sạch sẽ (`• Nhãn: <strong style={{ color: '#0f172a' }}>Giá trị</strong>`), **CẤM** nhét các cục pill nền vàng/xanh/đỏ vào trong KPI Card.
+
+3. **Quy Tắc Subtab / Segmented Control**:
+   - Khay ngoài: `display: 'inline-flex', padding: '3px', borderRadius: '10px', background: '#f1f5f9', border: '1px solid #e2e8f0', gap: '2px'`.
+   - Nút trong khay: `height: '32px', padding: '0 14px', borderRadius: '7px', border: 'none', background: isActive ? '#ffffff' : 'transparent', color: isActive ? '#BD1D2D' : '#64748b', fontWeight: isActive ? 700 : 600, boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'`.
+   - **CẤM** dùng nút subtab bo tròn `rounded-full` hoặc có viền đỏ `border: 1px solid #f87171`!
+
+4. **Quy Tắc 5 Archetype Biểu Đồ & Bảng Xếp Hạng Nhân Sự**:
+   - **Header của mọi Chart Card**: Tiêu đề `h3` (`0.98rem`, `fontWeight: 800`, `color: '#0f172a'`, **không có icon màu đứng trước tiêu đề**) + mô tả `p` (`0.76rem`, `color: '#64748b'`) + Badge tổng hợp góc phải (`background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', color: '#0f172a', fontWeight: 700`).
+   - **Archetype 1 (Ranked List + Donut)**: Cột trái danh sách xếp hạng `#1` (`#BD1D2D`), `#2+` (`#64748b`) kèm thanh progress `6px`; Cột phải (`borderLeft: '1px solid #f1f5f9'`) vòng Donut `162x162` hiển thị `%` ở tâm.
+   - **Archetype 2 (Donut + Vertical BarChart)**: Cột trái vòng Donut `154x154` kèm hộp Legend trắng viền `#e2e8f0`; Cột phải biểu đồ cột đứng `BarChart` màu `#C6333D` (`radius={[6, 6, 2, 2]}`) **bắt buộc có `<LabelList position="top" />`** hiển thị số trên đỉnh cột.
+   - **Archetype 3 (Top Nhân sự / Tư vấn viên)**: **TUYỆT ĐỐI KHÔNG BAO GIỜ LIỆT KÊ TÊN NHÂN SỰ MÀ KHÔNG CÓ `<Avatar />`!** Mỗi dòng gồm Huy chương (`🥇`, `🥈`, `🥉`, `#4...`) + `<Avatar size={30} />` + Tên đậm `#0f172a` + Thanh progress `5px` màu `#C6333D` (Top 1–3) / `#475569` (Top 4+) + Số lượng & Pill `%` (`#f1f5f9`).

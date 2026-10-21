@@ -281,7 +281,7 @@ if ($method === 'POST' && $action === 'refresh_token') {
             INNER JOIN ai_org_users u ON u.id = rt.user_id
             WHERE rt.token = ?
               AND rt.expires_at > NOW()
-              AND rt.is_active = 1
+              
             LIMIT 1
         ");
         $stmt->execute([$refreshToken]);
@@ -385,7 +385,7 @@ if ($method === 'GET' && $action === 'check') {
                 INNER JOIN ai_org_users u ON u.id = t.user_id
                 WHERE t.token = ?
                   AND t.expires_at > NOW()
-                  AND t.is_active = 1
+                  
                 LIMIT 1
             ");
             $stmt->execute([$bearerToken]);

@@ -14,7 +14,8 @@ import {
   Home,
   Coffee,
   Truck,
-  GraduationCap
+  GraduationCap,
+  Layers
 } from 'lucide-react';
 import {
   Bar, XAxis, YAxis, CartesianGrid,
@@ -30,7 +31,7 @@ import api from '../api/axios';
 import { useLanguage } from '../contexts/LanguageContext';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import toast from 'react-hot-toast';
-import { KpiCardSkeleton, Skeleton, ChartSkeleton } from '../components/ui/Skeleton';
+import { KpiCardSkeleton, Skeleton, ChartSkeleton, TableSkeleton } from '../components/ui/Skeleton';
 import { getLocalDateStr } from '../utils/dateUtils';
 
 import { Avatar } from '../components/ui/Avatar';
@@ -44,6 +45,20 @@ import { CustomerPersonaOverviewDeck } from '../components/Dashboard/CustomerPer
 const ExpenseQuickViewDrawer = React.lazy(() => import('../components/ExpenseQuickViewDrawer').then(m => ({ default: m.ExpenseQuickViewDrawer })));
 const DepositDetailDrawer = React.lazy(() => import('../components/DepositDetailDrawer').then(m => ({ default: m.DepositDetailDrawer })));
 const CustomerProfileDrawer = React.lazy(() => import('./CustomerProfileDrawer').then(m => ({ default: m.CustomerProfileDrawer })));
+const HrmAccountingAzWorkspace = React.lazy(() => import('../components/HRM/HrmAccountingAzWorkspace'));
+// @ts-ignore
+const MetaAdsAttributionDeck = React.lazy(() =>
+  // @ts-ignore
+  import('../components/Dashboard/MetaAdsAttributionDeck')
+    .then((m: any) => ({ default: m.MetaAdsAttributionDeck || m.default }))
+    .catch(() => ({
+      default: () => (
+        <div className="card" style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+          Đang tải báo cáo Meta Ads Attribution...
+        </div>
+      )
+    }))
+);
 
 const parseServerDate = (dateStr: string) => {
   if (!dateStr) return new Date();
@@ -140,22 +155,43 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
   const ORDER_PAGE_SIZE = 5;
 
   // Subtab and Marketing states
-  const [activeSubTab, setActiveSubTab] = useState<'default' | 'persona' | 'sales_performance' | 'hr' | 'accountant' | 'marketing'>('default');
+  const [activeSubTab, setActiveSubTab] = useState<string>('persona');
   const [personaDrawerContact, setPersonaDrawerContact] = useState<any | null>(null);
   const [campaignsList, setCampaignsList] = useState<any[]>([]);
   const [mktFilterType, setMktFilterType] = useState<'close_date' | 'lead_date'>('close_date');
   const [seedingLoading, setSeedingLoading] = useState(false);
 
+  const normalizedSubTab = useMemo(() => {
+    if (activeSubTab === 'default') return 'leads';
+    if (activeSubTab === 'sales_performance') return 'sales';
+    if (activeSubTab === 'accountant') return 'finance';
+    if (activeSubTab === 'hr') return 'hrm';
+    return activeSubTab;
+  }, [activeSubTab]);
+
   const currentViewRole = useMemo(() => {
-    if (activeSubTab === 'persona') return 'persona';
-    if (activeSubTab === 'sales_performance') return 'sales_performance';
+    if (normalizedSubTab === 'persona') return 'persona';
+    if (normalizedSubTab === 'sales') return 'sales';
+    if (normalizedSubTab === 'meta_ads') return 'meta_ads';
+    if (normalizedSubTab === 'accounting_az') return 'accounting_az';
+    if (normalizedSubTab === 'marketing') return 'marketing';
+    if (normalizedSubTab === 'finance') return 'finance';
+    if (normalizedSubTab === 'hrm') return 'hrm';
+    if (normalizedSubTab === 'leads') return 'leads';
+
     if (user?.role === 'marketing') {
-      return activeSubTab === 'default' ? 'marketing' : activeSubTab;
+      return 'marketing';
+    }
+    if (user?.role === 'accountant') {
+      return 'finance';
+    }
+    if (user?.role === 'hr') {
+      return 'hrm';
     }
     return (user?.role === 'admin' || user?.role === 'director' || user?.role === 'superadmin')
-      ? activeSubTab
+      ? normalizedSubTab
       : user?.role;
-  }, [user?.role, activeSubTab]);
+  }, [user?.role, normalizedSubTab]);
 
   // HR Dashboard specific states
   const [hrProfiles, setHrProfiles] = useState<any[]>([]);
@@ -427,7 +463,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       .then(res => { if (res.success) setPendingExpensesCount(res.data?.total ?? 0); })
       .catch(e => console.error(e));
 
-    if (currentViewRole === 'accountant' || activeSubTab === 'accountant' || user?.role === 'admin' || user?.role === 'director' || user?.role === 'superadmin') {
+    if (currentViewRole === 'finance' || currentViewRole === 'accountant' || normalizedSubTab === 'finance' || activeSubTab === 'accountant' || user?.role === 'admin' || user?.role === 'director' || user?.role === 'superadmin') {
       Promise.all([
         api.get('/expenses', { params: { limit: 50 } }).catch(() => ({ data: { data: { items: [] } } })),
         fetchAPI('deposits').catch(() => ({ data: [] })),
@@ -537,7 +573,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
 
   // HR Dashboard specific calculations
   useEffect(() => {
-    if (currentViewRole === 'hr' && isActive) {
+    if ((currentViewRole === 'hrm' || currentViewRole === 'hr') && isActive) {
       setHrLoading(true);
       const now = new Date();
       const todayStr = now.toISOString().substring(0, 10);
@@ -1250,29 +1286,23 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
     const isAdmin = (user?.role === 'admin' || user?.role === 'director' || user?.role === 'superadmin');
     const isMarketingUser = (user?.role === 'marketing');
     const isManagerUser = isManagement(user) || isExecutive(user);
+    const isAccountantUser = (user?.role === 'accountant');
+    const isHrUser = (user?.role === 'hr');
 
-    if (!isAdmin && !isManagerUser && !isMarketingUser) {
+    if (!isAdmin && !isManagerUser && !isMarketingUser && !isAccountantUser && !isHrUser) {
       return null;
     }
 
-    const TABS = isAdmin ? [
-      { key: 'default', label: t('Vận hành'), icon: Zap },
-      { key: 'persona', label: t('Tổng quan Học viên'), icon: GraduationCap },
-      { key: 'sales_performance', label: t('Hiệu suất Lead'), icon: TrendingUp },
-      { key: 'hr', label: t('Nhân sự'), icon: Users },
-      { key: 'accountant', label: t('Kế toán'), icon: DollarSign },
-      { key: 'marketing', label: t('Marketing'), icon: BarChart2 }
-    ] : isMarketingUser ? [
-      { key: 'marketing', label: t('Marketing'), icon: BarChart2 },
-      { key: 'persona', label: t('Tổng quan Học viên'), icon: GraduationCap },
-      { key: 'sales_performance', label: t('Hiệu suất Lead'), icon: TrendingUp }
-    ] : [
-      { key: 'default', label: t('Vận hành'), icon: Zap },
-      { key: 'persona', label: t('Tổng quan Học viên'), icon: GraduationCap },
-      { key: 'sales_performance', label: t('Hiệu suất Lead'), icon: TrendingUp }
+    const TABS = [
+      { key: 'persona', label: t('Chân dung Học viên'), icon: GraduationCap },
+      { key: 'leads', label: t('Tổng quan Lead'), icon: Zap },
+      { key: 'sales', label: t('Hiệu suất Sales'), icon: TrendingUp },
+      { key: 'meta_ads', label: t('Meta Ads'), icon: BarChart2 },
+      { key: 'marketing', label: t('Marketing'), icon: Layers },
+      { key: 'finance', label: t('Tài chính'), icon: DollarSign },
+      { key: 'hrm', label: t('Nhân sự'), icon: Users },
+      { key: 'accounting_az', label: t('Kế toán & Lương A-Z'), icon: Receipt }
     ];
-
-    const effectiveActiveTab = (isMarketingUser && activeSubTab === 'default') ? 'marketing' : activeSubTab;
 
     return (
       <div
@@ -1295,12 +1325,12 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       >
         {TABS.map((tab) => {
           const Icon = tab.icon;
-          const isAct = effectiveActiveTab === tab.key;
+          const isAct = normalizedSubTab === tab.key;
           return (
             <button
               key={tab.key}
               type="button"
-              onClick={() => setActiveSubTab(tab.key as any)}
+              onClick={() => setActiveSubTab(tab.key)}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -1914,7 +1944,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
     );
   }
 
-  if (currentViewRole === 'sales_performance') {
+  if (currentViewRole === 'sales' || currentViewRole === 'sales_performance') {
     return renderDashboardWrapper(
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', animation: 'slideUp 0.4s ease-out both' }}>
         {renderAdminWelcomeBanner()}
@@ -1924,7 +1954,31 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
     );
   }
 
-  if (currentViewRole === 'hr') {
+  if (currentViewRole === 'meta_ads') {
+    return renderDashboardWrapper(
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', animation: 'slideUp 0.4s ease-out both' }}>
+        {renderAdminWelcomeBanner()}
+        {renderHeaderForRole(t("Meta Ads Full-Funnel Attribution"), t("Đo lường chi tiết chiến dịch, nhóm quảng cáo, CPL, CAC, ROAS và quy kết doanh thu đa điểm chạm."))}
+        <React.Suspense fallback={<ChartSkeleton />}>
+          <MetaAdsAttributionDeck />
+        </React.Suspense>
+      </div>
+    );
+  }
+
+  if (currentViewRole === 'accounting_az') {
+    return renderDashboardWrapper(
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', animation: 'slideUp 0.4s ease-out both' }}>
+        {renderAdminWelcomeBanner()}
+        {renderHeaderForRole(t("Nghiệp vụ Kế toán & Bảng Lương A-Z"), t("Không gian hạch toán chứng từ, dòng tiền thực, quỹ tiền mặt và tính toán bảng lương chuyên sâu."))}
+        <React.Suspense fallback={<TableSkeleton rows={8} cols={6} />}>
+          <HrmAccountingAzWorkspace embedMode={true} />
+        </React.Suspense>
+      </div>
+    );
+  }
+
+  if (currentViewRole === 'hrm' || currentViewRole === 'hr') {
     const isHrLoading = hrLoading || (hrProfiles.length === 0 && hrLeaves.length === 0);
     const totalHeadcount = hrProfiles.length;
     const pendingLeaves = hrLeaves.filter(l => l.status === 'pending').length;
@@ -2030,7 +2084,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
           <div className="card hover-lift" style={{ padding: '1.25rem', border: '1px solid #e2e8f0', borderRadius: 16, minHeight: '135px', cursor: 'pointer', display: 'flex', flexDirection: 'column' }} onClick={() => navigate('/hrm')}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: '#64748b' }}>{t('ĐI LÀM HÔM NAY')}</span>
-              <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <CheckCircle size={16} />
               </div>
             </div>
@@ -2038,8 +2092,8 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
               <Skeleton width={80} height={36} style={{ margin: '4px 0' }} />
             ) : (
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <span style={{ fontSize: '1.85rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{presentToday}</span>
-                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: presentPctToday >= 80 ? '#10b981' : presentPctToday >= 50 ? '#f59e0b' : '#ef4444' }}>({presentPctToday}%)</span>
+                <span style={{ fontSize: '1.85rem', fontWeight: 800, color: '#BD1D2D', fontVariantNumeric: 'tabular-nums' }}>{presentToday}</span>
+                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b' }}>({presentPctToday}%)</span>
               </div>
             )}
             <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 'auto', fontWeight: 600 }}>
@@ -2051,14 +2105,14 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
           <div className="card hover-lift" style={{ padding: '1.25rem', border: '1px solid #e2e8f0', borderRadius: 16, minHeight: '135px', cursor: 'pointer', display: 'flex', flexDirection: 'column' }} onClick={() => navigate('/hrm')}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: '#64748b' }}>{t('ĐI TRỄ / VỀ SỚM')}</span>
-              <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(198, 51, 61, 0.08)', color: '#C6333D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Clock size={16} />
               </div>
             </div>
             {isHrLoading ? (
               <Skeleton width={80} height={36} style={{ margin: '4px 0' }} />
             ) : (
-              <div style={{ fontSize: '1.85rem', fontWeight: 800, color: lateToday > 0 ? '#C6333D' : '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{lateToday}</div>
+              <div style={{ fontSize: '1.85rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{lateToday}</div>
             )}
             <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 'auto', fontWeight: 600 }}>
               {isHrLoading ? <Skeleton width={160} height={12} /> : <span>{t('Ghi nhận đi trễ hoặc về sớm hôm nay')}</span>}
@@ -2076,7 +2130,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             {isHrLoading ? (
               <Skeleton width={80} height={36} style={{ margin: '4px 0' }} />
             ) : (
-              <div style={{ fontSize: '1.85rem', fontWeight: 800, color: totalPendingRequests > 0 ? '#C6333D' : '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{totalPendingRequests}</div>
+              <div style={{ fontSize: '1.85rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{totalPendingRequests}</div>
             )}
             <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 'auto', fontWeight: 600 }}>
               {isHrLoading ? <Skeleton width={170} height={12} /> : <span>{t('Đơn xin nghỉ phép & tạm ứng chờ duyệt')}</span>}
@@ -2339,7 +2393,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
     );
   }
 
-  if (currentViewRole === 'accountant') {
+  if (currentViewRole === 'finance' || currentViewRole === 'accountant') {
     const acct = stats?.accountantStats || {};
     const revenue = Number(acct.revenue ?? 0);
     const approvedExpenses = Number(acct.approved_expenses ?? 0);
@@ -2777,72 +2831,73 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
         {renderHeaderForRole(t("Quản lý tài chính & Kế toán"), t("Theo dõi doanh thu, chi phí, công nợ và dòng tiền doanh nghiệp.")) }
 
         {/* 4 KPI Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+        <div className="dashboard-kpi-grid" style={{ marginBottom: 0 }}>
           {/* Card 1: Doanh thu thực nhận */}
-          <div className="card hover-lift" style={{ padding: '1.25rem', position: 'relative', overflow: 'hidden', minHeight: '135px', cursor: 'pointer' }} onClick={() => navigate('/deposits')}>
+          <div className="stat-card" style={{ minHeight: '132px', display: 'flex', flexDirection: 'column', cursor: 'pointer' }} onClick={() => navigate('/deposits')}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('DOANH THU THỰC NHẬN')}</span>
-              <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(16, 185, 129, 0.08)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: '#64748b' }}>{t('DOANH THU THỰC NHẬN')}</span>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <DollarSign size={16} />
               </div>
             </div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#10b981' }}>{formatVND(revenue)}</div>
-            <div className={`stat-change ${revenueChange.startsWith('-') ? 'down' : 'up'}`} style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <svg viewBox="0 0 24 24" width="8" height="8" fill="currentColor" style={{ flexShrink: 0 }}>
-                {revenueChange.startsWith('-') ? <path d="M12 19L3 5h18z" /> : <path d="M12 5l9 14H3z" />}
-              </svg>
-              {revenueChange}
-              <span className="stat-desc" style={{ color: 'var(--color-text-light)', marginLeft: '4px', fontWeight: 500 }}>{getComparisonLabel(dateFilter)}</span>
+            <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a' }}>{formatVND(revenue)}</div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <span>• Thực thu: <strong style={{ color: '#0f172a' }}>{formatVND(revenue)}</strong></span>
+              <span>• Đơn SO: <strong style={{ color: '#0f172a' }}>{soList.length}</strong></span>
+            </div>
+            <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.73rem', color: '#64748b', fontWeight: 500 }}>
+              Tăng trưởng: {revenueChange} {getComparisonLabel(dateFilter)}
             </div>
           </div>
 
           {/* Card 2: Lợi nhuận gộp */}
-          <div className="card hover-lift" style={{ padding: '1.25rem', position: 'relative', overflow: 'hidden', minHeight: '135px' }}>
+          <div className="stat-card" style={{ minHeight: '132px', display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('LỢI NHUẬN GỘP')}</span>
-              <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(59, 130, 246, 0.08)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: '#64748b' }}>{t('LỢI NHUẬN GỘP')}</span>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <TrendingUp size={16} />
               </div>
             </div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: profit >= 0 ? '#3b82f6' : '#ef4444' }}>{formatVND(profit)}</div>
-            <div className="stat-desc" style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', marginTop: 'auto' }}>
-              {t('Doanh thu')} - {t('Chi phí đã duyệt')}
+            <div className="stat-value" style={{ fontWeight: 800, color: '#BD1D2D' }}>{formatVND(profit)}</div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500 }}>
+              • Doanh thu trừ chi phí đã duyệt
+            </div>
+            <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.73rem', color: '#64748b', fontWeight: 500 }}>
+              Tỷ suất ước tính: <strong style={{ color: '#0f172a' }}>{revenue > 0 ? Math.round((profit / revenue) * 100) : 0}%</strong>
             </div>
           </div>
 
           {/* Card 3: Chi phí đã duyệt */}
-          <div className="card hover-lift" style={{ padding: '1.25rem', position: 'relative', overflow: 'hidden', minHeight: '135px', cursor: 'pointer' }} onClick={() => navigate('/expenses')}>
+          <div className="stat-card" style={{ minHeight: '132px', display: 'flex', flexDirection: 'column', cursor: 'pointer' }} onClick={() => navigate('/expenses')}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('CHI PHÍ ĐÃ DUYỆT')}</span>
-              <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: '#64748b' }}>{t('CHI PHÍ ĐÃ DUYỆT')}</span>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <CreditCard size={16} />
               </div>
             </div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#ef4444' }}>{formatVND(approvedExpenses)}</div>
-            <div className={`stat-change ${approvedExpensesChange.startsWith('-') ? 'down' : 'up'}`} style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <svg viewBox="0 0 24 24" width="8" height="8" fill="currentColor" style={{ flexShrink: 0 }}>
-                {approvedExpensesChange.startsWith('-') ? <path d="M12 19L3 5h18z" /> : <path d="M12 5l9 14H3z" />}
-              </svg>
-              {approvedExpensesChange}
-              <span className="stat-desc" style={{ color: 'var(--color-text-light)', marginLeft: '4px', fontWeight: 500 }}>{getComparisonLabel(dateFilter)}</span>
+            <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a' }}>{formatVND(approvedExpenses)}</div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <span>• Khoản chi: <strong style={{ color: '#0f172a' }}>{approvedExpensesCount}</strong> khoản đã duyệt</span>
+            </div>
+            <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.73rem', color: '#64748b', fontWeight: 500 }}>
+              Thay đổi: {approvedExpensesChange} {getComparisonLabel(dateFilter)}
             </div>
           </div>
 
           {/* Card 4: Yêu cầu chi chờ duyệt */}
-          <div className="card hover-lift" style={{ padding: '1.25rem', position: 'relative', overflow: 'hidden', minHeight: '135px', cursor: 'pointer' }} onClick={() => navigate('/expenses?status=pending')}>
+          <div className="stat-card" style={{ minHeight: '132px', display: 'flex', flexDirection: 'column', cursor: 'pointer' }} onClick={() => navigate('/expenses?status=pending')}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('YÊU CẦU CHI CHỜ DUYỆT')}</span>
-              <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(245, 158, 11, 0.08)', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: '#64748b' }}>{t('YÊU CẦU CHI CHỜ DUYỆT')}</span>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Clock size={16} />
               </div>
             </div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f59e0b' }}>{pendingExpenses} {t('khoản')}</div>
-            <div className={`stat-change ${pendingExpensesChange.startsWith('-') ? 'down' : 'up'}`} style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <svg viewBox="0 0 24 24" width="8" height="8" fill="currentColor" style={{ flexShrink: 0 }}>
-                {pendingExpensesChange.startsWith('-') ? <path d="M12 19L3 5h18z" /> : <path d="M12 5l9 14H3z" />}
-              </svg>
-              {pendingExpensesChange}
-              <span className="stat-desc" style={{ color: 'var(--color-text-light)', marginLeft: '4px', fontWeight: 500 }}>{getComparisonLabel(dateFilter)}</span>
+            <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a' }}>{pendingExpenses} {t('khoản')}</div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <span>• Chờ xử lý: <strong style={{ color: '#0f172a' }}>{pendingExpenses}</strong> khoản chi PO</span>
+            </div>
+            <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.73rem', color: '#BD1D2D', fontWeight: 600 }}>
+              Bấm để mở danh sách chờ duyệt →
             </div>
           </div>
         </div>
@@ -2850,23 +2905,24 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
         {/* 1. Recent Orders Card (PO & SO) - Placed ON TOP as requested */}
         <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', marginBottom: '0.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: activeOrderType === 'po' ? '0.75rem' : '1.25rem', flexWrap: 'wrap', gap: '10px' }}>
-            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <FileText size={18} color="var(--color-primary)" /> {t('Đơn Hàng Gần Đây (PO & SO)')}
+            <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+              {t('Đơn Hàng Gần Đây (PO & SO)')}
             </h3>
-            <div style={{ display: 'flex', gap: '4px', background: 'var(--color-border-light, #f1f5f9)', padding: '3px', borderRadius: '8px', border: '1px solid var(--color-border, #e2e8f0)' }}>
+            <div style={{ display: 'inline-flex', padding: '3px', borderRadius: '10px', background: '#f1f5f9', border: '1px solid #e2e8f0', gap: '2px' }}>
               <button
                 onClick={() => setActiveOrderType('po')}
                 style={{
-                  padding: '6px 14px',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  borderRadius: '6px',
+                  height: '30px',
+                  padding: '0 12px',
+                  borderRadius: '7px',
                   border: 'none',
-                  background: activeOrderType === 'po' ? 'var(--color-surface, #ffffff)' : 'transparent',
-                  color: activeOrderType === 'po' ? '#C6333D' : 'var(--color-text-muted, #64748b)',
+                  background: activeOrderType === 'po' ? '#ffffff' : 'transparent',
+                  color: activeOrderType === 'po' ? '#BD1D2D' : '#64748b',
+                  fontSize: '0.75rem',
+                  fontWeight: activeOrderType === 'po' ? 700 : 600,
                   cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  boxShadow: activeOrderType === 'po' ? '0 1px 3px rgba(15,23,42,0.08)' : 'none'
+                  boxShadow: activeOrderType === 'po' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  transition: 'all 0.15s ease'
                 }}
               >
                 {t('PO gần đây')} ({poList.length})
@@ -2874,16 +2930,17 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
               <button
                 onClick={() => setActiveOrderType('so')}
                 style={{
-                  padding: '6px 14px',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  borderRadius: '6px',
+                  height: '30px',
+                  padding: '0 12px',
+                  borderRadius: '7px',
                   border: 'none',
-                  background: activeOrderType === 'so' ? 'var(--color-surface, #ffffff)' : 'transparent',
-                  color: activeOrderType === 'so' ? '#C6333D' : 'var(--color-text-muted, #64748b)',
+                  background: activeOrderType === 'so' ? '#ffffff' : 'transparent',
+                  color: activeOrderType === 'so' ? '#BD1D2D' : '#64748b',
+                  fontSize: '0.75rem',
+                  fontWeight: activeOrderType === 'so' ? 700 : 600,
                   cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  boxShadow: activeOrderType === 'so' ? '0 1px 3px rgba(15,23,42,0.08)' : 'none'
+                  boxShadow: activeOrderType === 'so' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  transition: 'all 0.15s ease'
                 }}
               >
                 {t('SO gần đây')} ({soList.length})
@@ -2904,12 +2961,22 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
               else if (overall !== 'rejected' && overall !== 'cancelled' && overall !== 'draft') pendingCount++;
             });
             return (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
+              <div
+                style={{
+                  display: 'inline-flex',
+                  padding: '3px',
+                  borderRadius: '10px',
+                  background: '#f1f5f9',
+                  border: '1px solid #e2e8f0',
+                  gap: '2px',
+                  marginBottom: '12px'
+                }}
+              >
                 {[
-                  { key: 'all', label: t('Tất cả'), count: poList.length, color: 'var(--color-primary)' },
-                  { key: 'pending', label: t('Chờ duyệt'), count: pendingCount, color: '#f59e0b' },
-                  { key: 'unpaid', label: t('Chưa thanh toán'), count: unpaidCount, color: '#d97706' },
-                  { key: 'paid', label: t('Đã thanh toán'), count: paidCount, color: '#10b981' },
+                  { key: 'all', label: t('Tất cả'), count: poList.length },
+                  { key: 'pending', label: t('Chờ duyệt'), count: pendingCount },
+                  { key: 'unpaid', label: t('Chưa thanh toán'), count: unpaidCount },
+                  { key: 'paid', label: t('Đã thanh toán'), count: paidCount }
                 ].map((tab) => {
                   const isActive = poFilter === tab.key;
                   return (
@@ -2923,26 +2990,30 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '6px',
-                        padding: '4px 10px',
-                        borderRadius: '20px',
+                        height: '30px',
+                        padding: '0 12px',
+                        borderRadius: '7px',
                         fontSize: '0.75rem',
-                        fontWeight: isActive ? 700 : 500,
-                        border: isActive ? `1.5px solid ${tab.color}` : '1px solid var(--color-border)',
-                        background: isActive ? `${tab.color}15` : 'var(--color-surface)',
-                        color: isActive ? tab.color : 'var(--color-text-muted)',
+                        fontWeight: isActive ? 700 : 600,
+                        border: 'none',
+                        background: isActive ? '#ffffff' : 'transparent',
+                        color: isActive ? '#BD1D2D' : '#64748b',
+                        boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                         cursor: 'pointer',
                         transition: 'all 0.15s ease'
                       }}
                     >
                       <span>{tab.label}</span>
-                      <span style={{
-                        fontSize: '0.68rem',
-                        padding: '1px 5px',
-                        borderRadius: '10px',
-                        background: isActive ? tab.color : 'var(--color-bg)',
-                        color: isActive ? '#ffffff' : 'var(--color-text-muted)',
-                        fontWeight: 700
-                      }}>
+                      <span
+                        style={{
+                          fontSize: '0.68rem',
+                          padding: '1px 6px',
+                          borderRadius: '999px',
+                          background: isActive ? 'rgba(189,29,45,0.08)' : '#f1f5f9',
+                          color: isActive ? '#BD1D2D' : '#64748b',
+                          fontWeight: 700
+                        }}
+                      >
                         {tab.count}
                       </span>
                     </button>
@@ -3871,135 +3942,113 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
               <KpiCardSkeleton />
             </div>
           ))
-        ) : kpiCards.map((card) => {
-          const Icon = card.icon;
-          
-          const getIconBgColor = (color: string) => {
-            if (color === 'var(--color-primary)' || color === '#a31422') return 'var(--color-primary-light)';
-            if (color === '#3b82f6') return 'rgba(59, 130, 246, 0.08)';
-            if (color === '#f59e0b') return 'rgba(245, 158, 11, 0.08)';
-            if (color === '#ef4444') return 'rgba(239, 68, 68, 0.08)';
-            return 'rgba(100, 116, 139, 0.08)';
-          };
-
-          return (
+        ) : (
+          <>
+            {/* Card 1: TỔNG DATA TIẾP NHẬN */}
             <div
-              key={`kpi-card-${card.id}`}
-              className={`stat-card hover-lift ${card.id}-card`}
-              style={{
-                minHeight: '140px',
-                display: 'flex',
-                flexDirection: 'column',
-                cursor: 'pointer',
-                animation: 'slideUp 0.4s ease-out both',
-                animationDelay: '180ms',
-                position: 'relative',
-                overflow: 'hidden',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
-              }}
-              onClick={() => navigate(`/data?status=${card.statusValue}`)}
+              className="stat-card hover-lift"
+              style={{ minHeight: '132px', display: 'flex', flexDirection: 'column', cursor: 'pointer' }}
+              onClick={() => navigate('/data?status=all')}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, color: 'var(--color-text-muted)' }}>{card.label}</span>
-                <div className="stat-icon" style={{ 
-                  width: '32px', 
-                  height: '32px', 
-                  borderRadius: '8px', 
-                  background: getIconBgColor(card.color), 
-                  color: card.color, 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  flexShrink: 0
-                }}><Icon size={16} /></div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: '#64748b' }}>
+                  {t('TỔNG DATA TIẾP NHẬN')}
+                </span>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <GitBranch size={16} />
+                </div>
               </div>
-
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)' }}>{card.value}</div>
-                {card.id === 'total' && (
-                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '8px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-primary)', display: 'inline-block', flexShrink: 0 }} />
-                      <span>
-                        {t('Tỷ lệ chia')}: {(() => {
-                          const total = stats?.total_today || 0;
-                          const distributed = stats?.distributed_today || 0;
-                          return total > 0 ? Math.round((distributed / total) * 100) : 0;
-                        })()}%
-                      </span>
-                    </span>
-                  </div>
-                )}
-                {card.id === 'distributed' && (
-                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '8px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#2563eb', fontWeight: 700 }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', display: 'inline-block', flexShrink: 0 }} />
-                      <span>{t('Được chia')}: {(stats?.distributed_assigned || 0) + (stats?.distributed_compensation || 0)} ({t('Vòng')}: {stats?.distributed_assigned || 0} • {t('Bù')}: {stats?.distributed_compensation || 0})</span>
-                    </span>
-                    {(stats?.distributed_rule_6_month || 0) > 0 && (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#8b5cf6', display: 'inline-block', flexShrink: 0 }} />
-                        <span>{t('6 tháng')}: {stats?.distributed_rule_6_month || 0}</span>
-                      </span>
-                    )}
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', display: 'inline-block', flexShrink: 0 }} />
-                      <span>{t('Data Self')}: {stats?.distributed_self || 0}</span>
-                    </span>
-                  </div>
-                )}
-                {card.id === 'duplicates' && (
-                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '8px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', display: 'inline-block', flexShrink: 0 }} />
-                      <span>
-                        {t('Tỷ lệ trùng')}: {(() => {
-                          const total = stats?.total_today || 0;
-                          const duplicates = stats?.duplicates || 0;
-                          return total > 0 ? Math.round((duplicates / total) * 100) : 0;
-                        })()}%
-                      </span>
-                    </span>
-                  </div>
-                )}
-                {card.id === 'errors' && (
-                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '8px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', display: 'inline-block', flexShrink: 0 }} />
-                      <span>{stats?.ticket_errors || 0} {t('ticket')}</span>
-                    </span>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', display: 'inline-block', flexShrink: 0 }} />
-                      <span>{stats?.under_standard || 0} {t('dưới chuẩn')}</span>
-                    </span>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#6b7280', display: 'inline-block', flexShrink: 0 }} />
-                      <span>{stats?.blacklists || 0} {t('blacklist')}</span>
-                    </span>
-                  </div>
-                )}
-                {(() => {
-                  const isIncrease = (card.change || '').startsWith('+');
-                  return (
-                    <div className={`stat-change ${card.up !== false ? 'up' : 'down'}`} style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      {isIncrease ? (
-                        <svg viewBox="0 0 24 24" width="8" height="8" fill="currentColor" style={{ flexShrink: 0 }}>
-                          <path d="M12 5l9 14H3z" />
-                        </svg>
-                      ) : (
-                        <svg viewBox="0 0 24 24" width="8" height="8" fill="currentColor" style={{ flexShrink: 0 }}>
-                          <path d="M12 19L3 5h18z" />
-                        </svg>
-                      )}
-                      {card.change || '+0%'}
-                      <span className="stat-desc" style={{ color: 'var(--color-text-light)', marginLeft: '4px', fontWeight: 500 }}>{getComparisonLabel(dateFilter)}</span>
-                    </div>
-                  );
-                })()}
+              <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a' }}>
+                {(stats?.total_today ?? 0).toLocaleString()}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <span>• Phân bổ: <strong style={{ color: '#0f172a' }}>{(stats?.distributed_today ?? 0).toLocaleString()}</strong></span>
+                <span>• Tự do: <strong style={{ color: '#0f172a' }}>{(stats?.distributed_self ?? 0).toLocaleString()}</strong></span>
+              </div>
+              <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.73rem', color: '#64748b', fontWeight: 500 }}>
+                Tăng trưởng: {stats?.total_change || '+0%'} {getComparisonLabel(dateFilter)}
               </div>
             </div>
-          );
-        })}
+
+            {/* Card 2: CHIA THÀNH CÔNG */}
+            <div
+              className="stat-card hover-lift"
+              style={{ minHeight: '132px', display: 'flex', flexDirection: 'column', cursor: 'pointer' }}
+              onClick={() => navigate('/data?status=assigned,compensation,rule_6_month,pending_work_hours,fallback,success,databank_claim')}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: '#64748b' }}>
+                  {t('CHIA THÀNH CÔNG')}
+                </span>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <UserPlus size={16} />
+                </div>
+              </div>
+              <div className="stat-value" style={{ fontWeight: 800, color: '#BD1D2D' }}>
+                {(stats?.distributed_today ?? 0).toLocaleString()}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <span>• Tỷ lệ chia: <strong style={{ color: '#0f172a' }}>{stats?.total_today > 0 ? Math.round(((stats?.distributed_today ?? 0) / stats.total_today) * 100) : 0}%</strong></span>
+                <span>• Đã nhận: <strong style={{ color: '#0f172a' }}>{(stats?.distributed_today ?? 0).toLocaleString()}</strong></span>
+              </div>
+              <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.73rem', color: '#64748b', fontWeight: 500 }}>
+                Được chia theo vòng: <strong style={{ color: '#0f172a' }}>{(stats?.distributed_assigned ?? 0) + (stats?.distributed_compensation ?? 0)}</strong> lead
+              </div>
+            </div>
+
+            {/* Card 3: TỶ LỆ XỬ LÝ SLA */}
+            <div
+              className="stat-card hover-lift"
+              style={{ minHeight: '132px', display: 'flex', flexDirection: 'column', cursor: 'pointer' }}
+              onClick={() => navigate('/fair-share')}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: '#64748b' }}>
+                  {t('TỶ LỆ XỬ LÝ SLA')}
+                </span>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <CheckCircle2 size={16} />
+                </div>
+              </div>
+              <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a' }}>
+                {stats?.fair_share_equity || '100%'}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <span>• Đúng hạn: <strong style={{ color: '#0f172a' }}>{stats?.processed_on_time ?? stats?.distributed_today ?? 0}</strong></span>
+                <span>• Trễ hạn: <strong style={{ color: '#0f172a' }}>{stats?.overdue_count ?? 0}</strong></span>
+              </div>
+              <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.73rem', color: '#64748b', fontWeight: 500 }}>
+                Độ lệch chuẩn phân bổ SD: <strong style={{ color: '#0f172a' }}>{stats?.fair_share_sd ?? '0.0'}</strong>
+              </div>
+            </div>
+
+            {/* Card 4: CẦN CHÚ Ý / NGOÀI GIỜ */}
+            <div
+              className="stat-card hover-lift"
+              style={{ minHeight: '132px', display: 'flex', flexDirection: 'column', cursor: 'pointer' }}
+              onClick={() => navigate('/tickets')}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: '#64748b' }}>
+                  {t('CẦN CHÚ Ý / NGOÀI GIỜ')}
+                </span>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <AlertTriangle size={16} />
+                </div>
+              </div>
+              <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a' }}>
+                {((stats?.duplicates ?? 0) + (stats?.errors ?? 0) + (stats?.pending_work_hours_count ?? 0)).toLocaleString()}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <span>• Ngoài giờ: <strong style={{ color: '#0f172a' }}>{stats?.pending_work_hours_count ?? 0}</strong></span>
+                <span>• Lỗi/Trùng: <strong style={{ color: '#0f172a' }}>{(stats?.duplicates ?? 0) + (stats?.errors ?? 0)}</strong></span>
+              </div>
+              <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.73rem', color: '#BD1D2D', fontWeight: 600 }}>
+                {stats?.ticket_errors ?? 0} ticket &amp; {stats?.pending_work_hours_count ?? 0} lead ngoài giờ →
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Chart + List row */}
@@ -4031,37 +4080,38 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
               display: 'flex',
               flexDirection: isMobile ? 'column' : 'row',
               justifyContent: 'space-between',
-              alignItems: isMobile ? 'flex-start' : 'flex-start',
+              alignItems: isMobile ? 'flex-start' : 'center',
               marginBottom: '1rem',
               gap: isMobile ? '12px' : '8px'
             }}>
               <div>
-                <h3 style={{ fontSize: isMobile ? '0.95rem' : '1.125rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                <h3 style={{ fontSize: isMobile ? '0.95rem' : '1rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
                   {displayChartMode === 'heatmap'
                     ? t('Bản đồ mật độ Lead theo ngày và giờ')
                     : `${t('Hiệu suất xử lý Data theo')} ${displayChartMode === 'hour' ? t('giờ') : t('ngày')}`}
                 </h3>
                 {!isMobile && (
-                  <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-light)', marginTop: '2px' }}>
+                  <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', marginBottom: 0 }}>
                     {t('Biểu đồ thể hiện lưu lượng Data đổ về')} {dateFilter === 'Tùy chỉnh' ? t('trong khoảng thời gian đã chọn') : `${t('trong')} ${getDisplayDateFilterText(dateFilter).toLowerCase()}`}.
                   </p>
                 )}
               </div>
               {!isSingleDay && (
-                <div style={{ display: 'flex', background: 'var(--color-bg)', padding: '4px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border-light)', flexShrink: 0 }}>
+                <div style={{ display: 'inline-flex', padding: '3px', borderRadius: '10px', background: '#f1f5f9', border: '1px solid #e2e8f0', gap: '2px', flexShrink: 0 }}>
                   <button
                     onClick={() => setChartMode('day')}
                     style={{
-                      padding: isMobile ? '4px 8px' : '6px 12px',
-                      borderRadius: 'var(--radius-sm)',
-                      fontSize: isMobile ? '0.7rem' : '0.8125rem',
-                      fontWeight: 600,
+                      height: '32px',
+                      padding: isMobile ? '0 8px' : '0 12px',
+                      borderRadius: '7px',
+                      fontSize: isMobile ? '0.72rem' : '0.78rem',
+                      fontWeight: displayChartMode === 'day' ? 700 : 600,
                       border: 'none',
                       cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      background: displayChartMode === 'day' ? 'var(--color-surface)' : 'transparent',
-                      color: displayChartMode === 'day' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                      boxShadow: displayChartMode === 'day' ? '0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)' : 'none'
+                      transition: 'all 0.15s ease',
+                      background: displayChartMode === 'day' ? '#ffffff' : 'transparent',
+                      color: displayChartMode === 'day' ? '#BD1D2D' : '#64748b',
+                      boxShadow: displayChartMode === 'day' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
                     }}
                   >
                     {t('Theo ngày')}
@@ -4069,16 +4119,17 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                   <button
                     onClick={() => setChartMode('hour')}
                     style={{
-                      padding: isMobile ? '4px 8px' : '6px 12px',
-                      borderRadius: 'var(--radius-sm)',
-                      fontSize: isMobile ? '0.7rem' : '0.8125rem',
-                      fontWeight: 600,
+                      height: '32px',
+                      padding: isMobile ? '0 8px' : '0 12px',
+                      borderRadius: '7px',
+                      fontSize: isMobile ? '0.72rem' : '0.78rem',
+                      fontWeight: displayChartMode === 'hour' ? 700 : 600,
                       border: 'none',
                       cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      background: displayChartMode === 'hour' ? 'var(--color-surface)' : 'transparent',
-                      color: displayChartMode === 'hour' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                      boxShadow: displayChartMode === 'hour' ? '0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)' : 'none'
+                      transition: 'all 0.15s ease',
+                      background: displayChartMode === 'hour' ? '#ffffff' : 'transparent',
+                      color: displayChartMode === 'hour' ? '#BD1D2D' : '#64748b',
+                      boxShadow: displayChartMode === 'hour' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
                     }}
                   >
                     {t('Theo giờ')}
@@ -4086,16 +4137,17 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                   <button
                     onClick={() => setChartMode('heatmap')}
                     style={{
-                      padding: isMobile ? '4px 8px' : '6px 12px',
-                      borderRadius: 'var(--radius-sm)',
-                      fontSize: isMobile ? '0.7rem' : '0.8125rem',
-                      fontWeight: 600,
+                      height: '32px',
+                      padding: isMobile ? '0 8px' : '0 12px',
+                      borderRadius: '7px',
+                      fontSize: isMobile ? '0.72rem' : '0.78rem',
+                      fontWeight: displayChartMode === 'heatmap' ? 700 : 600,
                       border: 'none',
                       cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      background: displayChartMode === 'heatmap' ? 'var(--color-surface)' : 'transparent',
-                      color: displayChartMode === 'heatmap' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                      boxShadow: displayChartMode === 'heatmap' ? '0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)' : 'none'
+                      transition: 'all 0.15s ease',
+                      background: displayChartMode === 'heatmap' ? '#ffffff' : 'transparent',
+                      color: displayChartMode === 'heatmap' ? '#BD1D2D' : '#64748b',
+                      boxShadow: displayChartMode === 'heatmap' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
                     }}
                   >
                     {t('Heatmap')}
@@ -4252,13 +4304,13 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                       }
                       return null;
                     }} />
-                    <Bar dataKey="volume" fill="var(--color-primary)" fillOpacity={0.85} radius={[4, 4, 0, 0]} maxBarSize={20}>
-                      <LabelList dataKey="volume" position="top" style={{ fill: 'var(--color-text)', fontSize: 11, fontWeight: 700 }} offset={6} />
+                    <Bar dataKey="volume" fill="#C6333D" fillOpacity={0.9} radius={[4, 4, 0, 0]} maxBarSize={22}>
+                      <LabelList dataKey="volume" position="top" style={{ fill: '#0f172a', fontSize: '10.5px', fontWeight: 800 }} offset={6} />
                     </Bar>
                   </ComposedChart>
                 </ResponsiveContainer>
               ) : (
-                <div style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)' }}>
+                <div style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
                   {t('Chưa có dữ liệu thống kê')}
                 </div>
               )
@@ -4266,12 +4318,12 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
           </div>
 
           <div className="card" style={{ display: 'flex', flexDirection: 'column', minWidth: 0, animation: 'slideUp 0.4s ease-out both', animationDelay: '300ms' }}>
-            <div style={{ padding: '1.25rem', borderBottom: '1px solid var(--color-border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>{t('Lịch sử giao Data gần đây')}</h3>
+            <div style={{ padding: '1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>{t('Lịch sử giao Data gần đây')}</h3>
               <span
-                style={{ fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 700, cursor: 'pointer' }}
+                style={{ fontSize: '0.75rem', color: '#BD1D2D', fontWeight: 700, cursor: 'pointer' }}
                 onClick={() => navigate('/data')}
-              >{t('Xem tất cả')}</span>
+              >{t('Xem tất cả')} →</span>
             </div>
             <div style={{ flex: 1, padding: '0.5rem 0.5rem 1.25rem 0.5rem', overflowY: 'auto', maxHeight: 280 }}>
               {recentLogs.length > 0 ? (
@@ -4439,22 +4491,22 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       ) : (
         <>
           <div key="source-quality-loaded" className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
-            {/* Top Consultants */}
+            {/* Top Consultants (Archetype 3) */}
             <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3 style={{ fontSize: isMobile ? '0.95rem' : '1.125rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-text)' }}>
-                  <Users size={18} color="#C6333D" /> {t('Top Tư vấn viên nhận Data')}
+                <h3 style={{ fontSize: isMobile ? '0.95rem' : '1rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                  {t('Top Tư vấn viên nhận Data')}
                 </h3>
                 {stats?.topConsultants && stats.topConsultants.length > 0 && (
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748B', background: 'var(--color-bg)', padding: '2px 8px', borderRadius: '12px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', background: '#f1f5f9', padding: '3px 9px', borderRadius: '8px' }}>
                     {stats.topConsultants.length} {t('tư vấn viên')}
                   </span>
                 )}
               </div>
-              <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1, justifyContent: 'flex-start', overflowY: 'auto', maxHeight: 270, paddingRight: 4 }}>
+              <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', flex: 1, justifyContent: 'flex-start', overflowY: 'auto', maxHeight: 280, paddingRight: 4 }}>
                 {stats?.topConsultants && stats.topConsultants.length > 0 ? stats.topConsultants.slice(0, 20).map((c: any, i: number) => {
                   const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : null;
-                  const barColor = i === 0 ? '#C6333D' : i === 1 ? '#E11D48' : i === 2 ? '#FB7185' : '#475569';
+                  const barColor = i < 3 ? '#C6333D' : '#475569';
                   const pctVal = Math.min(100, Math.max(0, Number(c.percent) || 0));
                   return (
                     <div
@@ -4469,7 +4521,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                         transition: 'background 0.15s ease',
                         cursor: 'pointer'
                       }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg)'}
+                      onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                       onClick={() => {
                         setStatsConsultant(c);
@@ -4479,13 +4531,13 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', fontWeight: 600, alignItems: 'center' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                          <span style={{ fontSize: medal ? '1rem' : '0.75rem', color: '#64748B', width: 22, textAlign: 'center', fontWeight: 700, flexShrink: 0 }}>
+                          <span style={{ fontSize: medal ? '1rem' : '0.75rem', color: '#64748b', width: 22, textAlign: 'center', fontWeight: 700, flexShrink: 0 }}>
                             {medal || `#${i + 1}`}
                           </span>
                           <Avatar
                             src={c.avatar}
                             name={c.name}
-                            size={26}
+                            size={30}
                             style={{
                               flexShrink: 0,
                               filter: (c.status === 'inactive' || c.status === 'leave' || Number(c.vacation_mode) === 1) ? 'grayscale(1)' : 'none',
@@ -4493,101 +4545,150 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                             }}
                           />
                           <span className="consultant-name" style={{ transition: 'color 0.2s ease', display: 'inline-flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            <span style={{ color: 'var(--color-text)', fontWeight: 700 }}>{c.name}</span>
+                            <span style={{ color: '#0f172a', fontWeight: 700 }}>{c.name}</span>
                             <BarChart2 size={13} className="consultant-chart-icon" style={{ opacity: 0.35, color: '#C6333D', flexShrink: 0 }} />
                           </span>
                         </span>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                           {c.company_data !== undefined && (
-                            <span style={{ fontSize: '0.72rem', fontWeight: 500, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '2px 6px', borderRadius: 6 }}>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 500, color: '#64748b', background: '#f1f5f9', padding: '2px 6px', borderRadius: 6 }}>
                               {c.company_data} {t('chia')} • {c.self_data || 0} self
                             </span>
                           )}
-                          <span style={{ color: 'var(--color-text)', fontWeight: 800, fontSize: '0.9rem' }}>
-                            {c.data} <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>{t('lead')}</span>
+                          <span style={{ color: '#0f172a', fontWeight: 800, fontSize: '0.88rem' }}>
+                            {c.data} <span style={{ fontSize: '0.72rem', fontWeight: 500, color: '#64748b' }}>{t('lead')}</span>
                           </span>
-                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', minWidth: 38, textAlign: 'right' }}>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', background: '#f1f5f9', padding: '2px 8px', borderRadius: 6, minWidth: 38, textAlign: 'center' }}>
                             {c.percent}%
                           </span>
                         </div>
                       </div>
-                      <div style={{ height: 6, background: 'var(--color-bg)', borderRadius: 4, overflow: 'hidden', marginLeft: 30 }}>
-                        <div style={{ width: `${pctVal}%`, height: '100%', background: barColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
+                      <div style={{ height: 5, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden', marginLeft: 30 }}>
+                        <div style={{ width: `${pctVal}%`, height: '100%', background: barColor, borderRadius: 3, transition: 'width 0.4s ease' }} />
                       </div>
                     </div>
                   );
                 }) : (
-                  <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem 0' }}>{t('Chưa có dữ liệu thống kê')}</div>
+                  <div style={{ textAlign: 'center', color: '#64748b', padding: '2rem 0' }}>{t('Chưa có dữ liệu thống kê')}</div>
                 )}
               </div>
             </div>
 
-            {/* Round Assignment Ratio */}
+            {/* Round Assignment Ratio (Archetype 1: Left Ranked List + Right 162x162 SVG Donut) */}
             <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3 style={{ fontSize: isMobile ? '0.95rem' : '1.125rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-text)' }}>
-                  <GitBranch size={18} color="#C6333D" /> {t('Tỷ lệ theo Vòng Phân Bổ')}
+                <h3 style={{ fontSize: isMobile ? '0.95rem' : '1rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                  {t('Tỷ lệ theo Vòng Phân Bổ')}
                 </h3>
                 {stats?.roundRatio && stats.roundRatio.length > 0 && (
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748B', background: 'var(--color-bg)', padding: '2px 8px', borderRadius: '12px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', background: '#f1f5f9', padding: '3px 9px', borderRadius: '8px' }}>
                     {stats.roundRatio.reduce((sum: number, r: any) => sum + (Number(r.count) || 0), 0)} {t('lượt chia')}
                   </span>
                 )}
               </div>
-              <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1, justifyContent: 'flex-start', overflowY: 'auto', maxHeight: 270, paddingRight: 4 }}>
-                {stats?.roundRatio && stats.roundRatio.length > 0 ? stats.roundRatio.slice(0, 10).map((r: any, i: number) => {
-                  const barColor = EXECUTIVE_PALETTE[i % EXECUTIVE_PALETTE.length];
-                  const pctVal = Number(r.percent) || 0;
-                  return (
-                    <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px', borderRadius: 8, background: 'var(--color-bg)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{ width: 10, height: 10, borderRadius: '50%', background: barColor, flexShrink: 0 }} />
-                          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)' }}>{t(r.round)}</span>
+              {stats?.roundRatio && stats.roundRatio.length > 0 ? (() => {
+                const roundDonutRadius = 60;
+                const roundDonutCircumference = 2 * Math.PI * roundDonutRadius;
+                let accumulatedRoundPct = 0;
+                const roundSegments = stats.roundRatio.slice(0, 8).map((r: any, idx: number) => {
+                  const pct = Number(r.percent) || 0;
+                  const arc = (pct / 100) * roundDonutCircumference;
+                  const offset = -(accumulatedRoundPct / 100) * roundDonutCircumference;
+                  accumulatedRoundPct += pct;
+                  return {
+                    ...r,
+                    color: EXECUTIVE_PALETTE[idx % EXECUTIVE_PALETTE.length],
+                    pct,
+                    arc,
+                    offset
+                  };
+                });
+                const topRound = stats.roundRatio[0];
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.15fr 0.85fr', gap: '1rem', alignItems: 'center', flex: 1 }}>
+                    <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', maxHeight: 270, overflowY: 'auto', paddingRight: 4 }}>
+                      {roundSegments.map((r: any, i: number) => (
+                        <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '5px 8px', borderRadius: 6, background: '#f8fafc' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                              <div style={{ width: 8, height: 8, borderRadius: '50%', background: r.color, flexShrink: 0 }} />
+                              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t(r.round)}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', background: '#f1f5f9', padding: '2px 7px', borderRadius: 6 }}>
+                                {r.pct}%
+                              </span>
+                              <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a' }}>
+                                {r.count} <span style={{ fontSize: '0.7rem', fontWeight: 500, color: '#64748b' }}>{t('lead')}</span>
+                              </span>
+                            </div>
+                          </div>
+                          <div style={{ width: '100%', height: 4, background: '#e2e8f0', borderRadius: 2, overflow: 'hidden' }}>
+                            <div style={{ width: `${Math.min(100, Math.max(0, r.pct))}%`, height: '100%', background: r.color, borderRadius: 2, transition: 'width 0.4s ease' }} />
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', background: 'var(--color-surface)', padding: '2px 8px', borderRadius: 10 }}>
-                            {pctVal}% {t('tổng')}
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0.5rem', borderLeft: isMobile ? 'none' : '1px solid #f1f5f9' }}>
+                      <div style={{ position: 'relative', width: 162, height: 162 }}>
+                        <svg width="162" height="162" viewBox="0 0 164 164" style={{ transform: 'rotate(-90deg)' }}>
+                          <circle cx="82" cy="82" r={roundDonutRadius} fill="transparent" stroke="#f1f5f9" strokeWidth="18" />
+                          {roundSegments.map((seg: any, idx: number) => (
+                            <circle
+                              key={idx}
+                              cx="82"
+                              cy="82"
+                              r={roundDonutRadius}
+                              fill="transparent"
+                              stroke={seg.color}
+                              strokeWidth="18"
+                              strokeDasharray={`${seg.arc} ${roundDonutCircumference}`}
+                              strokeDashoffset={seg.offset}
+                              style={{ transition: 'all 0.25s ease' }}
+                            />
+                          ))}
+                        </svg>
+                        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', pointerEvents: 'none', padding: '0 12px' }}>
+                          <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.1 }}>
+                            {topRound ? `${topRound.percent}%` : '0%'}
                           </span>
-                          <span style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text)' }}>
-                            {r.count} <span style={{ fontSize: '0.72rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>{t('lead')}</span>
+                          <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600, marginTop: 2, maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {topRound ? t(topRound.round) : t('Vòng')}
                           </span>
                         </div>
-                      </div>
-                      <div style={{ width: '100%', height: 6, background: 'var(--color-surface)', borderRadius: 3, overflow: 'hidden' }}>
-                        <div style={{ width: `${Math.min(100, Math.max(0, pctVal))}%`, height: '100%', background: barColor, borderRadius: 3, transition: 'width 0.4s ease' }} />
                       </div>
                     </div>
-                  );
-                }) : (
-                  <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem 0' }}>{t('Chưa có dữ liệu thống kê')}</div>
-                )}
-              </div>
+                  </div>
+                );
+              })() : (
+                <div style={{ textAlign: 'center', color: '#64748b', padding: '2rem 0' }}>{t('Chưa có dữ liệu thống kê')}</div>
+              )}
             </div>
           </div>
 
           {/* NEW ROW: Source Stats & Error Stats */}
           <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
-            {/* Source Pie Chart */}
+            {/* Source Stats (Archetype 1: Left Ranked List + Right 162x162 SVG Donut) */}
             <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '8px' }}>
-                <h3 style={{ fontSize: isMobile ? '0.95rem' : '1.125rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-text)' }}>
-                  <GitBranch size={18} color="#C6333D" /> {t('Tỷ lệ Nguồn Data')}
+                <h3 style={{ fontSize: isMobile ? '0.95rem' : '1rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                  {t('Tỷ lệ Nguồn Data')}
                 </h3>
-                <div style={{ display: 'flex', background: 'var(--color-bg)', padding: '3px', borderRadius: 'var(--radius-md)', flexShrink: 0 }}>
+                <div style={{ display: 'inline-flex', padding: '3px', borderRadius: '10px', background: '#f1f5f9', border: '1px solid #e2e8f0', gap: '2px', flexShrink: 0 }}>
                   <button
                     onClick={() => setSourceViewMode('connection')}
                     style={{
-                      padding: isMobile ? '3px 8px' : '4px 12px',
-                      borderRadius: 'var(--radius-sm)',
-                      fontSize: isMobile ? '0.65rem' : '0.75rem',
-                      fontWeight: 600,
+                      height: '30px',
+                      padding: isMobile ? '0 8px' : '0 12px',
+                      borderRadius: '7px',
+                      fontSize: isMobile ? '0.7rem' : '0.75rem',
+                      fontWeight: sourceViewMode === 'connection' ? 700 : 600,
                       border: 'none',
                       cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      background: sourceViewMode === 'connection' ? 'var(--color-surface)' : 'transparent',
-                      color: sourceViewMode === 'connection' ? '#C6333D' : 'var(--color-text-muted)',
-                      boxShadow: sourceViewMode === 'connection' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                      transition: 'all 0.15s ease',
+                      background: sourceViewMode === 'connection' ? '#ffffff' : 'transparent',
+                      color: sourceViewMode === 'connection' ? '#BD1D2D' : '#64748b',
+                      boxShadow: sourceViewMode === 'connection' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
                     }}
                   >
                     {t('Theo Kết nối')}
@@ -4595,16 +4696,17 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                   <button
                     onClick={() => setSourceViewMode('lead')}
                     style={{
-                      padding: isMobile ? '3px 8px' : '4px 12px',
-                      borderRadius: 'var(--radius-sm)',
-                      fontSize: isMobile ? '0.65rem' : '0.75rem',
-                      fontWeight: 600,
+                      height: '30px',
+                      padding: isMobile ? '0 8px' : '0 12px',
+                      borderRadius: '7px',
+                      fontSize: isMobile ? '0.7rem' : '0.75rem',
+                      fontWeight: sourceViewMode === 'lead' ? 700 : 600,
                       border: 'none',
                       cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      background: sourceViewMode === 'lead' ? 'var(--color-surface)' : 'transparent',
-                      color: sourceViewMode === 'lead' ? '#C6333D' : 'var(--color-text-muted)',
-                      boxShadow: sourceViewMode === 'lead' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                      transition: 'all 0.15s ease',
+                      background: sourceViewMode === 'lead' ? '#ffffff' : 'transparent',
+                      color: sourceViewMode === 'lead' ? '#BD1D2D' : '#64748b',
+                      boxShadow: sourceViewMode === 'lead' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
                     }}
                   >
                     {t('Theo Nguồn Lead')}
@@ -4615,71 +4717,85 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                 {(() => {
                   const activeSourceData = (sourceViewMode === 'connection' ? stats?.sourceStats : stats?.leadSourceStats) || [];
                   if (activeSourceData.length === 0) {
-                    return <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', width: '100%', padding: '2rem 0' }}>{t('Chưa có dữ liệu thống kê')}</div>;
+                    return <div style={{ textAlign: 'center', color: '#64748b', width: '100%', padding: '2rem 0' }}>{t('Chưa có dữ liệu thống kê')}</div>;
                   }
                   const totalVal = activeSourceData.reduce((acc: number, item: any) => acc + (Number(item.value) || 0), 0);
+                  const sourceDonutRadius = 60;
+                  const sourceDonutCircumference = 2 * Math.PI * sourceDonutRadius;
+                  let accumulatedSourcePct = 0;
+                  const sourceSegments = activeSourceData.slice(0, 8).map((entry: any, index: number) => {
+                    const itemVal = Number(entry.value) || 0;
+                    const pct = totalVal > 0 ? (itemVal / totalVal) * 100 : 0;
+                    const arc = (pct / 100) * sourceDonutCircumference;
+                    const offset = -(accumulatedSourcePct / 100) * sourceDonutCircumference;
+                    accumulatedSourcePct += pct;
+                    return {
+                      ...entry,
+                      color: entry.color || EXECUTIVE_PALETTE[index % EXECUTIVE_PALETTE.length],
+                      val: itemVal,
+                      pctNum: pct,
+                      pctStr: pct.toFixed(1),
+                      arc,
+                      offset
+                    };
+                  });
+                  const topSource = sourceSegments[0];
                   return (
-                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '150px 1fr', gap: '1rem', width: '100%', alignItems: 'center' }}>
-                      <div style={{ width: 150, height: 160, position: 'relative', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={activeSourceData}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={46}
-                              outerRadius={68}
-                              paddingAngle={3}
-                              dataKey="value"
-                            >
-                              {activeSourceData.map((entry: any, index: number) => (
-                                <Cell key={`cell-${index}`} fill={entry.color || EXECUTIVE_PALETTE[index % EXECUTIVE_PALETTE.length]} />
-                              ))}
-                            </Pie>
-                            <Tooltip
-                              contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                              itemStyle={{ color: 'var(--color-text)', fontWeight: 600 }}
-                            />
-                          </PieChart>
-                        </ResponsiveContainer>
-                        <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                          <span style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text)' }}>
-                            {totalVal}
-                          </span>
-                          <span style={{ fontSize: '0.62rem', color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
-                            {t('Tổng')}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: 220, overflowY: 'auto', paddingRight: 4 }}>
-                        {activeSourceData.map((entry: any, index: number) => {
-                          const itemColor = entry.color || EXECUTIVE_PALETTE[index % EXECUTIVE_PALETTE.length];
-                          const itemPct = totalVal > 0 ? ((Number(entry.value) || 0) / totalVal * 100).toFixed(1) : '0.0';
-                          return (
-                            <div key={index} style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '5px 8px', borderRadius: 6, background: 'var(--color-bg)' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: itemColor, flexShrink: 0 }} />
-                                  <span style={{ fontWeight: 600, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={t(entry.name)}>
-                                    {t(entry.name)}
-                                  </span>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.15fr 0.85fr', gap: '1rem', width: '100%', alignItems: 'center' }}>
+                      <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', maxHeight: 260, overflowY: 'auto', paddingRight: 4 }}>
+                        {sourceSegments.map((entry: any, index: number) => (
+                          <div key={index} style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '5px 8px', borderRadius: 6, background: '#f8fafc' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                                <span style={{ width: 8, height: 8, borderRadius: '50%', background: entry.color, flexShrink: 0 }} />
+                                <span style={{ fontWeight: 700, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={t(entry.name)}>
+                                  {t(entry.name)}
                                 </span>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569' }}>
-                                    {itemPct}%
-                                  </span>
-                                  <span style={{ fontWeight: 800, color: 'var(--color-text)', fontSize: '0.85rem' }}>
-                                    {entry.value}
-                                  </span>
-                                </div>
-                              </div>
-                              <div style={{ width: '100%', height: 4, background: 'var(--color-surface)', borderRadius: 2, overflow: 'hidden' }}>
-                                <div style={{ width: `${itemPct}%`, height: '100%', background: itemColor, borderRadius: 2 }} />
+                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', background: '#f1f5f9', padding: '2px 7px', borderRadius: 6 }}>
+                                  {entry.pctStr}%
+                                </span>
+                                <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.85rem' }}>
+                                  {entry.val}
+                                </span>
                               </div>
                             </div>
-                          );
-                        })}
+                            <div style={{ width: '100%', height: 4, background: '#e2e8f0', borderRadius: 2, overflow: 'hidden' }}>
+                              <div style={{ width: `${Math.min(100, Math.max(0, entry.pctNum))}%`, height: '100%', background: entry.color, borderRadius: 2, transition: 'width 0.4s ease' }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0.5rem', borderLeft: isMobile ? 'none' : '1px solid #f1f5f9' }}>
+                        <div style={{ position: 'relative', width: 162, height: 162 }}>
+                          <svg width="162" height="162" viewBox="0 0 164 164" style={{ transform: 'rotate(-90deg)' }}>
+                            <circle cx="82" cy="82" r={sourceDonutRadius} fill="transparent" stroke="#f1f5f9" strokeWidth="18" />
+                            {sourceSegments.map((seg: any, idx: number) => (
+                              <circle
+                                key={idx}
+                                cx="82"
+                                cy="82"
+                                r={sourceDonutRadius}
+                                fill="transparent"
+                                stroke={seg.color}
+                                strokeWidth="18"
+                                strokeDasharray={`${seg.arc} ${sourceDonutCircumference}`}
+                                strokeDashoffset={seg.offset}
+                                style={{ transition: 'all 0.25s ease' }}
+                              />
+                            ))}
+                          </svg>
+                          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', pointerEvents: 'none', padding: '0 12px' }}>
+                            <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.1 }}>
+                              {topSource ? `${topSource.pctStr}%` : '0%'}
+                            </span>
+                            <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600, marginTop: 2, maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {topSource ? t(topSource.name) : t('Tổng')}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   );
@@ -4690,11 +4806,11 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             {/* Error Tickets by TVV (Vertical Column Chart) */}
             <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3 style={{ fontSize: isMobile ? '0.95rem' : '1.125rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-text)' }}>
-                  <AlertTriangle size={18} color="#C6333D" /> {t('Thống kê lỗi Ticket')}
+                <h3 style={{ fontSize: isMobile ? '0.95rem' : '1rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                  {t('Thống kê lỗi Ticket')}
                 </h3>
                 {stats?.errorStats && stats.errorStats.length > 0 && (
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#C6333D', background: 'rgba(198, 51, 61, 0.08)', padding: '2px 8px', borderRadius: '12px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#BD1D2D', background: 'rgba(189, 29, 45, 0.08)', padding: '3px 9px', borderRadius: '8px' }}>
                     {stats.errorStats.reduce((sum: number, e: any) => sum + (Number(e.errors) || 0), 0)} {t('lỗi được duyệt')}
                   </span>
                 )}
@@ -4714,12 +4830,12 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                               <stop offset="100%" stopColor="#991B1B" stopOpacity={0.85} />
                             </linearGradient>
                           </defs>
-                          <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="var(--color-border-light)" />
+                          <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f1f5f9" />
                           <XAxis
                             dataKey="name"
                             axisLine={false}
                             tickLine={false}
-                            tick={{ fontSize: isMobile ? 8 : 10, fill: 'var(--color-text)', fontWeight: 600 }}
+                            tick={{ fontSize: isMobile ? 8 : 10, fill: '#0f172a', fontWeight: 600 }}
                             interval={0}
                             angle={isMobile ? -25 : -12}
                             textAnchor="end"
@@ -4729,22 +4845,22 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                             allowDecimals={false}
                             axisLine={false}
                             tickLine={false}
-                            tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }}
+                            tick={{ fontSize: 10, fill: '#64748b' }}
                           />
                           <Tooltip
                             cursor={{ fill: 'rgba(198, 51, 61, 0.04)' }}
-                            contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                            itemStyle={{ color: '#C6333D', fontWeight: 700 }}
+                            contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }}
+                            itemStyle={{ color: '#BD1D2D', fontWeight: 700 }}
                           />
                           <Bar dataKey="errors" fill="url(#ticketErrorGradient)" radius={[4, 4, 0, 0]} barSize={26} name={t("Số lỗi được duyệt")}>
-                            <LabelList dataKey="errors" position="top" style={{ fill: 'var(--color-text)', fontSize: 11, fontWeight: 700 }} offset={6} />
+                            <LabelList dataKey="errors" position="top" style={{ fill: '#0f172a', fontSize: '10.5px', fontWeight: 800 }} offset={6} />
                           </Bar>
                         </BarChart>
                       </ResponsiveContainer>
                     );
                   })()
                 ) : (
-                  <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>{t('Chưa có TVV nào có lỗi được duyệt')}</div>
+                  <div style={{ textAlign: 'center', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>{t('Chưa có TVV nào có lỗi được duyệt')}</div>
                 )}
               </div>
             </div>
@@ -4754,20 +4870,15 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
           <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
 
             {/* Out-of-Hours Lead Ratio Card */}
-            <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', transition: 'all 0.3s' }}>
+            <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(198, 51, 61, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#C6333D', flexShrink: 0 }}>
-                    <Clock size={18} />
-                  </div>
-                  <div>
-                    <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--color-text)', margin: 0 }}>
-                      {t('Phân tích Data Ngoài Giờ')}
-                    </h3>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '2px 0 0 0' }}>
-                      {t('Tỷ lệ lead tiếp nhận ngoài khung giờ làm việc')}
-                    </p>
-                  </div>
+                <div>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                    {t('Phân tích Data Ngoài Giờ')}
+                  </h3>
+                  <p style={{ fontSize: '0.75rem', color: '#64748b', margin: '2px 0 0 0' }}>
+                    {t('Tỷ lệ lead tiếp nhận ngoài khung giờ làm việc')}
+                  </p>
                 </div>
               </div>
               <div style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: '1.5rem', alignItems: 'center', justifyContent: 'center' }}>
@@ -4795,23 +4906,23 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                         ))}
                       </Pie>
                       <Tooltip
-                        contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                        itemStyle={{ color: 'var(--color-text)', fontWeight: 600 }}
+                        contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }}
+                        itemStyle={{ color: '#0f172a', fontWeight: 600 }}
                       />
                     </PieChart>
                   </ResponsiveContainer>
                   {/* Inside Text for Donut Chart */}
                   <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-                    <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--color-text)' }}>
+                    <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
                       {stats?.out_of_hours_ratio ?? '0%'}
                     </span>
-                    <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
+                    <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>
                       {t('Ngoài giờ')}
                     </span>
                   </div>
                 </div>
 
-                {/* Explanations & Details - Bỏ border màu, dùng background nhẹ & màu chữ theo sức khỏe */}
+                {/* Explanations & Details */}
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
                   {(() => {
                     const ratioNum = parseFloat(stats?.out_of_hours_ratio || '0');
@@ -4824,11 +4935,11 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                           justifyContent: 'space-between',
                           alignItems: 'center',
                           padding: '8px 12px',
-                          background: 'var(--color-bg)',
-                          borderRadius: 10,
+                          background: '#f8fafc',
+                          borderRadius: 8,
                           fontSize: '0.8125rem'
                         }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-text-light)', fontWeight: 600 }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#64748b', fontWeight: 600 }}>
                             <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#C6333D' }} />
                             {t('Ngoài giờ')}
                           </span>
@@ -4841,15 +4952,15 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                           justifyContent: 'space-between',
                           alignItems: 'center',
                           padding: '8px 12px',
-                          background: 'var(--color-bg)',
-                          borderRadius: 10,
+                          background: '#f8fafc',
+                          borderRadius: 8,
                           fontSize: '0.8125rem'
                         }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-text-light)', fontWeight: 600 }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#64748b', fontWeight: 600 }}>
                             <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#334155' }} />
                             {t('Trong giờ')}
                           </span>
-                          <strong style={{ color: 'var(--color-text)', fontWeight: 700 }}>
+                          <strong style={{ color: '#0f172a', fontWeight: 700 }}>
                             {Math.max(0, (stats?.total_today || 0) - (stats?.pending_work_hours_count || 0))} lead ({inWorkRatio})
                           </strong>
                         </div>
@@ -4858,18 +4969,18 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                   })()}
 
                   <div style={{
-                    borderTop: '1px dashed var(--color-border-light)',
+                    borderTop: '1px dashed #e2e8f0',
                     paddingTop: '0.625rem',
                     marginTop: '0.25rem',
                     fontSize: '0.78rem',
-                    color: 'var(--color-text-muted)',
+                    color: '#64748b',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '6px'
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span>{t('Chờ giờ làm (hiện tại)')}:</span>
-                      <strong style={{ color: 'var(--color-text)', fontWeight: 700 }}>{stats?.pending_work_hours_count || 0} lead</strong>
+                      <strong style={{ color: '#0f172a', fontWeight: 700 }}>{stats?.pending_work_hours_count || 0} lead</strong>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span>{t('Thay đổi so với kỳ trước')}:</span>
@@ -4877,7 +4988,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                         color: (stats?.out_of_hours_change || '').startsWith('-') ? '#10b981' : '#ef4444',
                         background: (stats?.out_of_hours_change || '').startsWith('-') ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
                         padding: '2px 8px',
-                        borderRadius: '12px',
+                        borderRadius: '6px',
                         fontWeight: 700,
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -4892,38 +5003,33 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             </div>
 
             {/* Rounds Fairness Audit Card */}
-            <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', transition: 'all 0.3s' }}>
+            <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(198, 51, 61, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#C6333D', flexShrink: 0 }}>
-                    <Scale size={18} />
-                  </div>
-                  <div>
-                    <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--color-text)', margin: 0 }}>
-                      {t('Đối Soát Công Bằng Vòng')}
-                    </h3>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '2px 0 0 0' }}>
-                      {t('Đánh giá mức độ đồng đều phân bổ giữa các vòng')}
-                    </p>
-                  </div>
+                <div>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                    {t('Đối Soát Công Bằng Vòng')}
+                  </h3>
+                  <p style={{ fontSize: '0.75rem', color: '#64748b', margin: '2px 0 0 0' }}>
+                    {t('Đánh giá mức độ đồng đều phân bổ giữa các vòng')}
+                  </p>
                 </div>
-                <span
+                <button
                   style={{
+                    height: '30px',
+                    padding: '0 12px',
+                    borderRadius: '7px',
+                    border: '1px solid #e2e8f0',
+                    background: '#ffffff',
+                    color: '#BD1D2D',
                     fontSize: '0.75rem',
-                    color: '#C6333D',
                     fontWeight: 700,
                     cursor: 'pointer',
-                    background: 'var(--color-bg)',
-                    padding: '4px 12px',
-                    borderRadius: '20px',
-                    transition: 'all 0.2s'
+                    transition: 'all 0.15s ease'
                   }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'var(--color-border-light)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'var(--color-bg)'}
                   onClick={() => navigate('/fair-share')}
                 >
-                  {t('Chi tiết đối soát')}
-                </span>
+                  {t('Chi tiết đối soát')} →
+                </button>
               </div>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.85rem', justifyContent: 'center' }}>
                 {/* Overall metrics and evaluation in a single clean row - Bỏ border màu */}
@@ -4942,17 +5048,17 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      background: 'var(--color-bg)',
+                      background: '#f8fafc',
                       padding: '8px 12px',
-                      borderRadius: 10,
+                      borderRadius: 8,
                       fontSize: '0.78rem',
                       gap: '8px',
                       flexWrap: 'wrap',
                       marginBottom: '0.25rem'
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                        <span style={{ color: 'var(--color-text-light)', fontWeight: 600 }}>
-                          {t('Chỉ số Công bằng')}: <strong style={{ color: '#C6333D', fontSize: '0.9rem', fontWeight: 800 }}>{stats?.fair_share_equity ?? '100%'}</strong>
+                        <span style={{ color: '#64748b', fontWeight: 600 }}>
+                          {t('Chỉ số Công bằng')}: <strong style={{ color: '#BD1D2D', fontSize: '0.9rem', fontWeight: 800 }}>{stats?.fair_share_equity ?? '100%'}</strong>
                           {stats?.fair_share_equity_change && parseFloat(stats?.fair_share_equity_change) !== 0 && (
                             <span style={{
                               marginLeft: 4,
@@ -4964,16 +5070,16 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                             </span>
                           )}
                         </span>
-                        <span style={{ width: 1, height: 11, background: 'var(--color-border-light)', display: 'inline-block' }} />
-                        <span style={{ color: 'var(--color-text-light)', fontWeight: 600 }}>
-                          {t('Độ lệch chuẩn (SD)')}: <strong style={{ color: 'var(--color-text)', fontSize: '0.9rem', fontWeight: 800 }}>{stats?.fair_share_sd ?? '0.0'}</strong>
+                        <span style={{ width: 1, height: 11, background: '#e2e8f0', display: 'inline-block' }} />
+                        <span style={{ color: '#64748b', fontWeight: 600 }}>
+                          {t('Độ lệch chuẩn (SD)')}: <strong style={{ color: '#0f172a', fontSize: '0.9rem', fontWeight: 800 }}>{stats?.fair_share_sd ?? '0.0'}</strong>
                         </span>
                       </div>
                       <span style={{
                         fontSize: '0.68rem',
                         fontWeight: 700,
                         padding: '3px 10px',
-                        borderRadius: 10,
+                        borderRadius: 6,
                         background: evalBg,
                         color: evalColor
                       }}>
@@ -4997,10 +5103,10 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                         const isGood = individualFairness >= 95;
                         const isFair = individualFairness >= 90;
                         const trackColor = isGood
-                          ? 'linear-gradient(90deg, #10b981 0%, #34d399 100%)'
+                          ? '#10b981'
                           : isFair
-                            ? 'linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%)'
-                            : 'linear-gradient(90deg, #C6333D 0%, #ef4444 100%)';
+                            ? '#f59e0b'
+                            : '#C6333D';
                         const badgeBg = isGood
                           ? 'rgba(16, 185, 129, 0.08)'
                           : isFair
@@ -5016,7 +5122,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                           <div
                             key={idx}
                             style={{
-                              background: 'var(--color-bg)',
+                              background: '#f8fafc',
                               borderRadius: 8,
                               padding: '8px 10px',
                               display: 'flex',
@@ -5027,19 +5133,19 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                             }}
                           >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
-                              <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{t(r.round)}</span>
+                              <span style={{ fontWeight: 700, color: '#0f172a' }}>{t(r.round)}</span>
                               <span style={{
                                 fontSize: '0.72rem',
                                 background: badgeBg,
                                 color: badgeTextColor,
                                 padding: '2px 8px',
-                                borderRadius: 10,
+                                borderRadius: 6,
                                 fontWeight: 700
                               }}>
                                 {individualFairness.toFixed(1)}% {t('Công bằng')}
                               </span>
                             </div>
-                            <div style={{ width: '100%', height: 6, background: 'var(--color-surface)', borderRadius: 3, overflow: 'hidden' }}>
+                            <div style={{ width: '100%', height: 5, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}>
                               <div style={{
                                 width: `${individualFairness}%`,
                                 height: '100%',
@@ -5051,7 +5157,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                         );
                       })
                     ) : (
-                      <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', textAlign: 'center', padding: '6px' }}>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b', textAlign: 'center', padding: '6px' }}>
                         {t('Chưa có thông tin vòng')}
                       </div>
                     )}
