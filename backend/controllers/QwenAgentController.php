@@ -1498,7 +1498,7 @@ class QwenAgentController {
             $stmtTask = $this->db->prepare("
                 SELECT 
                     SUM(CASE WHEN due_date < NOW() THEN 1 ELSE 0 END) AS overdue_cnt,
-                    SUM(CASE WHEN DATE(due_date) = CURDATE() THEN 1 ELSE 0 END) AS today_cnt
+                    SUM(CASE WHEN due_date >= CURDATE() AND due_date < DATE_ADD(CURDATE(), INTERVAL 1 DAY) THEN 1 ELSE 0 END) AS today_cnt
                 FROM activities
                 WHERE tenant_id = ? AND (user_id = ? OR created_by = ?)
                   AND status NOT IN ('done', 'completed', 'cancelled')

@@ -37,15 +37,15 @@ function runMaintenance($pdo) {
     // 2. Capping Zalo Message History (Keep last 20 per user)
     try {
         echo " - Capping Zalo Message History...\n";
-        // Optimized cleanup using a single mass-delete
+        // Optimized cleanup using a single mass-delete with NOT EXISTS
         $pdo->exec("
-            DELETE FROM zalo_user_messages 
-            WHERE id NOT IN (
-                SELECT id FROM (
-                    SELECT id, ROW_NUMBER() OVER(PARTITION BY zalo_user_id ORDER BY created_at DESC) as rn 
+            DELETE FROM zalo_user_messages
+            WHERE NOT EXISTS (
+                SELECT 1 FROM (
+                    SELECT id, ROW_NUMBER() OVER(PARTITION BY zalo_user_id ORDER BY created_at DESC) as rn
                     FROM zalo_user_messages
-                ) as t 
-                WHERE rn <= 20
+                ) as t
+                WHERE t.rn <= 20 AND t.id = zalo_user_messages.id
             )
         ");
         echo "   -> [OK] History capped.\n";

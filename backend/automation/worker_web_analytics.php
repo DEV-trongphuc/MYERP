@@ -11,16 +11,18 @@ try {
 
     // Aggregate data for yesterday (to avoid incomplete data for today)
     $targetDate = date('Y-m-d', strtotime('-1 day'));
+    $startOfDay = $targetDate . ' 00:00:00';
+    $endOfDay   = $targetDate . ' 23:59:59';
 
     echo "Aggregating data for: $targetDate\n";
 
-    // Get all unique pages for the target date
+    // Get all unique pages for the target date (SARGable B-Tree range scan)
     $stmt = $pdo->prepare("
-        SELECT DISTINCT url as page_url 
-        FROM web_page_views 
-        WHERE DATE(loaded_at) = ?
+        SELECT DISTINCT url as page_url
+        FROM web_page_views
+        WHERE loaded_at >= ? AND loaded_at <= ?
     ");
-    $stmt->execute([$targetDate]);
+    $stmt->execute([$startOfDay, $endOfDay]);
     $pages = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
     echo "Found " . count($pages) . " unique pages\n";
@@ -39,34 +41,36 @@ try {
 function aggregatePageData($pdo, $date, $pageUrl)
 {
     echo "  Processing: $pageUrl\n";
+    $startOfDay = $date . ' 00:00:00';
+    $endOfDay   = $date . ' 23:59:59';
 
-    // Calculate metrics for this page on this date
+    // Calculate metrics for this page on this date (SARGable B-Tree range scan)
     $stmt = $pdo->prepare("
-        SELECT 
+        SELECT
             COUNT(*) as total_views,
             COUNT(DISTINCT visitor_id) as unique_visitors,
             AVG(time_on_page) as avg_duration,
             AVG(scroll_depth) as avg_scroll_depth,
             SUM(CASE WHEN time_on_page < 5 THEN 1 ELSE 0 END) as bounce_count
         FROM web_page_views
-        WHERE DATE(loaded_at) = ? AND url = ?
+        WHERE loaded_at >= ? AND loaded_at <= ? AND url = ?
     ");
-    $stmt->execute([$date, $pageUrl]);
+    $stmt->execute([$startOfDay, $endOfDay, $pageUrl]);
     $metrics = $stmt->fetch(PDO::FETCH_ASSOC);
 
     $stmt = $pdo->prepare("
         SELECT COUNT(*) as total_events
         FROM web_events e
         LEFT JOIN web_page_views pv ON e.session_id = pv.session_id
-        WHERE DATE(e.created_at) = ? AND pv.url = ?
+        WHERE e.created_at >= ? AND e.created_at <= ? AND pv.url = ?
     ");
-    $stmt->execute([$date, $pageUrl]);
+    $stmt->execute([$startOfDay, $endOfDay, $pageUrl]);
     $eventCount = $stmt->fetch(PDO::FETCH_ASSOC);
 
     // Insert or update summary
     $stmt = $pdo->prepare("
         INSERT INTO web_analytics_summary (
-            date, page_url, total_views, unique_visitors, avg_duration, 
+            date, page_url, total_views, unique_visitors, avg_duration,
             avg_scroll_depth, bounce_count, total_events
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
@@ -83,41 +87,31 @@ function aggregatePageData($pdo, $date, $pageUrl)
         $pageUrl,
         $metrics['total_views'],
         $metrics['unique_visitors'],
-        round($metrics['avg_duration'], 1),
-        round($metrics['avg_scroll_depth'], 1),
+        round((float)($metrics['avg_duration'] ?? 0), 1),
+        round((float)($metrics['avg_scroll_depth'] ?? 0), 1),
         $metrics['bounce_count'],
         $eventCount['total_events']
     ]);
 
-    echo "    ? Aggregated: {$metrics['total_views']} views, {$metrics['unique_visitors']} unique visitors\n";
+    echo "    -> Aggregated: {$metrics['total_views']} views, {$metrics['unique_visitors']} unique visitors\n";
 }
 
 // Optional: Clean up old raw data (older than 90 days)
 function cleanupOldData($pdo)
 {
-    $cutoffDate = date('Y-m-d', strtotime('-90 days'));
+    $cutoffDate = date('Y-m-d', strtotime('-90 days')) . ' 00:00:00';
 
     echo "Cleaning up data older than $cutoffDate...\n";
 
-    $tables = ['web_page_views', 'web_events', 'web_heatmap_data'];
+    $stmt1 = $pdo->prepare("DELETE FROM web_page_views WHERE loaded_at < ?");
+    $stmt1->execute([$cutoffDate]);
+    echo "  Deleted {$stmt1->rowCount()} rows from web_page_views\n";
 
-    foreach ($tables as $table) {
-        $dateColumn = $table === 'web_heatmap_data' ? 'clicked_at' :
-            ($table === 'web_events' ? 'occurred_at' : 'viewed_at');
+    $stmt2 = $pdo->prepare("DELETE FROM web_events WHERE created_at < ?");
+    $stmt2->execute([$cutoffDate]);
+    echo "  Deleted {$stmt2->rowCount()} rows from web_events\n";
 
-        $stmt = $pdo->prepare("DELETE FROM $table WHERE DATE($dateColumn) < ?");
-        $stmt->execute([$cutoffDate]);
-        $deleted = $stmt->rowCount();
-
-        echo "  Deleted $deleted rows from $table\n";
-    }
-
-    // Clean up sessions
-    $stmt = $pdo->prepare("DELETE FROM web_sessions WHERE DATE(started_at) < ?");
-    $stmt->execute([$cutoffDate]);
-    echo "  Deleted {$stmt->rowCount()} sessions\n";
+    $stmt3 = $pdo->prepare("DELETE FROM web_sessions WHERE started_at < ?");
+    $stmt3->execute([$cutoffDate]);
+    echo "  Deleted {$stmt3->rowCount()} sessions\n";
 }
-
-// Uncomment to enable automatic cleanup
-// cleanupOldData($pdo);
-?>

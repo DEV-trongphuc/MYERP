@@ -3605,14 +3605,14 @@ switch ($action) {
                 $morningLeaveStmt = $conn->prepare("
                     SELECT 1 
                     FROM hrm_leave_requests 
-                    WHERE user_id = ? AND status = 'approved' AND DATE(start_date) = ?
+                    WHERE user_id = ? AND status = 'approved' AND start_date >= ? AND start_date < ?
                       AND leave_type IN ('annual', 'sick', 'compensatory', 'unpaid', 'remote_work')
-                      AND HOUR(start_date) < 12
                     LIMIT 1
                 ");
                 if ($morningLeaveStmt) {
-                    $todayYmd = date('Y-m-d');
-                    $morningLeaveStmt->bind_param("is", $targetUserId, $todayYmd);
+                    $todayStart = date('Y-m-d 00:00:00');
+                    $todayNoon  = date('Y-m-d 12:00:00');
+                    $morningLeaveStmt->bind_param("iss", $targetUserId, $todayStart, $todayNoon);
                     $morningLeaveStmt->execute();
                     $hasMorningLeave = (bool)$morningLeaveStmt->get_result()->fetch_assoc();
                     $morningLeaveStmt->close();

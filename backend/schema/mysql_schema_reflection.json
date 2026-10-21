@@ -2706,6 +2706,24 @@
                     "extra": "",
                     "comment": "Đánh dấu log đã được hoàn tác",
                     "ordinal": 8
+                },
+                "admin_id": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "target_type": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "target_id": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -4283,6 +4301,54 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 7
+                },
+                "org_user_id": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "category_id": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "type": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "title": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "description": {
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "screenshot_url": {
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "page_url": {
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "user_agent": {
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -4847,6 +4913,18 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 4
+                },
+                "is_active": {
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": null,
+                    "key": ""
+                },
+                "last_used_at": {
+                    "type": "datetime",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -4948,6 +5026,36 @@
                     "extra": "on update current_timestamp()",
                     "comment": "",
                     "ordinal": 6
+                },
+                "visitor_id": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "property_id": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "status": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "summary": {
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "is_public": {
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -5054,6 +5162,18 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 6
+                },
+                "model": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "processing_time": {
+                    "type": "float",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -5133,6 +5253,30 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 4
+                },
+                "is_active": {
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": null,
+                    "key": ""
+                },
+                "device_info": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "ip_address": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "last_used_at": {
+                    "type": "datetime",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -5366,6 +5510,12 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 18
+                },
+                "phone": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -5667,6 +5817,24 @@
                     "extra": "on update current_timestamp()",
                     "comment": "",
                     "ordinal": 8
+                },
+                "page_start": {
+                    "type": "int",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "page_end": {
+                    "type": "int",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "chapters_json": {
+                    "type": "longtext",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -5851,6 +6019,48 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 12
+                },
+                "channel_id": {
+                    "type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "key": ""
+                },
+                "detected_agents": {
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "tools_called": {
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "rag_articles_count": {
+                    "type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "key": ""
+                },
+                "gap_reason": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "response_preview": {
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "latency_ms": {
+                    "type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -5943,6 +6153,12 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 3
+                },
+                "property_id": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -6049,6 +6265,12 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 6
+                },
+                "source_url": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -6117,6 +6339,12 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 3
+                },
+                "df": {
+                    "type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -7082,6 +7310,12 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 4
+                },
+                "vector_binary": {
+                    "type": "longblob",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -7182,6 +7416,54 @@
                     "extra": "on update current_timestamp()",
                     "comment": "",
                     "ordinal": 7
+                },
+                "conversation_id": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "property_id": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "admin_id": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "file_name": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "file_type": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "file_size": {
+                    "type": "bigint",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "file_url": {
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "source": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -7339,6 +7621,30 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 4
+                },
+                "action": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "attempts": {
+                    "type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "key": ""
+                },
+                "last_attempt_at": {
+                    "type": "datetime",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "blocked_until": {
+                    "type": "datetime",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -7433,6 +7739,24 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 6
+                },
+                "scope": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "is_active": {
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": null,
+                    "key": ""
+                },
+                "expires_at": {
+                    "type": "datetime",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -10813,6 +11137,12 @@
                     "extra": "on update current_timestamp()",
                     "comment": "",
                     "ordinal": 12
+                },
+                "deleted_at": {
+                    "type": "datetime",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -11013,6 +11343,12 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 13
+                },
+                "is_deleted": {
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -14078,6 +14414,18 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 30
+                },
+                "bio": {
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "username": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": []
@@ -15664,6 +16012,18 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 118
+                },
+                "assigned_at": {
+                    "type": "datetime",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "is_error_ticket": {
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -25516,6 +25876,12 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 7
+                },
+                "flow_id": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -26256,6 +26622,48 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 7
+                },
+                "unique_name": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "extension": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "source": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "property_id": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "conversation_id": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "admin_id": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "is_deleted": {
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -31716,6 +32124,18 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 20
+                },
+                "expected_budget": {
+                    "type": "decimal",
+                    "nullable": false,
+                    "default": null,
+                    "key": ""
+                },
+                "budget": {
+                    "type": "decimal",
+                    "nullable": false,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -32129,6 +32549,42 @@
                     "extra": "on update current_timestamp()",
                     "comment": "",
                     "ordinal": 13
+                },
+                "meta_config_id": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "type": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "trigger_text": {
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "status": {
+                    "type": "varchar",
+                    "nullable": false,
+                    "default": null,
+                    "key": ""
+                },
+                "buttons": {
+                    "type": "longtext",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "ai_chatbot_id": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -38026,6 +38482,18 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 3
+                },
+                "throttle_key": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "created_at": {
+                    "type": "datetime",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -38733,6 +39201,12 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 6
+                },
+                "type": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -39430,6 +39904,12 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 23
+                },
+                "tax_percent": {
+                    "type": "decimal",
+                    "nullable": false,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -40178,6 +40658,12 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 3
+                },
+                "criteria": {
+                    "type": "longtext",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -42019,6 +42505,18 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 57
+                },
+                "temperature": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "last_send_at": {
+                    "type": "datetime",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -42524,6 +43022,30 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 23
+                },
+                "action_type": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "target_id": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "target_name": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "extra_data": {
+                    "type": "longtext",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -48703,6 +49225,12 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 45
+                },
+                "google_id": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -48916,6 +49444,12 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 7
+                },
+                "device": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -49639,6 +50173,18 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 22
+                },
+                "total_codes": {
+                    "type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "key": ""
+                },
+                "claimed_count": {
+                    "type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -50075,6 +50621,18 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 15
+                },
+                "distributed_to_subscriber_id": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "distributed_at": {
+                    "type": "datetime",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -53235,6 +53793,18 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 4
+                },
+                "id": {
+                    "type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "key": ""
+                },
+                "role_id": {
+                    "type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -53579,6 +54149,54 @@
                     "extra": "on update current_timestamp()",
                     "comment": "",
                     "ordinal": 13
+                },
+                "oa_config_id": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "type": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "trigger_text": {
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "status": {
+                    "type": "varchar",
+                    "nullable": false,
+                    "default": null,
+                    "key": ""
+                },
+                "buttons": {
+                    "type": "longtext",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "ai_chatbot_id": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "title": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "content": {
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -53936,6 +54554,24 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 6
+                },
+                "zalo_msg_id": {
+                    "type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "seen_at": {
+                    "type": "datetime",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "reacted_at": {
+                    "type": "datetime",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {
@@ -54484,6 +55120,18 @@
                     "extra": "",
                     "comment": "",
                     "ordinal": 8
+                },
+                "message_text": {
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "key": ""
+                },
+                "processed": {
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": null,
+                    "key": ""
                 }
             },
             "indexes": {

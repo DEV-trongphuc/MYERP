@@ -2207,13 +2207,13 @@ class AgentAutomationMarketingTools
         }
 
         if (self::tableExists($db, 'flow_enrollments')) {
-            $enrollId = sprintf('enr_%s_%s', substr(md5($flow['id'] . '_' . $subId), 0, 12), time());
+            $wsId = (int)($flow['workspace_id'] ?? 1);
             $stmtEnr = $db->prepare("
-                INSERT INTO flow_enrollments (id, flow_id, subscriber_id, current_step_id, status, next_run_at, enrolled_at, created_at)
-                VALUES (?, ?, ?, ?, 'active', NOW(), NOW(), NOW())
+                INSERT IGNORE INTO flow_enrollments (workspace_id, flow_id, subscriber_id, enrolled_at)
+                VALUES (?, ?, ?, NOW())
             ");
             try {
-                $stmtEnr->execute([$enrollId, $flow['id'], $subId, $firstStepId]);
+                $stmtEnr->execute([$wsId, $flow['id'], $subId]);
             } catch (\Throwable $e) {}
         }
 
@@ -2304,16 +2304,6 @@ class AgentAutomationMarketingTools
             $stmt = $db->prepare("UPDATE subscriber_flow_states SET status = ?, updated_at = NOW() WHERE subscriber_id = ?{$whereFlow}");
             $stmt->execute($params);
             $affected += $stmt->rowCount();
-        }
-        if (self::tableExists($db, 'flow_enrollments')) {
-            $enrollStatus = ($stateStatus === 'waiting') ? 'active' : 'paused';
-            $eParams = [$enrollStatus, $subId];
-            if (!empty($whereFlow)) {
-                $eParams[] = end($params);
-            }
-            $stmtE = $db->prepare("UPDATE flow_enrollments SET status = ? WHERE subscriber_id = ?{$whereFlow}");
-            $stmtE->execute($eParams);
-            $affected += $stmtE->rowCount();
         }
 
         self::refreshSingleContactEngagement($db, (int)$contact['id'], $subId);

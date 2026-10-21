@@ -340,6 +340,52 @@ class PhpstanDbaGuard {
             }
         }
 
+        // 3B. Unaliased INSERT INTO table (col1, col2, ...) column validation
+        if (preg_match('/^\s*INSERT\s+(?:IGNORE\s+)?INTO\s+`?([a-zA-Z0-9_]+)`?\s*\(([^)]+)\)\s*(?:VALUES|SELECT)/is', $normalizedSql, $mIns)) {
+            $insTbl = strtolower($mIns[1]);
+            if (isset($this->tableColumns[$insTbl])) {
+                foreach (explode(',', $mIns[2]) as $rawCol) {
+                    $c = strtolower(trim(str_replace('`', '', $rawCol)));
+                    if ($c === '' || str_contains($c, '$') || str_contains($c, '__var__') || str_contains($c, '(') || str_contains($c, ' ')) {
+                        continue;
+                    }
+                    if (!isset($this->tableColumns[$insTbl][$c])) {
+                        $this->errors[] = [
+                            'file' => str_replace('\\', '/', $file),
+                            'line' => $line,
+                            'type' => 'INSERT_UNKNOWN_COLUMN',
+                            'message' => "Unknown column '$c' in INSERT INTO '$insTbl'.",
+                            'sql' => $this->truncateSql($sql)
+                        ];
+                    }
+                }
+            }
+        }
+
+        // 3C. Unaliased single-table UPDATE table SET col1 = ..., col2 = ... column validation
+        if (preg_match('/^\s*UPDATE\s+`?([a-zA-Z0-9_]+)`?\s+SET\s+(.+?)(?:\bWHERE\b|$)/is', $normalizedSql, $mUpd)) {
+            $updTbl = strtolower($mUpd[1]);
+            if (isset($this->tableColumns[$updTbl]) && !preg_match('/\bJOIN\b/i', $mUpd[0])) {
+                if (preg_match_all('/(?:^|,)\s*`?([a-zA-Z0-9_]+)`?\s*=/m', $mUpd[2], $mSetCols)) {
+                    foreach ($mSetCols[1] as $rawCol) {
+                        $c = strtolower(trim($rawCol));
+                        if ($c === '' || str_contains($c, '__var__')) {
+                            continue;
+                        }
+                        if (!isset($this->tableColumns[$updTbl][$c])) {
+                            $this->errors[] = [
+                                'file' => str_replace('\\', '/', $file),
+                                'line' => $line,
+                                'type' => 'UPDATE_UNKNOWN_COLUMN',
+                                'message' => "Unknown column '$c' in UPDATE '$updTbl' SET.",
+                                'sql' => $this->truncateSql($sql)
+                            ];
+                        }
+                    }
+                }
+            }
+        }
+
         // 4. Anti-Pattern: NOT IN (SELECT ...)
         if (preg_match('/\bNOT\s+IN\s*\(\s*SELECT\b/i', $normalizedSql)) {
             $this->warnings[] = [

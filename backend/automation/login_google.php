@@ -68,7 +68,7 @@ if ($method === 'POST') {
             $status = in_array($email, ROOT_ADMIN_EMAILS) ? 'approved' : 'pending';
 
             $userId = bin2hex(random_bytes(16));
-            $insert = $pdo->prepare("INSERT INTO users (id, username, email, name, picture, role, status, google_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            $insert = $pdo->prepare("INSERT INTO users (id, username, email, full_name, avatar_url, role, status, google_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
             $insert->execute([$userId, $email, $email, $name, $picture, $role, $status, $payload['sub']]);
             $user = [
                 'id' => $userId,
@@ -80,7 +80,7 @@ if ($method === 'POST') {
             ];
         } else {
             // Update last login
-            $update = $pdo->prepare("UPDATE users SET last_login = NOW(), picture = ?, name = ? WHERE id = ?");
+            $update = $pdo->prepare("UPDATE users SET last_login_at = NOW(), avatar_url = ?, full_name = ? WHERE id = ?");
             $update->execute([$picture, $name, $user['id']]);
             $user['picture'] = $picture;
             $user['name'] = $name;

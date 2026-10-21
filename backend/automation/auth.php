@@ -19,19 +19,19 @@ if ($action === 'demo_login') {
 
     if ($isDemo) {
         try {
-            $stmtAdmin = $pdo->query("SELECT id, username, email, full_name, name, picture, role, status, (SELECT workspace_id FROM workspace_users WHERE BINARY user_id = BINARY users.id LIMIT 1) as workspace_id FROM users WHERE role = 'admin' LIMIT 1");
+            $stmtAdmin = $pdo->query("SELECT id, username, email, full_name, full_name AS name, avatar_url AS picture, role, status, (SELECT workspace_id FROM workspace_users WHERE BINARY user_id = BINARY users.id LIMIT 1) as workspace_id FROM users WHERE role = 'admin' LIMIT 1");
             $user = $stmtAdmin->fetch(PDO::FETCH_ASSOC);
 
             if (!$user) {
                 $adminId = uniqid();
-                $pdo->prepare("INSERT INTO users (id, username, password, email, name, role, status) VALUES (?, 'admin', ?, 'admin@domation.net', 'Demo Admin', 'admin', 'active')")
+                $pdo->prepare("INSERT INTO users (id, username, password_hash, email, full_name, role, status) VALUES (?, 'admin', ?, 'admin@domation.net', 'Demo Admin', 'admin', 'active')")
                     ->execute([$adminId, password_hash('admin123', PASSWORD_BCRYPT)]);
                 
                 $wsId = 1;
                 $pdo->prepare("INSERT IGNORE INTO workspace_users (workspace_id, user_id, role) VALUES (?, ?, 'admin')")
                     ->execute([$wsId, $adminId]);
 
-                $stmtAdmin = $pdo->prepare("SELECT id, username, email, full_name, name, picture, role, status, (SELECT workspace_id FROM workspace_users WHERE BINARY user_id = BINARY users.id LIMIT 1) as workspace_id FROM users WHERE id = ?");
+                $stmtAdmin = $pdo->prepare("SELECT id, username, email, full_name, full_name AS name, avatar_url AS picture, role, status, (SELECT workspace_id FROM workspace_users WHERE BINARY user_id = BINARY users.id LIMIT 1) as workspace_id FROM users WHERE id = ?");
                 $stmtAdmin->execute([$adminId]);
                 $user = $stmtAdmin->fetch(PDO::FETCH_ASSOC);
             }
@@ -93,7 +93,7 @@ if ($method === 'POST' && $action === 'login') {
     try {
         // [FIX P39-AUTH] Use separate queries: first verify password, then load profile without password.
         // Prevents password hash from ever being part of the user object returned to frontend.
-        $stmtPwd = $pdo->prepare("SELECT id, password FROM users WHERE username = ? AND status != 'disabled' LIMIT 1");
+        $stmtPwd = $pdo->prepare("SELECT id, password_hash AS password FROM users WHERE username = ? AND status != 'disabled' LIMIT 1");
         $stmtPwd->execute([$username]);
         $pwdRow = $stmtPwd->fetch(PDO::FETCH_ASSOC);
 
@@ -126,7 +126,7 @@ if ($method === 'POST' && $action === 'login') {
         } catch (Exception $e) { /* fail silently */ }
 
         // [FIX P39-AUTH] Fetch safe user profile (no password column) after successful verify
-        $stmtProfile = $pdo->prepare("SELECT id, username, email, full_name, name, picture, role, status, (SELECT workspace_id FROM workspace_users WHERE user_id = users.id LIMIT 1) as workspace_id, last_login FROM users WHERE id = ? LIMIT 1");
+        $stmtProfile = $pdo->prepare("SELECT id, username, email, full_name, full_name AS name, avatar_url AS picture, role, status, (SELECT workspace_id FROM workspace_users WHERE user_id = users.id LIMIT 1) as workspace_id, last_login_at AS last_login FROM users WHERE id = ? LIMIT 1");
         $stmtProfile->execute([$pwdRow['id']]);
         $user = $stmtProfile->fetch(PDO::FETCH_ASSOC);
         if (!$user) {
@@ -134,7 +134,7 @@ if ($method === 'POST' && $action === 'login') {
         }
 
         // Update last login
-        $updateStmt = $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
+        $updateStmt = $pdo->prepare("UPDATE users SET last_login_at = NOW() WHERE id = ?");
         $updateStmt->execute([$user['id']]);
 
         // Log Access
@@ -167,7 +167,7 @@ if ($method === 'GET' && $action === 'check') {
     if (isset($_SESSION['user_id'])) {
         try {
             // Lấy dữ liệu mới nhất từ DB để đảm bảo Avatar/Role luôn đúng
-            $stmt = $pdo->prepare("SELECT id, email, name, picture, role, status, (SELECT workspace_id FROM workspace_users WHERE BINARY user_id = BINARY users.id LIMIT 1) as workspace_id FROM users WHERE id = ?");
+            $stmt = $pdo->prepare("SELECT id, email, full_name AS name, avatar_url AS picture, role, status, (SELECT workspace_id FROM workspace_users WHERE BINARY user_id = BINARY users.id LIMIT 1) as workspace_id FROM users WHERE id = ?");
             $stmt->execute([$_SESSION['user_id']]);
             $user = $stmt->fetch();
 
@@ -177,9 +177,9 @@ if ($method === 'GET' && $action === 'check') {
                 // generating thousands of unnecessary DB writes/hour with no meaningful granularity gain.
                 // 5-minute throttle reduces writes by ~500x while still showing accurate activity timestamps.
                 $pdo->prepare("
-                    UPDATE users SET last_login = NOW()
+                    UPDATE users SET last_login_at = NOW()
                     WHERE id = ?
-                    AND (last_login IS NULL OR last_login < DATE_SUB(NOW(), INTERVAL 5 MINUTE))
+                    AND (last_login_at IS NULL OR last_login_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE))
                 ")->execute([$_SESSION['user_id']]);
                 
                 jsonResponse(true, $user);
@@ -207,9 +207,9 @@ if ($method === 'GET' && $action === 'ping') {
         $updateId = $_SESSION['user_id'] ?? '';
         // [FIX M-05] Removed hardcoded admin emails from SQL. Use role-based is_super_admin().
         $stmt = $pdo->prepare("
-            UPDATE users SET last_login = NOW()
+            UPDATE users SET last_login_at = NOW()
             WHERE id = ?
-            AND (last_login IS NULL OR last_login < DATE_SUB(NOW(), INTERVAL 5 MINUTE))
+            AND (last_login_at IS NULL OR last_login_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE))
         ");
         $stmt->execute([$updateId]);
         $rows = $stmt->rowCount();
@@ -286,7 +286,7 @@ if ($method === 'POST' && $action === 'change-password') {
     }
 
     try {
-        $stmt = $pdo->prepare("SELECT password FROM users WHERE id = ?");
+        $stmt = $pdo->prepare("SELECT password_hash AS password FROM users WHERE id = ?");
         $stmt->execute([$_SESSION['user_id']]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -307,7 +307,7 @@ if ($method === 'POST' && $action === 'change-password') {
         }
 
         $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
-        $updateStmt = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
+        $updateStmt = $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?");
         $updateStmt->execute([$hashedPassword, $_SESSION['user_id']]);
 
         jsonResponse(true, null, 'Đổi mật khẩu thành công');

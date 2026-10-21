@@ -633,8 +633,8 @@ try {
             // 2. Chatbots list
             $sqlBots = "SELECT b.name, b.id, COUNT(c.id) as conv_count 
                        FROM ai_chatbots b 
-                       JOIN ai_org_conversations c ON b.id = c.property_id 
-                       WHERE $userFilterJoined AND c.status != 'deleted' 
+                       JOIN ai_org_conversations c ON b.id = c.chatbot_id 
+                       WHERE $userFilterJoined 
                        GROUP BY b.id ORDER BY conv_count DESC LIMIT 5";
             $stmtBots = $pdo->prepare($sqlBots);
             $stmtBots->execute($params);
@@ -864,12 +864,12 @@ try {
                         // Optimization: Limit versions to the last 10 to prevent storage bloat
                         $pdo->prepare("DELETE FROM ai_workspace_versions 
                                        WHERE file_id = ? 
-                                       AND id NOT IN (
-                                           SELECT id FROM (
+                                       AND NOT EXISTS (
+                                           SELECT 1 FROM (
                                                SELECT id FROM ai_workspace_versions 
                                                WHERE file_id = ? 
                                                ORDER BY created_at DESC LIMIT 10
-                                           ) tmp
+                                           ) tmp WHERE tmp.id = ai_workspace_versions.id
                                        )")->execute([$fileId, $fileId]);
                     }
 
@@ -1715,12 +1715,12 @@ Sử dụng tiếng Việt, chuyên nghiệp và súc tích.";
                     // Limit versions to last 10
                     $pdo->prepare("DELETE FROM ai_workspace_versions 
                                WHERE file_id = ? 
-                               AND id NOT IN (
-                                   SELECT id FROM (
+                               AND NOT EXISTS (
+                                   SELECT 1 FROM (
                                        SELECT id FROM ai_workspace_versions 
                                        WHERE file_id = ? 
                                        ORDER BY created_at DESC LIMIT 10
-                                   ) tmp
+                                   ) tmp WHERE tmp.id = ai_workspace_versions.id
                                )")->execute([$fileId, $fileId]);
 
                     $pdo->commit();

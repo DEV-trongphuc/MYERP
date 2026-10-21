@@ -1,10 +1,10 @@
 {
     "format": "ChartDB_SchemaSpy_Enterprise_v1",
-    "generated_at": "2026-10-21T23:33:51+07:00",
+    "generated_at": "2026-10-22T00:10:42+07:00",
     "database": "vhvxoigh_myerp",
     "summary": {
         "total_tables": 289,
-        "total_relationships": 456,
+        "total_relationships": 459,
         "core_soft_delete_tables_checked": 9
     },
     "soft_delete_audit": {
@@ -1181,6 +1181,30 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "0"
+                },
+                {
+                    "name": "admin_id",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "target_type",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "target_id",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -2129,6 +2153,70 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "current_timestamp()"
+                },
+                {
+                    "name": "org_user_id",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "category_id",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "type",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "title",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "description",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "screenshot_url",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "page_url",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "user_agent",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -2466,6 +2554,22 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "current_timestamp()"
+                },
+                {
+                    "name": "is_active",
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "last_used_at",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -2527,6 +2631,46 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "current_timestamp()"
+                },
+                {
+                    "name": "visitor_id",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "property_id",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "status",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "summary",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "is_public",
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -2588,6 +2732,22 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "current_timestamp()"
+                },
+                {
+                    "name": "model",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "processing_time",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -2633,6 +2793,38 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "current_timestamp()"
+                },
+                {
+                    "name": "is_active",
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "device_info",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "ip_address",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "last_used_at",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -2790,6 +2982,14 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "NULL"
+                },
+                {
+                    "name": "phone",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -2972,6 +3172,30 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "current_timestamp()"
+                },
+                {
+                    "name": "page_start",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "page_end",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "chapters_json",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -3082,6 +3306,62 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "current_timestamp()"
+                },
+                {
+                    "name": "channel_id",
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "detected_agents",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "tools_called",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "rag_articles_count",
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "gap_reason",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "response_preview",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "latency_ms",
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -3121,6 +3401,14 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "current_timestamp()"
+                },
+                {
+                    "name": "property_id",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -3182,6 +3470,14 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "current_timestamp()"
+                },
+                {
+                    "name": "source_url",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -3219,6 +3515,14 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "1"
+                },
+                {
+                    "name": "df",
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -3765,6 +4069,14 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "0"
+                },
+                {
+                    "name": "vector_binary",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -3833,6 +4145,70 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "current_timestamp()"
+                },
+                {
+                    "name": "conversation_id",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "property_id",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "admin_id",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "file_name",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "file_type",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "file_size",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "file_url",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "source",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -3930,6 +4306,38 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "current_timestamp()"
+                },
+                {
+                    "name": "action",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "attempts",
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "last_attempt_at",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "blocked_until",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -3990,6 +4398,30 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "NULL"
+                },
+                {
+                    "name": "scope",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "is_active",
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "expires_at",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -5715,7 +6147,7 @@
             "engine": "InnoDB",
             "estimatedRows": 0,
             "isolationModel": "tenant_id",
-            "supportsSoftDelete": false,
+            "supportsSoftDelete": true,
             "columns": [
                 {
                     "name": "id",
@@ -5812,6 +6244,14 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "current_timestamp()"
+                },
+                {
+                    "name": "deleted_at",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -5930,6 +6370,14 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "current_timestamp()"
+                },
+                {
+                    "name": "is_deleted",
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -7405,6 +7853,22 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "1"
+                },
+                {
+                    "name": "bio",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "username",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": []
@@ -8499,6 +8963,22 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "NULL"
+                },
+                {
+                    "name": "assigned_at",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "is_error_ticket",
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -12859,6 +13339,14 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "current_timestamp()"
+                },
+                {
+                    "name": "flow_id",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -13289,6 +13777,62 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "current_timestamp()"
+                },
+                {
+                    "name": "unique_name",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "extension",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "source",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "property_id",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "conversation_id",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "admin_id",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "is_deleted",
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -16127,6 +16671,22 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "NULL"
+                },
+                {
+                    "name": "expected_budget",
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "budget",
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -16372,6 +16932,54 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "current_timestamp()"
+                },
+                {
+                    "name": "meta_config_id",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "type",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "trigger_text",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "status",
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "buttons",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "ai_chatbot_id",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -19702,6 +20310,22 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "0"
+                },
+                {
+                    "name": "throttle_key",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "created_at",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -20075,6 +20699,14 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "0"
+                },
+                {
+                    "name": "type",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -20498,6 +21130,14 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "NULL"
+                },
+                {
+                    "name": "tax_percent",
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -20874,6 +21514,14 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "current_timestamp()"
+                },
+                {
+                    "name": "criteria",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -22064,6 +22712,22 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "NULL"
+                },
+                {
+                    "name": "temperature",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "last_send_at",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -22277,6 +22941,38 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "NULL"
+                },
+                {
+                    "name": "action_type",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "target_id",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "target_name",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "extra_data",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -25734,6 +26430,14 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "NULL"
+                },
+                {
+                    "name": "google_id",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -25811,6 +26515,14 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "current_timestamp()"
+                },
+                {
+                    "name": "device",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -26257,6 +26969,22 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "NULL"
+                },
+                {
+                    "name": "total_codes",
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "claimed_count",
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -26526,6 +27254,22 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "1"
+                },
+                {
+                    "name": "distributed_to_subscriber_id",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "distributed_at",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -28265,6 +29009,22 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "current_timestamp()"
+                },
+                {
+                    "name": "id",
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "role_id",
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -28483,6 +29243,70 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "current_timestamp()"
+                },
+                {
+                    "name": "oa_config_id",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "type",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "trigger_text",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "status",
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "buttons",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "ai_chatbot_id",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "title",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "content",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -28710,6 +29534,30 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "current_timestamp()"
+                },
+                {
+                    "name": "zalo_msg_id",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "seen_at",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "reacted_at",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -29048,6 +29896,22 @@
                     "primaryKey": false,
                     "indexed": false,
                     "default": "current_timestamp()"
+                },
+                {
+                    "name": "message_text",
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
+                },
+                {
+                    "name": "processed",
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "primaryKey": false,
+                    "indexed": false,
+                    "default": null
                 }
             ],
             "indexes": [
@@ -34431,6 +35295,16 @@
         },
         {
             "id": "rel_40",
+            "name": "fk_ai_workspace_files_conversation_id",
+            "sourceTable": "ai_workspace_files",
+            "sourceColumn": "conversation_id",
+            "targetTable": "chat_conversations",
+            "targetColumn": "id",
+            "cardinality": "many_to_one",
+            "type": "implicit_enterprise_fk"
+        },
+        {
+            "id": "rel_41",
             "name": "fk_ai_workspace_versions_created_by",
             "sourceTable": "ai_workspace_versions",
             "sourceColumn": "created_by",
@@ -34440,7 +35314,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_41",
+            "id": "rel_42",
             "name": "fk_api_tokens_workspace_id",
             "sourceTable": "api_tokens",
             "sourceColumn": "workspace_id",
@@ -34450,7 +35324,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_42",
+            "id": "rel_43",
             "name": "fk_approval_requests_workspace_id",
             "sourceTable": "approval_requests",
             "sourceColumn": "workspace_id",
@@ -34460,7 +35334,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_43",
+            "id": "rel_44",
             "name": "fk_attendance_bulk_requests_user_id",
             "sourceTable": "attendance_bulk_requests",
             "sourceColumn": "user_id",
@@ -34470,7 +35344,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_44",
+            "id": "rel_45",
             "name": "fk_attendance_bulk_requests_approved_by",
             "sourceTable": "attendance_bulk_requests",
             "sourceColumn": "approved_by",
@@ -34480,7 +35354,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_45",
+            "id": "rel_46",
             "name": "fk_attendance_confirmations_tenant_id",
             "sourceTable": "attendance_confirmations",
             "sourceColumn": "tenant_id",
@@ -34490,7 +35364,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_46",
+            "id": "rel_47",
             "name": "fk_attendance_confirmations_user_id",
             "sourceTable": "attendance_confirmations",
             "sourceColumn": "user_id",
@@ -34500,7 +35374,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_47",
+            "id": "rel_48",
             "name": "fk_attendance_confirmation_batches_tenant_id",
             "sourceTable": "attendance_confirmation_batches",
             "sourceColumn": "tenant_id",
@@ -34510,7 +35384,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_48",
+            "id": "rel_49",
             "name": "fk_attendance_confirmation_batches_created_by",
             "sourceTable": "attendance_confirmation_batches",
             "sourceColumn": "created_by",
@@ -34520,7 +35394,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_49",
+            "id": "rel_50",
             "name": "fk_audit_logs_tenant_id",
             "sourceTable": "audit_logs",
             "sourceColumn": "tenant_id",
@@ -34530,7 +35404,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_50",
+            "id": "rel_51",
             "name": "fk_audit_logs_user_id",
             "sourceTable": "audit_logs",
             "sourceColumn": "user_id",
@@ -34540,7 +35414,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_51",
+            "id": "rel_52",
             "name": "fk_automation_logs_workspace_id",
             "sourceTable": "automation_logs",
             "sourceColumn": "workspace_id",
@@ -34550,7 +35424,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_52",
+            "id": "rel_53",
             "name": "fk_automation_logs_flow_id",
             "sourceTable": "automation_logs",
             "sourceColumn": "flow_id",
@@ -34560,7 +35434,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_53",
+            "id": "rel_54",
             "name": "fk_automation_logs_subscriber_id",
             "sourceTable": "automation_logs",
             "sourceColumn": "subscriber_id",
@@ -34570,7 +35444,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_54",
+            "id": "rel_55",
             "name": "fk_batches_tenant_id",
             "sourceTable": "batches",
             "sourceColumn": "tenant_id",
@@ -34580,7 +35454,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_55",
+            "id": "rel_56",
             "name": "fk_blocked_leads_tenant_id",
             "sourceTable": "blocked_leads",
             "sourceColumn": "tenant_id",
@@ -34590,7 +35464,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_56",
+            "id": "rel_57",
             "name": "fk_blocked_leads_created_by",
             "sourceTable": "blocked_leads",
             "sourceColumn": "created_by",
@@ -34600,7 +35474,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_57",
+            "id": "rel_58",
             "name": "fk_campaigns_template_id",
             "sourceTable": "campaigns",
             "sourceColumn": "template_id",
@@ -34610,7 +35484,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_58",
+            "id": "rel_59",
             "name": "fk_campaigns_workspace_id",
             "sourceTable": "campaigns",
             "sourceColumn": "workspace_id",
@@ -34620,7 +35494,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_59",
+            "id": "rel_60",
             "name": "fk_campaigns_created_by",
             "sourceTable": "campaigns",
             "sourceColumn": "created_by",
@@ -34630,7 +35504,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_60",
+            "id": "rel_61",
             "name": "fk_campaign_reminders_campaign_id",
             "sourceTable": "campaign_reminders",
             "sourceColumn": "campaign_id",
@@ -34640,7 +35514,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_61",
+            "id": "rel_62",
             "name": "fk_campaign_reminders_template_id",
             "sourceTable": "campaign_reminders",
             "sourceColumn": "template_id",
@@ -34650,7 +35524,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_62",
+            "id": "rel_63",
             "name": "fk_capi_logs_lead_id",
             "sourceTable": "capi_logs",
             "sourceColumn": "lead_id",
@@ -34660,7 +35534,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_63",
+            "id": "rel_64",
             "name": "fk_capi_logs_contact_id",
             "sourceTable": "capi_logs",
             "sourceColumn": "contact_id",
@@ -34670,7 +35544,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_64",
+            "id": "rel_65",
             "name": "fk_chat_attachments_vault_tenant_id",
             "sourceTable": "chat_attachments_vault",
             "sourceColumn": "tenant_id",
@@ -34680,7 +35554,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_65",
+            "id": "rel_66",
             "name": "fk_chat_attachments_vault_conversation_id",
             "sourceTable": "chat_attachments_vault",
             "sourceColumn": "conversation_id",
@@ -34690,7 +35564,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_66",
+            "id": "rel_67",
             "name": "fk_chat_conversations_tenant_id",
             "sourceTable": "chat_conversations",
             "sourceColumn": "tenant_id",
@@ -34700,7 +35574,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_67",
+            "id": "rel_68",
             "name": "fk_chat_conversations_created_by",
             "sourceTable": "chat_conversations",
             "sourceColumn": "created_by",
@@ -34710,7 +35584,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_68",
+            "id": "rel_69",
             "name": "fk_chat_messages_tenant_id",
             "sourceTable": "chat_messages",
             "sourceColumn": "tenant_id",
@@ -34720,7 +35594,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_69",
+            "id": "rel_70",
             "name": "fk_chat_messages_conversation_id",
             "sourceTable": "chat_messages",
             "sourceColumn": "conversation_id",
@@ -34730,7 +35604,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_70",
+            "id": "rel_71",
             "name": "fk_chat_message_reactions_tenant_id",
             "sourceTable": "chat_message_reactions",
             "sourceColumn": "tenant_id",
@@ -34740,7 +35614,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_71",
+            "id": "rel_72",
             "name": "fk_chat_message_reactions_user_id",
             "sourceTable": "chat_message_reactions",
             "sourceColumn": "user_id",
@@ -34750,7 +35624,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_72",
+            "id": "rel_73",
             "name": "fk_chat_participants_tenant_id",
             "sourceTable": "chat_participants",
             "sourceColumn": "tenant_id",
@@ -34760,7 +35634,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_73",
+            "id": "rel_74",
             "name": "fk_chat_participants_conversation_id",
             "sourceTable": "chat_participants",
             "sourceColumn": "conversation_id",
@@ -34770,7 +35644,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_74",
+            "id": "rel_75",
             "name": "fk_chat_participants_user_id",
             "sourceTable": "chat_participants",
             "sourceColumn": "user_id",
@@ -34780,7 +35654,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_75",
+            "id": "rel_76",
             "name": "fk_chat_user_presence_tenant_id",
             "sourceTable": "chat_user_presence",
             "sourceColumn": "tenant_id",
@@ -34790,7 +35664,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_76",
+            "id": "rel_77",
             "name": "fk_chat_user_presence_user_id",
             "sourceTable": "chat_user_presence",
             "sourceColumn": "user_id",
@@ -34800,7 +35674,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_77",
+            "id": "rel_78",
             "name": "fk_check_ins_user_id",
             "sourceTable": "check_ins",
             "sourceColumn": "user_id",
@@ -34810,7 +35684,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_78",
+            "id": "rel_79",
             "name": "fk_check_ins_approved_by",
             "sourceTable": "check_ins",
             "sourceColumn": "approved_by",
@@ -34820,7 +35694,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_79",
+            "id": "rel_80",
             "name": "fk_cloud_files_tenant_id",
             "sourceTable": "cloud_files",
             "sourceColumn": "tenant_id",
@@ -34830,7 +35704,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_80",
+            "id": "rel_81",
             "name": "fk_cloud_files_project_id",
             "sourceTable": "cloud_files",
             "sourceColumn": "project_id",
@@ -34840,7 +35714,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_81",
+            "id": "rel_82",
             "name": "fk_cloud_files_contact_id",
             "sourceTable": "cloud_files",
             "sourceColumn": "contact_id",
@@ -34850,7 +35724,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_82",
+            "id": "rel_83",
             "name": "fk_cloud_files_campaign_id",
             "sourceTable": "cloud_files",
             "sourceColumn": "campaign_id",
@@ -34860,7 +35734,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_83",
+            "id": "rel_84",
             "name": "fk_comments_tenant_id",
             "sourceTable": "comments",
             "sourceColumn": "tenant_id",
@@ -34870,7 +35744,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_84",
+            "id": "rel_85",
             "name": "fk_comments_user_id",
             "sourceTable": "comments",
             "sourceColumn": "user_id",
@@ -34880,7 +35754,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_85",
+            "id": "rel_86",
             "name": "fk_communication_logs_lead_id",
             "sourceTable": "communication_logs",
             "sourceColumn": "lead_id",
@@ -34890,7 +35764,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_86",
+            "id": "rel_87",
             "name": "fk_companies_tenant_id",
             "sourceTable": "companies",
             "sourceColumn": "tenant_id",
@@ -34900,7 +35774,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_87",
+            "id": "rel_88",
             "name": "fk_companies_owner_id",
             "sourceTable": "companies",
             "sourceColumn": "owner_id",
@@ -34910,7 +35784,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_88",
+            "id": "rel_89",
             "name": "fk_companies_created_by",
             "sourceTable": "companies",
             "sourceColumn": "created_by",
@@ -34920,7 +35794,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_89",
+            "id": "rel_90",
             "name": "fk_companies_stage_id",
             "sourceTable": "companies",
             "sourceColumn": "stage_id",
@@ -34930,7 +35804,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_90",
+            "id": "rel_91",
             "name": "fk_company_assets_tenant_id",
             "sourceTable": "company_assets",
             "sourceColumn": "tenant_id",
@@ -34940,7 +35814,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_91",
+            "id": "rel_92",
             "name": "fk_company_assets_assigned_to",
             "sourceTable": "company_assets",
             "sourceColumn": "assigned_to",
@@ -34950,7 +35824,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_92",
+            "id": "rel_93",
             "name": "fk_consultants_tenant_id",
             "sourceTable": "consultants",
             "sourceColumn": "tenant_id",
@@ -34960,7 +35834,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_93",
+            "id": "rel_94",
             "name": "fk_consultant_leaves_consultant_id",
             "sourceTable": "consultant_leaves",
             "sourceColumn": "consultant_id",
@@ -34970,7 +35844,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_94",
+            "id": "rel_95",
             "name": "fk_consultant_shifts_tenant_id",
             "sourceTable": "consultant_shifts",
             "sourceColumn": "tenant_id",
@@ -34980,7 +35854,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_95",
+            "id": "rel_96",
             "name": "fk_consultant_shifts_user_id",
             "sourceTable": "consultant_shifts",
             "sourceColumn": "user_id",
@@ -34990,7 +35864,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_96",
+            "id": "rel_97",
             "name": "fk_contacts_tenant_id",
             "sourceTable": "contacts",
             "sourceColumn": "tenant_id",
@@ -35000,7 +35874,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_97",
+            "id": "rel_98",
             "name": "fk_contacts_project_id",
             "sourceTable": "contacts",
             "sourceColumn": "project_id",
@@ -35010,7 +35884,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_98",
+            "id": "rel_99",
             "name": "fk_contacts_owner_id",
             "sourceTable": "contacts",
             "sourceColumn": "owner_id",
@@ -35020,7 +35894,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_99",
+            "id": "rel_100",
             "name": "fk_contacts_created_by",
             "sourceTable": "contacts",
             "sourceColumn": "created_by",
@@ -35030,7 +35904,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_100",
+            "id": "rel_101",
             "name": "fk_contacts_stage_id",
             "sourceTable": "contacts",
             "sourceColumn": "stage_id",
@@ -35040,7 +35914,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_101",
+            "id": "rel_102",
             "name": "fk_contacts_campaign_id",
             "sourceTable": "contacts",
             "sourceColumn": "campaign_id",
@@ -35050,7 +35924,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_102",
+            "id": "rel_103",
             "name": "fk_contact_emails_contact_id",
             "sourceTable": "contact_emails",
             "sourceColumn": "contact_id",
@@ -35060,7 +35934,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_103",
+            "id": "rel_104",
             "name": "fk_contact_meta_attribution_contact_id",
             "sourceTable": "contact_meta_attribution",
             "sourceColumn": "contact_id",
@@ -35070,7 +35944,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_104",
+            "id": "rel_105",
             "name": "fk_contact_meta_attribution_tenant_id",
             "sourceTable": "contact_meta_attribution",
             "sourceColumn": "tenant_id",
@@ -35080,7 +35954,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_105",
+            "id": "rel_106",
             "name": "fk_contact_meta_attribution_campaign_id",
             "sourceTable": "contact_meta_attribution",
             "sourceColumn": "campaign_id",
@@ -35090,7 +35964,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_106",
+            "id": "rel_107",
             "name": "fk_contact_phones_contact_id",
             "sourceTable": "contact_phones",
             "sourceColumn": "contact_id",
@@ -35100,7 +35974,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_107",
+            "id": "rel_108",
             "name": "fk_contact_presence_tenant_id",
             "sourceTable": "contact_presence",
             "sourceColumn": "tenant_id",
@@ -35110,7 +35984,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_108",
+            "id": "rel_109",
             "name": "fk_contact_presence_contact_id",
             "sourceTable": "contact_presence",
             "sourceColumn": "contact_id",
@@ -35120,7 +35994,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_109",
+            "id": "rel_110",
             "name": "fk_contact_presence_user_id",
             "sourceTable": "contact_presence",
             "sourceColumn": "user_id",
@@ -35130,7 +36004,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_110",
+            "id": "rel_111",
             "name": "fk_cooperation_slips_contact_id",
             "sourceTable": "cooperation_slips",
             "sourceColumn": "contact_id",
@@ -35140,7 +36014,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_111",
+            "id": "rel_112",
             "name": "fk_cooperation_slips_created_by",
             "sourceTable": "cooperation_slips",
             "sourceColumn": "created_by",
@@ -35150,7 +36024,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_112",
+            "id": "rel_113",
             "name": "fk_cooperation_slips_approved_by",
             "sourceTable": "cooperation_slips",
             "sourceColumn": "approved_by",
@@ -35160,7 +36034,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_113",
+            "id": "rel_114",
             "name": "fk_customer_ai_insights_tenant_id",
             "sourceTable": "customer_ai_insights",
             "sourceColumn": "tenant_id",
@@ -35170,7 +36044,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_114",
+            "id": "rel_115",
             "name": "fk_customer_ai_insights_contact_id",
             "sourceTable": "customer_ai_insights",
             "sourceColumn": "contact_id",
@@ -35180,7 +36054,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_115",
+            "id": "rel_116",
             "name": "fk_custom_events_workspace_id",
             "sourceTable": "custom_events",
             "sourceColumn": "workspace_id",
@@ -35190,7 +36064,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_116",
+            "id": "rel_117",
             "name": "fk_custom_fields_tenant_id",
             "sourceTable": "custom_fields",
             "sourceColumn": "tenant_id",
@@ -35200,7 +36074,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_117",
+            "id": "rel_118",
             "name": "fk_data_reports_lead_id",
             "sourceTable": "data_reports",
             "sourceColumn": "lead_id",
@@ -35210,7 +36084,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_118",
+            "id": "rel_119",
             "name": "fk_data_reports_consultant_id",
             "sourceTable": "data_reports",
             "sourceColumn": "consultant_id",
@@ -35220,7 +36094,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_119",
+            "id": "rel_120",
             "name": "fk_deals_tenant_id",
             "sourceTable": "deals",
             "sourceColumn": "tenant_id",
@@ -35230,7 +36104,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_120",
+            "id": "rel_121",
             "name": "fk_deals_stage_id",
             "sourceTable": "deals",
             "sourceColumn": "stage_id",
@@ -35240,7 +36114,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_121",
+            "id": "rel_122",
             "name": "fk_deals_contact_id",
             "sourceTable": "deals",
             "sourceColumn": "contact_id",
@@ -35250,7 +36124,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_122",
+            "id": "rel_123",
             "name": "fk_deals_owner_id",
             "sourceTable": "deals",
             "sourceColumn": "owner_id",
@@ -35260,7 +36134,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_123",
+            "id": "rel_124",
             "name": "fk_deals_created_by",
             "sourceTable": "deals",
             "sourceColumn": "created_by",
@@ -35270,7 +36144,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_124",
+            "id": "rel_125",
             "name": "fk_deal_stage_history_deal_id",
             "sourceTable": "deal_stage_history",
             "sourceColumn": "deal_id",
@@ -35280,7 +36154,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_125",
+            "id": "rel_126",
             "name": "fk_deposits_contact_id",
             "sourceTable": "deposits",
             "sourceColumn": "contact_id",
@@ -35290,7 +36164,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_126",
+            "id": "rel_127",
             "name": "fk_deposits_project_id",
             "sourceTable": "deposits",
             "sourceColumn": "project_id",
@@ -35300,7 +36174,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_127",
+            "id": "rel_128",
             "name": "fk_deposits_created_by",
             "sourceTable": "deposits",
             "sourceColumn": "created_by",
@@ -35310,7 +36184,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_128",
+            "id": "rel_129",
             "name": "fk_deposit_milestones_deposit_id",
             "sourceTable": "deposit_milestones",
             "sourceColumn": "deposit_id",
@@ -35320,7 +36194,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_129",
+            "id": "rel_130",
             "name": "fk_deposit_milestones_approved_by",
             "sourceTable": "deposit_milestones",
             "sourceColumn": "approved_by",
@@ -35330,7 +36204,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_130",
+            "id": "rel_131",
             "name": "fk_distribution_logs_lead_id",
             "sourceTable": "distribution_logs",
             "sourceColumn": "lead_id",
@@ -35340,7 +36214,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_131",
+            "id": "rel_132",
             "name": "fk_distribution_logs_assigned_to",
             "sourceTable": "distribution_logs",
             "sourceColumn": "assigned_to",
@@ -35350,7 +36224,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_132",
+            "id": "rel_133",
             "name": "fk_distribution_rounds_tenant_id",
             "sourceTable": "distribution_rounds",
             "sourceColumn": "tenant_id",
@@ -35360,7 +36234,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_133",
+            "id": "rel_134",
             "name": "fk_distribution_rounds_project_id",
             "sourceTable": "distribution_rounds",
             "sourceColumn": "project_id",
@@ -35370,7 +36244,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_134",
+            "id": "rel_135",
             "name": "fk_domation_ai_conversations_contact_id",
             "sourceTable": "domation_ai_conversations",
             "sourceColumn": "contact_id",
@@ -35380,7 +36254,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_135",
+            "id": "rel_136",
             "name": "fk_domation_ai_messages_conversation_id",
             "sourceTable": "domation_ai_messages",
             "sourceColumn": "conversation_id",
@@ -35390,7 +36264,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_136",
+            "id": "rel_137",
             "name": "fk_domation_tags_workspace_id",
             "sourceTable": "domation_tags",
             "sourceColumn": "workspace_id",
@@ -35400,7 +36274,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_137",
+            "id": "rel_138",
             "name": "fk_domation_tags_created_by",
             "sourceTable": "domation_tags",
             "sourceColumn": "created_by",
@@ -35410,7 +36284,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_138",
+            "id": "rel_139",
             "name": "fk_duplicate_log_tenant_id",
             "sourceTable": "duplicate_log",
             "sourceColumn": "tenant_id",
@@ -35420,7 +36294,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_139",
+            "id": "rel_140",
             "name": "fk_email_otps_user_id",
             "sourceTable": "email_otps",
             "sourceColumn": "user_id",
@@ -35430,7 +36304,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_140",
+            "id": "rel_141",
             "name": "fk_email_sections_workspace_id",
             "sourceTable": "email_sections",
             "sourceColumn": "workspace_id",
@@ -35440,7 +36314,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_141",
+            "id": "rel_142",
             "name": "fk_enterprise_comments_tenant_id",
             "sourceTable": "enterprise_comments",
             "sourceColumn": "tenant_id",
@@ -35450,7 +36324,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_142",
+            "id": "rel_143",
             "name": "fk_enterprise_comments_user_id",
             "sourceTable": "enterprise_comments",
             "sourceColumn": "user_id",
@@ -35460,7 +36334,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_143",
+            "id": "rel_144",
             "name": "fk_enterprise_honors_tenant_id",
             "sourceTable": "enterprise_honors",
             "sourceColumn": "tenant_id",
@@ -35470,7 +36344,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_144",
+            "id": "rel_145",
             "name": "fk_enterprise_honors_user_id",
             "sourceTable": "enterprise_honors",
             "sourceColumn": "user_id",
@@ -35480,7 +36354,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_145",
+            "id": "rel_146",
             "name": "fk_enterprise_honors_reactions_user_id",
             "sourceTable": "enterprise_honors_reactions",
             "sourceColumn": "user_id",
@@ -35490,7 +36364,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_146",
+            "id": "rel_147",
             "name": "fk_enterprise_posts_tenant_id",
             "sourceTable": "enterprise_posts",
             "sourceColumn": "tenant_id",
@@ -35500,7 +36374,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_147",
+            "id": "rel_148",
             "name": "fk_enterprise_posts_user_id",
             "sourceTable": "enterprise_posts",
             "sourceColumn": "user_id",
@@ -35510,7 +36384,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_148",
+            "id": "rel_149",
             "name": "fk_enterprise_reactions_tenant_id",
             "sourceTable": "enterprise_reactions",
             "sourceColumn": "tenant_id",
@@ -35520,7 +36394,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_149",
+            "id": "rel_150",
             "name": "fk_enterprise_reactions_user_id",
             "sourceTable": "enterprise_reactions",
             "sourceColumn": "user_id",
@@ -35530,7 +36404,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_150",
+            "id": "rel_151",
             "name": "fk_expenses_tenant_id",
             "sourceTable": "expenses",
             "sourceColumn": "tenant_id",
@@ -35540,7 +36414,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_151",
+            "id": "rel_152",
             "name": "fk_expenses_created_by",
             "sourceTable": "expenses",
             "sourceColumn": "created_by",
@@ -35550,7 +36424,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_152",
+            "id": "rel_153",
             "name": "fk_expenses_approved_by",
             "sourceTable": "expenses",
             "sourceColumn": "approved_by",
@@ -35560,7 +36434,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_153",
+            "id": "rel_154",
             "name": "fk_expense_entities_tenant_id",
             "sourceTable": "expense_entities",
             "sourceColumn": "tenant_id",
@@ -35570,7 +36444,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_154",
+            "id": "rel_155",
             "name": "fk_files_tenant_id",
             "sourceTable": "files",
             "sourceColumn": "tenant_id",
@@ -35580,7 +36454,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_155",
+            "id": "rel_156",
             "name": "fk_file_categories_tenant_id",
             "sourceTable": "file_categories",
             "sourceColumn": "tenant_id",
@@ -35590,7 +36464,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_156",
+            "id": "rel_157",
             "name": "fk_file_categories_created_by",
             "sourceTable": "file_categories",
             "sourceColumn": "created_by",
@@ -35600,7 +36474,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_157",
+            "id": "rel_158",
             "name": "fk_flows_workspace_id",
             "sourceTable": "flows",
             "sourceColumn": "workspace_id",
@@ -35610,7 +36484,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_158",
+            "id": "rel_159",
             "name": "fk_flows_created_by",
             "sourceTable": "flows",
             "sourceColumn": "created_by",
@@ -35620,7 +36494,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_159",
+            "id": "rel_160",
             "name": "fk_flow_enrollments_workspace_id",
             "sourceTable": "flow_enrollments",
             "sourceColumn": "workspace_id",
@@ -35630,7 +36504,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_160",
+            "id": "rel_161",
             "name": "fk_flow_enrollments_flow_id",
             "sourceTable": "flow_enrollments",
             "sourceColumn": "flow_id",
@@ -35640,7 +36514,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_161",
+            "id": "rel_162",
             "name": "fk_flow_enrollments_subscriber_id",
             "sourceTable": "flow_enrollments",
             "sourceColumn": "subscriber_id",
@@ -35650,7 +36524,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_162",
+            "id": "rel_163",
             "name": "fk_flow_event_queue_workspace_id",
             "sourceTable": "flow_event_queue",
             "sourceColumn": "workspace_id",
@@ -35660,7 +36534,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_163",
+            "id": "rel_164",
             "name": "fk_flow_event_queue_subscriber_id",
             "sourceTable": "flow_event_queue",
             "sourceColumn": "subscriber_id",
@@ -35670,7 +36544,17 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_164",
+            "id": "rel_165",
+            "name": "fk_flow_event_queue_flow_id",
+            "sourceTable": "flow_event_queue",
+            "sourceColumn": "flow_id",
+            "targetTable": "flows",
+            "targetColumn": "id",
+            "cardinality": "many_to_one",
+            "type": "implicit_enterprise_fk"
+        },
+        {
+            "id": "rel_166",
             "name": "fk_flow_snapshots_flow_id",
             "sourceTable": "flow_snapshots",
             "sourceColumn": "flow_id",
@@ -35680,7 +36564,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_165",
+            "id": "rel_167",
             "name": "fk_flow_snapshots_created_by",
             "sourceTable": "flow_snapshots",
             "sourceColumn": "created_by",
@@ -35690,7 +36574,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_166",
+            "id": "rel_168",
             "name": "fk_forms_tenant_id",
             "sourceTable": "forms",
             "sourceColumn": "tenant_id",
@@ -35700,7 +36584,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_167",
+            "id": "rel_169",
             "name": "fk_forms_created_by",
             "sourceTable": "forms",
             "sourceColumn": "created_by",
@@ -35710,7 +36594,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_168",
+            "id": "rel_170",
             "name": "fk_forms_workspace_id",
             "sourceTable": "forms",
             "sourceColumn": "workspace_id",
@@ -35720,7 +36604,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_169",
+            "id": "rel_171",
             "name": "fk_form_submissions_tenant_id",
             "sourceTable": "form_submissions",
             "sourceColumn": "tenant_id",
@@ -35730,7 +36614,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_170",
+            "id": "rel_172",
             "name": "fk_global_assets_workspace_id",
             "sourceTable": "global_assets",
             "sourceColumn": "workspace_id",
@@ -35740,7 +36624,17 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_171",
+            "id": "rel_173",
+            "name": "fk_global_assets_conversation_id",
+            "sourceTable": "global_assets",
+            "sourceColumn": "conversation_id",
+            "targetTable": "chat_conversations",
+            "targetColumn": "id",
+            "cardinality": "many_to_one",
+            "type": "implicit_enterprise_fk"
+        },
+        {
+            "id": "rel_174",
             "name": "fk_holiday_shift_registrations_user_id",
             "sourceTable": "holiday_shift_registrations",
             "sourceColumn": "user_id",
@@ -35750,7 +36644,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_172",
+            "id": "rel_175",
             "name": "fk_hrm_assets_user_id",
             "sourceTable": "hrm_assets",
             "sourceColumn": "user_id",
@@ -35760,7 +36654,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_173",
+            "id": "rel_176",
             "name": "fk_hrm_contracts_user_id",
             "sourceTable": "hrm_contracts",
             "sourceColumn": "user_id",
@@ -35770,7 +36664,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_174",
+            "id": "rel_177",
             "name": "fk_hrm_leave_requests_user_id",
             "sourceTable": "hrm_leave_requests",
             "sourceColumn": "user_id",
@@ -35780,7 +36674,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_175",
+            "id": "rel_178",
             "name": "fk_hrm_leave_requests_approved_by",
             "sourceTable": "hrm_leave_requests",
             "sourceColumn": "approved_by",
@@ -35790,7 +36684,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_176",
+            "id": "rel_179",
             "name": "fk_hrm_profiles_user_id",
             "sourceTable": "hrm_profiles",
             "sourceColumn": "user_id",
@@ -35800,7 +36694,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_177",
+            "id": "rel_180",
             "name": "fk_hrm_salary_advances_user_id",
             "sourceTable": "hrm_salary_advances",
             "sourceColumn": "user_id",
@@ -35810,7 +36704,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_178",
+            "id": "rel_181",
             "name": "fk_hrm_salary_advances_approved_by",
             "sourceTable": "hrm_salary_advances",
             "sourceColumn": "approved_by",
@@ -35820,7 +36714,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_179",
+            "id": "rel_182",
             "name": "fk_import_jobs_tenant_id",
             "sourceTable": "import_jobs",
             "sourceColumn": "tenant_id",
@@ -35830,7 +36724,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_180",
+            "id": "rel_183",
             "name": "fk_import_jobs_user_id",
             "sourceTable": "import_jobs",
             "sourceColumn": "user_id",
@@ -35840,7 +36734,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_181",
+            "id": "rel_184",
             "name": "fk_integrations_workspace_id",
             "sourceTable": "integrations",
             "sourceColumn": "workspace_id",
@@ -35850,7 +36744,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_182",
+            "id": "rel_185",
             "name": "fk_integration_connectors_tenant_id",
             "sourceTable": "integration_connectors",
             "sourceColumn": "tenant_id",
@@ -35860,7 +36754,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_183",
+            "id": "rel_186",
             "name": "fk_inventory_logs_tenant_id",
             "sourceTable": "inventory_logs",
             "sourceColumn": "tenant_id",
@@ -35870,7 +36764,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_184",
+            "id": "rel_187",
             "name": "fk_inventory_logs_created_by",
             "sourceTable": "inventory_logs",
             "sourceColumn": "created_by",
@@ -35880,7 +36774,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_185",
+            "id": "rel_188",
             "name": "fk_invoices_tenant_id",
             "sourceTable": "invoices",
             "sourceColumn": "tenant_id",
@@ -35890,7 +36784,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_186",
+            "id": "rel_189",
             "name": "fk_invoices_deal_id",
             "sourceTable": "invoices",
             "sourceColumn": "deal_id",
@@ -35900,7 +36794,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_187",
+            "id": "rel_190",
             "name": "fk_invoices_contact_id",
             "sourceTable": "invoices",
             "sourceColumn": "contact_id",
@@ -35910,7 +36804,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_188",
+            "id": "rel_191",
             "name": "fk_invoices_created_by",
             "sourceTable": "invoices",
             "sourceColumn": "created_by",
@@ -35920,7 +36814,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_189",
+            "id": "rel_192",
             "name": "fk_invoice_items_invoice_id",
             "sourceTable": "invoice_items",
             "sourceColumn": "invoice_id",
@@ -35930,7 +36824,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_190",
+            "id": "rel_193",
             "name": "fk_leads_campaign_id",
             "sourceTable": "leads",
             "sourceColumn": "campaign_id",
@@ -35940,7 +36834,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_191",
+            "id": "rel_194",
             "name": "fk_leads_assigned_to",
             "sourceTable": "leads",
             "sourceColumn": "assigned_to",
@@ -35950,7 +36844,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_192",
+            "id": "rel_195",
             "name": "fk_lead_offers_lead_id",
             "sourceTable": "lead_offers",
             "sourceColumn": "lead_id",
@@ -35960,7 +36854,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_193",
+            "id": "rel_196",
             "name": "fk_lead_offers_user_id",
             "sourceTable": "lead_offers",
             "sourceColumn": "user_id",
@@ -35970,7 +36864,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_194",
+            "id": "rel_197",
             "name": "fk_lead_scoring_rules_workspace_id",
             "sourceTable": "lead_scoring_rules",
             "sourceColumn": "workspace_id",
@@ -35980,7 +36874,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_195",
+            "id": "rel_198",
             "name": "fk_lists_workspace_id",
             "sourceTable": "lists",
             "sourceColumn": "workspace_id",
@@ -35990,7 +36884,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_196",
+            "id": "rel_199",
             "name": "fk_lists_created_by",
             "sourceTable": "lists",
             "sourceColumn": "created_by",
@@ -36000,7 +36894,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_197",
+            "id": "rel_200",
             "name": "fk_mail_delivery_logs_campaign_id",
             "sourceTable": "mail_delivery_logs",
             "sourceColumn": "campaign_id",
@@ -36010,7 +36904,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_198",
+            "id": "rel_201",
             "name": "fk_mail_delivery_logs_flow_id",
             "sourceTable": "mail_delivery_logs",
             "sourceColumn": "flow_id",
@@ -36020,7 +36914,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_199",
+            "id": "rel_202",
             "name": "fk_mail_delivery_logs_subscriber_id",
             "sourceTable": "mail_delivery_logs",
             "sourceColumn": "subscriber_id",
@@ -36030,7 +36924,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_200",
+            "id": "rel_203",
             "name": "fk_mail_delivery_logs_workspace_id",
             "sourceTable": "mail_delivery_logs",
             "sourceColumn": "workspace_id",
@@ -36040,7 +36934,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_201",
+            "id": "rel_204",
             "name": "fk_mail_queue_lead_id",
             "sourceTable": "mail_queue",
             "sourceColumn": "lead_id",
@@ -36050,7 +36944,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_202",
+            "id": "rel_205",
             "name": "fk_marketing_campaigns_tenant_id",
             "sourceTable": "marketing_campaigns",
             "sourceColumn": "tenant_id",
@@ -36060,7 +36954,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_203",
+            "id": "rel_206",
             "name": "fk_marketing_campaigns_project_id",
             "sourceTable": "marketing_campaigns",
             "sourceColumn": "project_id",
@@ -36070,7 +36964,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_204",
+            "id": "rel_207",
             "name": "fk_marketing_campaigns_created_by",
             "sourceTable": "marketing_campaigns",
             "sourceColumn": "created_by",
@@ -36080,7 +36974,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_205",
+            "id": "rel_208",
             "name": "fk_meta_app_configs_workspace_id",
             "sourceTable": "meta_app_configs",
             "sourceColumn": "workspace_id",
@@ -36090,7 +36984,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_206",
+            "id": "rel_209",
             "name": "fk_meta_automation_scenarios_workspace_id",
             "sourceTable": "meta_automation_scenarios",
             "sourceColumn": "workspace_id",
@@ -36100,7 +36994,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_207",
+            "id": "rel_210",
             "name": "fk_meta_conversations_contact_id",
             "sourceTable": "meta_conversations",
             "sourceColumn": "contact_id",
@@ -36110,7 +37004,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_208",
+            "id": "rel_211",
             "name": "fk_meta_conversations_assigned_to",
             "sourceTable": "meta_conversations",
             "sourceColumn": "assigned_to",
@@ -36120,7 +37014,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_209",
+            "id": "rel_212",
             "name": "fk_meta_conversations_workspace_id",
             "sourceTable": "meta_conversations",
             "sourceColumn": "workspace_id",
@@ -36130,7 +37024,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_210",
+            "id": "rel_213",
             "name": "fk_meta_customer_journey_workspace_id",
             "sourceTable": "meta_customer_journey",
             "sourceColumn": "workspace_id",
@@ -36140,7 +37034,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_211",
+            "id": "rel_214",
             "name": "fk_meta_message_logs_workspace_id",
             "sourceTable": "meta_message_logs",
             "sourceColumn": "workspace_id",
@@ -36150,7 +37044,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_212",
+            "id": "rel_215",
             "name": "fk_meta_subscribers_contact_id",
             "sourceTable": "meta_subscribers",
             "sourceColumn": "contact_id",
@@ -36160,7 +37054,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_213",
+            "id": "rel_216",
             "name": "fk_meta_subscribers_subscriber_id",
             "sourceTable": "meta_subscribers",
             "sourceColumn": "subscriber_id",
@@ -36170,7 +37064,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_214",
+            "id": "rel_217",
             "name": "fk_meta_subscribers_workspace_id",
             "sourceTable": "meta_subscribers",
             "sourceColumn": "workspace_id",
@@ -36180,7 +37074,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_215",
+            "id": "rel_218",
             "name": "fk_mkt_system_settings_workspace_id",
             "sourceTable": "mkt_system_settings",
             "sourceColumn": "workspace_id",
@@ -36190,7 +37084,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_216",
+            "id": "rel_219",
             "name": "fk_monthly_payslips_user_id",
             "sourceTable": "monthly_payslips",
             "sourceColumn": "user_id",
@@ -36200,7 +37094,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_217",
+            "id": "rel_220",
             "name": "fk_night_shift_registrations_user_id",
             "sourceTable": "night_shift_registrations",
             "sourceColumn": "user_id",
@@ -36210,7 +37104,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_218",
+            "id": "rel_221",
             "name": "fk_notes_tenant_id",
             "sourceTable": "notes",
             "sourceColumn": "tenant_id",
@@ -36220,7 +37114,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_219",
+            "id": "rel_222",
             "name": "fk_notes_user_id",
             "sourceTable": "notes",
             "sourceColumn": "user_id",
@@ -36230,7 +37124,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_220",
+            "id": "rel_223",
             "name": "fk_note_mentions_user_id",
             "sourceTable": "note_mentions",
             "sourceColumn": "user_id",
@@ -36240,7 +37134,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_221",
+            "id": "rel_224",
             "name": "fk_notifications_user_id",
             "sourceTable": "notifications",
             "sourceColumn": "user_id",
@@ -36250,7 +37144,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_222",
+            "id": "rel_225",
             "name": "fk_notifications_tenant_id",
             "sourceTable": "notifications",
             "sourceColumn": "tenant_id",
@@ -36260,7 +37154,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_223",
+            "id": "rel_226",
             "name": "fk_omnichannel_logs_tenant_id",
             "sourceTable": "omnichannel_logs",
             "sourceColumn": "tenant_id",
@@ -36270,7 +37164,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_224",
+            "id": "rel_227",
             "name": "fk_otp_profiles_workspace_id",
             "sourceTable": "otp_profiles",
             "sourceColumn": "workspace_id",
@@ -36280,7 +37174,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_225",
+            "id": "rel_228",
             "name": "fk_pipeline_stages_tenant_id",
             "sourceTable": "pipeline_stages",
             "sourceColumn": "tenant_id",
@@ -36290,7 +37184,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_226",
+            "id": "rel_229",
             "name": "fk_pos_sessions_tenant_id",
             "sourceTable": "pos_sessions",
             "sourceColumn": "tenant_id",
@@ -36300,7 +37194,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_227",
+            "id": "rel_230",
             "name": "fk_pos_sessions_user_id",
             "sourceTable": "pos_sessions",
             "sourceColumn": "user_id",
@@ -36310,7 +37204,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_228",
+            "id": "rel_231",
             "name": "fk_products_tenant_id",
             "sourceTable": "products",
             "sourceColumn": "tenant_id",
@@ -36320,7 +37214,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_229",
+            "id": "rel_232",
             "name": "fk_products_created_by",
             "sourceTable": "products",
             "sourceColumn": "created_by",
@@ -36330,7 +37224,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_230",
+            "id": "rel_233",
             "name": "fk_product_categories_tenant_id",
             "sourceTable": "product_categories",
             "sourceColumn": "tenant_id",
@@ -36340,7 +37234,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_231",
+            "id": "rel_234",
             "name": "fk_projects_tenant_id",
             "sourceTable": "projects",
             "sourceColumn": "tenant_id",
@@ -36350,7 +37244,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_232",
+            "id": "rel_235",
             "name": "fk_projects_created_by",
             "sourceTable": "projects",
             "sourceColumn": "created_by",
@@ -36360,7 +37254,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_233",
+            "id": "rel_236",
             "name": "fk_projects_backup_20260913_tenant_id",
             "sourceTable": "projects_backup_20260913",
             "sourceColumn": "tenant_id",
@@ -36370,7 +37264,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_234",
+            "id": "rel_237",
             "name": "fk_projects_backup_20260913_created_by",
             "sourceTable": "projects_backup_20260913",
             "sourceColumn": "created_by",
@@ -36380,7 +37274,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_235",
+            "id": "rel_238",
             "name": "fk_project_documents_project_id",
             "sourceTable": "project_documents",
             "sourceColumn": "project_id",
@@ -36390,7 +37284,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_236",
+            "id": "rel_239",
             "name": "fk_project_roster_project_id",
             "sourceTable": "project_roster",
             "sourceColumn": "project_id",
@@ -36400,7 +37294,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_237",
+            "id": "rel_240",
             "name": "fk_project_roster_user_id",
             "sourceTable": "project_roster",
             "sourceColumn": "user_id",
@@ -36410,7 +37304,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_238",
+            "id": "rel_241",
             "name": "fk_project_tasks_tenant_id",
             "sourceTable": "project_tasks",
             "sourceColumn": "tenant_id",
@@ -36420,7 +37314,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_239",
+            "id": "rel_242",
             "name": "fk_project_tasks_project_id",
             "sourceTable": "project_tasks",
             "sourceColumn": "project_id",
@@ -36430,7 +37324,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_240",
+            "id": "rel_243",
             "name": "fk_project_tasks_created_by",
             "sourceTable": "project_tasks",
             "sourceColumn": "created_by",
@@ -36440,7 +37334,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_241",
+            "id": "rel_244",
             "name": "fk_purchase_events_workspace_id",
             "sourceTable": "purchase_events",
             "sourceColumn": "workspace_id",
@@ -36450,7 +37344,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_242",
+            "id": "rel_245",
             "name": "fk_purchase_orders_tenant_id",
             "sourceTable": "purchase_orders",
             "sourceColumn": "tenant_id",
@@ -36460,7 +37354,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_243",
+            "id": "rel_246",
             "name": "fk_purchase_orders_created_by",
             "sourceTable": "purchase_orders",
             "sourceColumn": "created_by",
@@ -36470,7 +37364,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_244",
+            "id": "rel_247",
             "name": "fk_purchase_orders_approved_by",
             "sourceTable": "purchase_orders",
             "sourceColumn": "approved_by",
@@ -36480,7 +37374,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_245",
+            "id": "rel_248",
             "name": "fk_qa_emails_workspace_id",
             "sourceTable": "qa_emails",
             "sourceColumn": "workspace_id",
@@ -36490,7 +37384,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_246",
+            "id": "rel_249",
             "name": "fk_queue_jobs_workspace_id",
             "sourceTable": "queue_jobs",
             "sourceColumn": "workspace_id",
@@ -36500,7 +37394,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_247",
+            "id": "rel_250",
             "name": "fk_quotes_tenant_id",
             "sourceTable": "quotes",
             "sourceColumn": "tenant_id",
@@ -36510,7 +37404,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_248",
+            "id": "rel_251",
             "name": "fk_quotes_deal_id",
             "sourceTable": "quotes",
             "sourceColumn": "deal_id",
@@ -36520,7 +37414,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_249",
+            "id": "rel_252",
             "name": "fk_quotes_contact_id",
             "sourceTable": "quotes",
             "sourceColumn": "contact_id",
@@ -36530,7 +37424,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_250",
+            "id": "rel_253",
             "name": "fk_quotes_created_by",
             "sourceTable": "quotes",
             "sourceColumn": "created_by",
@@ -36540,7 +37434,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_251",
+            "id": "rel_254",
             "name": "fk_quyen_truy_cap_contact_id",
             "sourceTable": "quyen_truy_cap",
             "sourceColumn": "contact_id",
@@ -36550,7 +37444,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_252",
+            "id": "rel_255",
             "name": "fk_quyen_truy_cap_user_id",
             "sourceTable": "quyen_truy_cap",
             "sourceColumn": "user_id",
@@ -36560,7 +37454,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_253",
+            "id": "rel_256",
             "name": "fk_raw_event_buffer_workspace_id",
             "sourceTable": "raw_event_buffer",
             "sourceColumn": "workspace_id",
@@ -36570,7 +37464,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_254",
+            "id": "rel_257",
             "name": "fk_refresh_tokens_user_id",
             "sourceTable": "refresh_tokens",
             "sourceColumn": "user_id",
@@ -36580,7 +37474,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_255",
+            "id": "rel_258",
             "name": "fk_round_consultants_consultant_id",
             "sourceTable": "round_consultants",
             "sourceColumn": "consultant_id",
@@ -36590,7 +37484,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_256",
+            "id": "rel_259",
             "name": "fk_sales_orders_tenant_id",
             "sourceTable": "sales_orders",
             "sourceColumn": "tenant_id",
@@ -36600,7 +37494,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_257",
+            "id": "rel_260",
             "name": "fk_sales_orders_contact_id",
             "sourceTable": "sales_orders",
             "sourceColumn": "contact_id",
@@ -36610,7 +37504,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_258",
+            "id": "rel_261",
             "name": "fk_sales_orders_deal_id",
             "sourceTable": "sales_orders",
             "sourceColumn": "deal_id",
@@ -36620,7 +37514,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_259",
+            "id": "rel_262",
             "name": "fk_sales_orders_invoice_id",
             "sourceTable": "sales_orders",
             "sourceColumn": "invoice_id",
@@ -36630,7 +37524,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_260",
+            "id": "rel_263",
             "name": "fk_sales_orders_created_by",
             "sourceTable": "sales_orders",
             "sourceColumn": "created_by",
@@ -36640,7 +37534,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_261",
+            "id": "rel_264",
             "name": "fk_segments_tenant_id",
             "sourceTable": "segments",
             "sourceColumn": "tenant_id",
@@ -36650,7 +37544,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_262",
+            "id": "rel_265",
             "name": "fk_segments_created_by",
             "sourceTable": "segments",
             "sourceColumn": "created_by",
@@ -36660,7 +37554,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_263",
+            "id": "rel_266",
             "name": "fk_segments_workspace_id",
             "sourceTable": "segments",
             "sourceColumn": "workspace_id",
@@ -36670,7 +37564,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_264",
+            "id": "rel_267",
             "name": "fk_segment_count_update_queue_segment_id",
             "sourceTable": "segment_count_update_queue",
             "sourceColumn": "segment_id",
@@ -36680,7 +37574,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_265",
+            "id": "rel_268",
             "name": "fk_segment_count_update_queue_workspace_id",
             "sourceTable": "segment_count_update_queue",
             "sourceColumn": "workspace_id",
@@ -36690,7 +37584,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_266",
+            "id": "rel_269",
             "name": "fk_segment_exclusions_segment_id",
             "sourceTable": "segment_exclusions",
             "sourceColumn": "segment_id",
@@ -36700,7 +37594,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_267",
+            "id": "rel_270",
             "name": "fk_segment_exclusions_subscriber_id",
             "sourceTable": "segment_exclusions",
             "sourceColumn": "subscriber_id",
@@ -36710,7 +37604,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_268",
+            "id": "rel_271",
             "name": "fk_segment_exclusions_workspace_id",
             "sourceTable": "segment_exclusions",
             "sourceColumn": "workspace_id",
@@ -36720,7 +37614,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_269",
+            "id": "rel_272",
             "name": "fk_sent_notifications_user_id",
             "sourceTable": "sent_notifications",
             "sourceColumn": "user_id",
@@ -36730,7 +37624,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_270",
+            "id": "rel_273",
             "name": "fk_sheet_sync_configs_workspace_id",
             "sourceTable": "sheet_sync_configs",
             "sourceColumn": "workspace_id",
@@ -36740,7 +37634,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_271",
+            "id": "rel_274",
             "name": "fk_short_links_workspace_id",
             "sourceTable": "short_links",
             "sourceColumn": "workspace_id",
@@ -36750,7 +37644,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_272",
+            "id": "rel_275",
             "name": "fk_short_links_created_by",
             "sourceTable": "short_links",
             "sourceColumn": "created_by",
@@ -36760,7 +37654,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_273",
+            "id": "rel_276",
             "name": "fk_stats_update_buffer_workspace_id",
             "sourceTable": "stats_update_buffer",
             "sourceColumn": "workspace_id",
@@ -36770,7 +37664,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_274",
+            "id": "rel_277",
             "name": "fk_stats_update_buffer_campaign_id",
             "sourceTable": "stats_update_buffer",
             "sourceColumn": "campaign_id",
@@ -36780,7 +37674,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_275",
+            "id": "rel_278",
             "name": "fk_subscribers_contact_id",
             "sourceTable": "subscribers",
             "sourceColumn": "contact_id",
@@ -36790,7 +37684,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_276",
+            "id": "rel_279",
             "name": "fk_subscribers_workspace_id",
             "sourceTable": "subscribers",
             "sourceColumn": "workspace_id",
@@ -36800,7 +37694,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_277",
+            "id": "rel_280",
             "name": "fk_subscribers_created_by",
             "sourceTable": "subscribers",
             "sourceColumn": "created_by",
@@ -36810,7 +37704,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_278",
+            "id": "rel_281",
             "name": "fk_subscribers_owner_id",
             "sourceTable": "subscribers",
             "sourceColumn": "owner_id",
@@ -36820,7 +37714,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_279",
+            "id": "rel_282",
             "name": "fk_subscribers_stage_id",
             "sourceTable": "subscribers",
             "sourceColumn": "stage_id",
@@ -36830,7 +37724,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_280",
+            "id": "rel_283",
             "name": "fk_subscriber_activity_workspace_id",
             "sourceTable": "subscriber_activity",
             "sourceColumn": "workspace_id",
@@ -36840,7 +37734,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_281",
+            "id": "rel_284",
             "name": "fk_subscriber_activity_contact_id",
             "sourceTable": "subscriber_activity",
             "sourceColumn": "contact_id",
@@ -36850,7 +37744,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_282",
+            "id": "rel_285",
             "name": "fk_subscriber_activity_subscriber_id",
             "sourceTable": "subscriber_activity",
             "sourceColumn": "subscriber_id",
@@ -36860,7 +37754,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_283",
+            "id": "rel_286",
             "name": "fk_subscriber_activity_flow_id",
             "sourceTable": "subscriber_activity",
             "sourceColumn": "flow_id",
@@ -36870,7 +37764,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_284",
+            "id": "rel_287",
             "name": "fk_subscriber_activity_campaign_id",
             "sourceTable": "subscriber_activity",
             "sourceColumn": "campaign_id",
@@ -36880,7 +37774,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_285",
+            "id": "rel_288",
             "name": "fk_subscriber_activity_created_by",
             "sourceTable": "subscriber_activity",
             "sourceColumn": "created_by",
@@ -36890,7 +37784,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_286",
+            "id": "rel_289",
             "name": "fk_subscriber_flow_states_workspace_id",
             "sourceTable": "subscriber_flow_states",
             "sourceColumn": "workspace_id",
@@ -36900,7 +37794,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_287",
+            "id": "rel_290",
             "name": "fk_subscriber_flow_states_contact_id",
             "sourceTable": "subscriber_flow_states",
             "sourceColumn": "contact_id",
@@ -36910,7 +37804,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_288",
+            "id": "rel_291",
             "name": "fk_subscriber_flow_states_subscriber_id",
             "sourceTable": "subscriber_flow_states",
             "sourceColumn": "subscriber_id",
@@ -36920,7 +37814,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_289",
+            "id": "rel_292",
             "name": "fk_subscriber_flow_states_flow_id",
             "sourceTable": "subscriber_flow_states",
             "sourceColumn": "flow_id",
@@ -36930,7 +37824,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_290",
+            "id": "rel_293",
             "name": "fk_subscriber_lists_subscriber_id",
             "sourceTable": "subscriber_lists",
             "sourceColumn": "subscriber_id",
@@ -36940,7 +37834,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_291",
+            "id": "rel_294",
             "name": "fk_subscriber_lists_list_id",
             "sourceTable": "subscriber_lists",
             "sourceColumn": "list_id",
@@ -36950,7 +37844,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_292",
+            "id": "rel_295",
             "name": "fk_subscriber_lists_workspace_id",
             "sourceTable": "subscriber_lists",
             "sourceColumn": "workspace_id",
@@ -36960,7 +37854,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_293",
+            "id": "rel_296",
             "name": "fk_subscriber_notes_subscriber_id",
             "sourceTable": "subscriber_notes",
             "sourceColumn": "subscriber_id",
@@ -36970,7 +37864,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_294",
+            "id": "rel_297",
             "name": "fk_subscriber_tags_subscriber_id",
             "sourceTable": "subscriber_tags",
             "sourceColumn": "subscriber_id",
@@ -36980,7 +37874,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_295",
+            "id": "rel_298",
             "name": "fk_subscriber_tags_workspace_id",
             "sourceTable": "subscriber_tags",
             "sourceColumn": "workspace_id",
@@ -36990,7 +37884,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_296",
+            "id": "rel_299",
             "name": "fk_suppliers_tenant_id",
             "sourceTable": "suppliers",
             "sourceColumn": "tenant_id",
@@ -37000,7 +37894,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_297",
+            "id": "rel_300",
             "name": "fk_suppliers_created_by",
             "sourceTable": "suppliers",
             "sourceColumn": "created_by",
@@ -37010,7 +37904,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_298",
+            "id": "rel_301",
             "name": "fk_surveys_workspace_id",
             "sourceTable": "surveys",
             "sourceColumn": "workspace_id",
@@ -37020,7 +37914,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_299",
+            "id": "rel_302",
             "name": "fk_surveys_created_by",
             "sourceTable": "surveys",
             "sourceColumn": "created_by",
@@ -37030,7 +37924,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_300",
+            "id": "rel_303",
             "name": "fk_survey_responses_contact_id",
             "sourceTable": "survey_responses",
             "sourceColumn": "contact_id",
@@ -37040,7 +37934,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_301",
+            "id": "rel_304",
             "name": "fk_survey_responses_subscriber_id",
             "sourceTable": "survey_responses",
             "sourceColumn": "subscriber_id",
@@ -37050,7 +37944,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_302",
+            "id": "rel_305",
             "name": "fk_survey_responses_workspace_id",
             "sourceTable": "survey_responses",
             "sourceColumn": "workspace_id",
@@ -37060,7 +37954,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_303",
+            "id": "rel_306",
             "name": "fk_sync_queue_lead_id",
             "sourceTable": "sync_queue",
             "sourceColumn": "lead_id",
@@ -37070,7 +37964,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_304",
+            "id": "rel_307",
             "name": "fk_system_audit_logs_workspace_id",
             "sourceTable": "system_audit_logs",
             "sourceColumn": "workspace_id",
@@ -37080,7 +37974,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_305",
+            "id": "rel_308",
             "name": "fk_system_audit_logs_user_id",
             "sourceTable": "system_audit_logs",
             "sourceColumn": "user_id",
@@ -37090,7 +37984,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_306",
+            "id": "rel_309",
             "name": "fk_system_broadcasts_tenant_id",
             "sourceTable": "system_broadcasts",
             "sourceColumn": "tenant_id",
@@ -37100,7 +37994,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_307",
+            "id": "rel_310",
             "name": "fk_system_broadcasts_created_by",
             "sourceTable": "system_broadcasts",
             "sourceColumn": "created_by",
@@ -37110,7 +38004,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_308",
+            "id": "rel_311",
             "name": "fk_system_cron_jobs_tenant_id",
             "sourceTable": "system_cron_jobs",
             "sourceColumn": "tenant_id",
@@ -37120,7 +38014,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_309",
+            "id": "rel_312",
             "name": "fk_system_cron_logs_tenant_id",
             "sourceTable": "system_cron_logs",
             "sourceColumn": "tenant_id",
@@ -37130,7 +38024,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_310",
+            "id": "rel_313",
             "name": "fk_tags_tenant_id",
             "sourceTable": "tags",
             "sourceColumn": "tenant_id",
@@ -37140,7 +38034,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_311",
+            "id": "rel_314",
             "name": "fk_task_attachments_tenant_id",
             "sourceTable": "task_attachments",
             "sourceColumn": "tenant_id",
@@ -37150,7 +38044,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_312",
+            "id": "rel_315",
             "name": "fk_task_attachments_task_id",
             "sourceTable": "task_attachments",
             "sourceColumn": "task_id",
@@ -37160,7 +38054,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_313",
+            "id": "rel_316",
             "name": "fk_task_focus_logs_tenant_id",
             "sourceTable": "task_focus_logs",
             "sourceColumn": "tenant_id",
@@ -37170,7 +38064,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_314",
+            "id": "rel_317",
             "name": "fk_task_focus_logs_task_id",
             "sourceTable": "task_focus_logs",
             "sourceColumn": "task_id",
@@ -37180,7 +38074,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_315",
+            "id": "rel_318",
             "name": "fk_task_focus_logs_user_id",
             "sourceTable": "task_focus_logs",
             "sourceColumn": "user_id",
@@ -37190,7 +38084,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_316",
+            "id": "rel_319",
             "name": "fk_task_groups_tenant_id",
             "sourceTable": "task_groups",
             "sourceColumn": "tenant_id",
@@ -37200,7 +38094,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_317",
+            "id": "rel_320",
             "name": "fk_task_groups_user_id",
             "sourceTable": "task_groups",
             "sourceColumn": "user_id",
@@ -37210,7 +38104,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_318",
+            "id": "rel_321",
             "name": "fk_task_hidden_users_task_id",
             "sourceTable": "task_hidden_users",
             "sourceColumn": "task_id",
@@ -37220,7 +38114,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_319",
+            "id": "rel_322",
             "name": "fk_task_hidden_users_user_id",
             "sourceTable": "task_hidden_users",
             "sourceColumn": "user_id",
@@ -37230,7 +38124,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_320",
+            "id": "rel_323",
             "name": "fk_task_muted_notifications_task_id",
             "sourceTable": "task_muted_notifications",
             "sourceColumn": "task_id",
@@ -37240,7 +38134,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_321",
+            "id": "rel_324",
             "name": "fk_task_muted_notifications_user_id",
             "sourceTable": "task_muted_notifications",
             "sourceColumn": "user_id",
@@ -37250,7 +38144,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_322",
+            "id": "rel_325",
             "name": "fk_task_whiteboards_tenant_id",
             "sourceTable": "task_whiteboards",
             "sourceColumn": "tenant_id",
@@ -37260,7 +38154,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_323",
+            "id": "rel_326",
             "name": "fk_task_whiteboards_task_id",
             "sourceTable": "task_whiteboards",
             "sourceColumn": "task_id",
@@ -37270,7 +38164,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_324",
+            "id": "rel_327",
             "name": "fk_task_whiteboards_created_by",
             "sourceTable": "task_whiteboards",
             "sourceColumn": "created_by",
@@ -37280,7 +38174,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_325",
+            "id": "rel_328",
             "name": "fk_task_whiteboard_snapshots_task_id",
             "sourceTable": "task_whiteboard_snapshots",
             "sourceColumn": "task_id",
@@ -37290,7 +38184,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_326",
+            "id": "rel_329",
             "name": "fk_task_whiteboard_snapshots_created_by",
             "sourceTable": "task_whiteboard_snapshots",
             "sourceColumn": "created_by",
@@ -37300,7 +38194,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_327",
+            "id": "rel_330",
             "name": "fk_teams_tenant_id",
             "sourceTable": "teams",
             "sourceColumn": "tenant_id",
@@ -37310,7 +38204,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_328",
+            "id": "rel_331",
             "name": "fk_telegram_queue_lead_id",
             "sourceTable": "telegram_queue",
             "sourceColumn": "lead_id",
@@ -37320,7 +38214,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_329",
+            "id": "rel_332",
             "name": "fk_templates_workspace_id",
             "sourceTable": "templates",
             "sourceColumn": "workspace_id",
@@ -37330,7 +38224,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_330",
+            "id": "rel_333",
             "name": "fk_templates_created_by",
             "sourceTable": "templates",
             "sourceColumn": "created_by",
@@ -37340,7 +38234,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_331",
+            "id": "rel_334",
             "name": "fk_template_groups_workspace_id",
             "sourceTable": "template_groups",
             "sourceColumn": "workspace_id",
@@ -37350,7 +38244,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_332",
+            "id": "rel_335",
             "name": "fk_template_groups_created_by",
             "sourceTable": "template_groups",
             "sourceColumn": "created_by",
@@ -37360,7 +38254,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_333",
+            "id": "rel_336",
             "name": "fk_tickets_tenant_id",
             "sourceTable": "tickets",
             "sourceColumn": "tenant_id",
@@ -37370,7 +38264,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_334",
+            "id": "rel_337",
             "name": "fk_tickets_contact_id",
             "sourceTable": "tickets",
             "sourceColumn": "contact_id",
@@ -37380,7 +38274,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_335",
+            "id": "rel_338",
             "name": "fk_tickets_created_by",
             "sourceTable": "tickets",
             "sourceColumn": "created_by",
@@ -37390,7 +38284,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_336",
+            "id": "rel_339",
             "name": "fk_ticket_comments_user_id",
             "sourceTable": "ticket_comments",
             "sourceColumn": "user_id",
@@ -37400,7 +38294,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_337",
+            "id": "rel_340",
             "name": "fk_timestamp_buffer_subscriber_id",
             "sourceTable": "timestamp_buffer",
             "sourceColumn": "subscriber_id",
@@ -37410,7 +38304,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_338",
+            "id": "rel_341",
             "name": "fk_tracking_unique_cache_workspace_id",
             "sourceTable": "tracking_unique_cache",
             "sourceColumn": "workspace_id",
@@ -37420,7 +38314,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_339",
+            "id": "rel_342",
             "name": "fk_tracking_unique_cache_subscriber_id",
             "sourceTable": "tracking_unique_cache",
             "sourceColumn": "subscriber_id",
@@ -37430,7 +38324,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_340",
+            "id": "rel_343",
             "name": "fk_users_tenant_id",
             "sourceTable": "users",
             "sourceColumn": "tenant_id",
@@ -37440,7 +38334,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_341",
+            "id": "rel_344",
             "name": "fk_user_access_logs_user_id",
             "sourceTable": "user_access_logs",
             "sourceColumn": "user_id",
@@ -37450,7 +38344,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_342",
+            "id": "rel_345",
             "name": "fk_user_notification_settings_user_id",
             "sourceTable": "user_notification_settings",
             "sourceColumn": "user_id",
@@ -37460,7 +38354,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_343",
+            "id": "rel_346",
             "name": "fk_user_notification_settings_tenant_id",
             "sourceTable": "user_notification_settings",
             "sourceColumn": "tenant_id",
@@ -37470,7 +38364,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_344",
+            "id": "rel_347",
             "name": "fk_user_presence_tenant_id",
             "sourceTable": "user_presence",
             "sourceColumn": "tenant_id",
@@ -37480,7 +38374,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_345",
+            "id": "rel_348",
             "name": "fk_user_presence_user_id",
             "sourceTable": "user_presence",
             "sourceColumn": "user_id",
@@ -37490,7 +38384,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_346",
+            "id": "rel_349",
             "name": "fk_verified_senders_workspace_id",
             "sourceTable": "verified_senders",
             "sourceColumn": "workspace_id",
@@ -37500,7 +38394,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_347",
+            "id": "rel_350",
             "name": "fk_voucher_campaigns_workspace_id",
             "sourceTable": "voucher_campaigns",
             "sourceColumn": "workspace_id",
@@ -37510,7 +38404,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_348",
+            "id": "rel_351",
             "name": "fk_voucher_campaigns_created_by",
             "sourceTable": "voucher_campaigns",
             "sourceColumn": "created_by",
@@ -37520,7 +38414,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_349",
+            "id": "rel_352",
             "name": "fk_voucher_claims_contact_id",
             "sourceTable": "voucher_claims",
             "sourceColumn": "contact_id",
@@ -37530,7 +38424,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_350",
+            "id": "rel_353",
             "name": "fk_voucher_claims_campaign_id",
             "sourceTable": "voucher_claims",
             "sourceColumn": "campaign_id",
@@ -37540,7 +38434,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_351",
+            "id": "rel_354",
             "name": "fk_voucher_claims_subscriber_id",
             "sourceTable": "voucher_claims",
             "sourceColumn": "subscriber_id",
@@ -37550,7 +38444,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_352",
+            "id": "rel_355",
             "name": "fk_voucher_codes_contact_id",
             "sourceTable": "voucher_codes",
             "sourceColumn": "contact_id",
@@ -37560,7 +38454,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_353",
+            "id": "rel_356",
             "name": "fk_voucher_codes_campaign_id",
             "sourceTable": "voucher_codes",
             "sourceColumn": "campaign_id",
@@ -37570,7 +38464,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_354",
+            "id": "rel_357",
             "name": "fk_voucher_codes_subscriber_id",
             "sourceTable": "voucher_codes",
             "sourceColumn": "subscriber_id",
@@ -37580,7 +38474,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_355",
+            "id": "rel_358",
             "name": "fk_voucher_codes_workspace_id",
             "sourceTable": "voucher_codes",
             "sourceColumn": "workspace_id",
@@ -37590,7 +38484,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_356",
+            "id": "rel_359",
             "name": "fk_webhooks_workspace_id",
             "sourceTable": "webhooks",
             "sourceColumn": "workspace_id",
@@ -37600,7 +38494,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_357",
+            "id": "rel_360",
             "name": "fk_webhook_logs_workspace_id",
             "sourceTable": "webhook_logs",
             "sourceColumn": "workspace_id",
@@ -37610,7 +38504,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_358",
+            "id": "rel_361",
             "name": "fk_web_blacklist_workspace_id",
             "sourceTable": "web_blacklist",
             "sourceColumn": "workspace_id",
@@ -37620,7 +38514,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_359",
+            "id": "rel_362",
             "name": "fk_web_events_workspace_id",
             "sourceTable": "web_events",
             "sourceColumn": "workspace_id",
@@ -37630,7 +38524,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_360",
+            "id": "rel_363",
             "name": "fk_web_form_submissions_subscriber_id",
             "sourceTable": "web_form_submissions",
             "sourceColumn": "subscriber_id",
@@ -37640,7 +38534,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_361",
+            "id": "rel_364",
             "name": "fk_web_page_views_workspace_id",
             "sourceTable": "web_page_views",
             "sourceColumn": "workspace_id",
@@ -37650,7 +38544,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_362",
+            "id": "rel_365",
             "name": "fk_web_properties_workspace_id",
             "sourceTable": "web_properties",
             "sourceColumn": "workspace_id",
@@ -37660,7 +38554,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_363",
+            "id": "rel_366",
             "name": "fk_web_properties_created_by",
             "sourceTable": "web_properties",
             "sourceColumn": "created_by",
@@ -37670,7 +38564,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_364",
+            "id": "rel_367",
             "name": "fk_web_sessions_workspace_id",
             "sourceTable": "web_sessions",
             "sourceColumn": "workspace_id",
@@ -37680,7 +38574,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_365",
+            "id": "rel_368",
             "name": "fk_web_sessions_contact_id",
             "sourceTable": "web_sessions",
             "sourceColumn": "contact_id",
@@ -37690,7 +38584,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_366",
+            "id": "rel_369",
             "name": "fk_web_tracking_sites_workspace_id",
             "sourceTable": "web_tracking_sites",
             "sourceColumn": "workspace_id",
@@ -37700,7 +38594,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_367",
+            "id": "rel_370",
             "name": "fk_web_visitors_workspace_id",
             "sourceTable": "web_visitors",
             "sourceColumn": "workspace_id",
@@ -37710,7 +38604,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_368",
+            "id": "rel_371",
             "name": "fk_web_visitors_contact_id",
             "sourceTable": "web_visitors",
             "sourceColumn": "contact_id",
@@ -37720,7 +38614,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_369",
+            "id": "rel_372",
             "name": "fk_web_visitors_subscriber_id",
             "sourceTable": "web_visitors",
             "sourceColumn": "subscriber_id",
@@ -37730,7 +38624,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_370",
+            "id": "rel_373",
             "name": "fk_weekend_shift_registrations_user_id",
             "sourceTable": "weekend_shift_registrations",
             "sourceColumn": "user_id",
@@ -37740,7 +38634,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_371",
+            "id": "rel_374",
             "name": "fk_workflows_tenant_id",
             "sourceTable": "workflows",
             "sourceColumn": "tenant_id",
@@ -37750,7 +38644,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_372",
+            "id": "rel_375",
             "name": "fk_workflows_created_by",
             "sourceTable": "workflows",
             "sourceColumn": "created_by",
@@ -37760,7 +38654,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_373",
+            "id": "rel_376",
             "name": "fk_workflow_task_templates_tenant_id",
             "sourceTable": "workflow_task_templates",
             "sourceColumn": "tenant_id",
@@ -37770,7 +38664,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_374",
+            "id": "rel_377",
             "name": "fk_workflow_task_templates_stage_id",
             "sourceTable": "workflow_task_templates",
             "sourceColumn": "stage_id",
@@ -37780,7 +38674,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_375",
+            "id": "rel_378",
             "name": "fk_workspace_users_workspace_id",
             "sourceTable": "workspace_users",
             "sourceColumn": "workspace_id",
@@ -37790,7 +38684,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_376",
+            "id": "rel_379",
             "name": "fk_workspace_users_user_id",
             "sourceTable": "workspace_users",
             "sourceColumn": "user_id",
@@ -37800,7 +38694,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_377",
+            "id": "rel_380",
             "name": "fk_zalo_activity_buffer_workspace_id",
             "sourceTable": "zalo_activity_buffer",
             "sourceColumn": "workspace_id",
@@ -37810,7 +38704,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_378",
+            "id": "rel_381",
             "name": "fk_zalo_activity_buffer_subscriber_id",
             "sourceTable": "zalo_activity_buffer",
             "sourceColumn": "subscriber_id",
@@ -37820,7 +38714,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_379",
+            "id": "rel_382",
             "name": "fk_zalo_automation_scenarios_workspace_id",
             "sourceTable": "zalo_automation_scenarios",
             "sourceColumn": "workspace_id",
@@ -37830,7 +38724,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_380",
+            "id": "rel_383",
             "name": "fk_zalo_delivery_logs_flow_id",
             "sourceTable": "zalo_delivery_logs",
             "sourceColumn": "flow_id",
@@ -37840,7 +38734,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_381",
+            "id": "rel_384",
             "name": "fk_zalo_delivery_logs_subscriber_id",
             "sourceTable": "zalo_delivery_logs",
             "sourceColumn": "subscriber_id",
@@ -37850,7 +38744,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_382",
+            "id": "rel_385",
             "name": "fk_zalo_delivery_logs_workspace_id",
             "sourceTable": "zalo_delivery_logs",
             "sourceColumn": "workspace_id",
@@ -37860,7 +38754,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_383",
+            "id": "rel_386",
             "name": "fk_zalo_delivery_logs_template_id",
             "sourceTable": "zalo_delivery_logs",
             "sourceColumn": "template_id",
@@ -37870,7 +38764,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_384",
+            "id": "rel_387",
             "name": "fk_zalo_delivery_logs_campaign_id",
             "sourceTable": "zalo_delivery_logs",
             "sourceColumn": "campaign_id",
@@ -37880,7 +38774,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_385",
+            "id": "rel_388",
             "name": "fk_zalo_lists_workspace_id",
             "sourceTable": "zalo_lists",
             "sourceColumn": "workspace_id",
@@ -37890,7 +38784,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_386",
+            "id": "rel_389",
             "name": "fk_zalo_message_queue_workspace_id",
             "sourceTable": "zalo_message_queue",
             "sourceColumn": "workspace_id",
@@ -37900,7 +38794,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_387",
+            "id": "rel_390",
             "name": "fk_zalo_oa_configs_workspace_id",
             "sourceTable": "zalo_oa_configs",
             "sourceColumn": "workspace_id",
@@ -37910,7 +38804,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_388",
+            "id": "rel_391",
             "name": "fk_zalo_queue_lead_id",
             "sourceTable": "zalo_queue",
             "sourceColumn": "lead_id",
@@ -37920,7 +38814,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_389",
+            "id": "rel_392",
             "name": "fk_zalo_subscribers_contact_id",
             "sourceTable": "zalo_subscribers",
             "sourceColumn": "contact_id",
@@ -37930,7 +38824,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_390",
+            "id": "rel_393",
             "name": "fk_zalo_subscribers_subscriber_id",
             "sourceTable": "zalo_subscribers",
             "sourceColumn": "subscriber_id",
@@ -37940,7 +38834,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_391",
+            "id": "rel_394",
             "name": "fk_zalo_subscribers_workspace_id",
             "sourceTable": "zalo_subscribers",
             "sourceColumn": "workspace_id",
@@ -37950,7 +38844,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_392",
+            "id": "rel_395",
             "name": "fk_zalo_subscriber_activity_subscriber_id",
             "sourceTable": "zalo_subscriber_activity",
             "sourceColumn": "subscriber_id",
@@ -37960,7 +38854,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_393",
+            "id": "rel_396",
             "name": "fk_zalo_subscriber_activity_workspace_id",
             "sourceTable": "zalo_subscriber_activity",
             "sourceColumn": "workspace_id",
@@ -37970,7 +38864,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_394",
+            "id": "rel_397",
             "name": "fk_zalo_templates_template_id",
             "sourceTable": "zalo_templates",
             "sourceColumn": "template_id",
@@ -37980,7 +38874,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_395",
+            "id": "rel_398",
             "name": "fk_zalo_user_messages_workspace_id",
             "sourceTable": "zalo_user_messages",
             "sourceColumn": "workspace_id",
@@ -37990,7 +38884,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_396",
+            "id": "rel_399",
             "name": "fk__bak_activities_20260913_tenant_id",
             "sourceTable": "_bak_activities_20260913",
             "sourceColumn": "tenant_id",
@@ -38000,7 +38894,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_397",
+            "id": "rel_400",
             "name": "fk__bak_activities_20260913_user_id",
             "sourceTable": "_bak_activities_20260913",
             "sourceColumn": "user_id",
@@ -38010,7 +38904,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_398",
+            "id": "rel_401",
             "name": "fk__bak_activities_20260913_created_by",
             "sourceTable": "_bak_activities_20260913",
             "sourceColumn": "created_by",
@@ -38020,7 +38914,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_399",
+            "id": "rel_402",
             "name": "fk__bak_activities_20260913_contact_id",
             "sourceTable": "_bak_activities_20260913",
             "sourceColumn": "contact_id",
@@ -38030,7 +38924,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_400",
+            "id": "rel_403",
             "name": "fk__bak_deposits_20260819_103521_contact_id",
             "sourceTable": "_bak_deposits_20260819_103521",
             "sourceColumn": "contact_id",
@@ -38040,7 +38934,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_401",
+            "id": "rel_404",
             "name": "fk__bak_deposits_20260819_103521_project_id",
             "sourceTable": "_bak_deposits_20260819_103521",
             "sourceColumn": "project_id",
@@ -38050,7 +38944,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_402",
+            "id": "rel_405",
             "name": "fk__bak_deposits_20260819_103521_created_by",
             "sourceTable": "_bak_deposits_20260819_103521",
             "sourceColumn": "created_by",
@@ -38060,7 +38954,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_403",
+            "id": "rel_406",
             "name": "fk__bak_deposits_20260819_103544_contact_id",
             "sourceTable": "_bak_deposits_20260819_103544",
             "sourceColumn": "contact_id",
@@ -38070,7 +38964,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_404",
+            "id": "rel_407",
             "name": "fk__bak_deposits_20260819_103544_project_id",
             "sourceTable": "_bak_deposits_20260819_103544",
             "sourceColumn": "project_id",
@@ -38080,7 +38974,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_405",
+            "id": "rel_408",
             "name": "fk__bak_deposits_20260819_103544_created_by",
             "sourceTable": "_bak_deposits_20260819_103544",
             "sourceColumn": "created_by",
@@ -38090,7 +38984,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_406",
+            "id": "rel_409",
             "name": "fk__bak_deposits_20260819_104418_contact_id",
             "sourceTable": "_bak_deposits_20260819_104418",
             "sourceColumn": "contact_id",
@@ -38100,7 +38994,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_407",
+            "id": "rel_410",
             "name": "fk__bak_deposits_20260819_104418_project_id",
             "sourceTable": "_bak_deposits_20260819_104418",
             "sourceColumn": "project_id",
@@ -38110,7 +39004,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_408",
+            "id": "rel_411",
             "name": "fk__bak_deposits_20260819_104418_created_by",
             "sourceTable": "_bak_deposits_20260819_104418",
             "sourceColumn": "created_by",
@@ -38120,7 +39014,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_409",
+            "id": "rel_412",
             "name": "fk__bak_deposit_milestones_20260819_103521_deposit_id",
             "sourceTable": "_bak_deposit_milestones_20260819_103521",
             "sourceColumn": "deposit_id",
@@ -38130,7 +39024,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_410",
+            "id": "rel_413",
             "name": "fk__bak_deposit_milestones_20260819_103521_approved_by",
             "sourceTable": "_bak_deposit_milestones_20260819_103521",
             "sourceColumn": "approved_by",
@@ -38140,7 +39034,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_411",
+            "id": "rel_414",
             "name": "fk__bak_deposit_milestones_20260819_103544_deposit_id",
             "sourceTable": "_bak_deposit_milestones_20260819_103544",
             "sourceColumn": "deposit_id",
@@ -38150,7 +39044,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_412",
+            "id": "rel_415",
             "name": "fk__bak_deposit_milestones_20260819_103544_approved_by",
             "sourceTable": "_bak_deposit_milestones_20260819_103544",
             "sourceColumn": "approved_by",
@@ -38160,7 +39054,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_413",
+            "id": "rel_416",
             "name": "fk__bak_deposit_milestones_20260819_104418_deposit_id",
             "sourceTable": "_bak_deposit_milestones_20260819_104418",
             "sourceColumn": "deposit_id",
@@ -38170,7 +39064,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_414",
+            "id": "rel_417",
             "name": "fk__bak_deposit_milestones_20260819_104418_approved_by",
             "sourceTable": "_bak_deposit_milestones_20260819_104418",
             "sourceColumn": "approved_by",
@@ -38180,7 +39074,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_415",
+            "id": "rel_418",
             "name": "fk__bak_expenses_20260819_104126_tenant_id",
             "sourceTable": "_bak_expenses_20260819_104126",
             "sourceColumn": "tenant_id",
@@ -38190,7 +39084,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_416",
+            "id": "rel_419",
             "name": "fk__bak_expenses_20260819_104126_created_by",
             "sourceTable": "_bak_expenses_20260819_104126",
             "sourceColumn": "created_by",
@@ -38200,7 +39094,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_417",
+            "id": "rel_420",
             "name": "fk__bak_expenses_20260819_104419_tenant_id",
             "sourceTable": "_bak_expenses_20260819_104419",
             "sourceColumn": "tenant_id",
@@ -38210,7 +39104,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_418",
+            "id": "rel_421",
             "name": "fk__bak_expenses_20260819_104419_created_by",
             "sourceTable": "_bak_expenses_20260819_104419",
             "sourceColumn": "created_by",
@@ -38220,7 +39114,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_419",
+            "id": "rel_422",
             "name": "fk__bak_expenses_20260913_tenant_id",
             "sourceTable": "_bak_expenses_20260913",
             "sourceColumn": "tenant_id",
@@ -38230,7 +39124,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_420",
+            "id": "rel_423",
             "name": "fk__bak_expenses_20260913_created_by",
             "sourceTable": "_bak_expenses_20260913",
             "sourceColumn": "created_by",
@@ -38240,7 +39134,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_421",
+            "id": "rel_424",
             "name": "fk__bak_expenses_20260913_approved_by",
             "sourceTable": "_bak_expenses_20260913",
             "sourceColumn": "approved_by",
@@ -38250,7 +39144,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_422",
+            "id": "rel_425",
             "name": "fk__bak_hrm_leave_requests_20260819_103521_user_id",
             "sourceTable": "_bak_hrm_leave_requests_20260819_103521",
             "sourceColumn": "user_id",
@@ -38260,7 +39154,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_423",
+            "id": "rel_426",
             "name": "fk__bak_hrm_leave_requests_20260819_103521_approved_by",
             "sourceTable": "_bak_hrm_leave_requests_20260819_103521",
             "sourceColumn": "approved_by",
@@ -38270,7 +39164,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_424",
+            "id": "rel_427",
             "name": "fk__bak_hrm_leave_requests_20260819_103544_user_id",
             "sourceTable": "_bak_hrm_leave_requests_20260819_103544",
             "sourceColumn": "user_id",
@@ -38280,7 +39174,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_425",
+            "id": "rel_428",
             "name": "fk__bak_hrm_leave_requests_20260819_103544_approved_by",
             "sourceTable": "_bak_hrm_leave_requests_20260819_103544",
             "sourceColumn": "approved_by",
@@ -38290,7 +39184,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_426",
+            "id": "rel_429",
             "name": "fk__bak_hrm_leave_requests_20260819_104418_user_id",
             "sourceTable": "_bak_hrm_leave_requests_20260819_104418",
             "sourceColumn": "user_id",
@@ -38300,7 +39194,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_427",
+            "id": "rel_430",
             "name": "fk__bak_hrm_leave_requests_20260819_104418_approved_by",
             "sourceTable": "_bak_hrm_leave_requests_20260819_104418",
             "sourceColumn": "approved_by",
@@ -38310,7 +39204,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_428",
+            "id": "rel_431",
             "name": "fk__bak_hrm_salary_advances_20260819_104126_user_id",
             "sourceTable": "_bak_hrm_salary_advances_20260819_104126",
             "sourceColumn": "user_id",
@@ -38320,7 +39214,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_429",
+            "id": "rel_432",
             "name": "fk__bak_hrm_salary_advances_20260819_104419_user_id",
             "sourceTable": "_bak_hrm_salary_advances_20260819_104419",
             "sourceColumn": "user_id",
@@ -38330,7 +39224,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_430",
+            "id": "rel_433",
             "name": "fk__bak_invoices_20260819_103521_tenant_id",
             "sourceTable": "_bak_invoices_20260819_103521",
             "sourceColumn": "tenant_id",
@@ -38340,7 +39234,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_431",
+            "id": "rel_434",
             "name": "fk__bak_invoices_20260819_103521_deal_id",
             "sourceTable": "_bak_invoices_20260819_103521",
             "sourceColumn": "deal_id",
@@ -38350,7 +39244,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_432",
+            "id": "rel_435",
             "name": "fk__bak_invoices_20260819_103521_contact_id",
             "sourceTable": "_bak_invoices_20260819_103521",
             "sourceColumn": "contact_id",
@@ -38360,7 +39254,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_433",
+            "id": "rel_436",
             "name": "fk__bak_invoices_20260819_103521_created_by",
             "sourceTable": "_bak_invoices_20260819_103521",
             "sourceColumn": "created_by",
@@ -38370,7 +39264,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_434",
+            "id": "rel_437",
             "name": "fk__bak_invoices_20260819_103544_tenant_id",
             "sourceTable": "_bak_invoices_20260819_103544",
             "sourceColumn": "tenant_id",
@@ -38380,7 +39274,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_435",
+            "id": "rel_438",
             "name": "fk__bak_invoices_20260819_103544_deal_id",
             "sourceTable": "_bak_invoices_20260819_103544",
             "sourceColumn": "deal_id",
@@ -38390,7 +39284,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_436",
+            "id": "rel_439",
             "name": "fk__bak_invoices_20260819_103544_contact_id",
             "sourceTable": "_bak_invoices_20260819_103544",
             "sourceColumn": "contact_id",
@@ -38400,7 +39294,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_437",
+            "id": "rel_440",
             "name": "fk__bak_invoices_20260819_103544_created_by",
             "sourceTable": "_bak_invoices_20260819_103544",
             "sourceColumn": "created_by",
@@ -38410,7 +39304,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_438",
+            "id": "rel_441",
             "name": "fk__bak_invoices_20260819_104418_tenant_id",
             "sourceTable": "_bak_invoices_20260819_104418",
             "sourceColumn": "tenant_id",
@@ -38420,7 +39314,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_439",
+            "id": "rel_442",
             "name": "fk__bak_invoices_20260819_104418_deal_id",
             "sourceTable": "_bak_invoices_20260819_104418",
             "sourceColumn": "deal_id",
@@ -38430,7 +39324,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_440",
+            "id": "rel_443",
             "name": "fk__bak_invoices_20260819_104418_contact_id",
             "sourceTable": "_bak_invoices_20260819_104418",
             "sourceColumn": "contact_id",
@@ -38440,7 +39334,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_441",
+            "id": "rel_444",
             "name": "fk__bak_invoices_20260819_104418_created_by",
             "sourceTable": "_bak_invoices_20260819_104418",
             "sourceColumn": "created_by",
@@ -38450,7 +39344,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_442",
+            "id": "rel_445",
             "name": "fk__bak_notifications_20260819_103521_user_id",
             "sourceTable": "_bak_notifications_20260819_103521",
             "sourceColumn": "user_id",
@@ -38460,7 +39354,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_443",
+            "id": "rel_446",
             "name": "fk__bak_notifications_20260819_103521_tenant_id",
             "sourceTable": "_bak_notifications_20260819_103521",
             "sourceColumn": "tenant_id",
@@ -38470,7 +39364,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_444",
+            "id": "rel_447",
             "name": "fk__bak_notifications_20260819_103544_user_id",
             "sourceTable": "_bak_notifications_20260819_103544",
             "sourceColumn": "user_id",
@@ -38480,7 +39374,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_445",
+            "id": "rel_448",
             "name": "fk__bak_notifications_20260819_103544_tenant_id",
             "sourceTable": "_bak_notifications_20260819_103544",
             "sourceColumn": "tenant_id",
@@ -38490,7 +39384,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_446",
+            "id": "rel_449",
             "name": "fk__bak_notifications_20260819_104418_user_id",
             "sourceTable": "_bak_notifications_20260819_104418",
             "sourceColumn": "user_id",
@@ -38500,7 +39394,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_447",
+            "id": "rel_450",
             "name": "fk__bak_notifications_20260819_104418_tenant_id",
             "sourceTable": "_bak_notifications_20260819_104418",
             "sourceColumn": "tenant_id",
@@ -38510,7 +39404,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_448",
+            "id": "rel_451",
             "name": "fk__bak_purchase_orders_20260819_103521_tenant_id",
             "sourceTable": "_bak_purchase_orders_20260819_103521",
             "sourceColumn": "tenant_id",
@@ -38520,7 +39414,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_449",
+            "id": "rel_452",
             "name": "fk__bak_purchase_orders_20260819_103521_created_by",
             "sourceTable": "_bak_purchase_orders_20260819_103521",
             "sourceColumn": "created_by",
@@ -38530,7 +39424,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_450",
+            "id": "rel_453",
             "name": "fk__bak_purchase_orders_20260819_103521_approved_by",
             "sourceTable": "_bak_purchase_orders_20260819_103521",
             "sourceColumn": "approved_by",
@@ -38540,7 +39434,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_451",
+            "id": "rel_454",
             "name": "fk__bak_purchase_orders_20260819_103544_tenant_id",
             "sourceTable": "_bak_purchase_orders_20260819_103544",
             "sourceColumn": "tenant_id",
@@ -38550,7 +39444,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_452",
+            "id": "rel_455",
             "name": "fk__bak_purchase_orders_20260819_103544_created_by",
             "sourceTable": "_bak_purchase_orders_20260819_103544",
             "sourceColumn": "created_by",
@@ -38560,7 +39454,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_453",
+            "id": "rel_456",
             "name": "fk__bak_purchase_orders_20260819_103544_approved_by",
             "sourceTable": "_bak_purchase_orders_20260819_103544",
             "sourceColumn": "approved_by",
@@ -38570,7 +39464,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_454",
+            "id": "rel_457",
             "name": "fk__bak_purchase_orders_20260819_104418_tenant_id",
             "sourceTable": "_bak_purchase_orders_20260819_104418",
             "sourceColumn": "tenant_id",
@@ -38580,7 +39474,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_455",
+            "id": "rel_458",
             "name": "fk__bak_purchase_orders_20260819_104418_created_by",
             "sourceTable": "_bak_purchase_orders_20260819_104418",
             "sourceColumn": "created_by",
@@ -38590,7 +39484,7 @@
             "type": "implicit_enterprise_fk"
         },
         {
-            "id": "rel_456",
+            "id": "rel_459",
             "name": "fk__bak_purchase_orders_20260819_104418_approved_by",
             "sourceTable": "_bak_purchase_orders_20260819_104418",
             "sourceColumn": "approved_by",

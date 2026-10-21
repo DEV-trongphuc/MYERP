@@ -3596,7 +3596,7 @@ class AgentToolRegistry {
                                     WHEN NOT EXISTS (
                                         SELECT 1 FROM hrm_leave_requests lr 
                                         WHERE lr.user_id = c.user_id AND lr.status = 'approved' 
-                                          AND lr.leave_type = 'late_early' AND DATE(lr.start_date) = c.check_in_date
+                                          AND lr.leave_type = 'late_early' AND lr.start_date >= c.check_in_date AND lr.start_date < DATE_ADD(c.check_in_date, INTERVAL 1 DAY)
                                     ) THEN (
                                         CASE 
                                             WHEN c.late_minutes > 0 THEN c.late_minutes 
@@ -3740,7 +3740,7 @@ class AgentToolRegistry {
                               AND NOT EXISTS (
                                   SELECT 1 FROM hrm_leave_requests lr
                                   WHERE lr.user_id = c.user_id AND lr.status = 'approved'
-                                    AND lr.leave_type = 'late_early' AND DATE(lr.start_date) = c.check_in_date
+                                    AND lr.leave_type = 'late_early' AND lr.start_date >= c.check_in_date AND lr.start_date < DATE_ADD(c.check_in_date, INTERVAL 1 DAY)
                               )");
                             $stmtMyLate->execute([$uid, $rangeStart, $rangeEnd]);
                             $myLate = $stmtMyLate->fetch(PDO::FETCH_ASSOC);
@@ -3775,7 +3775,7 @@ class AgentToolRegistry {
                             "u.tenant_id = ?",
                             "c.check_in_date BETWEEN ? AND ?",
                             "c.status != 'rejected'",
-                            "NOT EXISTS (SELECT 1 FROM hrm_leave_requests lr WHERE lr.user_id = c.user_id AND lr.status = 'approved' AND lr.leave_type = 'late_early' AND DATE(lr.start_date) = c.check_in_date)"
+                            "NOT EXISTS (SELECT 1 FROM hrm_leave_requests lr WHERE lr.user_id = c.user_id AND lr.status = 'approved' AND lr.leave_type = 'late_early' AND lr.start_date >= c.check_in_date AND lr.start_date < DATE_ADD(c.check_in_date, INTERVAL 1 DAY))"
                         ];
                         $params = [$tid, $rangeStart, $rangeEnd];
 
@@ -5171,7 +5171,7 @@ class AgentToolRegistry {
                                 WHEN NOT EXISTS (
                                     SELECT 1 FROM hrm_leave_requests lr 
                                     WHERE lr.user_id = c.user_id AND lr.status = 'approved' 
-                                      AND lr.leave_type = 'late_early' AND DATE(lr.start_date) = c.check_in_date
+                                      AND lr.leave_type = 'late_early' AND lr.start_date >= c.check_in_date AND lr.start_date < DATE_ADD(c.check_in_date, INTERVAL 1 DAY)
                                 ) THEN (
                                     CASE 
                                         WHEN c.late_minutes > 0 THEN c.late_minutes 
@@ -5298,7 +5298,7 @@ class AgentToolRegistry {
                         }
                         $stmtCrm = $db->prepare("
                             SELECT 
-                                SUM(CASE WHEN DATE(created_at) = CURDATE() THEN 1 ELSE 0 END) as today_new,
+                                SUM(CASE WHEN created_at >= CURDATE() AND created_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY) THEN 1 ELSE 0 END) as today_new,
                                 SUM(CASE WHEN (status IN ('new', 'chua_lien_he', 'moi') OR stage_id IN (1, 2)) AND created_at < DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 ELSE 0 END) as stale_count
                             FROM contacts
                             WHERE $baseCrmWhere
@@ -7862,7 +7862,7 @@ class AgentToolRegistry {
                     $gapsQ = (int)($auditData['training_gaps_count'] ?? 0);
 
                     // 2. Active users currently in presence
-                    $presStmt = $db->prepare("SELECT COUNT(1) FROM chat_user_presence WHERE tenant_id = ? AND status = 'online' AND last_seen >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)");
+                    $presStmt = $db->prepare("SELECT COUNT(1) FROM chat_user_presence WHERE tenant_id = ? AND status = 'online' AND last_ping_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)");
                     $presStmt->execute([$tid]);
                     $onlineUsers = (int)$presStmt->fetchColumn();
 
@@ -8519,7 +8519,7 @@ class AgentToolRegistry {
                             SELECT 
                                 u.id as user_id, u.full_name, u.is_active,
                                 (SELECT COUNT(1) FROM contacts c WHERE c.owner_id = u.id AND c.tenant_id = ? AND c.deleted_at IS NULL AND c.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)) as leads_month,
-                                (SELECT COUNT(1) FROM contacts c WHERE c.owner_id = u.id AND c.tenant_id = ? AND c.deleted_at IS NULL AND DATE(c.created_at) = CURDATE()) as leads_today
+                                (SELECT COUNT(1) FROM contacts c WHERE c.owner_id = u.id AND c.tenant_id = ? AND c.deleted_at IS NULL AND c.created_at >= CURDATE() AND c.created_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)) as leads_today
                             FROM users u
                             WHERE u.team_id = ? AND u.tenant_id = ? AND u.is_active = 1
                             ORDER BY leads_month DESC
@@ -9019,7 +9019,7 @@ class AgentToolRegistry {
                                 // Count leads assigned today in this round
                                 $lStmt = $db->prepare("
                                     SELECT COUNT(1) FROM distribution_logs 
-                                    WHERE round_id = ? AND DATE(received_at) = CURDATE()
+                                    WHERE round_id = ? AND received_at >= CURDATE() AND received_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)
                                 ");
                                 $lStmt->execute([$rId]);
                                 $leadsToday = (int)$lStmt->fetchColumn();
@@ -9298,7 +9298,7 @@ class AgentToolRegistry {
                             } else {
                                 $defStmt = $db->prepare("
                                     SELECT dr.id, dr.round_name, dr.is_active, dr.last_assigned_consultant_id,
-                                           (SELECT COUNT(1) FROM distribution_logs dl WHERE dl.round_id = dr.id AND DATE(dl.received_at) = CURDATE()) as leads_today
+                                           (SELECT COUNT(1) FROM distribution_logs dl WHERE dl.round_id = dr.id AND dl.received_at >= CURDATE() AND dl.received_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)) as leads_today
                                     FROM distribution_rounds dr
                                     WHERE dr.tenant_id = ? AND dr.is_active = 1
                                     ORDER BY leads_today ASC, dr.id ASC LIMIT 6
@@ -9637,7 +9637,7 @@ class AgentToolRegistry {
                                 SELECT dr.id, dr.round_name, dr.description, dr.is_active, dr.last_assigned_consultant_id,
                                        u.full_name as last_assigned_consultant_name,
                                        (SELECT COUNT(1) FROM round_consultants rc WHERE rc.round_id = dr.id AND rc.is_active = 1) as active_consultant_count,
-                                       (SELECT COUNT(1) FROM distribution_logs dl WHERE dl.round_id = dr.id AND DATE(dl.received_at) = CURDATE()) as leads_today
+                                       (SELECT COUNT(1) FROM distribution_logs dl WHERE dl.round_id = dr.id AND dl.received_at >= CURDATE() AND dl.received_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)) as leads_today
                                 FROM distribution_rounds dr
                                 LEFT JOIN users u ON dr.last_assigned_consultant_id = u.id
                                 WHERE dr.tenant_id = ?

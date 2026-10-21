@@ -76,7 +76,7 @@ if ($method === 'GET' && $action === 'users') {
                 if ((int)$healCheck->fetchColumn() === 0) {
                     $admins = $pdo->query("SELECT id FROM users WHERE role IN ('super_admin','admin') LIMIT 50")->fetchAll(PDO::FETCH_COLUMN);
                     foreach ($admins as $aid) {
-                        $pdo->prepare("INSERT IGNORE INTO workspace_users (workspace_id, user_id, role_id) VALUES (1, ?, 1)")->execute([$aid]);
+                        $pdo->prepare("INSERT IGNORE INTO workspace_users (workspace_id, user_id, role) VALUES (1, ?, 'admin')")->execute([$aid]);
                     }
                 }
             } catch (Exception $healEx) { /* ignore — non-critical */ }
@@ -114,7 +114,7 @@ if ($method === 'POST' && $action === 'switch') {
     $isSuperSession = is_super_admin();
     if (!$isSuperSession && $user_id) {
         try {
-            $stmtCheck = $pdo->prepare("SELECT id FROM workspace_users WHERE workspace_id = ? AND user_id = ? LIMIT 1");
+            $stmtCheck = $pdo->prepare("SELECT workspace_id FROM workspace_users WHERE workspace_id = ? AND user_id = ? LIMIT 1");
             $stmtCheck->execute([$target_workspace, $user_id]);
             if (!$stmtCheck->fetch()) {
                 jsonResponse(false, null, 'Unauthorized: You do not belong to this workspace.');

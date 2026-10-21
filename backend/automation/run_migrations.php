@@ -969,7 +969,7 @@ try {
     // --------------------------------------------------
     if ($currentVersion < 44) {
         $logMsg("Đang chạy cập nhật v44 (Thêm ledaovuphuong@gmail.com làm Admin)...", "info");
-        $execSql($pdo, "INSERT INTO users (email, name, role, status) 
+        $execSql($pdo, "INSERT INTO users (email, full_name, role, status) 
                         VALUES ('ledaovuphuong@gmail.com', 'Admin Phuong', 'admin', 'approved')
                         ON DUPLICATE KEY UPDATE role='admin', status='approved'");
         $currentVersion = 44;
