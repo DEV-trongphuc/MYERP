@@ -2305,10 +2305,7 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                       style={{
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: '6px',
-                        maxHeight: '285px',
-                        overflowY: 'auto',
-                        paddingRight: '4px'
+                        gap: '6px'
                       }}
                     >
                       {(() => {

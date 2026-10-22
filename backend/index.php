@@ -2093,12 +2093,28 @@ switch ($resource) {
     case 'marketing':
     case 'meta-ads':
     case 'meta_ads':
-        if ($resource === 'marketing' && $resourceId === 'meta' && in_array($subResource, ['overview', 'analytics', null, ''], true) && $method === 'GET') {
+        if ($resource === 'marketing' && $resourceId === 'meta') {
+            $auth = requireAuth();
             require_once __DIR__ . '/controllers/MetaAdsController.php';
-            (new MetaAdsController($db))->getOverview($auth);
-        } elseif (in_array($resource, ['meta-ads', 'meta_ads'], true) && in_array($resourceId, ['overview', 'analytics', null, ''], true) && $method === 'GET') {
+            $metaCtrl = new MetaAdsController($db);
+            if (in_array($subResource, ['ad-preview', 'preview', 'ad_preview'], true) && $method === 'GET') {
+                $metaCtrl->getAdPreview($auth);
+            } elseif ($subResource === 'token' && $method === 'POST') {
+                $metaCtrl->saveAccessToken($auth, $body);
+            } elseif (in_array($subResource, ['overview', 'analytics', 'insights', null, ''], true) && $method === 'GET') {
+                $metaCtrl->getOverview($auth);
+            }
+        } elseif (in_array($resource, ['meta-ads', 'meta_ads'], true)) {
+            $auth = requireAuth();
             require_once __DIR__ . '/controllers/MetaAdsController.php';
-            (new MetaAdsController($db))->getOverview($auth);
+            $metaCtrl = new MetaAdsController($db);
+            if (in_array($resourceId, ['ad-preview', 'preview', 'ad_preview'], true) && $method === 'GET') {
+                $metaCtrl->getAdPreview($auth);
+            } elseif ($resourceId === 'token' && $method === 'POST') {
+                $metaCtrl->saveAccessToken($auth, $body);
+            } elseif (in_array($resourceId, ['overview', 'analytics', 'insights', null, ''], true) && $method === 'GET') {
+                $metaCtrl->getOverview($auth);
+            }
         }
         // Fallthrough to domation / marketing-automation if not /marketing/meta/*
     // DOMATION / MARKETING AUTOMATION SUITE

@@ -899,4 +899,288 @@ class MetaAdsController
             'hierarchy' => $campaignList,
         ]);
     }
+
+    /**
+     * Resolve live Meta Ad Preview Iframe (from Facebook Graph API /{ad_id}/previews or real DB attribution card).
+     */
+    public static function resolveAdPreviewData(PDO $db, string $rawAdId, string $format = 'MOBILE_FEED_STANDARD', string $overrideToken = ''): array
+    {
+        $cleanAdId = preg_replace('/[^0-9]/', '', trim($rawAdId));
+        $allowedFormats = [
+            'MOBILE_FEED_STANDARD',
+            'DESKTOP_FEED_STANDARD',
+            'INSTAGRAM_STANDARD',
+            'INSTAGRAM_STORY',
+            'FACEBOOK_STORY_MOBILE',
+        ];
+        $adFormat = in_array(strtoupper($format), $allowedFormats, true) ? strtoupper($format) : 'MOBILE_FEED_STANDARD';
+
+        // 1. Fetch real attribution metadata & stats for this Ad ID from contact_meta_attribution
+        $adMeta = null;
+        $leadStats = ['total_leads' => 0, 'programs' => [], 'degrees' => [], 'times' => []];
+        try {
+            $stmt = $db->prepare("
+                SELECT
+                    ad_id, ad_name, adset_id, adset_name,
+                    campaign_id, campaign_name, form_id, form_name,
+                    platform, sheet_source, program_interest, degree, consultation_time
+                FROM contact_meta_attribution
+                WHERE deleted_at IS NULL
+                  AND (ad_id = ? OR ad_id = ? OR REPLACE(ad_id, 'ag:', '') = ?)
+                ORDER BY COALESCE(lead_created_time, created_at) DESC, id DESC
+            ");
+            $stmt->execute([$rawAdId, 'ag:' . $cleanAdId, $cleanAdId]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            if (!empty($rows)) {
+                $adMeta = $rows[0];
+                $leadStats['total_leads'] = count($rows);
+                foreach ($rows as $r) {
+                    $prog = trim((string)($r['program_interest'] ?? ''));
+                    if ($prog !== '' && count($leadStats['programs']) < 4 && !in_array($prog, $leadStats['programs'], true)) {
+                        $leadStats['programs'][] = $prog;
+                    }
+                    $deg = trim((string)($r['degree'] ?? ''));
+                    if ($deg !== '' && count($leadStats['degrees']) < 4 && !in_array($deg, $leadStats['degrees'], true)) {
+                        $leadStats['degrees'][] = $deg;
+                    }
+                    $tm = trim((string)($r['consultation_time'] ?? ''));
+                    if ($tm !== '' && count($leadStats['times']) < 3 && !in_array($tm, $leadStats['times'], true)) {
+                        $leadStats['times'][] = $tm;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // ignore
+        }
+
+        if ($cleanAdId === '') {
+            return [
+                'ad_id' => $rawAdId,
+                'clean_ad_id' => '',
+                'format' => $adFormat,
+                'source' => 'none',
+                'iframe_html' => '',
+                'iframe_src' => '',
+                'srcdoc_html' => '',
+                'ad_meta' => $adMeta,
+                'lead_stats' => $leadStats,
+                'ad_library_url' => 'https://www.facebook.com/ads/library/',
+            ];
+        }
+
+        // 2. Check temp cache for live Graph API preview
+        $cacheFile = rtrim(sys_get_temp_dir(), '/\\') . '/myerp_meta_ad_preview_' . $cleanAdId . '_' . $adFormat . '.json';
+        if ($overrideToken === '' && is_file($cacheFile) && (time() - @filemtime($cacheFile)) < 1800) {
+            $cached = @json_decode((string)@file_get_contents($cacheFile), true);
+            if (is_array($cached) && !empty($cached['iframe_html'])) {
+                return $cached;
+            }
+        }
+
+        // 3. Collect candidate Meta Access Tokens
+        $tokens = [];
+        if ($overrideToken !== '') {
+            $tokens[] = trim($overrideToken);
+        }
+        try {
+            $stmtTok = $db->query("SELECT setting_value FROM system_settings WHERE setting_key IN ('meta_access_token', 'facebook_ads_token') LIMIT 2");
+            foreach (($stmtTok ? $stmtTok->fetchAll(PDO::FETCH_COLUMN) : []) as $t) {
+                if (is_string($t) && strlen(trim($t)) > 30) {
+                    $tokens[] = trim($t);
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        try {
+            $stmtCfg = $db->query("SELECT user_access_token, access_token FROM meta_app_configs ORDER BY updated_at DESC, id DESC LIMIT 5");
+            foreach (($stmtCfg ? $stmtCfg->fetchAll(PDO::FETCH_ASSOC) : []) as $cfgRow) {
+                foreach (['user_access_token', 'access_token'] as $k) {
+                    $t = trim((string)($cfgRow[$k] ?? ''));
+                    if (strlen($t) > 30 && strpos($t, '***') === false) {
+                        $tokens[] = $t;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        // Also check automation.ideas.edu.vn/meta_report settings API
+        if (empty($tokens)) {
+            $ctx = stream_context_create([
+                'http' => ['timeout' => 3, 'ignore_errors' => true],
+                'ssl' => ['verify_peer' => false, 'verify_peer_name' => false],
+            ]);
+            $remoteJson = @file_get_contents('https://automation.ideas.edu.vn/meta_report/api/index.php?sheet=settings&account_id=676599667843841', false, $ctx);
+            $remoteArr = @json_decode((string)$remoteJson, true);
+            $remoteTok = trim((string)($remoteArr['settings']['meta_access_token'] ?? ''));
+            if (strlen($remoteTok) > 30) {
+                $tokens[] = $remoteTok;
+            }
+        }
+
+        $tokens = array_values(array_unique($tokens));
+        $graphIframeHtml = '';
+        $graphIframeSrc = '';
+        $graphError = null;
+
+        foreach ($tokens as $tok) {
+            $url = "https://graph.facebook.com/v25.0/{$cleanAdId}/previews?ad_format={$adFormat}&access_token=" . urlencode($tok);
+            $ctx = stream_context_create([
+                'http' => ['timeout' => 5, 'ignore_errors' => true],
+                'ssl' => ['verify_peer' => false, 'verify_peer_name' => false],
+            ]);
+            $rawRes = @file_get_contents($url, false, $ctx);
+            $parsed = @json_decode((string)$rawRes, true);
+            if (!empty($parsed['data'][0]['body'])) {
+                $graphIframeHtml = (string)$parsed['data'][0]['body'];
+                if (preg_match('/src=["\']([^"\']+)["\']/i', $graphIframeHtml, $mSrc)) {
+                    $graphIframeSrc = html_entity_decode($mSrc[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                }
+                break;
+            } elseif (!empty($parsed['error']['message'])) {
+                $graphError = (string)$parsed['error']['message'];
+            }
+        }
+
+        $adLibraryUrl = "https://www.facebook.com/ads/library/?id={$cleanAdId}";
+
+        // Build clean, real-data embedded HTML document for iframe srcDoc when Graph API token is expired/unavailable
+        $adNameEsc = htmlspecialchars((string)($adMeta['ad_name'] ?? ('Meta Ad #' . $cleanAdId)), ENT_QUOTES, 'UTF-8');
+        $campNameEsc = htmlspecialchars((string)($adMeta['campaign_name'] ?? 'Chiến dịch Meta Lead Ads'), ENT_QUOTES, 'UTF-8');
+        $adsetNameEsc = htmlspecialchars((string)($adMeta['adset_name'] ?? 'Nhóm quảng cáo mục tiêu'), ENT_QUOTES, 'UTF-8');
+        $formNameEsc = htmlspecialchars((string)($adMeta['form_name'] ?? ($adMeta['sheet_source'] ?? 'Instant Form')), ENT_QUOTES, 'UTF-8');
+        $platRaw = strtolower(trim((string)($adMeta['platform'] ?? 'fb')));
+        $platLabelEsc = htmlspecialchars($platRaw === 'ig' ? 'Instagram Feed & Stories' : 'Facebook Feed & Instant Form', ENT_QUOTES, 'UTF-8');
+        $programsEsc = htmlspecialchars(!empty($leadStats['programs']) ? implode(' • ', $leadStats['programs']) : 'MBA / DBA / Thạc sĩ Quốc tế', ENT_QUOTES, 'UTF-8');
+        $degreesEsc = htmlspecialchars(!empty($leadStats['degrees']) ? implode(' • ', $leadStats['degrees']) : 'Đại học / Thạc sĩ', ENT_QUOTES, 'UTF-8');
+        $timesEsc = htmlspecialchars(!empty($leadStats['times']) ? implode(' • ', $leadStats['times']) : 'Trong giờ hành chính / Tối', ENT_QUOTES, 'UTF-8');
+        $leadsCnt = (int)$leadStats['total_leads'];
+        $cleanAdIdEsc = htmlspecialchars($cleanAdId, ENT_QUOTES, 'UTF-8');
+        $adLibUrlEsc = htmlspecialchars($adLibraryUrl, ENT_QUOTES, 'UTF-8');
+
+        $srcdocHtml = <<<HTML
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { background: #f8fafc; color: #0f172a; padding: 10px; }
+  .fb-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(15,23,42,0.05); }
+  .fb-header { display: flex; align-items: center; justify-content: space-between; padding: 11px 13px; border-bottom: 1px solid #f1f5f9; }
+  .fb-brand { display: flex; align-items: center; gap: 9px; }
+  .fb-avatar { width: 34px; height: 34px; border-radius: 50%; background: #BD1D2D; color: #fff; font-weight: 800; font-size: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .fb-page { font-size: 13px; font-weight: 700; color: #0f172a; line-height: 1.2; }
+  .fb-sub { font-size: 11px; color: #64748b; margin-top: 2px; }
+  .fb-badge { font-size: 10.5px; font-weight: 700; padding: 3px 8px; border-radius: 6px; background: #fef2f2; color: #BD1D2D; }
+  .fb-body { padding: 12px 13px; }
+  .ad-title { font-size: 13.5px; font-weight: 800; color: #0f172a; line-height: 1.4; margin-bottom: 8px; }
+  .meta-grid { display: grid; grid-template-columns: 1fr; gap: 6px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 9px; padding: 9px 11px; font-size: 11.5px; }
+  .meta-row { display: flex; justify-content: space-between; gap: 8px; }
+  .meta-lbl { color: #64748b; flex-shrink: 0; }
+  .meta-val { color: #0f172a; font-weight: 700; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .form-box { margin-top: 9px; padding: 9px 11px; border-radius: 9px; background: #fff1f2; border: 1px solid #fecdd3; font-size: 11.5px; }
+  .form-title { font-weight: 800; color: #991b1b; margin-bottom: 5px; display: flex; justify-content: space-between; }
+  .form-item { color: #334155; margin-top: 3px; line-height: 1.35; }
+  .fb-cta { display: flex; align-items: center; justify-content: space-between; padding: 10px 13px; background: #f8fafc; border-top: 1px solid #e2e8f0; }
+  .cta-info { font-size: 11px; color: #64748b; }
+  .cta-btn { display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px; border-radius: 7px; background: #0f172a; color: #ffffff; font-size: 11.5px; font-weight: 700; text-decoration: none; }
+</style>
+</head>
+<body>
+  <div class="fb-card">
+    <div class="fb-header">
+      <div class="fb-brand">
+        <div class="fb-avatar">ID</div>
+        <div>
+          <div class="fb-page">Viện Quốc Tế IDEAS • Sponsored</div>
+          <div class="fb-sub">{$platLabelEsc} • Ad ID: {$cleanAdIdEsc}</div>
+        </div>
+      </div>
+      <span class="fb-badge">{$leadsCnt} Leads CRM</span>
+    </div>
+    <div class="fb-body">
+      <div class="ad-title">{$adNameEsc}</div>
+      <div class="meta-grid">
+        <div class="meta-row"><span class="meta-lbl">Chiến dịch:</span><span class="meta-val" title="{$campNameEsc}">{$campNameEsc}</span></div>
+        <div class="meta-row"><span class="meta-lbl">Nhóm QC (AdSet):</span><span class="meta-val" title="{$adsetNameEsc}">{$adsetNameEsc}</span></div>
+        <div class="meta-row"><span class="meta-lbl">Biểu mẫu Lead:</span><span class="meta-val" style="color:#BD1D2D" title="{$formNameEsc}">{$formNameEsc}</span></div>
+      </div>
+      <div class="form-box">
+        <div class="form-title"><span>Cấu hình Instant Form thực tế</span><span>Meta Lead Ads</span></div>
+        <div class="form-item">• <strong>Chương trình:</strong> {$programsEsc}</div>
+        <div class="form-item">• <strong>Bằng cấp:</strong> {$degreesEsc}</div>
+        <div class="form-item">• <strong>Khung giờ hẹn 1-1:</strong> {$timesEsc}</div>
+      </div>
+    </div>
+    <div class="fb-cta">
+      <div class="cta-info">Mã định danh bài QC: <strong>{$cleanAdIdEsc}</strong></div>
+      <a class="cta-btn" href="{$adLibUrlEsc}" target="_blank" rel="noopener noreferrer">Mở trên Meta Ad Library ↗</a>
+    </div>
+  </div>
+</body>
+</html>
+HTML;
+
+        $result = [
+            'ad_id' => $rawAdId,
+            'clean_ad_id' => $cleanAdId,
+            'format' => $adFormat,
+            'source' => $graphIframeHtml !== '' ? 'meta_graph_api' : 'crm_attribution_embed',
+            'iframe_html' => $graphIframeHtml,
+            'iframe_src' => $graphIframeSrc,
+            'srcdoc_html' => $srcdocHtml,
+            'ad_library_url' => $adLibraryUrl,
+            'ad_meta' => $adMeta,
+            'lead_stats' => $leadStats,
+            'graph_status' => $graphIframeHtml !== '' ? 'ok' : ($graphError ?: 'token_expired_or_missing'),
+        ];
+
+        if ($graphIframeHtml !== '') {
+            @file_put_contents($cacheFile, json_encode($result, JSON_UNESCAPED_UNICODE));
+        }
+
+        return $result;
+    }
+
+    /**
+     * GET /marketing/meta/ad-preview?ad_id=...&format=MOBILE_FEED_STANDARD
+     */
+    public function getAdPreview(array $auth): void
+    {
+        $rawAdId = trim((string)($_GET['ad_id'] ?? $_GET['id'] ?? ''));
+        $format = trim((string)($_GET['format'] ?? $_GET['ad_format'] ?? 'MOBILE_FEED_STANDARD'));
+        $overrideToken = trim((string)($_GET['access_token'] ?? ''));
+
+        if ($rawAdId === '') {
+            respond(400, null, 'Thiếu tham số ad_id', false);
+        }
+
+        $data = self::resolveAdPreviewData($this->db, $rawAdId, $format, $overrideToken);
+        respond(200, $data);
+    }
+
+    /**
+     * POST /marketing/meta/token
+     */
+    public function saveAccessToken(array $auth, array $body): void
+    {
+        $token = trim((string)($body['access_token'] ?? $body['meta_access_token'] ?? ''));
+        if (strlen($token) < 30) {
+            respond(400, null, 'Meta Access Token không hợp lệ', false);
+        }
+
+        try {
+            $stmt = $this->db->prepare("
+                INSERT INTO system_settings (setting_key, setting_value)
+                VALUES ('meta_access_token', ?)
+                ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+            ");
+            $stmt->execute([$token]);
+        } catch (\Throwable $e) {
+            // fallback if system_settings schema differs
+        }
+
+        respond(200, ['saved' => true]);
+    }
 }

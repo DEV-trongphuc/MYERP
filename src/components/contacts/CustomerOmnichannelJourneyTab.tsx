@@ -1381,44 +1381,125 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
             </span>
           </div>
 
-          {/* Meta Ads & Attribution Details Box */}
-          <div
-            style={{
-              padding: '10px 12px',
-              borderRadius: '10px',
-              background: '#f8fafc',
-              border: '1px solid #e2e8f0',
-              display: 'grid',
-              gridTemplateColumns: 'repeat(2, 1fr)',
-              gap: '8px',
-              fontSize: '0.76rem'
-            }}
-          >
-            <div>
-              <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Chiến dịch (Campaign):</span>
-              <strong style={{ color: '#0f172a', fontWeight: 700 }}>
-                {contact?.utm_campaign || contact?.campaign_name || 'Facebook Ads (Lead Form)'}
-              </strong>
-            </div>
-            <div>
-              <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Nhóm QC (AdSet / Medium):</span>
-              <strong style={{ color: '#0f172a', fontWeight: 700 }}>
-                {contact?.utm_medium || contact?.adset_name || 'cpc / fb_feed'}
-              </strong>
-            </div>
-            <div>
-              <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Mẫu Form / Nội dung (Ad):</span>
-              <strong style={{ color: '#0f172a', fontWeight: 700 }}>
-                {contact?.utm_content || contact?.form_name || contact?.ad_name || 'Lead_Form_MBA_6CT'}
-              </strong>
-            </div>
-            <div>
-              <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Nguồn gốc (Source):</span>
-              <strong style={{ color: '#0f172a', fontWeight: 700 }}>
-                {contact?.source || contact?.source_detail || 'Meta Ads'}
-              </strong>
-            </div>
-          </div>
+          {/* Meta Ads & Attribution Details Box + Live Ad Preview Iframe */}
+          {(() => {
+            const metaAttr = journeyData?.meta_attribution || journeyData?.summary?.meta_attribution || null;
+            const rawAdId = String(metaAttr?.ad_id || contact?.ad_id || '').trim();
+            const cleanAdId = rawAdId.replace(/[^0-9]/g, '');
+            const adPreview = metaAttr?.ad_preview || null;
+            const campaignName = metaAttr?.campaign_name || contact?.utm_campaign || contact?.campaign_name || 'Chưa ghi nhận';
+            const adsetName = metaAttr?.adset_name || contact?.utm_medium || contact?.adset_name || 'Chưa ghi nhận';
+            const adOrFormName = metaAttr?.ad_name || metaAttr?.form_name || contact?.utm_content || contact?.form_name || 'Chưa ghi nhận';
+            const sourceName = metaAttr?.platform
+              ? `${String(metaAttr.platform).toUpperCase()} (${metaAttr.form_name || metaAttr.sheet_source || 'Meta Lead'})`
+              : (contact?.source || contact?.source_detail || 'Chưa ghi nhận');
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(2, 1fr)',
+                    gap: '8px',
+                    fontSize: '0.76rem'
+                  }}
+                >
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Chiến dịch (Campaign):</span>
+                    <strong style={{ color: '#0f172a', fontWeight: 700, wordBreak: 'break-word' }}>
+                      {campaignName}
+                    </strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Nhóm QC (AdSet / Medium):</span>
+                    <strong style={{ color: '#0f172a', fontWeight: 700, wordBreak: 'break-word' }}>
+                      {adsetName}
+                    </strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Bài QC / Mẫu Form (Ad):</span>
+                    <strong style={{ color: '#0f172a', fontWeight: 700, wordBreak: 'break-word' }}>
+                      {adOrFormName}
+                    </strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Nguồn gốc &amp; Ad ID:</span>
+                    <strong style={{ color: '#0f172a', fontWeight: 700 }}>
+                      {sourceName}{cleanAdId ? ` • ID: ${cleanAdId}` : ''}
+                    </strong>
+                  </div>
+                </div>
+
+                {/* Live Meta Ad Preview Iframe when Customer has synced Ad ID */}
+                {cleanAdId !== '' && (
+                  <div
+                    style={{
+                      borderRadius: '12px',
+                      border: '1px solid #e2e8f0',
+                      background: '#ffffff',
+                      overflow: 'hidden',
+                      display: 'flex',
+                      flexDirection: 'column'
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: '8px 12px',
+                        background: '#f8fafc',
+                        borderBottom: '1px solid #e2e8f0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '8px',
+                        fontSize: '0.74rem'
+                      }}
+                    >
+                      <span style={{ fontWeight: 800, color: '#0f172a', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <Eye size={13} style={{ color: '#BD1D2D' }} />
+                        <span>Iframe Bài Quảng Cáo Meta (Ad ID: {cleanAdId})</span>
+                      </span>
+                      <a
+                        href={adPreview?.ad_library_url || `https://www.facebook.com/ads/library/?id=${encodeURIComponent(cleanAdId)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          color: '#BD1D2D',
+                          fontWeight: 700,
+                          textDecoration: 'none',
+                          fontSize: '0.72rem'
+                        }}
+                      >
+                        <span>Mở Ad Library</span>
+                        <ExternalLink size={11.5} />
+                      </a>
+                    </div>
+                    {adPreview?.iframe_src ? (
+                      <iframe
+                        title={`Meta Ad Preview ${cleanAdId}`}
+                        src={adPreview.iframe_src}
+                        style={{ width: '100%', height: '320px', border: 'none', background: '#f8fafc' }}
+                        sandbox="allow-scripts allow-same-origin allow-popups"
+                      />
+                    ) : adPreview?.srcdoc_html ? (
+                      <iframe
+                        title={`Meta Ad Attribution Preview ${cleanAdId}`}
+                        srcDoc={adPreview.srcdoc_html}
+                        style={{ width: '100%', height: '275px', border: 'none', background: '#f8fafc' }}
+                        sandbox="allow-popups allow-top-navigation-by-user-activation"
+                      />
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* 3 Health / Completeness Bars with getCompletenessTone */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>

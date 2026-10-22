@@ -592,297 +592,8 @@ export const HrmAccountingAzWorkspace: React.FC<{
   }, [activeSubtab, loadTaxDeclaration, loadLaborBook, handleCalculateBenefit, handleSimulate, simResult]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem', width: '100%' }}>
-      {/* TOP FILTER & SEGMENT BAR (100% Đồng bộ style Tổng quan lead) */}
-      <div
-        className="card"
-        style={{
-          padding: '0.75rem 1rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '0.75rem'
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexWrap: 'wrap' }}>
-          {/* Segment Switcher Tray: 6 Phân hệ chính */}
-          <div
-            className="mobile-horizontal-strip touch-scroll-x"
-            style={{
-              display: 'flex',
-              padding: '3px',
-              borderRadius: '10px',
-              background: '#f1f5f9',
-              border: '1px solid #e2e8f0',
-              gap: '2px',
-              maxWidth: '100%',
-              overflowX: 'auto',
-              flexWrap: 'nowrap',
-              scrollbarWidth: 'none',
-              WebkitOverflowScrolling: 'touch'
-            }}
-          >
-            {[
-              { id: 'overview' as const, label: 'Tổng quan A-Z', icon: Layers },
-              { id: 'pnl_report' as const, label: 'Báo Cáo P&L & Dòng Tiền', icon: TrendingUp },
-              { id: 'calculator' as const, label: 'Tính Lương Gross ⇄ Net', icon: Calculator },
-              { id: 'journal' as const, label: 'Sổ Nhật Ký Chung', icon: FileSpreadsheet },
-              { id: 'tax_reports' as const, label: 'Tờ khai TNCN & HTKK XML', icon: FileText },
-              { id: 'labor_book' as const, label: 'Sổ QLLĐ (NĐ 145)', icon: BookOpen },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const isAct = activeSubtab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveSubtab(tab.id)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    height: '32px',
-                    padding: '0 14px',
-                    flexShrink: 0,
-                    whiteSpace: 'nowrap',
-                    borderRadius: '7px',
-                    border: 'none',
-                    background: isAct ? '#ffffff' : 'transparent',
-                    color: isAct ? '#BD1D2D' : '#64748b',
-                    fontSize: '0.8rem',
-                    fontWeight: isAct ? 700 : 600,
-                    cursor: 'pointer',
-                    boxShadow: isAct ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <Icon size={14} />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Quick Month Selector */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '7px',
-              height: '32px',
-              padding: '0 10px',
-              borderRadius: '8px',
-              border: '1px solid var(--color-border)',
-              background: 'var(--color-surface, #ffffff)',
-              boxSizing: 'border-box'
-            }}
-          >
-            <Calendar size={13.5} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-            <input
-              type="month"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              style={{
-                border: 'none',
-                outline: 'none',
-                background: 'transparent',
-                fontSize: '0.78rem',
-                fontWeight: 600,
-                color: 'var(--color-text)',
-                padding: 0
-              }}
-            />
-          </div>
-
-          {/* Quick Account Filter (Only in Journal Tab) */}
-          {activeSubtab === 'journal' && (
-            <div style={{ minWidth: '180px' }}>
-              <select
-                value={journalFilterAcc}
-                onChange={e => setJournalFilterAcc(e.target.value)}
-                style={{
-                  height: '32px',
-                  padding: '0 10px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--color-border)',
-                  background: 'var(--color-surface, #ffffff)',
-                  fontSize: '0.78rem',
-                  fontWeight: 600,
-                  color: 'var(--color-text)',
-                  outline: 'none',
-                  width: '100%'
-                }}
-              >
-                <option value="all">Tất cả tài khoản kế toán</option>
-                <option value="334">TK 334 (Phải trả NLĐ)</option>
-                <option value="338">TK 338 (Bảo hiểm & KPCĐ)</option>
-                <option value="3335">TK 3335 (Thuế TNCN)</option>
-                <option value="642">TK 642 (Chi phí QLDN)</option>
-                <option value="112">TK 112 (Tiền gửi ngân hàng)</option>
-                <option value="511">TK 511 (Doanh thu)</option>
-                <option value="133">TK 133 (VAT đầu vào)</option>
-              </select>
-            </div>
-          )}
-        </div>
-
-        {/* Right side Actions & Quick Navigation */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          {onNavigateToPayroll && (
-            <button
-              type="button"
-              className="btn outline sm"
-              onClick={onNavigateToPayroll}
-              style={{ height: '32px', padding: '0 12px', fontSize: '0.76rem', fontWeight: 600 }}
-              title="Mở Bảng tính lương chi tiết"
-            >
-              <span>Bảng tính lương</span>
-              <ChevronRight size={13} />
-            </button>
-          )}
-
-          {onNavigateToProfiles && (
-            <button
-              type="button"
-              className="btn outline sm"
-              onClick={onNavigateToProfiles}
-              style={{ height: '32px', padding: '0 12px', fontSize: '0.76rem', fontWeight: 600 }}
-              title="Mở Danh sách hồ sơ nhân sự"
-            >
-              <span>Hồ sơ nhân sự</span>
-              <ChevronRight size={13} />
-            </button>
-          )}
-
-          <button
-            type="button"
-            className="btn outline sm"
-            onClick={() => {
-              loadOverview();
-              loadJournal();
-              loadFinancial();
-              if (activeSubtab === 'tax_reports') loadTaxDeclaration();
-              if (activeSubtab === 'labor_book') loadLaborBook();
-              toast.success('Đã làm mới dữ liệu kế toán & lương');
-            }}
-            style={{
-              height: '32px',
-              width: '32px',
-              padding: 0,
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-            title="Làm mới dữ liệu"
-          >
-            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-          </button>
-        </div>
-      </div>
-
-      {/* ACTIVE FILTER CHIPS BAR */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '6px',
-          padding: '8px 12px',
-          background: 'var(--color-surface, #ffffff)',
-          border: '1px solid var(--color-border-light)',
-          borderRadius: '10px',
-          fontSize: '0.78rem'
-        }}
-      >
-        <span style={{ color: 'var(--color-text-muted)', fontWeight: 600, marginRight: '4px' }}>Đang hiển thị:</span>
-
-        <span
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '5px',
-            padding: '3px 9px',
-            borderRadius: '8px',
-            background: 'rgba(189, 29, 45, 0.08)',
-            color: 'var(--color-primary, #BD1D2D)',
-            fontSize: '0.75rem',
-            fontWeight: 600
-          }}
-        >
-          <span>Kỳ tháng: {selectedMonth}</span>
-        </span>
-
-        {activeSubtab === 'journal' && journalFilterAcc !== 'all' && (
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '5px',
-              padding: '3px 9px',
-              borderRadius: '8px',
-              background: 'rgba(37, 99, 235, 0.08)',
-              color: '#1d4ed8',
-              fontSize: '0.75rem',
-              fontWeight: 600
-            }}
-          >
-            <span>Tài khoản: TK {journalFilterAcc}</span>
-            <button
-              type="button"
-              onClick={() => setJournalFilterAcc('all')}
-              style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', color: 'inherit', display: 'flex' }}
-            >
-              <X size={12} />
-            </button>
-          </span>
-        )}
-
-        {overview?.kpis.is_projected && (
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '5px',
-              padding: '3px 9px',
-              borderRadius: '8px',
-              background: 'rgba(245, 158, 11, 0.1)',
-              color: '#b45309',
-              fontSize: '0.75rem',
-              fontWeight: 600
-            }}
-          >
-            <span>Chế độ: Dự toán theo hồ sơ (Chưa chốt lương tháng)</span>
-          </span>
-        )}
-
-        <button
-          type="button"
-          onClick={() => {
-            setSelectedMonth(new Date().toISOString().slice(0, 7));
-            setJournalFilterAcc('all');
-            setJournalSearch('');
-            setLaborSearch('');
-          }}
-          style={{
-            marginLeft: 'auto',
-            border: 'none',
-            background: 'transparent',
-            color: 'var(--color-danger, #ef4444)',
-            fontSize: '0.75rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '4px'
-          }}
-        >
-          <RotateCcw size={12} />
-          <span>Về tháng hiện tại</span>
-        </button>
-      </div>
-
-      {/* 4 APP-STANDARD KPI CARDS (Đồng bộ chuẩn .stat-card & .dashboard-kpi-grid) */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
+      {/* 1. 4 TOP KPI CARDS ON VERY TOP ("card này nằm trên đầu") */}
       <div className="dashboard-kpi-grid" style={{ marginBottom: 0 }}>
         {/* KPI 1: TỔNG QUỸ LƯƠNG & NHÂN SỰ */}
         <div className="stat-card" style={{ minHeight: '132px', display: 'flex', flexDirection: 'column' }}>
@@ -974,6 +685,240 @@ export const HrmAccountingAzWorkspace: React.FC<{
           <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.73rem', color: '#64748b', fontWeight: 500 }}>
             Kỳ kê khai Quý {overview?.tax_schedule.quarter || 1} • Khoản 2 Điều 20 BLLĐ 2019
           </div>
+        </div>
+      </div>
+
+      {/* 2. SUBTABS & COMPACT FILTER BAR BELOW KPI CARDS ("đem các subtab nằm dưới -> bộ lọc") */}
+      <div
+        className="card"
+        style={{
+          padding: '0.65rem 0.9rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '0.6rem'
+        }}
+      >
+        {/* Left: Segmented Subtabs */}
+        <div
+          className="mobile-horizontal-strip touch-scroll-x"
+          style={{
+            display: 'inline-flex',
+            padding: '3px',
+            borderRadius: '10px',
+            background: '#f1f5f9',
+            border: '1px solid #e2e8f0',
+            gap: '2px',
+            maxWidth: '100%',
+            overflowX: 'auto',
+            flexWrap: 'nowrap',
+            scrollbarWidth: 'none',
+            WebkitOverflowScrolling: 'touch'
+          }}
+        >
+          {[
+            { id: 'overview' as const, label: 'Tổng quan A-Z', icon: Layers },
+            { id: 'pnl_report' as const, label: 'Báo Cáo P&L & Dòng Tiền', icon: TrendingUp },
+            { id: 'calculator' as const, label: 'Tính Lương Gross ⇄ Net', icon: Calculator },
+            { id: 'journal' as const, label: 'Sổ Nhật Ký Chung', icon: FileSpreadsheet },
+            { id: 'tax_reports' as const, label: 'Tờ khai TNCN & HTKK XML', icon: FileText },
+            { id: 'labor_book' as const, label: 'Sổ QLLĐ (NĐ 145)', icon: BookOpen },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isAct = activeSubtab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveSubtab(tab.id)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  height: '32px',
+                  padding: '0 13px',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
+                  borderRadius: '7px',
+                  border: 'none',
+                  background: isAct ? '#ffffff' : 'transparent',
+                  color: isAct ? '#BD1D2D' : '#64748b',
+                  fontSize: '0.78rem',
+                  fontWeight: isAct ? 700 : 600,
+                  cursor: 'pointer',
+                  boxShadow: isAct ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <Icon size={13.5} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Right: Compact Filters & Quick Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap' }}>
+          {/* Quick Month Selector */}
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              height: '32px',
+              padding: '0 10px',
+              borderRadius: '8px',
+              border: '1px solid #e2e8f0',
+              background: '#ffffff',
+              boxSizing: 'border-box'
+            }}
+          >
+            <Calendar size={13.5} style={{ color: '#64748b', flexShrink: 0 }} />
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              style={{
+                border: 'none',
+                outline: 'none',
+                background: 'transparent',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                color: '#0f172a',
+                padding: 0,
+                width: 'auto'
+              }}
+            />
+          </div>
+
+          {/* Quick Account Filter (Only in Journal Tab) */}
+          {activeSubtab === 'journal' && (
+            <select
+              value={journalFilterAcc}
+              onChange={e => setJournalFilterAcc(e.target.value)}
+              style={{
+                height: '32px',
+                padding: '0 10px',
+                borderRadius: '8px',
+                border: '1px solid #e2e8f0',
+                background: '#ffffff',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                color: '#0f172a',
+                outline: 'none',
+                width: 'auto',
+                minWidth: '175px'
+              }}
+            >
+              <option value="all">Tất cả tài khoản kế toán</option>
+              <option value="334">TK 334 (Phải trả NLĐ)</option>
+              <option value="338">TK 338 (Bảo hiểm & KPCĐ)</option>
+              <option value="3335">TK 3335 (Thuế TNCN)</option>
+              <option value="642">TK 642 (Chi phí QLDN)</option>
+              <option value="112">TK 112 (Tiền gửi ngân hàng)</option>
+              <option value="511">TK 511 (Doanh thu)</option>
+              <option value="133">TK 133 (VAT đầu vào)</option>
+            </select>
+          )}
+
+          {overview?.kpis.is_projected && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                height: '32px',
+                padding: '0 10px',
+                borderRadius: '8px',
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                color: '#475569',
+                fontSize: '0.74rem',
+                fontWeight: 600,
+                whiteSpace: 'nowrap'
+              }}
+              title="Dữ liệu đang hiển thị theo dự toán hồ sơ nhân sự khi chưa chốt bảng lương tháng"
+            >
+              <span>Dự toán hồ sơ</span>
+            </span>
+          )}
+
+          {onNavigateToPayroll && (
+            <button
+              type="button"
+              className="btn outline sm"
+              onClick={onNavigateToPayroll}
+              style={{ height: '32px', padding: '0 10px', fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap' }}
+              title="Mở Bảng tính lương chi tiết"
+            >
+              <span>Bảng lương</span>
+              <ChevronRight size={13} />
+            </button>
+          )}
+
+          {onNavigateToProfiles && (
+            <button
+              type="button"
+              className="btn outline sm"
+              onClick={onNavigateToProfiles}
+              style={{ height: '32px', padding: '0 10px', fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap' }}
+              title="Mở Danh sách hồ sơ nhân sự"
+            >
+              <span>Hồ sơ NS</span>
+              <ChevronRight size={13} />
+            </button>
+          )}
+
+          <button
+            type="button"
+            className="btn outline sm"
+            onClick={() => {
+              setSelectedMonth(new Date().toISOString().slice(0, 7));
+              setJournalFilterAcc('all');
+              setJournalSearch('');
+              setLaborSearch('');
+            }}
+            style={{
+              height: '32px',
+              padding: '0 10px',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              whiteSpace: 'nowrap'
+            }}
+            title="Đặt lại về tháng hiện tại"
+          >
+            <RotateCcw size={12} />
+            <span>Mặc định</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn outline sm"
+            onClick={() => {
+              loadOverview();
+              loadJournal();
+              loadFinancial();
+              if (activeSubtab === 'tax_reports') loadTaxDeclaration();
+              if (activeSubtab === 'labor_book') loadLaborBook();
+              toast.success('Đã làm mới dữ liệu kế toán & lương');
+            }}
+            style={{
+              height: '32px',
+              width: '32px',
+              padding: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}
+            title="Làm mới dữ liệu"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+          </button>
         </div>
       </div>
 
@@ -2345,19 +2290,22 @@ export const HrmAccountingAzWorkspace: React.FC<{
               </div>
 
               {/* Controls */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'nowrap', flexShrink: 0 }}>
                 <select
                   value={taxType}
                   onChange={e => setTaxType(e.target.value as any)}
                   style={{
+                    width: 'auto',
+                    minWidth: '155px',
                     height: '32px',
                     padding: '0 10px',
                     borderRadius: '8px',
-                    border: '1px solid var(--color-border)',
+                    border: '1px solid #e2e8f0',
                     fontSize: '0.78rem',
                     fontWeight: 600,
+                    color: '#0f172a',
                     outline: 'none',
-                    background: 'var(--color-surface, #ffffff)'
+                    background: '#ffffff'
                   }}
                 >
                   <option value="Q">Theo Quý (05/KK)</option>
@@ -2370,14 +2318,17 @@ export const HrmAccountingAzWorkspace: React.FC<{
                     value={taxNum}
                     onChange={e => setTaxNum(Number(e.target.value))}
                     style={{
+                      width: 'auto',
+                      minWidth: '95px',
                       height: '32px',
                       padding: '0 10px',
                       borderRadius: '8px',
-                      border: '1px solid var(--color-border)',
+                      border: '1px solid #e2e8f0',
                       fontSize: '0.78rem',
                       fontWeight: 600,
+                      color: '#0f172a',
                       outline: 'none',
-                      background: 'var(--color-surface, #ffffff)'
+                      background: '#ffffff'
                     }}
                   >
                     {taxType === 'Q' ? (
@@ -2397,12 +2348,13 @@ export const HrmAccountingAzWorkspace: React.FC<{
                     height: '32px',
                     padding: '0 8px',
                     borderRadius: '8px',
-                    border: '1px solid var(--color-border)',
+                    border: '1px solid #e2e8f0',
                     fontSize: '0.78rem',
                     fontWeight: 600,
+                    color: '#0f172a',
                     textAlign: 'center',
                     outline: 'none',
-                    background: 'var(--color-surface, #ffffff)'
+                    background: '#ffffff'
                   }}
                 />
 
@@ -2417,7 +2369,9 @@ export const HrmAccountingAzWorkspace: React.FC<{
                     fontWeight: 700,
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '6px'
+                    gap: '6px',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0
                   }}
                 >
                   <FileText size={13} />

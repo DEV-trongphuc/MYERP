@@ -311,142 +311,37 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = () 
     );
   }, [overviewData, tableSearch]);
 
+  const [adPreviewPayload, setAdPreviewPayload] = useState<any>(null);
+  const [loadingAdPreview, setLoadingAdPreview] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!previewAdModal?.ad_id) {
+      setAdPreviewPayload(null);
+      return;
+    }
+    let cancelled = false;
+    setLoadingAdPreview(true);
+    api
+      .get('/marketing/meta/ad-preview', { params: { ad_id: previewAdModal.ad_id } })
+      .then((res) => {
+        if (!cancelled) {
+          setAdPreviewPayload(res.data?.data ?? res.data ?? null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAdPreviewPayload(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingAdPreview(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [previewAdModal?.ad_id]);
+
   return (
-    <div className="animate-fade" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingBottom: '2rem' }}>
-      {/* 1. TOP FILTER BAR — Clean White Card */}
-      <div
-        className="card"
-        style={{
-          padding: '0.75rem 1rem',
-          borderRadius: 14,
-          border: '1px solid #e2e8f0',
-          background: '#ffffff',
-          boxShadow: '0 1px 3px rgba(15, 23, 42, 0.03)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '0.75rem'
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexWrap: 'wrap' }}>
-          {/* Canonical 3-Tab Segmented Switcher */}
-          <div
-            style={{
-              display: 'inline-flex',
-              padding: '3px',
-              borderRadius: '10px',
-              background: '#f1f5f9',
-              border: '1px solid #e2e8f0',
-              gap: '2px',
-              flexWrap: 'wrap'
-            }}
-          >
-            {[
-              { id: 'funnel' as const, label: 'Tổng quan Phễu & Chi phí', icon: TrendingUp },
-              { id: 'campaigns' as const, label: `Chiến dịch & Nhóm QC (${summary.campaigns_count})`, icon: Megaphone },
-              { id: 'preview' as const, label: `Thư viện Ad Preview (${summary.ads_count})`, icon: Eye }
-            ].map((tab) => {
-              const isAct = viewMode === tab.id;
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setViewMode(tab.id)}
-                  style={{
-                    height: '32px',
-                    padding: '0 14px',
-                    borderRadius: '7px',
-                    border: 'none',
-                    fontSize: '0.8rem',
-                    fontWeight: isAct ? 700 : 600,
-                    background: isAct ? '#ffffff' : 'transparent',
-                    color: isAct ? '#BD1D2D' : '#64748b',
-                    cursor: 'pointer',
-                    boxShadow: isAct ? '0 1px 3px rgba(0, 0, 0, 0.08)' : 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <Icon size={14} style={{ color: isAct ? '#BD1D2D' : '#64748b' }} />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Real Campaign Selector */}
-          <div style={{ minWidth: '240px' }}>
-            <CustomSelect
-              options={campaignOptions}
-              value={selectedCampaignFilter}
-              onChange={(val) => setSelectedCampaignFilter(String(val))}
-              size="sm"
-              width="100%"
-            />
-          </div>
-
-          {/* Date Range Selector */}
-          <div style={{ minWidth: '195px' }}>
-            <CustomSelect
-              options={dateOptions}
-              value={dateRange}
-              onChange={(val) => setDateRange(String(val))}
-              size="sm"
-              width="100%"
-            />
-          </div>
-        </div>
-
-        {/* Right Action: Refresh */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <button
-            type="button"
-            onClick={() => fetchMetaAnalytics(true)}
-            style={{
-              height: '36px',
-              padding: '0 14px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              borderRadius: '8px',
-              border: '1px solid #e2e8f0',
-              background: '#ffffff',
-              color: '#0f172a',
-              fontSize: '0.8rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
-            }}
-            title="Làm mới dữ liệu Meta Attribution thực tế từ DB"
-          >
-            <RefreshCw size={13.5} className={refreshing || loading ? 'animate-spin' : ''} style={{ color: '#BD1D2D' }} />
-            <span>Làm mới dữ liệu</span>
-          </button>
-        </div>
-      </div>
-
-      {errorMsg && (
-        <div
-          className="card"
-          style={{
-            padding: '1rem 1.25rem',
-            borderRadius: 12,
-            border: '1px solid #fecdd3',
-            background: '#fef2f2',
-            color: '#991b1b',
-            fontSize: '0.82rem',
-            fontWeight: 600
-          }}
-        >
-          {errorMsg}
-        </div>
-      )}
-
-      {/* 2. 4 CANONICAL TOP KPI CARDS (100% Real Data from DB) */}
+    <div className="animate-fade" style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem', paddingBottom: '2rem' }}>
+      {/* 1. 4 CANONICAL TOP KPI CARDS ON VERY TOP (100% Real Data from DB) */}
       {loading ? (
         <div className="dashboard-kpi-grid" style={{ marginBottom: 0 }}>
           <KpiCardSkeleton />
@@ -548,6 +443,139 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = () 
               Đối soát thực tế từ Đặt cọc &amp; Học phí đã duyệt trên CRM
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 2. SUBTAB & FILTER BAR BELOW KPI CARDS */}
+      <div
+        className="card"
+        style={{
+          padding: '0.65rem 0.9rem',
+          borderRadius: 14,
+          border: '1px solid #e2e8f0',
+          background: '#ffffff',
+          boxShadow: '0 1px 3px rgba(15, 23, 42, 0.03)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '0.65rem'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexWrap: 'wrap' }}>
+          {/* Canonical 3-Tab Segmented Switcher */}
+          <div
+            style={{
+              display: 'inline-flex',
+              padding: '3px',
+              borderRadius: '10px',
+              background: '#f1f5f9',
+              border: '1px solid #e2e8f0',
+              gap: '2px',
+              flexWrap: 'wrap'
+            }}
+          >
+            {[
+              { id: 'funnel' as const, label: 'Tổng quan Phễu & Chi phí', icon: TrendingUp },
+              { id: 'campaigns' as const, label: `Chiến dịch & Nhóm QC (${summary.campaigns_count})`, icon: Megaphone },
+              { id: 'preview' as const, label: `Thư viện Ad Preview (${summary.ads_count})`, icon: Eye }
+            ].map((tab) => {
+              const isAct = viewMode === tab.id;
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setViewMode(tab.id)}
+                  style={{
+                    height: '32px',
+                    padding: '0 14px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    fontSize: '0.8rem',
+                    fontWeight: isAct ? 700 : 600,
+                    background: isAct ? '#ffffff' : 'transparent',
+                    color: isAct ? '#BD1D2D' : '#64748b',
+                    cursor: 'pointer',
+                    boxShadow: isAct ? '0 1px 3px rgba(0, 0, 0, 0.08)' : 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <Icon size={14} style={{ color: isAct ? '#BD1D2D' : '#64748b' }} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Real Campaign Selector */}
+          <div style={{ minWidth: '230px' }}>
+            <CustomSelect
+              options={campaignOptions}
+              value={selectedCampaignFilter}
+              onChange={(val) => setSelectedCampaignFilter(String(val))}
+              size="sm"
+              width="100%"
+            />
+          </div>
+
+          {/* Date Range Selector */}
+          <div style={{ minWidth: '185px' }}>
+            <CustomSelect
+              options={dateOptions}
+              value={dateRange}
+              onChange={(val) => setDateRange(String(val))}
+              size="sm"
+              width="100%"
+            />
+          </div>
+        </div>
+
+        {/* Right Action: Refresh */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={() => fetchMetaAnalytics(true)}
+            style={{
+              height: '34px',
+              padding: '0 13px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              borderRadius: '8px',
+              border: '1px solid #e2e8f0',
+              background: '#ffffff',
+              color: '#0f172a',
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+            }}
+            title="Làm mới dữ liệu Meta Attribution thực tế từ DB"
+          >
+            <RefreshCw size={13.5} className={refreshing || loading ? 'animate-spin' : ''} style={{ color: '#BD1D2D' }} />
+            <span>Làm mới</span>
+          </button>
+        </div>
+      </div>
+
+      {errorMsg && (
+        <div
+          className="card"
+          style={{
+            padding: '1rem 1.25rem',
+            borderRadius: 12,
+            border: '1px solid #fecdd3',
+            background: '#fef2f2',
+            color: '#991b1b',
+            fontSize: '0.82rem',
+            fontWeight: 600
+          }}
+        >
+          {errorMsg}
         </div>
       )}
 
@@ -1651,8 +1679,39 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = () 
                 )}
 
                 {previewAdModal.ad_id && (
+                  <div
+                    style={{
+                      borderRadius: 12,
+                      border: '1px solid #e2e8f0',
+                      overflow: 'hidden',
+                      background: '#f8fafc'
+                    }}
+                  >
+                    {loadingAdPreview ? (
+                      <div style={{ padding: '1.5rem', textAlign: 'center', fontSize: '0.78rem', color: '#64748b' }}>
+                        Đang tải Iframe bài quảng cáo Meta ({previewAdModal.ad_id})...
+                      </div>
+                    ) : adPreviewPayload?.iframe_src ? (
+                      <iframe
+                        title={`Meta Ad Preview ${previewAdModal.ad_id}`}
+                        src={adPreviewPayload.iframe_src}
+                        style={{ width: '100%', height: '340px', border: 'none', background: '#f8fafc' }}
+                        sandbox="allow-scripts allow-same-origin allow-popups"
+                      />
+                    ) : adPreviewPayload?.srcdoc_html ? (
+                      <iframe
+                        title={`Meta Ad Preview ${previewAdModal.ad_id}`}
+                        srcDoc={adPreviewPayload.srcdoc_html}
+                        style={{ width: '100%', height: '275px', border: 'none', background: '#f8fafc' }}
+                        sandbox="allow-popups allow-top-navigation-by-user-activation"
+                      />
+                    ) : null}
+                  </div>
+                )}
+
+                {previewAdModal.ad_id && (
                   <a
-                    href={`https://www.facebook.com/ads/library/?id=${encodeURIComponent(previewAdModal.ad_id)}`}
+                    href={`https://www.facebook.com/ads/library/?id=${encodeURIComponent(String(previewAdModal.ad_id).replace(/[^0-9]/g, ''))}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
@@ -1670,7 +1729,7 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = () 
                     }}
                   >
                     <ExternalLink size={13.5} />
-                    <span>Tra cứu mẫu quảng cáo trên Meta Ad Library ({previewAdModal.ad_id})</span>
+                    <span>Tra cứu mẫu quảng cáo trên Meta Ad Library ({String(previewAdModal.ad_id).replace(/[^0-9]/g, '')})</span>
                   </a>
                 )}
               </div>

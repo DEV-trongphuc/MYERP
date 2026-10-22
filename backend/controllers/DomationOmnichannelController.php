@@ -268,19 +268,46 @@ class DomationOmnichannelController
         );
 
         // Fetch real Meta Ads attribution record from contact_meta_attribution if present
+        // Match by contact_id OR normalized 9-digit phone OR email so sibling contact rows always resolve attribution
         $metaAttribution = null;
         try {
+            $metaConds = ['contact_id = ?'];
+            $metaParams = [$contactId];
+
+            $rawDigits = preg_replace('/[^0-9]/', '', (string)($contact['phone'] ?: ($contact['mobile'] ?? '')));
+            if (strlen($rawDigits) >= 9) {
+                $phoneNorm9 = substr($rawDigits, -9);
+                $metaConds[] = 'phone_norm9 = ?';
+                $metaParams[] = $phoneNorm9;
+            }
+
+            $contactEmail = strtolower(trim((string)($contact['email'] ?? '')));
+            if ($contactEmail !== '' && strpos($contactEmail, '@') !== false) {
+                $metaConds[] = 'LOWER(TRIM(email)) = ?';
+                $metaParams[] = $contactEmail;
+            }
+
             $stmtMeta = $this->db->prepare("
                 SELECT *
                 FROM contact_meta_attribution
-                WHERE contact_id = ? AND deleted_at IS NULL
-                ORDER BY COALESCE(lead_created_time, created_at) DESC, id DESC
+                WHERE deleted_at IS NULL
+                  AND (" . implode(' OR ', $metaConds) . ")
+                ORDER BY (CASE WHEN contact_id = " . (int)$contactId . " THEN 0 ELSE 1 END) ASC,
+                         COALESCE(lead_created_time, created_at) DESC, id DESC
                 LIMIT 1
             ");
-            $stmtMeta->execute([$contactId]);
+            $stmtMeta->execute(array_values($metaParams));
             $metaAttribution = $stmtMeta->fetch(PDO::FETCH_ASSOC) ?: null;
-            if ($metaAttribution && !empty($metaAttribution['form_answers_json'])) {
-                $metaAttribution['form_answers'] = json_decode((string)$metaAttribution['form_answers_json'], true) ?: [];
+            if ($metaAttribution) {
+                if (!empty($metaAttribution['form_answers_json'])) {
+                    $metaAttribution['form_answers'] = json_decode((string)$metaAttribution['form_answers_json'], true) ?: [];
+                }
+                $rawAdId = trim((string)($metaAttribution['ad_id'] ?? ''));
+                if ($rawAdId !== '') {
+                    require_once __DIR__ . '/MetaAdsController.php';
+                    $metaAttribution['ad_preview'] = MetaAdsController::resolveAdPreviewData($this->db, $rawAdId, 'MOBILE_FEED_STANDARD');
+                    $metaAttribution['clean_ad_id'] = preg_replace('/[^0-9]/', '', $rawAdId);
+                }
             }
         } catch (\Throwable $eMeta) {
             $metaAttribution = null;
