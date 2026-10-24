@@ -883,15 +883,20 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                           )}
                           {/* Icon Box — with badge dot when collapsed */}
                           <div style={{
-                            width: 30, height: 30,
+                            width: 28, height: 28,
+                            borderRadius: '7px',
+                            background: isActive ? '#BD1D2D' : 'rgba(255, 255, 255, 0.05)',
+                            border: isActive ? '1px solid rgba(255, 255, 255, 0.18)' : '1px solid rgba(255, 255, 255, 0.06)',
+                            color: isActive ? '#ffffff' : 'rgba(255, 255, 255, 0.75)',
+                            boxShadow: isActive ? '0 2px 8px rgba(189, 29, 45, 0.35)' : 'none',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            flexShrink: 0, transition: 'all 0.2s', position: 'relative'
+                            flexShrink: 0, transition: 'all 0.2s cubic-bezier(0.22, 1, 0.36, 1)', position: 'relative'
                           }}>
-                            <AppIcon name={iconKey || name} size={26} />
+                            {Icon ? <Icon size={16} /> : <AppIcon name={iconKey || name} size={18} />}
                             {effectiveCollapsed && badgeCount > 0 && (
                               <div style={{
-                                position: 'absolute', top: 0, right: 0, width: 8, height: 8,
-                                borderRadius: '50%', background: badgeKey === 'gatekeeper' ? '#f59e0b' : '#ef4444',
+                                position: 'absolute', top: -2, right: -2, width: 8, height: 8,
+                                borderRadius: '50%', background: '#BD1D2D',
                                 boxShadow: '0 0 0 1.5px #140e11'
                               }} />
                             )}
@@ -910,7 +915,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                                   alignItems: 'center',
                                   justifyContent: 'center',
                                   padding: badgeCount > 9 ? '0 5px' : '0',
-                                  background: badgeKey === 'gatekeeper' ? '#f59e0b' : '#ef4444',
+                                  background: '#BD1D2D',
                                   color: 'white',
                                   fontWeight: 700,
                                   lineHeight: 1
