@@ -1,7 +1,49 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { AppIcon } from '../common/AppIcons';
-import { LayoutDashboard, Users, GitBranch, Settings, ChevronLeft, Webhook, Link2, Database, ShieldCheck, Ticket, Plus, Scale, Filter, Cpu, Building2, TrendingUp, FileText, Calendar, Package, Receipt, CreditCard, BarChart2, Truck, File, Boxes, Layers, Clock, Home, CheckSquare, LifeBuoy, User, Clipboard, Globe, GraduationCap, Bot, Brain, DollarSign } from 'lucide-react';
+import {
+  AnimateIcon,
+  createAnimatedLucideFallback,
+  LayoutDashboard,
+  Users,
+  GitBranch,
+  Settings,
+  ChevronLeft,
+  Webhook,
+  Link2,
+  Database,
+  ShieldCheck,
+  Ticket,
+  Plus,
+  Scale,
+  Filter,
+  Cpu,
+  Building2,
+  TrendingUp,
+  FileText,
+  Calendar,
+  Package,
+  Receipt,
+  CreditCard,
+  BarChart2,
+  Truck,
+  File,
+  Boxes,
+  Layers,
+  Clock,
+  Home,
+  CheckSquare,
+  LifeBuoy,
+  User,
+  Clipboard,
+  Globe,
+  GraduationCap,
+  Bot,
+  Brain,
+  DollarSign,
+} from '../animate-ui/icons';
 import { useAuth } from '../../contexts/AuthContext';
+
+const AnimatedAppIcon = createAnimatedLucideFallback(AppIcon, 'default');
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useEffect, useState, useRef, Fragment } from 'react';
 import { fetchAPI } from '../../utils/api';
@@ -707,77 +749,83 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
         {['admin', 'superadmin', 'super_admin', 'director', 'sale', 'sales', 'marketing'].includes(String(user?.role || '').toLowerCase()) && (
           <div style={{ padding: effectiveCollapsed ? '0.5rem 0.25rem' : '0.875rem 0.75rem', display: 'flex', justifyContent: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.06)' }}>
             {effectiveCollapsed ? (
-              <button
-                onClick={() => {
-                  window.dispatchEvent(new CustomEvent('open-quick-add-lead'));
-                  if (onMobileClose) onMobileClose();
-                }}
-                style={{
-                  width: 32, height: 32, borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #BD1D2D 0%, #9e1824 50%, #660f17 100%)',
-                  color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  cursor: 'pointer', boxShadow: '0 2px 8px rgba(189, 29, 45, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15)', transition: 'all 0.2s'
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(189, 29, 45, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2)';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(189, 29, 45, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15)';
-                }}
-                title={((user?.role as string) === 'sale' || (user?.role as string) === 'sales') ? t("Thêm data cá nhân") : t("Thêm data nhanh")}
-              >
-                <Plus size={16} />
-              </button>
+              <AnimateIcon animateOnHover asChild>
+                <button
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent('open-quick-add-lead'));
+                    if (onMobileClose) onMobileClose();
+                  }}
+                  style={{
+                    width: 32, height: 32, borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #BD1D2D 0%, #9e1824 50%, #660f17 100%)',
+                    color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', boxShadow: '0 2px 8px rgba(189, 29, 45, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15)', transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(189, 29, 45, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(189, 29, 45, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15)';
+                  }}
+                  title={((user?.role as string) === 'sale' || (user?.role as string) === 'sales') ? t("Thêm data cá nhân") : t("Thêm data nhanh")}
+                >
+                  <Plus size={16} />
+                </button>
+              </AnimateIcon>
             ) : (
-              <button
-                onClick={() => {
-                  window.dispatchEvent(new CustomEvent('open-quick-add-lead'));
-                  if (onMobileClose) onMobileClose();
-                }}
-                className="btn primary"
-                style={{
-                  width: '100%', height: 34, borderRadius: '8px',
-                  background: 'linear-gradient(135deg, #BD1D2D 0%, #9e1824 50%, #660f17 100%)',
-                  color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  gap: 6, fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer',
-                  boxShadow: '0 2px 8px rgba(189, 29, 45, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15)', transition: 'all 0.2s'
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(189, 29, 45, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2)';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(189, 29, 45, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15)';
-                }}
-              >
-                <Plus size={14} /> {((user?.role as string) === 'sale' || (user?.role as string) === 'sales') ? t("Thêm data cá nhân") : t("Thêm data nhanh")}
-              </button>
+              <AnimateIcon animateOnHover asChild>
+                <button
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent('open-quick-add-lead'));
+                    if (onMobileClose) onMobileClose();
+                  }}
+                  className="btn primary"
+                  style={{
+                    width: '100%', height: 34, borderRadius: '8px',
+                    background: 'linear-gradient(135deg, #BD1D2D 0%, #9e1824 50%, #660f17 100%)',
+                    color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    gap: 6, fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(189, 29, 45, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15)', transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(189, 29, 45, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(189, 29, 45, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15)';
+                  }}
+                >
+                  <Plus size={14} /> {((user?.role as string) === 'sale' || (user?.role as string) === 'sales') ? t("Thêm data cá nhân") : t("Thêm data nhanh")}
+                </button>
+              </AnimateIcon>
             )}
           </div>
         )}
 
         {/* Collapse Button */}
-        <button
-          onClick={onToggleCollapse}
-          className="responsive-hide-mobile no-active-scale"
-          style={{
-            position: 'absolute', right: -12, top: '50%', transform: 'translateY(-50%)',
-            width: 24, height: 24, borderRadius: '50%', background: 'var(--color-primary, #BD1D2D)', color: '#ffffff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', zIndex: 200, border: '1px solid rgba(255, 255, 255, 0.2)',
-            boxShadow: '0 2px 10px rgba(189, 29, 45, 0.45)', transition: 'all 0.2s',
-            opacity: isHovered ? 1 : 0,
-            visibility: isHovered ? 'visible' : 'hidden',
-            pointerEvents: isHovered ? 'auto' : 'none'
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.transform = 'translateY(-50%) scale(1.1)';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.transform = 'translateY(-50%) scale(1)';
-          }}
-        >
-          <ChevronLeft size={14} style={{ transform: effectiveCollapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s' }} />
-        </button>
+        <AnimateIcon animateOnHover asChild>
+          <button
+            onClick={onToggleCollapse}
+            className="responsive-hide-mobile no-active-scale"
+            style={{
+              position: 'absolute', right: -12, top: '50%', transform: 'translateY(-50%)',
+              width: 24, height: 24, borderRadius: '50%', background: 'var(--color-primary, #BD1D2D)', color: '#ffffff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', zIndex: 200, border: '1px solid rgba(255, 255, 255, 0.2)',
+              boxShadow: '0 2px 10px rgba(189, 29, 45, 0.45)', transition: 'all 0.2s',
+              opacity: isHovered ? 1 : 0,
+              visibility: isHovered ? 'visible' : 'hidden',
+              pointerEvents: isHovered ? 'auto' : 'none'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'translateY(-50%) scale(1.1)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'translateY(-50%) scale(1)';
+            }}
+          >
+            <ChevronLeft size={14} style={{ transform: effectiveCollapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s' }} />
+          </button>
+        </AnimateIcon>
 
         {/* Nav */}
         <div
@@ -868,7 +916,16 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                       }}
                     >
                       {() => (
-                        <>
+                        <AnimateIcon
+                          animateOnHover
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            width: '100%',
+                            justifyContent: effectiveCollapsed ? 'center' : 'flex-start',
+                          }}
+                        >
                           {isActive && (
                             <div style={{
                               position: 'absolute',
@@ -881,7 +938,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                               zIndex: 10
                             }} />
                           )}
-                          {/* Icon Box — with badge dot when collapsed */}
+                          {/* Icon Box — Minimalist Executive Luxury (Monochrome Slate + Brand Crimson Active) */}
                           <div style={{
                             width: 28, height: 28,
                             borderRadius: '7px',
@@ -892,7 +949,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             flexShrink: 0, transition: 'all 0.2s cubic-bezier(0.22, 1, 0.36, 1)', position: 'relative'
                           }}>
-                            {Icon ? <Icon size={16} /> : <AppIcon name={iconKey || name} size={18} />}
+                            {Icon ? <Icon size={16} /> : <AnimatedAppIcon name={iconKey || name} size={18} />}
                             {effectiveCollapsed && badgeCount > 0 && (
                               <div style={{
                                 position: 'absolute', top: -2, right: -2, width: 8, height: 8,
@@ -925,7 +982,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                               )}
                             </div>
                           )}
-                        </>
+                        </AnimateIcon>
                       )}
                     </NavLink>
                   );
