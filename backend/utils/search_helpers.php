@@ -93,16 +93,39 @@ function getPhoneSearchVariants(string $search): array {
 }
 
 /**
- * Inspect and cache table columns per request so queries never reference missing columns.
+ * Inspect and cache table columns per request + persistent disk cache (1-hour TTL)
+ * so queries never reference missing columns and `SHOW COLUMNS` runs at most once per deployment/hour.
  */
 function getCrmTableColumnsCache(?PDO $db, string $table = 'contacts'): array {
-    static $cache = [];
-    if (isset($cache[$table])) {
+    static $cache = null;
+    static $cacheFile = null;
+    static $dirty = false;
+
+    if ($cache === null) {
+        $cache = [];
+        $cacheFile = rtrim(sys_get_temp_dir(), '/\\') . '/myerp_crm_schema_cols_v4_' . substr(md5(__DIR__), 0, 12) . '.json';
+        if (is_file($cacheFile)) {
+            $mtime = @filemtime($cacheFile);
+            if ($mtime && (time() - $mtime) < 3600) {
+                $raw = @file_get_contents($cacheFile);
+                if (is_string($raw) && $raw !== '') {
+                    $decoded = @json_decode($raw, true);
+                    if (is_array($decoded)) {
+                        $cache = $decoded;
+                    }
+                }
+            }
+        }
+    }
+
+    if (isset($cache[$table]) && is_array($cache[$table])) {
         return $cache[$table];
     }
+
     if ($db instanceof PDO) {
         try {
-            $stmt = $db->query("SHOW COLUMNS FROM `{$table}`");
+            $safeTable = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
+            $stmt = $db->query("SHOW COLUMNS FROM `{$safeTable}`");
             if ($stmt) {
                 $cols = [];
                 foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
@@ -112,6 +135,9 @@ function getCrmTableColumnsCache(?PDO $db, string $table = 'contacts'): array {
                 }
                 if (!empty($cols)) {
                     $cache[$table] = $cols;
+                    if ($cacheFile) {
+                        @file_put_contents($cacheFile, json_encode($cache, JSON_UNESCAPED_UNICODE), LOCK_EX);
+                    }
                     return $cols;
                 }
             }
@@ -2161,17 +2187,25 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
  * and appends bound parameters to $outParams.
  */
 function buildContactOmnichannelFilterClause(PDO $db, string $alias, array $paramsInput, array &$outParams): string {
-    static $hasEngagementScoreCol = null;
-    if ($hasEngagementScoreCol === null) {
-        try {
-            $stmt = $db->query("SHOW COLUMNS FROM contacts LIKE 'engagement_score'");
-            $hasEngagementScoreCol = ($stmt && $stmt->fetch(PDO::FETCH_ASSOC)) ? true : false;
-        } catch (\Throwable $e) {
-            $hasEngagementScoreCol = false;
+    // Fast-path early exit when no omnichannel filter parameter is provided
+    $omnichannelKeys = [
+        'engagement_status', 'engagement_level', 'min_engagement_score', 'max_engagement_score',
+        'email_engagement', 'web_behavior', 'automation_flow', 'automation_flow_filter',
+        'voucher_status', 'voucher_filter', 'survey_filter', 'marketing_status', 'channel_reachability'
+    ];
+    $hasAnyFilter = false;
+    foreach ($omnichannelKeys as $k) {
+        if (isset($paramsInput[$k]) && $paramsInput[$k] !== '' && strtolower(trim((string)$paramsInput[$k])) !== 'all') {
+            $hasAnyFilter = true;
+            break;
         }
     }
+    if (!$hasAnyFilter) {
+        return '';
+    }
 
-    if (!$hasEngagementScoreCol) {
+    $contactCols = getCrmTableColumnsCache($db, 'contacts');
+    if (empty($contactCols['engagement_score'])) {
         return '';
     }
 

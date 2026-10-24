@@ -888,7 +888,7 @@ class FinanceController
 
         // Fetch entities for all these rows
         if (!empty($rows)) {
-            $ids = array_column($rows, 'id');
+            $ids = array_values(array_unique(array_column($rows, 'id')));
             $in = str_repeat('?,', count($ids) - 1) . '?';
             $sEE = $this->db->prepare("SELECT ee.*, c.full_name, c.avatar_url FROM expense_entities ee LEFT JOIN contacts c ON ee.entity_type='contact' AND ee.entity_id=c.id WHERE ee.expense_id IN ($in)");
             $sEE->execute($ids);
@@ -1008,7 +1008,7 @@ class FinanceController
                 $stmtTeam = $this->db->prepare("SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
                 $stmtTeam->execute([$uid]);
                 $teamMemberIds = $stmtTeam->fetchAll(PDO::FETCH_COLUMN) ?: [];
-                $userIds = array_merge([$uid], array_map('intval', $teamMemberIds));
+                $userIds = array_values(array_unique(array_merge([$uid], array_map('intval', $teamMemberIds))));
                 $placeholders = implode(',', array_fill(0, count($userIds), '?'));
                 $where[] = "(e.created_by IN ($placeholders) OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR e.refunder_id = ? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ? OR EXISTS (SELECT 1 FROM notes n JOIN note_mentions nm ON nm.note_id = n.id WHERE n.entity_type = 'expense' AND n.entity_id = e.id AND nm.user_id = ?))";
                 $p = array_merge($p, $userIds, [$uid, $uid, $uid, $uid, '%"' . $uid . '"%', '%' . $uid . '%', $uid]);
@@ -2490,27 +2490,31 @@ class FinanceController
         $tid = (int)($auth['tenant_id'] ?? 1);
         $month = trim($_GET['month'] ?? date('Y-m'));
         if (!preg_match('/^\d{4}-\d{2}$/', $month)) $month = date('Y-m');
+        $monthStart = $month . '-01';
+        $monthEnd = date('Y-m-t', strtotime($monthStart));
+        $monthStartTs = $monthStart . ' 00:00:00';
+        $monthEndTs = $monthEnd . ' 23:59:59';
 
         // 1. DOANH THU THỰC TẾ
-        // Doanh thu Đặt cọc
+        // Doanh thu Đặt cọc (SARGable date range + soft-delete filter)
         $depStmt = $this->db->prepare("
             SELECT COALESCE(SUM(d.price), 0) as total_deposit
             FROM deposits d
             JOIN contacts c ON d.contact_id = c.id
-            WHERE c.tenant_id = ? AND d.status = 'approved' AND DATE_FORMAT(d.created_at, '%Y-%m') = ?
+            WHERE c.tenant_id = ? AND d.deleted_at IS NULL AND d.status = 'approved' AND d.created_at >= ? AND d.created_at <= ?
         ");
-        $depStmt->execute([$tid, $month]);
+        $depStmt->execute([$tid, $monthStartTs, $monthEndTs]);
         $depRev = (float)($depStmt->fetch(PDO::FETCH_ASSOC)['total_deposit'] ?? 0);
 
-        // Doanh thu Hóa đơn (Invoices Paid)
+        // Doanh thu Hóa đơn (Invoices Paid - SARGable date range)
         $invStmt = $this->db->prepare("
             SELECT 
                 COALESCE(SUM(total), 0) as total_inv,
                 COALESCE(SUM(tax), 0) as vat_out
             FROM invoices
-            WHERE tenant_id = ? AND status = 'paid' AND deleted_at IS NULL AND DATE_FORMAT(paid_at, '%Y-%m') = ?
+            WHERE tenant_id = ? AND status = 'paid' AND deleted_at IS NULL AND paid_at >= ? AND paid_at <= ?
         ");
-        $invStmt->execute([$tid, $month]);
+        $invStmt->execute([$tid, $monthStartTs, $monthEndTs]);
         $invData = $invStmt->fetch(PDO::FETCH_ASSOC) ?: [];
         $invRev  = (float)($invData['total_inv'] ?? 0);
         $vatOut  = (float)($invData['vat_out'] ?? 0);
@@ -2557,17 +2561,17 @@ class FinanceController
         $insuranceDN  = round($payrollGross * 0.235); // 23.5% BHXH, BHYT, BHTN, KPCĐ
         $totalHRMCost = $payrollGross + $insuranceDN;
 
-        // 3. CHI PHÍ VẬN HÀNH & MARKETING (Expenses)
+        // 3. CHI PHÍ VẬN HÀNH & MARKETING (Expenses - SARGable date range)
         $expStmt = $this->db->prepare("
             SELECT 
                 category,
                 COALESCE(SUM(amount), 0) as cat_amount,
                 COALESCE(SUM(vat_amount), 0) as cat_vat
             FROM expenses
-            WHERE tenant_id = ? AND status = 'approved' AND deleted_at IS NULL AND DATE_FORMAT(date, '%Y-%m') = ?
+            WHERE tenant_id = ? AND status = 'approved' AND deleted_at IS NULL AND date >= ? AND date <= ?
             GROUP BY category
         ");
-        $expStmt->execute([$tid, $month]);
+        $expStmt->execute([$tid, $monthStart, $monthEnd]);
         $expCategories = $expStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
         $totalOperatingExp = 0.0;
@@ -2586,13 +2590,13 @@ class FinanceController
         }
         $totalOtherExpense = $totalOperatingExp + $totalMarketingExp;
 
-        // 4. MUA HÀNG & GIÁ VỐN (Purchase Orders Paid/Received)
+        // 4. MUA HÀNG & GIÁ VỐN (Purchase Orders Paid/Received - SARGable date range)
         $poStmt = $this->db->prepare("
             SELECT COALESCE(SUM(paid_amount), 0) as po_paid, COALESCE(SUM(total), 0) as po_total
             FROM purchase_orders
-            WHERE tenant_id = ? AND status IN ('ordered', 'received') AND payment_status IN ('partial', 'paid') AND DATE_FORMAT(order_date, '%Y-%m') = ?
+            WHERE tenant_id = ? AND status IN ('ordered', 'received') AND payment_status IN ('partial', 'paid') AND order_date >= ? AND order_date <= ?
         ");
-        $poStmt->execute([$tid, $month]);
+        $poStmt->execute([$tid, $monthStart, $monthEnd]);
         $poData = $poStmt->fetch(PDO::FETCH_ASSOC) ?: [];
         $cogsPO = (float)($poData['po_paid'] ?? 0);
 

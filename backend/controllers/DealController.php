@@ -707,7 +707,7 @@ class DealController {
     public function bulkDelete(array $auth): void {
         if (in_array($auth['role'], ['sales', 'viewer'], true)) respond(403, null, 'Bạn không có quyền xóa deal', false);
         $b = getBody();
-        $ids = $b['ids'] ?? [];
+        $ids = is_array($b['ids'] ?? null) ? array_values(array_filter(array_map('intval', $b['ids']), fn($x) => $x > 0)) : [];
         if (empty($ids)) respond(400, null, 'ID không hợp lệ', false);
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
         
@@ -869,9 +869,9 @@ class DealController {
 
     private function getScope(array $auth, string $module, string $action): string {
         $permissionsJson = null;
-        $stmtQ = $this->db->prepare("SELECT permissions_json FROM users WHERE id = ? LIMIT 1");
-        $stmtQ->execute([$auth['user_id']]);
-        $resQ = $stmtQ->fetch(PDO::FETCH_ASSOC);
+        static $uCache = []; $uid = (int)($auth['user_id'] ?? 0); if (!isset($uCache[$uid])) { $stmtQ = $this->db->prepare("SELECT u.permissions_json, u.team_id, t.name as team_name, u.job_title, u.department FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ? LIMIT 1"); $stmtQ->execute([$uid]); $uCache[$uid] = $stmtQ->fetch(PDO::FETCH_ASSOC) ?: []; } $resQ = $uCache[$uid];
+        // Loaded from $uCache[$uid] above
+        $permissionsJson = (!empty($resQ['permissions_json'])) ? json_decode($resQ['permissions_json'], true) : null;
         if ($resQ && !empty($resQ['permissions_json'])) {
             $permissionsJson = json_decode($resQ['permissions_json'], true);
         }
@@ -882,9 +882,9 @@ class DealController {
             $isMarketing = true;
         }
         if (!$isMarketing || !$isAcademic) {
-            $stmtM = $this->db->prepare("SELECT u.team_id, t.name as team_name, u.job_title, u.department FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ? LIMIT 1");
-            $stmtM->execute([$auth['user_id']]);
-            $uInfo = $stmtM->fetch(PDO::FETCH_ASSOC);
+            // Reuse $resQ from $uCache[$uid]
+            // Single query already includes team_name, job_title, department
+            $uInfo = $resQ ?: null;
             if ($uInfo) {
                 $tName = mb_strtolower($uInfo['team_name'] ?? '');
                 $jTitle = mb_strtolower($uInfo['job_title'] ?? '');
@@ -978,7 +978,7 @@ class DealController {
         respond(200, $stages, 'Lấy danh sách giai đoạn thành công');
     }
 
-    private function getSetting(string $key, string $default): string {
+    private function getSetting(string $key, string $default): string { static $sc = null; if ($sc === null) { $sc = []; try { foreach ($this->db->query("SELECT setting_key, setting_value FROM system_settings")->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) { $sc[(string)$r['setting_key']] = (string)($r['setting_value'] ?? ''); } } catch (\Throwable $e) {} } return array_key_exists($key, $sc) ? $sc[$key] : $default; } private function getSettingLegacyUnused(string $key, string $default): string {
         $stmt = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ?");
         $stmt->execute([$key]);
         $val = $stmt->fetchColumn();

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Wallet,
@@ -1403,7 +1404,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   };
 
   return (
-    <AnimatePresence>
+    createPortal(<AnimatePresence>
       {isOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: baseZIndex }}>
           <motion.div
@@ -1427,7 +1428,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
           />
 
           <motion.div
-            className="drawer-sheet"
+            className="drawer-sheet drawer-panel"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
@@ -1445,7 +1446,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
               boxShadow: isMobile ? 'none' : '-10px 0 30px rgba(0, 0, 0, 0.15)',
               display: 'flex',
               flexDirection: 'column',
-              zIndex: baseZIndex + 1,
+              zIndex: baseZIndex + 5, ...({ '--drawer-panel-z': baseZIndex + 5 } as any),
               overflow: 'hidden',
               willChange: 'transform, opacity',
               transform: 'translate3d(0, 0, 0)',
@@ -3717,7 +3718,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  zIndex: baseZIndex + 100,
+                  zIndex: 2147483646,
                   padding: '20px'
                 }}
                 onClick={() => setPreviewQrModalUrl(null)}
@@ -3767,11 +3768,11 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
               onContinue={() => setShowExitConfirm(false)}
               title="Lưu bản nháp đề xuất thanh toán?"
               message="Bạn có thông tin đề xuất đang nhập dở dang. Bạn có muốn lưu bản nháp để tiếp tục hoàn thiện sau không?"
-              zIndex={baseZIndex + 50}
+              zIndex={2147483646}
             />
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>, document.body)
   );
 };

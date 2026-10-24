@@ -41,12 +41,22 @@ html, body {
   --safe-area-right: env(safe-area-inset-right, 0px);
 }
 
-/* 4. Drawer & Modal Z-Index Hierarchy (Strict Hiến Chương MYERP) */
+/* 4. Drawer & Modal Z-Index Hierarchy (Strict Hiến Chương MYERP)
+   NOTE: Never place 10-digit integers inside var(--x, 21474836xx) fallbacks in CSS files because
+   LightningCSS parses var() fallback tokens as 32-bit float (f32) and truncates them to 2147480000. */
 .drawer-backdrop {
   z-index: 2147483620 !important;
 }
-.drawer-panel {
+.drawer-backdrop[style*="--drawer-backdrop-z"] {
+  z-index: var(--drawer-backdrop-z) !important;
+}
+.drawer-panel,
+.drawer-sheet {
   z-index: 2147483625 !important;
+}
+.drawer-panel[style*="--drawer-panel-z"],
+.drawer-sheet[style*="--drawer-panel-z"] {
+  z-index: var(--drawer-panel-z) !important;
 }
 
 /* 5. Small Mobile (320px - 374px) Ultra-Tight Safety */
@@ -4321,19 +4331,17 @@ textarea:not(.chat-input-textarea), .form-textarea, textarea.form-input, textare
   -webkit-backdrop-filter: blur(6px) !important;
 }
 
-.overlay-backdrop,
-.custom-modal-overlay {
-  z-index: 2147483645; /* Tier 5: Ensure outer modal containers are always on top of drawers */
-  overscroll-behavior-x: contain;
-}
-
+.overlay-backdrop:not([style*="position: absolute"]):not([style*="position:absolute"]):not(.stats-modal-backdrop),
+.custom-modal-overlay,
 .modal-above-drawer {
-  z-index: var(--modal-z, 2147483645);
+  z-index: 2147483646 !important; /* Tier 5: Ensure outer modal containers are always on top of drawers */
   overscroll-behavior-x: contain;
 }
 
-.modal-above-drawer:not([style*="z-index"]) {
-  z-index: var(--modal-z, 2147483645) !important;
+.overlay-backdrop[style*="--modal-z"]:not([style*="position: absolute"]):not([style*="position:absolute"]):not(.stats-modal-backdrop),
+.custom-modal-overlay[style*="--modal-z"],
+.modal-above-drawer[style*="--modal-z"] {
+  z-index: var(--modal-z) !important;
 }
 
 /* Inner absolute backdrop inside a fixed modal wrapper must stay behind its sibling modal card */
@@ -4363,11 +4371,15 @@ textarea:not(.chat-input-textarea), .form-textarea, textarea.form-input, textare
   background: rgba(0, 0, 0, 0.6) !important;
   backdrop-filter: blur(6px) !important;
   -webkit-backdrop-filter: blur(6px) !important;
-  z-index: var(--drawer-backdrop-z, 2147483620) !important;
+  z-index: 2147483620 !important;
   overscroll-behavior-x: contain;
   cursor: pointer !important;
   will-change: opacity;
   transition: opacity 0.22s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.drawer-backdrop[style*="--drawer-backdrop-z"] {
+  z-index: var(--drawer-backdrop-z) !important;
 }
 
 @media (min-width: 768px) {
@@ -4420,7 +4432,7 @@ textarea:not(.chat-input-textarea), .form-textarea, textarea.form-input, textare
 .ticket-drawer,
 .company-drawer,
 .deposit-drawer {
-  z-index: var(--drawer-panel-z, 2147483625);
+  z-index: 2147483625 !important;
   overscroll-behavior-x: contain;
   will-change: transform, opacity;
   transform: translate3d(0, 0, 0);
@@ -4428,8 +4440,15 @@ textarea:not(.chat-input-textarea), .form-textarea, textarea.form-input, textare
   contain: layout style;
 }
 
-.drawer-panel:not([style*="z-index"]) {
-  z-index: var(--drawer-panel-z, 2147483625) !important;
+.drawer-sheet[style*="--drawer-panel-z"],
+.drawer-panel[style*="--drawer-panel-z"],
+.crm-drawer[style*="--drawer-panel-z"],
+.drawer-content[style*="--drawer-panel-z"],
+.deal-drawer[style*="--drawer-panel-z"],
+.ticket-drawer[style*="--drawer-panel-z"],
+.company-drawer[style*="--drawer-panel-z"],
+.deposit-drawer[style*="--drawer-panel-z"] {
+  z-index: var(--drawer-panel-z) !important;
 }
 
 /* Mobile Header / Sidebar alignment */
@@ -5183,8 +5202,13 @@ div[role="status"] {
     border: none !important;
     display: flex !important;
     flex-direction: column !important;
-    z-index: 2147483625;
+    z-index: 2147483625 !important;
     background: var(--color-surface) !important;
+  }
+
+  .drawer-sheet[style*="--drawer-panel-z"],
+  .drawer-panel[style*="--drawer-panel-z"] {
+    z-index: var(--drawer-panel-z) !important;
   }
 
   .modal-body, .drawer-body {

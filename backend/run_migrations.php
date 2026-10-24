@@ -235,7 +235,7 @@ try {
     $conn->query("INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES ('require_lead_claim', '0')");
     $conn->query("INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES ('require_checkin_lead', '0')");
     $conn->query("REPLACE INTO system_settings (setting_key, setting_value) VALUES ('frontend_url', 'https://myerp.ideas.edu.vn')");
-    $conn->query("UPDATE users SET is_active = 1, status = 'active' WHERE email IS NOT NULL AND email != '' AND (is_active = 0 OR status IS NULL OR status != 'active')");
+    $conn->query("UPDATE users SET status = IF(is_active = 0, 'inactive', 'active') WHERE status IS NULL OR status = '' OR (is_active = 0 AND status = 'active')");
 
     // 5. Ensure 2FA columns exist in users table
     $chk2FA = $conn->query("SHOW COLUMNS FROM users LIKE 'two_factor_enabled'");
@@ -1724,7 +1724,7 @@ try {
     if ($currentVersion < 228) {
         $logMsg("Bắt đầu nâng cấp CSDL phiên bản 228...", "info");
         try {
-            $conn->query("UPDATE users SET is_active = 1, status = 'active' WHERE email IS NOT NULL AND email != '' AND (is_active = 0 OR status IS NULL OR status != 'active')");
+            $conn->query("UPDATE users SET status = IF(is_active = 0, 'inactive', 'active') WHERE status IS NULL OR status = '' OR (is_active = 0 AND status = 'active')");
             $conn->query("REPLACE INTO system_settings (setting_key, setting_value) VALUES ('frontend_url', 'https://myerp.ideas.edu.vn')");
             $conn->query("REPLACE INTO system_settings (setting_key, setting_value) VALUES ('ses_sender_email', 'systemnoti@ideas.edu.vn')");
             $conn->query("REPLACE INTO system_settings (setting_key, setting_value) VALUES ('ses_sender_name', 'IDEAS NOTIFICATION')");

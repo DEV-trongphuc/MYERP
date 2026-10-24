@@ -912,7 +912,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
 
           {/* Drawer Sheet */}
           <motion.div
-            className="drawer-sheet"
+            className="drawer-sheet drawer-panel"
             initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
             animate={{ y: 0, x: 0, opacity: 1 }}
             exit={isMobile ? { y: '60%', opacity: 0 } : { opacity: 0, x: '60%' }}
@@ -927,7 +927,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
               boxShadow: '-10px 0 30px rgba(0, 0, 0, 0.15)',
               display: 'flex',
               flexDirection: 'column',
-              zIndex: baseZIndex + 10,
+              zIndex: baseZIndex + 10, ...({ '--drawer-panel-z': baseZIndex + 10 } as any),
               willChange: 'transform, opacity',
               transform: 'translate3d(0, 0, 0)',
               contain: 'layout style',
@@ -1997,7 +1997,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  zIndex: baseZIndex + 100,
+                  zIndex: 2147483646, ...({ '--modal-z': 2147483646 } as any),
                   padding: '16px'
                 }}
                 onClick={() => setShowDocPickerModal(false)}
@@ -2167,7 +2167,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
               onContinue={() => setShowExitConfirm(false)}
               title="Lưu bản nháp phiếu thanh toán?"
               message="Bạn có các thông tin phiếu thanh toán đang nhập dở dang. Bạn có muốn lưu bản nháp để tiếp tục hoàn thiện sau không?"
-              zIndex={baseZIndex + 50}
+              zIndex={2147483646}
             />
 
             {/* AI Contract Import Modal */}
@@ -2177,7 +2177,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
               onApply={handleApplyAIContract}
               contacts={contacts}
               projects={projects}
-              zIndex={baseZIndex + 60}
+              zIndex={2147483646}
             />
           </motion.div>
         </div>

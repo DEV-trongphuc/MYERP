@@ -940,7 +940,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
             />
             {/* Drawer panel */}
             <motion.div
-              className="drawer-sheet"
+              className="drawer-sheet drawer-panel"
               initial={window.innerWidth < 768 ? { y: '100%' } : { opacity: 0, x: '250px' }}
               animate={{ y: 0, x: 0, opacity: 1 }}
               exit={window.innerWidth < 768 ? { y: '60%', opacity: 0 } : { opacity: 0, x: '60%' }}
@@ -955,7 +955,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                 boxShadow: '-10px 0 30px rgba(0, 0, 0, 0.15)',
                 display: 'flex',
                 flexDirection: 'column',
-                zIndex: baseZIndex + 10,
+                zIndex: baseZIndex + 10, ...({ '--drawer-panel-z': baseZIndex + 10 } as any),
                 willChange: 'transform, opacity',
                 transform: 'translate3d(0, 0, 0)',
                 contain: 'layout style'
@@ -2438,7 +2438,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
         onClose={() => setIsEditSOOpen(false)}
         title="Chỉnh sửa thông tin đơn hàng / SO"
         width="650px"
-        zIndex={baseZIndex + 60}
+        zIndex={2147483646}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '75vh', overflowY: 'auto', padding: '4px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px' }}>
@@ -2618,7 +2618,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
         onClose={() => setIsCancelOpen(false)}
         title="Yêu cầu hủy giao dịch"
         width="400px"
-        zIndex={baseZIndex + 50}
+        zIndex={2147483646}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div className="form-group" style={{ margin: 0 }}>
@@ -2647,7 +2647,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
         onClose={() => setPreviewReminderMilestone(null)}
         title="Xem trước & Gửi nhắc lịch thanh toán"
         width="650px"
-        zIndex={Math.min(baseZIndex + 10, 2147483647)}
+        zIndex={2147483646}
       >
         {previewReminderMilestone && (() => {
           const caretakerUser = sharesData && sharesData.length > 0 ? sharesData[0] : null;

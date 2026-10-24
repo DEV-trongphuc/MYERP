@@ -341,9 +341,9 @@ interface HoveredDealCardData {
 
 const DealsFloatingTooltip = React.memo<{
   triggerRef: React.MutableRefObject<((data: HoveredDealCardData | null) => void) | null>;
-  pipelineView: 'deals' | 'contacts' | 'companies';
-  stages: any[];
-}>(({ triggerRef, pipelineView, stages }) => {
+  pipelineView?: 'deals' | 'contacts' | 'companies';
+  stages?: any[];
+}>(({ triggerRef }) => {
   const [hoveredCard, setHoveredCard] = useState<HoveredDealCardData | null>(null);
 
   useEffect(() => {
@@ -355,29 +355,51 @@ const DealsFloatingTooltip = React.memo<{
 
   if (!hoveredCard) return null;
 
-  const { item, stage, rect } = hoveredCard;
-  const itemName = pipelineView === 'contacts'
-    ? (item.full_name || '').trim()
-    : (pipelineView === 'companies' ? item.name : item.title);
-  const stageObj = stage || stages.find(s => String(s.id) === String(item.stage_id));
-  const isNewLead = isNewLeadStage(stageObj) || /^01\b|new\s*lead/i.test(String(item.stage_name || ''));
-  const stageName = stageObj?.name || item.stage_name || '01 – New Lead';
-  const prog = (item.program || item.project_name || '').trim();
-  const admDate = formatAdmissionDate(item.admission_date);
-  const tags = parseCardTags(item.tags);
+  const { item, rect } = hoveredCard;
   const interactionNote = cleanNoteText(item.last_interaction);
   const initialNote = cleanNoteText(item.notes);
-  const expectedRev = Number(item.expected_revenue) || Number(item.value) || 0;
-  const totalDep = Number(item.total_deposit) || Number(item.actual_revenue) || 0;
 
-  const tooltipWidth = 360;
+  const rawEntries: Array<{ content: string; created_at?: string | null; user_name?: string | null; is_initial?: boolean }> =
+    Array.isArray(item.recent_interactions) && item.recent_interactions.length > 0
+      ? item.recent_interactions
+          .map((it: any) => ({
+            content: cleanNoteText(it?.content || ''),
+            created_at: it?.created_at || null,
+            user_name: it?.user_name || null,
+            is_initial: Boolean(it?.is_initial),
+          }))
+          .filter((it: any) => Boolean(it.content))
+          .slice(0, 3)
+      : (() => {
+          const fallback: Array<{ content: string; created_at?: string | null; user_name?: string | null; is_initial?: boolean }> = [];
+          if (interactionNote) {
+            fallback.push({
+              content: interactionNote,
+              created_at: item.last_interaction_at || item.last_contact || null,
+              user_name: null,
+            });
+          }
+          if (initialNote && initialNote !== interactionNote) {
+            fallback.push({
+              content: initialNote,
+              created_at: item.created_at || null,
+              user_name: null,
+              is_initial: true,
+            });
+          }
+          return fallback.slice(0, 3);
+        })();
+
+  if (rawEntries.length === 0) return null;
+
+  const tooltipWidth = 340;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   let left = rect.right + 12;
   if (left + tooltipWidth > vw - 16) {
     left = Math.max(16, rect.left - tooltipWidth - 12);
   }
-  const top = Math.max(16, Math.min(rect.top, vh - 340));
+  const top = Math.max(16, Math.min(rect.top, vh - 260));
 
   return createPortal(
     <div
@@ -386,185 +408,81 @@ const DealsFloatingTooltip = React.memo<{
         top,
         left,
         width: tooltipWidth,
-        zIndex: 9999,
+        zIndex: 99999,
         pointerEvents: 'none',
         background: '#ffffff',
         color: '#0f172a',
         border: '1px solid #e2e8f0',
-        borderRadius: '14px',
+        borderRadius: '12px',
         boxShadow: '0 14px 34px rgba(15, 23, 42, 0.14)',
-        padding: '0.95rem 1.05rem',
+        padding: '10px 12px',
         display: 'flex',
         flexDirection: 'column',
-        gap: '0.6rem',
-        fontSize: '0.78rem'
+        gap: '6px',
+        fontSize: '0.75rem',
+        lineHeight: 1.45
       }}
     >
-      {/* Header: Name + Stage Badge + Owner */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0f172a', lineHeight: 1.25 }}>
-            {itemName || 'Khách hàng'}
-          </div>
-          <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '3px' }}>
-            Sale phụ trách: <strong style={{ color: '#0f172a' }}>{item.owner_name || 'Chưa phân bổ'}</strong>
-          </div>
-        </div>
-        <span style={isNewLead ? {
-          background: '#dc2626',
-          color: '#ffffff',
-          fontWeight: 700,
-          padding: '2px 8px',
-          borderRadius: 99,
-          fontSize: 11,
-          whiteSpace: 'nowrap',
-          flexShrink: 0
-        } : {
-          background: stageObj?.color ? `${stageObj.color}18` : '#f1f5f9',
-          color: stageObj?.color || '#2563eb',
-          fontWeight: 700,
-          padding: '2px 8px',
-          borderRadius: 99,
-          fontSize: 11,
-          whiteSpace: 'nowrap',
-          flexShrink: 0
-        }}>
-          {stageName}
+      <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#BD1D2D', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+          <MessageSquare size={12} style={{ flexShrink: 0 }} />
+          <span>Nhật ký gần nhất ({rawEntries.length})</span>
         </span>
       </div>
 
-      {/* Contact: Phone & Email */}
-      {(item.phone || item.email) && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', fontSize: '0.76rem', color: '#0f172a' }}>
-          {item.phone && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-              <Phone size={12} style={{ color: '#64748b' }} />
-              <strong>{item.phone}</strong>
-            </span>
-          )}
-          {item.email && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#64748b' }}>
-              <Mail size={12} style={{ color: '#64748b' }} />
-              <span>{item.email}</span>
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Program & Admission Date */}
-      {(prog || admDate) && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-          {prog && (
-            <span style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '3px 8px',
-              borderRadius: '6px',
-              fontSize: '0.73rem',
-              fontWeight: 700,
-              background: 'rgba(37, 99, 235, 0.1)',
-              color: '#2563eb'
-            }}>
-              <GraduationCap size={12} style={{ flexShrink: 0 }} />
-              <span>Chương trình: {prog}</span>
-            </span>
-          )}
-          {admDate && (
-            <span style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '3px 8px',
-              borderRadius: '6px',
-              fontSize: '0.73rem',
-              fontWeight: 700,
-              background: 'rgba(16, 185, 129, 0.1)',
-              color: '#059669'
-            }}>
-              <Calendar size={12} style={{ flexShrink: 0 }} />
-              <span>Nhập học: {admDate}</span>
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* All Tags & Source / Campaign */}
-      {(tags.length > 0 || item.source || item.campaign_name || item.utm_campaign) && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          {tags.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-              {tags.map((tg, idx) => (
-                <span key={idx} style={{
-                  padding: '2px 7px',
-                  borderRadius: '6px',
-                  fontSize: '0.68rem',
-                  fontWeight: 600,
-                  background: '#f1f5f9',
-                  color: '#334155'
-                }}>
-                  #{tg}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {rawEntries.map((entry, idx) => (
+          <div
+            key={idx}
+            style={{
+              background: idx === 0 ? '#f8fafc' : '#ffffff',
+              border: '1px solid #f1f5f9',
+              borderRadius: '8px',
+              padding: '7px 9px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '3px'
+            }}
+          >
+            {(entry.created_at || entry.user_name || entry.is_initial) && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', fontSize: '0.67rem', color: '#64748b' }}>
+                <span style={{ fontWeight: 700, color: idx === 0 ? '#0f172a' : '#475569' }}>
+                  {entry.is_initial ? 'Ghi chú gốc' : (entry.user_name || `#${idx + 1}`)}
                 </span>
-              ))}
-            </div>
-          )}
-          {(item.source || item.campaign_name || item.utm_campaign) && (
-            <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-              {item.source && <span>Nguồn: <strong style={{ color: '#0f172a' }}>{item.source}</strong></span>}
-              {(item.campaign_name || item.utm_campaign) && (
-                <span> · Chiến dịch: <strong style={{ color: '#0f172a' }}>{item.campaign_name || item.utm_campaign}</strong></span>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Full Multi-line Interaction Note & Initial Note */}
-      <div style={{
-        background: '#f8fafc',
-        borderRadius: '8px',
-        padding: '8px 10px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '6px'
-      }}>
-        <div>
-          <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#2563eb', marginBottom: '2px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-              <MessageSquare size={12} style={{ flexShrink: 0 }} />
-              <span>Tương tác gần nhất</span>
-            </span>
-            {(item.last_interaction_at || item.last_contact) && (
-              <span style={{ fontWeight: 500, color: '#64748b' }}>
-                {String(item.last_interaction_at || item.last_contact).slice(0, 16)}
-              </span>
+                {entry.created_at && (
+                  <span style={{ whiteSpace: 'nowrap' }}>
+                    {String(entry.created_at).slice(0, 16)}
+                  </span>
+                )}
+              </div>
             )}
-          </div>
-          <div style={{ fontSize: '0.75rem', color: '#0f172a', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.4, maxHeight: '140px', overflow: 'hidden' }}>
-            {interactionNote || 'Chưa có ghi chú tương tác'}
-          </div>
-        </div>
-        {initialNote && initialNote !== interactionNote && (
-          <div style={{ borderTop: '1px dashed #e2e8f0', paddingTop: '5px' }}>
-            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', marginBottom: '2px' }}>
-              Ghi chú hồ sơ:
-            </div>
-            <div style={{ fontSize: '0.74rem', color: '#334155', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.35, maxHeight: '90px', overflow: 'hidden' }}>
-              {initialNote}
+            <div style={{ fontSize: '0.75rem', color: '#0f172a', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.4, maxHeight: '110px', overflow: 'hidden' }}>
+              {entry.content}
             </div>
           </div>
-        )}
-      </div>
-
-      {/* Footer: Expected Revenue & Total Deposit */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9', paddingTop: '0.45rem', fontSize: '0.74rem', color: '#64748b' }}>
-        <span>Dự kiến: <strong style={{ color: 'var(--color-primary)' }}>{FMT_VND(expectedRev)}</strong></span>
-        <span>Đã cọc: <strong style={{ color: '#059669' }}>{FMT_VND(totalDep)}</strong></span>
+        ))}
       </div>
     </div>,
     document.body
   );
 });
+
+const DEFAULT_PIPELINE_STAGES = [
+  { id: 31, name: '01 – New Lead', system_slug: 'new_lead', color: '#f97316', order_index: 1 },
+  { id: 32, name: '02 – Contact Attempted', system_slug: 'contact_attempted', color: '#eab308', order_index: 2 },
+  { id: 33, name: '03 – Connected', system_slug: 'connected', color: '#8b5cf6', order_index: 3 },
+  { id: 34, name: '04 – Needed', system_slug: 'needed', color: '#ef4444', order_index: 4 },
+  { id: 35, name: '05 – Discovery Completed', system_slug: 'discovery_completed', color: '#0d9488', order_index: 5 },
+  { id: 36, name: '06 – Program Matched', system_slug: 'program_matched', color: '#0284c7', order_index: 6 },
+  { id: 37, name: '07 – Proposal Sent', system_slug: 'proposal_sent', color: '#d97706', order_index: 7 },
+  { id: 38, name: '08 – Evaluation / Objection', system_slug: 'evaluation_objection', color: '#ea580c', order_index: 8 },
+  { id: 39, name: '09 – Application Started', system_slug: 'application_started', color: '#f59e0b', order_index: 9 },
+  { id: 40, name: '10 – Application Completed', system_slug: 'application_completed', color: '#4338ca', order_index: 10 },
+  { id: 41, name: '11 – Admission Approved', system_slug: 'admission_approved', color: '#65a30d', order_index: 11 },
+  { id: 42, name: '12 – Offer / Scholarship Accepted', system_slug: 'offer_accepted', color: '#16a34a', order_index: 12 },
+  { id: 43, name: '13 – Deposit / Tuition Payment', system_slug: 'deposit_tuition_payment', color: '#059669', order_index: 13 },
+  { id: 44, name: '14 – Enrolled', system_slug: 'enrolled', color: '#db2777', order_index: 14 }
+];
 
 export const DealsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -577,8 +495,8 @@ export const DealsPage: React.FC = () => {
   const [pipelineView, setPipelineView] = useState<'deals' | 'contacts' | 'companies'>('contacts');
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [activeStageFilter, setActiveStageFilter] = useState<string | number>('all');
-  const [stages, setStages] = useState<any[]>([]);
-  const stagesRef = React.useRef<any[]>([]);
+  const [stages, setStages] = useState<any[]>(DEFAULT_PIPELINE_STAGES);
+  const stagesRef = React.useRef<any[]>(DEFAULT_PIPELINE_STAGES);
   React.useEffect(() => {
     stagesRef.current = stages;
   }, [stages]);
@@ -649,16 +567,7 @@ export const DealsPage: React.FC = () => {
     return () => clearTimeout(timer);
   }, [stages, items, loading, viewMode]);
 
-  useEffect(() => {
-    const currentUser = useAuthStore.getState().user;
-    if (currentUser && ['manager', 'admin', 'superadmin', 'super_admin', 'director', 'sale_admin', 'saleadmin', 'marketing'].includes(currentUser.role)) {
-      api.get('/teams').then(res => {
-        setTeams(res.data.data || res.data || []);
-      }).catch(() => {});
-    }
-  }, []);
-
-  const getEffectiveTeamId = () => {
+  const getEffectiveTeamId = (teamsSource: any[] = teams) => {
     const currentUser = useAuthStore.getState().user;
     if (!currentUser) return null;
     const isMarketing = currentUser.role === 'marketing' || 
@@ -674,7 +583,7 @@ export const DealsPage: React.FC = () => {
     }
     const nonSalesTeamIds = [1, 2, 3, 5, 99983];
     if (currentUser.role === 'manager') {
-      const managedTeam = teams.find(t => Number(t.leader_id) === Number(currentUser.id));
+      const managedTeam = teamsSource.find(t => Number(t.leader_id) === Number(currentUser.id));
       const candidateTeamId = Number(managedTeam?.id || (currentUser as any)?.team_id || 0);
       if (!candidateTeamId || nonSalesTeamIds.includes(candidateTeamId)) return null;
       return candidateTeamId;
@@ -870,14 +779,15 @@ export const DealsPage: React.FC = () => {
   // All filtering is done on the Backend API — do not re-filter in JS with UTC date bugs
   const filteredItems = items;
 
-  const getVisibleItems = () => {
+  const pagedItems = useMemo(() => {
     return Object.values(filteredItems)
       .flat()
       .filter(item => activeStageFilter === 'all' || Boolean(debouncedSearch) || String(item.stage_id) === String(activeStageFilter));
-  };
+  }, [filteredItems, activeStageFilter, debouncedSearch]);
+
+  const getVisibleItems = () => pagedItems;
 
   const totalVisibleCount = total;
-  const pagedItems = getVisibleItems();
 
   const toggleSelect = (id: number) => {
     setSelected(prev => {
@@ -1099,16 +1009,48 @@ export const DealsPage: React.FC = () => {
     setIsBulkMoving(true);
     try {
       const ids = Array.from(selected);
-      // In a real app, this would be one API call
+      const targetSidNum = Number(targetStageId);
+      const selectedSet = new Set(ids);
+      const toStageObj = stages.find(s => Number(s.id) === targetSidNum);
+
+      // Optimistic 0ms update in RAM
+      setItems(prev => {
+        const next: Record<number, any[]> = {};
+        const movedCards: any[] = [];
+        Object.keys(prev).forEach(sidKey => {
+          const sid = Number(sidKey);
+          const list = prev[sid] || [];
+          if (sid === targetSidNum) {
+            next[sid] = [...list];
+          } else {
+            const kept: any[] = [];
+            list.forEach((card: any) => {
+              if (selectedSet.has(card.id)) {
+                movedCards.push({
+                  ...card,
+                  stage_id: targetSidNum,
+                  pipeline_status: toStageObj?.system_slug || card.pipeline_status
+                });
+              } else {
+                kept.push(card);
+              }
+            });
+            next[sid] = kept;
+          }
+        });
+        next[targetSidNum] = [...movedCards, ...(next[targetSidNum] || [])];
+        return next;
+      });
+
       await Promise.all(ids.map(id => api.patch(`/${pipelineView}/${id}/stage`, { stage_id: targetStageId, note: 'Bulk move' })));
-      
-      fetchData(); // Refresh all
       
       addToast(`Đã chuyển ${selected.size} thẻ sang giai đoạn mới`, 'success');
       setSelected(new Set());
       setShowBulkMove(false);
+      fetchData(true); // Silent background sync
     } catch (err: any) {
       addToast(err.response?.data?.message || 'Lỗi khi chuyển giai đoạn', 'error');
+      fetchData(true);
     } finally {
       bulkMoveInFlightRef.current = false;
       setIsBulkMoving(false);
@@ -1186,15 +1128,17 @@ export const DealsPage: React.FC = () => {
     };
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = async (isSilent = false) => {
     if (fetchAbortRef.current) {
       fetchAbortRef.current.abort();
     }
     fetchAbortRef.current = new AbortController();
     const signal = fetchAbortRef.current.signal;
 
-    setLoading(true);
-    setHoveredCard(null);
+    if (!isSilent) {
+      setLoading(true);
+      setHoveredCard(null);
+    }
     try {
       const endpoint = pipelineView === 'contacts' ? '/contacts' : (pipelineView === 'companies' ? '/companies' : '/deals');
       const params = buildFilterParams();
@@ -1394,12 +1338,16 @@ export const DealsPage: React.FC = () => {
         const isRosterRestricted = ['sale', 'sales', 'manager', 'director'].includes(currentUser?.role || '');
         const bypassProj = isRosterRestricted ? '' : '?bypass_roster=1';
         const isSale = currentUser && (currentUser.role === 'sale' || currentUser.role === 'sales');
+        const shouldFetchTeams = Boolean(
+          currentUser && ['manager', 'admin', 'superadmin', 'super_admin', 'director', 'sale_admin', 'saleadmin', 'marketing'].includes(currentUser.role)
+        );
 
         const [
           projResult,
           campResult,
           srcResult,
           stageResult,
+          teamsResult,
           userResult,
           settingResult,
           tagResult
@@ -1408,12 +1356,19 @@ export const DealsPage: React.FC = () => {
           api.get('/marketing-campaigns', { signal: controller.signal }),
           api.get('api.php?action=get_unique_sources', { signal: controller.signal }),
           api.get('/pipeline-stages', { signal: controller.signal }),
+          shouldFetchTeams ? api.get('/teams', { signal: controller.signal }) : Promise.resolve(null),
           !isSale ? api.get('/users', { signal: controller.signal }) : Promise.resolve(null),
           api.get('/api.php?action=get_settings', { signal: controller.signal }),
           api.get('/tags', { signal: controller.signal })
         ]);
 
         if (controller.signal.aborted) return;
+
+        let loadedTeams = teams;
+        if (teamsResult.status === 'fulfilled' && teamsResult.value) {
+          loadedTeams = teamsResult.value.data?.data || teamsResult.value.data || [];
+          setTeams(loadedTeams);
+        }
 
         if (projResult.status === 'fulfilled' && projResult.value) {
           setProjects(projResult.value.data?.data || []);
@@ -1426,12 +1381,14 @@ export const DealsPage: React.FC = () => {
         }
         if (stageResult.status === 'fulfilled' && stageResult.value) {
           const stagesData = stageResult.value.data?.data || [];
-          const sorted = [...stagesData].sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
-          setStages(sorted);
+          if (Array.isArray(stagesData) && stagesData.length > 0) {
+            const sorted = [...stagesData].sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+            setStages(sorted);
+          }
         }
         if (userResult.status === 'fulfilled' && userResult.value) {
           let list = userResult.value.data?.data || [];
-          const teamId = getEffectiveTeamId();
+          const teamId = getEffectiveTeamId(loadedTeams);
           if (currentUser?.role === 'manager' && teamId) {
             list = list.filter((u: any) => String(u.team_id) === String(teamId));
           }
@@ -1456,7 +1413,7 @@ export const DealsPage: React.FC = () => {
     };
     loadDealsMetadata();
     return () => controller.abort();
-  }, [pipelineView, teams]);
+  }, [pipelineView]);
 
   useEffect(() => {
     if (!location.pathname.startsWith('/deals')) return;
@@ -1607,7 +1564,7 @@ export const DealsPage: React.FC = () => {
   useEffect(() => {
     const handleRefresh = () => {
       if (stages.length > 0) {
-        fetchData();
+        fetchData(true);
       }
     };
     window.addEventListener('lead-claimed', handleRefresh);
@@ -1828,7 +1785,9 @@ export const DealsPage: React.FC = () => {
     }
   };
 
-  const totalRevenue = Object.values(filteredItems).flat().reduce((sum, d) => sum + (Number(d.expected_revenue) || Number(d.value) || 0), 0);
+  const totalRevenue = useMemo(() => {
+    return Object.values(filteredItems).flat().reduce((sum, d) => sum + (Number(d.expected_revenue) || Number(d.value) || 0), 0);
+  }, [filteredItems]);
 
   const activeFilterCount = useMemo(() => {
     return [
@@ -2823,7 +2782,7 @@ export const DealsPage: React.FC = () => {
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
           {showFilterPanel && (
-            <div style={{ position: 'fixed', inset: 0, zIndex: 2147483640, display: 'flex', justifyContent: 'flex-end', overflow: 'hidden' }}>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 2147483620, display: 'flex', justifyContent: 'flex-end', overflow: 'hidden' }}>
               {/* Backdrop */}
               <motion.div
                 className="drawer-backdrop"
@@ -2846,7 +2805,7 @@ export const DealsPage: React.FC = () => {
                 initial={{ x: '100%' }}
                 animate={{ x: 0 }}
                 exit={{ x: '100%' }}
-                transition={{ type: 'spring', damping: 26, stiffness: 260 }}
+                transition={{ type: 'spring', damping: 26, stiffness: 260 }} className="drawer-panel"
                 style={{
                   position: 'relative',
                   width: '100%',
@@ -2856,7 +2815,7 @@ export const DealsPage: React.FC = () => {
                   boxShadow: '-8px 0 36px rgba(0, 0, 0, 0.28)',
                   display: 'flex',
                   flexDirection: 'column',
-                  zIndex: 2147483640,
+                  zIndex: 2147483625, ...({ '--drawer-panel-z': 2147483625 } as any),
                   overflow: 'hidden'
                 }}
               >
@@ -4459,12 +4418,6 @@ export const DealsPage: React.FC = () => {
                             if (canDrag) setDragging({ id: item.id, fromStage: stage.id });
                           }}
                           onDragEnd={() => setDragging(null)}
-                          onMouseEnter={(e) => {
-                            if (!isMobile) {
-                              setHoveredCard({ item, stage, rect: e.currentTarget.getBoundingClientRect() });
-                            }
-                          }}
-                          onMouseLeave={() => setHoveredCard(null)}
                           initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
                           style={{ 
                             background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: '0.85rem 0.95rem', 
@@ -4655,18 +4608,26 @@ export const DealsPage: React.FC = () => {
 
                           {/* Recent Interaction / Note Preview Box */}
                           {cardNote && (
-                            <div style={{
-                              marginBottom: '0.65rem',
-                              padding: '6px 8px',
-                              borderRadius: '8px',
-                              background: 'var(--color-bg-alt, rgba(0,0,0,0.03))',
-                              fontSize: '0.73rem',
-                              color: 'var(--color-text-muted)',
-                              lineHeight: 1.35,
-                              display: 'flex',
-                              alignItems: 'flex-start',
-                              gap: '5px'
-                            }}>
+                            <div
+                              onMouseEnter={(e) => {
+                                if (!isMobile) {
+                                  setHoveredCard({ item, stage, rect: e.currentTarget.getBoundingClientRect() });
+                                }
+                              }}
+                              onMouseLeave={() => setHoveredCard(null)}
+                              style={{
+                                marginBottom: '0.65rem',
+                                padding: '6px 8px',
+                                borderRadius: '8px',
+                                background: 'var(--color-bg-alt, rgba(0,0,0,0.03))',
+                                fontSize: '0.73rem',
+                                color: 'var(--color-text-muted)',
+                                lineHeight: 1.35,
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: '5px'
+                              }}
+                            >
                               <MessageSquare size={12} style={{ flexShrink: 0, marginTop: '2px', color: 'var(--color-text-light)' }} />
                               <span style={{
                                 display: '-webkit-box',
@@ -4861,12 +4822,6 @@ export const DealsPage: React.FC = () => {
                   return (
                     <tr 
                       key={item.id} 
-                      onMouseEnter={(e) => {
-                        if (!isMobile) {
-                          setHoveredCard({ item, stage, rect: e.currentTarget.getBoundingClientRect() });
-                        }
-                      }}
-                      onMouseLeave={() => setHoveredCard(null)}
                       onClick={() => {
                         setHoveredCard(null);
                         if (pipelineView === 'contacts') { setSelectedContactInitialTab('info'); setSelectedContact(item); setShowContactDrawer(true); }
@@ -5009,7 +4964,15 @@ export const DealsPage: React.FC = () => {
                         </td>
                       )}
                       {visibleColsMap['last_interaction'] && (
-                        <td style={{ padding: '0.85rem 0.75rem', maxWidth: 260 }}>
+                        <td
+                          style={{ padding: '0.85rem 0.75rem', maxWidth: 260 }}
+                          onMouseEnter={(e) => {
+                            if (!isMobile && noteStr) {
+                              setHoveredCard({ item, stage, rect: e.currentTarget.getBoundingClientRect() });
+                            }
+                          }}
+                          onMouseLeave={() => setHoveredCard(null)}
+                        >
                           {noteStr ? (
                             <div style={{
                               fontSize: '0.76rem',
@@ -5125,7 +5088,24 @@ export const DealsPage: React.FC = () => {
             }}
             contact={selectedContact}
             initialTab={selectedContactInitialTab as any}
-            onUpdate={(updated) => { updateItemLocally(updated); fetchData(); }}
+            onUpdate={(updated) => {
+              if (updated === null) {
+                if (selectedContact?.id) {
+                  setItems(prev => {
+                    const next: Record<number, any[]> = {};
+                    Object.keys(prev).forEach(sid => {
+                      next[sid as any] = (prev[sid as any] || []).filter((it: any) => it.id !== selectedContact.id);
+                    });
+                    return next;
+                  });
+                }
+                setShowContactDrawer(false);
+                fetchData(true);
+                return;
+              }
+              updateItemLocally(updated);
+              setSelectedContact((prev: any) => prev && prev.id === updated.id ? { ...prev, ...updated } : updated);
+            }}
           />
         </Suspense>
       )}

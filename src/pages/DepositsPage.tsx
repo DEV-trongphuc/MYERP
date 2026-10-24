@@ -102,6 +102,33 @@ const formatMoney = (val: string | number, currency: string = 'VND') => {
   }).format(num);
 };
 
+const depositsCache: {
+  deposits: Deposit[];
+  contacts: Contact[];
+  companies: any[];
+  suppliers: any[];
+  projects: Project[];
+  usersList: any[];
+  coopSlips: any[];
+  purchaseOrders: any[];
+  salesOrders: any[];
+  expenses: any[];
+  timestamp: number;
+} = {
+  deposits: [],
+  contacts: [],
+  companies: [],
+  suppliers: [],
+  projects: [],
+  usersList: [],
+  coopSlips: [],
+  purchaseOrders: [],
+  salesOrders: [],
+  expenses: [],
+  timestamp: 0
+};
+const DEPOSITS_SWR_TTL_MS = 45_000;
+
 export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'list' | 'stats' }) {
   const { user } = useAuth();
   const isViewer = user?.role === 'viewer';
@@ -118,16 +145,16 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (document.documentElement.getAttribute('data-theme') as 'light' | 'dark') || 'light';
   });
-  const [deposits, setDeposits] = useState<Deposit[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [companies, setCompanies] = useState<any[]>([]);
-  const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [usersList, setUsersList] = useState<any[]>([]);
-  const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
-  const [salesOrders, setSalesOrders] = useState<any[]>([]);
-  const [expenses, setExpenses] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [deposits, setDeposits] = useState<Deposit[]>(() => depositsCache.deposits);
+  const [contacts, setContacts] = useState<Contact[]>(() => depositsCache.contacts);
+  const [companies, setCompanies] = useState<any[]>(() => depositsCache.companies);
+  const [suppliers, setSuppliers] = useState<any[]>(() => depositsCache.suppliers);
+  const [projects, setProjects] = useState<Project[]>(() => depositsCache.projects);
+  const [usersList, setUsersList] = useState<any[]>(() => depositsCache.usersList);
+  const [purchaseOrders, setPurchaseOrders] = useState<any[]>(() => depositsCache.purchaseOrders);
+  const [salesOrders, setSalesOrders] = useState<any[]>(() => depositsCache.salesOrders);
+  const [expenses, setExpenses] = useState<any[]>(() => depositsCache.expenses);
+  const [loading, setLoading] = useState(() => depositsCache.deposits.length === 0);
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 8;
   const [period, setPeriod] = useState<Period>('all');
@@ -279,7 +306,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
   const [depositUncFile, setDepositUncFile] = useState<File | null>(null);
 
   // Co-op and Sales Method Selection States
-  const [coopSlips, setCoopSlips] = useState<any[]>([]);
+  const [coopSlips, setCoopSlips] = useState<any[]>(() => depositsCache.coopSlips);
   const [hasExistingCoop, setHasExistingCoop] = useState(false);
   const [existingCoopShares, setExistingCoopShares] = useState<any[]>([]);
   const [isCooperation, setIsCooperation] = useState(false);
@@ -443,7 +470,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     };
   }, []);
 
-  const loadData = async () => {
+  const loadData = async (isSilent = false) => {
     if (loadDataAbortRef.current) {
       loadDataAbortRef.current.abort();
     }
@@ -451,58 +478,88 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     loadDataAbortRef.current = controller;
     const { signal } = controller;
 
-    setLoading(true);
+    const hasCached = depositsCache.deposits.length > 0;
+    if (!isSilent && !hasCached) {
+      setLoading(true);
+    }
     try {
       const isStats = activeViewTab === 'stats';
+      const auxFresh = Date.now() - depositsCache.timestamp < DEPOSITS_SWR_TTL_MS;
+      const needListAux = !isStats && (!auxFresh || depositsCache.contacts.length === 0);
+
       const [resDep, resCont, resProj, resCoop, resUsr, resPO, resExp, resComp, resSup, resSO] = await Promise.all([
         fetchAPI('deposits', { signal }),
-        isStats ? Promise.resolve({ success: true, data: [] }) : fetchAPI('contacts?limit=1000', { signal }),
-        fetchAPI('projects?bypass_roster=1', { signal }),
-        isStats ? Promise.resolve({ success: true, data: [] }) : fetchAPI('cooperation-slips', { signal }).catch(() => ({ success: false, data: [] })),
-        isStats ? Promise.resolve({ success: true, data: [] }) : fetchAPI('users?all=1', { signal }).catch(() => ({ success: false, data: [] })),
-        isStats ? fetchAPI('purchase-orders?payment_status=unpaid&simple=1', { signal }).catch(() => ({ success: false, data: [] })) : Promise.resolve({ success: true, data: [] }),
-        isStats ? fetchAPI('expenses?status=pending&limit=5000&simple=1', { signal }).catch(() => ({ success: false, data: [] })) : Promise.resolve({ success: true, data: [] }),
-        isStats ? Promise.resolve({ success: true, data: [] }) : fetchAPI('companies?limit=1000', { signal }).catch(() => ({ success: false, data: [] })),
-        isStats ? Promise.resolve({ success: true, data: [] }) : fetchAPI('suppliers', { signal }).catch(() => ({ success: false, data: [] })),
-        isStats ? fetchAPI('sales-orders?exclude_status=cancelled&payment_status=unpaid&limit=5000&simple=1', { signal }).catch(() => ({ success: false, data: [] })) : Promise.resolve({ success: true, data: [] })
+        needListAux ? fetchAPI('contacts?limit=1000', { signal }) : Promise.resolve({ success: false, data: [] }),
+        !auxFresh || depositsCache.projects.length === 0
+          ? fetchAPI('projects?bypass_roster=1', { signal })
+          : Promise.resolve({ success: false, data: [] }),
+        needListAux ? fetchAPI('cooperation-slips', { signal }).catch(() => ({ success: false, data: [] })) : Promise.resolve({ success: false, data: [] }),
+        needListAux ? fetchAPI('users?all=1', { signal }).catch(() => ({ success: false, data: [] })) : Promise.resolve({ success: false, data: [] }),
+        isStats ? fetchAPI('purchase-orders?payment_status=unpaid&simple=1', { signal }).catch(() => ({ success: false, data: [] })) : Promise.resolve({ success: false, data: [] }),
+        isStats ? fetchAPI('expenses?status=pending&limit=5000&simple=1', { signal }).catch(() => ({ success: false, data: [] })) : Promise.resolve({ success: false, data: [] }),
+        needListAux ? fetchAPI('companies?limit=1000', { signal }).catch(() => ({ success: false, data: [] })) : Promise.resolve({ success: false, data: [] }),
+        needListAux ? fetchAPI('suppliers', { signal }).catch(() => ({ success: false, data: [] })) : Promise.resolve({ success: false, data: [] }),
+        isStats ? fetchAPI('sales-orders?exclude_status=cancelled&payment_status=unpaid&limit=5000&simple=1', { signal }).catch(() => ({ success: false, data: [] })) : Promise.resolve({ success: false, data: [] })
       ]);
 
       if (signal.aborted) return;
 
-      if (resDep.success) setDeposits(resDep.data || []);
+      if (resDep.success) {
+        const nextDeps = resDep.data || [];
+        setDeposits(nextDeps);
+        depositsCache.deposits = nextDeps;
+        depositsCache.timestamp = Date.now();
+      }
       if (resCont.success) {
         const allContacts = resCont.data?.items || resCont.data || [];
         const filteredContacts = (user?.role === 'sale') 
           ? allContacts.filter((c: any) => String(c.owner_id) === String(user.id))
           : allContacts;
         setContacts(filteredContacts);
+        depositsCache.contacts = filteredContacts;
       }
       if (resComp?.success) {
-        setCompanies(resComp.data?.items || resComp.data || []);
+        const nextComp = resComp.data?.items || resComp.data || [];
+        setCompanies(nextComp);
+        depositsCache.companies = nextComp;
       }
       if (resSup?.success) {
-        setSuppliers(resSup.data?.items || resSup.data || []);
+        const nextSup = resSup.data?.items || resSup.data || [];
+        setSuppliers(nextSup);
+        depositsCache.suppliers = nextSup;
       }
       if (resProj.success) {
-        setProjects(resProj.data || []);
+        const nextProj = resProj.data || [];
+        setProjects(nextProj);
+        depositsCache.projects = nextProj;
       }
       if (resCoop.success) {
-        setCoopSlips(resCoop.data || []);
+        const nextCoop = resCoop.data || [];
+        setCoopSlips(nextCoop);
+        depositsCache.coopSlips = nextCoop;
       }
       if (resUsr.success) {
-        setUsersList(resUsr.data || []);
+        const nextUsr = resUsr.data || [];
+        setUsersList(nextUsr);
+        depositsCache.usersList = nextUsr;
       }
-      if (resPO) {
+      if (isStats && resPO) {
         const poData = resPO.data?.items || resPO.data || resPO;
-        setPurchaseOrders(Array.isArray(poData) ? poData : []);
+        const nextPo = Array.isArray(poData) ? poData : [];
+        setPurchaseOrders(nextPo);
+        depositsCache.purchaseOrders = nextPo;
       }
-      if (resSO) {
+      if (isStats && resSO) {
         const soData = resSO.data?.orders || resSO.data || resSO;
-        setSalesOrders(Array.isArray(soData) ? soData : []);
+        const nextSo = Array.isArray(soData) ? soData : [];
+        setSalesOrders(nextSo);
+        depositsCache.salesOrders = nextSo;
       }
-      if (resExp) {
+      if (isStats && resExp) {
         const expData = resExp.data?.items || resExp.data || resExp;
-        setExpenses(Array.isArray(expData) ? expData : []);
+        const nextExp = Array.isArray(expData) ? expData : [];
+        setExpenses(nextExp);
+        depositsCache.expenses = nextExp;
       }
     } catch (e: any) {
       if (e?.name === 'AbortError' || e?.code === 'ERR_CANCELED') return;
@@ -515,9 +572,9 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
   };
 
   useEffect(() => {
-    loadData();
+    loadData(depositsCache.deposits.length > 0);
     const handleRefresh = () => {
-      loadData();
+      loadData(true);
     };
     window.addEventListener('deposit-created', handleRefresh);
     window.addEventListener('deposit-updated', handleRefresh);
@@ -860,20 +917,37 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     }
   };
 
+  const patchDepositMilestoneOptimistic = (depositId: number, milestoneId: number, nextStatus: 'approved' | 'failed') => {
+    setDeposits(prev => {
+      const next = prev.map(dep => {
+        if (Number(dep.id) !== Number(depositId)) return dep;
+        const nextMilestones = Array.isArray(dep.milestones)
+          ? dep.milestones.map(m => Number(m.id) === Number(milestoneId) ? { ...m, status: nextStatus } : m)
+          : [];
+        return { ...dep, milestones: nextMilestones };
+      });
+      depositsCache.deposits = next;
+      return next;
+    });
+  };
+
   const approveMilestoneInFlightRef = useRef(false);
   const handleApproveMilestone = async (depositId: number, milestoneId: number) => {
     if (approveMilestoneInFlightRef.current) return;
     approveMilestoneInFlightRef.current = true;
+    patchDepositMilestoneOptimistic(depositId, milestoneId, 'approved');
     try {
       const res = await fetchAPI(`deposits/${depositId}/milestones/${milestoneId}/approve`, { method: 'POST' });
       if (res.success) {
         addToast('Phê duyệt đợt tiền thành công!', 'success');
-        loadData();
+        loadData(true);
       } else {
         addToast(res.message || 'Lỗi phê duyệt', 'error');
+        loadData(true);
       }
     } catch (e: any) {
       addToast(e.message || 'Lỗi kết nối', 'error');
+      loadData(true);
     } finally {
       approveMilestoneInFlightRef.current = false;
     }
@@ -892,6 +966,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       onConfirm: async (reason) => {
         if (rejectMilestoneInFlightRef.current) return;
         rejectMilestoneInFlightRef.current = true;
+        patchDepositMilestoneOptimistic(depositId, milestoneId, 'failed');
         try {
           const res = await fetchAPI(`deposits/${depositId}/milestones/${milestoneId}/reject`, {
             method: 'POST',
@@ -899,12 +974,14 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
           });
           if (res.success) {
             addToast('Đã từ chối UNC thành công', 'success');
-            loadData();
+            loadData(true);
           } else {
             addToast(res.message || 'Lỗi xử lý', 'error');
+            loadData(true);
           }
         } catch (e: any) {
           addToast(e.message || 'Lỗi kết nối', 'error');
+          loadData(true);
         } finally {
           rejectMilestoneInFlightRef.current = false;
         }
@@ -921,9 +998,15 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
   const handleConfirmCancel = async () => {
     if (!cancelDepositId || !cancelReason || isSaving || confirmCancelInFlightRef.current) return;
     confirmCancelInFlightRef.current = true;
+    const targetDepId = cancelDepositId;
+    setDeposits(prev => {
+      const next = prev.map(dep => Number(dep.id) === Number(targetDepId) ? { ...dep, status: 'cancelled' as any, cancel_reason: cancelReason } : dep);
+      depositsCache.deposits = next;
+      return next;
+    });
     try {
       setIsSaving(true);
-      const res = await fetchAPI(`deposits/${cancelDepositId}/cancel`, {
+      const res = await fetchAPI(`deposits/${targetDepId}/cancel`, {
         method: 'POST',
         body: JSON.stringify({ reason: cancelReason })
       });
@@ -932,12 +1015,14 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
         addToast('Đã hủy giao dịch thành công', 'success');
         setIsCancelOpen(false);
         setShowManageModal(false);
-        loadData();
+        loadData(true);
       } else {
         addToast(res.message || 'Lỗi báo hủy', 'error');
+        loadData(true);
       }
     } catch (e: any) {
       addToast(e.message || 'Lỗi kết nối', 'error');
+      loadData(true);
     } finally {
       confirmCancelInFlightRef.current = false;
       setIsSaving(false);
@@ -1031,19 +1116,22 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     if (actioningMilestoneId !== null) return;
     setActioningMilestoneId(m.id);
     setActioningType('approve');
+    const updated = [...tempMilestones];
+    updated[index] = { ...updated[index], status: 'approved' };
+    setTempMilestones(updated);
+    patchDepositMilestoneOptimistic(selectedDepForManage.id, m.id, 'approved');
     try {
       const res = await fetchAPI(`deposits/${selectedDepForManage.id}/milestones/${m.id}/approve`, { method: 'POST' });
       if (res.success) {
         addToast('Phê duyệt đợt tiền thành công!', 'success');
-        const updated = [...tempMilestones];
-        updated[index] = { ...updated[index], status: 'approved' };
-        setTempMilestones(updated);
-        loadData();
+        loadData(true);
       } else {
         addToast(res.message || 'Lỗi phê duyệt', 'error');
+        loadData(true);
       }
     } catch (e: any) {
       addToast(e.message || 'Lỗi kết nối', 'error');
+      loadData(true);
     } finally {
       setActioningMilestoneId(null);
       setActioningType(null);
@@ -1065,6 +1153,10 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       onConfirm: async (reason) => {
         setActioningMilestoneId(m.id);
         setActioningType('reject');
+        const updated = [...tempMilestones];
+        updated[index] = { ...updated[index], status: 'failed' };
+        setTempMilestones(updated);
+        patchDepositMilestoneOptimistic(selectedDepForManage.id, m.id, 'failed');
         try {
           const res = await fetchAPI(`deposits/${selectedDepForManage.id}/milestones/${m.id}/reject`, {
             method: 'POST',
@@ -1072,15 +1164,14 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
           });
           if (res.success) {
             addToast('Đã từ chối UNC thành công', 'success');
-            const updated = [...tempMilestones];
-            updated[index] = { ...updated[index], status: 'failed' };
-            setTempMilestones(updated);
-            loadData();
+            loadData(true);
           } else {
             addToast(res.message || 'Lỗi xử lý', 'error');
+            loadData(true);
           }
         } catch (e: any) {
           addToast(e.message || 'Lỗi kết nối', 'error');
+          loadData(true);
         } finally {
           setActioningMilestoneId(null);
           setActioningType(null);
@@ -1109,6 +1200,13 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       }
     }
 
+    const targetDepId = selectedDepForManage.id;
+    setDeposits(prev => {
+      const next = prev.map(dep => Number(dep.id) === Number(targetDepId) ? { ...dep, price: syncPrice, milestones: tempMilestones } : dep);
+      depositsCache.deposits = next;
+      return next;
+    });
+
     try {
       setIsSavingMilestones(true);
       const payload: any = {
@@ -1126,19 +1224,21 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
           percentage: sh.percentage
         }));
       }
-      const res = await fetchAPI(`deposits/${selectedDepForManage.id}/milestones`, {
+      const res = await fetchAPI(`deposits/${targetDepId}/milestones`, {
         method: 'PUT',
         body: JSON.stringify(payload)
       });
       if (res.success) {
         addToast('Cập nhật lịch trình thanh toán thành công!', 'success');
         setShowManageModal(false);
-        loadData();
+        loadData(true);
       } else {
         addToast(res.message || 'Lỗi khi lưu lịch trình', 'error');
+        loadData(true);
       }
     } catch (e: any) {
       addToast(e.message || 'Lỗi kết nối', 'error');
+      loadData(true);
     } finally {
       setIsSavingMilestones(false);
     }

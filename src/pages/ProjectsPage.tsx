@@ -209,6 +209,49 @@ const CampaignCardSkeleton = () => (
   </div>
 );
 
+const projectsPageCache: {
+  projects: Project[];
+  totalProjects: number;
+  projectsByPage: Map<string, { items: Project[]; total: number; timestamp: number }>;
+  campaigns: any[];
+  totalCampaigns: number;
+  campaignsTimestamp: number;
+  users: any[];
+  developers: any[];
+  allFiles: any[];
+  consultants: any[];
+  companiesList: any[];
+  teams: any[];
+  fileCategories: { id: number; label: string }[];
+  allRounds: any[];
+  auxTimestamp: number;
+  timestamp: number;
+} = {
+  projects: [],
+  totalProjects: 0,
+  projectsByPage: new Map(),
+  campaigns: [],
+  totalCampaigns: 0,
+  campaignsTimestamp: 0,
+  users: [],
+  developers: [],
+  allFiles: [],
+  consultants: [],
+  companiesList: [],
+  teams: [],
+  fileCategories: [],
+  allRounds: [],
+  auxTimestamp: 0,
+  timestamp: 0
+};
+
+const projectStatsCache = new Map<number, { data: any; timestamp: number }>();
+const campaignStatsCache = new Map<number, { data: any; timestamp: number }>();
+const projectRosterCache = new Map<number, { data: any[]; timestamp: number }>();
+const entityCommentsCache = new Map<string, { data: any[]; timestamp: number }>();
+const entityTasksCache = new Map<string, { data: any[]; timestamp: number }>();
+const PROJECTS_SWR_TTL_MS = 45_000;
+
 export default function ProjectsPage() {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 991);
   useEffect(() => {
@@ -265,36 +308,44 @@ export default function ProjectsPage() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [projects, setProjects] = useState<Project[]>(() => projectsPageCache.projects);
+  const [loading, setLoading] = useState(() => projectsPageCache.projects.length === 0);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [fileCategories, setFileCategories] = useState<{ id: number; label: string }[]>([]);
+  const [fileCategories, setFileCategories] = useState<{ id: number; label: string }[]>(() => projectsPageCache.fileCategories);
   const [folderLinkType, setFolderLinkType] = useState<'link' | 'select'>('link');
   const [campaignFolderLinkType, setCampaignFolderLinkType] = useState<'link' | 'select'>('link');
   const isLegacyLayoutEnabled = false;
 
   useEffect(() => {
+    if (projectsPageCache.fileCategories.length > 0 && Date.now() - projectsPageCache.timestamp < PROJECTS_SWR_TTL_MS) {
+      return;
+    }
     api.get('/file-categories')
       .then(res => {
         if (res.data && Array.isArray(res.data.data)) {
           setFileCategories(res.data.data);
+          projectsPageCache.fileCategories = res.data.data;
         }
       })
       .catch(err => console.error('Failed to fetch file categories', err));
   }, []);
-  const [developers, setDevelopers] = useState<any[]>([]);
-  const [allFiles, setAllFiles] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
-  const [allRounds, setAllRounds] = useState<any[]>([]);
+  const [developers, setDevelopers] = useState<any[]>(() => projectsPageCache.developers);
+  const [allFiles, setAllFiles] = useState<any[]>(() => projectsPageCache.allFiles);
+  const [users, setUsers] = useState<any[]>(() => projectsPageCache.users);
+  const [allRounds, setAllRounds] = useState<any[]>(() => projectsPageCache.allRounds);
   const [selectedRoundForModal, setSelectedRoundForModal] = useState<any | null>(null);
   const [isRoundDetailModalOpen, setIsRoundDetailModalOpen] = useState(false);
 
   useEffect(() => {
+    if (projectsPageCache.allRounds.length > 0 && Date.now() - projectsPageCache.timestamp < PROJECTS_SWR_TTL_MS) {
+      return;
+    }
     fetchAPI('get_rounds')
       .then(res => {
         if (res && res.success && Array.isArray(res.data)) {
           setAllRounds(res.data);
+          projectsPageCache.allRounds = res.data;
         }
       })
       .catch(err => console.error('Failed to fetch distribution rounds', err));
@@ -316,13 +367,13 @@ export default function ProjectsPage() {
   const [activeSubTab, setActiveSubTab] = useState<'projects' | 'campaigns'>('projects');
   const [projectTasksPage, setProjectTasksPage] = useState(1);
   const [campaignTasksPage, setCampaignTasksPage] = useState(1);
-  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [campaigns, setCampaigns] = useState<any[]>(() => projectsPageCache.campaigns);
   const [campaignsLoading, setCampaignsLoading] = useState(false);
   const [campaignProjectFilter, setCampaignProjectFilter] = useState<string>('');
   const [isCampaignModalOpen, setIsCampaignModalOpen] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<any | null>(null);
-  const [totalProjects, setTotalProjects] = useState(0);
-  const [totalCampaigns, setTotalCampaigns] = useState(0);
+  const [totalProjects, setTotalProjects] = useState(() => projectsPageCache.totalProjects);
+  const [totalCampaigns, setTotalCampaigns] = useState(() => projectsPageCache.totalCampaigns);
   const [rosterSearch, setRosterSearch] = useState('');
   const [mainSearchTerm, setMainSearchTerm] = useState('');
 
@@ -571,7 +622,7 @@ export default function ProjectsPage() {
       const res = await api.post(`/projects/${projectId}/duplicate`);
       if (res.data?.success) {
         addToast(t('Đã nhân bản chương trình thành công!'), 'success');
-        loadProjects();
+        loadProjects(true);
       } else {
         addToast(res.data?.message || t('Lỗi nhân bản chương trình'), 'error');
       }
@@ -586,16 +637,29 @@ export default function ProjectsPage() {
   const handleToggleArchiveProject = async (projectId: number, shouldArchive: boolean) => {
     if (archiveProjectInFlightRef.current) return;
     archiveProjectInFlightRef.current = true;
+    const prevProjects = projects;
+    setProjects(prev => {
+      const next = prev.map(p => Number(p.id) === Number(projectId) ? { ...p, is_archived: shouldArchive ? 1 : 0, status: shouldArchive ? 'archived' : 'active' } : p);
+      projectsPageCache.projects = next;
+      return next;
+    });
+    if (editingProject && Number(editingProject.id) === Number(projectId)) {
+      setEditingProject(prev => prev ? { ...prev, is_archived: shouldArchive ? 1 : 0, status: shouldArchive ? 'archived' : 'active' } : prev);
+    }
     try {
       const endpoint = shouldArchive ? `/projects/${projectId}/archive` : `/projects/${projectId}/unarchive`;
       const res = await api.post(endpoint);
       if (res.data?.success) {
         addToast(shouldArchive ? t('Đã lưu trữ chương trình') : t('Đã bỏ lưu trữ chương trình'), 'success');
-        loadProjects();
+        loadProjects(true);
       } else {
+        setProjects(prevProjects);
+        projectsPageCache.projects = prevProjects;
         addToast(res.data?.message || t('Lỗi lưu trữ chương trình'), 'error');
       }
     } catch (err: any) {
+      setProjects(prevProjects);
+      projectsPageCache.projects = prevProjects;
       addToast(err.response?.data?.message || err.message || t('Lỗi lưu trữ chương trình'), 'error');
     } finally {
       archiveProjectInFlightRef.current = false;
@@ -607,12 +671,19 @@ export default function ProjectsPage() {
     if (quickTaskActionInFlightRef.current) return;
     quickTaskActionInFlightRef.current = true;
     const nextStatus = currentStatus === 'done' ? 'planned' : 'done';
+    const prevTasks = linkedTasks;
+    setLinkedTasks(prev => {
+      const next = prev.map(t => Number(t.id) === Number(taskId) ? { ...t, status: nextStatus } : t);
+      if (editingProject?.id) entityTasksCache.set(`project:${editingProject.id}`, { data: next, timestamp: Date.now() });
+      if (editingCampaign?.id) entityTasksCache.set(`campaign:${editingCampaign.id}`, { data: next, timestamp: Date.now() });
+      return next;
+    });
     try {
       await api.put(`/tasks/${taskId}/status`, { status: nextStatus });
-      setLinkedTasks(prev => prev.map(t => Number(t.id) === Number(taskId) ? { ...t, status: nextStatus } : t));
       addToast(nextStatus === 'done' ? t('Đã đánh dấu hoàn thành nhiệm vụ') : t('Đã mở lại nhiệm vụ'), 'success');
       window.dispatchEvent(new CustomEvent('task-updated'));
     } catch (err: any) {
+      setLinkedTasks(prevTasks);
       addToast(t('Lỗi cập nhật trạng thái nhiệm vụ: ') + (err.response?.data?.message || err.message), 'error');
     } finally {
       quickTaskActionInFlightRef.current = false;
@@ -626,7 +697,12 @@ export default function ProjectsPage() {
       const res = await api.post(`/tasks/${taskId}/duplicate`);
       if (res.data?.success && res.data?.data) {
         addToast(t('Đã nhân bản nhiệm vụ thành công!'), 'success');
-        setLinkedTasks(prev => [res.data.data, ...prev]);
+        setLinkedTasks(prev => {
+          const next = [res.data.data, ...prev];
+          if (editingProject?.id) entityTasksCache.set(`project:${editingProject.id}`, { data: next, timestamp: Date.now() });
+          if (editingCampaign?.id) entityTasksCache.set(`campaign:${editingCampaign.id}`, { data: next, timestamp: Date.now() });
+          return next;
+        });
         window.dispatchEvent(new CustomEvent('task-updated'));
       }
     } catch (err: any) {
@@ -640,14 +716,23 @@ export default function ProjectsPage() {
     if (quickTaskActionInFlightRef.current) return;
     if (!window.confirm(t('Bạn có chắc chắn muốn xóa nhiệm vụ này?'))) return;
     quickTaskActionInFlightRef.current = true;
+    const prevTasks = linkedTasks;
+    setLinkedTasks(prev => {
+      const next = prev.filter(t => Number(t.id) !== Number(taskId));
+      if (editingProject?.id) entityTasksCache.set(`project:${editingProject.id}`, { data: next, timestamp: Date.now() });
+      if (editingCampaign?.id) entityTasksCache.set(`campaign:${editingCampaign.id}`, { data: next, timestamp: Date.now() });
+      return next;
+    });
     try {
       const res = await api.delete(`/tasks/${taskId}`);
       if (res.data?.success) {
         addToast(t('Đã xóa nhiệm vụ thành công'), 'success');
-        setLinkedTasks(prev => prev.filter(t => Number(t.id) !== Number(taskId)));
         window.dispatchEvent(new CustomEvent('task-updated'));
+      } else {
+        setLinkedTasks(prevTasks);
       }
     } catch (err: any) {
+      setLinkedTasks(prevTasks);
       addToast(t('Lỗi xóa nhiệm vụ: ') + (err.response?.data?.message || err.message), 'error');
     } finally {
       quickTaskActionInFlightRef.current = false;
@@ -835,8 +920,8 @@ export default function ProjectsPage() {
   const [configuringSubjectId, setConfiguringSubjectId] = useState<string | null>(null);
   const [syncSubjectToOtherCourses, setSyncSubjectToOtherCourses] = useState(false);
   const [activeConfigTab, setActiveConfigTab] = useState<'school' | 'seminar' | 'zoom' | 'quiz'>('school');
-  const [consultants, setConsultants] = useState<any[]>([]);
-  const [companiesList, setCompaniesList] = useState<any[]>([]);
+  const [consultants, setConsultants] = useState<any[]>(() => projectsPageCache.consultants || []);
+  const [companiesList, setCompaniesList] = useState<any[]>(() => projectsPageCache.companiesList || []);
   const [showScheduleExportModal, setShowScheduleExportModal] = useState(false);
   const [showNotifModal, setShowNotifModal] = useState(false);
   const [notifText, setNotifText] = useState('');
@@ -850,54 +935,81 @@ export default function ProjectsPage() {
     }
   }, [configuringSubjectId]);
 
-  const loadProjectStats = async (id: number) => {
-    setStatsLoading(true);
+  const loadProjectStats = async (id: number, isSilent = false) => {
+    const cached = projectStatsCache.get(id);
+    if (cached) {
+      setProjectStats(cached.data);
+      if (Date.now() - cached.timestamp < PROJECTS_SWR_TTL_MS && !isSilent) {
+        setStatsLoading(false);
+      }
+    } else if (!isSilent) {
+      setStatsLoading(true);
+    }
     try {
       const res = await fetchAPI(`projects/${id}/stats`);
       if (res && res.success) {
         setProjectStats(res.data);
-      } else {
+        projectStatsCache.set(id, { data: res.data, timestamp: Date.now() });
+      } else if (!cached) {
         setProjectStats(null);
       }
     } catch (e) {
       console.error(e);
-      setProjectStats(null);
+      if (!cached) setProjectStats(null);
     } finally {
       setStatsLoading(false);
     }
   };
 
-  const loadCampaignStats = async (id: number) => {
-    setStatsLoading(true);
+  const loadCampaignStats = async (id: number, isSilent = false) => {
+    const cached = campaignStatsCache.get(id);
+    if (cached) {
+      setCampaignStats(cached.data);
+      if (Date.now() - cached.timestamp < PROJECTS_SWR_TTL_MS && !isSilent) {
+        setStatsLoading(false);
+      }
+    } else if (!isSilent) {
+      setStatsLoading(true);
+    }
     try {
       const res = await fetchAPI(`campaigns/${id}/stats`);
       if (res && res.success) {
         setCampaignStats(res.data);
-      } else {
+        campaignStatsCache.set(id, { data: res.data, timestamp: Date.now() });
+      } else if (!cached) {
         setCampaignStats(null);
       }
     } catch (e) {
       console.error(e);
-      setCampaignStats(null);
+      if (!cached) setCampaignStats(null);
     } finally {
       setStatsLoading(false);
     }
   };
 
-  const loadProjectRoster = async (projectId: number) => {
-    setProjectRosterLoading(true);
+  const loadProjectRoster = async (projectId: number, isSilent = false) => {
+    const cached = projectRosterCache.get(projectId);
+    if (cached) {
+      setProjectRoster(cached.data);
+      if (Date.now() - cached.timestamp < PROJECTS_SWR_TTL_MS && !isSilent) {
+        setProjectRosterLoading(false);
+      }
+    } else if (!isSilent) {
+      setProjectRosterLoading(true);
+    }
     try {
       const res = await fetchAPI(`projects/${projectId}/roster`);
+      let assigned: any[] = [];
       if (Array.isArray(res)) {
-        setProjectRoster(res.filter((m: any) => m.is_assigned === 1));
+        assigned = res.filter((m: any) => m.is_assigned === 1);
       } else if (res.success && Array.isArray(res.data)) {
-        setProjectRoster(res.data.filter((m: any) => m.is_assigned === 1));
-      } else {
-        setProjectRoster([]);
+        assigned = res.data.filter((m: any) => m.is_assigned === 1);
       }
+      setProjectRoster(assigned);
+      projectRosterCache.set(projectId, { data: assigned, timestamp: Date.now() });
     } catch (e) {
       console.error(e);
-      setProjectRoster([]);
+      if (!cached) setProjectRoster([]);
     } finally {
       setProjectRosterLoading(false);
     }
@@ -916,20 +1028,30 @@ export default function ProjectsPage() {
   const [linkedTasks, setLinkedTasks] = useState<any[]>([]);
   const [loadingLinkedTasks, setLoadingLinkedTasks] = useState(false);
 
-  const loadDetailComments = async (entityType: 'project' | 'campaign', entityId: number) => {
-    setLoadingComments(true);
+  const loadDetailComments = async (entityType: 'project' | 'campaign', entityId: number, isSilent = false) => {
+    const cacheKey = `${entityType}:${entityId}`;
+    const cached = entityCommentsCache.get(cacheKey);
+    if (cached) {
+      setDetailComments(cached.data);
+      if (Date.now() - cached.timestamp < PROJECTS_SWR_TTL_MS && !isSilent) {
+        setLoadingComments(false);
+      }
+    } else if (!isSilent) {
+      setLoadingComments(true);
+    }
     try {
       const res = await fetchAPI(`${entityType}s/${entityId}/comments`);
+      let list: any[] = [];
       if (Array.isArray(res)) {
-        setDetailComments(res);
+        list = res;
       } else if (res.success && Array.isArray(res.data)) {
-        setDetailComments(res.data);
-      } else {
-        setDetailComments([]);
+        list = res.data;
       }
+      setDetailComments(list);
+      entityCommentsCache.set(cacheKey, { data: list, timestamp: Date.now() });
     } catch (e) {
       console.error(e);
-      setDetailComments([]);
+      if (!cached) setDetailComments([]);
     } finally {
       setLoadingComments(false);
     }
@@ -1284,11 +1406,20 @@ export default function ProjectsPage() {
     );
   };
 
-  const loadLinkedTasks = async (entityType: 'project' | 'campaign', entityId: number) => {
-    setLoadingLinkedTasks(true);
+  const loadLinkedTasks = async (entityType: 'project' | 'campaign', entityId: number, isSilent = false) => {
+    const cacheKey = `${entityType}:${entityId}`;
+    const cached = entityTasksCache.get(cacheKey);
+    if (cached) {
+      setLinkedTasks(cached.data);
+      if (Date.now() - cached.timestamp < PROJECTS_SWR_TTL_MS && !isSilent) {
+        setLoadingLinkedTasks(false);
+      }
+    } else if (!isSilent) {
+      setLoadingLinkedTasks(true);
+    }
     try {
       const res = await fetchAPI(`activities?related_type=${entityType}&related_id=${entityId}&limit=100`);
-      let directItems = [];
+      let directItems: any[] = [];
       if (res && res.items) {
         directItems = res.items;
       } else if (res.success && res.data && Array.isArray(res.data.items)) {
@@ -1301,7 +1432,7 @@ export default function ProjectsPage() {
         const parentProjId = editingCampaign?.project_id;
         if (parentProjId) {
           const projRes = await fetchAPI(`activities?related_type=project&related_id=${parentProjId}&limit=1000`);
-          let projItems = [];
+          let projItems: any[] = [];
           if (projRes && projRes.items) {
             projItems = projRes.items;
           } else if (projRes.success && projRes.data && Array.isArray(projRes.data.items)) {
@@ -1329,15 +1460,18 @@ export default function ProjectsPage() {
             }
           });
           setLinkedTasks(allItems);
+          entityTasksCache.set(cacheKey, { data: allItems, timestamp: Date.now() });
         } else {
           setLinkedTasks(directItems);
+          entityTasksCache.set(cacheKey, { data: directItems, timestamp: Date.now() });
         }
       } else {
         setLinkedTasks(directItems);
+        entityTasksCache.set(cacheKey, { data: directItems, timestamp: Date.now() });
       }
     } catch (e) {
       console.error(e);
-      setLinkedTasks([]);
+      if (!cached) setLinkedTasks([]);
     } finally {
       setLoadingLinkedTasks(false);
     }
@@ -1458,17 +1592,17 @@ export default function ProjectsPage() {
   useEffect(() => {
     const handleTaskUpdated = () => {
       if (editingProject && editingProject.id) {
-        loadLinkedTasks('project', editingProject.id);
+        loadLinkedTasks('project', editingProject.id, true);
       }
       if (editingCampaign && editingCampaign.id) {
-        loadLinkedTasks('campaign', editingCampaign.id);
+        loadLinkedTasks('campaign', editingCampaign.id, true);
       }
     };
     const handleContactUpdated = () => {
       if (editingProject && editingProject.id) {
-        loadProjectRoster(editingProject.id);
+        loadProjectRoster(editingProject.id, true);
       }
-      loadProjects();
+      loadProjects(true);
     };
     window.addEventListener('task-updated', handleTaskUpdated);
     window.addEventListener('contact-updated', handleContactUpdated);
@@ -1535,18 +1669,19 @@ export default function ProjectsPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.25 }}
+              transition={{ duration: 0.22 }}
               style={{
                 position: 'fixed',
                 inset: 0,
                 background: 'rgba(0,0,0,0.65)',
-                zIndex: 10000,
+                zIndex: 2147483620,
+                '--drawer-backdrop-z': 2147483620,
                 backdropFilter: 'blur(4px)',
                 cursor: 'pointer'
-              }}
+              } as React.CSSProperties}
             />
             <motion.div
-              className="drawer-sheet"
+              className="drawer-sheet drawer-panel"
               initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
               animate={{ y: 0, x: 0, opacity: 1 }}
               exit={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
@@ -1555,7 +1690,8 @@ export default function ProjectsPage() {
                 left: window.innerWidth <= 768 ? 0 : 'var(--sidebar-width, 220px)',
                 right: 0,
                 maxWidth: '100vw',
-                zIndex: 10600,
+                zIndex: 2147483625,
+                '--drawer-panel-z': 2147483625,
                 background: 'linear-gradient(180deg, var(--color-bg) 0%, var(--color-border-light) 100%)',
                 display: 'flex',
                 flexDirection: 'column',
@@ -1564,7 +1700,7 @@ export default function ProjectsPage() {
                 bottom: 0,
                 boxShadow: '-10px 0 30px rgba(0,0,0,0.15)',
                 willChange: 'transform'
-              }}
+              } as React.CSSProperties}
             >
               {/* Drawer Header */}
               <div style={{
@@ -5306,7 +5442,7 @@ export default function ProjectsPage() {
     );
   };
 
-  const loadProjects = async () => {
+  const loadProjects = async (isSilent = false) => {
     if (projectsAbortRef.current) {
       projectsAbortRef.current.abort();
     }
@@ -5314,22 +5450,32 @@ export default function ProjectsPage() {
     projectsAbortRef.current = controller;
     const { signal } = controller;
 
-    setLoading(true);
+    const pageKey = `${projectPage}:${projectPageSize}`;
+    const cachedPage = projectsPageCache.projectsByPage.get(pageKey);
+    if (cachedPage && !isSilent) {
+      setProjects(cachedPage.items);
+      setTotalProjects(cachedPage.total);
+      setLoading(false);
+    } else if (!isSilent && projects.length === 0) {
+      setLoading(true);
+    }
     try {
       const res = await fetchAPI(`projects?page=${projectPage}&limit=${projectPageSize}`, { signal });
       if (signal.aborted) return;
-      console.log('Projects API Response:', res);
       if (res.success) {
+        let list: any[] = [];
+        let totalVal = 0;
         if (res.data && typeof res.data === 'object' && 'data' in res.data) {
-          const list = res.data.data || [];
-          setProjects(list);
-          const totalVal = Number(res.data.total);
-          setTotalProjects(isNaN(totalVal) ? list.length : totalVal);
+          list = res.data.data || [];
+          const parsedTotal = Number(res.data.total);
+          totalVal = isNaN(parsedTotal) ? list.length : parsedTotal;
         } else {
-          const arr = Array.isArray(res.data) ? res.data : [];
-          setProjects(arr);
-          setTotalProjects(arr.length);
+          list = Array.isArray(res.data) ? res.data : [];
+          totalVal = list.length;
         }
+        setProjects(list);
+        setTotalProjects(totalVal);
+        projectsPageCache.projectsByPage.set(pageKey, { items: list, total: totalVal, timestamp: Date.now() });
       } else {
         addToast(res.message || 'Lỗi tải danh sách chương trình', 'error');
       }
@@ -5343,21 +5489,33 @@ export default function ProjectsPage() {
   };
 
   const loadDevelopers = async () => {
+    if (projectsPageCache.developers.length > 0 && Date.now() - projectsPageCache.auxTimestamp < PROJECTS_SWR_TTL_MS) {
+      setDevelopers(projectsPageCache.developers);
+      return;
+    }
     try {
       const res = await fetchAPI('suppliers?limit=100');
       if (res.success) {
-        setDevelopers(res.data?.items || res.data || []);
+        const list = res.data?.items || res.data || [];
+        setDevelopers(list);
+        projectsPageCache.developers = list;
       }
     } catch (e) {
       console.error('Failed to load developers', e);
     }
   };
 
-  const loadAllFiles = async () => {
+  const loadAllFiles = async (forceRefresh = false) => {
+    if (!forceRefresh && projectsPageCache.allFiles.length > 0 && Date.now() - projectsPageCache.auxTimestamp < PROJECTS_SWR_TTL_MS) {
+      setAllFiles(projectsPageCache.allFiles);
+      return;
+    }
     try {
       const res = await fetchAPI('cloud-files?limit=100');
       if (res.success) {
-        setAllFiles(res.data?.items || res.data || []);
+        const list = res.data?.items || res.data || [];
+        setAllFiles(list);
+        projectsPageCache.allFiles = list;
       }
     } catch (e) {
       console.error('Failed to load all files', e);
@@ -5384,7 +5542,7 @@ export default function ProjectsPage() {
       });
       if (res.success || res.id) {
         addToast('Đã tải tài liệu lên thành công!', 'success');
-        loadAllFiles();
+        loadAllFiles(true);
         if (projectId) {
           loadFolderFiles(projectId);
         }
@@ -5415,7 +5573,7 @@ export default function ProjectsPage() {
     }
   };
 
-  const loadCampaigns = async () => {
+  const loadCampaigns = async (isSilent = false) => {
     if (campaignsAbortRef.current) {
       campaignsAbortRef.current.abort();
     }
@@ -5423,20 +5581,32 @@ export default function ProjectsPage() {
     campaignsAbortRef.current = controller;
     const { signal } = controller;
 
-    setCampaignsLoading(true);
+    if (!isSilent && projectsPageCache.campaignsTimestamp > 0) {
+      setCampaigns(projectsPageCache.campaigns);
+      setTotalCampaigns(projectsPageCache.totalCampaigns);
+      setCampaignsLoading(false);
+    } else if (!isSilent && campaigns.length === 0) {
+      setCampaignsLoading(true);
+    }
     try {
       const url = 'campaigns?limit=1000';
       const res = await fetchAPI(url, { signal });
       if (signal.aborted) return;
       if (res.success) {
+        let list: any[] = [];
+        let totalVal = 0;
         if (res.data && typeof res.data === 'object' && 'data' in res.data) {
-          setCampaigns(res.data.data || []);
-          setTotalCampaigns(Number(res.data.total || 0));
+          list = res.data.data || [];
+          totalVal = Number(res.data.total || 0);
         } else {
-          const arr = Array.isArray(res.data) ? res.data : [];
-          setCampaigns(arr);
-          setTotalCampaigns(arr.length);
+          list = Array.isArray(res.data) ? res.data : [];
+          totalVal = list.length;
         }
+        setCampaigns(list);
+        setTotalCampaigns(totalVal);
+        projectsPageCache.campaigns = list;
+        projectsPageCache.totalCampaigns = totalVal;
+        projectsPageCache.campaignsTimestamp = Date.now();
       }
     } catch (e: any) {
       if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED' || signal.aborted) return;
@@ -5469,7 +5639,7 @@ export default function ProjectsPage() {
       if (res.success) {
         addToast(isNew ? 'Tạo chiến dịch thành công!' : 'Cập nhật chiến dịch thành công!', 'success');
         setIsCampaignModalOpen(false);
-        loadCampaigns();
+        loadCampaigns(true);
       } else {
         addToast(res.message || 'Lỗi lưu thông tin chiến dịch', 'error');
       }
@@ -5491,15 +5661,24 @@ export default function ProjectsPage() {
       onConfirm: async () => {
         if (inFlightRef.current) return;
         inFlightRef.current = true;
+        // 0ms Optimistic UI update
+        const prevCampaigns = campaigns;
+        setCampaigns(prev => prev.filter(c => Number(c.id) !== Number(id)));
+        setTotalCampaigns(prev => Math.max(0, prev - 1));
+        projectsPageCache.campaigns = projectsPageCache.campaigns.filter(c => Number(c.id) !== Number(id));
         try {
           const res = await fetchAPI(`campaigns/${id}`, { method: 'DELETE' });
           if (res.success) {
             addToast('Xóa chiến dịch thành công!', 'success');
-            loadCampaigns();
+            loadCampaigns(true);
           } else {
+            setCampaigns(prevCampaigns);
+            projectsPageCache.campaigns = prevCampaigns;
             addToast(res.message || 'Lỗi khi xóa chiến dịch', 'error');
           }
         } catch (err: any) {
+          setCampaigns(prevCampaigns);
+          projectsPageCache.campaigns = prevCampaigns;
           addToast(err.message || 'Lỗi kết nối', 'error');
         } finally {
           inFlightRef.current = false;
@@ -5509,10 +5688,16 @@ export default function ProjectsPage() {
   };
 
   const loadUsers = async () => {
+    if (projectsPageCache.users.length > 0 && Date.now() - projectsPageCache.auxTimestamp < PROJECTS_SWR_TTL_MS) {
+      setUsers(projectsPageCache.users);
+      return;
+    }
     try {
       const res = await fetchAPI('users?all=1');
       if (res.success) {
-        setUsers(res.data || []);
+        const list = res.data || [];
+        setUsers(list);
+        projectsPageCache.users = list;
       }
     } catch (e) {
       console.error('Failed to load users', e);
@@ -5520,10 +5705,16 @@ export default function ProjectsPage() {
   };
 
   const loadConsultants = async () => {
+    if (projectsPageCache.consultants.length > 0 && Date.now() - projectsPageCache.auxTimestamp < PROJECTS_SWR_TTL_MS) {
+      setConsultants(projectsPageCache.consultants);
+      return;
+    }
     try {
       const res = await fetchAPI('consultants?limit=1000');
       if (res && res.success) {
-        setConsultants(res.data?.items || res.data || []);
+        const list = res.data?.items || res.data || [];
+        setConsultants(list);
+        projectsPageCache.consultants = list;
       }
     } catch (e) {
       console.error('Failed to load consultants', e);
@@ -5531,10 +5722,17 @@ export default function ProjectsPage() {
   };
 
   const loadCompanies = async () => {
+    if (projectsPageCache.companiesList.length > 0 && Date.now() - projectsPageCache.auxTimestamp < PROJECTS_SWR_TTL_MS) {
+      setCompaniesList(projectsPageCache.companiesList);
+      return;
+    }
     try {
       const res = await fetchAPI('companies?limit=2000');
       if (res && res.success) {
-        setCompaniesList(res.data?.items || res.data || []);
+        const list = res.data?.items || res.data || [];
+        setCompaniesList(list);
+        projectsPageCache.companiesList = list;
+        projectsPageCache.auxTimestamp = Date.now();
       }
     } catch (e) {
       console.error('Failed to load companies', e);
@@ -5721,7 +5919,7 @@ export default function ProjectsPage() {
       if (res.success) {
         addToast(isNew ? 'Tạo chương trình thành công!' : 'Cập nhật chương trình thành công!', 'success');
         setIsEditModalOpen(false);
-        loadProjects();
+        loadProjects(true);
       } else {
         addToast(res.message || 'Lỗi lưu thông tin', 'error');
       }
@@ -5743,15 +5941,21 @@ export default function ProjectsPage() {
       onConfirm: async () => {
         if (inFlightRef.current) return;
         inFlightRef.current = true;
+        // 0ms Optimistic UI update
+        const prevProjects = projects;
+        setProjects(prev => prev.filter(p => Number(p.id) !== Number(id)));
+        setTotalProjects(prev => Math.max(0, prev - 1));
         try {
           const res = await fetchAPI(`projects/${id}`, { method: 'DELETE' });
           if (res.success) {
             addToast('Xóa chương trình thành công!', 'success');
-            loadProjects();
+            loadProjects(true);
           } else {
+            setProjects(prevProjects);
             addToast(res.message || 'Lỗi xóa chương trình', 'error');
           }
         } catch (e: any) {
+          setProjects(prevProjects);
           addToast(e.message || 'Lỗi kết nối', 'error');
         } finally {
           inFlightRef.current = false;
@@ -5762,13 +5966,20 @@ export default function ProjectsPage() {
 
   // Roster logic
   const fetchTeams = async () => {
+    if (projectsPageCache.teams.length > 0 && Date.now() - projectsPageCache.auxTimestamp < PROJECTS_SWR_TTL_MS) {
+      setTeams(projectsPageCache.teams);
+      return;
+    }
     try {
       const res = await fetchAPI('teams');
+      let list: any[] = [];
       if (Array.isArray(res)) {
-        setTeams(res);
+        list = res;
       } else if (res && res.success && Array.isArray(res.data)) {
-        setTeams(res.data);
+        list = res.data;
       }
+      setTeams(list);
+      projectsPageCache.teams = list;
     } catch (e) {
       console.error('Failed to fetch teams:', e);
     }
@@ -5800,8 +6011,14 @@ export default function ProjectsPage() {
   const handleSaveRoster = async () => {
     if (!selectedProjectId || inFlightRef.current) return;
 
-    const assignedIds = rosterMembers.filter(m => m.is_assigned === 1).map(m => m.id);
+    const assignedMembers = rosterMembers.filter(m => m.is_assigned === 1);
+    const assignedIds = assignedMembers.map(m => m.id);
     inFlightRef.current = true;
+    // 0ms Optimistic UI update for project roster
+    projectRosterCache.set(selectedProjectId, { data: assignedMembers, timestamp: Date.now() });
+    if (editingProject && editingProject.id === selectedProjectId) {
+      setProjectRoster(assignedMembers);
+    }
     try {
       const res = await fetchAPI(`projects/${selectedProjectId}/roster`, {
         method: 'POST',
@@ -5811,9 +6028,9 @@ export default function ProjectsPage() {
       if (res.success) {
         addToast('Cập nhật roster chương trình thành công!', 'success');
         setIsRosterModalOpen(false);
-        loadProjects();
+        loadProjects(true);
         if (editingProject && editingProject.id === selectedProjectId) {
-          loadProjectRoster(editingProject.id);
+          loadProjectRoster(editingProject.id, true);
         }
       } else {
         addToast(res.message || 'Lỗi lưu roster', 'error');

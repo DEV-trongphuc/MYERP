@@ -7,10 +7,15 @@ class HRMController {
     }
 
     private static bool $checkInsHealed = false;
+    private static ?array $lateGraceSettingsCache = null;
 
     public static function healPollutedCheckIns(PDO $db): void {
         if (self::$checkInsHealed) return;
         self::$checkInsHealed = true;
+        $flagFile = rtrim(sys_get_temp_dir(), '/\\') . '/myerp_hrm_healed_checkins_v2.flag';
+        if (@is_file($flagFile) && (time() - (int)@filemtime($flagFile)) < 300) {
+            return;
+        }
         try {
             $stmt = $db->query("
                 SELECT id, reason, status, late_minutes, selfie_url
@@ -51,6 +56,7 @@ class HRMController {
                     $upd->execute([$cleanedReason, $newStatus, $lateMins, (int)$r['id']]);
                 }
             }
+            @file_put_contents($flagFile, (string)time());
         } catch (\Throwable $e) {}
     }
 
@@ -80,16 +86,23 @@ class HRMController {
     }
 
     private function getSystemLateGraceSettings(): array {
+        if (self::$lateGraceSettingsCache !== null) {
+            return self::$lateGraceSettingsCache;
+        }
         $graceMale = 30;
         $graceFemale = 60;
         try {
-            $stmtGrace = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ? LIMIT 1");
-            $stmtGrace->execute(['hrm_late_grace_male']);
-            $graceMale = (int)($stmtGrace->fetchColumn() ?: 30);
-            $stmtGrace->execute(['hrm_late_grace_female']);
-            $graceFemale = (int)($stmtGrace->fetchColumn() ?: 60);
+            $stmtGrace = $this->db->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('hrm_late_grace_male', 'hrm_late_grace_female')");
+            foreach (($stmtGrace ? $stmtGrace->fetchAll(PDO::FETCH_ASSOC) : []) as $sRow) {
+                if (($sRow['setting_key'] ?? '') === 'hrm_late_grace_male' && (int)$sRow['setting_value'] > 0) {
+                    $graceMale = (int)$sRow['setting_value'];
+                } elseif (($sRow['setting_key'] ?? '') === 'hrm_late_grace_female' && (int)$sRow['setting_value'] > 0) {
+                    $graceFemale = (int)$sRow['setting_value'];
+                }
+            }
         } catch (\Throwable $e) {}
-        return [$graceMale, $graceFemale];
+        self::$lateGraceSettingsCache = [$graceMale, $graceFemale];
+        return self::$lateGraceSettingsCache;
     }
 
     public static function formatLeaveTypeText(string $type): string {
@@ -455,11 +468,22 @@ class HRMController {
 
     private function hasColumn(string $table, string $column): bool {
         if (!isset(self::$tableColumnsCache[$table])) {
-            try {
-                $stmt = $this->db->query("SHOW COLUMNS FROM `{$table}`");
-                self::$tableColumnsCache[$table] = $stmt ? ($stmt->fetchAll(PDO::FETCH_COLUMN) ?: []) : [];
-            } catch (\Throwable $e) {
-                self::$tableColumnsCache[$table] = [];
+            $safeTbl = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
+            $cacheFile = rtrim(sys_get_temp_dir(), '/\\') . '/myerp_hrm_cols_v2_' . $safeTbl . '_' . md5((string)@filemtime(__FILE__)) . '.json';
+            if (@is_file($cacheFile)) {
+                $cached = @json_decode((string)@file_get_contents($cacheFile), true);
+                if (is_array($cached)) {
+                    self::$tableColumnsCache[$table] = $cached;
+                }
+            }
+            if (!isset(self::$tableColumnsCache[$table])) {
+                try {
+                    $stmt = $this->db->query("SHOW COLUMNS FROM `{$table}`");
+                    self::$tableColumnsCache[$table] = $stmt ? ($stmt->fetchAll(PDO::FETCH_COLUMN) ?: []) : [];
+                    @file_put_contents($cacheFile, json_encode(self::$tableColumnsCache[$table]));
+                } catch (\Throwable $e) {
+                    self::$tableColumnsCache[$table] = [];
+                }
             }
         }
         return in_array($column, self::$tableColumnsCache[$table], true);
@@ -2820,15 +2844,15 @@ class HRMController {
 
         if (empty($monthYear)) respond(400, null, 'Thiếu tháng gửi phiếu lương', false);
 
-        // Fetch users who have draft/disputed payslips in this month to notify them
+        // Fetch users who have draft/disputed payslips in this month to notify them (Batch join - zero N+1)
         $stmtUsers = $this->db->prepare("
-            SELECT DISTINCT mp.user_id 
+            SELECT DISTINCT mp.user_id, u.full_name
             FROM monthly_payslips mp
             JOIN users u ON mp.user_id = u.id
             WHERE mp.month_year = ? AND mp.status IN ('draft', 'disputed') AND u.tenant_id = ?
         ");
         $stmtUsers->execute([$monthYear, $auth['tenant_id']]);
-        $userIds = $stmtUsers->fetchAll(PDO::FETCH_COLUMN) ?: [];
+        $userRows = $stmtUsers->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
         $stmt = $this->db->prepare("
             UPDATE monthly_payslips mp
@@ -2841,10 +2865,10 @@ class HRMController {
         // Dispatch Notifications
         try {
             require_once __DIR__ . '/../NotificationService.php';
-            foreach ($userIds as $uid) {
-                $stmtU = $this->db->prepare("SELECT full_name FROM users WHERE id = ?");
-                $stmtU->execute([$uid]);
-                $uName = $stmtU->fetchColumn() ?: 'Nhân viên';
+            foreach ($userRows as $uRow) {
+                $uid = (int)($uRow['user_id'] ?? 0);
+                if ($uid <= 0) continue;
+                $uName = !empty($uRow['full_name']) ? $uRow['full_name'] : 'Nhân viên';
 
                 NotificationService::send($this->db, $auth['tenant_id'], 'HRM_PAYSLIP_PUBLISHED', [
                     'user_id' => $uid,
@@ -3007,10 +3031,16 @@ class HRMController {
         respond(200, ['success' => true, 'status' => 'locked']);
     }
 
+    private static array $autoConfirmedTenants = [];
+
     /**
      * Tự động xác nhận các bản ghi đối soát công đã quá hạn chót (Auto-Confirm Past Deadline)
      */
     public static function autoConfirmExpiredAttendance(PDO $db, int $tenantId = 0): int {
+        if (isset(self::$autoConfirmedTenants[$tenantId])) {
+            return 0;
+        }
+        self::$autoConfirmedTenants[$tenantId] = true;
         try {
             $where = "WHERE ac.status = 'pending' AND b.deadline_at <= NOW()";
             $params = [];
@@ -3796,7 +3826,7 @@ class HRMController {
 
         // 1. Pending Leaves (Chỉ hiển thị đơn người khác gửi đến cần user duyệt, loại trừ đơn của chính mình)
         $stmtLeaves = $this->db->prepare("
-            SELECT l.id, l.user_id, u.full_name as employee_name, l.leave_type, 
+            SELECT l.id, l.user_id, u.full_name as employee_name, u.avatar_url as employee_avatar, l.leave_type, 
                    l.start_date, l.end_date, l.total_days, l.unpaid_days, l.reason, l.status, l.created_at,
                    l.approver_id, l.approver_id_2, l.status_level_1, l.status_level_2,
                    l.approved_by, l.approved_at, l.related_user_ids,
@@ -3855,6 +3885,7 @@ class HRMController {
                     'id' => (int)$l['id'],
                     'type' => 'leave',
                     'employee_name' => $l['employee_name'],
+                    'employee_avatar' => $l['employee_avatar'] ?? null,
                     'user_id' => (int)$l['user_id'],
                     'approver_id' => (int)($l['approver_id'] ?? 0),
                     'approver_id_2' => (int)($l['approver_id_2'] ?? 0),
@@ -3886,7 +3917,7 @@ class HRMController {
 
         // 2. Pending Advances
         $stmtAdvances = $this->db->prepare("
-            SELECT a.*, u.full_name as employee_name,
+            SELECT a.*, u.full_name as employee_name, u.avatar_url as employee_avatar,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
                    u_real.full_name as approved_by_name
@@ -3938,6 +3969,7 @@ class HRMController {
                     'id' => (int)$a['id'],
                     'type' => 'advance',
                     'employee_name' => $a['employee_name'],
+                    'employee_avatar' => $a['employee_avatar'] ?? null,
                     'user_id' => (int)$a['user_id'],
                     'approver_id' => (int)($a['approver_id'] ?? 0),
                     'approver_id_2' => (int)($a['approver_id_2'] ?? 0),
@@ -3963,7 +3995,7 @@ class HRMController {
 
         // 3. Pending Expenses
         $stmtExpenses = $this->db->prepare("
-            SELECT e.*, e.notes as description, u.full_name as employee_name,
+            SELECT e.*, e.notes as description, u.full_name as employee_name, u.avatar_url as employee_avatar,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
                    u_app3.full_name as approver_name_3,
@@ -4047,6 +4079,7 @@ class HRMController {
                     'id' => (int)$e['id'],
                     'type' => 'expense',
                     'employee_name' => $e['employee_name'] ?? ('Người dùng #' . $e['created_by']),
+                    'employee_avatar' => $e['employee_avatar'] ?? null,
                     'user_id' => (int)($e['created_by'] ?? 0),
                     'approver_id' => (int)($e['approver_id'] ?? 0),
                     'approver_id_2' => (int)($e['approver_id_2'] ?? 0),
@@ -4157,7 +4190,7 @@ class HRMController {
 
         // 5. Pending Bulk Attendance Requests (Cho phép Trưởng phòng / Quản lý tự duyệt đơn chấm công của chính mình)
         $stmtBulks = $this->db->prepare("
-            SELECT r.*, u.full_name as employee_name, u.team_id,
+            SELECT r.*, u.full_name as employee_name, u.avatar_url as employee_avatar, u.team_id,
                    u_mgr.full_name as manager_name,
                    u_real.full_name as approved_by_name,
                    (SELECT COUNT(*) FROM attendance_bulk_request_details WHERE request_id = r.id) as days_count,
@@ -4217,6 +4250,7 @@ class HRMController {
                     'id' => (int)$b['id'],
                     'type' => 'attendance_bulk',
                     'employee_name' => $b['employee_name'],
+                    'employee_avatar' => $b['employee_avatar'] ?? null,
                     'user_id' => (int)$b['user_id'],
                     'approver_id' => (int)($b['approved_by'] ?? $b['manager_id'] ?? 0),
                     'approver_id_2' => (int)($b['approver2_id'] ?? 0),
@@ -4248,7 +4282,7 @@ class HRMController {
         // 1. My Leaves
         $stmtLeaves = $this->db->prepare("
             SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.unpaid_days, l.reason, l.status, l.created_at,
-                   l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids, u.full_name as employee_name,
+                   l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids, u.full_name as employee_name, u.avatar_url as employee_avatar,
                    l.approved_by, l.approved_at,
                    l.salary_rate, l.ot_type, l.ot_rate,
                    u_app1.full_name as approver_name,
@@ -4313,7 +4347,7 @@ class HRMController {
 
         // 2. My Advances
         $stmtAdvances = $this->db->prepare("
-            SELECT a.*, u.full_name as employee_name,
+            SELECT a.*, u.full_name as employee_name, u.avatar_url as employee_avatar,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
                    u_real.full_name as approved_by_name
@@ -4367,7 +4401,7 @@ class HRMController {
 
         // 3. My Expenses
         $stmtExpenses = $this->db->prepare("
-            SELECT e.*, e.notes as description, e.created_by as user_id, u.full_name as employee_name,
+            SELECT e.*, e.notes as description, e.created_by as user_id, u.full_name as employee_name, u.avatar_url as employee_avatar,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
                    u_app3.full_name as approver_name_3,
@@ -4404,6 +4438,7 @@ class HRMController {
                 'id' => (int)$e['id'],
                 'type' => 'expense',
                 'employee_name' => $e['employee_name'] ?? ('Người dùng #' . $e['user_id']),
+                'employee_avatar' => $e['employee_avatar'] ?? null,
                 'user_id' => (int)$e['user_id'],
                 'approver_id' => (int)($e['approver_id'] ?? 0),
                 'approver_id_2' => (int)($e['approver_id_2'] ?? 0),
@@ -4515,7 +4550,7 @@ class HRMController {
 
         // 5. My Bulk Attendance Requests
         $stmtBulks = $this->db->prepare("
-            SELECT r.*, u.full_name as employee_name,
+            SELECT r.*, u.full_name as employee_name, u.avatar_url as employee_avatar,
                    u_mgr.full_name as manager_name,
                    u_real.full_name as approved_by_name,
                    (SELECT COUNT(*) FROM attendance_bulk_request_details WHERE request_id = r.id) as days_count,
@@ -4578,7 +4613,7 @@ class HRMController {
                        l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids,
                        l.approved_by, l.approved_at,
                        l.salary_rate, l.ot_type, l.ot_rate,
-                       u.full_name as employee_name,
+                       u.full_name as employee_name, u.avatar_url as employee_avatar,
                        ap1.full_name as approver_name,
                        ap2.full_name as approver_name_2,
                        app_by.full_name as approved_by_name
@@ -4598,7 +4633,7 @@ class HRMController {
                        l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids,
                        l.approved_by, l.approved_at,
                        l.salary_rate, l.ot_type, l.ot_rate,
-                       u.full_name as employee_name,
+                       u.full_name as employee_name, u.avatar_url as employee_avatar,
                        ap1.full_name as approver_name,
                        ap2.full_name as approver_name_2,
                        app_by.full_name as approved_by_name
@@ -4634,6 +4669,7 @@ class HRMController {
                     'id' => (int)$l['id'],
                     'type' => 'leave',
                     'employee_name' => $l['employee_name'],
+                    'employee_avatar' => $l['employee_avatar'] ?? null,
                     'user_id' => (int)$l['user_id'],
                     'approver_id' => (int)($l['approver_id'] ?? 0),
                     'approver_id_2' => (int)($l['approver_id_2'] ?? 0),
@@ -4666,7 +4702,7 @@ class HRMController {
 
         // 2. Advances where user is in related_user_ids (excluding drafts)
         $stmtAdvances = $this->db->prepare("
-            SELECT a.*, u.full_name as employee_name,
+            SELECT a.*, u.full_name as employee_name, u.avatar_url as employee_avatar,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
                    u_real.full_name as approved_by_name
@@ -4698,6 +4734,7 @@ class HRMController {
                     'id' => (int)$a['id'],
                     'type' => 'advance',
                     'employee_name' => $a['employee_name'],
+                    'employee_avatar' => $a['employee_avatar'] ?? null,
                     'user_id' => (int)$a['user_id'],
                     'approver_id' => (int)($a['approver_id'] ?? 0),
                     'approver_id_2' => (int)($a['approver_id_2'] ?? 0),
@@ -4725,7 +4762,7 @@ class HRMController {
         // 3. Expenses where user is in related_user_ids (excluding drafts)
         $stmtExpenses = $this->db->prepare("
             SELECT e.*, e.notes as description, e.created_by as user_id,
-                   u.full_name as employee_name,
+                   u.full_name as employee_name, u.avatar_url as employee_avatar,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
                    u_app3.full_name as approver_name_3,
@@ -4764,6 +4801,7 @@ class HRMController {
                     'id' => (int)$e['id'],
                     'type' => 'expense',
                     'employee_name' => $e['employee_name'] ?? ('Người dùng #' . $e['user_id']),
+                    'employee_avatar' => $e['employee_avatar'] ?? null,
                     'user_id' => (int)$e['user_id'],
                     'approver_id' => (int)($e['approver_id'] ?? 0),
                     'approver_id_2' => (int)($e['approver_id_2'] ?? 0),
@@ -4809,7 +4847,7 @@ class HRMController {
 
         // 4. Bulk Attendance Requests where user is in related_user_ids (excluding drafts)
         $stmtBulks = $this->db->prepare("
-            SELECT r.*, u.full_name as employee_name,
+            SELECT r.*, u.full_name as employee_name, u.avatar_url as employee_avatar,
                    u_mgr.full_name as manager_name,
                    u_app.full_name as approved_by_name,
                    (SELECT COUNT(*) FROM attendance_bulk_request_details WHERE request_id = r.id) as days_count,
@@ -4838,6 +4876,7 @@ class HRMController {
                     'id' => (int)$b['id'],
                     'type' => 'attendance_bulk',
                     'employee_name' => $b['employee_name'],
+                    'employee_avatar' => $b['employee_avatar'] ?? null,
                     'user_id' => (int)$b['user_id'],
                     'approver_id' => (int)($b['approved_by'] ?? $b['manager_id'] ?? 0),
                     'approver_id_2' => (int)($b['approver2_id'] ?? 0),
@@ -4894,7 +4933,7 @@ class HRMController {
                        l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids,
                        l.approved_by, l.approved_at,
                        l.salary_rate, l.ot_type, l.ot_rate,
-                       u.full_name as employee_name,
+                       u.full_name as employee_name, u.avatar_url as employee_avatar,
                        ap1.full_name as approver_name,
                        ap2.full_name as approver_name_2,
                        app_by.full_name as approved_by_name
@@ -4921,7 +4960,7 @@ class HRMController {
                        l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids,
                        l.approved_by, l.approved_at,
                        l.salary_rate, l.ot_type, l.ot_rate,
-                       u.full_name as employee_name,
+                       u.full_name as employee_name, u.avatar_url as employee_avatar,
                        ap1.full_name as approver_name,
                        ap2.full_name as approver_name_2,
                        app_by.full_name as approved_by_name
@@ -4961,6 +5000,7 @@ class HRMController {
                 'id' => (int)$l['id'],
                 'type' => 'leave',
                 'employee_name' => $l['employee_name'],
+                'employee_avatar' => $l['employee_avatar'] ?? null,
                 'user_id' => (int)$l['user_id'],
                 'approver_id' => (int)($l['approver_id'] ?? 0),
                 'approver_id_2' => (int)($l['approver_id_2'] ?? 0),
@@ -4991,7 +5031,7 @@ class HRMController {
 
         // 2. All Advances
         $advSelect = "
-            SELECT a.*, u.full_name as employee_name,
+            SELECT a.*, u.full_name as employee_name, u.avatar_url as employee_avatar,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
                    u_real.full_name as approved_by_name
@@ -5045,6 +5085,7 @@ class HRMController {
                 'id' => (int)$a['id'],
                 'type' => 'advance',
                 'employee_name' => $a['employee_name'],
+                'employee_avatar' => $a['employee_avatar'] ?? null,
                 'user_id' => (int)$a['user_id'],
                 'approver_id' => (int)($a['approver_id'] ?? 0),
                 'approver_id_2' => (int)($a['approver_id_2'] ?? 0),
@@ -5070,7 +5111,7 @@ class HRMController {
         // 3. All Expenses
         $expSelect = "
             SELECT e.*, e.notes as description, e.created_by as user_id,
-                   u.full_name as employee_name,
+                   u.full_name as employee_name, u.avatar_url as employee_avatar,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
                    u_app3.full_name as approver_name_3,
@@ -5136,6 +5177,7 @@ class HRMController {
                 'id' => (int)$e['id'],
                 'type' => 'expense',
                 'employee_name' => $e['employee_name'] ?? ('Người dùng #' . $e['user_id']),
+                'employee_avatar' => $e['employee_avatar'] ?? null,
                 'user_id' => (int)$e['user_id'],
                 'approver_id' => (int)($e['approver_id'] ?? 0),
                 'approver_id_2' => (int)($e['approver_id_2'] ?? 0),
@@ -5270,7 +5312,7 @@ class HRMController {
 
         // 5. All Bulk Attendance Requests
         $bulkSelect = "
-            SELECT r.*, u.full_name as employee_name,
+            SELECT r.*, u.full_name as employee_name, u.avatar_url as employee_avatar,
                    u_mgr.full_name as manager_name,
                    u_app.full_name as approved_by_name,
                    (SELECT COUNT(*) FROM attendance_bulk_request_details WHERE request_id = r.id) as days_count,
@@ -5325,6 +5367,7 @@ class HRMController {
                 'id' => (int)$b['id'],
                 'type' => 'attendance_bulk',
                 'employee_name' => $b['employee_name'],
+                'employee_avatar' => $b['employee_avatar'] ?? null,
                 'user_id' => (int)$b['user_id'],
                 'approver_id' => (int)($b['approved_by'] ?? $b['manager_id'] ?? 0),
                 'approver_id_2' => (int)($b['approver2_id'] ?? 0),
@@ -5343,7 +5386,7 @@ class HRMController {
 
         // 6. Purchase Orders (PO waiting approval)
         $poSelect = "
-            SELECT po.*, s.name as supplier_name, u.full_name as creator_name,
+            SELECT po.*, s.name as supplier_name, u.full_name as creator_name, u.avatar_url as creator_avatar,
                    app1.full_name as approver_name,
                    app2.full_name as approver_name_2,
                    app3.full_name as approver_name_3
@@ -5386,6 +5429,7 @@ class HRMController {
                 'id' => (int)$p['id'],
                 'type' => 'po',
                 'employee_name' => $p['creator_name'],
+                'employee_avatar' => $p['creator_avatar'] ?? null,
                 'user_id' => (int)$p['created_by'],
                 'created_by' => (int)$p['created_by'],
                 'approver_id' => (int)($p['approver_id'] ?? 0),
@@ -5696,15 +5740,13 @@ class HRMController {
     private function parseAndNotifyMentions(string $body, int $id, string $type, array $auth, ?int $commentId = null): array {
         $mentions = [];
         if (preg_match_all('/data-user-id=(?:&quot;|["\']|\\\\+["\'])?(\d+)/i', (string)$body, $matches)) {
-            $uids = array_filter(array_map('intval', $matches[1]));
-            foreach ($uids as $uid) {
-                if ($uid !== (int)$auth['user_id']) {
-                    $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE id=? AND tenant_id=?");
-                    $stmtUser->execute([$uid, $auth['tenant_id']]);
-                    $userRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
-                    if ($userRow) {
-                        $mentions[$uid] = $userRow;
-                    }
+            $uids = array_values(array_unique(array_filter(array_map('intval', $matches[1]), fn($u) => $u > 0 && $u !== (int)$auth['user_id'])));
+            if (!empty($uids)) {
+                $inPh = implode(',', array_fill(0, count($uids), '?'));
+                $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE id IN ($inPh) AND tenant_id=?");
+                $stmtUser->execute(array_merge($uids, [$auth['tenant_id']]));
+                foreach ($stmtUser->fetchAll(PDO::FETCH_ASSOC) ?: [] as $userRow) {
+                    $mentions[(int)$userRow['id']] = $userRow;
                 }
             }
         }
@@ -6453,34 +6495,39 @@ class HRMController {
         $effBhtnDN  = $gross > 0 ? $bhtnDN : round($projectedInsSal * 0.01);
         $effKpcdDN  = $gross > 0 ? $kpcdDN : $projectedKPCD;
 
-        // 2. Lấy dữ liệu Doanh thu Học phí/Cọc (deposits + invoices)
+        // 2. Lấy dữ liệu Doanh thu Học phí/Cọc (deposits + invoices - SARGable date range)
+        $monthStart = $month . '-01';
+        $monthEnd = date('Y-m-t', strtotime($monthStart));
+        $monthStartTs = $monthStart . ' 00:00:00';
+        $monthEndTs = $monthEnd . ' 23:59:59';
+
         $dStmt = $this->db->prepare("
             SELECT COALESCE(SUM(price), 0) as total_deposit
             FROM deposits d
             JOIN contacts c ON d.contact_id = c.id
-            WHERE c.tenant_id = ? AND d.status = 'approved' AND DATE_FORMAT(d.created_at, '%Y-%m') = ?
+            WHERE c.tenant_id = ? AND d.deleted_at IS NULL AND d.status = 'approved' AND d.created_at >= ? AND d.created_at <= ?
         ");
-        $dStmt->execute([$tid, $month]);
+        $dStmt->execute([$tid, $monthStartTs, $monthEndTs]);
         $depRow = $dStmt->fetch(PDO::FETCH_ASSOC);
         $depositRevenue = (float)($depRow['total_deposit'] ?? 0);
 
         $iStmt = $this->db->prepare("
             SELECT COALESCE(SUM(total), 0) as total_invoice
             FROM invoices
-            WHERE tenant_id = ? AND status = 'paid' AND deleted_at IS NULL AND DATE_FORMAT(paid_at, '%Y-%m') = ?
+            WHERE tenant_id = ? AND status = 'paid' AND deleted_at IS NULL AND paid_at >= ? AND paid_at <= ?
         ");
-        $iStmt->execute([$tid, $month]);
+        $iStmt->execute([$tid, $monthStartTs, $monthEndTs]);
         $invRow = $iStmt->fetch(PDO::FETCH_ASSOC);
         $invoiceRevenue = (float)($invRow['total_invoice'] ?? 0);
         $totalRevenue = $depositRevenue + $invoiceRevenue;
 
-        // 3. Lấy dữ liệu Chi phí vận hành (expenses)
+        // 3. Lấy dữ liệu Chi phí vận hành (expenses - SARGable date range)
         $eStmt = $this->db->prepare("
             SELECT COALESCE(SUM(amount), 0) as total_expense, COALESCE(SUM(vat_amount), 0) as total_vat
             FROM expenses
-            WHERE tenant_id = ? AND status = 'approved' AND deleted_at IS NULL AND DATE_FORMAT(date, '%Y-%m') = ?
+            WHERE tenant_id = ? AND status = 'approved' AND deleted_at IS NULL AND date >= ? AND date <= ?
         ");
-        $eStmt->execute([$tid, $month]);
+        $eStmt->execute([$tid, $monthStart, $monthEnd]);
         $expRow = $eStmt->fetch(PDO::FETCH_ASSOC);
         $totalExpense = (float)($expRow['total_expense'] ?? 0);
         $totalExpVAT  = (float)($expRow['total_vat'] ?? 0);
@@ -6907,19 +6954,34 @@ class HRMController {
                 u.id, u.full_name, u.gender, u.dob, u.citizen_id, u.address, u.phone, u.email,
                 u.job_title, u.created_at as joined_date, u.is_active, u.avatar_url, u.avatar_url as avatar,
                 p.base_salary, p.deal_salary, p.annual_leave_used, p.annual_leave_total,
-                (SELECT contract_type FROM hrm_contracts c WHERE c.user_id = u.id ORDER BY c.id DESC LIMIT 1) as last_contract_type,
-                (SELECT start_date FROM hrm_contracts c WHERE c.user_id = u.id ORDER BY c.id DESC LIMIT 1) as contract_start_date,
-                (SELECT end_date FROM hrm_contracts c WHERE c.user_id = u.id ORDER BY c.id DESC LIMIT 1) as contract_end_date,
-                (SELECT contract_code FROM hrm_contracts c WHERE c.user_id = u.id ORDER BY c.id DESC LIMIT 1) as contract_code,
-                (SELECT COALESCE(SUM(COALESCE(mp.overtime_days, 0) * 8), 0) FROM monthly_payslips mp WHERE mp.user_id = u.id AND mp.month_year LIKE '{$year}-%') as total_ot_hours
+                lc.contract_type as last_contract_type,
+                lc.start_date as contract_start_date,
+                lc.end_date as contract_end_date,
+                lc.contract_code as contract_code,
+                COALESCE(ot.total_ot_hours, 0) as total_ot_hours
             FROM users u
             LEFT JOIN hrm_profiles p ON u.id = p.user_id
+            LEFT JOIN (
+                SELECT c1.user_id, c1.contract_type, c1.start_date, c1.end_date, c1.contract_code
+                FROM hrm_contracts c1
+                INNER JOIN (
+                    SELECT user_id, MAX(id) as max_id
+                    FROM hrm_contracts
+                    GROUP BY user_id
+                ) c2 ON c1.id = c2.max_id
+            ) lc ON lc.user_id = u.id
+            LEFT JOIN (
+                SELECT user_id, SUM(COALESCE(overtime_days, 0) * 8) as total_ot_hours
+                FROM monthly_payslips
+                WHERE month_year LIKE ?
+                GROUP BY user_id
+            ) ot ON ot.user_id = u.id
             WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
             ORDER BY u.id ASC
         ";
         try {
             $stmt = $this->db->prepare($sql);
-            $stmt->execute([$tid]);
+            $stmt->execute(["{$year}-%", $tid]);
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
         } catch (\Throwable $e) {
             $stmt = $this->db->prepare("

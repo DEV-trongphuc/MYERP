@@ -27,7 +27,13 @@ import { Avatar, getColorFromName } from '../ui/Avatar';
 import { CustomSelect } from '../ui/CustomSelect';
 import { CustomModal } from '../ui/CustomModal';
 import { Pagination } from '../ui/Pagination';
-import { KpiCardSkeleton, TableSkeleton } from '../ui/Skeleton';
+import {
+  KpiCardSkeleton,
+  TableSkeleton,
+  PipelineCardsAndSpectrumSkeleton,
+  LeaderboardCardSkeleton,
+  DonutAndRankedListSkeleton
+} from '../ui/Skeleton';
 
 const CustomerProfileDrawer = lazy(() =>
   import('../../pages/CustomerProfileDrawer').then((m) => ({ default: m.CustomerProfileDrawer }))
@@ -181,6 +187,8 @@ interface SalesLeadPerformanceData {
     reason: string;
     count: number;
   }>;
+  initial_drilldown_pool?: any[];
+  initial_drilldown_pool_complete?: boolean;
 }
 
 type DrilldownType =
@@ -242,6 +250,12 @@ const formatUncontactedDuration = (hours?: number): string => {
   return remHours > 0 ? `Chưa tương tác ${days} ngày ${remHours}h` : `Chưa tương tác ${days} ngày`;
 };
 
+const deckCache = new Map<string, { data: SalesLeadPerformanceData; timestamp: number }>();
+const SWR_TTL_MS = 45_000;
+
+const buildSalesPerfCacheKey = (dateVal: string, consultantId: number, funnelSaleId: number, sourceVal: string) =>
+  `${dateVal}|${consultantId}|${funnelSaleId}|${sourceVal || 'all'}`;
+
 export const SalesLeadPerformanceDeck: React.FC<Props> = ({
   embedInPage = 'dashboard',
   externalDateFilter
@@ -250,12 +264,25 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
   const [localDateFilter, setLocalDateFilter] = useState<string>('Tháng này');
   const activeDateFilter = embedInPage === 'dashboard' && externalDateFilter ? externalDateFilter : localDateFilter;
 
+  const [isMobile, setIsMobile] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth <= 768);
+  const [showMobileFilters, setShowMobileFilters] = useState<boolean>(false);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   const [selectedConsultantId, setSelectedConsultantId] = useState<number>(0);
   const [funnelConsultantId, setFunnelConsultantId] = useState<number>(0);
   const [selectedSource, setSelectedSource] = useState<string>('all');
-  const [data, setData] = useState<SalesLeadPerformanceData | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const initialPerfCacheKey = buildSalesPerfCacheKey(activeDateFilter, 0, 0, 'all');
+  const [data, setData] = useState<SalesLeadPerformanceData | null>(
+    () => deckCache.get(initialPerfCacheKey)?.data ?? null
+  );
+  const [loading, setLoading] = useState<boolean>(() => !deckCache.has(initialPerfCacheKey));
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const abortPerfRef = useRef<AbortController | null>(null);
 
   // Table pagination states for high-speed rendering
   const [salesPage, setSalesPage] = useState<number>(1);
@@ -296,9 +323,36 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
   }, [drillSearchInput]);
 
   const fetchPerformance = useCallback(
-    async (dateVal: string, consultantId: number, funnelSaleId: number, sourceVal: string) => {
-      setLoading(true);
-      setError(null);
+    async (
+      dateVal: string,
+      consultantId: number,
+      funnelSaleId: number,
+      sourceVal: string,
+      forceRefresh = false
+    ) => {
+      const cacheKey = buildSalesPerfCacheKey(dateVal, consultantId, funnelSaleId, sourceVal);
+      const cached = deckCache.get(cacheKey);
+      const now = Date.now();
+
+      if (cached) {
+        setData(cached.data);
+        setLoading(false);
+        setError(null);
+        if (!forceRefresh && now - cached.timestamp < SWR_TTL_MS) {
+          return;
+        }
+        setIsRefreshing(true);
+      } else {
+        setLoading(true);
+        setError(null);
+      }
+
+      if (abortPerfRef.current) {
+        abortPerfRef.current.abort();
+      }
+      const controller = new AbortController();
+      abortPerfRef.current = controller;
+
       try {
         const params: Record<string, any> = {
           date: dateVal,
@@ -310,13 +364,24 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
         if (sourceVal && sourceVal !== 'all') {
           params.source = sourceVal;
         }
-        const res = await api.get('/dashboard/sales-lead-performance', { params });
+        const res = await api.get('/dashboard/sales-lead-performance', {
+          params,
+          signal: controller.signal
+        });
+        if (controller.signal.aborted) return;
         const payload = res.data?.data || res.data;
+        deckCache.set(cacheKey, { data: payload, timestamp: Date.now() });
         setData(payload);
       } catch (err: any) {
-        setError(err?.response?.data?.message || 'Không thể tải dữ liệu hiệu suất Sales & Lead');
+        if (err?.name === 'CanceledError' || err?.name === 'AbortError' || controller.signal.aborted) return;
+        if (!cached) {
+          setError(err?.response?.data?.message || 'Không thể tải dữ liệu hiệu suất Sales & Lead');
+        }
       } finally {
-        setLoading(false);
+        if (abortPerfRef.current === controller) {
+          setLoading(false);
+          setIsRefreshing(false);
+        }
       }
     },
     []
@@ -332,9 +397,102 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
   };
 
   useEffect(() => {
-    drillCacheRef.current.clear();
     fetchPerformance(activeDateFilter, selectedConsultantId, funnelConsultantId, selectedSource);
+    return () => {
+      if (abortPerfRef.current) {
+        abortPerfRef.current.abort();
+      }
+    };
   }, [activeDateFilter, selectedConsultantId, funnelConsultantId, selectedSource, fetchPerformance]);
+
+  // 0ms Instant Client-Side Drilldown Filter from pre-warmed initial_drilldown_pool
+  const resolveFromLocalPool = useCallback(
+    (
+      modalState: DrilldownModalState,
+      pageNum: number,
+      searchText: string
+    ): { items: any[]; total: number } | null => {
+      if (
+        !data?.initial_drilldown_pool_complete ||
+        !Array.isArray(data?.initial_drilldown_pool) ||
+        modalState.type === 'reminder' ||
+        modalState.type === 'duplicate_profile'
+      ) {
+        return null;
+      }
+      // Only use local pool if the modal's consultant/source filter is compatible with the pool's top-level filter
+      if (selectedConsultantId > 0 && modalState.consultantId !== selectedConsultantId) {
+        return null;
+      }
+      if (selectedSource && selectedSource !== 'all' && modalState.source !== selectedSource) {
+        return null;
+      }
+
+      const hasSourceFilter = Boolean(modalState.source && modalState.source !== 'all');
+      const kw = searchText.trim().toLowerCase();
+
+      const matched = data.initial_drilldown_pool.filter((r: any) => {
+        // 1. Period & deposit scope
+        if (hasSourceFilter) {
+          if (Number(r.in_period_created || 0) !== 1 && Number(r.has_period_deposit || 0) !== 1) return false;
+        } else {
+          if (Number(r.in_period_created || 0) !== 1) return false;
+        }
+
+        // 2. Consultant filter
+        if (modalState.consultantId > 0 && Number(r.owner_id || 0) !== Number(modalState.consultantId)) {
+          return false;
+        }
+
+        // 3. Source filter
+        if (hasSourceFilter && String(r.source || 'Chưa phân loại').trim() !== modalState.source) {
+          return false;
+        }
+
+        // 4. Drilldown type filter
+        const isUc = Number(r.is_uncontacted || 0) === 1;
+        const isQual = Number(r.is_qualified || 0) === 1;
+        const isWin = Number(r.is_win || 0) === 1;
+        const hasDep = Number(r.has_period_deposit || 0) === 1;
+
+        if (modalState.type === 'uncontacted' && !isUc) return false;
+        if (modalState.type === 'contacted' && isUc) return false;
+        if (modalState.type === 'qualified' && !isQual) return false;
+        if (modalState.type === 'qualified_all') {
+          if (hasSourceFilter) {
+            if (!isQual && !isWin && !hasDep) return false;
+          } else {
+            if (!isQual && !isWin) return false;
+          }
+        }
+        if (modalState.type === 'win' && !isWin) return false;
+        if (modalState.type === 'unconnected' && (isQual || isWin)) return false;
+        if (modalState.type === 'stage' && modalState.stageId > 0) {
+          if (Number(r.resolved_stage_id || r.stage_id || 0) !== Number(modalState.stageId)) return false;
+        }
+
+        // 5. Search keyword
+        if (kw !== '') {
+          const fn = String(r.full_name || '').toLowerCase();
+          const ph = String(r.phone || '').toLowerCase();
+          const em = String(r.email || '').toLowerCase();
+          const pr = String(r.program || '').toLowerCase();
+          if (!fn.includes(kw) && !ph.includes(kw) && !em.includes(kw) && !pr.includes(kw)) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+
+      const startIdx = (pageNum - 1) * DRILLDOWN_PAGE_SIZE;
+      return {
+        items: matched.slice(startIdx, startIdx + DRILLDOWN_PAGE_SIZE),
+        total: matched.length
+      };
+    },
+    [data?.initial_drilldown_pool, data?.initial_drilldown_pool_complete, selectedConsultantId, selectedSource]
+  );
 
   const fetchDrilldownList = useCallback(
     async (
@@ -344,6 +502,18 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
       bypassCache = false
     ) => {
       if (!modalState.isOpen) return;
+
+      // 0ms Instant Resolution from in-memory pool
+      if (!bypassCache) {
+        const localRes = resolveFromLocalPool(modalState, pageNum, searchText);
+        if (localRes) {
+          setDrillItems(localRes.items);
+          setDrillTotal(localRes.total);
+          setDrillLoading(false);
+          return;
+        }
+      }
+
       const cacheKey = `${activeDateFilter}|${modalState.type}|${modalState.consultantId}|${modalState.source}|${modalState.stageId}|${pageNum}|${searchText}`;
       if (!bypassCache && drillCacheRef.current.has(cacheKey)) {
         const cached = drillCacheRef.current.get(cacheKey)!;
@@ -395,7 +565,7 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
         }
       }
     },
-    [activeDateFilter]
+    [activeDateFilter, resolveFromLocalPool]
   );
 
   useEffect(() => {
@@ -412,10 +582,7 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
     stageId?: number;
     stageName?: string;
   }) => {
-    setDrillPage(1);
-    setDrillSearchInput('');
-    setDrillSearch('');
-    setDrillModal({
+    const nextModal: DrilldownModalState = {
       isOpen: true,
       type: opts.type,
       title: opts.title,
@@ -423,7 +590,18 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
       source: opts.source !== undefined ? opts.source : selectedSource,
       stageId: opts.stageId || 0,
       stageName: opts.stageName
-    });
+    };
+    setDrillPage(1);
+    setDrillSearchInput('');
+    setDrillSearch('');
+    // Synchronously hydrate items in 0ms before modal even paints!
+    const localRes = resolveFromLocalPool(nextModal, 1, '');
+    if (localRes) {
+      setDrillItems(localRes.items);
+      setDrillTotal(localRes.total);
+      setDrillLoading(false);
+    }
+    setDrillModal(nextModal);
   };
 
   const summary = data?.summary || {
@@ -625,7 +803,12 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
           <KpiCardSkeleton />
           <KpiCardSkeleton />
         </div>
-        <TableSkeleton rows={6} cols={7} />
+        <PipelineCardsAndSpectrumSkeleton />
+        <LeaderboardCardSkeleton rows={5} />
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(440px, 1fr))', gap: '1.25rem' }}>
+          <DonutAndRankedListSkeleton rows={5} />
+          <LeaderboardCardSkeleton rows={5} />
+        </div>
       </div>
     );
   }
@@ -663,138 +846,207 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
       <div
         className="card"
         style={{
-          padding: '0.875rem 1.25rem',
+          padding: isMobile ? '0.625rem 0.75rem' : '0.875rem 1.25rem',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
-          gap: '0.875rem'
+          gap: '0.625rem'
         }}
       >
         {/* Left: Clean Period Info */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem', flexWrap: 'wrap', fontSize: '0.8rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--color-text)', fontWeight: 700 }}>
-            <Calendar size={14} style={{ color: 'var(--color-primary)' }} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: isMobile ? '100%' : 'auto', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.8rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--color-text)', fontWeight: 700, fontSize: isMobile ? '0.75rem' : '0.8rem' }}>
+            <Calendar size={14} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
             <span>
-              Kỳ thống kê: {formatDateShort(data?.date_range?.from)} – {formatDateShort(data?.date_range?.to)}
+              Kỳ: {formatDateShort(data?.date_range?.from)} – {formatDateShort(data?.date_range?.to)}
             </span>
           </span>
-          <span style={{ color: 'var(--color-border)' }}>•</span>
-          <button
-            type="button"
-            onClick={() => setShowUncontactedHelp((v) => !v)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '3px 8px',
-              borderRadius: '6px',
-              border: '1px solid var(--color-border-light)',
-              background: 'var(--color-bg)',
-              color: 'var(--color-text)',
-              fontSize: '0.73rem',
-              fontWeight: 700,
-              cursor: 'pointer'
-            }}
-          >
-            <HelpCircle size={12} style={{ color: 'var(--color-primary)' }} />
-            <span>Quy chuẩn Chưa tương tác &amp; Qualified</span>
-          </button>
+          {!isMobile && <span style={{ color: 'var(--color-border)' }}>•</span>}
+          {!isMobile && (
+            <button
+              type="button"
+              onClick={() => setShowUncontactedHelp((v) => !v)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                border: '1px solid var(--color-border-light)',
+                background: 'var(--color-bg)',
+                color: 'var(--color-text)',
+                fontSize: '0.73rem',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              <HelpCircle size={12} style={{ color: 'var(--color-primary)' }} />
+              <span>Quy chuẩn Chưa tương tác &amp; Qualified</span>
+            </button>
+          )}
+
+          {isMobile && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <button
+                type="button"
+                onClick={() => setShowUncontactedHelp((v) => !v)}
+                style={{
+                  height: 30,
+                  width: 30,
+                  borderRadius: 7,
+                  border: '1px solid var(--color-border-light)',
+                  background: 'var(--color-bg)',
+                  color: 'var(--color-primary)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer'
+                }}
+                title="Quy chuẩn Chưa tương tác & Qualified"
+              >
+                <HelpCircle size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowMobileFilters((v) => !v)}
+                style={{
+                  height: 30,
+                  padding: '0 10px',
+                  borderRadius: 7,
+                  border: hasActiveSubFilters ? '1px solid #C6333D' : '1px solid var(--color-border-light)',
+                  background: hasActiveSubFilters ? '#fef2f2' : '#ffffff',
+                  color: hasActiveSubFilters ? '#C6333D' : '#0f172a',
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  cursor: 'pointer'
+                }}
+              >
+                <Filter size={13} />
+                <span>Lọc{hasActiveSubFilters ? ' •' : ''}</span>
+              </button>
+              <button
+                onClick={() => {
+                  drillCacheRef.current.clear();
+                  fetchPerformance(activeDateFilter, selectedConsultantId, funnelConsultantId, selectedSource, true);
+                }}
+                className="btn outline sm"
+                style={{
+                  height: 30,
+                  width: 30,
+                  padding: 0,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                title="Làm mới số liệu"
+              >
+                <RefreshCw size={13} className={loading || isRefreshing ? 'animate-spin' : ''} />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Right: Filters */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexWrap: 'wrap' }}>
-          {embedInPage === 'contacts' && (
-            <div style={{ minWidth: '160px' }}>
+        {(!isMobile || showMobileFilters) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
+            {embedInPage === 'contacts' && (
+              <div style={{ minWidth: isMobile ? '100%' : '160px', flex: isMobile ? '1 1 100%' : undefined }}>
+                <CustomSelect
+                  options={localDateOptions}
+                  value={localDateFilter}
+                  onChange={(val) => {
+                    setLocalDateFilter(String(val));
+                    setSalesPage(1);
+                    setSourcePage(1);
+                    setOrdersPage(1);
+                  }}
+                  size="sm"
+                  width="100%"
+                />
+              </div>
+            )}
+
+            <div style={{ minWidth: isMobile ? '140px' : '210px', flex: isMobile ? '1 1 45%' : undefined }}>
               <CustomSelect
-                options={localDateOptions}
-                value={localDateFilter}
-                onChange={(val) => {
-                  setLocalDateFilter(String(val));
-                  setSalesPage(1);
-                  setSourcePage(1);
-                  setOrdersPage(1);
-                }}
+                options={consultantOptions}
+                value={selectedConsultantId}
+                onChange={(val) => handleTopConsultantChange(Number(val))}
+                showAvatars
+                searchable
                 size="sm"
                 width="100%"
               />
             </div>
-          )}
 
-          <div style={{ minWidth: '210px' }}>
-            <CustomSelect
-              options={consultantOptions}
-              value={selectedConsultantId}
-              onChange={(val) => handleTopConsultantChange(Number(val))}
-              showAvatars
-              searchable
-              size="sm"
-              width="100%"
-            />
+            <div style={{ minWidth: isMobile ? '140px' : '195px', flex: isMobile ? '1 1 45%' : undefined }}>
+              <CustomSelect
+                options={sourceOptions}
+                value={selectedSource}
+                onChange={(val) => {
+                  setSelectedSource(String(val));
+                  setSalesPage(1);
+                  setSourcePage(1);
+                  setOrdersPage(1);
+                }}
+                searchable
+                size="sm"
+                width="100%"
+              />
+            </div>
+
+            {hasActiveSubFilters && (
+              <button
+                onClick={() => {
+                  setSelectedConsultantId(0);
+                  setFunnelConsultantId(0);
+                  setSelectedSource('all');
+                  setSalesPage(1);
+                  setSourcePage(1);
+                  setOrdersPage(1);
+                }}
+                className="btn outline sm"
+                style={{
+                  height: '34px',
+                  padding: '0 10px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  fontSize: '0.75rem',
+                  fontWeight: 700
+                }}
+                title="Xóa bộ lọc Sale & Nguồn"
+              >
+                <RotateCcw size={13} />
+                <span>Đặt lại</span>
+              </button>
+            )}
+
+            {!isMobile && (
+              <button
+                onClick={() => {
+                  drillCacheRef.current.clear();
+                  fetchPerformance(activeDateFilter, selectedConsultantId, funnelConsultantId, selectedSource, true);
+                }}
+                className="btn outline sm"
+                style={{
+                  height: '34px',
+                  width: '34px',
+                  padding: 0,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                title="Làm mới số liệu"
+              >
+                <RefreshCw size={14} className={loading || isRefreshing ? 'animate-spin' : ''} />
+              </button>
+            )}
           </div>
-
-          <div style={{ minWidth: '195px' }}>
-            <CustomSelect
-              options={sourceOptions}
-              value={selectedSource}
-              onChange={(val) => {
-                setSelectedSource(String(val));
-                setSalesPage(1);
-                setSourcePage(1);
-                setOrdersPage(1);
-              }}
-              searchable
-              size="sm"
-              width="100%"
-            />
-          </div>
-
-          {hasActiveSubFilters && (
-            <button
-              onClick={() => {
-                setSelectedConsultantId(0);
-                setFunnelConsultantId(0);
-                setSelectedSource('all');
-                setSalesPage(1);
-                setSourcePage(1);
-                setOrdersPage(1);
-              }}
-              className="btn outline sm"
-              style={{
-                height: '34px',
-                padding: '0 10px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px',
-                fontSize: '0.75rem',
-                fontWeight: 700
-              }}
-              title="Xóa bộ lọc Sale & Nguồn"
-            >
-              <RotateCcw size={13} />
-              <span>Đặt lại</span>
-            </button>
-          )}
-
-          <button
-            onClick={() => {
-              drillCacheRef.current.clear();
-              fetchPerformance(activeDateFilter, selectedConsultantId, funnelConsultantId, selectedSource);
-            }}
-            className="btn outline sm"
-            style={{
-              height: '34px',
-              width: '34px',
-              padding: 0,
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-            title="Làm mới số liệu"
-          >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          </button>
-        </div>
+        )}
       </div>
 
       {/* Collapsible Definition Banner */}
@@ -2803,96 +3055,184 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
           {/* Modal Toolbar: Explicit Segmented Pill Switcher + Search + Sale/Source Filters */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
-            <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '4px',
-                background: 'var(--color-bg)',
-                border: '1px solid var(--color-border-light)',
-                borderRadius: '10px',
-                flexWrap: 'wrap'
-              }}
-            >
-              {[
-                { id: 'all', label: 'Tất cả Lead' },
-                { id: 'uncontacted', label: 'Chưa tương tác' },
-                { id: 'unconnected', label: 'Chưa Connect' },
-                { id: 'contacted', label: 'Đã tương tác' },
-                { id: 'qualified', label: 'Lead Qualified' },
-                { id: 'win', label: 'Win' },
-                { id: 'duplicate_profile', label: `Trùng hồ sơ (${summary.duplicate_profile_count ?? 0})` },
-                { id: 'reminder', label: `Nhắc lại (${summary.reminder_count ?? 0})` }
-              ].map((tab) => {
-                const isActive = drillModal.type === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => {
-                      setDrillPage(1);
-                      setDrillModal((prev) => ({
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.625rem' }}>
+            {isMobile ? (
+              <div style={{ flex: '1 1 100%' }}>
+                <select
+                  value={drillModal.type}
+                  onChange={(e) => {
+                    const nextType = e.target.value as DrilldownType;
+                    const tabMap: Record<string, string> = {
+                      all: 'Tất cả Lead',
+                      uncontacted: 'Chưa tương tác',
+                      unconnected: 'Chưa Connect',
+                      contacted: 'Đã tương tác',
+                      qualified: 'Lead Qualified',
+                      win: 'Win',
+                      duplicate_profile: `Trùng hồ sơ (${summary.duplicate_profile_count ?? 0})`,
+                      reminder: `Nhắc lại (${summary.reminder_count ?? 0})`
+                    };
+                    setDrillPage(1);
+                    setDrillModal((prev) => {
+                      const next = {
                         ...prev,
-                        type: tab.id as DrilldownType,
+                        type: nextType,
                         stageId: 0,
-                        title: tab.label
-                      }));
-                    }}
-                    style={{
-                      height: '30px',
-                      padding: '0 12px',
-                      borderRadius: '7px',
-                      fontSize: '0.76rem',
-                      fontWeight: isActive ? 700 : 600,
-                      border: 'none',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                      background: isActive ? 'var(--color-surface)' : 'transparent',
-                      color: isActive ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                      boxShadow: isActive ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <div style={{ position: 'relative', minWidth: '210px' }}>
-                <Search
-                  size={14}
-                  style={{
-                    position: 'absolute',
-                    left: '10px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    color: 'var(--color-text-muted)'
+                        title: tabMap[nextType] || prev.title
+                      };
+                      const localRes = resolveFromLocalPool(next, 1, drillSearch);
+                      if (localRes) {
+                        setDrillItems(localRes.items);
+                        setDrillTotal(localRes.total);
+                        setDrillLoading(false);
+                      }
+                      return next;
+                    });
                   }}
-                />
+                  style={{
+                    width: '100%',
+                    height: 34,
+                    padding: '0 10px',
+                    borderRadius: 8,
+                    border: '1px solid #e2e8f0',
+                    background: '#f8fafc',
+                    color: '#BD1D2D',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    outline: 'none'
+                  }}
+                >
+                  <option value="all">Nhóm: Tất cả Lead</option>
+                  <option value="uncontacted">Nhóm: Chưa tương tác</option>
+                  <option value="unconnected">Nhóm: Chưa Connect (1–2)</option>
+                  <option value="contacted">Nhóm: Đã tương tác</option>
+                  <option value="qualified">Nhóm: Lead Qualified (3–12)</option>
+                  <option value="win">Nhóm: Win (13–14)</option>
+                  <option value="duplicate_profile">Nhóm: Trùng hồ sơ ({summary.duplicate_profile_count ?? 0})</option>
+                  <option value="reminder">Nhóm: Nhắc lại ({summary.reminder_count ?? 0})</option>
+                </select>
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '2px',
+                  padding: '3px',
+                  background: '#f1f5f9',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '10px',
+                  flexWrap: 'wrap'
+                }}
+              >
+                {[
+                  { id: 'all', label: 'Tất cả Lead' },
+                  { id: 'uncontacted', label: 'Chưa tương tác' },
+                  { id: 'unconnected', label: 'Chưa Connect' },
+                  { id: 'contacted', label: 'Đã tương tác' },
+                  { id: 'qualified', label: 'Lead Qualified' },
+                  { id: 'win', label: 'Win' },
+                  { id: 'duplicate_profile', label: `Trùng hồ sơ (${summary.duplicate_profile_count ?? 0})` },
+                  { id: 'reminder', label: `Nhắc lại (${summary.reminder_count ?? 0})` }
+                ].map((tab) => {
+                  const isActive = drillModal.type === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => {
+                        setDrillPage(1);
+                        setDrillModal((prev) => {
+                          const next = {
+                            ...prev,
+                            type: tab.id as DrilldownType,
+                            stageId: 0,
+                            title: tab.label
+                          };
+                          const localRes = resolveFromLocalPool(next, 1, drillSearch);
+                          if (localRes) {
+                            setDrillItems(localRes.items);
+                            setDrillTotal(localRes.total);
+                            setDrillLoading(false);
+                          }
+                          return next;
+                        });
+                      }}
+                      style={{
+                        height: '30px',
+                        padding: '0 12px',
+                        borderRadius: '7px',
+                        fontSize: '0.76rem',
+                        fontWeight: isActive ? 700 : 600,
+                        border: 'none',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        background: isActive ? '#ffffff' : 'transparent',
+                        color: isActive ? '#BD1D2D' : '#64748b',
+                        boxShadow: isActive ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 7,
+                  padding: '0 10px',
+                  height: 32,
+                  minWidth: isMobile ? '100%' : '215px',
+                  flex: isMobile ? '1 1 100%' : undefined,
+                  borderRadius: 8,
+                  border: '1px solid #e2e8f0',
+                  background: '#ffffff'
+                }}
+              >
+                <Search size={14} style={{ color: '#94a3b8', flexShrink: 0 }} />
                 <input
                   type="text"
-                  className="form-input sm"
                   placeholder="Tìm tên, SĐT, chương trình..."
                   value={drillSearchInput}
                   onChange={(e) => {
                     setDrillPage(1);
                     setDrillSearchInput(e.target.value);
                   }}
-                  style={{ paddingLeft: '30px', height: '32px', width: '100%' }}
+                  style={{
+                    border: 'none',
+                    outline: 'none',
+                    background: 'transparent',
+                    width: '100%',
+                    height: '100%',
+                    fontSize: '0.78rem',
+                    color: '#0f172a',
+                    padding: 0
+                  }}
                 />
               </div>
 
-              <div style={{ minWidth: '185px' }}>
+              <div style={{ minWidth: isMobile ? '130px' : '185px', flex: isMobile ? '1 1 45%' : undefined }}>
                 <CustomSelect
                   options={consultantOptions}
                   value={drillModal.consultantId}
                   onChange={(val) => {
                     setDrillPage(1);
-                    setDrillModal((prev) => ({ ...prev, consultantId: Number(val) }));
+                    setDrillModal((prev) => {
+                      const next = { ...prev, consultantId: Number(val) };
+                      const localRes = resolveFromLocalPool(next, 1, drillSearch);
+                      if (localRes) {
+                        setDrillItems(localRes.items);
+                        setDrillTotal(localRes.total);
+                        setDrillLoading(false);
+                      }
+                      return next;
+                    });
                   }}
                   showAvatars
                   searchable
@@ -2901,13 +3241,22 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                 />
               </div>
 
-              <div style={{ minWidth: '170px' }}>
+              <div style={{ minWidth: isMobile ? '130px' : '170px', flex: isMobile ? '1 1 45%' : undefined }}>
                 <CustomSelect
                   options={sourceOptions}
                   value={drillModal.source}
                   onChange={(val) => {
                     setDrillPage(1);
-                    setDrillModal((prev) => ({ ...prev, source: String(val) }));
+                    setDrillModal((prev) => {
+                      const next = { ...prev, source: String(val) };
+                      const localRes = resolveFromLocalPool(next, 1, drillSearch);
+                      if (localRes) {
+                        setDrillItems(localRes.items);
+                        setDrillTotal(localRes.total);
+                        setDrillLoading(false);
+                      }
+                      return next;
+                    });
                   }}
                   searchable
                   size="sm"

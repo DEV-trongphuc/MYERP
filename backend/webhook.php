@@ -143,6 +143,7 @@ while($row = $mappingsResult->fetch_assoc()) {
 $mapStmt->close();
 
 // Extract mapped values from incoming data (handle multiple mapped columns by concatenating them)
+if (!function_exists('extractMappedValues')) {
 function extractMappedValues($mappingsArray, $systemField, $data) {
     if (!isset($mappingsArray[$systemField])) return '';
     $values = [];
@@ -160,7 +161,8 @@ function extractMappedValues($mappingsArray, $systemField, $data) {
         'gender', 'dob', 'citizen_id', 'address', 'city', 'district', 'company', 'job_title', 'tax_code',
         'budget', 'demand_type', 'property_type', 'bedroom_count', 'preferred_location',
         'utm_campaign', 'utm_medium', 'utm_content', 'utm_term', 'platform', 'form_name',
-        'zalo_phone', 'facebook_link'
+        'zalo_phone', 'facebook_link', 'program', 'degree', 'consultation_time', 'english_work_exp',
+        'meta_lead_id', 'ad_id', 'ad_name', 'adset_id', 'adset_name', 'campaign_id', 'campaign_name', 'form_id'
     ];
     if (in_array($systemField, $knownSingleFields) || strpos($systemField, 'cf_') === 0 || strpos($systemField, 'custom_field_') === 0) {
         foreach ($mappingsArray[$systemField] as $mapItem) {
@@ -173,6 +175,7 @@ function extractMappedValues($mappingsArray, $systemField, $data) {
     }
     return implode("\n", $values);
 }
+}
 
 // normalizePhone is defined in webhook_logic.php (already required above)
 
@@ -183,6 +186,11 @@ function extractMappedValues($mappingsArray, $systemField, $data) {
     $note = extractMappedValues($mappings, 'note', $data);
     $name = extractMappedValues($mappings, 'name', $data);
 }
+
+$GLOBALS['__CURRENT_SYNC_ROW_DATA__'] = $data;
+$GLOBALS['__CURRENT_SYNC_MAPPINGS__'] = $mappings;
+$GLOBALS['__CURRENT_SYNC_CONN_ID__'] = $connectionId ?? null;
+$GLOBALS['__CURRENT_SYNC_SHEET_NAME__'] = $connData['sheet_name'] ?? '';
 
 if (isLeadBlocked($conn, $phone, $email)) {
     if (function_exists('recordBlockedIncomingLead')) {
@@ -426,6 +434,9 @@ if ($isSilent == 1) {
         } else {
             $leadId = insertLead($conn, $data, $assignedToId, $phone, $email, $name, $source, $type, $note, $connectionId, null, true);
         }
+        if ($leadId) {
+            saveMappedExtendedFields($conn, $leadId, $data, $mappings);
+        }
         $actualOwnerId = ($crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo'])) ? $crmCheckResult['assignedTo'] : $assignedToId;
         logDistribution($conn, $leadId, $actualOwnerId, null, 'silent', 'Chỉ đồng bộ check trùng, không định tuyến.', false);
         $conn->commit();
@@ -500,6 +511,9 @@ if ($keepForOldSale) {
     try {
         // Update last interaction
         $leadId = updateLead($conn, $phone, $email, $assignedTo, $source, $type, $note, $connectionId, null, $name);
+        if ($leadId) {
+            saveMappedExtendedFields($conn, $leadId, $data, $mappings);
+        }
         logDistribution($conn, $leadId, $assignedTo, null, 'reminder', 'Khách cũ đăng ký lại < ' . $dupCheckMonths . ' tháng.', false);
         $conn->commit();
         if (!empty($leadId)) {
@@ -558,6 +572,9 @@ if ($crmCheckResult['leadExists'] && $crmCheckResult['leadStatus'] === 'pending_
     $conn->begin_transaction();
     try {
         $leadId = updateLead($conn, $phone, $email, null, $source, $type, $note, $connectionId, null, $name);
+        if ($leadId) {
+            saveMappedExtendedFields($conn, $leadId, $data, $mappings);
+        }
         
         $updHeld = $conn->prepare("UPDATE leads SET status = 'pending_approval', assigned_to = NULL WHERE id = ?");
         $updHeld->bind_param("i", $leadId);
@@ -624,6 +641,9 @@ if ($aiScreenerResult && $aiScreenerResult['status'] === 'pending') {
         } else {
             $leadId = insertLead($conn, $data, null, $phone, $email, $name, $source, $type, $note, $connectionId);
         }
+        if ($leadId) {
+            saveMappedExtendedFields($conn, $leadId, $data, $mappings);
+        }
         
         $updHeld = $conn->prepare("UPDATE leads SET status = 'pending_approval', target_round_id = ?, ai_screener_status = 'pending', ai_evaluation = 'Chờ AI đánh giá', assigned_to = NULL WHERE id = ?");
         $updHeld->bind_param("ii", $targetRoundId, $leadId);
@@ -664,6 +684,9 @@ if ($aiScreenerResult && ($aiScreenerResult['status'] === 'failed' || $aiScreene
             $leadId = updateLead($conn, $phone, $email, null, $source, $type, $note, $connectionId, null, $name);
         } else {
             $leadId = insertLead($conn, $data, null, $phone, $email, $name, $source, $type, $note, $connectionId);
+        }
+        if ($leadId) {
+            saveMappedExtendedFields($conn, $leadId, $data, $mappings);
         }
         
         $updHeld = $conn->prepare("UPDATE leads SET status = 'pending_approval', target_round_id = ?, ai_screener_status = ?, ai_evaluation = ?, assigned_to = NULL WHERE id = ?");
@@ -779,7 +802,7 @@ try {
         $leadId = insertLead($conn, $data, $assignedConsultantId, $phone, $email, $name, $source, $type, $note, $connectionId);
     }
 
-    if ($leadId && !empty($mappings)) {
+    if ($leadId) {
         saveMappedExtendedFields($conn, $leadId, $data, $mappings);
     }
     

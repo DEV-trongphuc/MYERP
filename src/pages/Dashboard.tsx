@@ -15,7 +15,8 @@ import {
   Coffee,
   Truck,
   GraduationCap,
-  Layers
+  Layers,
+  ChevronDown
 } from 'lucide-react';
 import {
   Bar, XAxis, YAxis, CartesianGrid,
@@ -38,21 +39,18 @@ import { Avatar } from '../components/ui/Avatar';
 import { Pagination } from '../components/ui/Pagination';
 import { WarRoomFlightDeck } from '../components/Dashboard/WarRoomFlightDeck';
 import { useAuth } from '../contexts/AuthContext';
-import { getUserJobTitle, getUserDisplayRoleOrTitle, isManagement, isExecutive } from '../utils/roleUtils';
+import { getUserJobTitle, getUserDisplayRoleOrTitle, isManagement, isExecutive, isAccountant, isHR, isMarketing } from '../utils/roleUtils';
 import { SalesLeadPerformanceDeck } from '../components/Dashboard/SalesLeadPerformanceDeck';
 import { CustomerPersonaOverviewDeck } from '../components/Dashboard/CustomerPersonaOverviewDeck';
 
 const ExpenseQuickViewDrawer = React.lazy(() => import('../components/ExpenseQuickViewDrawer').then(m => ({ default: m.ExpenseQuickViewDrawer })));
 const DepositDetailDrawer = React.lazy(() => import('../components/DepositDetailDrawer').then(m => ({ default: m.DepositDetailDrawer })));
 const CustomerProfileDrawer = React.lazy(() => import('./CustomerProfileDrawer').then(m => ({ default: m.CustomerProfileDrawer })));
-const HrmAccountingAzWorkspace = React.lazy(() => import('../components/HRM/HrmAccountingAzWorkspace'));
-// @ts-ignore
-const MetaAdsAttributionDeck = React.lazy(() =>
-  // @ts-ignore
+const MetaAdsAttributionDeck = React.lazy<React.ComponentType<any>>(() =>
   import('../components/Dashboard/MetaAdsAttributionDeck')
     .then((m: any) => ({ default: m.MetaAdsAttributionDeck || m.default }))
     .catch(() => ({
-      default: () => (
+      default: (_props?: any) => (
         <div className="card" style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
           Đang tải báo cáo Meta Ads Attribution...
         </div>
@@ -81,6 +79,32 @@ const EXECUTIVE_PALETTE = [
   '#94A3B8'
 ];
 
+interface DashboardMainCacheEntry {
+  stats: any;
+  recentLogs: any[];
+  settings: any;
+  connections: any[];
+  timestamp: number;
+}
+
+interface DashboardHrCacheEntry {
+  hrProfiles: any[];
+  hrLeaves: any[];
+  hrAdvances: any[];
+  hrTeams: any[];
+  hrTodayCheckIns: any[];
+  hrWeeklyCheckIns: any[];
+  hrMonthCheckIns: any[];
+  hrShifts: any[];
+  hrDashboardPayslips: any[];
+  timestamp: number;
+}
+
+const deckCache = new Map<string, DashboardMainCacheEntry>();
+const hrDashboardCache = new Map<string, DashboardHrCacheEntry>();
+let financeDashboardCache: { poList: any[]; soList: any[]; usersList: any[]; timestamp: number } | null = null;
+const SWR_TTL_MS = 45_000;
+
 const DashboardInner = ({ isActive }: { isActive: boolean }) => {
   const { t, language } = useLanguage();
   const { user } = useAuth();
@@ -103,22 +127,26 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
     t('CN')
   ];
   const navigate = useNavigate();
-  const [stats, setStats] = useState<any>(null);
-  const [recentLogs, setRecentLogs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const initialDateFilter = localStorage.getItem('Ideas_global_date') || getDefaultDateFilter();
+  const initialIsSingleDay = initialDateFilter === 'Hôm nay' || initialDateFilter === 'Hôm qua';
+  const initialMainKey = `${initialDateFilter}|${initialIsSingleDay ? 'hour' : 'day'}|lead`;
+  const initialCachedMain = deckCache.get(initialMainKey);
+
+  const [stats, setStats] = useState<any>(() => initialCachedMain?.stats ?? null);
+  const [recentLogs, setRecentLogs] = useState<any[]>(() => initialCachedMain?.recentLogs ?? []);
+  const [loading, setLoading] = useState(() => !initialCachedMain);
   const [pendingTicketsCount, setPendingTicketsCount] = useState(0);
   const [heldLeadsCount, setHeldLeadsCount] = useState(0);
   const [pendingCheckInsCount, setPendingCheckInsCount] = useState(0);
   const [pendingCoopsCount, setPendingCoopsCount] = useState(0);
   const [pendingExpensesCount, setPendingExpensesCount] = useState(0);
   const [showWarRoom, setShowWarRoom] = useState(false);
+  const [showMobileSubTabMenu, setShowMobileSubTabMenu] = useState(false);
   const [aiScreenerEnabled, setAiScreenerEnabled] = useState<boolean>(() => {
     const cached = localStorage.getItem('ai_screener_enabled');
     return cached === null ? true : cached === '1';
   });
-  const [dateFilter, setDateFilter] = useState(() => {
-    return localStorage.getItem('Ideas_global_date') || getDefaultDateFilter();
-  });
+  const [dateFilter, setDateFilter] = useState(() => initialDateFilter);
 
   const handleUpdateDateFilter = (val: string) => {
     setDateFilter(val);
@@ -135,75 +163,109 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
     y: number;
   } | null>(null);
   const [sourceViewMode, setSourceViewMode] = useState<'connection' | 'lead'>('connection');
-  const [settings, setSettings] = useState<any>(null);
-  const [connections, setConnections] = useState<any[]>([]);
+  const [settings, setSettings] = useState<any>(() => initialCachedMain?.settings ?? null);
+  const [connections, setConnections] = useState<any[]>(() => initialCachedMain?.connections ?? []);
   const [showHealthModal, setShowHealthModal] = useState(false);
   const [healthModalTab, setHealthModalTab] = useState<'stats' | 'connections'>('stats');
   const [healthChartMetric, setHealthChartMetric] = useState<'zalo' | 'email' | 'telegram' | 'token'>('zalo');
   const [modalChartLoading, setModalChartLoading] = useState(false);
 
   // Accountant Dashboard specific states
-  const [poList, setPoList] = useState<any[]>([]);
+  const [poList, setPoList] = useState<any[]>(() => financeDashboardCache?.poList ?? []);
   const [poFilter, setPoFilter] = useState<'all' | 'pending' | 'unpaid' | 'paid'>('all');
-  const [soList, setSoList] = useState<any[]>([]);
+  const [soList, setSoList] = useState<any[]>(() => financeDashboardCache?.soList ?? []);
   const [activeOrderType, setActiveOrderType] = useState<'so' | 'po'>('po');
   const [selectedExpenseId, setSelectedExpenseId] = useState<number | null>(null);
   const [selectedDeposit, setSelectedDeposit] = useState<any | null>(null);
-  const [usersList, setUsersList] = useState<any[]>([]);
+  const [usersList, setUsersList] = useState<any[]>(() => financeDashboardCache?.usersList ?? []);
   const [poPage, setPoPage] = useState(1);
   const [soPage, setSoPage] = useState(1);
   const ORDER_PAGE_SIZE = 5;
 
+  // Strict Role-Scoped Allowed Dashboard Subtabs
+  const allowedSubTabKeys = useMemo(() => {
+    if (isExecutive(user)) {
+      return ['persona', 'leads', 'sales', 'meta_ads', 'finance', 'hrm'];
+    }
+    const isAcct = isAccountant(user, false);
+    const isHrRole = isHR(user, false);
+    const isMktRole = isMarketing(user);
+    const roleStr = String(user?.role || '').toLowerCase();
+
+    if (isAcct && isHrRole) {
+      return ['finance', 'hrm', 'persona'];
+    }
+    if (isAcct || roleStr === 'accountant') {
+      return ['finance', 'persona'];
+    }
+    if (isHrRole || roleStr === 'hr') {
+      return ['hrm'];
+    }
+    if (isMktRole || roleStr === 'marketing') {
+      return ['meta_ads', 'persona', 'leads', 'sales'];
+    }
+    if (isManagement(user) || ['manager', 'assistant', 'leader', 'sale_admin', 'saleadmin'].includes(roleStr)) {
+      return ['persona', 'leads', 'sales', 'meta_ads'];
+    }
+    return ['persona', 'leads', 'sales'];
+  }, [user]);
+
   // Subtab and Marketing states
-  const [activeSubTab, setActiveSubTab] = useState<string>('persona');
+  const [activeSubTab, setActiveSubTab] = useState<string>(() => {
+    if (isExecutive(user)) return 'persona';
+    if (isAccountant(user, false) || String(user?.role || '').toLowerCase() === 'accountant') return 'finance';
+    if (isHR(user, false) || String(user?.role || '').toLowerCase() === 'hr') return 'hrm';
+    if (isMarketing(user) || String(user?.role || '').toLowerCase() === 'marketing') return 'meta_ads';
+    return 'persona';
+  });
   const [personaDrawerContact, setPersonaDrawerContact] = useState<any | null>(null);
   const [campaignsList, setCampaignsList] = useState<any[]>([]);
   const [mktFilterType, setMktFilterType] = useState<'close_date' | 'lead_date'>('close_date');
   const [seedingLoading, setSeedingLoading] = useState(false);
 
+  // Ensure activeSubTab stays inside allowedSubTabKeys when user changes
+  useEffect(() => {
+    if (allowedSubTabKeys.length > 0 && !allowedSubTabKeys.includes(activeSubTab)) {
+      setActiveSubTab(allowedSubTabKeys[0]);
+    }
+  }, [allowedSubTabKeys, activeSubTab]);
+
   const normalizedSubTab = useMemo(() => {
-    if (activeSubTab === 'default') return 'leads';
-    if (activeSubTab === 'sales_performance') return 'sales';
-    if (activeSubTab === 'accountant') return 'finance';
-    if (activeSubTab === 'hr') return 'hrm';
-    return activeSubTab;
-  }, [activeSubTab]);
+    let raw = activeSubTab;
+    if (raw === 'default') raw = 'leads';
+    if (raw === 'sales_performance') raw = 'sales';
+    if (raw === 'marketing') raw = 'meta_ads';
+    if (raw === 'accountant') raw = 'finance';
+    if (raw === 'hr') raw = 'hrm';
+    if (allowedSubTabKeys.length > 0 && !allowedSubTabKeys.includes(raw)) {
+      return allowedSubTabKeys[0];
+    }
+    return raw;
+  }, [activeSubTab, allowedSubTabKeys]);
 
   const currentViewRole = useMemo(() => {
     if (normalizedSubTab === 'persona') return 'persona';
     if (normalizedSubTab === 'sales') return 'sales';
     if (normalizedSubTab === 'meta_ads') return 'meta_ads';
-    if (normalizedSubTab === 'accounting_az') return 'accounting_az';
-    if (normalizedSubTab === 'marketing') return 'marketing';
     if (normalizedSubTab === 'finance') return 'finance';
     if (normalizedSubTab === 'hrm') return 'hrm';
     if (normalizedSubTab === 'leads') return 'leads';
-
-    if (user?.role === 'marketing') {
-      return 'marketing';
-    }
-    if (user?.role === 'accountant') {
-      return 'finance';
-    }
-    if (user?.role === 'hr') {
-      return 'hrm';
-    }
-    return (user?.role === 'admin' || user?.role === 'director' || user?.role === 'superadmin')
-      ? normalizedSubTab
-      : user?.role;
-  }, [user?.role, normalizedSubTab]);
+    return allowedSubTabKeys[0] || 'persona';
+  }, [normalizedSubTab, allowedSubTabKeys]);
 
   // HR Dashboard specific states
-  const [hrProfiles, setHrProfiles] = useState<any[]>([]);
-  const [hrLeaves, setHrLeaves] = useState<any[]>([]);
-  const [hrAdvances, setHrAdvances] = useState<any[]>([]);
-  const [hrTeams, setHrTeams] = useState<any[]>([]);
-  const [hrTodayCheckIns, setHrTodayCheckIns] = useState<any[]>([]);
-  const [hrWeeklyCheckIns, setHrWeeklyCheckIns] = useState<any[]>([]);
-  const [hrMonthCheckIns, setHrMonthCheckIns] = useState<any[]>([]);
-  const [hrShifts, setHrShifts] = useState<any[]>([]);
-  const [hrDashboardMonth, setHrDashboardMonth] = useState(new Date().toISOString().substring(0, 7));
-  const [hrDashboardPayslips, setHrDashboardPayslips] = useState<any[]>([]);
+  const initialHrMonth = new Date().toISOString().substring(0, 7);
+  const initialCachedHr = hrDashboardCache.get(initialHrMonth);
+  const [hrProfiles, setHrProfiles] = useState<any[]>(() => initialCachedHr?.hrProfiles ?? []);
+  const [hrLeaves, setHrLeaves] = useState<any[]>(() => initialCachedHr?.hrLeaves ?? []);
+  const [hrAdvances, setHrAdvances] = useState<any[]>(() => initialCachedHr?.hrAdvances ?? []);
+  const [hrTeams, setHrTeams] = useState<any[]>(() => initialCachedHr?.hrTeams ?? []);
+  const [hrTodayCheckIns, setHrTodayCheckIns] = useState<any[]>(() => initialCachedHr?.hrTodayCheckIns ?? []);
+  const [hrWeeklyCheckIns, setHrWeeklyCheckIns] = useState<any[]>(() => initialCachedHr?.hrWeeklyCheckIns ?? []);
+  const [hrMonthCheckIns, setHrMonthCheckIns] = useState<any[]>(() => initialCachedHr?.hrMonthCheckIns ?? []);
+  const [hrShifts, setHrShifts] = useState<any[]>(() => initialCachedHr?.hrShifts ?? []);
+  const [hrDashboardMonth, setHrDashboardMonth] = useState(initialHrMonth);
+  const [hrDashboardPayslips, setHrDashboardPayslips] = useState<any[]>(() => initialCachedHr?.hrDashboardPayslips ?? []);
   const [hrLoading, setHrLoading] = useState(false);
 
   const usersMap = useMemo(() => {
@@ -367,12 +429,35 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
     return t(filter);
   };
 
-  const fetchDashboard = async (signal?: AbortSignal) => {
-    setLoading(true);
+  const fetchDashboard = async (signal?: AbortSignal, isSilent = false) => {
+    const metric = showHealthModal ? healthChartMetric : 'lead';
+    const cacheKey = `${dateFilter}|${displayChartMode}|${metric}`;
+    const cached = deckCache.get(cacheKey);
+    const now = Date.now();
+
+    if (cached) {
+      setStats(cached.stats);
+      setRecentLogs(cached.recentLogs);
+      if (cached.settings) setSettings(cached.settings);
+      if (cached.connections) setConnections(cached.connections);
+      setLoading(false);
+      if (!isSilent && now - cached.timestamp < SWR_TTL_MS) {
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            if (typeof (window as any).hideSplashScreen === 'function') {
+              (window as any).hideSplashScreen();
+            }
+          }, 50);
+        });
+        return;
+      }
+    } else if (!isSilent && !stats) {
+      setLoading(true);
+    }
+
     try {
       // BUG-04 fix: Dùng Promise.all để gọi song song, tiết kiệm ~1-2s
       // BUG-06 fix: Xử lý lỗi riêng từng API, không để lỗi một cái 'nuốt' cái kia
-      const metric = showHealthModal ? healthChartMetric : 'lead';
       const [statsJson, logsJson, settingsJson, connectionsJson] = await Promise.all([
         fetchAPI(`get_dashboard_stats&date=${encodeURIComponent(dateFilter)}&chart_mode=${displayChartMode}&chart_metric=${metric}`, { signal }).catch(e => ({ success: false, message: e.message })),
         fetchAPI('get_logs&exclude_status=silent&page=1&pageSize=5', { signal }).catch(e => ({ success: false, message: e.message })),
@@ -383,7 +468,13 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       // Kiểm tra xem request đã bị hủy chưa (user đổi filter trước khi response về)
       if (signal?.aborted) return;
 
+      let nextStats = cached?.stats ?? stats;
+      let nextLogs = cached?.recentLogs ?? recentLogs;
+      let nextSettings = cached?.settings ?? settings;
+      let nextConnections = cached?.connections ?? connections;
+
       if (statsJson.success) {
+        nextStats = statsJson.data;
         setStats(statsJson.data);
         const isEnabled = statsJson.data.ai_screener_enabled === 1 || statsJson.data.ai_screener_enabled === '1' || statsJson.data.ai_screener_enabled === true;
         setAiScreenerEnabled(isEnabled);
@@ -393,13 +484,33 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       }
 
       if (logsJson.success) {
-        const nonSilentLogs = logsJson.data.filter((log: any) => log.status !== 'silent');
-        setRecentLogs(nonSilentLogs.slice(0, 5));
+        const nonSilentLogs = Array.isArray(logsJson.data)
+          ? logsJson.data.filter((log: any) => log.status !== 'silent').slice(0, 5)
+          : [];
+        nextLogs = nonSilentLogs;
+        setRecentLogs(nonSilentLogs);
+      } else {
+        console.error('Lỗi tải nhật ký:', logsJson.message);
       }
-      else console.error('Lỗi tải nhật ký:', logsJson.message);
 
-      if (settingsJson.success) setSettings(settingsJson.data);
-      if (connectionsJson.success) setConnections(connectionsJson.data || []);
+      if (settingsJson.success) {
+        nextSettings = settingsJson.data;
+        setSettings(settingsJson.data);
+      }
+      if (connectionsJson.success) {
+        nextConnections = connectionsJson.data || [];
+        setConnections(nextConnections);
+      }
+
+      if (nextStats) {
+        deckCache.set(cacheKey, {
+          stats: nextStats,
+          recentLogs: nextLogs,
+          settings: nextSettings,
+          connections: nextConnections,
+          timestamp: Date.now()
+        });
+      }
     } catch (e: any) {
       if (e?.name !== 'AbortError') {
         console.error('Dashboard fetch error:', e);
@@ -422,12 +533,12 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
   useEffect(() => {
     if (isActive) {
       let abortController = new AbortController();
-      fetchDashboard(abortController.signal);
+      fetchDashboard(abortController.signal, false);
 
       const intervalId = setInterval(() => {
         abortController.abort();
         abortController = new AbortController();
-        fetchDashboard(abortController.signal);
+        fetchDashboard(abortController.signal, true);
       }, 60000);
 
       return () => {
@@ -464,33 +575,46 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       .catch(e => console.error(e));
 
     if (currentViewRole === 'finance' || currentViewRole === 'accountant' || normalizedSubTab === 'finance' || activeSubTab === 'accountant' || user?.role === 'admin' || user?.role === 'director' || user?.role === 'superadmin') {
-      Promise.all([
-        api.get('/expenses', { params: { limit: 50 } }).catch(() => ({ data: { data: { items: [] } } })),
-        fetchAPI('deposits').catch(() => ({ data: [] })),
-        api.get('/users').catch(() => ({ data: { data: [] } }))
-      ]).then(([expRes, soRes, usersRes]) => {
-        const rawPos = expRes?.data?.data?.items || expRes?.data?.data || [];
-        const pos = Array.isArray(rawPos) ? rawPos : [];
-        const rawSos = soRes?.data || soRes || [];
-        const sos = Array.isArray(rawSos) ? rawSos : (Array.isArray(rawSos?.orders) ? rawSos.orders : []);
-        setPoList(pos);
-        setSoList(sos);
-        const uData = usersRes?.data?.data || usersRes?.data || [];
-        if (Array.isArray(uData)) setUsersList(uData);
+      if (financeDashboardCache && Date.now() - financeDashboardCache.timestamp < SWR_TTL_MS) {
+        setPoList(financeDashboardCache.poList);
+        setSoList(financeDashboardCache.soList);
+        setUsersList(financeDashboardCache.usersList);
+      } else {
+        Promise.all([
+          api.get('/expenses', { params: { limit: 50 } }).catch(() => ({ data: { data: { items: [] } } })),
+          fetchAPI('deposits').catch(() => ({ data: [] })),
+          api.get('/users').catch(() => ({ data: { data: [] } }))
+        ]).then(([expRes, soRes, usersRes]) => {
+          const rawPos = expRes?.data?.data?.items || expRes?.data?.data || [];
+          const pos = Array.isArray(rawPos) ? rawPos : [];
+          const rawSos = soRes?.data || soRes || [];
+          const sos = Array.isArray(rawSos) ? rawSos : (Array.isArray(rawSos?.orders) ? rawSos.orders : []);
+          setPoList(pos);
+          setSoList(sos);
+          const uData = usersRes?.data?.data || usersRes?.data || [];
+          const safeUsers = Array.isArray(uData) ? uData : [];
+          if (Array.isArray(uData)) setUsersList(uData);
+          financeDashboardCache = {
+            poList: pos,
+            soList: sos,
+            usersList: safeUsers,
+            timestamp: Date.now()
+          };
 
-        if (!hasInitializedOrderTypeRef.current) {
-          hasInitializedOrderTypeRef.current = true;
-          if (pos.length > 0 && sos.length > 0) {
-            setActiveOrderType('po');
-          } else if (pos.length > 0) {
-            setActiveOrderType('po');
-          } else if (sos.length > 0) {
-            setActiveOrderType('so');
-          } else {
-            setActiveOrderType('po');
+          if (!hasInitializedOrderTypeRef.current) {
+            hasInitializedOrderTypeRef.current = true;
+            if (pos.length > 0 && sos.length > 0) {
+              setActiveOrderType('po');
+            } else if (pos.length > 0) {
+              setActiveOrderType('po');
+            } else if (sos.length > 0) {
+              setActiveOrderType('so');
+            } else {
+              setActiveOrderType('po');
+            }
           }
-        }
-      }).catch(e => console.error(e));
+        }).catch(e => console.error(e));
+      }
     }
 
     if (currentViewRole === 'marketing') {
@@ -571,10 +695,30 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
     return d.toISOString().substring(0, 7);
   }, [dateFilter, t]);
 
-  // HR Dashboard specific calculations
+  // HR Dashboard specific calculations with 0ms SWR Cache
   useEffect(() => {
     if ((currentViewRole === 'hrm' || currentViewRole === 'hr') && isActive) {
-      setHrLoading(true);
+      const cachedHr = hrDashboardCache.get(parsedMonthStr);
+      if (cachedHr) {
+        setHrProfiles(cachedHr.hrProfiles);
+        setHrLeaves(cachedHr.hrLeaves);
+        setHrAdvances(cachedHr.hrAdvances);
+        setHrTeams(cachedHr.hrTeams);
+        setHrTodayCheckIns(cachedHr.hrTodayCheckIns);
+        setHrWeeklyCheckIns(cachedHr.hrWeeklyCheckIns);
+        setHrMonthCheckIns(cachedHr.hrMonthCheckIns);
+        setHrShifts(cachedHr.hrShifts);
+        setHrDashboardPayslips(cachedHr.hrDashboardPayslips);
+        setHrLoading(false);
+        if (Date.now() - cachedHr.timestamp < SWR_TTL_MS) {
+          return;
+        }
+      } else {
+        setHrLoading(true);
+      }
+
+      const controller = new AbortController();
+      const { signal } = controller;
       const now = new Date();
       const todayStr = now.toISOString().substring(0, 10);
       const currentDay = now.getDay();
@@ -591,34 +735,57 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       const m = parts[1];
 
       Promise.all([
-        fetchAPI('hrm/profiles').catch(() => ({ data: [] })),
-        fetchAPI('hrm/leaves').catch(() => ({ data: [] })),
-        fetchAPI('hrm/advances').catch(() => ({ data: [] })),
-        fetchAPI('teams').catch(() => ({ data: [] })),
-        fetchAPI(`check-ins?date=${todayStr}`).catch(() => ({ data: [] })),
-        fetchAPI(`check-ins?from=${mondayStr}&to=${saturdayStr}`).catch(() => ({ data: [] })),
-        fetchAPI(`check-ins?month=${m}&year=${y}&include_shifts=1`).catch(() => ({ data: [] })),
-        fetchAPI(`hrm/payroll?month_year=${parsedMonthStr}`).catch(() => ({ data: [] }))
+        fetchAPI('hrm/profiles', { signal }).catch(() => ({ data: [] })),
+        fetchAPI('hrm/leaves', { signal }).catch(() => ({ data: [] })),
+        fetchAPI('hrm/advances', { signal }).catch(() => ({ data: [] })),
+        fetchAPI('teams', { signal }).catch(() => ({ data: [] })),
+        fetchAPI(`check-ins?date=${todayStr}`, { signal }).catch(() => ({ data: [] })),
+        fetchAPI(`check-ins?from=${mondayStr}&to=${saturdayStr}`, { signal }).catch(() => ({ data: [] })),
+        fetchAPI(`check-ins?month=${m}&year=${y}&include_shifts=1`, { signal }).catch(() => ({ data: [] })),
+        fetchAPI(`hrm/payroll?month_year=${parsedMonthStr}`, { signal }).catch(() => ({ data: [] }))
       ]).then(([profRes, leaveRes, advRes, teamRes, todayCheckRes, weekCheckRes, monthCheckRes, payRes]) => {
-        setHrProfiles(profRes?.data || profRes || []);
-        setHrLeaves(leaveRes?.data || leaveRes || []);
-        setHrAdvances(advRes?.data || advRes || []);
-        setHrTeams(teamRes?.data || teamRes || []);
-        setHrTodayCheckIns(Array.isArray(todayCheckRes) ? todayCheckRes : todayCheckRes?.data || []);
+        if (signal.aborted) return;
+        const nextProfiles = profRes?.data || profRes || [];
+        const nextLeaves = leaveRes?.data || leaveRes || [];
+        const nextAdvances = advRes?.data || advRes || [];
+        const nextTeams = teamRes?.data || teamRes || [];
+        const nextTodayCheckIns = Array.isArray(todayCheckRes) ? todayCheckRes : todayCheckRes?.data || [];
         const weeklyRows = weekCheckRes?.data?.check_ins || weekCheckRes?.check_ins || (Array.isArray(weekCheckRes?.data) ? weekCheckRes.data : (Array.isArray(weekCheckRes) ? weekCheckRes : []));
-        setHrWeeklyCheckIns(weeklyRows);
-
         const checkData = monthCheckRes?.data || monthCheckRes || {};
         const checkInsList = Array.isArray(checkData) ? checkData : (checkData.check_ins || []);
         const shiftsList = checkData.shifts || [];
+        const nextPayslips = payRes?.data || payRes || [];
+
+        setHrProfiles(nextProfiles);
+        setHrLeaves(nextLeaves);
+        setHrAdvances(nextAdvances);
+        setHrTeams(nextTeams);
+        setHrTodayCheckIns(nextTodayCheckIns);
+        setHrWeeklyCheckIns(weeklyRows);
         setHrMonthCheckIns(checkInsList);
         setHrShifts(shiftsList);
+        setHrDashboardPayslips(nextPayslips);
 
-        setHrDashboardPayslips(payRes?.data || payRes || []);
+        hrDashboardCache.set(parsedMonthStr, {
+          hrProfiles: nextProfiles,
+          hrLeaves: nextLeaves,
+          hrAdvances: nextAdvances,
+          hrTeams: nextTeams,
+          hrTodayCheckIns: nextTodayCheckIns,
+          hrWeeklyCheckIns: weeklyRows,
+          hrMonthCheckIns: checkInsList,
+          hrShifts: shiftsList,
+          hrDashboardPayslips: nextPayslips,
+          timestamp: Date.now()
+        });
       }).catch(() => {})
       .finally(() => {
-        setHrLoading(false);
+        if (!signal.aborted) {
+          setHrLoading(false);
+        }
       });
+
+      return () => controller.abort();
     }
   }, [currentViewRole, parsedMonthStr, isActive]);
 
@@ -657,8 +824,13 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
   }, [hrProfiles]);
 
   const hrTopLatenessList = useMemo(() => {
+    const isExcludedLateUser = (prof: any, row: any) => {
+      const emailStr = String(prof?.email || row?.email || row?.user_email || '').trim().toLowerCase();
+      const nameStr = String(prof?.full_name || prof?.name || row?.user_name || row?.employee_name || row?.name || '').trim().toLowerCase();
+      return emailStr === 'phucht@ideas.edu.vn' || emailStr.startsWith('phucht@') || nameStr === 'huỳnh trọng phúc';
+    };
     // 1. Ưu tiên tính Realtime từ check-ins tháng (hoặc tuần)
-    const map: Record<string, { id: any; name: string; avatar?: string; department?: string; count: number; value: number }> = {};
+    const map: Record<string, { id: any; name: string; avatar?: string; department?: string; count: number; value: number; grace: number; genderLabel: string }> = {};
     const checkinSource = hrMonthCheckIns.length > 0 ? hrMonthCheckIns : hrWeeklyCheckIns;
     checkinSource.forEach((c: any) => {
       const lateness = Number(c.late_minutes ?? c.lateness_minutes ?? 0);
@@ -677,6 +849,11 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       if (isLate) {
         const uid = c.user_id;
         const prof = hrProfileMap.get(Number(uid)) || hrProfileMap.get(uid);
+        if (isExcludedLateUser(prof, c)) return;
+        const gRaw = String(prof?.gender || c.gender || '').toLowerCase().trim();
+        const isMale = gRaw === 'male' || gRaw === 'nam';
+        const grace = isMale ? 30 : 60;
+        const genderLabel = isMale ? 'Nam' : 'Nữ';
         if (!map[uid]) {
           map[uid] = { 
             id: uid, 
@@ -684,7 +861,9 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             avatar: prof?.avatar || prof?.avatar_url || c.user_avatar,
             department: prof?.department_name || prof?.department || '',
             count: 0,
-            value: 0 
+            value: 0,
+            grace,
+            genderLabel
           };
         }
         const addVal = actualLate > 0 ? actualLate : 15;
@@ -704,15 +883,26 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
 
     // 2. Fallback từ hrDashboardPayslips nếu chưa có check-in realtime
     const fromPayslips = [...hrDashboardPayslips]
-      .filter(p => Number(p.lateness_minutes || 0) > 0)
+      .filter(p => {
+        if (Number(p.lateness_minutes || 0) <= 0) return false;
+        const prof = hrProfileMap.get(Number(p.user_id || p.employee_id || p.id));
+        return !isExcludedLateUser(prof, p);
+      })
       .map(p => {
         const prof = hrProfileMap.get(Number(p.user_id || p.employee_id || p.id));
+        const gRaw = String(p.gender || prof?.gender || '').toLowerCase().trim();
+        const isMale = gRaw === 'male' || gRaw === 'nam';
+        const grace = Number(p.late_grace_minutes) || (isMale ? 30 : 60);
+        const genderLabel = isMale ? 'Nam' : 'Nữ';
         return {
           id: p.id || p.user_id,
           name: prof?.full_name || p.employee_name,
           avatar: prof?.avatar || prof?.avatar_url,
           department: prof?.department_name || prof?.department || '',
-          value: Number(p.lateness_minutes || 0)
+          count: Number(p.lateness_count || 1),
+          value: Number(p.lateness_minutes || 0),
+          grace,
+          genderLabel
         };
       });
     
@@ -976,6 +1166,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
 
 
   const dateOptions = [
+    { value: 'Tất cả thời gian', label: t('Tất cả thời gian') },
     { value: 'Hôm nay', label: t('Hôm nay') },
     { value: 'Hôm qua', label: t('Hôm qua') },
     { value: 'Tuần này', label: t('Tuần này') },
@@ -984,10 +1175,11 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
     { value: '7 ngày qua', label: t('7 ngày qua') },
     { value: '30 ngày qua', label: t('30 ngày qua') },
     { value: 'Tháng này', label: t('Tháng này') },
-    { value: 'Tháng trước', label: t('Tháng trước') }
+    { value: 'Tháng trước', label: t('Tháng trước') },
+    { value: 'Năm nay', label: t('Năm nay') }
   ];
 
-  const defaultFilters = ['Hôm nay', 'Hôm qua', 'Tuần này', 'Tuần trước', 'Tuần trước nữa', '7 ngày qua', '30 ngày qua', 'Tháng này', 'Tháng trước', 'Tùy chỉnh'];
+  const defaultFilters = ['Tất cả thời gian', 'Hôm nay', 'Hôm qua', 'Tuần này', 'Tuần trước', 'Tuần trước nữa', '7 ngày qua', '30 ngày qua', 'Tháng này', 'Tháng trước', 'Năm nay', 'Tùy chỉnh'];
   if (!defaultFilters.includes(dateFilter)) {
     dateOptions.push({ value: dateFilter, label: getDisplayDateFilterText(dateFilter) });
   }
@@ -1070,56 +1262,58 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
 
   const renderHeaderForRole = (title: string, subtitle: string) => {
     return (
-      <div className="page-header" style={{ animation: 'slideUp 0.4s ease-out both', animationDelay: '50ms', marginBottom: '1.25rem' }}>
-        <div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'flex-start' }}>
-            {renderSubTabs()}
-            <h1 className="page-title" style={{ margin: 0 }}>{title}</h1>
+      <>
+        {renderSubTabs()}
+        <div className="page-header" style={{ animation: 'slideUp 0.4s ease-out both', animationDelay: '50ms', marginBottom: '0.25rem' }}>
+          <div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'flex-start' }}>
+              <h1 className="page-title" style={{ margin: 0 }}>{title}</h1>
+            </div>
+            <p className="page-subtitle" style={{ marginTop: '4px' }}>{subtitle}</p>
           </div>
-          <p className="page-subtitle" style={{ marginTop: '4px' }}>{subtitle}</p>
-        </div>
-        <div className="mobile-w-full" style={{ display: 'flex', gap: '8px', alignItems: 'center', width: 'auto' }}>
-          <div className="mobile-flex-1" style={{ position: 'relative', zIndex: 100, flex: '1 1 auto', minWidth: isMobile ? '0' : '180px', maxWidth: isMobile ? 'none' : '320px' }}>
-            <CustomSelect
-              options={dateOptions}
-              value={dateFilter}
-              onChange={(val) => {
-                if (val === 'Tùy chỉnh') {
-                  setShowDateModal(true);
-                  return;
-                }
-                handleUpdateDateFilter(String(val));
-              }}
-              width="100%"
-            />
-          </div>
+          <div className="mobile-w-full" style={{ display: 'flex', gap: '8px', alignItems: 'center', width: 'auto' }}>
+            <div className="mobile-flex-1" style={{ position: 'relative', zIndex: 85, flex: '1 1 auto', minWidth: isMobile ? '0' : '180px', maxWidth: isMobile ? 'none' : '320px' }}>
+              <CustomSelect
+                options={dateOptions}
+                value={dateFilter}
+                onChange={(val) => {
+                  if (val === 'Tùy chỉnh') {
+                    setShowDateModal(true);
+                    return;
+                  }
+                  handleUpdateDateFilter(String(val));
+                }}
+                width="100%"
+              />
+            </div>
 
-          <button
-            className="btn primary resource-health-btn"
-            onClick={() => setShowHealthModal(true)}
-            title={t("Kiểm tra kết nối hệ thống / Tài nguyên sử dụng")}
-            style={{
-              width: 38,
-              height: 38,
-              padding: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 'var(--radius-md)',
-              background: 'linear-gradient(135deg, #BD1D2D 0%, #a31422 100%)',
-              color: '#fff',
-              border: 'none',
-              boxShadow: '0 2px 6px rgba(189, 29, 45, 0.25)',
-              cursor: 'pointer',
-              flexShrink: 0,
-              flex: '0 0 38px',
-              minWidth: '38px'
-            }}
-          >
-            <Server size={15} style={{ flexShrink: 0 }} />
-          </button>
+            <button
+              className="btn primary resource-health-btn"
+              onClick={() => setShowHealthModal(true)}
+              title={t("Kiểm tra kết nối hệ thống / Tài nguyên sử dụng")}
+              style={{
+                width: 38,
+                height: 38,
+                padding: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 'var(--radius-md)',
+                background: 'linear-gradient(135deg, #BD1D2D 0%, #a31422 100%)',
+                color: '#fff',
+                border: 'none',
+                boxShadow: '0 2px 6px rgba(189, 29, 45, 0.25)',
+                cursor: 'pointer',
+                flexShrink: 0,
+                flex: '0 0 38px',
+                minWidth: '38px'
+              }}
+            >
+              <Server size={15} style={{ flexShrink: 0 }} />
+            </button>
+          </div>
         </div>
-      </div>
+      </>
     );
   };
 
@@ -1283,78 +1477,211 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
   };
 
   const renderSubTabs = () => {
-    const isAdmin = (user?.role === 'admin' || user?.role === 'director' || user?.role === 'superadmin');
-    const isMarketingUser = (user?.role === 'marketing');
-    const isManagerUser = isManagement(user) || isExecutive(user);
-    const isAccountantUser = (user?.role === 'accountant');
-    const isHrUser = (user?.role === 'hr');
+    const isAdmin = isExecutive(user);
+    const isMarketingUser = isMarketing(user) || (user?.role === 'marketing');
+    const isManagerUser = isManagement(user);
+    const isAccountantUser = isAccountant(user, false) || (user?.role === 'accountant');
+    const isHrUser = isHR(user, false) || (user?.role === 'hr');
 
     if (!isAdmin && !isManagerUser && !isMarketingUser && !isAccountantUser && !isHrUser) {
       return null;
     }
 
-    const TABS = [
+    const ALL_TABS = [
       { key: 'persona', label: t('Chân dung Học viên'), icon: GraduationCap },
       { key: 'leads', label: t('Tổng quan Lead'), icon: Zap },
       { key: 'sales', label: t('Hiệu suất Sales'), icon: TrendingUp },
       { key: 'meta_ads', label: t('Meta Ads'), icon: BarChart2 },
-      { key: 'marketing', label: t('Marketing'), icon: Layers },
       { key: 'finance', label: t('Tài chính'), icon: DollarSign },
-      { key: 'hrm', label: t('Nhân sự'), icon: Users },
-      { key: 'accounting_az', label: t('Kế toán & Lương A-Z'), icon: Receipt }
+      { key: 'hrm', label: t('Nhân sự'), icon: Users }
     ];
+
+    const TABS = ALL_TABS.filter(tab => allowedSubTabKeys.includes(tab.key));
+    if (TABS.length <= 1) {
+      return null;
+    }
+
+    // On Mobile (<= 768px) when there are > 2 tabs, show the first 2 tabs (swapping in active tab if it's in overflow)
+    // plus a compact "Khác ▾" dropdown menu so tabs never overflow 100vw or require awkward horizontal scrolling.
+    const useMobileOverflow = isMobile && TABS.length > 2;
+    let visibleTabs = TABS;
+    let overflowTabs: typeof TABS = [];
+
+    if (useMobileOverflow) {
+      const activeIdx = TABS.findIndex(tab => tab.key === normalizedSubTab);
+      if (activeIdx <= 1) {
+        visibleTabs = TABS.slice(0, 2);
+        overflowTabs = TABS.slice(2);
+      } else {
+        visibleTabs = [TABS[0], TABS[activeIdx]];
+        overflowTabs = TABS.filter((_, idx) => idx !== 0 && idx !== activeIdx);
+      }
+    }
 
     return (
       <div
-        className="dashboard-subtab-container mobile-swipe-tabs touch-scroll-x"
+        className="dashboard-sticky-subtab-header"
         style={{
-          display: isMobile ? 'flex' : 'inline-flex',
-          padding: '3px',
-          borderRadius: '10px',
-          background: 'var(--color-border-light, #f1f5f9)',
-          border: '1px solid var(--color-border, #e2e8f0)',
-          gap: '2px',
-          width: isMobile ? '100%' : 'fit-content',
-          maxWidth: '100%',
-          flexWrap: isMobile ? 'nowrap' : 'wrap',
-          overflowX: isMobile ? 'auto' : 'visible',
-          WebkitOverflowScrolling: 'touch',
-          scrollbarWidth: 'none',
-          marginBottom: '0.45rem'
+          position: 'sticky',
+          top: isMobile ? -10 : -18,
+          zIndex: 96,
+          width: '100%',
+          padding: '6px 0',
+          background: 'rgba(248, 250, 252, 0.96)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          marginTop: 0,
+          marginBottom: '2px'
         }}
       >
-        {TABS.map((tab) => {
-          const Icon = tab.icon;
-          const isAct = normalizedSubTab === tab.key;
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setActiveSubTab(tab.key)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                height: '32px',
-                padding: isMobile ? '0 10px' : '0 14px',
-                borderRadius: '7px',
-                border: 'none',
-                outline: 'none',
-                background: isAct ? 'var(--color-surface, #ffffff)' : 'transparent',
-                color: isAct ? 'var(--color-primary, #BD1D2D)' : 'var(--color-text-muted, #64748b)',
-                fontSize: isMobile ? '0.73rem' : '0.8rem',
-                fontWeight: isAct ? 700 : 600,
-                cursor: 'pointer',
-                boxShadow: isAct ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                transition: 'all 0.15s ease',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              <Icon size={14} style={{ color: isAct ? 'var(--color-primary, #BD1D2D)' : 'var(--color-text-muted, #64748b)', flexShrink: 0 }} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
+        <div
+          className="dashboard-subtab-container"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            padding: '4px',
+            borderRadius: '11px',
+            background: 'var(--color-border-light, #f1f5f9)',
+            border: '1px solid var(--color-border, #e2e8f0)',
+            gap: '4px',
+            width: '100%',
+            maxWidth: '100%',
+            boxSizing: 'border-box',
+            boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)',
+            position: 'relative'
+          }}
+        >
+          {visibleTabs.map((tab) => {
+            const Icon = tab.icon;
+            const isAct = normalizedSubTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => {
+                  setActiveSubTab(tab.key);
+                  setShowMobileSubTabMenu(false);
+                }}
+                style={{
+                  flex: '1 1 0%',
+                  minWidth: 0,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  height: '34px',
+                  padding: isMobile ? '0 8px' : '0 12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  outline: 'none',
+                  background: isAct ? 'var(--color-surface, #ffffff)' : 'transparent',
+                  color: isAct ? 'var(--color-primary, #BD1D2D)' : 'var(--color-text-muted, #64748b)',
+                  fontSize: isMobile ? '0.74rem' : '0.8rem',
+                  fontWeight: isAct ? 700 : 600,
+                  cursor: 'pointer',
+                  boxShadow: isAct ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
+                  transition: 'all 0.15s ease',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}
+              >
+                <Icon size={14} style={{ color: isAct ? 'var(--color-primary, #BD1D2D)' : 'var(--color-text-muted, #64748b)', flexShrink: 0 }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{tab.label}</span>
+              </button>
+            );
+          })}
+
+          {useMobileOverflow && overflowTabs.length > 0 && (
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <button
+                type="button"
+                onClick={() => setShowMobileSubTabMenu(prev => !prev)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '4px',
+                  height: '34px',
+                  padding: '0 10px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  background: showMobileSubTabMenu ? '#0f172a' : '#ffffff',
+                  color: showMobileSubTabMenu ? '#ffffff' : '#0f172a',
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                <span>Khác ({overflowTabs.length})</span>
+                <ChevronDown size={13} />
+              </button>
+
+              {showMobileSubTabMenu && (
+                <>
+                  <div
+                    onClick={() => setShowMobileSubTabMenu(false)}
+                    style={{ position: 'fixed', inset: 0, zIndex: 990 }}
+                  />
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 6px)',
+                      right: 0,
+                      minWidth: 215,
+                      background: '#ffffff',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 12,
+                      boxShadow: '0 12px 28px rgba(15, 23, 42, 0.14)',
+                      padding: 6,
+                      zIndex: 995,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 2
+                    }}
+                  >
+                    {TABS.map((tab) => {
+                      const Icon = tab.icon;
+                      const isAct = normalizedSubTab === tab.key;
+                      return (
+                        <button
+                          key={tab.key}
+                          type="button"
+                          onClick={() => {
+                            setActiveSubTab(tab.key);
+                            setShowMobileSubTabMenu(false);
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 8,
+                            padding: '8px 10px',
+                            borderRadius: 8,
+                            border: 'none',
+                            background: isAct ? '#fef2f2' : 'transparent',
+                            color: isAct ? '#BD1D2D' : '#0f172a',
+                            fontSize: '0.78rem',
+                            fontWeight: isAct ? 700 : 600,
+                            cursor: 'pointer',
+                            textAlign: 'left'
+                          }}
+                        >
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                            <Icon size={14} style={{ color: isAct ? '#BD1D2D' : '#64748b', flexShrink: 0 }} />
+                            <span>{tab.label}</span>
+                          </span>
+                          {isAct && <CheckCircle2 size={13} color="#BD1D2D" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     );
   };
@@ -1921,11 +2248,12 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
 
   if (currentViewRole === 'persona') {
     return renderDashboardWrapper(
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', animation: 'slideUp 0.4s ease-out both' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         {renderAdminWelcomeBanner()}
         {renderHeaderForRole(t("Tổng quan Chân dung Học viên & Tiềm năng"), t("Phân tích chuyên sâu theo trường đào tạo, khóa học (Intake), công ty, chức vụ, ngành nghề và độ đầy đủ dữ liệu."))}
         <CustomerPersonaOverviewDeck
           defaultSegment="student"
+          externalDateFilter={dateFilter}
           onOpenContact={(cid, fallbackContact) => {
             if (fallbackContact) {
               setPersonaDrawerContact({ id: cid, ...fallbackContact });
@@ -1946,7 +2274,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
 
   if (currentViewRole === 'sales' || currentViewRole === 'sales_performance') {
     return renderDashboardWrapper(
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', animation: 'slideUp 0.4s ease-out both' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         {renderAdminWelcomeBanner()}
         {renderHeaderForRole(t("Hiệu suất Sales & Phân tích Chất lượng Lead"), t("Đo lường tốc độ xử lý data chia vòng, tỷ lệ kết nối, phễu chuyển đổi và doanh số thực thu của đội ngũ Sales."))}
         <SalesLeadPerformanceDeck embedInPage="dashboard" externalDateFilter={dateFilter} />
@@ -1956,23 +2284,28 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
 
   if (currentViewRole === 'meta_ads') {
     return renderDashboardWrapper(
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', animation: 'slideUp 0.4s ease-out both' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         {renderAdminWelcomeBanner()}
         {renderHeaderForRole(t("Meta Ads Full-Funnel Attribution"), t("Đo lường chi tiết chiến dịch, nhóm quảng cáo, CPL, CAC, ROAS và quy kết doanh thu đa điểm chạm."))}
         <React.Suspense fallback={<ChartSkeleton />}>
-          <MetaAdsAttributionDeck />
-        </React.Suspense>
-      </div>
-    );
-  }
-
-  if (currentViewRole === 'accounting_az') {
-    return renderDashboardWrapper(
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', animation: 'slideUp 0.4s ease-out both' }}>
-        {renderAdminWelcomeBanner()}
-        {renderHeaderForRole(t("Nghiệp vụ Kế toán & Bảng Lương A-Z"), t("Không gian hạch toán chứng từ, dòng tiền thực, quỹ tiền mặt và tính toán bảng lương chuyên sâu."))}
-        <React.Suspense fallback={<TableSkeleton rows={8} cols={6} />}>
-          <HrmAccountingAzWorkspace embedMode={true} />
+          <MetaAdsAttributionDeck
+            externalDateFilter={dateFilter}
+            customStartDate={startDate}
+            customEndDate={endDate}
+            onOpenContact={(cid, fallbackContact) => {
+              if (fallbackContact) {
+                setPersonaDrawerContact({ id: cid, ...fallbackContact });
+              } else {
+                setPersonaDrawerContact({ id: cid });
+              }
+              api.get(`/contacts/${cid}`).then((res) => {
+                const cData = res.data?.data || res.data;
+                if (cData && cData.id) {
+                  setPersonaDrawerContact(cData);
+                }
+              }).catch(() => {});
+            }}
+          />
         </React.Suspense>
       </div>
     );
@@ -2050,7 +2383,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
     }
 
     return renderDashboardWrapper(
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', animation: 'slideUp 0.4s ease-out both' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         {/* Welcome Banner at the very top */}
         {(user?.role === 'admin' || user?.role === 'director' || user?.role === 'superadmin') 
           ? renderAdminWelcomeBanner() 
@@ -2173,22 +2506,37 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                   </div>
                 ))
               ) : hrTopLatenessList && hrTopLatenessList.length > 0 ? (
-                hrTopLatenessList.map((item, i) => {
-                  const barColor = i === 0 ? '#C6333D' : i < 3 ? '#334155' : '#64748b';
+                hrTopLatenessList.map((item: any, i) => {
+                  const grace = item.grace || 60;
+                  const totalMins = Number(item.value || 0);
+                  const isExceeded = totalMins > grace;
+                  const excessMins = Math.max(0, totalMins - grace);
+                  const remainingGrace = Math.max(0, grace - totalMins);
+                  const barColor = isExceeded ? '#C6333D' : '#475569';
                   const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`;
                   return (
-                    <div key={item.id || i} style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '6px 8px', borderRadius: 8, background: i === 0 ? '#fff1f2' : 'transparent' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem', fontWeight: 600, alignItems: 'center' }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontSize: i < 3 ? '0.92rem' : '0.74rem', fontWeight: 700, color: '#64748b', width: 22, textAlign: 'center' }}>{medal}</span>
-                          <Avatar src={item.avatar} name={item.name} size={26} />
-                          <span style={{ fontWeight: i < 3 ? 700 : 600, color: '#0f172a' }}>{item.name}</span>
+                    <div key={item.id || i} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '9px 12px', borderRadius: 10, background: '#f8fafc', border: '1px solid #f1f5f9' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <span style={{ fontSize: i < 3 ? '0.88rem' : '0.74rem', fontWeight: 700, color: i === 0 ? '#BD1D2D' : '#64748b', width: 22, textAlign: 'center', flexShrink: 0 }}>{medal}</span>
+                          <Avatar src={item.avatar} name={item.name} size={28} />
+                          <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                            <span style={{ fontWeight: 700, fontSize: '0.8rem', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                            <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 500 }}>
+                              Trễ <strong style={{ color: '#334155' }}>{item.count || 1} lần</strong> • Định mức miễn trừ ({item.genderLabel || 'Nữ'}): <strong style={{ color: '#334155' }}>{grace}p/tháng</strong>
+                            </span>
+                          </span>
                         </span>
-                        <span style={{ color: i === 0 ? '#C6333D' : '#0f172a', fontSize: '0.84rem', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
-                          {item.value} {t('phút')}
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                          <span style={{ color: '#0f172a', fontSize: '0.75rem', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
+                            Tổng: {totalMins} phút
+                          </span>
+                          <span style={{ fontSize: '0.67rem', fontWeight: 700, padding: '2px 7px', borderRadius: 6, background: isExceeded ? 'rgba(189, 29, 45, 0.08)' : '#e2e8f0', color: isExceeded ? '#BD1D2D' : '#475569', whiteSpace: 'nowrap' }}>
+                            {isExceeded ? `Vượt định mức +${excessMins}p` : `Trong định mức (còn ${remainingGrace}p)`}
+                          </span>
                         </span>
                       </div>
-                      <div style={{ height: 5, background: '#f1f5f9', borderRadius: 999, overflow: 'hidden', marginLeft: 30 }}>
+                      <div style={{ height: 5, width: '100%', background: '#e2e8f0', borderRadius: 999, overflow: 'hidden' }}>
                         <div style={{ width: `${Math.max(4, item.percent)}%`, height: '100%', background: barColor, borderRadius: 999 }} />
                       </div>
                     </div>
@@ -2233,22 +2581,27 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                   </div>
                 ))
               ) : hrTopOTList && hrTopOTList.length > 0 ? (
-                hrTopOTList.map((item, i) => {
+                hrTopOTList.map((item: any, i) => {
                   const barColor = i === 0 ? '#C6333D' : i < 3 ? '#0f172a' : '#64748b';
                   const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`;
                   return (
-                    <div key={item.id || i} style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '6px 8px', borderRadius: 8, background: i === 0 ? '#f8fafc' : 'transparent' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem', fontWeight: 600, alignItems: 'center' }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontSize: i < 3 ? '0.92rem' : '0.74rem', fontWeight: 700, color: '#64748b', width: 22, textAlign: 'center' }}>{medal}</span>
-                          <Avatar src={item.avatar} name={item.name} size={26} />
-                          <span style={{ fontWeight: i < 3 ? 700 : 600, color: '#0f172a' }}>{item.name}</span>
+                    <div key={item.id || i} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '9px 12px', borderRadius: 10, background: '#f8fafc', border: '1px solid #f1f5f9' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 600, alignItems: 'center', gap: 8 }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <span style={{ fontSize: i < 3 ? '0.88rem' : '0.74rem', fontWeight: 700, color: '#64748b', width: 22, textAlign: 'center', flexShrink: 0 }}>{medal}</span>
+                          <Avatar src={item.avatar} name={item.name} size={28} />
+                          <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                            <span style={{ fontWeight: 700, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                            <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 500 }}>
+                              {item.department || 'Chung'} • Số ca đăng ký: <strong style={{ color: '#334155' }}>{item.count || 1} ca</strong>
+                            </span>
+                          </span>
                         </span>
-                        <span style={{ color: '#0f172a', fontSize: '0.84rem', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
+                        <span style={{ color: '#0f172a', fontSize: '0.72rem', fontWeight: 700, padding: '2.5px 8px', borderRadius: 6, background: '#e2e8f0', flexShrink: 0 }}>
                           {item.value} {item.unit || t('giờ')}
                         </span>
                       </div>
-                      <div style={{ height: 5, background: '#f1f5f9', borderRadius: 999, overflow: 'hidden', marginLeft: 30 }}>
+                      <div style={{ height: 5, width: '100%', background: '#e2e8f0', borderRadius: 999, overflow: 'hidden' }}>
                         <div style={{ width: `${Math.max(4, item.percent)}%`, height: '100%', background: barColor, borderRadius: 999 }} />
                       </div>
                     </div>
@@ -2821,7 +3174,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
     };
 
     return renderDashboardWrapper(
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', animation: 'slideUp 0.4s ease-out both' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         {/* Welcome Banner */}
         {(user?.role === 'admin' || user?.role === 'director' || user?.role === 'superadmin') 
           ? renderAdminWelcomeBanner() 
@@ -2840,7 +3193,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                 <DollarSign size={16} />
               </div>
             </div>
-            <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a' }}>{formatVND(revenue)}</div>
+            <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a', fontSize: '1.42rem', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>{formatVND(revenue)}</div>
             <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <span>• Thực thu: <strong style={{ color: '#0f172a' }}>{formatVND(revenue)}</strong></span>
               <span>• Đơn SO: <strong style={{ color: '#0f172a' }}>{soList.length}</strong></span>
@@ -2858,7 +3211,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                 <TrendingUp size={16} />
               </div>
             </div>
-            <div className="stat-value" style={{ fontWeight: 800, color: '#BD1D2D' }}>{formatVND(profit)}</div>
+            <div className="stat-value" style={{ fontWeight: 800, color: '#BD1D2D', fontSize: '1.42rem', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>{formatVND(profit)}</div>
             <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500 }}>
               • Doanh thu trừ chi phí đã duyệt
             </div>
@@ -2875,7 +3228,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                 <CreditCard size={16} />
               </div>
             </div>
-            <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a' }}>{formatVND(approvedExpenses)}</div>
+            <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a', fontSize: '1.42rem', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>{formatVND(approvedExpenses)}</div>
             <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <span>• Khoản chi: <strong style={{ color: '#0f172a' }}>{approvedExpensesCount}</strong> khoản đã duyệt</span>
             </div>
@@ -2892,7 +3245,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                 <Clock size={16} />
               </div>
             </div>
-            <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a' }}>{pendingExpenses} {t('khoản')}</div>
+            <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a', fontSize: '1.42rem', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>{pendingExpenses} {t('khoản')}</div>
             <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <span>• Chờ xử lý: <strong style={{ color: '#0f172a' }}>{pendingExpenses}</strong> khoản chi PO</span>
             </div>
@@ -3378,7 +3731,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
     ];
 
     return renderDashboardWrapper(
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', animation: 'slideUp 0.4s ease-out both' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         
         {/* Welcome Banner */}
         {(user?.role === 'admin' || user?.role === 'director' || user?.role === 'superadmin') 
@@ -3742,17 +4095,18 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
 
       {renderAdminWelcomeBanner()}
 
+      {renderSubTabs()}
+
       {/* Header */}
       <div className="page-header" style={{ animation: 'slideUp 0.4s ease-out both', animationDelay: '50ms' }}>
         <div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'flex-start' }}>
-            {renderSubTabs()}
             <h1 className="page-title" style={{ margin: 0 }}>{t("Tổng quan Phân bổ Data")}</h1>
           </div>
           <p className="page-subtitle" style={{ marginTop: '4px' }}>{t("Phân tích hiệu suất giao data theo thời gian thực — Hệ thống đang hoạt động trơn tru.")}</p>
         </div>
         <div className="mobile-w-full" style={{ display: 'flex', gap: '8px', alignItems: 'center', width: 'auto' }}>
-          <div className="mobile-flex-1" style={{ position: 'relative', zIndex: 100, flex: '1 1 auto', minWidth: isMobile ? '0' : '180px', maxWidth: isMobile ? 'none' : '320px' }}>
+          <div className="mobile-flex-1" style={{ position: 'relative', zIndex: 85, flex: '1 1 auto', minWidth: isMobile ? '0' : '180px', maxWidth: isMobile ? 'none' : '320px' }}>
             <CustomSelect
               options={dateOptions}
               value={dateFilter}

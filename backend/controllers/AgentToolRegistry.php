@@ -1195,7 +1195,7 @@ class AgentToolRegistry {
                     ],
                     [
                         'name' => 'manage_lead_round_distribution',
-                        'description' => 'Thực thi nghiệp vụ Vòng xoay phân bổ Lead: Tra cứu tải thực tế của các vòng (giải đáp "nên giao vòng nào?"), gán số điện thoại/khách hàng trực tiếp vào vòng xoay, bù data cho chuyên viên tư vấn (khi lead trùng/rác) và điều chỉnh ca trực nhận số.',
+                        'description' => 'Thực thi nghiệp vụ Vòng xoay phân bổ Lead: Tra cứu tải thực tế của các vòng (giải đáp "nên giao vòng nào?"), gán số điện thoại/khách hàng trực tiếp vào vòng xoay (vd: "chia vòng mess hotline", "vòng Form", "vòng BBA", "vòng DBA"), bù data cho chuyên viên tư vấn (khi lead trùng/rác) và điều chỉnh ca trực nhận số.',
                         'parameters' => [
                             'type' => 'OBJECT',
                             'properties' => [
@@ -1210,7 +1210,7 @@ class AgentToolRegistry {
                                 ],
                                 'round_name' => [
                                     'type' => 'STRING',
-                                    'description' => 'Tên vòng phân bổ gần đúng (vd: "BBA", "IELTS", "Tuyển sinh")'
+                                    'description' => 'Tên vòng phân bổ gần đúng (vd: "Mess/Web/Hotline", "vòng mess hot line", "Form", "BBA", "DBA", "Dưới chuẩn")'
                                 ],
                                 'consultant_id' => [
                                     'type' => 'INTEGER',
@@ -1236,9 +1236,21 @@ class AgentToolRegistry {
                                     'type' => 'STRING',
                                     'description' => 'Email của khách hàng nếu có'
                                 ],
+                                'lead_source' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Nguồn khách hàng (vd: "Hotline", "Messenger", "Facebook", "Website", "Form")'
+                                ],
+                                'lead_program' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Chương trình quan tâm nếu có (vd: "MBA", "DBA", "BBA")'
+                                ],
+                                'lead_job_title' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Trình độ / chức vụ / kinh nghiệm làm việc của khách hàng (vd: "Cao đẳng, 10+ năm kinh nghiệm")'
+                                ],
                                 'lead_note' => [
                                     'type' => 'STRING',
-                                    'description' => 'Nhu cầu hoặc ghi chú nguồn của Lead'
+                                    'description' => 'Nhu cầu hoặc ghi chú tư vấn của Lead'
                                 ],
                                 'shift_active' => [
                                     'type' => 'BOOLEAN',
@@ -2172,7 +2184,7 @@ class AgentToolRegistry {
                     ],
                     [
                         'name' => 'smart_create_or_assign_leads',
-                        'description' => 'Tạo mới hoặc giao/chuyển giao 1 hoặc nhiều Data Lead / Khách hàng (Data cá nhân hoặc giao cho đồng nghiệp/Sale khác). Hỗ trợ: (1) Tự thêm Data cá nhân cho chính mình (source mặc định "Data cá nhân"), (2) Tạo mới Data và giao trực tiếp cho đồng nghiệp (ví dụ: "Tạo lead Nguyễn Văn A 0901234567 chương trình MBA giao cho Linh Đan"), (3) Tạo hàng loạt nhiều Data cùng lúc từ danh sách văn bản/file, (4) Chuyển giao/giao lại Data đã có sẵn trong CRM cho đồng nghiệp theo tên hoặc SĐT. BẮT BUỘC gọi công cụ này khi người dùng yêu cầu thêm data, tạo lead mới, nhập danh sách khách hàng hoặc giao data cho nhân sự tư vấn.',
+                        'description' => 'Tạo mới hoặc giao/chuyển giao 1 hoặc nhiều Data Lead / Khách hàng (Data cá nhân, giao trực tiếp cho đồng nghiệp/Sale, hoặc chia vào Vòng xoay phân bổ như "vòng mess hot line", "vòng Form", "vòng BBA", "vòng DBA"). Hỗ trợ: (1) Tự thêm Data cá nhân cho chính mình (source mặc định "Data cá nhân"), (2) Tạo mới Data và giao trực tiếp cho đồng nghiệp (ví dụ: "Tạo lead Nguyễn Văn A 0901234567 chương trình MBA giao cho Linh Đan"), (3) Tạo mới Data và chia tự động vào vòng phân bổ (ví dụ: "chia data này vòng mess hot line"), (4) Tạo hàng loạt nhiều Data cùng lúc từ danh sách văn bản/file, (5) Chuyển giao/giao lại Data đã có sẵn trong CRM cho đồng nghiệp theo tên hoặc SĐT. BẮT BUỘC gọi công cụ này khi người dùng yêu cầu thêm data, tạo lead mới, nhập danh sách khách hàng, chia vòng hoặc giao data cho nhân sự tư vấn.',
                         'parameters' => [
                             'type' => 'OBJECT',
                             'properties' => [
@@ -2187,14 +2199,24 @@ class AgentToolRegistry {
                                             'phone' => ['type' => 'STRING', 'description' => 'Số điện thoại liên hệ'],
                                             'email' => ['type' => 'STRING', 'description' => 'Địa chỉ Email (nếu có)'],
                                             'program' => ['type' => 'STRING', 'description' => 'Chương trình quan tâm (VD: MBA, DBA, EMBA, MSc AI, BBA, Swiss UMEF, Rushford, SBS...)'],
-                                            'source' => ['type' => 'STRING', 'description' => 'Nguồn data (VD: Data cá nhân, Facebook, Referral, Zalo, Sự kiện...). Mặc định: "Data cá nhân"'],
-                                            'job_title' => ['type' => 'STRING', 'description' => 'Chức vụ (nếu có)'],
+                                            'source' => ['type' => 'STRING', 'description' => 'Nguồn data (VD: Data cá nhân, Hotline, Messenger, Facebook, Referral, Zalo, Sự kiện...). Mặc định: "Data cá nhân"'],
+                                            'job_title' => ['type' => 'STRING', 'description' => 'Chức vụ / trình độ / kinh nghiệm (nếu có)'],
                                             'company' => ['type' => 'STRING', 'description' => 'Công ty / Đơn vị công tác (nếu có)'],
                                             'notes' => ['type' => 'STRING', 'description' => 'Ghi chú tư vấn ban đầu hoặc yêu cầu đặc biệt (nếu có)'],
                                             'assign_to_name' => ['type' => 'STRING', 'description' => 'Tên nhân sự Sale / đồng nghiệp nhận lead này (nếu giao riêng từng người)'],
-                                            'assign_to_user_id' => ['type' => 'INTEGER', 'description' => 'ID nhân sự nhận lead (nếu đã biết sẵn ID)']
+                                            'assign_to_user_id' => ['type' => 'INTEGER', 'description' => 'ID nhân sự nhận lead (nếu đã biết sẵn ID)'],
+                                            'round_name' => ['type' => 'STRING', 'description' => 'Tên vòng phân bổ nếu người dùng yêu cầu chia vào vòng xoay (VD: "Mess/Web/Hotline", "vòng mess hot line", "Form", "BBA", "DBA")'],
+                                            'round_id' => ['type' => 'INTEGER', 'description' => 'ID vòng phân bổ nếu đã biết sẵn (distribution_rounds.id)']
                                         ]
                                     ]
+                                ],
+                                'round_name' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên vòng xoay phân bổ nếu người dùng yêu cầu chia lead vào vòng (VD: "Mess/Web/Hotline", "vòng mess hot line", "Form", "BBA", "DBA").'
+                                ],
+                                'round_id' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'ID vòng xoay phân bổ (distribution_rounds.id) nếu người dùng yêu cầu chia lead vào vòng.'
                                 ],
                                 'default_assign_to_name' => [
                                     'type' => 'STRING',
@@ -8926,34 +8948,34 @@ class AgentToolRegistry {
                 case 'manage_lead_round_distribution': {
                     $action = $args['action'] ?? 'get_round_load_audit';
                     $roundId = isset($args['round_id']) ? (int)$args['round_id'] : 0;
-                    $roundNameKw = trim($args['round_name'] ?? '');
+                    $roundNameKw = trim((string)($args['round_name'] ?? ''));
                     $consultantId = isset($args['consultant_id']) ? (int)$args['consultant_id'] : 0;
-                    $consultantNameKw = trim($args['consultant_name'] ?? '');
+                    $consultantNameKw = trim((string)($args['consultant_name'] ?? ''));
                     $compCount = isset($args['compensation_count']) ? (int)$args['compensation_count'] : 1;
-                    $leadPhone = preg_replace('/[^\d+]/', '', trim($args['lead_phone'] ?? ''));
-                    $leadName = trim($args['lead_name'] ?? '');
-                    $leadEmail = trim($args['lead_email'] ?? '');
-                    $leadNote = trim($args['lead_note'] ?? '');
+                    $leadPhone = preg_replace('/[^0-9]/', '', (string)($args['lead_phone'] ?? $args['phone'] ?? ''));
+                    if (str_starts_with($leadPhone, '84') && strlen($leadPhone) >= 11) {
+                        $leadPhone = '0' . substr($leadPhone, 2);
+                    }
+                    $leadName = trim((string)($args['lead_name'] ?? $args['full_name'] ?? $args['name'] ?? ''));
+                    $leadEmail = trim((string)($args['lead_email'] ?? $args['email'] ?? ''));
+                    $leadSource = trim((string)($args['lead_source'] ?? $args['source'] ?? ''));
+                    $leadProgram = trim((string)($args['lead_program'] ?? $args['program'] ?? ''));
+                    $leadJobTitle = trim((string)($args['lead_job_title'] ?? $args['job_title'] ?? ''));
+                    $leadCompany = trim((string)($args['lead_company'] ?? $args['company'] ?? ''));
+                    $leadNote = trim((string)($args['lead_note'] ?? $args['notes'] ?? $args['note'] ?? ''));
                     $shiftActive = isset($args['shift_active']) ? (bool)$args['shift_active'] : true;
-                    $reason = trim($args['reason'] ?? 'Điều phối tự động qua AI Agent');
-                    $canManageRounds = $isGlobalAdmin || $isManager || in_array($role, ['sale_admin', 'saleadmin', 'lead_manager', 'admin', 'director'], true);
+                    $reason = trim((string)($args['reason'] ?? 'Điều phối tự động qua AI Agent'));
 
-                    // Helper: Fuzzy Resolve Round
+                    $userDept = strtolower(trim((string)($auth['department'] ?? '')));
+                    $userJobTitle = strtolower(trim((string)($auth['job_title'] ?? '')));
+                    $isMarketingUser = in_array($role, ['marketing', 'mkt', 'digital_marketing'], true)
+                        || strpos($userDept, 'marketing') !== false
+                        || strpos($userJobTitle, 'marketing') !== false;
+                    $canManageRounds = $isGlobalAdmin || $isManager || $isMarketingUser || in_array($role, ['sale_admin', 'saleadmin', 'lead_manager', 'admin', 'director', 'truong_phong'], true);
+
+                    // Helper: Fuzzy Resolve Round (supports "vòng mess hot line" -> "Mess/Web/Hotline", "vòng form", "vòng bba", "vòng dba", etc.)
                     $resolveRound = function() use ($db, $tid, $roundId, $roundNameKw) {
-                        if ($roundId > 0) {
-                            $stmt = $db->prepare("SELECT id, round_name, is_active, last_assigned_consultant_id FROM distribution_rounds WHERE id = ? AND tenant_id = ? LIMIT 1");
-                            $stmt->execute([$roundId, $tid]);
-                            $r = $stmt->fetch(PDO::FETCH_ASSOC);
-                            if ($r) return ['exact' => $r];
-                        }
-                        if (!empty($roundNameKw)) {
-                            $stmt = $db->prepare("SELECT id, round_name, is_active, last_assigned_consultant_id FROM distribution_rounds WHERE tenant_id = ? AND round_name LIKE ? ORDER BY is_active DESC, id ASC LIMIT 5");
-                            $stmt->execute([$tid, "%{$roundNameKw}%"]);
-                            $matches = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-                            if (count($matches) === 1) return ['exact' => $matches[0]];
-                            if (count($matches) > 1) return ['multiple' => $matches];
-                        }
-                        return null;
+                        return self::resolveDistributionRoundFuzzy($db, $tid, $roundId, $roundNameKw);
                     };
 
                     // Helper: Fuzzy Resolve Consultant
@@ -8965,8 +8987,12 @@ class AgentToolRegistry {
                             if ($u) return ['exact' => $u];
                         }
                         if (!empty($consultantNameKw)) {
-                            $stmt = $db->prepare("SELECT id, full_name, email, phone, is_active FROM users WHERE tenant_id = ? AND is_active = 1 AND (full_name LIKE ? OR username LIKE ? OR phone LIKE ?) ORDER BY id ASC LIMIT 5");
-                            $stmt->execute([$tid, "%{$consultantNameKw}%", "%{$consultantNameKw}%", "%{$consultantNameKw}%"]);
+                            $uParams = [$tid];
+                            $fzWhere = self::buildVietnameseFuzzyNameWhere('full_name', $consultantNameKw, $uParams);
+                            $stmt = $db->prepare("SELECT id, full_name, email, phone, is_active FROM users WHERE tenant_id = ? AND is_active = 1 AND ({$fzWhere} OR username LIKE ? OR phone LIKE ?) ORDER BY id ASC LIMIT 8");
+                            $uParams[] = "%{$consultantNameKw}%";
+                            $uParams[] = "%{$consultantNameKw}%";
+                            $stmt->execute($uParams);
                             $matches = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
                             if (count($matches) === 1) return ['exact' => $matches[0]];
                             if (count($matches) > 1) return ['multiple' => $matches];
@@ -9276,7 +9302,7 @@ class AgentToolRegistry {
                             if (!$canManageRounds) {
                                 return [
                                     'success' => false,
-                                    'error' => "Bạn không có thẩm quyền điều phối hoặc đưa khách hàng vào vòng phân bổ (Yêu cầu vai trò Quản lý hoặc Quản trị viên/Sale Admin)."
+                                    'error' => "Bạn không có thẩm quyền điều phối hoặc đưa khách hàng vào vòng phân bổ (Yêu cầu vai trò Quản lý, Marketing hoặc Quản trị viên/Sale Admin)."
                                 ];
                             }
 
@@ -9285,6 +9311,11 @@ class AgentToolRegistry {
                                     'success' => false,
                                     'error' => "Số điện thoại khách hàng không hợp lệ ('{$leadPhone}'). Vui lòng cung cấp số điện thoại tối thiểu 8 chữ số."
                                 ];
+                            }
+
+                            // Clean trailing round command phrase from leadNote if LLM included raw instruction
+                            if ($leadNote !== '') {
+                                $leadNote = trim((string)preg_replace('/[\s\,\.\-\;]*(?:chia|phân\s*bổ|giao|đẩy|đưa)\s*(?:data|lead|số|khách|hồ\s*sơ)?\s*(?:này|mới|đó)?\s*(?:vào|cho|qua|vô)?\s*vòng\s+[^\.\,\;\n\r]+$/iu', '', $leadNote));
                             }
 
                             // 1. Resolve Target Round with Smart Disambiguation
@@ -9348,13 +9379,51 @@ class AgentToolRegistry {
                             }
 
                             $targetRoundId = (int)$targetRound['id'];
+                            if ($leadSource === '') {
+                                if (preg_match('/hot\s*line/iu', $leadNote . ' ' . $roundNameKw)) {
+                                    $leadSource = 'Hotline';
+                                } elseif (preg_match('/mess|inbox|fanpage|fb/iu', $leadNote . ' ' . $roundNameKw)) {
+                                    $leadSource = 'Messenger';
+                                } else {
+                                    $leadSource = (string)$targetRound['round_name'];
+                                }
+                            }
+                            if ($leadProgram === '' && in_array(strtoupper((string)$targetRound['round_name']), ['BBA', 'DBA', 'MBA', 'EMBA'], true)) {
+                                $leadProgram = strtoupper((string)$targetRound['round_name']);
+                            }
+
+                            // Fetch first Pipeline Stage (order_index ASC, id ASC)
+                            $stmtStage = $db->prepare("SELECT id, name, COALESCE(system_slug, 'new_lead') as system_slug FROM pipeline_stages WHERE tenant_id = ? ORDER BY order_index ASC, id ASC LIMIT 1");
+                            $stmtStage->execute([$tid]);
+                            $firstStage = $stmtStage->fetch(PDO::FETCH_ASSOC);
+                            $defaultStageId = $firstStage ? (int)$firstStage['id'] : 31;
+                            $defaultStageName = $firstStage ? (string)$firstStage['name'] : 'Mới (New)';
+                            $defaultStageSlug = $firstStage ? (string)$firstStage['system_slug'] : 'new_lead';
 
                             // 2. Atomic Allocation Transaction
                             $db->beginTransaction();
                             try {
-                                // Find or Create Contact in contacts table
-                                $chkC = $db->prepare("SELECT id, full_name, phone, owner_id FROM contacts WHERE phone = ? AND tenant_id = ? LIMIT 1 FOR UPDATE");
-                                $chkC->execute([$leadPhone, $tid]);
+                                $stmtLockR = $db->prepare("SELECT id, round_name, is_active, last_assigned_consultant_id FROM distribution_rounds WHERE id = ? AND tenant_id = ? LIMIT 1 FOR UPDATE");
+                                $stmtLockR->execute([$targetRoundId, $tid]);
+                                $lockedR = $stmtLockR->fetch(PDO::FETCH_ASSOC);
+                                if ($lockedR) {
+                                    $targetRound = $lockedR;
+                                }
+
+                                // Check if contact already exists in contacts table (Soft-Delete safe)
+                                $chkC = $db->prepare("
+                                    SELECT c.id, c.person_id, c.full_name, c.phone, c.email, c.owner_id, c.source, c.program, c.job_title, c.company, c.notes,
+                                           COALESCE(ps.name, c.pipeline_status, 'Mới') as stage_name,
+                                           u.full_name as owner_name, u.phone as owner_phone, u.role as owner_role, COALESCE(u.is_active, 0) as owner_active
+                                    FROM contacts c
+                                    LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
+                                    LEFT JOIN users u ON c.owner_id = u.id
+                                    WHERE (c.phone = ? OR c.mobile = ?) AND c.tenant_id = ? AND c.deleted_at IS NULL
+                                    ORDER BY c.id DESC
+                                    LIMIT 1
+                                    FOR UPDATE
+                                ");
+                                $chkC->execute([$leadPhone, $leadPhone, $tid]);
                                 $existingContact = $chkC->fetch(PDO::FETCH_ASSOC);
 
                                 $contactId = 0;
@@ -9364,39 +9433,88 @@ class AgentToolRegistry {
                                     $contactId = (int)$existingContact['id'];
                                     $isExisting = true;
                                     $currentOwnerId = (int)($existingContact['owner_id'] ?? 0);
-                                    if ($currentOwnerId > 0) {
-                                        $ownerStmt = $db->prepare("SELECT full_name FROM users WHERE id = ?");
-                                        $ownerStmt->execute([$currentOwnerId]);
-                                        $ownerName = $ownerStmt->fetchColumn() ?: "ID #{$currentOwnerId}";
-                                        $db->rollBack();
+                                    $ownerActive = (int)($existingContact['owner_active'] ?? 0) === 1;
+                                    $ownerRoleLower = strtolower(trim((string)($existingContact['owner_role'] ?? '')));
+                                    $isOwnedByActiveSale = $currentOwnerId > 0 && $ownerActive && in_array($ownerRoleLower, ['sale', 'sales'], true);
+
+                                    if ($isOwnedByActiveSale) {
+                                        // Enrich missing fields (job_title, company, program, email) without overwriting existing Sale ownership
+                                        $enrFields = ['updated_at = NOW()'];
+                                        $enrParams = [];
+                                        if ($leadJobTitle !== '' && empty($existingContact['job_title'])) {
+                                            $enrFields[] = 'job_title = ?';
+                                            $enrParams[] = $leadJobTitle;
+                                        }
+                                        if ($leadCompany !== '' && empty($existingContact['company'])) {
+                                            $enrFields[] = 'company = ?';
+                                            $enrParams[] = $leadCompany;
+                                        }
+                                        if ($leadProgram !== '' && empty($existingContact['program'])) {
+                                            $enrFields[] = 'program = ?';
+                                            $enrParams[] = $leadProgram;
+                                        }
+                                        if ($leadEmail !== '' && empty($existingContact['email'])) {
+                                            $enrFields[] = 'email = ?';
+                                            $enrParams[] = $leadEmail;
+                                        }
+                                        if (count($enrFields) > 1) {
+                                            $enrParams[] = $contactId;
+                                            $enrParams[] = $tid;
+                                            $db->prepare("UPDATE contacts SET " . implode(', ', $enrFields) . " WHERE id = ? AND tenant_id = ?")->execute($enrParams);
+                                        }
+
+                                        $ownerName = $existingContact['owner_name'] ?: "ID #{$currentOwnerId}";
+                                        $ownerPhone = $existingContact['owner_phone'] ?: '';
+                                        $db->commit();
+
+                                        $smartCard = self::buildEntitySmartCard('contact', [
+                                            'id' => $contactId,
+                                            'name' => $existingContact['full_name'] ?: ($leadName ?: "Khách hàng {$leadPhone}"),
+                                            'subtitle' => $leadPhone . ' • ' . ($existingContact['program'] ?: ($leadProgram ?: 'Chưa chọn chương trình')),
+                                            'status' => $existingContact['stage_name'] ?: $defaultStageName,
+                                            'meta' => "Sale: {$ownerName} • Vòng: {$targetRound['round_name']}",
+                                            'link' => "/contacts?id={$contactId}"
+                                        ]);
+
                                         return [
-                                            'success' => false,
-                                            'error' => "Khách hàng {$leadPhone} ({$existingContact['full_name']}) đã tồn tại trên hệ thống và đang thuộc quyền chăm sóc của chuyên viên [{$ownerName}]. Không thể tự ý chiếm đoạt hoặc phân bổ lại vào vòng xoay."
+                                            'success' => true,
+                                            'action' => 'distribute_lead',
+                                            'already_distributed' => true,
+                                            'contact' => [
+                                                'id' => $contactId,
+                                                'name' => $existingContact['full_name'] ?: $leadName,
+                                                'phone' => $leadPhone,
+                                                'source' => $existingContact['source'] ?: $leadSource,
+                                                'job_title' => $existingContact['job_title'] ?: $leadJobTitle,
+                                                'is_new' => false,
+                                                'smart_card' => $smartCard
+                                            ],
+                                            'round' => [
+                                                'id' => $targetRoundId,
+                                                'name' => $targetRound['round_name']
+                                            ],
+                                            'assigned_consultant' => [
+                                                'id' => $currentOwnerId,
+                                                'name' => $ownerName,
+                                                'phone' => $ownerPhone
+                                            ],
+                                            'distribution_type' => 'existing_owner',
+                                            'message' => "Hồ sơ khách hàng {$existingContact['full_name']} ({$leadPhone}) đã được ghi nhận trên hệ thống (Vòng [{$targetRound['round_name']}]) và đang do chuyên viên tư vấn [{$ownerName}] trực tiếp phụ trách chăm sóc. {$smartCard}",
+                                            'verdict' => "Khách hàng {$existingContact['full_name']} ({$leadPhone}) thuộc Vòng [{$targetRound['round_name']}], người phụ trách hiện tại: {$ownerName}. {$smartCard}"
                                         ];
                                     }
-
-                                    // Update notes or name if provided
-                                    if (!empty($leadName) || !empty($leadNote)) {
-                                        $updC = $db->prepare("UPDATE contacts SET full_name = COALESCE(NULLIF(?, ''), full_name), notes = CONCAT(IFNULL(notes, ''), '\n[AI Ghi chú]: ', ?) WHERE id = ?");
-                                        $updC->execute([$leadName, $leadNote ?: 'Cập nhật từ AI chat', $contactId]);
-                                    }
-                                } else {
-                                    $cName = !empty($leadName) ? $leadName : "Khách hàng {$leadPhone}";
-                                    $insC = $db->prepare("
-                                        INSERT INTO contacts (tenant_id, full_name, phone, email, notes, pipeline_status, created_by, created_at)
-                                        VALUES (?, ?, ?, ?, ?, 'assigned', ?, NOW())
-                                    ");
-                                    $insC->execute([$tid, $cName, $leadPhone, $leadEmail, $leadNote ?: 'Tạo từ AI Chat', $uid]);
-                                    $contactId = (int)$db->lastInsertId();
                                 }
 
-                                // 3. Select Winner Consultant in Round
+                                // 3. Select Winner Consultant in Round (respecting vacation_mode & active status)
                                 // A. Priority 1: Consultant with compensation_count > 0
                                 $compStmt = $db->prepare("
                                     SELECT rc.consultant_id, rc.compensation_count, u.full_name as consultant_name, u.phone as consultant_phone
                                     FROM round_consultants rc
                                     JOIN users u ON rc.consultant_id = u.id
-                                    WHERE rc.round_id = ? AND rc.is_active = 1 AND rc.compensation_count > 0 AND u.is_active = 1
+                                    LEFT JOIN consultants c ON rc.consultant_id = c.id
+                                    WHERE rc.round_id = ? AND rc.is_active = 1 AND rc.compensation_count > 0
+                                      AND u.is_active = 1 AND COALESCE(u.vacation_mode, 0) = 0
+                                      AND (c.id IS NULL OR (c.status = 'active' AND COALESCE(c.vacation_mode, 0) = 0))
                                     ORDER BY rc.compensation_count DESC, rc.consultant_id ASC
                                     LIMIT 1
                                     FOR UPDATE
@@ -9411,12 +9529,12 @@ class AgentToolRegistry {
 
                                 if ($compWinner) {
                                     $winnerId = (int)$compWinner['consultant_id'];
-                                    $winnerName = $compWinner['consultant_name'];
-                                    $winnerPhone = $compWinner['consultant_phone'];
+                                    $winnerName = (string)$compWinner['consultant_name'];
+                                    $winnerPhone = (string)($compWinner['consultant_phone'] ?? '');
                                     $distType = "compensation";
 
                                     // Decrement compensation count
-                                    $decComp = $db->prepare("UPDATE round_consultants SET compensation_count = compensation_count - 1 WHERE round_id = ? AND consultant_id = ?");
+                                    $decComp = $db->prepare("UPDATE round_consultants SET compensation_count = GREATEST(0, compensation_count - 1) WHERE round_id = ? AND consultant_id = ?");
                                     $decComp->execute([$targetRoundId, $winnerId]);
                                 } else {
                                     // B. Priority 2: Next in Round-Robin rotation
@@ -9424,7 +9542,10 @@ class AgentToolRegistry {
                                         SELECT rc.consultant_id, u.full_name as consultant_name, u.phone as consultant_phone
                                         FROM round_consultants rc
                                         JOIN users u ON rc.consultant_id = u.id
-                                        WHERE rc.round_id = ? AND rc.is_active = 1 AND u.is_active = 1
+                                        LEFT JOIN consultants c ON rc.consultant_id = c.id
+                                        WHERE rc.round_id = ? AND rc.is_active = 1
+                                          AND u.is_active = 1 AND COALESCE(u.vacation_mode, 0) = 0
+                                          AND (c.id IS NULL OR (c.status = 'active' AND COALESCE(c.vacation_mode, 0) = 0))
                                         ORDER BY rc.consultant_id ASC
                                     ");
                                     $rotStmt->execute([$targetRoundId]);
@@ -9453,19 +9574,147 @@ class AgentToolRegistry {
                                     }
 
                                     $winnerId = (int)$picked['consultant_id'];
-                                    $winnerName = $picked['consultant_name'];
-                                    $winnerPhone = $picked['consultant_phone'];
+                                    $winnerName = (string)$picked['consultant_name'];
+                                    $winnerPhone = (string)($picked['consultant_phone'] ?? '');
 
                                     // Update last_assigned_consultant_id on round
                                     $updRound = $db->prepare("UPDATE distribution_rounds SET last_assigned_consultant_id = ? WHERE id = ?");
                                     $updRound->execute([$winnerId, $targetRoundId]);
                                 }
 
-                                // 4. Assign Owner to Contact
-                                $updOwner = $db->prepare("UPDATE contacts SET owner_id = ?, pipeline_status = 'assigned' WHERE id = ?");
-                                $updOwner->execute([$winnerId, $contactId]);
+                                $cName = $leadName !== '' ? $leadName : ($existingContact['full_name'] ?? "Khách hàng {$leadPhone}");
 
-                                // 5. Insert Distribution Log
+                                // 4. Ensure person_id in persons table
+                                $personId = !empty($existingContact['person_id']) ? (int)$existingContact['person_id'] : null;
+                                if (!$personId) {
+                                    $stmtP = $db->prepare("SELECT id FROM persons WHERE phone = ? LIMIT 1");
+                                    $stmtP->execute([$leadPhone]);
+                                    $personId = (int)($stmtP->fetchColumn() ?: 0) ?: null;
+                                    if (!$personId) {
+                                        $stmtInsP = $db->prepare("INSERT INTO persons (phone, email, full_name, is_public) VALUES (?, ?, ?, 1)");
+                                        $stmtInsP->execute([$leadPhone, $leadEmail !== '' ? $leadEmail : null, $cName]);
+                                        $personId = (int)$db->lastInsertId() ?: null;
+                                    }
+                                }
+
+                                // 5. Upsert leads table so Lead Distribution Dashboard & distribution_logs stay 100% in sync
+                                $leadTableId = 0;
+                                try {
+                                    $stmtChkLead = $db->prepare("SELECT id FROM leads WHERE phone = ? ORDER BY id DESC LIMIT 1");
+                                    $stmtChkLead->execute([$leadPhone]);
+                                    $leadTableId = (int)($stmtChkLead->fetchColumn() ?: 0);
+                                    if ($leadTableId > 0) {
+                                        $stmtUpdL = $db->prepare("
+                                            UPDATE leads
+                                            SET person_id = COALESCE(person_id, ?),
+                                                name = COALESCE(NULLIF(?, ''), name),
+                                                full_name = COALESCE(NULLIF(?, ''), full_name),
+                                                email = COALESCE(NULLIF(?, ''), email),
+                                                source = COALESCE(NULLIF(?, ''), source),
+                                                program = COALESCE(NULLIF(?, ''), program),
+                                                note = IF(? = '', note, ?),
+                                                assigned_to = ?,
+                                                target_round_id = ?,
+                                                is_accepted = 1,
+                                                accepted_at = NOW(),
+                                                status = 'active',
+                                                last_interaction_date = NOW()
+                                            WHERE id = ?
+                                        ");
+                                        $stmtUpdL->execute([
+                                            $personId, $cName, $cName, $leadEmail, $leadSource, $leadProgram,
+                                            $leadNote, $leadNote, $winnerId, $targetRoundId, $leadTableId
+                                        ]);
+                                    } else {
+                                        $stmtInsL = $db->prepare("
+                                            INSERT INTO leads (
+                                                person_id, phone, email, name, full_name, source, program, note,
+                                                assigned_to, target_round_id, is_accepted, accepted_at, status,
+                                                ai_screener_status, last_interaction_date, created_at
+                                            ) VALUES (
+                                                ?, ?, ?, ?, ?, ?, ?, ?,
+                                                ?, ?, 1, NOW(), 'active',
+                                                'not_screened', NOW(), NOW()
+                                            )
+                                        ");
+                                        $stmtInsL->execute([
+                                            $personId,
+                                            $leadPhone,
+                                            $leadEmail !== '' ? $leadEmail : null,
+                                            $cName,
+                                            $cName,
+                                            $leadSource,
+                                            $leadProgram !== '' ? $leadProgram : null,
+                                            $leadNote !== '' ? $leadNote : 'Phân bổ từ AI Agent',
+                                            $winnerId,
+                                            $targetRoundId
+                                        ]);
+                                        $leadTableId = (int)$db->lastInsertId();
+                                    }
+                                } catch (\Throwable $eLeadTbl) {
+                                    // Safe fallback if leads table schema differs
+                                }
+
+                                // 6. Create or Update Contact in contacts table
+                                if ($existingContact) {
+                                    $updC = $db->prepare("
+                                        UPDATE contacts
+                                        SET person_id = COALESCE(person_id, ?),
+                                            owner_id = ?,
+                                            full_name = COALESCE(NULLIF(?, ''), full_name),
+                                            email = COALESCE(NULLIF(?, ''), email),
+                                            source = COALESCE(NULLIF(?, ''), source),
+                                            program = COALESCE(NULLIF(?, ''), program),
+                                            job_title = COALESCE(NULLIF(?, ''), job_title),
+                                            company = COALESCE(NULLIF(?, ''), company),
+                                            stage_id = COALESCE(stage_id, ?),
+                                            pipeline_status = ?,
+                                            lead_status = 'active',
+                                            status = 'lead',
+                                            notes = IF(? = '', notes, CONCAT(IFNULL(notes, ''), IF(IFNULL(notes, '') = '', '', '\n'), ?)),
+                                            updated_at = NOW()
+                                        WHERE id = ? AND tenant_id = ?
+                                    ");
+                                    $updC->execute([
+                                        $personId, $winnerId, $cName, $leadEmail, $leadSource, $leadProgram,
+                                        $leadJobTitle, $leadCompany, $defaultStageId, $defaultStageSlug,
+                                        $leadNote, $leadNote, $contactId, $tid
+                                    ]);
+                                } else {
+                                    $insC = $db->prepare("
+                                        INSERT INTO contacts (
+                                            tenant_id, person_id, full_name, email, phone, mobile,
+                                            job_title, company, lead_status, stage_id, pipeline_status, status,
+                                            source, program, notes, temperature, suggested_temperature,
+                                            owner_id, created_by, last_contact, created_at, updated_at
+                                        ) VALUES (
+                                            ?, ?, ?, ?, ?, ?,
+                                            ?, ?, 'active', ?, ?, 'lead',
+                                            ?, ?, ?, 'cold', 'cold',
+                                            ?, ?, NULL, NOW(), NOW()
+                                        )
+                                    ");
+                                    $insC->execute([
+                                        $tid,
+                                        $personId,
+                                        $cName,
+                                        $leadEmail !== '' ? $leadEmail : null,
+                                        $leadPhone,
+                                        $leadPhone,
+                                        $leadJobTitle !== '' ? $leadJobTitle : null,
+                                        $leadCompany !== '' ? $leadCompany : null,
+                                        $defaultStageId,
+                                        $defaultStageSlug,
+                                        $leadSource,
+                                        $leadProgram !== '' ? $leadProgram : null,
+                                        $leadNote !== '' ? $leadNote : 'Tạo & phân bổ qua AI Agent',
+                                        $winnerId,
+                                        $uid
+                                    ]);
+                                    $contactId = (int)$db->lastInsertId();
+                                }
+
+                                // 7. Insert Distribution Log (references leads.id for 100% Dashboard Parity)
                                 $logMsg = $distType === 'compensation'
                                     ? "AI Agent phân bổ khách hàng theo diện Ưu Tiên Bù Số cho {$winnerName}."
                                     : "AI Agent phân bổ khách hàng theo vòng xoay Round-Robin cho {$winnerName}.";
@@ -9473,18 +9722,59 @@ class AgentToolRegistry {
                                     INSERT INTO distribution_logs (lead_id, assigned_to, round_id, status, message, received_at)
                                     VALUES (?, ?, ?, ?, ?, NOW())
                                 ");
-                                $insLog->execute([$contactId, $winnerId, $targetRoundId, $distType === 'compensation' ? 'compensation' : 'assigned', $logMsg]);
+                                $insLog->execute([
+                                    $leadTableId > 0 ? $leadTableId : $contactId,
+                                    $winnerId,
+                                    $targetRoundId,
+                                    $distType === 'compensation' ? 'compensation' : 'assigned',
+                                    $logMsg
+                                ]);
+
+                                // 8. Log CRM Activity & Send In-App Notification (Zero Self-Notification compliant)
+                                $actSubject = "Phân bổ Data từ Vòng [{$targetRound['round_name']}] cho {$winnerName}";
+                                $actBody = "Khách hàng: {$cName} ({$leadPhone}). Nguồn: {$leadSource}."
+                                    . ($leadJobTitle !== '' ? " Thông tin: {$leadJobTitle}." : "")
+                                    . ($leadNote !== '' ? " Ghi chú: {$leadNote}." : "")
+                                    . " Người điều phối: {$userName}. Người nhận: {$winnerName}.";
+                                $db->prepare("
+                                    INSERT INTO activities (tenant_id, type, subject, body, status, progress, contact_id, related_type, related_id, user_id, created_by, done_at, created_at, updated_at)
+                                    VALUES (?, 'note', ?, ?, 'done', 100, ?, 'contact', ?, ?, ?, NOW(), NOW(), NOW())
+                                ")->execute([$tid, $actSubject, $actBody, $contactId, $contactId, $winnerId, $uid]);
+
+                                if ($winnerId > 0 && $winnerId !== $uid) {
+                                    $notifTitle = "Bạn nhận được Data mới từ Vòng {$targetRound['round_name']}: {$cName}";
+                                    $notifBody = "{$userName} vừa phân bổ khách hàng {$cName} ({$leadPhone}) vào Vòng [{$targetRound['round_name']}] cho bạn phụ trách.";
+                                    $db->prepare("
+                                        INSERT INTO notifications (user_id, tenant_id, title, body, type, link, is_read, created_at)
+                                        VALUES (?, ?, ?, ?, 'lead_assigned', ?, 0, NOW())
+                                    ")->execute([$winnerId, $tid, $notifTitle, $notifBody, "/contacts?id={$contactId}"]);
+                                }
 
                                 $db->commit();
+
+                                $smartCard = self::buildEntitySmartCard('contact', [
+                                    'id' => $contactId,
+                                    'name' => $cName,
+                                    'subtitle' => $leadPhone . ' • ' . ($leadProgram !== '' ? $leadProgram : $leadSource),
+                                    'status' => $defaultStageName,
+                                    'meta' => "Sale: {$winnerName} • Vòng: {$targetRound['round_name']}",
+                                    'link' => "/contacts?id={$contactId}"
+                                ]);
 
                                 return [
                                     'success' => true,
                                     'action' => 'distribute_lead',
                                     'contact' => [
                                         'id' => $contactId,
-                                        'name' => !empty($leadName) ? $leadName : "Khách hàng {$leadPhone}",
+                                        'lead_id' => $leadTableId,
+                                        'name' => $cName,
                                         'phone' => $leadPhone,
-                                        'is_new' => !$isExisting
+                                        'source' => $leadSource,
+                                        'program' => $leadProgram,
+                                        'job_title' => $leadJobTitle,
+                                        'notes' => $leadNote,
+                                        'is_new' => !$isExisting,
+                                        'smart_card' => $smartCard
                                     ],
                                     'round' => [
                                         'id' => $targetRoundId,
@@ -9497,7 +9787,8 @@ class AgentToolRegistry {
                                     ],
                                     'distribution_type' => $distType,
                                     'distribution_message' => $logMsg,
-                                    'verdict' => "Đã giao thành công khách hàng {$leadPhone} (" . (!empty($leadName) ? $leadName : 'Chưa có tên') . ") vào Vòng [{$targetRound['round_name']}]. Người nhận số: {$winnerName} (Diện: " . ($distType === 'compensation' ? 'Ưu tiên bù số' : 'Vòng xoay luân phiên') . ")."
+                                    'message' => "Đã tạo mới và phân bổ thành công khách hàng {$cName} ({$leadPhone}) vào Vòng [{$targetRound['round_name']}]. Chuyên viên nhận số: {$winnerName} (" . ($distType === 'compensation' ? 'Ưu tiên bù số' : 'Vòng xoay luân phiên') . "). {$smartCard}",
+                                    'verdict' => "Đã giao thành công khách hàng {$leadPhone} ({$cName}) vào Vòng [{$targetRound['round_name']}]. Người nhận số: {$winnerName} (Diện: " . ($distType === 'compensation' ? 'Ưu tiên bù số' : 'Vòng xoay luân phiên') . "). {$smartCard}"
                                 ];
                             } catch (\Throwable $e) {
                                 if ($db->inTransaction()) $db->rollBack();
@@ -13391,7 +13682,136 @@ class AgentToolRegistry {
     }
 
     /**
-     * Smart Personal Lead Creation, Batch Text Parsing & Colleague Lead Assignment
+     * Fuzzy resolve distribution round by ID or natural-language round name
+     * Supports compound synonyms ("vòng mess hot line" -> "Mess/Web/Hotline", "vòng hotline", "vòng form", "vòng bba", "vòng dba", "vòng dưới chuẩn")
+     */
+    public static function resolveDistributionRoundFuzzy(PDO $db, int $tid, int $roundId = 0, string $roundNameKw = ''): ?array
+    {
+        if ($roundId > 0) {
+            $stmt = $db->prepare("SELECT id, round_name, description, is_active, last_assigned_consultant_id FROM distribution_rounds WHERE id = ? AND tenant_id = ? LIMIT 1");
+            $stmt->execute([$roundId, $tid]);
+            $r = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($r) {
+                return ['exact' => $r];
+            }
+        }
+
+        $kw = trim($roundNameKw);
+        if ($kw === '') {
+            return null;
+        }
+
+        $normalizeRoundText = function (string $str): array {
+            $s = mb_strtolower(self::removeVietnameseAccents(trim($str)), 'UTF-8');
+            $s = preg_replace('/\bhot[\s\-_]*line\b/u', 'hotline', $s);
+            $s = preg_replace('/\bduong\s+day\s+nong\b/u', 'hotline', $s);
+            $s = preg_replace('/\b(messenger|inbox|fanpage|fb\s*mess)\b/u', 'mess', $s);
+            $s = preg_replace('/\b(website|landing\s*page|landingpage)\b/u', 'web', $s);
+            $s = preg_replace('/\bngoai[\s\-_]*gio\b/u', 'ngoaigio', $s);
+            $s = preg_replace('/\bduoi[\s\-_]*chuan\b/u', 'duoichuan', $s);
+            $s = preg_replace('/\bcong[\s\-_]*ty\b/u', 'congty', $s);
+
+            $stopWords = [
+                'vong', 'xoay', 'chia', 'phan', 'bo', 'phanbo', 'data', 'lead', 'leads',
+                'so', 'khach', 'hang', 'hoc', 'vien', 'nay', 'moi', 'do', 'vao', 'cho',
+                'qua', 'vo', 'kenh', 'nguon', 'dum', 'giup', 'em', 'anh', 'chi', 'cua',
+                'team', 'doi', 'nhom', 'tuyen', 'sinh', 'lien', 'ngay'
+            ];
+            $rawTokens = preg_split('/[^a-z0-9]+/u', $s, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+            $tokens = [];
+            foreach ($rawTokens as $tk) {
+                if ($tk !== '' && !in_array($tk, $stopWords, true)) {
+                    $tokens[] = $tk;
+                }
+            }
+            $tokens = array_values(array_unique($tokens));
+            return [
+                'tokens' => $tokens,
+                'compact' => implode('', $tokens)
+            ];
+        };
+
+        $qNorm = $normalizeRoundText($kw);
+        if (empty($qNorm['tokens'])) {
+            return null;
+        }
+
+        $stmtAll = $db->prepare("SELECT id, round_name, description, is_active, last_assigned_consultant_id FROM distribution_rounds WHERE tenant_id = ? ORDER BY is_active DESC, id ASC");
+        $stmtAll->execute([$tid]);
+        $allRounds = $stmtAll->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        if (empty($allRounds)) {
+            return null;
+        }
+
+        $scored = [];
+        foreach ($allRounds as $r) {
+            $rNorm = $normalizeRoundText((string)$r['round_name']);
+            if (empty($rNorm['tokens'])) {
+                continue;
+            }
+            $score = 0;
+            if ($qNorm['compact'] !== '' && $rNorm['compact'] === $qNorm['compact']) {
+                $score = 1000;
+            } else {
+                $matchedQ = 0;
+                foreach ($qNorm['tokens'] as $qt) {
+                    if (in_array($qt, $rNorm['tokens'], true)) {
+                        $score += 150;
+                        $matchedQ++;
+                    } elseif ($rNorm['compact'] !== '' && strpos($rNorm['compact'], $qt) !== false) {
+                        $score += 90;
+                        $matchedQ++;
+                    }
+                }
+                if ($matchedQ > 0 && $matchedQ === count($qNorm['tokens'])) {
+                    $score += 300;
+                }
+            }
+
+            if ($score > 0) {
+                if ((int)($r['is_active'] ?? 0) === 1) {
+                    $score += 25;
+                }
+                $r['_match_score'] = $score;
+                $scored[] = $r;
+            }
+        }
+
+        if (empty($scored)) {
+            return null;
+        }
+
+        usort($scored, function ($a, $b) {
+            if ($b['_match_score'] !== $a['_match_score']) {
+                return $b['_match_score'] <=> $a['_match_score'];
+            }
+            if ((int)$b['is_active'] !== (int)$a['is_active']) {
+                return (int)$b['is_active'] <=> (int)$a['is_active'];
+            }
+            return (int)$a['id'] <=> (int)$b['id'];
+        });
+
+        $topScore = (int)$scored[0]['_match_score'];
+        $topMatches = array_values(array_filter($scored, fn($item) => (int)$item['_match_score'] >= max(150, $topScore - 30)));
+
+        foreach ($topMatches as &$tm) {
+            unset($tm['_match_score']);
+        }
+        unset($tm);
+
+        if (count($topMatches) === 1) {
+            return ['exact' => $topMatches[0]];
+        }
+        $activeTop = array_values(array_filter($topMatches, fn($item) => (int)($item['is_active'] ?? 0) === 1));
+        if (count($activeTop) === 1) {
+            return ['exact' => $activeTop[0]];
+        }
+
+        return ['multiple' => !empty($activeTop) ? $activeTop : $topMatches];
+    }
+
+    /**
+     * Smart Personal Lead Creation, Batch Text Parsing & Colleague / Round-Robin Lead Assignment
      */
     private static function smartCreateOrAssignLeads(PDO $db, array $args, array $auth, array $leadRbac): array
     {
@@ -13400,84 +13820,126 @@ class AgentToolRegistry {
         $userName = trim((string)($auth['full_name'] ?? 'Nhân viên'));
         $isAdminOrMgr = !empty($leadRbac['is_admin']) || !empty($leadRbac['is_manager']);
 
-        $assignToName = trim((string)($args['assign_to_name'] ?? ''));
-        $assignToId   = (int)($args['assign_to_id'] ?? 0);
+        $leadsInput = is_array($args['leads'] ?? null) ? $args['leads'] : [];
+        $firstLead  = (!empty($leadsInput) && is_array($leadsInput[0] ?? null)) ? $leadsInput[0] : [];
+
+        $assignToName = trim((string)($args['assign_to_name'] ?? $args['default_assign_to_name'] ?? $firstLead['assign_to_name'] ?? ''));
+        $assignToId   = (int)($args['assign_to_id'] ?? $args['default_assign_to_user_id'] ?? $args['assign_to_user_id'] ?? $firstLead['assign_to_user_id'] ?? $firstLead['assign_to_id'] ?? 0);
+        $roundId      = (int)($args['round_id'] ?? $firstLead['round_id'] ?? 0);
+        $roundNameKw  = trim((string)($args['round_name'] ?? $args['default_round_name'] ?? $firstLead['round_name'] ?? ''));
         $defaultSource  = trim((string)($args['default_source'] ?? ''));
         $defaultProgram = trim((string)($args['default_program'] ?? ''));
         $rawText        = trim((string)($args['raw_text'] ?? ''));
-        $leadsInput     = is_array($args['leads'] ?? null) ? $args['leads'] : [];
 
-        // 1. Resolve Target Owner (Self vs Colleague)
+        // Check if assign_to_name is actually a round name (e.g. "vòng mess hot line", "Mess/Web/Hotline", "vòng Form")
+        if ($roundId <= 0 && $roundNameKw === '' && $assignToName !== '') {
+            if (preg_match('/\bvòng\b/iu', $assignToName)) {
+                $roundNameKw = $assignToName;
+                $assignToName = '';
+            }
+        }
+
+        // Detect round distribution intent from raw_text or lead notes (e.g. "chia data này vòng mess hot line")
+        if ($roundId <= 0 && $roundNameKw === '' && $assignToId <= 0 && $assignToName === '') {
+            $searchRoundTexts = [$rawText, (string)($args['notes'] ?? '')];
+            foreach ($leadsInput as $li) {
+                if (is_array($li)) {
+                    $searchRoundTexts[] = (string)($li['notes'] ?? '');
+                }
+            }
+            foreach ($searchRoundTexts as $txt) {
+                if ($txt === '') continue;
+                if (preg_match('/(?:chia|phân\s*bổ|giao|đẩy|đưa|bỏ)\s*(?:data|lead|số|khách|hồ\s*sơ)?\s*(?:này|mới|đó)?\s*(?:vào|cho|qua|vô)?\s*vòng\s+([^\.\,\;\n\r]+)/iu', $txt, $mRound)) {
+                    $roundNameKw = trim($mRound[1]);
+                    break;
+                }
+                if (preg_match('/\bvòng\s+(mess[\s\/\-]*web[\s\/\-]*hot\s*line|mess[\s\/\-]*hot\s*line|hot\s*line|mess|form|bba|dba|dưới\s*chuẩn|ngoài\s*giờ|công\s*ty[^\.\,\;\n\r]*)/iu', $txt, $mRound2)) {
+                    $roundNameKw = trim($mRound2[1]);
+                    break;
+                }
+            }
+        }
+
+        // 1. Resolve Target Owner (Self vs Colleague) when not distributing via a round
         $selfTokens = ['', 'me', 'self', 'tôi', 'mình', 'ca nhan', 'cá nhân', 'data ca nhan', 'data cá nhân'];
         $isSelfTarget = ($assignToId <= 0 || $assignToId === $uid) && in_array(mb_strtolower($assignToName, 'UTF-8'), $selfTokens, true);
 
         $targetOwnerId = $uid;
         $targetOwnerName = $userName;
 
-        if ($assignToId > 0 && $assignToId !== $uid) {
-            $stmtU = $db->prepare("SELECT id, full_name, email, role, COALESCE(department, '') as department FROM users WHERE id = ? AND tenant_id = ? LIMIT 1");
-            $stmtU->execute([$assignToId, $tid]);
-            $uRow = $stmtU->fetch(PDO::FETCH_ASSOC);
-            if (!$uRow) {
-                return [
-                    'success' => false,
-                    'error' => "Không tìm thấy nhân sự có ID #{$assignToId} trong hệ thống."
-                ];
+        if ($roundId <= 0 && $roundNameKw === '') {
+            if ($assignToId > 0 && $assignToId !== $uid) {
+                $stmtU = $db->prepare("SELECT id, full_name, email, role, COALESCE(department, '') as department FROM users WHERE id = ? AND tenant_id = ? LIMIT 1");
+                $stmtU->execute([$assignToId, $tid]);
+                $uRow = $stmtU->fetch(PDO::FETCH_ASSOC);
+                if (!$uRow) {
+                    return [
+                        'success' => false,
+                        'error' => "Không tìm thấy nhân sự có ID #{$assignToId} trong hệ thống."
+                    ];
+                }
+                $targetOwnerId = (int)$uRow['id'];
+                $targetOwnerName = (string)$uRow['full_name'];
+            } elseif (!$isSelfTarget && $assignToName !== '') {
+                $uParams = [$tid];
+                $fzWhere = self::buildVietnameseFuzzyNameWhere('u.full_name', $assignToName, $uParams);
+                $stmtU = $db->prepare("
+                    SELECT u.id, u.full_name, u.email, u.role, COALESCE(u.department, tm.name, '') as department
+                    FROM users u
+                    LEFT JOIN teams tm ON u.team_id = tm.id
+                    WHERE u.tenant_id = ? AND COALESCE(u.is_active, 1) = 1
+                      AND {$fzWhere}
+                    LIMIT 15
+                ");
+                $stmtU->execute($uParams);
+                $staffCandidates = $stmtU->fetchAll(PDO::FETCH_ASSOC);
+
+                if (empty($staffCandidates)) {
+                    // Fallback: check if assignToName is actually a distribution round name (e.g. "Mess/Web/Hotline", "BBA", "Form")
+                    $roundCheck = self::resolveDistributionRoundFuzzy($db, $tid, 0, $assignToName);
+                    if ($roundCheck) {
+                        $roundNameKw = $assignToName;
+                        $assignToName = '';
+                    } else {
+                        return [
+                            'success' => false,
+                            'error' => "Không tìm thấy đồng nghiệp nào khớp với tên '{$assignToName}'. Vui lòng kiểm tra lại họ tên nhân viên nhận Data."
+                        ];
+                    }
+                } else {
+                    foreach ($staffCandidates as &$sc) {
+                        $sc['_score'] = self::scoreFuzzyNameMatch((string)$sc['full_name'], $assignToName);
+                    }
+                    unset($sc);
+                    usort($staffCandidates, fn($a, $b) => $b['_score'] <=> $a['_score']);
+
+                    $topScore = $staffCandidates[0]['_score'];
+                    $topTies = array_values(array_filter($staffCandidates, fn($c) => $c['_score'] >= max(75, $topScore - 5)));
+
+                    if (count($topTies) > 1 && $topTies[0]['_score'] === $topTies[1]['_score']) {
+                        $candList = array_map(fn($c) => [
+                            'id' => (int)$c['id'],
+                            'full_name' => $c['full_name'],
+                            'role' => $c['role'],
+                            'department' => $c['department'] ?: 'Chưa phân phòng',
+                            'email' => $c['email'] ?: ''
+                        ], array_slice($topTies, 0, 8));
+
+                        return [
+                            'success' => true,
+                            'disambiguation_required' => true,
+                            'entity_type' => 'staff',
+                            'query_name' => $assignToName,
+                            'matched_count' => count($candList),
+                            'candidates' => $candList,
+                            'message' => "Tìm thấy " . count($candList) . " đồng nghiệp trùng tên '{$assignToName}'. Vui lòng xác nhận chính xác người nhận Data."
+                        ];
+                    }
+
+                    $targetOwnerId = (int)$staffCandidates[0]['id'];
+                    $targetOwnerName = (string)$staffCandidates[0]['full_name'];
+                }
             }
-            $targetOwnerId = (int)$uRow['id'];
-            $targetOwnerName = (string)$uRow['full_name'];
-        } elseif (!$isSelfTarget && $assignToName !== '') {
-            $uParams = [$tid];
-            $fzWhere = self::buildVietnameseFuzzyNameWhere('u.full_name', $assignToName, $uParams);
-            $stmtU = $db->prepare("
-                SELECT u.id, u.full_name, u.email, u.role, COALESCE(u.department, tm.name, '') as department
-                FROM users u
-                LEFT JOIN teams tm ON u.team_id = tm.id
-                WHERE u.tenant_id = ? AND COALESCE(u.is_active, 1) = 1
-                  AND {$fzWhere}
-                LIMIT 15
-            ");
-            $stmtU->execute($uParams);
-            $staffCandidates = $stmtU->fetchAll(PDO::FETCH_ASSOC);
-
-            if (empty($staffCandidates)) {
-                return [
-                    'success' => false,
-                    'error' => "Không tìm thấy đồng nghiệp nào khớp với tên '{$assignToName}'. Vui lòng kiểm tra lại họ tên nhân viên nhận Data."
-                ];
-            }
-
-            foreach ($staffCandidates as &$sc) {
-                $sc['_score'] = self::scoreFuzzyNameMatch($assignToName, (string)$sc['full_name']);
-            }
-            unset($sc);
-            usort($staffCandidates, fn($a, $b) => $b['_score'] <=> $a['_score']);
-
-            $topScore = $staffCandidates[0]['_score'];
-            $topTies = array_values(array_filter($staffCandidates, fn($c) => $c['_score'] >= max(75, $topScore - 5)));
-
-            if (count($topTies) > 1 && $topTies[0]['_score'] === $topTies[1]['_score']) {
-                $candList = array_map(fn($c) => [
-                    'id' => (int)$c['id'],
-                    'full_name' => $c['full_name'],
-                    'role' => $c['role'],
-                    'department' => $c['department'] ?: 'Chưa phân phòng',
-                    'email' => $c['email'] ?: ''
-                ], array_slice($topTies, 0, 8));
-
-                return [
-                    'success' => true,
-                    'disambiguation_required' => true,
-                    'entity_type' => 'staff',
-                    'query_name' => $assignToName,
-                    'matched_count' => count($candList),
-                    'candidates' => $candList,
-                    'message' => "Tìm thấy " . count($candList) . " đồng nghiệp trùng tên '{$assignToName}'. Vui lòng xác nhận chính xác người nhận Data."
-                ];
-            }
-
-            $targetOwnerId = (int)$staffCandidates[0]['id'];
-            $targetOwnerName = (string)$staffCandidates[0]['full_name'];
         }
 
         $isAssigningToColleague = ($targetOwnerId !== $uid);
@@ -13510,6 +13972,8 @@ class AgentToolRegistry {
                 'email' => trim((string)($item['email'] ?? '')),
                 'program' => trim((string)($item['program'] ?? $defaultProgram)),
                 'source' => trim((string)($item['source'] ?? $defaultSource)),
+                'job_title' => trim((string)($item['job_title'] ?? '')),
+                'company' => trim((string)($item['company'] ?? '')),
                 'city' => trim((string)($item['city'] ?? '')),
                 'notes' => trim((string)($item['notes'] ?? ''))
             ];
@@ -13581,6 +14045,8 @@ class AgentToolRegistry {
                     'email' => $emailFound,
                     'program' => $progFound,
                     'source' => $defaultSource,
+                    'job_title' => '',
+                    'company' => '',
                     'city' => '',
                     'notes' => $extraNotes
                 ];
@@ -13602,6 +14068,8 @@ class AgentToolRegistry {
                     'email' => trim((string)($args['email'] ?? '')),
                     'program' => $defaultProgram,
                     'source' => $defaultSource,
+                    'job_title' => trim((string)($args['job_title'] ?? '')),
+                    'company' => trim((string)($args['company'] ?? '')),
                     'city' => trim((string)($args['city'] ?? '')),
                     'notes' => trim((string)($args['notes'] ?? ''))
                 ];
@@ -13615,8 +14083,48 @@ class AgentToolRegistry {
             ];
         }
 
-        // 3. Fetch Default Pipeline Stage
-        $stmtStage = $db->prepare("SELECT id, name FROM pipeline_stages WHERE tenant_id = ? ORDER BY sort_order ASC, id ASC LIMIT 1");
+        // 2B. If Round-Robin Distribution was requested (via round_id, round_name, or "chia ... vòng ..."), delegate to manage_lead_round_distribution
+        if ($roundId > 0 || $roundNameKw !== '') {
+            $distResults = [];
+            foreach ($parsedLeads as $pl) {
+                $plSource = $pl['source'] ?? '';
+                if ($plSource === 'Data cá nhân' || $plSource === 'Data phân bổ nội bộ') {
+                    $plSource = '';
+                }
+                $resDist = self::executeTool($db, 'manage_lead_round_distribution', [
+                    'action' => 'distribute_lead',
+                    'round_id' => $roundId,
+                    'round_name' => $roundNameKw,
+                    'lead_phone' => $pl['phone'] ?? '',
+                    'lead_name' => $pl['full_name'] ?? '',
+                    'lead_email' => $pl['email'] ?? '',
+                    'lead_source' => $plSource,
+                    'lead_program' => $pl['program'] ?? '',
+                    'lead_job_title' => $pl['job_title'] ?? '',
+                    'lead_company' => $pl['company'] ?? '',
+                    'lead_note' => $pl['notes'] ?? ''
+                ], $auth);
+                if (!empty($resDist['requires_disambiguation'])) {
+                    return $resDist;
+                }
+                $distResults[] = $resDist;
+            }
+            if (count($distResults) === 1) {
+                return $distResults[0];
+            }
+            $successCount = count(array_filter($distResults, fn($r) => !empty($r['success'])));
+            return [
+                'success' => $successCount > 0,
+                'action_type' => 'distribute_leads_to_round',
+                'total_processed' => count($distResults),
+                'success_count' => $successCount,
+                'results' => $distResults,
+                'message' => "Đã xử lý phân bổ {$successCount}/" . count($distResults) . " khách hàng vào vòng xoay phân bổ."
+            ];
+        }
+
+        // 3. Fetch Default Pipeline Stage (order_index ASC, id ASC)
+        $stmtStage = $db->prepare("SELECT id, name FROM pipeline_stages WHERE tenant_id = ? ORDER BY order_index ASC, id ASC LIMIT 1");
         $stmtStage->execute([$tid]);
         $firstStage = $stmtStage->fetch(PDO::FETCH_ASSOC);
         $defaultStageId = $firstStage ? (int)$firstStage['id'] : null;
@@ -13633,6 +14141,8 @@ class AgentToolRegistry {
             $email = trim((string)($lead['email'] ?? ''));
             $program = trim((string)($lead['program'] ?? $defaultProgram));
             $source = trim((string)($lead['source'] ?? $defaultSource));
+            $jobTitle = trim((string)($lead['job_title'] ?? ''));
+            $company = trim((string)($lead['company'] ?? ''));
             $city = trim((string)($lead['city'] ?? ''));
             $notes = trim((string)($lead['notes'] ?? ''));
 
@@ -13640,7 +14150,7 @@ class AgentToolRegistry {
             $existing = null;
             if ($cid > 0) {
                 $stmtEx = $db->prepare("
-                    SELECT c.id, c.full_name, c.phone, c.program, c.source, c.owner_id,
+                    SELECT c.id, c.full_name, c.phone, c.program, c.source, c.job_title, c.company, c.owner_id,
                            COALESCE(ps.name, c.pipeline_status, 'Mới') as stage_name,
                            COALESCE(u.full_name, 'Chưa gán') as owner_name
                     FROM contacts c
@@ -13653,7 +14163,7 @@ class AgentToolRegistry {
                 $existing = $stmtEx->fetch(PDO::FETCH_ASSOC) ?: null;
             } elseif ($phone !== '') {
                 $stmtEx = $db->prepare("
-                    SELECT c.id, c.full_name, c.phone, c.program, c.source, c.owner_id,
+                    SELECT c.id, c.full_name, c.phone, c.program, c.source, c.job_title, c.company, c.owner_id,
                            COALESCE(ps.name, c.pipeline_status, 'Mới') as stage_name,
                            COALESCE(u.full_name, 'Chưa gán') as owner_name
                     FROM contacts c
@@ -13707,6 +14217,14 @@ class AgentToolRegistry {
                 if ($program !== '' && empty($existing['program'])) {
                     $updFields[] = 'program = ?';
                     $updParams[] = $program;
+                }
+                if ($jobTitle !== '' && empty($existing['job_title'])) {
+                    $updFields[] = 'job_title = ?';
+                    $updParams[] = $jobTitle;
+                }
+                if ($company !== '' && empty($existing['company'])) {
+                    $updFields[] = 'company = ?';
+                    $updParams[] = $company;
                 }
                 $updParams[] = $exId;
                 $updParams[] = $tid;
@@ -13774,11 +14292,13 @@ class AgentToolRegistry {
             $stmtInsC = $db->prepare("
                 INSERT INTO contacts (
                     tenant_id, person_id, full_name, email, phone, mobile,
+                    job_title, company,
                     lead_status, stage_id, pipeline_status, status,
                     source, program, city, notes,
                     owner_id, created_by, last_contact, created_at, updated_at
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?,
+                    ?, ?,
                     'new', ?, 'new', 'new',
                     ?, ?, ?, ?,
                     ?, ?, CURDATE(), NOW(), NOW()
@@ -13791,6 +14311,8 @@ class AgentToolRegistry {
                 $email !== '' ? $email : null,
                 $phone !== '' ? $phone : null,
                 $phone !== '' ? $phone : null,
+                $jobTitle !== '' ? $jobTitle : null,
+                $company !== '' ? $company : null,
                 $defaultStageId,
                 $source,
                 $program !== '' ? $program : null,

@@ -79,13 +79,35 @@ switch ($method) {
                     $res = $reconcileList($pdo, $targetListId, $workspace_id);
                     jsonResponse(true, $res, 'Đã cập nhật số lượng cho danh sách.');
                 } else {
-                    // Refresh ALL lists in current workspace
+                    // Refresh ALL lists in current workspace using a single grouped query instead of N+1
                     $stmtAll = $pdo->prepare("SELECT id FROM lists WHERE workspace_id = ?");
                     $stmtAll->execute([$workspace_id]);
                     $ids = $stmtAll->fetchAll(PDO::FETCH_COLUMN);
+
+                    $stmtAgg = $pdo->prepare("
+                        SELECT sl.list_id,
+                               COUNT(*) as total,
+                               SUM(CASE WHEN s.phone_number IS NOT NULL AND s.phone_number != '' AND s.phone_number != '0' THEN 1 ELSE 0 END) as phone_total
+                        FROM subscriber_lists sl
+                        JOIN subscribers s ON sl.subscriber_id = s.id
+                        WHERE s.workspace_id = ?
+                        GROUP BY sl.list_id
+                    ");
+                    $stmtAgg->execute([$workspace_id]);
+                    $aggMap = [];
+                    while ($r = $stmtAgg->fetch(PDO::FETCH_ASSOC)) {
+                        $aggMap[$r['list_id']] = [
+                            'total' => (int)($r['total'] ?? 0),
+                            'phone' => (int)($r['phone_total'] ?? 0),
+                        ];
+                    }
+
+                    $stmtUpd = $pdo->prepare("UPDATE lists SET subscriber_count = ?, phone_count = ? WHERE id = ? AND workspace_id = ?");
                     $processed = 0;
                     foreach ($ids as $lid) {
-                        $reconcileList($pdo, $lid, $workspace_id);
+                        $c = $aggMap[$lid]['total'] ?? 0;
+                        $p = $aggMap[$lid]['phone'] ?? 0;
+                        $stmtUpd->execute([$c, $p, $lid, $workspace_id]);
                         $processed++;
                     }
                     jsonResponse(true, ['processed' => $processed], 'Đã cập nhật số lượng cho tất cả danh sách trong workspace.');
@@ -178,7 +200,7 @@ switch ($method) {
                 $cleanupType = $data['cleanupType'] ?? 'junk'; // 'junk' or 'dormant'
 
                 // Junk params
-                $statuses = $data['statuses'] ?? [];
+                $statuses = array_values((array)($data['statuses'] ?? []));
 
                 // Dormant params
                 $days = $data['days'] ?? 90;
@@ -238,7 +260,7 @@ switch ($method) {
                             $statusPlaceholders = implode(',', array_fill(0, count($statuses), '?'));
                             $sql = "SELECT s.id FROM subscribers s WHERE s.status IN ($statusPlaceholders) AND " . $res['sql'];
                             $stmt = $pdo->prepare($sql);
-                            $stmt->execute(array_merge($statuses, $res['params']));
+                            $stmt->execute(array_values(array_merge($statuses, $res['params'])));
                             $targetIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
                         }
                     }
@@ -263,7 +285,7 @@ switch ($method) {
                             $sql = "SELECT s.id FROM subscribers s WHERE s.status IN ('active', 'lead', 'customer') AND " . $res['sql'];
                             $sql .= " AND (s.last_activity_at < ? OR (s.last_activity_at IS NULL AND s.created_at < ?))";
                             $stmt = $pdo->prepare($sql);
-                            $stmt->execute(array_merge($res['params'], [$dateThreshold, $dateThreshold]));
+                            $stmt->execute(array_values(array_merge($res['params'], [$dateThreshold, $dateThreshold])));
                             $targetIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
                         }
                     }
@@ -368,7 +390,7 @@ switch ($method) {
         if (isset($_GET['route']) && $_GET['route'] === 'merge') {
             try {
                 $data = json_decode(file_get_contents("php://input"), true);
-                $listIds = $data['list_ids'] ?? [];
+                $listIds = array_values(array_unique((array)($data['list_ids'] ?? [])));
                 $mergeType = $data['merge_type'] ?? 'new';
 
                 if (count($listIds) < 2) {
@@ -585,7 +607,7 @@ switch ($method) {
                       AND s.status IN ('active', 'lead', 'customer')
                       $extraEmailSql
                       AND " . $res['sql'];
-                $insParams = array_merge([$workspace_id, $listId, $workspace_id], $res['params']);
+                $insParams = array_values(array_merge([$workspace_id, $listId, $workspace_id], $res['params']));
                 $stmtIns = $pdo->prepare($insSql);
                 $stmtIns->execute($insParams);
                 $addedCount = $stmtIns->rowCount();
@@ -670,7 +692,7 @@ switch ($method) {
                       AND s.status IN ('active', 'lead', 'customer')
                       $extraEmailSql
                       AND " . $res['sql'];
-                $insParams = array_merge([$workspace_id, $id, $workspace_id], $res['params']);
+                $insParams = array_values(array_merge([$workspace_id, $id, $workspace_id], $res['params']));
                 $stmtIns = $pdo->prepare($insSql);
                 $stmtIns->execute($insParams);
                 $populatedCount = $stmtIns->rowCount();
@@ -733,7 +755,7 @@ switch ($method) {
                       AND s.status IN ('active', 'lead', 'customer')
                       AND " . $res['sql']
                 );
-                $stmtIns->execute(array_merge([$workspace_id, $path, $workspace_id], $res['params']));
+                $stmtIns->execute(array_values(array_merge([$workspace_id, $path, $workspace_id], $res['params'])));
                 $addedCount = $stmtIns->rowCount();
 
                 $stmtCnt = $pdo->prepare("
@@ -791,8 +813,8 @@ switch ($method) {
 
             // 3. Clean up Buffers
             $pdo->prepare("DELETE FROM stats_update_buffer WHERE target_id = ? AND target_table = 'lists'")->execute([$path]);
-            $pdo->prepare("DELETE FROM segment_count_update_queue WHERE segment_id IN (SELECT id FROM segments WHERE criteria LIKE ?)")
-                ->execute(['%"list_id":"' . $path . '"%']); // Just a heuristic, maybe not perfect
+            $pdo->prepare("DELETE FROM segment_count_update_queue WHERE workspace_id = ? AND segment_id IN (SELECT id FROM segments WHERE workspace_id = ? AND criteria LIKE ?)")
+                ->execute([$workspace_id, $workspace_id, '%"list_id":"' . $path . '"%']);
 
             // 4. Delete List (Subscribers relation removed via CASCADE)
             $stmtDel = $pdo->prepare("DELETE FROM lists WHERE id = ? AND workspace_id = ?");

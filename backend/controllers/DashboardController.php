@@ -21,11 +21,11 @@ class DashboardController {
         $fromTs = $from . ' 00:00:00';
         $toTs   = $to . ' 23:59:59';
 
-        // 60-second cache check
+        // 20-second cache check (bypassed on explicit refresh/nocache)
         $cacheKey = "ideas_stats_cache_" . $tid . "_" . $uid . "_" . md5($fromTs . $toTs . $auth['role']);
         $cacheFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . $cacheKey . ".json";
         
-        if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < 60)) {
+        if (empty($_GET['refresh']) && empty($_GET['nocache']) && file_exists($cacheFile) && (time() - filemtime($cacheFile) < 20)) {
             $cachedData = json_decode(file_get_contents($cacheFile), true);
             if ($cachedData) {
                 respond(200, $cachedData);
@@ -636,6 +636,14 @@ class DashboardController {
         $role = strtolower($auth['role'] ?? '');
         $uid = (int)($auth['user_id'] ?? 0);
         $tid = (int)($auth['tenant_id'] ?? 1);
+        $badgeCacheFile = rtrim(sys_get_temp_dir(), '/\\') . '/myerp_badges_v2_' . $tid . '_' . $uid . '_' . md5($role) . '.json';
+        if (empty($_GET['refresh']) && empty($_GET['nocache']) && @is_file($badgeCacheFile) && (time() - (int)@filemtime($badgeCacheFile)) < 12) {
+            $cachedBadges = @json_decode((string)@file_get_contents($badgeCacheFile), true);
+            if (is_array($cachedBadges)) {
+                respond(200, $cachedBadges, 'Lấy danh sách badges thành công');
+                return;
+            }
+        }
         $isAdminOrDirector = in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true);
         $isManager = ($role === 'manager');
         $isAccountant = ($role === 'accountant');
@@ -814,7 +822,8 @@ class DashboardController {
                 $stmtCoop = $this->db->query("SELECT COUNT(1) FROM cooperation_slips WHERE status = 'pending_manager_approval'");
                 $coopCount = (int)$stmtCoop->fetchColumn();
             } elseif ($isSale) {
-                $stmtCoop = $this->db->query("SELECT id, status, shares_json FROM cooperation_slips WHERE status != 'rejected'");
+                $stmtCoop = $this->db->prepare("SELECT id, status, shares_json FROM cooperation_slips WHERE status != 'rejected' AND shares_json LIKE ?");
+                $stmtCoop->execute(['%' . $uid . '%']);
                 while ($csRow = $stmtCoop->fetch(PDO::FETCH_ASSOC)) {
                     $shares = json_decode($csRow['shares_json'] ?? '[]', true) ?: [];
                     foreach ($shares as $sh) {
@@ -848,7 +857,7 @@ class DashboardController {
             }
         } catch (\Throwable $e) { }
 
-        respond(200, [
+        $badgePayload = [
             'workspaceTasks' => $tasksCount,
             'pendingApprovals' => $totalApprovals,
             'pendingExpenses' => $pendingExpensesCount,
@@ -859,7 +868,9 @@ class DashboardController {
             'coopSlips' => $coopCount,
             'nopHoSo' => $nopHoSoCount,
             'lePhi' => $lePhiCount,
-        ], 'Lấy danh sách badges thành công');
+        ];
+        @file_put_contents($badgeCacheFile, json_encode($badgePayload, JSON_UNESCAPED_UNICODE));
+        respond(200, $badgePayload, 'Lấy danh sách badges thành công');
     }
 
     /**
@@ -922,6 +933,19 @@ class DashboardController {
             : $consultantId;
         $sourceFilter = trim((string)($_GET['source'] ?? ''));
         $drilldownType = trim((string)($_GET['drilldown'] ?? ''));
+
+        $perfCacheFile = '';
+        if ($drilldownType === '') {
+            $perfCacheKey = implode('|', [$tid, $dateParam, $monthParam, $fromParam, $toParam, $consultantId, $funnelConsultantId, $sourceFilter]);
+            $perfCacheFile = rtrim(sys_get_temp_dir(), '/\\') . '/myerp_sales_lead_perf_v3_' . $tid . '_' . md5($perfCacheKey) . '.json';
+            if (empty($_GET['refresh']) && empty($_GET['nocache']) && @is_file($perfCacheFile) && (time() - (int)@filemtime($perfCacheFile)) < 15) {
+                $cachedPerf = @json_decode((string)@file_get_contents($perfCacheFile), true);
+                if (is_array($cachedPerf)) {
+                    respond(200, $cachedPerf, 'Lấy báo cáo hiệu suất Sales & Lead thành công');
+                    return;
+                }
+            }
+        }
 
         // Resolve Date Range ($from, $to) and Previous Comparison Period ($prevFrom, $prevTo)
         $today = date('Y-m-d');
@@ -1081,19 +1105,42 @@ class DashboardController {
             return false;
         };
 
-        // 2. Confirmed / Pending Error leads (excluded from performance metrics — 100% NULL-safe & synced with ContactController.php)
-        $errorCond = function(string $alias = 'c'): string {
+        // 2. Confirmed / Pending Error leads (excluded from performance metrics — pre-fetched in O(1) to eliminate correlated subqueries)
+        $errTicketIdsCsv = '0';
+        $errPhonesCsv = "''";
+        try {
+            $stmtErrTk = $this->db->query("SELECT DISTINCT contact_id FROM tickets WHERE contact_id IS NOT NULL AND contact_id > 0 AND status IN ('open', 'in_progress', 'pending', 'approved', 'confirmed')");
+            $errTkIds = array_values(array_unique(array_filter(array_map('intval', $stmtErrTk ? $stmtErrTk->fetchAll(PDO::FETCH_COLUMN) : []))));
+            if (!empty($errTkIds)) {
+                $errTicketIdsCsv = implode(',', $errTkIds);
+            }
+        } catch (\Throwable $e) {}
+        try {
+            $stmtErrDr = $this->db->query("SELECT DISTINCT l_err.phone FROM data_reports dr_err JOIN leads l_err ON dr_err.lead_id = l_err.id WHERE dr_err.status IN ('pending', 'approved') AND l_err.phone IS NOT NULL AND TRIM(l_err.phone) != ''");
+            $errPhones = [];
+            if ($stmtErrDr) {
+                while ($ep = $stmtErrDr->fetchColumn()) {
+                    $epTrim = trim((string)$ep);
+                    if ($epTrim !== '') {
+                        $errPhones[] = $this->db->quote($epTrim);
+                    }
+                }
+            }
+            if (!empty($errPhones)) {
+                $errPhonesCsv = implode(',', array_values(array_unique($errPhones)));
+            }
+        } catch (\Throwable $e) {}
+
+        $errorCond = function(string $alias = 'c') use ($errTicketIdsCsv, $errPhonesCsv): string {
             $a = $alias !== '' ? $alias . '.' : '';
+            $tkCheck = $errTicketIdsCsv !== '0' ? "OR {$a}id IN ($errTicketIdsCsv)" : '';
+            $phCheck = $errPhonesCsv !== "''" ? "OR ({$a}phone IS NOT NULL AND {$a}phone != '' AND {$a}phone IN ($errPhonesCsv))" : '';
             return "(
                 COALESCE({$a}lead_status, '') IN ('error', 'ticket_pending', 'pending', 'approved', 'confirmed', 'bao_loi')
                 OR COALESCE({$a}pipeline_status, '') IN ('00_error', 'error', 'bao_loi')
                 OR COALESCE({$a}tags, '') LIKE '%\"Báo lỗi\"%'
-                OR EXISTS (SELECT 1 FROM tickets tk_err WHERE tk_err.contact_id = {$a}id AND tk_err.status IN ('open', 'in_progress', 'pending', 'approved', 'confirmed'))
-                OR EXISTS (
-                    SELECT 1 FROM data_reports dr_err
-                    JOIN leads l_err ON dr_err.lead_id = l_err.id
-                    WHERE {$a}phone IS NOT NULL AND {$a}phone != '' AND l_err.phone = {$a}phone AND dr_err.status IN ('pending', 'approved')
-                )
+                $tkCheck
+                $phCheck
             )";
         };
 
@@ -1180,9 +1227,77 @@ class DashboardController {
             return "{$a}owner_id IN ($saleIdsCsv)";
         };
 
-        // 4. Exact Uncontacted (Chưa tương tác) condition — 100% NULL-safe & synced with ContactController.php & AgentToolRegistry.php
-        $uncontactedCond = function(string $alias = 'c'): string {
+        // 4. Exact Uncontacted (Chưa tương tác) condition — Pre-computed in 1 batch pass to eliminate 3x correlated NOT EXISTS subqueries across all 8 dashboard queries
+        $precomputedUcCsv = null;
+        try {
+            $stmtCandUc = $this->db->prepare("
+                SELECT c_uc.id
+                FROM contacts c_uc
+                WHERE c_uc.tenant_id = ?
+                  AND c_uc.deleted_at IS NULL
+                  AND COALESCE(c_uc.lead_status, '') NOT IN ('lost', 'nurture')
+                  AND (c_uc.last_contact IS NULL OR TRIM(c_uc.last_contact) = '' OR c_uc.last_contact LIKE '0000-00-00%')
+                LIMIT 5001
+            ");
+            $stmtCandUc->execute([$tid]);
+            $candUcIds = array_values(array_unique(array_filter(array_map('intval', $stmtCandUc->fetchAll(PDO::FETCH_COLUMN) ?: []))));
+            if (count($candUcIds) === 0) {
+                $precomputedUcCsv = '0';
+            } elseif (count($candUcIds) <= 5000) {
+                $hasActOrNoteMap = [];
+                foreach (array_chunk($candUcIds, 1000) as $chunkIds) {
+                    $cPh = implode(',', array_fill(0, count($chunkIds), '?'));
+                    $stmtChkAct = $this->db->prepare("
+                        SELECT DISTINCT COALESCE(act_u.contact_id, act_u.related_id) as cid
+                        FROM activities act_u
+                        WHERE (act_u.contact_id IN ($cPh) OR (act_u.related_type IN ('contact', 'lead') AND act_u.related_id IN ($cPh)))
+                          AND act_u.deleted_at IS NULL
+                          AND COALESCE(act_u.type, '') NOT IN ('system', 'lifecycle', 'assign', 'lead_Assign')
+                    ");
+                    $stmtChkAct->execute(array_merge($chunkIds, $chunkIds));
+                    while ($acId = $stmtChkAct->fetchColumn()) {
+                        $hasActOrNoteMap[(int)$acId] = true;
+                    }
+
+                    $stmtChkNote = $this->db->prepare("
+                        SELECT DISTINCT n_u.entity_id as cid
+                        FROM notes n_u
+                        WHERE n_u.entity_type = 'contact' AND n_u.entity_id IN ($cPh)
+                          AND COALESCE(n_u.body, '') NOT LIKE '[Tự động]%'
+                          AND COALESCE(n_u.body, '') NOT LIKE '[Phân bổ]%'
+                          AND COALESCE(n_u.body, '') NOT LIKE '[Giao data]%'
+                          AND COALESCE(n_u.body, '') NOT LIKE '[Auto]%'
+                          AND COALESCE(n_u.body, '') NOT LIKE '[Import]%'
+                          AND COALESCE(n_u.body, '') NOT LIKE '[Tái phân bổ]%'
+                          AND COALESCE(n_u.body, '') NOT LIKE 'Tái phân bổ%'
+                          AND COALESCE(n_u.body, '') NOT LIKE 'Giao lại%'
+                          AND COALESCE(n_u.body, '') NOT LIKE '📋 [Ghi chú gốc%'
+                          AND COALESCE(n_u.body, '') NOT LIKE '[Ghi chú gốc%'
+                          AND COALESCE(n_u.body, '') NOT LIKE 'Khách hàng đăng ký lại%'
+                          AND COALESCE(n_u.body, '') NOT LIKE '📌%'
+                    ");
+                    $stmtChkNote->execute($chunkIds);
+                    while ($ncId = $stmtChkNote->fetchColumn()) {
+                        $hasActOrNoteMap[(int)$ncId] = true;
+                    }
+                }
+                $trueUcIds = [];
+                foreach ($candUcIds as $cidVal) {
+                    if (!isset($hasActOrNoteMap[$cidVal])) {
+                        $trueUcIds[] = $cidVal;
+                    }
+                }
+                $precomputedUcCsv = !empty($trueUcIds) ? implode(',', $trueUcIds) : '0';
+            }
+        } catch (\Throwable $e) {
+            $precomputedUcCsv = null;
+        }
+
+        $uncontactedCond = function(string $alias = 'c') use ($precomputedUcCsv): string {
             $a = $alias !== '' ? $alias . '.' : '';
+            if ($precomputedUcCsv !== null) {
+                return $precomputedUcCsv === '0' ? '(1 = 0)' : "({$a}id IN ($precomputedUcCsv))";
+            }
             return "(
                 COALESCE({$a}lead_status, '') NOT IN ('lost', 'nurture')
                 AND ({$a}last_contact IS NULL OR TRIM({$a}last_contact) = '' OR {$a}last_contact LIKE '0000-00-00%')
@@ -2472,7 +2587,172 @@ class DashboardController {
             ]
         ];
 
-        respond(200, [
+        // 11. Pre-warmed 0ms Instant Drilldown Pool (for periods with <= 800 distributed leads)
+        $initialDrilldownPool = [];
+        $initialDrilldownPoolComplete = false;
+        if ($totalLeads <= 800) {
+            try {
+                $stmtPool = $this->db->prepare("
+                    SELECT 
+                        c.id,
+                        c.id as contact_id,
+                        c.full_name,
+                        c.phone,
+                        c.email,
+                        c.program,
+                        COALESCE(NULLIF(TRIM(c.source), ''), 'Chưa phân loại') as source,
+                        c.owner_id,
+                        u.full_name as owner_name,
+                        u.avatar_url as owner_avatar,
+                        c.stage_id,
+                        c.pipeline_status,
+                        COALESCE(ps.id, ps_slug.id, ?) as resolved_stage_id,
+                        COALESCE(ps.name, ps_slug.name, '01 – New Lead') as stage_name,
+                        COALESCE(ps.color, ps_slug.color, '#3b82f6') as stage_color,
+                        COALESCE(ps.order_index, ps_slug.order_index, 1) as stage_order,
+                        CASE WHEN $ucCondC THEN 1 ELSE 0 END as is_uncontacted,
+                        CASE WHEN $qCondC THEN 1 ELSE 0 END as is_qualified,
+                        CASE WHEN $wCondC THEN 1 ELSE 0 END as is_win,
+                        CASE WHEN c.created_at BETWEEN ? AND ? THEN 1 ELSE 0 END as in_period_created,
+                        CASE WHEN EXISTS (
+                            SELECT 1 FROM deposits d_pl
+                            WHERE d_pl.contact_id = c.id
+                              AND d_pl.deleted_at IS NULL
+                              AND d_pl.status NOT IN ('cancelled', 'rejected', 'deleted')
+                              AND d_pl.created_at BETWEEN ? AND ?
+                        ) THEN 1 ELSE 0 END as has_period_deposit,
+                        TIMESTAMPDIFF(HOUR, c.created_at, NOW()) as hours_since_created,
+                        c.created_at,
+                        c.last_contact,
+                        c.notes
+                    FROM contacts c
+                    LEFT JOIN users u ON u.id = c.owner_id
+                    LEFT JOIN pipeline_stages ps ON ps.id = c.stage_id AND ps.tenant_id = c.tenant_id
+                    LEFT JOIN pipeline_stages ps_slug ON (c.stage_id IS NULL OR c.stage_id = 0) AND ps_slug.system_slug = c.pipeline_status AND ps_slug.tenant_id = c.tenant_id
+                    WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND $notClonedC
+                      AND (
+                          c.created_at BETWEEN ? AND ?
+                          OR EXISTS (
+                              SELECT 1 FROM deposits d_p2
+                              WHERE d_p2.contact_id = c.id
+                                AND d_p2.deleted_at IS NULL
+                                AND d_p2.status NOT IN ('cancelled', 'rejected', 'deleted')
+                                AND d_p2.created_at BETWEEN ? AND ?
+                          )
+                      )
+                      AND NOT $pCondC AND NOT $eCondC AND $sRoleC
+                      $extraContactSql
+                    ORDER BY c.created_at DESC
+                    LIMIT 850
+                ");
+                $stmtPool->execute(array_merge(
+                    [$firstStageId, $fromTs, $toTs, $fromTs, $toTs, $tid, $fromTs, $toTs, $fromTs, $toTs],
+                    $extraContactParams
+                ));
+                $poolRows = $stmtPool->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                if (count($poolRows) < 850) {
+                    $initialDrilldownPoolComplete = true;
+                    $poolIds = array_values(array_unique(array_filter(array_map(function($r) {
+                        return (int)($r['id'] ?? 0);
+                    }, $poolRows))));
+
+                    $poolActMap = [];
+                    $poolNoteMap = [];
+                    if (!empty($poolIds)) {
+                        $cleanPoolText = function(?string $raw): ?string {
+                            if ($raw === null || trim($raw) === '') return null;
+                            $s = trim($raw);
+                            $prefix = '';
+                            if (preg_match('/^([a-z_]+\s*:\s*)(?=\{\s*"erp_task")/i', $s, $pm)) {
+                                $prefix = $pm[1];
+                                $s = trim(substr($s, strlen($prefix)));
+                            }
+                            if (str_starts_with($s, '{"erp_task"') || str_contains($s, '"erp_task"')) {
+                                $decoded = json_decode($s, true);
+                                if (is_array($decoded)) {
+                                    $desc = $decoded['erp_task']['description'] ?? $decoded['description'] ?? '';
+                                    if (is_string($desc) && trim($desc) !== '') {
+                                        $s = trim($desc);
+                                    }
+                                } elseif (preg_match('/"description"\s*:\s*"((?:[^"\\\\]|\\\\.)*)/s', $s, $dm)) {
+                                    $s = stripcslashes($dm[1]);
+                                }
+                            }
+                            $s = preg_replace('/<br\s*\/?>/i', "\n", $s);
+                            $s = preg_replace('/<\/(p|div|li)>/i', "\n", $s);
+                            $s = strip_tags((string)$s);
+                            $s = html_entity_decode((string)$s, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                            $s = str_replace("\xC2\xA0", ' ', $s);
+                            $s = trim((string)preg_replace('/\n{3,}/', "\n\n", $s));
+                            return $s !== '' ? ($prefix . $s) : null;
+                        };
+
+                        foreach (array_chunk($poolIds, 400) as $pChunk) {
+                            $pPh = implode(',', array_fill(0, count($pChunk), '?'));
+                            $stmtPAct = $this->db->prepare("
+                                SELECT 
+                                    COALESCE(act_l.contact_id, act_l.related_id) as cid,
+                                    CONCAT(COALESCE(act_l.type, 'call'), ': ', COALESCE(NULLIF(TRIM(act_l.subject), ''), act_l.body, '')) as text_val,
+                                    act_l.body as raw_body,
+                                    act_l.subject as raw_subject,
+                                    act_l.type as act_type,
+                                    act_l.created_at
+                                FROM activities act_l
+                                WHERE (act_l.contact_id IN ($pPh) OR (act_l.related_type IN ('contact', 'lead') AND act_l.related_id IN ($pPh)))
+                                  AND act_l.deleted_at IS NULL
+                                  AND COALESCE(act_l.type, '') NOT IN ('system', 'lifecycle', 'assign', 'lead_Assign')
+                                ORDER BY act_l.created_at DESC
+                            ");
+                            $stmtPAct->execute(array_merge($pChunk, $pChunk));
+                            while ($ar = $stmtPAct->fetch(PDO::FETCH_ASSOC)) {
+                                $cid = (int)$ar['cid'];
+                                if (!isset($poolActMap[$cid])) {
+                                    $rawBody = trim((string)($ar['raw_body'] ?? ''));
+                                    $rawSubj = trim((string)($ar['raw_subject'] ?? ''));
+                                    $actType = trim((string)($ar['act_type'] ?? 'call')) ?: 'call';
+                                    $cleanBody = $cleanPoolText($rawBody);
+                                    $displayContent = ($cleanBody !== null && $cleanBody !== '') ? $cleanBody : $rawSubj;
+                                    $ar['text_val'] = $displayContent !== '' ? ($actType . ': ' . $displayContent) : $cleanPoolText((string)($ar['text_val'] ?? ''));
+                                    $poolActMap[$cid] = $ar;
+                                }
+                            }
+
+                            $stmtPNote = $this->db->prepare("
+                                SELECT n_l.entity_id as cid, n_l.body
+                                FROM notes n_l
+                                WHERE n_l.entity_type = 'contact' AND n_l.entity_id IN ($pPh)
+                                  AND COALESCE(n_l.body, '') NOT LIKE '[Tự động]%'
+                                  AND COALESCE(n_l.body, '') NOT LIKE '[Phân bổ]%'
+                                  AND COALESCE(n_l.body, '') NOT LIKE '[Giao data]%'
+                                  AND COALESCE(n_l.body, '') NOT LIKE '[Auto]%'
+                                ORDER BY n_l.created_at DESC
+                            ");
+                            $stmtPNote->execute($pChunk);
+                            while ($nr = $stmtPNote->fetch(PDO::FETCH_ASSOC)) {
+                                $cid = (int)$nr['cid'];
+                                if (!isset($poolNoteMap[$cid])) {
+                                    $poolNoteMap[$cid] = $cleanPoolText((string)$nr['body']) ?? (string)$nr['body'];
+                                }
+                            }
+                        }
+                    }
+
+                    foreach ($poolRows as &$pItem) {
+                        $cid = (int)($pItem['id'] ?? 0);
+                        $pItem['latest_interaction'] = $poolActMap[$cid]['text_val'] ?? null;
+                        $pItem['latest_interaction_at'] = $poolActMap[$cid]['created_at'] ?? null;
+                        $pItem['latest_manual_note'] = $poolNoteMap[$cid] ?? null;
+                    }
+                    unset($pItem);
+                    $initialDrilldownPool = $poolRows;
+                }
+            } catch (\Throwable $e) {
+                $initialDrilldownPool = [];
+                $initialDrilldownPoolComplete = false;
+            }
+        }
+
+        $perfPayload = [
             'month' => $month,
             'period_label' => $periodLabel,
             'date_range' => [
@@ -2542,7 +2822,13 @@ class DashboardController {
             'lost_reasons' => $lostReasons,
             'daily_velocity' => $dailyVelocity,
             'by_program_breakdown' => $byProgramBreakdown,
-            'sla_speed_breakdown' => $slaSpeedBreakdown
-        ], 'Lấy báo cáo hiệu suất Sales & Lead thành công');
+            'sla_speed_breakdown' => $slaSpeedBreakdown,
+            'initial_drilldown_pool' => $initialDrilldownPool,
+            'initial_drilldown_pool_complete' => $initialDrilldownPoolComplete
+        ];
+        if ($perfCacheFile !== '') {
+            @file_put_contents($perfCacheFile, json_encode($perfPayload, JSON_UNESCAPED_UNICODE));
+        }
+        respond(200, $perfPayload, 'Lấy báo cáo hiệu suất Sales & Lead thành công');
     }
 }

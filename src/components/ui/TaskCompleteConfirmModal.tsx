@@ -122,6 +122,7 @@ export const TaskCompleteConfirmModal: React.FC<TaskCompleteConfirmModalProps> =
           position: 'fixed',
           inset: 0,
           zIndex: 2147483646, // Tier 5 topmost modal level, above drawers and below Global Toasts
+          ...({ '--modal-z': 2147483646 } as any),
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

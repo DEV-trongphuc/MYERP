@@ -22,14 +22,27 @@ if (!$route && $actionParam) {
 }
 
 require_once 'segment_helper.php';
-ensureSegmentsTableSchema($pdo);
+$segSchemaFlag = sys_get_temp_dir() . '/myerp_segments_schema_v2.flag';
+if (!is_file($segSchemaFlag)) {
+    ensureSegmentsTableSchema($pdo);
+    @file_put_contents($segSchemaFlag, (string)time());
+}
+
+$syncCrmToSubscribersThrottled = function (PDO $pdo, int $wsId, bool $force = false): void {
+    $syncFlag = sys_get_temp_dir() . '/myerp_crm_sub_sync_ws_' . $wsId . '.flag';
+    if (!$force && is_file($syncFlag) && (time() - (int)@filemtime($syncFlag)) < 60) {
+        return;
+    }
+    ensureAllCrmContactsSyncedForFilter($pdo, $wsId);
+    @file_put_contents($syncFlag, (string)time());
+};
 
 if (($method === 'POST' || $method === 'GET') && $route === 'preview') {
     $data = $method === 'POST' ? (json_decode(file_get_contents("php://input"), true) ?: []) : $_GET;
     $segmentId = $data['segment_id'] ?? ($data['id'] ?? $path);
     $criteriaRaw = $data['criteria'] ?? null;
 
-    ensureAllCrmContactsSyncedForFilter($pdo, (int)$workspace_id);
+    $syncCrmToSubscribersThrottled($pdo, (int)$workspace_id, !empty($_GET['refresh']));
 
     if ($criteriaRaw === null && $segmentId) {
         $stmtSegCrit = $pdo->prepare("SELECT COALESCE(NULLIF(criteria, ''), conditions) FROM segments WHERE id = ? AND workspace_id = ? LIMIT 1");
@@ -43,7 +56,7 @@ if (($method === 'POST' || $method === 'GET') && $route === 'preview') {
     $params = $res['params'];
 
     try {
-        $countParams = array_merge([$workspace_id], $params);
+        $countParams = array_values(array_merge([$workspace_id], $params));
         $stmtCount = $pdo->prepare("SELECT COUNT(*) FROM subscribers s WHERE s.status IN ('active', 'lead', 'customer') AND s.workspace_id = ? AND $where");
         $stmtCount->execute($countParams);
         $count = (int)$stmtCount->fetchColumn();
@@ -94,7 +107,7 @@ if ($method === 'POST' && $route === 'estimate') {
     $criteriaJson = isset($data['criteria']) ? (is_string($data['criteria']) ? $data['criteria'] : json_encode($data['criteria'])) : '[]';
 
     require_once 'segment_helper.php';
-    ensureAllCrmContactsSyncedForFilter($pdo, (int)$workspace_id);
+    $syncCrmToSubscribersThrottled($pdo, (int)$workspace_id, !empty($_GET['refresh']));
     $res = buildSegmentWhereClause($criteriaJson, $workspace_id);
 
     $where = $res['sql'];
@@ -105,7 +118,7 @@ if ($method === 'POST' && $route === 'estimate') {
     try {
         $stmt = $pdo->prepare($sql);
         array_unshift($params, $workspace_id);
-        $stmt->execute($params);
+        $stmt->execute(array_values($params));
         $count = $stmt->fetchColumn();
         jsonResponse(true, ['count' => (int) $count]);
     } catch (Exception $e) {
@@ -173,7 +186,7 @@ if ($method === 'POST' && $route === 'cleanup') {
             $sql = "SELECT s.id FROM subscribers s WHERE s.status IN ('unsubscribed', 'error', 'bounced', 'complained') AND s.workspace_id = ? AND " . $res['sql'];
             $stmtSubs = $pdo->prepare($sql);
             array_unshift($res['params'], $workspace_id);
-            $stmtSubs->execute($res['params']);
+            $stmtSubs->execute(array_values($res['params']));
             $targetIds = $stmtSubs->fetchAll(PDO::FETCH_COLUMN);
         } else {
             // Dormant logic (90 days inactive)
@@ -181,7 +194,7 @@ if ($method === 'POST' && $route === 'cleanup') {
             $dateThreshold = date('Y-m-d H:i:s', strtotime("-$days days"));
             $sql = "SELECT s.id FROM subscribers s WHERE s.status IN ('active', 'lead', 'customer') AND s.workspace_id = ? AND " . $res['sql'];
             $sql .= " AND (s.last_activity_at < ? OR (s.last_activity_at IS NULL AND s.created_at < ?))";
-            $params = array_merge([$workspace_id], $res['params'], [$dateThreshold, $dateThreshold]);
+            $params = array_values(array_merge([$workspace_id], $res['params'], [$dateThreshold, $dateThreshold]));
             $stmtSubs = $pdo->prepare($sql);
             $stmtSubs->execute($params);
             $targetIds = $stmtSubs->fetchAll(PDO::FETCH_COLUMN);
@@ -464,7 +477,12 @@ switch ($method) {
             }
 
             if (!$pdo->inTransaction()) {
-                ensureDefaultPipelineSegments($pdo, (int)$workspace_id);
+                $defSegFlag = sys_get_temp_dir() . '/myerp_def_seg_ws_' . (int)$workspace_id . '.flag';
+                $forceSyncSeg = !empty($_GET['refresh']) || !empty($_GET['nocache']);
+                if ($forceSyncSeg || !is_file($defSegFlag) || (time() - (int)@filemtime($defSegFlag)) >= 300) {
+                    ensureDefaultPipelineSegments($pdo, (int)$workspace_id);
+                    @file_put_contents($defSegFlag, (string)time());
+                }
             }
 
             $creatorCols = "s.id, s.name, s.description, COALESCE(NULLIF(s.criteria, ''), s.conditions) as criteria, s.subscriber_count as count, s.phone_count, s.auto_cleanup_days as autoCleanupDays, s.notify_on_join as notifyOnJoin, s.notify_subject as notifySubject, s.notify_email as notifyEmail, s.notify_cc as notifyCc, s.created_at, s.created_by, s.updated_by, u_creator.id AS creator_id, u_creator.full_name AS creator_name, u_creator.email AS creator_email, u_creator.avatar_url AS creator_avatar, u_creator.role AS creator_role";

@@ -2047,6 +2047,17 @@ function insertLead($conn, $data, $assignedConsultantId, $phone, $email, $name, 
     }
     if ($id > 0) {
         ensurePersonAndContact($conn, $id);
+        if (function_exists('syncRealtimeMarketingAndMetaAttribution')) {
+            $syncRawData = (!empty($data) && is_array($data)) ? $data : ($GLOBALS['__CURRENT_SYNC_ROW_DATA__'] ?? null);
+            syncRealtimeMarketingAndMetaAttribution(
+                $conn,
+                (int)$id,
+                $syncRawData,
+                $GLOBALS['__CURRENT_SYNC_MAPPINGS__'] ?? null,
+                $connectionId ?? ($GLOBALS['__CURRENT_SYNC_CONN_ID__'] ?? null),
+                $GLOBALS['__CURRENT_SYNC_SHEET_NAME__'] ?? null
+            );
+        }
         try {
             $phoneClean = normalizePhone($phone);
             if (!empty($phoneClean)) {
@@ -2070,15 +2081,758 @@ function insertLead($conn, $data, $assignedConsultantId, $phone, $email, $name, 
     return $id;
 }
 
+if (!function_exists('extractMappedValues')) {
+    function extractMappedValues($mappingsArray, $systemField, $data) {
+        if (!isset($mappingsArray[$systemField]) || !is_array($mappingsArray[$systemField])) return '';
+        $values = [];
+        foreach ($mappingsArray[$systemField] as $mapItem) {
+            $colName = is_array($mapItem) ? ($mapItem['sheet_column'] ?? '') : (string)$mapItem;
+            $customLabel = is_array($mapItem) ? ($mapItem['custom_label'] ?? '') : '';
+            if ($colName !== '' && isset($data[$colName]) && $data[$colName] !== '') {
+                $label = !empty($customLabel) ? $customLabel : $colName;
+                $values[] = $label . ': ' . $data[$colName];
+            }
+        }
+        $knownSingleFields = [
+            'phone', 'phone2', 'name', 'email', 'source', 'type', 'assigned_to', 'saleperson',
+            'gender', 'dob', 'citizen_id', 'address', 'city', 'district', 'company', 'job_title', 'tax_code',
+            'budget', 'demand_type', 'property_type', 'bedroom_count', 'preferred_location',
+            'utm_campaign', 'utm_medium', 'utm_content', 'utm_term', 'platform', 'form_name',
+            'zalo_phone', 'facebook_link', 'program', 'degree', 'consultation_time', 'english_work_exp',
+            'meta_lead_id', 'ad_id', 'ad_name', 'adset_id', 'adset_name', 'campaign_id', 'campaign_name', 'form_id'
+        ];
+        if (in_array($systemField, $knownSingleFields, true) || strpos($systemField, 'cf_') === 0 || strpos($systemField, 'custom_field_') === 0) {
+            foreach ($mappingsArray[$systemField] as $mapItem) {
+                $colName = is_array($mapItem) ? ($mapItem['sheet_column'] ?? '') : (string)$mapItem;
+                if ($colName !== '' && isset($data[$colName]) && $data[$colName] !== '') {
+                    return $data[$colName];
+                }
+            }
+            return '';
+        }
+        return implode("\n", $values);
+    }
+}
+
+if (!function_exists('syncRealtimeMarketingAndMetaAttribution')) {
+    /**
+     * Đồng bộ Realtime toàn diện cho mọi nguồn tích hợp (Google Sheets Cron, Webhook, Landing Page API):
+     * 1. Cập nhật đầy đủ các trường CRM đã map + các trường mở rộng trên bảng `leads` và `contacts`.
+     * 2. Tự động bóc tách & đồng bộ song song toàn bộ trường Marketing / Meta Ads Attribution & Form Khảo sát
+     *    (`meta_lead_id`, `ad_id`, `ad_name`, `adset_id`, `adset_name`, `campaign_id`, `campaign_name`, `form_id`, `form_name`,
+     *     `platform`, `is_organic`, `utm_*`, `degree`, `program_interest`, `english_work_exp`, `consultation_time`, `city`)
+     *    vào `leads`, `contacts`, `contact_meta_attribution` và `subscribers` (Marketing Audience).
+     */
+    function syncRealtimeMarketingAndMetaAttribution($conn, $leadId, $rawRowData = null, $mappings = null, $connectionId = null, $sheetName = null) {
+        $leadId = (int)$leadId;
+        if ($leadId <= 0 || !$conn) return;
+
+        try {
+            // 1. Lấy thông tin hiện tại của lead
+            $stmtL = $conn->prepare("SELECT id, person_id, phone, email, name, source, type, note, assigned_to, connection_id, raw_payload, campaign_id, campaign_name, ad_id, platform, form_name, program FROM leads WHERE id = ? LIMIT 1");
+            if (!$stmtL) return;
+            $stmtL->bind_param("i", $leadId);
+            $stmtL->execute();
+            $leadRow = $stmtL->get_result()->fetch_assoc();
+            $stmtL->close();
+            if (!$leadRow) return;
+
+            $effConnId = $connectionId ? (int)$connectionId : (int)($leadRow['connection_id'] ?? ($GLOBALS['__CURRENT_SYNC_CONN_ID__'] ?? 0));
+            $effSheetName = trim((string)($sheetName ?? ($GLOBALS['__CURRENT_SYNC_SHEET_NAME__'] ?? '')));
+
+            if ($effConnId > 0 && $effSheetName === '') {
+                $stmtSc = $conn->prepare("SELECT sheet_name FROM sheet_connections WHERE id = ? LIMIT 1");
+                if ($stmtSc) {
+                    $stmtSc->bind_param("i", $effConnId);
+                    $stmtSc->execute();
+                    $scRow = $stmtSc->get_result()->fetch_assoc();
+                    $stmtSc->close();
+                    if ($scRow && !empty($scRow['sheet_name'])) {
+                        $effSheetName = trim((string)$scRow['sheet_name']);
+                    }
+                }
+            }
+
+            // Khôi phục rawRowData từ GLOBALS hoặc leads.raw_payload nếu chưa truyền trực tiếp
+            $payload = [];
+            if (is_array($rawRowData) && !empty($rawRowData)) {
+                $payload = $rawRowData;
+            } elseif (!empty($GLOBALS['__CURRENT_SYNC_ROW_DATA__']) && is_array($GLOBALS['__CURRENT_SYNC_ROW_DATA__'])) {
+                $payload = $GLOBALS['__CURRENT_SYNC_ROW_DATA__'];
+            } elseif (!empty($leadRow['raw_payload'])) {
+                $decoded = json_decode((string)$leadRow['raw_payload'], true);
+                if (is_array($decoded)) {
+                    $payload = $decoded;
+                }
+            }
+
+            if (!is_array($mappings) || empty($mappings)) {
+                if (!empty($GLOBALS['__CURRENT_SYNC_MAPPINGS__']) && is_array($GLOBALS['__CURRENT_SYNC_MAPPINGS__'])) {
+                    $mappings = $GLOBALS['__CURRENT_SYNC_MAPPINGS__'];
+                } elseif ($effConnId > 0) {
+                    $mappings = [];
+                    $mStmt = $conn->prepare("SELECT sheet_column, system_field, custom_label FROM field_mappings WHERE connection_id = ?");
+                    if ($mStmt) {
+                        $mStmt->bind_param("i", $effConnId);
+                        $mStmt->execute();
+                        $mRes = $mStmt->get_result();
+                        while ($mRow = $mRes->fetch_assoc()) {
+                            $sf = $mRow['system_field'];
+                            if (!isset($mappings[$sf])) $mappings[$sf] = [];
+                            $mappings[$sf][] = [
+                                'sheet_column' => $mRow['sheet_column'],
+                                'custom_label' => $mRow['custom_label']
+                            ];
+                        }
+                        $mStmt->close();
+                    }
+                } else {
+                    $mappings = [];
+                }
+            }
+
+            // Tạo bảng tra cứu key không phân biệt hoa thường / khoảng trắng cho $payload
+            $normPayload = [];
+            foreach ($payload as $k => $v) {
+                if (is_array($v) || is_object($v)) continue;
+                $valStr = trim((string)$v);
+                if ($valStr === '') continue;
+                $cleanKey = mb_strtolower(trim((string)$k), 'UTF-8');
+                $normPayload[$cleanKey] = $valStr;
+                $slugKey = preg_replace('/[\s_\-]+/u', '_', $cleanKey);
+                $normPayload[$slugKey] = $valStr;
+                $noColonKey = rtrim($slugKey, ':?.,;');
+                $normPayload[$noColonKey] = $valStr;
+            }
+
+            $pickVal = function (array $sysFields, array $candidateCols) use ($mappings, $payload, $normPayload) {
+                foreach ($sysFields as $sf) {
+                    if (!empty($mappings[$sf])) {
+                        $v = trim((string)extractMappedValues($mappings, $sf, $payload));
+                        if ($v !== '') return $v;
+                    }
+                }
+                foreach ($candidateCols as $col) {
+                    if (isset($payload[$col]) && !is_array($payload[$col]) && trim((string)$payload[$col]) !== '') {
+                        return trim((string)$payload[$col]);
+                    }
+                    $ck = mb_strtolower(trim((string)$col), 'UTF-8');
+                    if (isset($normPayload[$ck]) && $normPayload[$ck] !== '') {
+                        return $normPayload[$ck];
+                    }
+                    $sk = rtrim(preg_replace('/[\s_\-]+/u', '_', $ck), ':?.,;');
+                    if (isset($normPayload[$sk]) && $normPayload[$sk] !== '') {
+                        return $normPayload[$sk];
+                    }
+                }
+                return '';
+            };
+
+            $stripMetaPrefix = function ($val) {
+                $v = trim((string)($val ?? ''));
+                if ($v === '') return '';
+                return trim((string)preg_replace('/^(l|ag|as|c|f):/i', '', $v));
+            };
+
+            // 2. Bóc tách các trường Meta Ads & Marketing Attribution từ payload + mappings
+            $adId = $stripMetaPrefix($pickVal(['ad_id'], ['ad_id', 'meta_ad_id']));
+            $adName = $pickVal(['ad_name', 'utm_content'], ['ad_name', 'meta_ad_name', 'utm_content']);
+            $adsetId = $stripMetaPrefix($pickVal(['adset_id'], ['adset_id', 'meta_adset_id']));
+            $adsetName = $pickVal(['adset_name'], ['adset_name', 'meta_adset_name']);
+            $campaignId = $stripMetaPrefix($pickVal(['campaign_id'], ['campaign_id', 'meta_campaign_id']));
+            $campaignName = $pickVal(['campaign_name', 'utm_campaign'], ['campaign_name', 'meta_campaign_name', 'utm_campaign']);
+            $formId = $stripMetaPrefix($pickVal(['form_id'], ['form_id', 'meta_form_id']));
+            $formName = $pickVal(['form_name'], ['form_name', 'meta_form_name']);
+            $platformRaw = $pickVal(['platform'], ['platform', 'meta_platform', 'utm_source']);
+            $platform = $platformRaw;
+            if (strtolower($platformRaw) === 'fb') $platform = 'fb';
+            elseif (strtolower($platformRaw) === 'ig') $platform = 'ig';
+
+            $rawIdCandidate = $pickVal(['meta_lead_id'], ['meta_lead_id', 'leadgen_id', 'id']);
+            $metaLeadId = '';
+            if ($rawIdCandidate !== '') {
+                if (stripos($rawIdCandidate, 'l:') === 0 || strlen(preg_replace('/\D/', '', $rawIdCandidate)) >= 10 || $adId !== '' || $campaignId !== '' || $formId !== '') {
+                    $metaLeadId = $stripMetaPrefix($rawIdCandidate);
+                }
+            }
+
+            $isOrganicRaw = $pickVal([], ['is_organic']);
+            $isOrganic = (strtolower($isOrganicRaw) === 'true' || $isOrganicRaw === '1') ? 1 : 0;
+
+            $createdTimeRaw = $pickVal([], ['created_time', 'lead_created_time', 'timestamp', 'ngày_tạo', 'thời_gian']);
+            $leadCreatedTime = null;
+            if ($createdTimeRaw !== '') {
+                $ts = strtotime($createdTimeRaw);
+                if ($ts !== false && $ts > 946684800) {
+                    $leadCreatedTime = date('Y-m-d H:i:s', $ts);
+                }
+            }
+
+            $rawLeadStatus = $pickVal([], ['lead_status', 'raw_lead_status']);
+            $priority = $pickVal([], ['priority', 'mức_độ_ưu_tiên']);
+
+            // Các trường khảo sát / nhu cầu học viên từ Meta Lead Form & Google Sheets
+            $degree = $pickVal(
+                ['degree', 'bedroom_count'],
+                [
+                    'học_vấn_cao_nhất_hiện_tại:',
+                    'học_vấn_cao_nhất_hiện_tại',
+                    'Bằng cấp cao nhất hiện tại?',
+                    'Bằng cấp cao nhất hiện tại',
+                    'Trình độ học vấn',
+                    'Bằng cấp',
+                    'degree',
+                    'meta_degree'
+                ]
+            );
+            $programInterest = $pickVal(
+                ['program', 'property_type'],
+                [
+                    'chương_trình_quan_tâm',
+                    'chương_trình_anh/_chị_quan_tâm',
+                    'chương_trình_anh/chị_quan_tâm',
+                    'Chương trình quan tâm',
+                    'Chương trình',
+                    'Khóa học',
+                    'program',
+                    'program_interest'
+                ]
+            );
+            $englishWorkExp = $pickVal(
+                ['english_work_exp'],
+                [
+                    'Trình độ tiếng Anh và Kinh nghiệm làm việc',
+                    'trình_độ_tiếng_anh_và_kinh_nghiệm_làm_việc',
+                    'Kinh nghiệm làm việc',
+                    'Trình độ tiếng Anh',
+                    'english_work_exp'
+                ]
+            );
+            $consultationTime = $pickVal(
+                ['consultation_time'],
+                [
+                    'bạn_muốn_tư_vấn_viên_liên_hệ_tư_vấn_1_-_1_vào_khung_giờ_nào?',
+                    'bạn_muốn_tư_vấn_viên_liên_hệ_tư_vấn_1_-_1_vào_khung_giờ_nào',
+                    'Khung giờ tư vấn',
+                    'Giờ liên hệ',
+                    'consultation_time',
+                    'meta_consultation_time'
+                ]
+            );
+            $cityVal = $pickVal(
+                ['city', 'preferred_location'],
+                ['city', 'Tỉnh / Thành phố', 'Tỉnh/Thành phố', 'Thành phố', 'Khu vực', 'Nơi ở']
+            );
+
+            $utmCampaign = $pickVal(['utm_campaign'], ['utm_campaign', 'campaign_name']);
+            $utmMedium = $pickVal(['utm_medium'], ['utm_medium', 'adset_name']);
+            $utmContent = $pickVal(['utm_content'], ['utm_content', 'ad_name']);
+            $utmTerm = $pickVal(['utm_term'], ['utm_term']);
+
+            // Chuẩn hóa tên chương trình ngắn gọn cho cột `program` nếu có
+            $normalizedProgram = trim((string)($leadRow['program'] ?? ''));
+            if ($normalizedProgram === '' && $programInterest !== '') {
+                $piUpper = mb_strtoupper($programInterest, 'UTF-8');
+                if (strpos($piUpper, 'UBIS') !== false) $normalizedProgram = 'UBIS';
+                elseif (strpos($piUpper, 'UMEF') !== false) $normalizedProgram = 'UMEF';
+                elseif (strpos($piUpper, 'SBS') !== false) $normalizedProgram = 'SBS';
+                elseif (strpos($piUpper, 'ASC') !== false) $normalizedProgram = 'ASC';
+                elseif (strpos($piUpper, 'MSC') !== false || strpos($piUpper, 'AI') !== false) $normalizedProgram = 'MSc-AI';
+                elseif (strpos($piUpper, 'DBA') !== false) $normalizedProgram = 'DBA';
+                elseif (strpos($piUpper, 'EMBA') !== false) $normalizedProgram = 'EMBA';
+                elseif (strpos($piUpper, 'MBA') !== false) $normalizedProgram = 'MBA';
+                else $normalizedProgram = mb_substr($programInterest, 0, 100, 'UTF-8');
+            }
+
+            // 3. Cập nhật bảng `leads` (bao gồm raw_payload và các cột marketing/attribution)
+            $leadSet = [];
+            $leadTypes = '';
+            $leadParams = [];
+
+            if (!empty($payload)) {
+                $rawJson = json_encode($payload, JSON_UNESCAPED_UNICODE);
+                if ($rawJson !== false) {
+                    $leadSet[] = "`raw_payload` = ?";
+                    $leadTypes .= 's';
+                    $leadParams[] = $rawJson;
+                }
+            }
+            $leadColMap = [
+                'campaign_id' => $campaignId,
+                'campaign_name' => $campaignName,
+                'ad_id' => $adId,
+                'platform' => $platform,
+                'form_name' => $formName,
+                'program' => $normalizedProgram,
+                'utm_campaign' => $utmCampaign,
+                'utm_medium' => $utmMedium,
+                'utm_content' => $utmContent,
+                'utm_term' => $utmTerm,
+                'full_name' => trim((string)($leadRow['name'] ?? '')),
+            ];
+            foreach ($leadColMap as $cName => $cVal) {
+                if ($cVal !== '') {
+                    $leadSet[] = "`$cName` = COALESCE(NULLIF(?, ''), `$cName`)";
+                    $leadTypes .= 's';
+                    $leadParams[] = $cVal;
+                }
+            }
+            if (!empty($leadSet)) {
+                $lSql = "UPDATE leads SET " . implode(', ', $leadSet) . " WHERE id = ?";
+                $leadTypes .= 'i';
+                $leadParams[] = $leadId;
+                $uLeadStmt = $conn->prepare($lSql);
+                if ($uLeadStmt) {
+                    $uLeadStmt->bind_param($leadTypes, ...$leadParams);
+                    $uLeadStmt->execute();
+                    $uLeadStmt->close();
+                }
+            }
+
+            // 4. Tìm các bản ghi `contacts` liên kết với lead này (qua person_id, phone hoặc email)
+            $contactRows = [];
+            $personId = (int)($leadRow['person_id'] ?? 0);
+            $phone = sanitizePhoneNumber($leadRow['phone'] ?? '');
+            $email = sanitizeEmailAddress($leadRow['email'] ?? '');
+
+            if ($personId > 0) {
+                $cStmt = $conn->prepare("SELECT id, tenant_id, person_id, owner_id, full_name, email, phone, source, city, program, stage_id, pipeline_status, lead_status, temperature, domation_subscriber_id FROM contacts WHERE person_id = ? AND deleted_at IS NULL ORDER BY id DESC");
+                if ($cStmt) {
+                    $cStmt->bind_param("i", $personId);
+                    $cStmt->execute();
+                    $resC = $cStmt->get_result();
+                    while ($r = $resC->fetch_assoc()) $contactRows[$r['id']] = $r;
+                    $cStmt->close();
+                }
+            }
+            if (empty($contactRows) && $phone !== '') {
+                $noZero = ltrim($phone, '0');
+                $withZero = '0' . $noZero;
+                $cStmt = $conn->prepare("SELECT id, tenant_id, person_id, owner_id, full_name, email, phone, source, city, program, stage_id, pipeline_status, lead_status, temperature, domation_subscriber_id FROM contacts WHERE (phone = ? OR phone = ?) AND deleted_at IS NULL ORDER BY id DESC");
+                if ($cStmt) {
+                    $cStmt->bind_param("ss", $withZero, $noZero);
+                    $cStmt->execute();
+                    $resC = $cStmt->get_result();
+                    while ($r = $resC->fetch_assoc()) $contactRows[$r['id']] = $r;
+                    $cStmt->close();
+                }
+            }
+            if (empty($contactRows) && $email !== '') {
+                $cStmt = $conn->prepare("SELECT id, tenant_id, person_id, owner_id, full_name, email, phone, source, city, program, stage_id, pipeline_status, lead_status, temperature, domation_subscriber_id FROM contacts WHERE email = ? AND deleted_at IS NULL ORDER BY id DESC");
+                if ($cStmt) {
+                    $cStmt->bind_param("s", $email);
+                    $cStmt->execute();
+                    $resC = $cStmt->get_result();
+                    while ($r = $resC->fetch_assoc()) $contactRows[$r['id']] = $r;
+                    $cStmt->close();
+                }
+            }
+
+            if (empty($contactRows)) {
+                return;
+            }
+
+            // Chuẩn bị JSON câu trả lời khảo sát đầy đủ cho `contact_meta_attribution.form_answers_json`
+            $formAnswers = [];
+            if ($programInterest !== '') $formAnswers['program_interest'] = $programInterest;
+            if ($degree !== '') $formAnswers['degree'] = $degree;
+            if ($englishWorkExp !== '') $formAnswers['english_work_exp'] = $englishWorkExp;
+            if ($consultationTime !== '') $formAnswers['consultation_time'] = $consultationTime;
+            if ($cityVal !== '') $formAnswers['city'] = $cityVal;
+            foreach ($payload as $pk => $pv) {
+                if (is_array($pv) || is_object($pv)) continue;
+                $pvStr = trim((string)$pv);
+                if ($pvStr !== '' && !in_array($pk, ['_meta', 'phone', 'email', 'name', 'note', 'source', 'type'], true)) {
+                    $formAnswers[$pk] = $pvStr;
+                }
+            }
+            $formAnswersJson = !empty($formAnswers) ? json_encode($formAnswers, JSON_UNESCAPED_UNICODE) : null;
+
+            $hasMetaOrSurveyData = (
+                $metaLeadId !== '' || $adId !== '' || $adName !== '' || $adsetId !== '' || $adsetName !== '' ||
+                $campaignId !== '' || $campaignName !== '' || $formId !== '' || $formName !== '' ||
+                $degree !== '' || $programInterest !== '' || $englishWorkExp !== '' || $consultationTime !== ''
+            );
+
+            foreach ($contactRows as $cid => $cInfo) {
+                $cid = (int)$cid;
+                $tenantId = (int)($cInfo['tenant_id'] ?: 1);
+
+                // 4a. Cập nhật các cột Marketing & Meta Attribution trên bảng `contacts`
+                $cSet = [];
+                $cTypes = '';
+                $cParams = [];
+                $contactColMap = [
+                    'city' => $cityVal,
+                    'program' => $normalizedProgram,
+                    'platform' => $platform,
+                    'form_name' => $formName,
+                    'utm_campaign' => $utmCampaign,
+                    'utm_medium' => $utmMedium,
+                    'utm_content' => $utmContent,
+                    'utm_term' => $utmTerm,
+                    'meta_lead_id' => $metaLeadId,
+                    'meta_ad_id' => $adId,
+                    'meta_ad_name' => $adName,
+                    'meta_adset_id' => $adsetId,
+                    'meta_adset_name' => $adsetName,
+                    'meta_campaign_id' => $campaignId,
+                    'meta_campaign_name' => $campaignName,
+                    'meta_form_name' => $formName,
+                    'meta_platform' => $platform,
+                    'meta_degree' => $degree,
+                    'meta_consultation_time' => $consultationTime,
+                ];
+                foreach ($contactColMap as $col => $val) {
+                    if ($val !== '') {
+                        $cSet[] = "`$col` = COALESCE(NULLIF(?, ''), `$col`)";
+                        $cTypes .= 's';
+                        $cParams[] = $val;
+                    }
+                }
+                if (!empty($cSet)) {
+                    $cSql = "UPDATE contacts SET " . implode(', ', $cSet) . ", updated_at = NOW() WHERE id = ?";
+                    $cTypes .= 'i';
+                    $cParams[] = $cid;
+                    $uContactStmt = $conn->prepare($cSql);
+                    if ($uContactStmt) {
+                        $uContactStmt->bind_param($cTypes, ...$cParams);
+                        $uContactStmt->execute();
+                        $uContactStmt->close();
+                    }
+                }
+
+                // 4b. Upsert vào bảng `contact_meta_attribution` để phục vụ Dashboard Meta Ads Full-Funnel & Hành trình 360
+                if ($hasMetaOrSurveyData) {
+                    $existingAttrId = 0;
+                    $chkAttr = $conn->prepare("SELECT id FROM contact_meta_attribution WHERE contact_id = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 1");
+                    if ($chkAttr) {
+                        $chkAttr->bind_param("i", $cid);
+                        $chkAttr->execute();
+                        $attrRow = $chkAttr->get_result()->fetch_assoc();
+                        $chkAttr->close();
+                        if ($attrRow) $existingAttrId = (int)$attrRow['id'];
+                    }
+
+                    $sheetSourceVal = $effSheetName !== '' ? $effSheetName : trim((string)($leadRow['source'] ?? ''));
+
+                    if ($existingAttrId > 0) {
+                        $uAttr = $conn->prepare("
+                            UPDATE contact_meta_attribution
+                            SET meta_lead_id = COALESCE(NULLIF(?, ''), meta_lead_id),
+                                ad_id = COALESCE(NULLIF(?, ''), ad_id),
+                                ad_name = COALESCE(NULLIF(?, ''), ad_name),
+                                adset_id = COALESCE(NULLIF(?, ''), adset_id),
+                                adset_name = COALESCE(NULLIF(?, ''), adset_name),
+                                campaign_id = COALESCE(NULLIF(?, ''), campaign_id),
+                                campaign_name = COALESCE(NULLIF(?, ''), campaign_name),
+                                form_id = COALESCE(NULLIF(?, ''), form_id),
+                                form_name = COALESCE(NULLIF(?, ''), form_name),
+                                platform = COALESCE(NULLIF(?, ''), platform),
+                                is_organic = ?,
+                                lead_created_time = COALESCE(?, lead_created_time),
+                                raw_lead_status = COALESCE(NULLIF(?, ''), raw_lead_status),
+                                priority = COALESCE(NULLIF(?, ''), priority),
+                                sheet_source = COALESCE(NULLIF(?, ''), sheet_source),
+                                degree = COALESCE(NULLIF(?, ''), degree),
+                                english_work_exp = COALESCE(NULLIF(?, ''), english_work_exp),
+                                consultation_time = COALESCE(NULLIF(?, ''), consultation_time),
+                                program_interest = COALESCE(NULLIF(?, ''), program_interest),
+                                form_answers_json = COALESCE(?, form_answers_json),
+                                updated_at = NOW()
+                            WHERE id = ?
+                        ");
+                        if ($uAttr) {
+                            $uAttr->bind_param(
+                                "ssssssssssisssssssssi",
+                                $metaLeadId,
+                                $adId,
+                                $adName,
+                                $adsetId,
+                                $adsetName,
+                                $campaignId,
+                                $campaignName,
+                                $formId,
+                                $formName,
+                                $platform,
+                                $isOrganic,
+                                $leadCreatedTime,
+                                $rawLeadStatus,
+                                $priority,
+                                $sheetSourceVal,
+                                $degree,
+                                $englishWorkExp,
+                                $consultationTime,
+                                $programInterest,
+                                $formAnswersJson,
+                                $existingAttrId
+                            );
+                            $uAttr->execute();
+                            $uAttr->close();
+                        }
+                    } else {
+                        $iAttr = $conn->prepare("
+                            INSERT INTO contact_meta_attribution (
+                                contact_id, tenant_id, meta_lead_id, ad_id, ad_name, adset_id, adset_name,
+                                campaign_id, campaign_name, form_id, form_name, platform, is_organic,
+                                lead_created_time, raw_lead_status, priority, sheet_source,
+                                degree, english_work_exp, consultation_time, program_interest, form_answers_json,
+                                created_at, updated_at
+                            ) VALUES (
+                                ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''),
+                                NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), ?,
+                                ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''),
+                                NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), ?,
+                                NOW(), NOW()
+                            )
+                        ");
+                        if ($iAttr) {
+                            $iAttr->bind_param(
+                                "iissssssssssisssssssss",
+                                $cid,
+                                $tenantId,
+                                $metaLeadId,
+                                $adId,
+                                $adName,
+                                $adsetId,
+                                $adsetName,
+                                $campaignId,
+                                $campaignName,
+                                $formId,
+                                $formName,
+                                $platform,
+                                $isOrganic,
+                                $leadCreatedTime,
+                                $rawLeadStatus,
+                                $priority,
+                                $sheetSourceVal,
+                                $degree,
+                                $englishWorkExp,
+                                $consultationTime,
+                                $programInterest,
+                                $formAnswersJson
+                            );
+                            $iAttr->execute();
+                            $iAttr->close();
+                        }
+                    }
+                }
+
+                // 4c. Đồng bộ sang bảng `subscribers` (Marketing Audience & Dynamic Segments)
+                $cPhone = sanitizePhoneNumber($cInfo['phone'] ?: $phone);
+                $cEmail = sanitizeEmailAddress($cInfo['email'] ?: $email);
+                $phoneNorm9 = $cPhone !== '' ? substr(preg_replace('/\D/', '', $cPhone), -9) : '';
+                $emailNorm = $cEmail !== '' ? mb_strtolower(trim($cEmail), 'UTF-8') : '';
+                $fullName = trim((string)($cInfo['full_name'] ?: ($leadRow['name'] ?? '')));
+                $firstName = $fullName;
+                $lastName = '';
+                if (strpos($fullName, ' ') !== false) {
+                    $parts = preg_split('/\s+/u', $fullName);
+                    $firstName = (string)array_pop($parts);
+                    $lastName = implode(' ', $parts);
+                }
+
+                $subId = (int)($cInfo['domation_subscriber_id'] ?? 0);
+                $existingCustomAttrs = [];
+                if ($subId > 0) {
+                    $sChk = $conn->prepare("SELECT id, custom_attributes FROM subscribers WHERE id = ? LIMIT 1");
+                    if ($sChk) {
+                        $sChk->bind_param("i", $subId);
+                        $sChk->execute();
+                        $sRow = $sChk->get_result()->fetch_assoc();
+                        $sChk->close();
+                        if ($sRow) {
+                            $existingCustomAttrs = json_decode((string)($sRow['custom_attributes'] ?? '{}'), true) ?: [];
+                        } else {
+                            $subId = 0;
+                        }
+                    }
+                }
+                if ($subId <= 0) {
+                    $sChk = $conn->prepare("SELECT id, custom_attributes FROM subscribers WHERE contact_id = ? LIMIT 1");
+                    if ($sChk) {
+                        $sChk->bind_param("i", $cid);
+                        $sChk->execute();
+                        $sRow = $sChk->get_result()->fetch_assoc();
+                        $sChk->close();
+                        if ($sRow) {
+                            $subId = (int)$sRow['id'];
+                            $existingCustomAttrs = json_decode((string)($sRow['custom_attributes'] ?? '{}'), true) ?: [];
+                        }
+                    }
+                }
+                if ($subId <= 0 && $phoneNorm9 !== '') {
+                    $sChk = $conn->prepare("SELECT id, custom_attributes FROM subscribers WHERE phone_norm9 = ? LIMIT 1");
+                    if ($sChk) {
+                        $sChk->bind_param("s", $phoneNorm9);
+                        $sChk->execute();
+                        $sRow = $sChk->get_result()->fetch_assoc();
+                        $sChk->close();
+                        if ($sRow) {
+                            $subId = (int)$sRow['id'];
+                            $existingCustomAttrs = json_decode((string)($sRow['custom_attributes'] ?? '{}'), true) ?: [];
+                        }
+                    }
+                }
+
+                $newAttrs = array_filter([
+                    'meta_lead_id' => $metaLeadId,
+                    'meta_campaign_id' => $campaignId,
+                    'meta_campaign_name' => $campaignName,
+                    'meta_adset_id' => $adsetId,
+                    'meta_adset_name' => $adsetName,
+                    'meta_ad_id' => $adId,
+                    'meta_ad_name' => $adName,
+                    'meta_form_id' => $formId,
+                    'meta_form_name' => $formName,
+                    'platform' => $platform,
+                    'degree' => $degree,
+                    'program_interest' => $programInterest,
+                    'english_work_exp' => $englishWorkExp,
+                    'consultation_time' => $consultationTime,
+                ], function ($v) { return $v !== ''; });
+                $mergedCustomAttrs = array_merge(is_array($existingCustomAttrs) ? $existingCustomAttrs : [], $newAttrs);
+                $customAttrsJson = !empty($mergedCustomAttrs) ? json_encode($mergedCustomAttrs, JSON_UNESCAPED_UNICODE) : null;
+
+                $subSource = trim((string)($cInfo['source'] ?: ($leadRow['source'] ?? 'other')));
+                $subCity = $cityVal !== '' ? $cityVal : trim((string)($cInfo['city'] ?? ''));
+                $subProgram = $normalizedProgram !== '' ? $normalizedProgram : trim((string)($cInfo['program'] ?? ''));
+                $subOwnerId = !empty($cInfo['owner_id']) ? (int)$cInfo['owner_id'] : null;
+                $subStageId = !empty($cInfo['stage_id']) ? (int)$cInfo['stage_id'] : null;
+                $subPipeline = trim((string)($cInfo['pipeline_status'] ?? 'new_lead'));
+                $subLeadStatus = trim((string)($cInfo['lead_status'] ?? 'active'));
+                $subTemp = trim((string)($cInfo['temperature'] ?? 'cold'));
+                $subPersonId = !empty($cInfo['person_id']) ? (int)$cInfo['person_id'] : ($personId > 0 ? $personId : null);
+
+                if ($subId > 0) {
+                    $uSub = $conn->prepare("
+                        UPDATE subscribers
+                        SET contact_id = COALESCE(contact_id, ?),
+                            person_id = COALESCE(person_id, ?),
+                            phone_norm9 = COALESCE(NULLIF(?, ''), phone_norm9),
+                            email_norm = COALESCE(NULLIF(?, ''), email_norm),
+                            email = COALESCE(NULLIF(?, ''), email),
+                            first_name = COALESCE(NULLIF(?, ''), first_name),
+                            last_name = COALESCE(NULLIF(?, ''), last_name),
+                            phone_number = COALESCE(NULLIF(?, ''), phone_number),
+                            phone = COALESCE(NULLIF(?, ''), phone),
+                            source = COALESCE(NULLIF(?, ''), source),
+                            city = COALESCE(NULLIF(?, ''), city),
+                            program = COALESCE(NULLIF(?, ''), program),
+                            owner_id = COALESCE(?, owner_id),
+                            stage_id = COALESCE(?, stage_id),
+                            pipeline_status = COALESCE(NULLIF(?, ''), pipeline_status),
+                            lead_status = COALESCE(NULLIF(?, ''), lead_status),
+                            temperature = COALESCE(NULLIF(?, ''), temperature),
+                            custom_attributes = COALESCE(?, custom_attributes),
+                            updated_at = NOW()
+                        WHERE id = ?
+                    ");
+                    if ($uSub) {
+                        $uSub->bind_param(
+                            "iissssssssssiissssi",
+                            $cid,
+                            $subPersonId,
+                            $phoneNorm9,
+                            $emailNorm,
+                            $cEmail,
+                            $firstName,
+                            $lastName,
+                            $cPhone,
+                            $cPhone,
+                            $subSource,
+                            $subCity,
+                            $subProgram,
+                            $subOwnerId,
+                            $subStageId,
+                            $subPipeline,
+                            $subLeadStatus,
+                            $subTemp,
+                            $customAttrsJson,
+                            $subId
+                        );
+                        $uSub->execute();
+                        $uSub->close();
+                    }
+                } elseif ($cPhone !== '' || $cEmail !== '') {
+                    $iSub = $conn->prepare("
+                        INSERT INTO subscribers (
+                            workspace_id, contact_id, person_id, phone_norm9, email_norm, email,
+                            first_name, last_name, status, source, phone_number, phone,
+                            city, program, owner_id, stage_id, pipeline_status, lead_status,
+                            temperature, custom_attributes, created_at, updated_at
+                        ) VALUES (
+                            ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''),
+                            ?, ?, 'active', ?, NULLIF(?, ''), NULLIF(?, ''),
+                            NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?, ?,
+                            ?, ?, NOW(), NOW()
+                        )
+                    ");
+                    if ($iSub) {
+                        $iSub->bind_param(
+                            "iiisssssssssssiissss",
+                            $tenantId,
+                            $cid,
+                            $subPersonId,
+                            $phoneNorm9,
+                            $emailNorm,
+                            $cEmail,
+                            $firstName,
+                            $lastName,
+                            $subSource,
+                            $cPhone,
+                            $cPhone,
+                            $subCity,
+                            $subProgram,
+                            $subOwnerId,
+                            $subStageId,
+                            $subPipeline,
+                            $subLeadStatus,
+                            $subTemp,
+                            $customAttrsJson
+                        );
+                        if (@$iSub->execute()) {
+                            $subId = (int)$iSub->insert_id;
+                        }
+                        $iSub->close();
+                    }
+                }
+
+                if ($subId > 0 && (int)($cInfo['domation_subscriber_id'] ?? 0) !== $subId) {
+                    $uDom = $conn->prepare("UPDATE contacts SET domation_subscriber_id = ? WHERE id = ?");
+                    if ($uDom) {
+                        $uDom->bind_param("ii", $subId, $cid);
+                        $uDom->execute();
+                        $uDom->close();
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log("syncRealtimeMarketingAndMetaAttribution warning: " . $e->getMessage());
+        }
+    }
+}
+
 if (!function_exists('saveMappedExtendedFields')) {
     function saveMappedExtendedFields($conn, $leadId, $data, $mappings) {
-        if (!$leadId || empty($mappings) || !is_array($mappings)) return;
+        if (!$leadId) return;
+        if (function_exists('syncRealtimeMarketingAndMetaAttribution')) {
+            syncRealtimeMarketingAndMetaAttribution(
+                $conn,
+                (int)$leadId,
+                is_array($data) ? $data : ($GLOBALS['__CURRENT_SYNC_ROW_DATA__'] ?? null),
+                is_array($mappings) ? $mappings : ($GLOBALS['__CURRENT_SYNC_MAPPINGS__'] ?? null),
+                $GLOBALS['__CURRENT_SYNC_CONN_ID__'] ?? null,
+                $GLOBALS['__CURRENT_SYNC_SHEET_NAME__'] ?? null
+            );
+        }
+        if (empty($mappings) || !is_array($mappings)) return;
 
         $extendedCols = [
             'phone2', 'gender', 'dob', 'citizen_id', 'address', 'city', 'district',
             'company', 'job_title', 'tax_code', 'budget', 'demand_type', 'property_type',
             'bedroom_count', 'preferred_location', 'utm_campaign', 'utm_medium', 'utm_content',
-            'utm_term', 'platform', 'form_name', 'zalo_phone', 'facebook_link'
+            'utm_term', 'platform', 'form_name', 'zalo_phone', 'facebook_link', 'program'
         ];
 
         // 1. Update extended fields in leads table
@@ -2312,12 +3066,22 @@ function updateLead($conn, $phone, $email, $assignedConsultantId, $source, $type
         $uStmt->close();
         if ($id > 0) {
             ensurePersonAndContact($conn, $id);
+            if (function_exists('syncRealtimeMarketingAndMetaAttribution')) {
+                syncRealtimeMarketingAndMetaAttribution(
+                    $conn,
+                    (int)$id,
+                    $GLOBALS['__CURRENT_SYNC_ROW_DATA__'] ?? null,
+                    $GLOBALS['__CURRENT_SYNC_MAPPINGS__'] ?? null,
+                    $connectionId ?? ($GLOBALS['__CURRENT_SYNC_CONN_ID__'] ?? null),
+                    $GLOBALS['__CURRENT_SYNC_SHEET_NAME__'] ?? null
+                );
+            }
         }
         return $id;
     }
     // Trường hợp khách đã có trong bảng contacts nhưng chưa từng có bản ghi trong bảng leads:
     // Tạo mới bản ghi leads để không bị mất $leadId khi ghi distribution_logs và đồng bộ contact
-    return insertLead($conn, [], $assignedConsultantId, $phone, $email, $name ?? '', $source, $type, $note, $connectionId, $customDate, $preserveInteractionDate);
+    return insertLead($conn, $GLOBALS['__CURRENT_SYNC_ROW_DATA__'] ?? [], $assignedConsultantId, $phone, $email, $name ?? '', $source, $type, $note, $connectionId, $customDate, $preserveInteractionDate);
 }
 
 function sendDirectSaleLeadNotification($conn, $leadId, $assignedToId, $roundId = null) {
@@ -4881,6 +5645,17 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
                 }
             }
         }
+    }
+
+    if (function_exists('syncRealtimeMarketingAndMetaAttribution') && $leadId > 0) {
+        syncRealtimeMarketingAndMetaAttribution(
+            $conn,
+            (int)$leadId,
+            $GLOBALS['__CURRENT_SYNC_ROW_DATA__'] ?? null,
+            $GLOBALS['__CURRENT_SYNC_MAPPINGS__'] ?? null,
+            $GLOBALS['__CURRENT_SYNC_CONN_ID__'] ?? null,
+            $GLOBALS['__CURRENT_SYNC_SHEET_NAME__'] ?? null
+        );
     }
 }
 

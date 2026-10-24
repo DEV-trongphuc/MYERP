@@ -3,6 +3,7 @@
 
 class ProjectController {
     private PDO $db;
+    private static bool $schemaChecked = false;
 
     public function __construct(PDO $db) {
         $this->db = $db;
@@ -10,9 +11,15 @@ class ProjectController {
     }
 
     private function ensureSchema(): void {
-        if ($this->db->inTransaction()) {
+        if (self::$schemaChecked || $this->db->inTransaction()) {
             return;
         }
+        $flagFile = rtrim(sys_get_temp_dir(), '/\\') . '/myerp_schema_guard_ProjectController_v3_' . md5((string)@filemtime(__FILE__)) . '.flag';
+        if (@is_file($flagFile)) {
+            self::$schemaChecked = true;
+            return;
+        }
+        self::$schemaChecked = true;
         try {
             // 1. projects: deleted_at, is_archived
             try {
@@ -94,6 +101,7 @@ class ProjectController {
                     KEY idx_thu_user (user_id)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             ");
+            @file_put_contents($flagFile, (string)time());
         } catch (\Throwable $e) {
             // Ignore schema alter errors if DB has restricted permissions
         }
@@ -625,9 +633,11 @@ class ProjectController {
             SELECT a.id, a.subject as title, a.body as description, a.status, a.priority, 
                    a.progress, a.due_date, a.user_id as assignee_id, a.created_by, a.created_at, a.updated_at,
                    a.is_archived, a.is_hidden, a.tags,
-                   u.full_name as assignee_name, u.avatar_url as assignee_avatar
+                   u.full_name as assignee_name, u.avatar_url as assignee_avatar,
+                   uc.full_name as created_by_name, uc.avatar_url as created_by_avatar
             FROM activities a
             LEFT JOIN users u ON a.user_id = u.id
+            LEFT JOIN users uc ON a.created_by = uc.id
             WHERE $where
             ORDER BY a.id DESC
         ");
@@ -1038,15 +1048,13 @@ class ProjectController {
         $mentions = [];
         // 1. data-user-id
         if (preg_match_all('/data-user-id=(?:&quot;|["\']|\\\\+["\'])?(\d+)/i', (string)$body, $matchesId)) {
-            $uids = array_filter(array_map('intval', $matchesId[1]));
-            foreach ($uids as $uid) {
-                if ($uid !== (int)$auth['user_id']) {
-                    $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE id=?");
-                    $stmtUser->execute([$uid]);
-                    $userRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
-                    if ($userRow) {
-                        $mentions[$uid] = $userRow;
-                    }
+            $uids = array_values(array_unique(array_filter(array_map('intval', $matchesId[1]), fn($u) => $u > 0 && $u !== (int)$auth['user_id'])));
+            if (!empty($uids)) {
+                $inPh = implode(',', array_fill(0, count($uids), '?'));
+                $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE id IN ($inPh)");
+                $stmtUser->execute($uids);
+                foreach ($stmtUser->fetchAll(PDO::FETCH_ASSOC) ?: [] as $userRow) {
+                    $mentions[(int)$userRow['id']] = $userRow;
                 }
             }
         }
@@ -1350,10 +1358,12 @@ class ProjectController {
             SELECT a.id, a.subject as title, a.body as description, a.status, a.priority, 
                    a.due_date, a.user_id as assignee_id, a.created_by, a.created_at, a.updated_at,
                    a.progress, a.is_archived, a.is_hidden, a.tags,
-                   p.name as project_name, u.full_name as assignee_name, u.avatar_url as assignee_avatar
+                   p.name as project_name, u.full_name as assignee_name, u.avatar_url as assignee_avatar,
+                   uc.full_name as created_by_name, uc.avatar_url as created_by_avatar
             FROM activities a
             LEFT JOIN projects p ON (a.related_type = 'project' AND a.related_id = p.id)
             LEFT JOIN users u ON a.user_id = u.id
+            LEFT JOIN users uc ON a.created_by = uc.id
             WHERE $where
             ORDER BY a.id DESC
             LIMIT $offset, $limit
@@ -1413,10 +1423,12 @@ class ProjectController {
                    a.due_date, a.user_id, a.user_id as assignee_id, a.created_by, a.approver_id,
                    a.participant_ids, a.tags, a.related_type, a.related_id, a.created_at, a.updated_at,
                    a.progress, a.is_archived, a.is_hidden,
-                   p.name as project_name, u.full_name as assignee_name, u.avatar_url as assignee_avatar
+                   p.name as project_name, u.full_name as assignee_name, u.avatar_url as assignee_avatar,
+                   uc.full_name as created_by_name, uc.avatar_url as created_by_avatar
             FROM activities a
             LEFT JOIN projects p ON (a.related_type = 'project' AND a.related_id = p.id)
             LEFT JOIN users u ON a.user_id = u.id
+            LEFT JOIN users uc ON a.created_by = uc.id
             WHERE a.id = ? AND a.tenant_id = ? AND a.type = 'task' AND a.deleted_at IS NULL
             LIMIT 1
         ");
@@ -1639,10 +1651,12 @@ class ProjectController {
                        a.due_date, a.user_id, a.user_id as assignee_id, a.created_by, a.approver_id,
                        a.participant_ids, a.tags, a.related_type, a.related_id, a.created_at, a.updated_at,
                        a.is_archived, a.is_hidden, a.progress,
-                       p.name as project_name, u.full_name as assignee_name, u.avatar_url as assignee_avatar
+                       p.name as project_name, u.full_name as assignee_name, u.avatar_url as assignee_avatar,
+                       uc.full_name as created_by_name, uc.avatar_url as created_by_avatar
                 FROM activities a
                 LEFT JOIN projects p ON (a.related_type = 'project' AND a.related_id = p.id)
                 LEFT JOIN users u ON a.user_id = u.id
+                LEFT JOIN users uc ON a.created_by = uc.id
                 WHERE a.id = ?
                 LIMIT 1
             ");
@@ -1903,14 +1917,13 @@ class ProjectController {
         // Parse mentions in comment body: data-user-id="..." and @name
         $mentions = [];
         if (preg_match_all('/data-user-id=(?:&quot;|["\']|\\\\+["\'])?(\d+)/i', (string)$content, $matchesId)) {
-            $uids = array_values(array_unique(array_filter(array_map('intval', $matchesId[1]))));
-            foreach ($uids as $uid) {
-                if ($uid !== $userId) {
-                    $stmtUser = $this->db->prepare("SELECT id, full_name, email FROM users WHERE id = ? AND tenant_id = ?");
-                    $stmtUser->execute([$uid, $tid]);
-                    if ($u = $stmtUser->fetch(PDO::FETCH_ASSOC)) {
-                        $mentions[$uid] = $u;
-                    }
+            $uids = array_values(array_unique(array_filter(array_map('intval', $matchesId[1]), fn($u) => $u > 0 && $u !== $userId)));
+            if (!empty($uids)) {
+                $inPh = implode(',', array_fill(0, count($uids), '?'));
+                $stmtUser = $this->db->prepare("SELECT id, full_name, email FROM users WHERE id IN ($inPh) AND tenant_id = ?");
+                $stmtUser->execute(array_merge($uids, [$tid]));
+                foreach ($stmtUser->fetchAll(PDO::FETCH_ASSOC) ?: [] as $u) {
+                    $mentions[(int)$u['id']] = $u;
                 }
             }
         }

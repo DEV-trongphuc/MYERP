@@ -35,13 +35,31 @@ export const Skeleton = ({ width = '100%', height = 16, borderRadius = 8, style 
 
 // ─── KPI card skeleton ───────────────────────────────────────────────────────
 export const KpiCardSkeleton = () => (
-  <div className="card skeleton-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: 12 }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-      <Skeleton width={80} height={12} />
-      <Skeleton width={32} height={32} borderRadius="50%" />
+  <div
+    className="stat-card skeleton-card"
+    style={{
+      minHeight: '138px',
+      padding: '1.15rem 1.25rem',
+      borderRadius: 16,
+      border: '1px solid #e2e8f0',
+      background: '#ffffff',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 10
+    }}
+  >
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Skeleton width="58%" height={11} borderRadius={4} />
+      <Skeleton width={32} height={32} borderRadius={8} />
     </div>
-    <Skeleton width={65} height={24} />
-    <Skeleton width={50} height={10} />
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <Skeleton width="48%" height={28} borderRadius={6} />
+      <Skeleton width="28%" height={20} borderRadius={6} />
+    </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 'auto' }}>
+      <Skeleton width="78%" height={10} borderRadius={4} />
+      <Skeleton width="64%" height={10} borderRadius={4} />
+    </div>
   </div>
 );
 
@@ -179,24 +197,300 @@ export const CalendarSkeleton = () => {
 // ─── Chart skeleton ──────────────────────────────────────────────────────────
 export const ChartSkeleton = ({ height = 300 }: { height?: number }) => {
   const isMobile = useResponsive();
-  const barsCount = isMobile ? 6 : 12;
+  const barsCount = isMobile ? 6 : 10;
 
   return (
-    <div className="card skeleton-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Skeleton width={isMobile ? 120 : 160} height={16} />
-        <Skeleton width={80} height={12} />
+    <div className="card skeleton-card" style={{ padding: '1.35rem', borderRadius: 16, border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+          <Skeleton width={isMobile ? '68%' : 210} height={17} borderRadius={6} />
+          <Skeleton width={isMobile ? '85%' : 280} height={11} borderRadius={5} />
+        </div>
+        <Skeleton width={88} height={26} borderRadius={8} />
       </div>
-      <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: isMobile ? 8 : 16, height: height - 55, padding: '8px 0' }}>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: isMobile ? 8 : 14, height: height - 65, padding: '12px 4px 0' }}>
         {Array.from({ length: barsCount }).map((_, i) => (
-          <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8, height: '100%', justifyContent: 'flex-end' }}>
-            <Skeleton width="100%" height={`${Math.max(15, Math.sin(i) * 35 + 50)}%`} borderRadius="4px 4px 0 0" />
+          <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, height: '100%', justifyContent: 'flex-end' }}>
+            <Skeleton width="65%" height={10} borderRadius={3} />
+            <Skeleton width="100%" height={`${Math.max(18, Math.round(Math.sin(i * 1.1) * 32 + 52))}%`} borderRadius="6px 6px 2px 2px" />
+            <Skeleton width="75%" height={9} borderRadius={3} />
           </div>
         ))}
       </div>
     </div>
   );
 };
+
+// ─── Archetype 1 Skeleton: Ranked List (Left) + 162x162 Donut (Right) ────────
+export const DonutAndRankedListSkeleton = ({ rows = 5 }: { rows?: number }) => {
+  const isMobile = useResponsive();
+  return (
+    <div className="card skeleton-card" style={{ padding: '1.35rem', borderRadius: 16, border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+          <Skeleton width={isMobile ? '70%' : 220} height={17} borderRadius={6} />
+          <Skeleton width={isMobile ? '88%' : 270} height={11} borderRadius={5} />
+        </div>
+        <Skeleton width={76} height={26} borderRadius={8} />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.15fr 0.85fr', gap: '1.1rem', alignItems: 'center' }}>
+        {/* Left: Ranked List */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {Array.from({ length: rows }).map((_, i) => (
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '6px 8px', borderRadius: 8, border: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+                  <Skeleton width={18} height={13} borderRadius={4} />
+                  <Skeleton width={22} height={22} borderRadius={6} />
+                  <Skeleton width={`${62 - (i % 3) * 10}%`} height={13} borderRadius={4} />
+                </div>
+                <Skeleton width={52} height={14} borderRadius={4} />
+              </div>
+              <div style={{ marginLeft: 26 }}>
+                <Skeleton width={`${Math.max(25, 92 - i * 14)}%`} height={6} borderRadius={4} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Right: Circular Donut Skeleton */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingLeft: isMobile ? 0 : 12,
+            paddingTop: isMobile ? 12 : 0,
+            borderLeft: isMobile ? 'none' : '1px solid #f1f5f9',
+            borderTop: isMobile ? '1px solid #f1f5f9' : 'none'
+          }}
+        >
+          <div style={{ position: 'relative', width: 156, height: 156, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Skeleton width={156} height={156} borderRadius="50%" />
+            <div
+              style={{
+                position: 'absolute',
+                width: 108,
+                height: 108,
+                borderRadius: '50%',
+                background: '#ffffff',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6
+              }}
+            >
+              <Skeleton width={46} height={18} borderRadius={5} />
+              <Skeleton width={64} height={10} borderRadius={4} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 12 }}>
+            <Skeleton width={68} height={14} borderRadius={4} />
+            <Skeleton width={68} height={14} borderRadius={4} />
+            <Skeleton width={68} height={14} borderRadius={4} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Archetype 2 Skeleton: 154x154 Donut (Left) + Vertical Column BarChart (Right) ──
+export const DonutAndBarChartSkeleton = () => {
+  const isMobile = useResponsive();
+  return (
+    <div className="card skeleton-card" style={{ padding: '1.35rem', borderRadius: 16, border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+          <Skeleton width={isMobile ? '68%' : 210} height={17} borderRadius={6} />
+          <Skeleton width={isMobile ? '85%' : 265} height={11} borderRadius={5} />
+        </div>
+        <Skeleton width={74} height={26} borderRadius={8} />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '0.88fr 1.12fr', gap: '1.1rem', alignItems: 'center', flex: 1 }}>
+        {/* Left: Donut + Legend Boxes */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingRight: isMobile ? 0 : 10,
+            paddingBottom: isMobile ? 12 : 0,
+            borderRight: isMobile ? 'none' : '1px solid #f1f5f9',
+            borderBottom: isMobile ? '1px solid #f1f5f9' : 'none'
+          }}
+        >
+          <div style={{ position: 'relative', width: 146, height: 146, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Skeleton width={146} height={146} borderRadius="50%" />
+            <div
+              style={{
+                position: 'absolute',
+                width: 100,
+                height: 100,
+                borderRadius: '50%',
+                background: '#ffffff',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 5
+              }}
+            >
+              <Skeleton width={44} height={16} borderRadius={4} />
+              <Skeleton width={58} height={10} borderRadius={4} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%', maxWidth: 195, marginTop: 10 }}>
+            <Skeleton width="100%" height={26} borderRadius={7} />
+            <Skeleton width="100%" height={26} borderRadius={7} />
+          </div>
+        </div>
+
+        {/* Right: Vertical Column Bars */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: 215, justifyContent: 'flex-end' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Skeleton width={110} height={13} borderRadius={4} />
+            <Skeleton width={65} height={11} borderRadius={4} />
+          </div>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: 10, paddingTop: 10 }}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, height: '100%', justifyContent: 'flex-end' }}>
+                <Skeleton width="70%" height={9} borderRadius={3} />
+                <Skeleton width="100%" height={`${Math.max(22, 35 + ((i * 23) % 58))}%`} borderRadius="6px 6px 2px 2px" />
+                <Skeleton width="80%" height={9} borderRadius={3} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Interaction 6-Box Grid Skeleton (for Meta Ads Engagement & Video) ───────
+export const InteractionGridSkeleton = () => {
+  const isMobile = useResponsive();
+  return (
+    <div className="card skeleton-card" style={{ padding: '1.35rem', borderRadius: 16, border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+          <Skeleton width={isMobile ? '75%' : 240} height={17} borderRadius={6} />
+          <Skeleton width={isMobile ? '90%' : 290} height={11} borderRadius={5} />
+        </div>
+        <Skeleton width={120} height={26} borderRadius={8} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, minmax(0, 1fr))' : 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} style={{ padding: 14, borderRadius: 12, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Skeleton width="58%" height={12} borderRadius={4} />
+              <Skeleton width={26} height={26} borderRadius={7} />
+            </div>
+            <Skeleton width="72%" height={22} borderRadius={6} />
+            <Skeleton width="85%" height={10} borderRadius={4} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ─── Leaderboard Card Skeleton (Avatar + Medal + Progress Bar) ───────────────
+export const LeaderboardCardSkeleton = ({ rows = 5 }: { rows?: number }) => {
+  const isMobile = useResponsive();
+  return (
+    <div className="card skeleton-card" style={{ padding: '1.35rem', borderRadius: 16, border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+          <Skeleton width={isMobile ? '72%' : 220} height={17} borderRadius={6} />
+          <Skeleton width={isMobile ? '88%' : 280} height={11} borderRadius={5} />
+        </div>
+        <Skeleton width={isMobile ? 90 : 150} height={30} borderRadius={8} />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+                <Skeleton width={20} height={16} borderRadius={4} />
+                <Skeleton width={28} height={28} borderRadius="50%" />
+                <Skeleton width={isMobile ? '55%' : 140} height={14} borderRadius={4} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Skeleton width={48} height={15} borderRadius={4} />
+                <Skeleton width={38} height={20} borderRadius={6} />
+              </div>
+            </div>
+            <div style={{ marginLeft: 30 }}>
+              <Skeleton width={`${Math.max(30, 92 - i * 14)}%`} height={5} borderRadius={4} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ─── Completeness / SLA Health Grid Skeleton ─────────────────────────────────
+export const CompletenessGridSkeleton = ({ items = 6 }: { items?: number }) => {
+  const isMobile = useResponsive();
+  return (
+    <div className="card skeleton-card" style={{ padding: '1.35rem', borderRadius: 16, border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+          <Skeleton width={isMobile ? '70%' : 210} height={17} borderRadius={6} />
+          <Skeleton width={isMobile ? '85%' : 260} height={11} borderRadius={5} />
+        </div>
+        <Skeleton width={86} height={26} borderRadius={8} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+        {Array.from({ length: items }).map((_, i) => (
+          <div key={i} style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #f1f5f9', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 7 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Skeleton width="56%" height={13} borderRadius={4} />
+              <Skeleton width={42} height={18} borderRadius={999} />
+            </div>
+            <Skeleton width="100%" height={6} borderRadius={999} />
+            <Skeleton width="42%" height={10} borderRadius={4} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ─── Pipeline 4-Card + Spectrum Bar Skeleton ─────────────────────────────────
+export const PipelineCardsAndSpectrumSkeleton = () => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <Skeleton width={210} height={17} borderRadius={6} />
+        <Skeleton width={310} height={11} borderRadius={5} />
+      </div>
+      <Skeleton width={110} height={26} borderRadius={8} />
+    </div>
+    <div className="dashboard-kpi-grid" style={{ marginBottom: 0 }}>
+      <KpiCardSkeleton />
+      <KpiCardSkeleton />
+      <KpiCardSkeleton />
+      <KpiCardSkeleton />
+    </div>
+    <div className="card skeleton-card" style={{ padding: '12px 14px', borderRadius: 12, border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <Skeleton width={130} height={14} borderRadius={4} />
+        <Skeleton width={85} height={20} borderRadius={6} />
+        <Skeleton width={95} height={20} borderRadius={6} />
+        <Skeleton width={95} height={20} borderRadius={6} />
+      </div>
+      <Skeleton width={280} height={8} borderRadius={999} />
+    </div>
+  </div>
+);
 
 // ─── Drawer skeleton (for Customer / Task / Expense Drawers) ─────────────────
 export const DrawerSkeleton = () => (

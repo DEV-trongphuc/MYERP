@@ -733,8 +733,11 @@ export const insertDeep = (list: EmailBlock[], targetId: string, block: EmailBlo
                 // We are inside a section, but trying to drop a non-row block. Wrap it.
                 const wrapped = wrapElement(block); blockToInsert = wrapped.children![0];
             } else if (targetSibling.type === 'column' && block.type !== 'column') {
-                // This shouldn't happen much as columns are side-by-side, but if so:
-                blockToInsert = createBlock('column'); blockToInsert.children = [block];
+                const colChildren = [...(targetSibling.children || [])];
+                if (pos === 'top') colChildren.unshift(block);
+                else colChildren.push(block);
+                copy[idx] = { ...targetSibling, children: colChildren };
+                return copy;
             }
             copy.splice(pos === 'top' ? idx : idx + 1, 0, blockToInsert);
         }

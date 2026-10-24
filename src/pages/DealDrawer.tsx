@@ -458,9 +458,9 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
         } as any}
       />
       <div
-        className={`${styles.drawer} drawer-sheet`}
+        className={`${styles.drawer} drawer-sheet drawer-panel`}
         style={{
-          zIndex: 2147483625,
+          zIndex: 2147483625, ...({ '--drawer-panel-z': 2147483625 } as any),
           transform: animateIn ? 'translateX(0)' : 'translateX(60%)',
           opacity: animateIn ? 1 : 0,
           transition: 'transform 0.22s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.22s cubic-bezier(0.25, 0.1, 0.25, 1)',

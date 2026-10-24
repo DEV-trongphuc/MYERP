@@ -5,9 +5,74 @@ class UserController {
         $this->db = $db; 
     }
 
+    public static function invalidateUserCaches(int $tenantId = 1, int $userId = 0): void {
+        $tmpDir = sys_get_temp_dir();
+        if ($userId > 0) {
+            @unlink($tmpDir . "/myerp_auth_u_{$userId}_{$tenantId}.json");
+            @unlink($tmpDir . "/myerp_api_u_{$userId}.json");
+        }
+        foreach (glob($tmpDir . "/myerp_users_list_t{$tenantId}_*.json") ?: [] as $f) {
+            @unlink($f);
+        }
+        foreach (glob($tmpDir . "/myerp_chat_staff_t{$tenantId}*.json") ?: [] as $f) {
+            @unlink($f);
+        }
+    }
+
+    private function persistInlineBase64Asset(int $userId, string $dataUri, string $subDir, string $prefix): ?string {
+        if (strpos($dataUri, 'data:image/') !== 0) return null;
+        $commaPos = strpos($dataUri, ',');
+        if ($commaPos === false) return null;
+        $meta = substr($dataUri, 0, $commaPos);
+        $ext = 'png';
+        if (preg_match('/^data:image\/([a-zA-Z0-9+.-]+);base64$/', $meta, $m)) {
+            $rawExt = strtolower($m[1]);
+            if ($rawExt === 'jpeg') $ext = 'jpg';
+            elseif (in_array($rawExt, ['png', 'jpg', 'webp', 'gif'], true)) $ext = $rawExt;
+        }
+        $decoded = base64_decode(substr($dataUri, $commaPos + 1));
+        if ($decoded === false || strlen($decoded) < 16) return null;
+        $dir = __DIR__ . '/../uploads/' . trim($subDir, '/') . '/';
+        if (!is_dir($dir)) @mkdir($dir, 0755, true);
+        $fileName = $prefix . '_' . $userId . '_' . substr(md5($dataUri), 0, 10) . '.' . $ext;
+        $fullPath = $dir . $fileName;
+        if (!file_exists($fullPath)) {
+            @file_put_contents($fullPath, $decoded);
+        }
+        if (file_exists($fullPath) && filesize($fullPath) > 0) {
+            return 'uploads/' . trim($subDir, '/') . '/' . $fileName;
+        }
+        return null;
+    }
+
     public function index(array $auth): void {
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $uid = (int)($auth['user_id'] ?? 0);
+        $role = strtolower((string)($auth['role'] ?? ''));
+        $teamOnlyFlag = isset($_GET['team_only']) && (string)$_GET['team_only'] === '1';
+        $canViewSensitivePii = in_array($role, ['admin', 'super_admin', 'superadmin', 'director', 'hr'], true);
+        $cacheKey = sprintf(
+            '%s/myerp_users_list_t%d_r%s_to%d_u%d.json',
+            sys_get_temp_dir(),
+            $tid,
+            preg_replace('/[^a-z0-9_]/', '', $role),
+            $teamOnlyFlag ? 1 : 0,
+            ($teamOnlyFlag || !$canViewSensitivePii) ? $uid : 0
+        );
+        if (empty($_GET['nocache']) && is_file($cacheKey) && (time() - filemtime($cacheKey)) < 60) {
+            $cachedRows = json_decode((string)@file_get_contents($cacheKey), true);
+            if (is_array($cachedRows)) {
+                respond(200, $cachedRows);
+            }
+        }
         // Allow all authenticated users to retrieve the active user list based on unified accounts.is_active = 1
-        $where = ["a.is_active = 1"];
+        $where = [
+            "a.is_active = 1",
+            "a.id != 9000001",
+            "LOWER(COALESCE(a.role, '')) NOT IN ('bot', 'system')",
+            "LOWER(COALESCE(a.email, '')) NOT IN ('turniodev@gmail.com', 'turnlodev@gmail.com', 'ideas.ai@ideas.vn', 'ai@ideas.edu.vn')",
+            "LOWER(COALESCE(NULLIF(a.status, ''), 'active')) NOT IN ('inactive', 'locked', 'resigned', 'terminated', 'disabled', 'nghi_viec', 'tam_nghi', 'suspended', 'khoa')"
+        ];
         $params = [];
         
         $teamOnly = isset($_GET['team_only']) && (string)$_GET['team_only'] === '1';
@@ -40,12 +105,22 @@ class UserController {
         $joinWhere[] = "(u.tenant_id = ? OR u.tenant_id IS NULL)";
         $joinParams[] = (int)($auth['tenant_id'] ?? 1);
         $joinWhere[] = "(u.is_active = 1 OR u.is_active IS NULL)";
-        try {
-            $uCols = $this->db->query("SHOW COLUMNS FROM users LIKE 'deleted_at'")->fetch();
-            if ($uCols) {
+        $joinWhere[] = "LOWER(COALESCE(NULLIF(u.status, ''), NULLIF(a.status, ''), 'active')) NOT IN ('inactive', 'locked', 'resigned', 'terminated', 'disabled', 'nghi_viec', 'tam_nghi', 'suspended', 'khoa')";
+        $joinWhere[] = "LOWER(COALESCE(u.role, a.role, '')) NOT IN ('bot', 'system')";
+        $delFlagFile = sys_get_temp_dir() . '/myerp_users_has_deleted_at.flag';
+        if (is_file($delFlagFile)) {
+            if (trim((string)@file_get_contents($delFlagFile)) === '1') {
                 $joinWhere[] = "u.deleted_at IS NULL";
             }
-        } catch (Throwable $eCol) {}
+        } else {
+            try {
+                $uCols = $this->db->query("SHOW COLUMNS FROM users LIKE 'deleted_at'")->fetch();
+                @file_put_contents($delFlagFile, $uCols ? '1' : '0');
+                if ($uCols) {
+                    $joinWhere[] = "u.deleted_at IS NULL";
+                }
+            } catch (Throwable $eCol) {}
+        }
 
         $whereClause = implode(" AND ", $joinWhere);
         
@@ -80,9 +155,8 @@ class UserController {
                     u.extra_fields_json,
                     u.manager_behavior_mode
                 FROM accounts a
-                LEFT JOIN users u ON (a.id = u.id OR (a.email IS NOT NULL AND a.email != '' AND a.email = u.email))
+                LEFT JOIN users u ON a.id = u.id
                 WHERE $whereClause
-                GROUP BY a.id
                 ORDER BY full_name ASC
             ");
             $stmt->execute(array_values($joinParams));
@@ -94,11 +168,33 @@ class UserController {
                 }
                 $r['id'] = (int)$r['id'];
                 $r['is_active'] = 1;
+                if (!empty($r['avatar_url']) && strpos((string)$r['avatar_url'], 'data:image/') === 0) {
+                    $savedAvatar = $this->persistInlineBase64Asset($r['id'], (string)$r['avatar_url'], 'avatars', 'avt');
+                    if ($savedAvatar) {
+                        $r['avatar_url'] = $savedAvatar;
+                        $r['avatar'] = $savedAvatar;
+                        try {
+                            $this->db->prepare("UPDATE users SET avatar_url = ? WHERE id = ?")->execute([$savedAvatar, $r['id']]);
+                            $this->db->prepare("UPDATE accounts SET avatar = ? WHERE id = ?")->execute([$savedAvatar, $r['id']]);
+                        } catch (Throwable $ignoreAv) {}
+                    }
+                }
+                if (!empty($r['signature_url']) && strpos((string)$r['signature_url'], 'data:image/') === 0) {
+                    $savedSig = $this->persistInlineBase64Asset($r['id'], (string)$r['signature_url'], 'signatures', 'sig');
+                    if ($savedSig) {
+                        $r['signature_url'] = $savedSig;
+                        try {
+                            $this->db->prepare("UPDATE users SET signature_url = ? WHERE id = ?")->execute([$savedSig, $r['id']]);
+                            $this->db->prepare("UPDATE accounts SET signature_url = ? WHERE id = ?")->execute([$savedSig, $r['id']]);
+                        } catch (Throwable $ignoreSig) {}
+                    }
+                }
                 // Bảo mật Zero-Trust: Chỉ HR/Admin hoặc chính chủ mới được thấy CCCD, ngân hàng, địa chỉ
                 if (!$canViewSensitivePii && (int)$r['id'] !== (int)$auth['user_id']) {
                     unset($r['citizen_id'], $r['bank_name'], $r['bank_account'], $r['address'], $r['dob']);
                 }
             }
+            @file_put_contents($cacheKey, json_encode($rows, JSON_UNESCAPED_UNICODE));
             respond(200, $rows);
         } catch (Throwable $e) {
             try {
@@ -151,6 +247,7 @@ class UserController {
                 $b['bank_account']??null
             ]);
         $newId = (int)$this->db->lastInsertId();
+        self::invalidateUserCaches((int)($auth['tenant_id'] ?? 1), $newId);
         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'CREATE', 'user', $newId, json_encode(['email' => $b['email'], 'role' => $dbUserRole]));
         $this->show($auth, $newId);
     }
@@ -321,6 +418,7 @@ class UserController {
         // Log changes (Masking password)
         $logData = $b;
         if (isset($logData['password'])) unset($logData['password']);
+        self::invalidateUserCaches((int)($auth['tenant_id'] ?? 1), (int)$id);
         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'UPDATE', 'user', $id, json_encode($logData));
         
         $this->show($auth,$id);
@@ -349,6 +447,7 @@ class UserController {
                 $this->db->prepare("UPDATE consultants SET status = 'inactive' WHERE id = ? OR email = (SELECT email FROM users WHERE id = ? LIMIT 1)")->execute([$id, $id]);
             } catch (\Throwable $eCons) {}
 
+            self::invalidateUserCaches((int)($auth['tenant_id'] ?? 1), (int)$id);
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'DELETE', 'user', $id);
             respond(200,null,'Đã xóa người dùng');
         } catch (PDOException $e) {

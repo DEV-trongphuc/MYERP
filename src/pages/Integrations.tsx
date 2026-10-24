@@ -27,7 +27,7 @@ const SYSTEM_FIELDS = [
   { value: 'job_title', label: 'Nghề nghiệp / Chức danh' },
   { value: 'tax_code', label: 'Mã số thuế cá nhân' },
 
-  // --- Nguồn Data & Tracking (UTM) ---
+  // --- Nguồn Data & Tracking (UTM & Meta Ads Attribution) ---
   { value: 'source', label: 'Nguồn Data' },
   { value: 'type', label: 'Loại Data' },
   { value: 'platform', label: 'Nền tảng Data (Meta / Google / TikTok / Zalo)' },
@@ -36,8 +36,20 @@ const SYSTEM_FIELDS = [
   { value: 'utm_content', label: 'Mẫu Quảng cáo / Adset (UTM Content)' },
   { value: 'utm_term', label: 'Từ khóa Ads (UTM Term)' },
   { value: 'form_name', label: 'Tên Mẫu Lead Form / Landing Page' },
+  { value: 'form_id', label: 'Mã Lead Form (Meta Form ID)' },
+  { value: 'meta_lead_id', label: 'Mã Lead Meta (Meta Lead ID)' },
+  { value: 'campaign_id', label: 'Mã Chiến dịch (Meta Campaign ID)' },
+  { value: 'campaign_name', label: 'Tên Chiến dịch (Meta Campaign Name)' },
+  { value: 'adset_id', label: 'Mã Nhóm Quảng cáo (Meta AdSet ID)' },
+  { value: 'adset_name', label: 'Tên Nhóm Quảng cáo (Meta AdSet Name)' },
+  { value: 'ad_id', label: 'Mã Bài Quảng cáo (Meta Ad ID)' },
+  { value: 'ad_name', label: 'Tên Bài Quảng cáo (Meta Ad Name)' },
 
-  // --- Nhu cầu & Tài chính ---
+  // --- Nhu cầu, Khảo sát Học viên & Tài chính ---
+  { value: 'program', label: 'Chương trình quan tâm (MBA / DBA / UBIS / SBS...)' },
+  { value: 'degree', label: 'Học vấn / Bằng cấp cao nhất hiện tại' },
+  { value: 'english_work_exp', label: 'Trình độ tiếng Anh & Kinh nghiệm làm việc' },
+  { value: 'consultation_time', label: 'Khung giờ đăng ký tư vấn 1-1' },
   { value: 'budget', label: 'Ngân sách tài chính / Học phí / Doanh thu dự kiến' },
   { value: 'demand_type', label: 'Mục đích nhu cầu (Học tập / Bằng cấp / Hợp tác)' },
   { value: 'property_type', label: 'Chương trình / Khóa học / Dịch vụ quan tâm' },

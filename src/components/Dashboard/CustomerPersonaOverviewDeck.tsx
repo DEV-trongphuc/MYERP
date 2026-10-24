@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -44,12 +44,23 @@ import {
 import api from '../../api/axios';
 import { CustomSelect } from '../ui/CustomSelect';
 import { Avatar } from '../ui/Avatar';
-import { KpiCardSkeleton, TableSkeleton } from '../ui/Skeleton';
+import {
+  KpiCardSkeleton,
+  TableSkeleton,
+  ChartSkeleton,
+  DonutAndRankedListSkeleton,
+  DonutAndBarChartSkeleton,
+  LeaderboardCardSkeleton,
+  CompletenessGridSkeleton
+} from '../ui/Skeleton';
 
 interface BreakdownItem {
   label: string;
+  key?: string;
   count: number;
   pct: number;
+  variants_count?: number;
+  variants?: string[];
 }
 
 interface OwnerBreakdownItem {
@@ -146,6 +157,7 @@ interface PersonaOverviewResponse {
 
 interface CustomerPersonaOverviewDeckProps {
   defaultSegment?: 'student' | 'lead';
+  externalDateFilter?: string;
   onOpenContact?: (contactId: number, fallbackContact?: Record<string, any>) => void;
 }
 
@@ -274,8 +286,26 @@ const CleanSearchBox: React.FC<{
   </div>
 );
 
+const deckCache = new Map<string, { data: PersonaOverviewResponse; timestamp: number }>();
+const SWR_TTL_MS = 45_000;
+
+const buildPersonaCacheKey = (params: {
+  seg: 'student' | 'lead';
+  owner: string;
+  school: string;
+  intake: string;
+  gender: string;
+  jobGroup: string;
+  industry: string;
+  company?: string;
+  multiCourse: boolean;
+  dateFilter?: string;
+}) =>
+  `${params.seg}|${params.owner}|${params.school}|${params.intake}|${params.gender}|${params.jobGroup}|${params.industry}|${params.company || 'all'}|${params.multiCourse ? '1' : '0'}|${params.dateFilter || 'all'}`;
+
 export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckProps> = ({
   defaultSegment = 'student',
+  externalDateFilter = '',
   onOpenContact
 }) => {
   // Always default to 'student' (Học viên)
@@ -286,6 +316,7 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
   const [selectedGender, setSelectedGender] = useState<string>('all');
   const [selectedJobGroup, setSelectedJobGroup] = useState<string>('all');
   const [selectedIndustry, setSelectedIndustry] = useState<string>('all');
+  const [selectedCompany, setSelectedCompany] = useState<string>('all');
   const [multiCourseOnly, setMultiCourseOnly] = useState<boolean>(false);
 
   const [showAdvancedDrawer, setShowAdvancedDrawer] = useState<boolean>(false);
@@ -299,9 +330,25 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const [data, setData] = useState<PersonaOverviewResponse | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const initialCacheKey = buildPersonaCacheKey({
+    seg: defaultSegment || 'student',
+    owner: 'all',
+    school: 'all',
+    intake: 'all',
+    gender: 'all',
+    jobGroup: 'all',
+    industry: 'all',
+    company: 'all',
+    multiCourse: false,
+    dateFilter: externalDateFilter
+  });
+  const [data, setData] = useState<PersonaOverviewResponse | null>(
+    () => deckCache.get(initialCacheKey)?.data ?? null
+  );
+  const [loading, setLoading] = useState<boolean>(() => !deckCache.has(initialCacheKey));
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const abortPersonaRef = useRef<AbortController | null>(null);
 
   const [companySearch, setCompanySearch] = useState<string>('');
   const [multiStudentSearch, setMultiStudentSearch] = useState<string>('');
@@ -313,18 +360,44 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
   const MULTI_PAGE_SIZE = 10;
 
   const fetchPersonaOverview = useCallback(
-    async (params: {
-      seg: 'student' | 'lead';
-      owner: string;
-      school: string;
-      intake: string;
-      gender: string;
-      jobGroup: string;
-      industry: string;
-      multiCourse: boolean;
-    }) => {
-      setLoading(true);
-      setError(null);
+    async (
+      params: {
+        seg: 'student' | 'lead';
+        owner: string;
+        school: string;
+        intake: string;
+        gender: string;
+        jobGroup: string;
+        industry: string;
+        company?: string;
+        multiCourse: boolean;
+        dateFilter?: string;
+      },
+      forceRefresh = false
+    ) => {
+      const cacheKey = buildPersonaCacheKey(params);
+      const cached = deckCache.get(cacheKey);
+      const now = Date.now();
+
+      if (cached) {
+        setData(cached.data);
+        setLoading(false);
+        setError(null);
+        if (!forceRefresh && now - cached.timestamp < SWR_TTL_MS) {
+          return;
+        }
+        setIsRefreshing(true);
+      } else {
+        setLoading(true);
+        setError(null);
+      }
+
+      if (abortPersonaRef.current) {
+        abortPersonaRef.current.abort();
+      }
+      const controller = new AbortController();
+      abortPersonaRef.current = controller;
+
       try {
         const res = await api.get('/contacts/persona-overview', {
           params: {
@@ -335,15 +408,27 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
             gender: params.gender !== 'all' ? params.gender : undefined,
             job_group: params.jobGroup !== 'all' ? params.jobGroup : undefined,
             industry: params.industry !== 'all' ? params.industry : undefined,
-            multi_course: params.multiCourse ? '1' : undefined
-          }
+            company: params.company && params.company !== 'all' ? params.company : undefined,
+            multi_course: params.multiCourse ? '1' : undefined,
+            date_filter: params.dateFilter ? params.dateFilter : undefined,
+            refresh: forceRefresh ? '1' : undefined
+          },
+          signal: controller.signal
         });
+        if (controller.signal.aborted) return;
         const payload = res.data?.data || res.data;
+        deckCache.set(cacheKey, { data: payload, timestamp: Date.now() });
         setData(payload);
       } catch (err: any) {
-        setError(err?.response?.data?.message || 'Không thể tải dữ liệu tổng quan chân dung khách hàng');
+        if (err?.name === 'CanceledError' || err?.name === 'AbortError' || controller.signal.aborted) return;
+        if (!cached) {
+          setError(err?.response?.data?.message || 'Không thể tải dữ liệu tổng quan chân dung khách hàng');
+        }
       } finally {
-        setLoading(false);
+        if (abortPersonaRef.current === controller) {
+          setLoading(false);
+          setIsRefreshing(false);
+        }
       }
     },
     []
@@ -358,8 +443,15 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
       gender: selectedGender,
       jobGroup: selectedJobGroup,
       industry: selectedIndustry,
-      multiCourse: multiCourseOnly
+      company: selectedCompany,
+      multiCourse: multiCourseOnly,
+      dateFilter: externalDateFilter
     });
+    return () => {
+      if (abortPersonaRef.current) {
+        abortPersonaRef.current.abort();
+      }
+    };
   }, [
     fetchPersonaOverview,
     segmentFilter,
@@ -369,7 +461,9 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
     selectedGender,
     selectedJobGroup,
     selectedIndustry,
-    multiCourseOnly
+    selectedCompany,
+    multiCourseOnly,
+    externalDateFilter
   ]);
 
   const handleResetAllFilters = () => {
@@ -379,6 +473,7 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
     setSelectedGender('all');
     setSelectedJobGroup('all');
     setSelectedIndustry('all');
+    setSelectedCompany('all');
     setMultiCourseOnly(false);
     setMultiPage(1);
   };
@@ -391,6 +486,7 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
     if (selectedGender !== 'all') count++;
     if (selectedJobGroup !== 'all') count++;
     if (selectedIndustry !== 'all') count++;
+    if (selectedCompany !== 'all') count++;
     if (multiCourseOnly) count++;
     return count;
   }, [
@@ -400,6 +496,7 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
     selectedGender,
     selectedJobGroup,
     selectedIndustry,
+    selectedCompany,
     multiCourseOnly
   ]);
 
@@ -467,7 +564,12 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
     const list = Array.isArray(data?.top_companies) ? data!.top_companies : [];
     if (!companySearch.trim()) return list;
     const q = companySearch.trim().toLowerCase();
-    return list.filter((c) => c.label.toLowerCase().includes(q));
+    return list.filter(
+      (c) =>
+        c.label.toLowerCase().includes(q) ||
+        (c.key && c.key.toLowerCase().includes(q)) ||
+        (Array.isArray(c.variants) && c.variants.some((v) => v.toLowerCase().includes(q)))
+    );
   }, [data?.top_companies, companySearch]);
 
   const filteredIntakes = useMemo(() => {
@@ -598,15 +700,15 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
       <div
         className="card"
         style={{
-          padding: '0.75rem 1rem',
+          padding: isMobile ? '0.55rem 0.7rem' : '0.75rem 1rem',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '0.75rem'
+          flexWrap: isMobile ? 'nowrap' : 'wrap',
+          gap: isMobile ? '0.45rem' : '0.75rem'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '0.4rem' : '0.625rem', flexWrap: isMobile ? 'nowrap' : 'wrap', minWidth: 0 }}>
           {/* Clean Segment Switcher: Học viên (Default) vs Tiềm năng */}
           <div
             style={{
@@ -615,12 +717,13 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
               borderRadius: '10px',
               background: 'var(--color-border-light)',
               border: '1px solid var(--color-border)',
-              gap: '2px'
+              gap: '2px',
+              flexShrink: 0
             }}
           >
             {[
-              { id: 'student' as const, label: 'Học viên', icon: GraduationCap },
-              { id: 'lead' as const, label: 'Tiềm năng (Lead)', icon: Users }
+              { id: 'student' as const, label: 'Học viên', shortLabel: 'Học viên', icon: GraduationCap },
+              { id: 'lead' as const, label: 'Tiềm năng (Lead)', shortLabel: 'Tiềm năng', icon: Users }
             ].map((tab) => {
               const Icon = tab.icon;
               const isAct = segmentFilter === tab.id;
@@ -637,87 +740,92 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '6px',
+                    gap: isMobile ? '4px' : '6px',
                     height: '32px',
-                    padding: '0 14px',
+                    padding: isMobile ? '0 9px' : '0 14px',
                     borderRadius: '7px',
                     border: 'none',
                     background: isAct ? 'var(--color-surface, #ffffff)' : 'transparent',
                     color: isAct ? 'var(--color-primary, #BD1D2D)' : 'var(--color-text-muted)',
-                    fontSize: '0.8rem',
+                    fontSize: isMobile ? '0.74rem' : '0.8rem',
                     fontWeight: isAct ? 700 : 600,
                     cursor: 'pointer',
                     boxShadow: isAct ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                    transition: 'all 0.15s ease'
+                    transition: 'all 0.15s ease',
+                    whiteSpace: 'nowrap'
                   }}
                 >
                   <Icon size={14} />
-                  <span>{tab.label}</span>
+                  <span>{isMobile ? tab.shortLabel : tab.label}</span>
                 </button>
               );
             })}
           </div>
 
-          {/* Quick Sale / Consultant Filter with Avatar + Search */}
-          <div style={{ minWidth: '225px' }}>
-            <CustomSelect
-              options={ownerOptions}
-              value={selectedOwner}
-              onChange={(val) => {
-                setSelectedOwner(String(val));
-                setMultiPage(1);
-              }}
-              searchable
-              showAvatars
-              hideSelectedSublabel
-              placeholder="Sale phụ trách..."
-              size="sm"
-              width="100%"
-            />
-          </div>
+          {!isMobile && (
+            <>
+              {/* Quick Sale / Consultant Filter with Avatar + Search */}
+              <div style={{ minWidth: '225px' }}>
+                <CustomSelect
+                  options={ownerOptions}
+                  value={selectedOwner}
+                  onChange={(val) => {
+                    setSelectedOwner(String(val));
+                    setMultiPage(1);
+                  }}
+                  searchable
+                  showAvatars
+                  hideSelectedSublabel
+                  placeholder="Sale phụ trách..."
+                  size="sm"
+                  width="100%"
+                />
+              </div>
 
-          {/* Quick School / Program Filter */}
-          <div style={{ minWidth: '210px' }}>
-            <CustomSelect
-              options={schoolOptions}
-              value={selectedSchool}
-              onChange={(val) => {
-                setSelectedSchool(String(val));
-                setMultiPage(1);
-              }}
-              searchable
-              size="sm"
-              width="100%"
-            />
-          </div>
+              {/* Quick School / Program Filter */}
+              <div style={{ minWidth: '210px' }}>
+                <CustomSelect
+                  options={schoolOptions}
+                  value={selectedSchool}
+                  onChange={(val) => {
+                    setSelectedSchool(String(val));
+                    setMultiPage(1);
+                  }}
+                  searchable
+                  size="sm"
+                  width="100%"
+                />
+              </div>
 
-          {/* Quick Intake Filter */}
-          <div style={{ minWidth: '185px' }}>
-            <CustomSelect
-              options={intakeOptions}
-              value={selectedIntake}
-              onChange={(val) => {
-                setSelectedIntake(String(val));
-                setMultiPage(1);
-              }}
-              searchable
-              size="sm"
-              width="100%"
-            />
-          </div>
+              {/* Quick Intake Filter */}
+              <div style={{ minWidth: '185px' }}>
+                <CustomSelect
+                  options={intakeOptions}
+                  value={selectedIntake}
+                  onChange={(val) => {
+                    setSelectedIntake(String(val));
+                    setMultiPage(1);
+                  }}
+                  searchable
+                  size="sm"
+                  width="100%"
+                />
+              </div>
+            </>
+          )}
         </div>
 
         {/* Right: Advanced Filter Drawer Trigger + Reset + Refresh */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '6px' : '8px', flexWrap: 'nowrap', flexShrink: 0 }}>
           <button
             type="button"
             onClick={() => setShowAdvancedDrawer(true)}
             style={{
-              height: '36px',
-              padding: '0 14px',
+              height: isMobile ? '34px' : '36px',
+              padding: isMobile ? '0 10px' : '0 14px',
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '6px',
+              gap: '5px',
               borderRadius: '8px',
               border:
                 activeFilterCount > 0
@@ -725,16 +833,17 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                   : '1px solid var(--color-border)',
               background: 'var(--color-surface, #ffffff)',
               color: activeFilterCount > 0 ? 'var(--color-primary, #BD1D2D)' : 'var(--color-text)',
-              fontSize: '0.8rem',
+              fontSize: isMobile ? '0.75rem' : '0.8rem',
               fontWeight: 600,
               cursor: 'pointer',
               boxShadow: 'var(--shadow-sm)',
-              transition: 'all 0.15s ease'
+              transition: 'all 0.15s ease',
+              whiteSpace: 'nowrap'
             }}
             title="Mở bảng Bộ lọc nâng cao"
           >
             <SlidersHorizontal size={14} />
-            <span>Bộ lọc nâng cao</span>
+            <span>{isMobile ? 'Bộ lọc' : 'Bộ lọc nâng cao'}</span>
             {activeFilterCount > 0 && (
               <span
                 style={{
@@ -756,7 +865,7 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
             )}
           </button>
 
-          {activeFilterCount > 0 && (
+          {!isMobile && activeFilterCount > 0 && (
             <button
               type="button"
               className="btn outline sm"
@@ -772,28 +881,34 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
             type="button"
             className="btn outline sm"
             onClick={() =>
-              fetchPersonaOverview({
-                seg: segmentFilter,
-                owner: selectedOwner,
-                school: selectedSchool,
-                intake: selectedIntake,
-                gender: selectedGender,
-                jobGroup: selectedJobGroup,
-                industry: selectedIndustry,
-                multiCourse: multiCourseOnly
-              })
+              fetchPersonaOverview(
+                {
+                  seg: segmentFilter,
+                  owner: selectedOwner,
+                  school: selectedSchool,
+                  intake: selectedIntake,
+                  gender: selectedGender,
+                  jobGroup: selectedJobGroup,
+                  industry: selectedIndustry,
+                  company: selectedCompany,
+                  multiCourse: multiCourseOnly,
+                  dateFilter: externalDateFilter
+                },
+                true
+              )
             }
             style={{
-              height: '36px',
-              width: '36px',
+              height: isMobile ? '34px' : '36px',
+              width: isMobile ? '34px' : '36px',
               padding: 0,
               display: 'inline-flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              flexShrink: 0
             }}
             title="Làm mới dữ liệu"
           >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={loading || isRefreshing ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>
@@ -807,25 +922,15 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
             <KpiCardSkeleton />
             <KpiCardSkeleton />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '1.25rem' }}>
-            {[1, 2, 3, 4, 5, 6].map((n) => (
-              <div key={n} className="card" style={{ padding: '1.25rem', minHeight: '280px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <div className="skeleton" style={{ width: '55%', height: '18px', borderRadius: '6px' }} />
-                <div className="skeleton" style={{ width: '35%', height: '12px', borderRadius: '6px' }} />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '8px' }}>
-                  {[1, 2, 3, 4, 5].map((r) => (
-                    <div key={r} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <div className="skeleton" style={{ width: '42%', height: '13px', borderRadius: '4px' }} />
-                        <div className="skeleton" style={{ width: '18%', height: '13px', borderRadius: '4px' }} />
-                      </div>
-                      <div className="skeleton" style={{ width: '100%', height: '6px', borderRadius: '4px' }} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(440px, 1fr))', gap: '1.25rem' }}>
+            <DonutAndRankedListSkeleton />
+            <DonutAndBarChartSkeleton />
           </div>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(440px, 1fr))', gap: '1.25rem' }}>
+            <LeaderboardCardSkeleton rows={5} />
+            <ChartSkeleton height={240} />
+          </div>
+          <CompletenessGridSkeleton items={8} />
           <TableSkeleton rows={6} cols={6} />
         </div>
       ) : error && !data ? (
@@ -843,7 +948,8 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                 gender: selectedGender,
                 jobGroup: selectedJobGroup,
                 industry: selectedIndustry,
-                multiCourse: multiCourseOnly
+                multiCourse: multiCourseOnly,
+                dateFilter: externalDateFilter
               })
             }
           >
@@ -1019,6 +1125,31 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                 </span>
               )}
 
+              {selectedCompany !== 'all' && (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '3px 9px',
+                    borderRadius: '8px',
+                    background: 'rgba(189, 29, 45, 0.08)',
+                    color: 'var(--color-primary, #BD1D2D)',
+                    fontSize: '0.75rem',
+                    fontWeight: 600
+                  }}
+                >
+                  <span>Đơn vị: {selectedCompany}</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCompany('all')}
+                    style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', color: 'inherit', display: 'flex' }}
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              )}
+
               {multiCourseOnly && (
                 <span
                   style={{
@@ -1165,7 +1296,7 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
           </div>
 
           {/* ROW 1: TRƯỜNG / CHƯƠNG TRÌNH ĐÀO TẠO & CƠ CẤU GIỚI TÍNH + ĐỘ TUỔI (Basic Brand Style) */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: '1.25rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(440px, 1fr))', gap: '1.25rem' }}>
             {/* Left: Thống Kê Theo Trường / Chương Trình */}
             <div className="card" style={{ padding: '1.35rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
@@ -1607,7 +1738,7 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
           </div>
 
           {/* ROW 2: TOP TƯ VẤN VIÊN & BIỂU ĐỒ CỘT KHÓA HỌC INTAKE (Reference Image 4 Style!) */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: '1.25rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(440px, 1fr))', gap: '1.25rem' }}>
             {/* Left: Top Tư Vấn Viên / Sale Phụ Trách */}
             <div className="card" style={{ padding: '1.35rem', display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
@@ -1997,7 +2128,7 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
           </div>
 
           {/* ROW 3: THÁP CẤP BẬC CHỨC VỤ (Horizontal Pyramid Bar Chart) & NHÓM NGÀNH NGHỀ (Basic Brand Spectrum + Ranked List) */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: '1.25rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(440px, 1fr))', gap: '1.25rem' }}>
             {/* Left: Tháp Cấp Bậc Chức Vụ & Quản Lý — Clean Horizontal Bar Pyramid */}
             <div className="card" style={{ padding: '1.35rem', display: 'flex', flexDirection: 'column', gap: '0.95rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
@@ -2300,12 +2431,15 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                       </div>
                     )}
 
-                    {/* Industry List Rows with crisp cards and bottom progress track */}
+                    {/* Industry List Rows with crisp cards and bottom progress track (height-matched to left Pyramid card + scroll) */}
                     <div
                       style={{
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: '6px'
+                        gap: '6px',
+                        maxHeight: '345px',
+                        overflowY: 'auto',
+                        paddingRight: '4px'
                       }}
                     >
                       {(() => {
@@ -2481,27 +2615,39 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                     const podiumBadges = ['TOP 1', 'TOP 2', 'TOP 3'];
                     const medal = podiumMedals[idx] || `#${idx + 1}`;
                     const badge = podiumBadges[idx] || `TOP ${idx + 1}`;
+                    const isSelected = selectedCompany === topComp.label;
+                    const tooltipText =
+                      topComp.variants && topComp.variants.length > 1
+                        ? `${topComp.label} (${topComp.count} HV) — Đã hợp nhất ${topComp.variants.length} đơn vị/chi nhánh:\n• ${topComp.variants.join('\n• ')}`
+                        : `${topComp.label}: ${topComp.count} HV`;
                     return (
                       <div
                         key={topComp.label}
+                        onClick={() => {
+                          setSelectedCompany(isSelected ? 'all' : topComp.label);
+                          setMultiPage(1);
+                        }}
                         style={{
                           padding: '12px 14px',
                           borderRadius: 12,
-                          background: '#ffffff',
-                          border: '1px solid #e2e8f0',
+                          background: isSelected ? '#f8fafc' : '#ffffff',
+                          border: isSelected ? '1.5px solid #0f172a' : '1px solid #e2e8f0',
                           boxShadow: '0 1px 2px rgba(15, 23, 42, 0.03)',
                           display: 'flex',
                           flexDirection: 'column',
                           gap: '6px',
-                          minWidth: 0
+                          minWidth: 0,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
                         }}
+                        title={tooltipText}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
                           <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#334155', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                             <span style={{ fontSize: '1rem' }}>{medal}</span>
                             <span>{badge}</span>
                           </span>
-                          <span style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--color-text, #0f172a)', fontVariantNumeric: 'tabular-nums' }}>
+                          <span style={{ fontSize: '0.82rem', fontWeight: 800, color: isSelected ? '#BD1D2D' : 'var(--color-text, #0f172a)', fontVariantNumeric: 'tabular-nums' }}>
                             {topComp.count} HV
                           </span>
                         </div>
@@ -2509,12 +2655,11 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                           style={{
                             fontSize: '0.84rem',
                             fontWeight: 700,
-                            color: 'var(--color-text, #0f172a)',
+                            color: isSelected ? '#BD1D2D' : 'var(--color-text, #0f172a)',
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis'
                           }}
-                          title={topComp.label}
                         >
                           {topComp.label}
                         </div>
@@ -2543,9 +2688,18 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                   (companySearch ? filteredCompanies : filteredCompanies.slice(3)).map((comp, idx) => {
                     const actualRank = companySearch ? idx + 1 : idx + 4;
                     const rankBadge = actualRank === 1 ? '🥇' : actualRank === 2 ? '🥈' : actualRank === 3 ? '🥉' : `#${actualRank}`;
+                    const isSelected = selectedCompany === comp.label;
+                    const tooltipText =
+                      comp.variants && comp.variants.length > 1
+                        ? `${comp.label} (${comp.count} HV) — Đã hợp nhất ${comp.variants.length} đơn vị/chi nhánh:\n• ${comp.variants.join('\n• ')}`
+                        : `${comp.label}: ${comp.count} HV`;
                     return (
                       <div
                         key={comp.label}
+                        onClick={() => {
+                          setSelectedCompany(isSelected ? 'all' : comp.label);
+                          setMultiPage(1);
+                        }}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
@@ -2553,12 +2707,14 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                           gap: '8px',
                           padding: '10px 12px',
                           borderRadius: 10,
-                          border: '1px solid #e2e8f0',
-                          background: '#ffffff',
+                          border: isSelected ? '1.5px solid #0f172a' : '1px solid #e2e8f0',
+                          background: isSelected ? '#f8fafc' : '#ffffff',
                           boxShadow: '0 1px 2px rgba(15, 23, 42, 0.02)',
-                          minWidth: 0
+                          minWidth: 0,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
                         }}
-                        title={`${comp.label}: ${comp.count} HV`}
+                        title={tooltipText}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
                           <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748b', minWidth: 24, textAlign: 'center', flexShrink: 0 }}>
@@ -2567,8 +2723,8 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                           <span
                             style={{
                               fontSize: '0.8125rem',
-                              fontWeight: 600,
-                              color: 'var(--color-text, #0f172a)',
+                              fontWeight: isSelected ? 700 : 600,
+                              color: isSelected ? '#BD1D2D' : 'var(--color-text, #0f172a)',
                               whiteSpace: 'nowrap',
                               overflow: 'hidden',
                               textOverflow: 'ellipsis'
@@ -2581,7 +2737,7 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                           style={{
                             fontSize: '0.74rem',
                             fontWeight: 700,
-                            color: '#334155',
+                            color: isSelected ? '#BD1D2D' : '#334155',
                             background: '#f1f5f9',
                             border: 'none',
                             padding: '2px 8px',
@@ -2880,7 +3036,7 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                 style={{
                   position: 'fixed',
                   inset: 0,
-                  zIndex: 2147483645,
+                  zIndex: 2147483610,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',

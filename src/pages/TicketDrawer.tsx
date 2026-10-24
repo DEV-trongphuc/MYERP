@@ -575,13 +575,13 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
+            transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] as any }}
             onClick={handleClose}
             style={{
               position: 'fixed',
               inset: 0,
-              zIndex: 2147483619,
-              '--drawer-backdrop-z': 2147483619,
+              zIndex: 2147483620,
+              '--drawer-backdrop-z': 2147483620,
               background: 'rgba(0, 0, 0, 0.45)',
               backdropFilter: 'blur(8px)',
               WebkitBackdropFilter: 'blur(8px)'
@@ -589,11 +589,11 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
           />
 
           <motion.div
-            className="drawer-sheet"
+            className="drawer-sheet drawer-panel"
             initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
             animate={{ y: 0, x: 0, opacity: 1 }}
             exit={isMobile ? { y: '60%', opacity: 0 } : { x: '60%', opacity: 0 }}
-            transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
+            transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] as any }}
             onClick={e => e.stopPropagation()}
             style={{
               position: 'fixed',
@@ -605,9 +605,10 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
               boxShadow: '-10px 0 30px rgba(0, 0, 0, 0.15)',
               display: 'flex',
               flexDirection: 'column',
-              zIndex: 2147483620,
+              zIndex: 2147483625,
+              '--drawer-panel-z': 2147483625,
               overflow: 'hidden'
-            }}
+            } as React.CSSProperties}
           >
             <div className={styles.header} style={{ padding: '1rem 1.5rem', background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem', flex: 1, minWidth: 0 }}>

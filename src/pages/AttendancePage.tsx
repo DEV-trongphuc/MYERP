@@ -5120,7 +5120,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       }
     };
 
-    return (
+    return createPortal(
+      <>
       <div
         className="drawer-backdrop"
         style={{
@@ -5132,15 +5133,18 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           backgroundColor: 'rgba(15, 23, 42, 0.35)',
           backdropFilter: 'blur(4px)',
           zIndex: 2147483620,
-          display: 'flex',
-          justifyContent: 'flex-end',
+          '--drawer-backdrop-z': 2147483620,
           animation: 'fadeIn 0.22s cubic-bezier(0.25, 0.1, 0.25, 1)'
-        }}
+        } as React.CSSProperties}
         onClick={() => setShowLeaveDrawer(false)}
-      >
+      />
         <div
-          className="drawer-panel"
+          className="drawer-panel drawer-sheet"
           style={{
+            position: 'fixed',
+            top: 0,
+            right: 0,
+            bottom: 0,
             width: isMobile ? '100vw' : '520px',
             maxWidth: isMobile ? '100vw' : '90vw',
             height: '100dvh',
@@ -5149,10 +5153,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
             display: 'flex',
             flexDirection: 'column',
             zIndex: 2147483625,
+            '--drawer-panel-z': 2147483625,
             animation: 'slideInRight 0.22s cubic-bezier(0.25, 0.1, 0.25, 1)',
-            position: 'relative',
             paddingBottom: 'env(safe-area-inset-bottom, 0px)'
-          }}
+          } as React.CSSProperties}
           onClick={e => e.stopPropagation()}
         >
           
@@ -5402,7 +5406,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           </div>
 
         </div>
-      </div>
+      </>,
+      document.body
     );
   };
 
@@ -12008,10 +12013,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               setSelectedBulkRequest(null);
               setSelectedDetailIds([]);
             }}
-            style={{ zIndex: 10500 }}
+            style={{ zIndex: 2147483620, '--drawer-backdrop-z': 2147483620 } as React.CSSProperties}
           />
 
-          <div className="drawer-sheet" style={{
+          <div className="drawer-sheet drawer-panel" style={{
             position: 'fixed',
             top: 0,
             left: isMobile ? 0 : 'var(--sidebar-width, 220px)',
@@ -12021,11 +12026,12 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
             boxShadow: '-10px 0 30px rgba(0,0,0,0.15)',
             display: 'flex',
             flexDirection: 'column',
-            animation: 'slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+            animation: 'slideIn 0.22s cubic-bezier(0.25, 0.1, 0.25, 1)',
             boxSizing: 'border-box',
-            zIndex: 10600,
+            zIndex: 2147483625,
+            '--drawer-panel-z': 2147483625,
             overflow: 'hidden'
-          }} onClick={e => e.stopPropagation()}>
+          } as React.CSSProperties} onClick={e => e.stopPropagation()}>
             
             {/* Drawer Header */}
             <div style={{

@@ -208,9 +208,18 @@ const TableBlockCanvas: React.FC<Props> = ({ block, onUpdate, isSelected }) => {
         if (block.content !== lastContent.current) {
             lastContent.current = block.content;
             const p = parseCells(block.content);
-            if (p.length > 0) setCells(p);
+            if (p.length > 0) {
+                setCells(p);
+                if (editCell) {
+                    const el = document.getElementById(`cell-editor-${editCell.r}-${editCell.c}`);
+                    const nextVal = p[editCell.r]?.[editCell.c]?.content ?? '';
+                    if (el && el.innerHTML !== nextVal) {
+                        el.innerHTML = nextVal;
+                    }
+                }
+            }
         }
-    }, [block.content]);
+    }, [block.content, editCell]);
 
     // ── Atomic update ──────────────────────────────────────────────
     const atomicUpdate = useCallback((newCells: TableCell[][], styleOverride: Partial<typeof s> = {}) => {
@@ -348,17 +357,21 @@ const TableBlockCanvas: React.FC<Props> = ({ block, onUpdate, isSelected }) => {
     }, []);
 
     const insertListInCell = (r: number, c: number, type: 'bullet' | 'number') => {
-        const activeEl = document.activeElement as HTMLElement;
-        if (activeEl && activeEl.id === `cell-editor-${r}-${c}`) {
+        const editorEl = document.getElementById(`cell-editor-${r}-${c}`) as HTMLElement | null;
+        if (editorEl) {
+            if (document.activeElement !== editorEl) {
+                editorEl.focus();
+            }
             document.execCommand(type === 'bullet' ? 'insertUnorderedList' : 'insertOrderedList');
-            patchCell(r, c, { content: activeEl.innerHTML });
+            patchCell(r, c, { content: editorEl.innerHTML });
         } else {
             const cell = cells[r]?.[c];
             if (cell) {
                 const current = cell.content || '';
                 const prefix = current === '' ? '' : '<br />';
                 const suffix = type === 'bullet' ? '<ul><li>&nbsp;</li></ul>' : '<ol><li>&nbsp;</li></ol>';
-                patchCell(r, c, { content: current + prefix + suffix });
+                const nextHtml = current + prefix + suffix;
+                patchCell(r, c, { content: nextHtml });
             }
         }
     };
@@ -634,8 +647,10 @@ const TableBlockCanvas: React.FC<Props> = ({ block, onUpdate, isSelected }) => {
                                         {/* Content: contentEditable div khi edit, span khi không */}
                                         {isSelected && isEditing ? (
                                             <div
+                                                key={`cell-editor-${rIdx}-${cIdx}`}
                                                 id={`cell-editor-${rIdx}-${cIdx}`}
                                                 contentEditable
+                                                suppressContentEditableWarning
                                                 autoFocus
                                                 className="w-full bg-transparent outline-none min-h-[1.2em] outline-0"
                                                 style={{
@@ -653,9 +668,12 @@ const TableBlockCanvas: React.FC<Props> = ({ block, onUpdate, isSelected }) => {
                                                     wordBreak: 'break-word',
                                                 }}
                                                 ref={el => {
-                                                    if (el && document.activeElement !== el) {
+                                                    if (!el) return;
+                                                    if (el.dataset.initialized !== '1') {
+                                                        el.dataset.initialized = '1';
+                                                        el.innerHTML = cell.content || '';
                                                         el.focus();
-                                                        // Move cursor to end of text
+                                                        // Move cursor to end of text on initial focus
                                                         const range = document.createRange();
                                                         range.selectNodeContents(el);
                                                         range.collapse(false);
@@ -664,9 +682,10 @@ const TableBlockCanvas: React.FC<Props> = ({ block, onUpdate, isSelected }) => {
                                                             sel.removeAllRanges();
                                                             sel.addRange(range);
                                                         }
+                                                    } else if (document.activeElement !== el && el.innerHTML !== (cell.content || '')) {
+                                                        el.innerHTML = cell.content || '';
                                                     }
                                                 }}
-                                                dangerouslySetInnerHTML={{ __html: cell.content }}
                                                 onInput={e => {
                                                     patchCell(rIdx, cIdx, { content: e.currentTarget.innerHTML });
                                                 }}

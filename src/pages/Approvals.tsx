@@ -536,6 +536,31 @@ function docSoTiengViet(num: number): string {
   return result.charAt(0).toUpperCase() + result.slice(1) + ' đồng';
 }
 
+const approvalsCache: {
+  pendingList: ApprovalItem[];
+  myRequestsList: ApprovalItem[];
+  followingList: ApprovalItem[];
+  allList: ApprovalItem[];
+  users: any[];
+  teams: any[];
+  suppliers: any[];
+  companies: any[];
+  contacts: any[];
+  timestamp: number;
+} = {
+  pendingList: [],
+  myRequestsList: [],
+  followingList: [],
+  allList: [],
+  users: [],
+  teams: [],
+  suppliers: [],
+  companies: [],
+  contacts: [],
+  timestamp: 0
+};
+const APPROVALS_SWR_TTL_MS = 45_000;
+
 export default function Approvals() {
   const { t } = useLanguage();
   const { user } = useAuth();
@@ -582,10 +607,10 @@ export default function Approvals() {
   const [dateRange, setDateRange] = useState<DateRange>(() => getDateRange('all'));
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   
-  const [pendingList, setPendingList] = useState<ApprovalItem[]>([]);
-  const [myRequestsList, setMyRequestsList] = useState<ApprovalItem[]>([]);
-  const [followingList, setFollowingList] = useState<ApprovalItem[]>([]);
-  const [allList, setAllList] = useState<ApprovalItem[]>([]);
+  const [pendingList, setPendingList] = useState<ApprovalItem[]>(() => approvalsCache.pendingList);
+  const [myRequestsList, setMyRequestsList] = useState<ApprovalItem[]>(() => approvalsCache.myRequestsList);
+  const [followingList, setFollowingList] = useState<ApprovalItem[]>(() => approvalsCache.followingList);
+  const [allList, setAllList] = useState<ApprovalItem[]>(() => approvalsCache.allList);
   const [loading, setLoading] = useState(false);
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [isSubmittingReject, setIsSubmittingReject] = useState(false);
@@ -596,7 +621,7 @@ export default function Approvals() {
   const [itemToApprove, setItemToApprove] = useState<ApprovalItem | null>(null);
   
   // Custom states for timeline details and user listings
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>(() => approvalsCache.users);
   const [selectedTimelineItem, setSelectedTimelineItem] = useState<ApprovalItem | null>(null);
   const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null);
 
@@ -808,21 +833,40 @@ export default function Approvals() {
   // Fast O(1) user lookup maps for optimal table and drawer rendering
   const usersMap = useMemo(() => {
     const map = new Map<number, any>();
+    if (user?.id) {
+      map.set(Number(user.id), {
+        ...user,
+        full_name: (user as any).full_name || user.name,
+        avatar_url: (user as any).avatar_url || user.avatar,
+        avatar: user.avatar || (user as any).avatar_url,
+      });
+    }
     users.forEach(u => {
       if (u.id) map.set(Number(u.id), u);
     });
     return map;
-  }, [users]);
+  }, [users, user]);
 
   const usersByNameMap = useMemo(() => {
     const map = new Map<string, any>();
+    if (user) {
+      const selfEntry = {
+        ...user,
+        full_name: (user as any).full_name || user.name,
+        avatar_url: (user as any).avatar_url || user.avatar,
+        avatar: user.avatar || (user as any).avatar_url,
+      };
+      if ((user as any).full_name) map.set(String((user as any).full_name).toLowerCase().trim(), selfEntry);
+      if (user.name) map.set(String(user.name).toLowerCase().trim(), selfEntry);
+      if ((user as any).username) map.set(String((user as any).username).toLowerCase().trim(), selfEntry);
+    }
     users.forEach(u => {
       if (u.full_name) map.set(String(u.full_name).toLowerCase().trim(), u);
       if (u.name) map.set(String(u.name).toLowerCase().trim(), u);
       if (u.username) map.set(String(u.username).toLowerCase().trim(), u);
     });
     return map;
-  }, [users]);
+  }, [users, user]);
 
   // Creation workflow states
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -979,7 +1023,7 @@ export default function Approvals() {
   }, [selectedWorkflowDef]);
   const [jobPosition, setJobPosition] = useState('');
   const [departmentName, setDepartmentName] = useState('');
-  const [teams, setTeams] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>(() => approvalsCache.teams);
   const [previewQrModalUrl, setPreviewQrModalUrl] = useState<string | null>(null);
 
   const getUserPrimaryDepartment = useCallback(() => {
@@ -1040,20 +1084,14 @@ export default function Approvals() {
   }, [user, users, teams]);
 
   useEffect(() => {
+    if (approvalsCache.teams.length > 0 && Date.now() - approvalsCache.timestamp < APPROVALS_SWR_TTL_MS) {
+      setTeams(approvalsCache.teams);
+      return;
+    }
     fetchAPI('teams').then(res => {
       if (res && res.success && Array.isArray(res.data)) {
         setTeams(res.data);
-      }
-    }).catch(() => {});
-
-    fetchAPI('get_accounts').then(res => {
-      if (res && res.success && Array.isArray(res.data)) {
-        const activeAccs = res.data.filter((u: any) => u.is_active !== false && u.is_active !== 0 && String(u.is_active) !== '0');
-        setUsers(activeAccs.map((u: any) => ({
-          ...u,
-          full_name: u.name || u.full_name,
-          avatar_url: u.avatar || u.avatar_url
-        })));
+        approvalsCache.teams = res.data;
       }
     }).catch(() => {});
   }, []);
@@ -1087,9 +1125,9 @@ export default function Approvals() {
   const [paymentPhone, setPaymentPhone] = useState('');
   const [paymentTaxCode, setPaymentTaxCode] = useState('');
   const [paymentDueDate, setPaymentDueDate] = useState('');
-  const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [companies, setCompanies] = useState<any[]>([]);
-  const [contacts, setContacts] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<any[]>(() => approvalsCache.suppliers);
+  const [companies, setCompanies] = useState<any[]>(() => approvalsCache.companies);
+  const [contacts, setContacts] = useState<any[]>(() => approvalsCache.contacts);
 
   // Meeting / Tiếp khách states
   const [meetingTargetType, setMeetingTargetType] = useState<'company' | 'lecturer' | 'contact' | 'gov' | 'other'>('company');
@@ -3516,32 +3554,52 @@ export default function Approvals() {
   }, [selectedWorkflowDef, draftsList, currentDraftId]);
 
   useEffect(() => {
-    fetchAPI('users?all=1').then(res => {
-      const d = res?.data ?? res;
-      setUsers(Array.isArray(d) ? d : (d?.items || []));
-    }).catch(() => setUsers([]));
+    if (approvalsCache.users.length === 0 || Date.now() - approvalsCache.timestamp >= APPROVALS_SWR_TTL_MS) {
+      fetchAPI('users?all=1').then(res => {
+        const d = res?.data ?? res;
+        const list = Array.isArray(d) ? d : (d?.items || []);
+        setUsers(list);
+        approvalsCache.users = list;
+      }).catch(() => {
+        if (approvalsCache.users.length === 0) setUsers([]);
+      });
+    }
 
     // Defer loading heavy auxiliary lists (suppliers, companies, contacts) so approvals table loads immediately without network congestion
     const timer = setTimeout(() => {
-      fetchAPI('suppliers').then(res => {
-        const d = res?.data ?? res;
-        setSuppliers(Array.isArray(d) ? d : (d?.items || d?.suppliers || []));
-      }).catch(() => {
-        api.get('/suppliers?limit=1000').then(res => {
+      if (approvalsCache.suppliers.length === 0) {
+        fetchAPI('suppliers').then(res => {
+          const d = res?.data ?? res;
+          const list = Array.isArray(d) ? d : (d?.items || d?.suppliers || []);
+          setSuppliers(list);
+          approvalsCache.suppliers = list;
+        }).catch(() => {
+          api.get('/suppliers?limit=1000').then(res => {
+            const d = res.data?.data ?? res.data;
+            const list = Array.isArray(d) ? d : (d?.items || d?.suppliers || []);
+            setSuppliers(list);
+            approvalsCache.suppliers = list;
+          }).catch(() => {});
+        });
+      }
+
+      if (approvalsCache.companies.length === 0) {
+        api.get('/companies?limit=1000').then(res => {
           const d = res.data?.data ?? res.data;
-          setSuppliers(Array.isArray(d) ? d : (d?.items || d?.suppliers || []));
-        }).catch(() => setSuppliers([]));
-      });
+          const list = Array.isArray(d) ? d : (d?.items || []);
+          setCompanies(list);
+          approvalsCache.companies = list;
+        }).catch(() => {});
+      }
 
-      api.get('/companies?limit=1000').then(res => {
-        const d = res.data?.data ?? res.data;
-        setCompanies(Array.isArray(d) ? d : (d?.items || []));
-      }).catch(() => setCompanies([]));
-
-      api.get('/contacts?limit=1000').then(res => {
-        const d = res.data?.data ?? res.data;
-        setContacts(Array.isArray(d) ? d : (d?.items || []));
-      }).catch(() => setContacts([]));
+      if (approvalsCache.contacts.length === 0) {
+        api.get('/contacts?limit=1000').then(res => {
+          const d = res.data?.data ?? res.data;
+          const list = Array.isArray(d) ? d : (d?.items || []);
+          setContacts(list);
+          approvalsCache.contacts = list;
+        }).catch(() => {});
+      }
     }, 1500);
 
     return () => clearTimeout(timer);
@@ -3980,7 +4038,13 @@ export default function Approvals() {
   const deleteInFlightRef = useRef(false);
 
   const loadData = useCallback(async (isSilent = false, abortSignal?: AbortSignal) => {
-    if (!isSilent) setLoading(true);
+    const hasCachedData =
+      approvalsCache.allList.length > 0 ||
+      approvalsCache.pendingList.length > 0 ||
+      approvalsCache.myRequestsList.length > 0;
+    if (!isSilent && !hasCachedData) {
+      setLoading(true);
+    }
     try {
       let pList: ApprovalItem[] = [];
       let mList: ApprovalItem[] = [];
@@ -4041,6 +4105,11 @@ export default function Approvals() {
       setMyRequestsList(mList);
       setFollowingList(fList);
       setAllList(aList);
+      approvalsCache.pendingList = pList;
+      approvalsCache.myRequestsList = mList;
+      approvalsCache.followingList = fList;
+      approvalsCache.allList = aList;
+      approvalsCache.timestamp = Date.now();
 
       // Đếm badge ở sidebar: gồm các đề xuất chờ tôi duyệt + các đề xuất của tôi đang chờ duyệt
       const badgeKeys = new Set<string>();
@@ -4112,26 +4181,76 @@ export default function Approvals() {
 
   const loadDataRef = useRef(loadData);
   loadDataRef.current = loadData;
-
-  const hasPopulatedUsersRef = useRef(false);
-  useEffect(() => {
-    if (users.length > 0 && !hasPopulatedUsersRef.current) {
-      hasPopulatedUsersRef.current = true;
-      loadDataRef.current(true);
-    }
-  }, [users.length]);
+  const refreshTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     loadDataRef.current(false, controller.signal);
-    const handleRefresh = () => loadDataRef.current(true);
+    const handleRefresh = () => {
+      if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = window.setTimeout(() => {
+        loadDataRef.current(true);
+      }, 60);
+    };
     window.addEventListener('approval-updated', handleRefresh);
     window.addEventListener('refresh-approvals', handleRefresh);
     return () => {
       controller.abort();
+      if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
       window.removeEventListener('approval-updated', handleRefresh);
       window.removeEventListener('refresh-approvals', handleRefresh);
     };
+  }, []);
+
+  const applyOptimisticStatusUpdate = useCallback((target: ApprovalItem, nextStatus: 'approved' | 'rejected') => {
+    const isSame = (x: ApprovalItem) => Number(x.id) === Number(target.id) && x.type === target.type;
+    const patchItem = (x: ApprovalItem): ApprovalItem => {
+      if (!isSame(x)) return x;
+      if (nextStatus === 'rejected') {
+        return {
+          ...x,
+          status: 'rejected',
+          status_level_1: x.status_level_1 === 'pending' ? 'rejected' : x.status_level_1,
+          status_level_2: x.status_level_1 === 'approved' && x.status_level_2 === 'pending' ? 'rejected' : x.status_level_2
+        };
+      }
+      const hasL2 = Boolean((x as any).approver_id_2) && x.status_level_2 !== 'none';
+      const hasL3 = Boolean((x as any).approver_id_3) && (x as any).status_level_3 !== 'none';
+      if (x.status_level_1 === 'pending' && hasL2) {
+        return { ...x, status_level_1: 'approved', status: 'pending' };
+      }
+      if (x.status_level_2 === 'pending' && hasL3) {
+        return { ...x, status_level_1: 'approved', status_level_2: 'approved', status: 'pending' };
+      }
+      return {
+        ...x,
+        status: 'approved',
+        status_level_1: 'approved',
+        status_level_2: hasL2 ? 'approved' : x.status_level_2,
+        ...(hasL3 ? { status_level_3: 'approved' } : {})
+      } as ApprovalItem;
+    };
+
+    setPendingList(prev => {
+      const next = prev.filter(x => !isSame(x));
+      approvalsCache.pendingList = next;
+      return next;
+    });
+    setMyRequestsList(prev => {
+      const next = prev.map(patchItem);
+      approvalsCache.myRequestsList = next;
+      return next;
+    });
+    setFollowingList(prev => {
+      const next = prev.map(patchItem);
+      approvalsCache.followingList = next;
+      return next;
+    });
+    setAllList(prev => {
+      const next = prev.map(patchItem);
+      approvalsCache.allList = next;
+      return next;
+    });
   }, []);
 
   const handleApprove = async (item: ApprovalItem) => {
@@ -4139,6 +4258,7 @@ export default function Approvals() {
     if (inFlightOpsRef.current[opKey] || actionLoadingId) return;
     inFlightOpsRef.current[opKey] = true;
     setActionLoadingId(item.id);
+    applyOptimisticStatusUpdate(item, 'approved');
     try {
       if (item.type === 'leave') {
         await fetchAPI('hrm/leaves', {
@@ -4165,10 +4285,9 @@ export default function Approvals() {
       }
       toast.success(t('Đã phê duyệt yêu cầu thành công!'));
       window.dispatchEvent(new CustomEvent('approval-updated'));
-      window.dispatchEvent(new CustomEvent('refresh-approvals'));
-      loadData();
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err?.message || t('Lỗi khi phê duyệt'));
+      loadData(true);
     } finally {
       delete inFlightOpsRef.current[opKey];
       setActionLoadingId(null);
@@ -4191,43 +4310,45 @@ export default function Approvals() {
       return;
     }
 
+    const targetItem = selectedItem;
+    applyOptimisticStatusUpdate(targetItem, 'rejected');
+
     try {
       inFlightOpsRef.current[opKey] = true;
       setIsSubmittingReject(true);
-      if (selectedItem.type === 'leave') {
+      if (targetItem.type === 'leave') {
         await fetchAPI('hrm/leaves', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: selectedItem.id, status: 'rejected', reason: rejectReason })
+          body: JSON.stringify({ id: targetItem.id, status: 'rejected', reason: rejectReason })
         });
-      } else if (selectedItem.type === 'advance') {
+      } else if (targetItem.type === 'advance') {
         await fetchAPI('hrm/advances', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: selectedItem.id, status: 'rejected', reason: rejectReason })
+          body: JSON.stringify({ id: targetItem.id, status: 'rejected', reason: rejectReason })
         });
-      } else if (selectedItem.type === 'expense') {
-        await api.patch(`/expenses/${selectedItem.id}`, { status: 'rejected', reject_reason: rejectReason });
-      } else if (selectedItem.type === 'po' || selectedItem.type === 'purchase_order') {
-        await api.post(`/purchase-orders/${selectedItem.id}/approve`, { status: 'rejected', reject_reason: rejectReason });
-      } else if (selectedItem.type === 'checkin') {
-        await api.put(`/check-ins/${selectedItem.id}`, { status: 'rejected', reason: rejectReason });
-      } else if (selectedItem.type === 'attendance_bulk') {
-        await api.post(`/check-ins/${selectedItem.id}/bulk-approve`, { status: 'rejected', admin_note: rejectReason });
+      } else if (targetItem.type === 'expense') {
+        await api.patch(`/expenses/${targetItem.id}`, { status: 'rejected', reject_reason: rejectReason });
+      } else if (targetItem.type === 'po' || targetItem.type === 'purchase_order') {
+        await api.post(`/purchase-orders/${targetItem.id}/approve`, { status: 'rejected', reject_reason: rejectReason });
+      } else if (targetItem.type === 'checkin') {
+        await api.put(`/check-ins/${targetItem.id}`, { status: 'rejected', reason: rejectReason });
+      } else if (targetItem.type === 'attendance_bulk') {
+        await api.post(`/check-ins/${targetItem.id}/bulk-approve`, { status: 'rejected', admin_note: rejectReason });
       } else {
         throw new Error(t('Loại đề xuất này chưa được hỗ trợ từ chối tự động. Vui lòng mở chi tiết để xử lý.'));
       }
       toast.success(t('Đã từ chối yêu cầu thành công!'));
       window.dispatchEvent(new CustomEvent('approval-updated'));
-      window.dispatchEvent(new CustomEvent('refresh-approvals'));
       setRejectModalOpen(false);
       setSelectedItem(null);
       setSelectedTimelineItem(null);
       pendingOpenRef.current = null;
       clearApprovalUrlParams();
-      loadData();
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err?.message || t('Lỗi khi từ chối'));
+      loadData(true);
     } finally {
       delete inFlightOpsRef.current[opKey];
       setIsSubmittingReject(false);
@@ -4247,6 +4368,27 @@ export default function Approvals() {
       onConfirm: async () => {
         if (deleteInFlightRef.current) return;
         deleteInFlightRef.current = true;
+        const isSame = (x: ApprovalItem) => Number(x.id) === Number(item.id) && x.type === item.type;
+        setPendingList(prev => {
+          const next = prev.filter(x => !isSame(x));
+          approvalsCache.pendingList = next;
+          return next;
+        });
+        setMyRequestsList(prev => {
+          const next = prev.filter(x => !isSame(x));
+          approvalsCache.myRequestsList = next;
+          return next;
+        });
+        setFollowingList(prev => {
+          const next = prev.filter(x => !isSame(x));
+          approvalsCache.followingList = next;
+          return next;
+        });
+        setAllList(prev => {
+          const next = prev.filter(x => !isSame(x));
+          approvalsCache.allList = next;
+          return next;
+        });
         try {
           if (item.type === 'expense') {
             await api.delete(`/expenses/${item.id}`);
@@ -4262,12 +4404,14 @@ export default function Approvals() {
             await api.delete(`/check-ins/bulk-requests/${item.id}`);
           } else {
             toast.error(t('Không hỗ trợ xóa loại yêu cầu này'));
+            loadData(true);
             return;
           }
           toast.success(t('Đã xóa yêu cầu thành công'));
-          loadData();
+          loadData(true);
         } catch (err: any) {
           toast.error(err.response?.data?.message || err.message || t('Lỗi khi xóa yêu cầu'));
+          loadData(true);
         } finally {
           deleteInFlightRef.current = false;
         }
@@ -6723,7 +6867,7 @@ export default function Approvals() {
                 const isPendingAction = activeTab === 'pending' && isItemAtMyStepToApprove(item);
                 const creatorKey = String(item.employee_name || user?.name || '').toLowerCase().trim();
                 const creatorUser = (item.user_id ? usersMap.get(Number(item.user_id)) : null) || usersByNameMap.get(creatorKey);
-                const avatarUrl = creatorUser?.avatar_url || creatorUser?.avatar;
+                const avatarUrl = creatorUser?.avatar_url || creatorUser?.avatar || (item as any).employee_avatar || (item as any).avatar_url || (item as any).avatar;
 
                 return (
                   <div
@@ -7113,7 +7257,7 @@ export default function Approvals() {
                           {(() => {
                             const creatorKey = String(item.employee_name || user?.name || '').toLowerCase().trim();
                             const creatorUser = (item.user_id ? usersMap.get(Number(item.user_id)) : null) || usersByNameMap.get(creatorKey);
-                            const avatarUrl = creatorUser?.avatar_url || creatorUser?.avatar;
+                            const avatarUrl = creatorUser?.avatar_url || creatorUser?.avatar || (item as any).employee_avatar || (item as any).avatar_url || (item as any).avatar;
                             return (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <Avatar src={avatarUrl} name={item.employee_name || user?.name} size={28} />
@@ -7319,8 +7463,10 @@ export default function Approvals() {
 
       {/* Custom Approve Confirmation Modal */}
       {approveConfirmOpen && itemToApprove && createPortal((() => {
-        const creatorUser = users.find(u => String(u.full_name) === String(itemToApprove.employee_name) || String(u.name) === String(itemToApprove.employee_name));
-        const avatarUrl = creatorUser?.avatar_url || creatorUser?.avatar;
+        const creatorUser = (itemToApprove.user_id ? usersMap.get(Number(itemToApprove.user_id)) : null)
+          || usersByNameMap.get(String(itemToApprove.employee_name || '').toLowerCase().trim())
+          || users.find(u => String(u.full_name) === String(itemToApprove.employee_name) || String(u.name) === String(itemToApprove.employee_name));
+        const avatarUrl = creatorUser?.avatar_url || creatorUser?.avatar || (itemToApprove as any).employee_avatar || (itemToApprove as any).avatar_url || (itemToApprove as any).avatar;
         const displayRole = creatorUser?.role ? (creatorUser.role === 'sales' ? 'Phòng Kinh doanh' : creatorUser.role === 'accountant' ? 'Phòng Kế toán' : creatorUser.role) : 'Nhân viên';
         
         const formatApprovalDescription = (desc: string) => {
@@ -8138,7 +8284,7 @@ export default function Approvals() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  transition={{ duration: 0.25 }}
+                  transition={{ duration: 0.22 }}
                   onClick={() => {
                     handleRequestExit('close');
                   }}
@@ -8146,10 +8292,11 @@ export default function Approvals() {
                     position: 'fixed',
                     inset: 0,
                     zIndex: 2147483620,
+                    '--drawer-backdrop-z': 2147483620,
                     background: 'rgba(0, 0, 0, 0.45)',
                     backdropFilter: 'blur(8px)',
                     WebkitBackdropFilter: 'blur(8px)'
-                  }}
+                  } as React.CSSProperties}
                 />
 
                 <motion.div
@@ -8172,8 +8319,9 @@ export default function Approvals() {
                     borderTopLeftRadius: 0,
                     borderBottomLeftRadius: 0,
                     overflow: 'hidden',
-                    zIndex: 2147483625
-                  }}
+                    zIndex: 2147483625,
+                    '--drawer-panel-z': 2147483625
+                  } as React.CSSProperties}
                 >
                   
                   {/* Drawer Header styled EXACTLY like WorkspaceTaskDrawer */}
@@ -8184,7 +8332,7 @@ export default function Approvals() {
                     justifyContent: 'space-between',
                     alignItems: 'center',
                     background: 'var(--color-surface)',
-                    zIndex: 100,
+                    zIndex: 1000,
                     position: 'sticky',
                     top: 0,
                     flexShrink: 0
@@ -14635,7 +14783,7 @@ export default function Approvals() {
               onSaveDraft={() => handleSaveCurrentDraft(true)}
               onDiscard={handleDiscardExit}
               onContinue={() => setShowExitConfirmModal(false)}
-              zIndex={2147483646}
+              zIndex={2147483647}
             />
           </>
         );
@@ -14645,6 +14793,7 @@ export default function Approvals() {
         isOpen={!!previewQrModalUrl}
         qrUrl={previewQrModalUrl}
         onClose={() => setPreviewQrModalUrl(null)}
+        zIndex={2147483646}
       />
 
       <ExpenseCreateDrawer
@@ -14661,7 +14810,7 @@ export default function Approvals() {
         }}
         user={user}
         users={users}
-        zIndex={2147483645}
+        zIndex={2147483630}
       />
     </div>
   );
@@ -15422,7 +15571,10 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
   const creatorUser = useMemo(() => {
     const creatorId = detail?.user_id || detail?.created_by || (item as any)?.user_id || (item as any)?.created_by;
     const empName = detail?.employee_name || detail?.full_name || (item as any)?.employee_name || (item as any)?.full_name || (detail?.user as any)?.name;
-    const empAvatar = detail?.employee_avatar || detail?.avatar_url || (item as any)?.avatar_url || (item as any)?.employee_avatar || (detail?.user as any)?.avatar;
+    const isSelf = (creatorId && user?.id && Number(creatorId) === Number(user.id)) ||
+      (empName && user && String(empName).trim().toLowerCase() === String((user as any).full_name || user.name || '').trim().toLowerCase());
+    const selfAvatar = isSelf ? ((user as any)?.avatar_url || user?.avatar) : undefined;
+    const empAvatar = detail?.employee_avatar || detail?.avatar_url || (item as any)?.avatar_url || (item as any)?.employee_avatar || (detail?.user as any)?.avatar || selfAvatar;
 
     if (creatorId) {
       const foundById = effectiveUsers.find(u => Number(u.id) === Number(creatorId));
@@ -19791,15 +19943,15 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
+              transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] as any }}
               style={{
                 position: 'fixed',
                 inset: 0,
                 background: 'rgba(0, 0, 0, 0.45)',
                 backdropFilter: 'blur(8px)',
                 WebkitBackdropFilter: 'blur(8px)',
-                zIndex: (zIndex ? Math.min(zIndex, 2147483638) : 2147483625) - 5,
-                '--drawer-backdrop-z': (zIndex ? Math.min(zIndex, 2147483638) : 2147483625) - 5
+                zIndex: (zIndex ? Math.min(Math.max(zIndex, 2147483625), 2147483638) : 2147483625) - 5,
+                '--drawer-backdrop-z': (zIndex ? Math.min(Math.max(zIndex, 2147483625), 2147483638) : 2147483625) - 5
               } as React.CSSProperties}
             />
 
@@ -19809,7 +19961,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
               initial={isMobile ? { y: '100%', opacity: 0 } : { opacity: 0, x: '100%' }}
               animate={isMobile ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }}
               exit={isMobile ? { y: '60%', opacity: 0 } : { opacity: 0, x: '60%' }}
-              transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
+              transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] as any }}
               style={{
                 position: 'fixed',
                 top: 0,
@@ -19821,8 +19973,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 display: 'flex',
                 flexDirection: 'column',
                 boxSizing: 'border-box',
-                zIndex: (zIndex ? Math.min(zIndex, 2147483638) : 2147483625),
-                '--drawer-panel-z': (zIndex ? Math.min(zIndex, 2147483638) : 2147483625),
+                zIndex: (zIndex ? Math.min(Math.max(zIndex, 2147483625), 2147483638) : 2147483625),
+                '--drawer-panel-z': (zIndex ? Math.min(Math.max(zIndex, 2147483625), 2147483638) : 2147483625),
                 overflow: 'hidden'
               } as React.CSSProperties} 
               onClick={e => e.stopPropagation()}

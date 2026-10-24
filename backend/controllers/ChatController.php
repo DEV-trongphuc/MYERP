@@ -948,20 +948,23 @@ class ChatController {
             $isStreamRequested = !empty($body['stream']);
             if ($isIdeasAiDirect || $isIdeasAiMentioned) {
                 if ($isStreamRequested) {
-                    header('Content-Type: text/event-stream; charset=UTF-8');
-                    header('Cache-Control: no-cache, no-transform');
-                    header('Connection: keep-alive');
-                    header('X-Accel-Buffering: no');
                     if (function_exists('apache_setenv')) {
                         @apache_setenv('no-gzip', '1');
                     }
                     @ini_set('output_buffering', 'off');
-                    @ini_set('zlib.output_compression', false);
+                    @ini_set('zlib.output_compression', '0');
                     @ini_set('implicit_flush', '1');
                     while (ob_get_level() > 0) {
                         @ob_end_clean();
                     }
                     @ob_implicit_flush(1);
+                    @header_remove('Content-Encoding');
+                    @header_remove('Transfer-Encoding');
+                    @header_remove('Content-Length');
+                    @header_remove('Connection');
+                    header('Content-Type: text/event-stream; charset=UTF-8');
+                    header('Cache-Control: no-cache, no-store, no-transform');
+                    header('X-Accel-Buffering: no');
 
                     echo "data: " . json_encode(['type' => 'user_message', 'message' => $newMsg], JSON_UNESCAPED_UNICODE) . "\n\n";
                     echo "data: " . json_encode(['type' => 'orchestrator_reasoning', 'text' => 'Agent Điều Phối SI IDEAS đang suy luận & phân tích yêu cầu...'], JSON_UNESCAPED_UNICODE) . "\n\n";
@@ -1997,6 +2000,14 @@ class ChatController {
         $tid = (int)($auth['tenant_id'] ?? 1);
         $uid = (int)($auth['user_id'] ?? 0);
 
+        $staffCacheFile = sys_get_temp_dir() . "/myerp_chat_staff_t{$tid}.json";
+        if (empty($_GET['nocache']) && is_file($staffCacheFile) && (time() - filemtime($staffCacheFile)) < 25) {
+            $cachedStaff = json_decode((string)@file_get_contents($staffCacheFile), true);
+            if (is_array($cachedStaff)) {
+                respond(200, $cachedStaff);
+            }
+        }
+
         try {
             $stmt = $this->db->prepare("
                 SELECT a.id, 
@@ -2013,10 +2024,13 @@ class ChatController {
                        COALESCE(pr.last_ping_at, a.last_login, u.last_login_at) as last_active_at,
                        TIMESTAMPDIFF(SECOND, COALESCE(pr.last_ping_at, a.last_login, u.last_login_at), NOW()) as seconds_ago
                 FROM accounts a
-                LEFT JOIN users u ON (a.id = u.id OR (a.email IS NOT NULL AND a.email != '' AND a.email = u.email))
+                LEFT JOIN users u ON a.id = u.id
                 LEFT JOIN teams t ON (COALESCE(a.team_id, u.team_id) = t.id)
                 LEFT JOIN chat_user_presence pr ON (pr.user_id = a.id)
                 WHERE a.is_active = 1 AND a.tenant_id = ?
+                  AND (u.is_active = 1 OR u.is_active IS NULL)
+                  AND LOWER(COALESCE(NULLIF(u.status, ''), NULLIF(a.status, ''), 'active')) NOT IN ('inactive', 'locked', 'resigned', 'terminated', 'disabled', 'nghi_viec', 'tam_nghi', 'suspended', 'khoa')
+                  AND LOWER(COALESCE(a.email, '')) NOT IN ('turniodev@gmail.com', 'turnlodev@gmail.com')
                 GROUP BY a.id
                 ORDER BY (a.id = 9000001) DESC, full_name ASC
             ");
@@ -2045,6 +2059,7 @@ class ChatController {
                 }
             }
 
+            @file_put_contents($staffCacheFile, json_encode($users, JSON_UNESCAPED_UNICODE));
             respond(200, $users);
         } catch (\Throwable $e) {
             error_log("Get Staff Directory Error: " . $e->getMessage());
@@ -2955,13 +2970,16 @@ class ChatController {
         @ini_set('zlib.output_compression', '0');
         @ini_set('implicit_flush', '1');
         while (ob_get_level() > 0) {
-            ob_end_clean();
+            @ob_end_clean();
         }
+        @header_remove('Content-Encoding');
+        @header_remove('Transfer-Encoding');
+        @header_remove('Content-Length');
+        @header_remove('Connection');
 
         header('Content-Type: text/event-stream; charset=utf-8');
-        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Cache-Control: no-cache, no-store, must-revalidate, no-transform');
         header('Pragma: no-cache');
-        header('Connection: close');
         header('X-Accel-Buffering: no');
 
         echo "retry: 6000\n";
@@ -4315,7 +4333,7 @@ class ChatController {
             $matchedKeys[] = 'hrm';
         }
         // 9. Sales domain
-        if (preg_match('/(lead|leads|\bdata\b|tiềm năng|khách hàng|crm|tư vấn|chốt sale|từ chối|học viên|chăm sóc|pipeline|pipieline|pipe line|phễu|giai đoạn|\bstage\b|phụ trách|chia số|vòng xoay)/iu', $q)) {
+        if (preg_match('/(lead|leads|\bdata\b|tiềm năng|khách hàng|crm|tư vấn|chốt sale|từ chối|học viên|chăm sóc|pipeline|pipieline|pipe line|phễu|giai đoạn|\bstage\b|phụ trách|chia số|chia vòng|vòng xoay|vòng mess|vòng hot\s*line|vòng form|vòng bba|vòng dba|bù số|bù data|\bsđt\b|(?:\+?84|0)\d[\d\.\-\s]{7,11}\d)/iu', $q)) {
             $matchedKeys[] = 'sales';
         }
         // 10. Academic domain
@@ -5655,7 +5673,7 @@ class ChatController {
                 'records_legal' => ['query_customer_student_persona_overview', 'check_student_admission_records', 'get_academic_students_filter', 'get_contact_360_profile', 'attach_files_to_contact', 'draft_action_proposal', 'get_system_navigation'],
                 'assets_inventory' => ['query_inventory_and_assets_multitier', 'get_inventory_health_check', 'get_inventory_and_asset_status', 'draft_action_proposal', 'get_system_navigation'],
                 'b2b_partner' => ['query_deals_and_b2b_multitier', 'get_b2b_partner_and_contract_summary', 'draft_action_proposal', 'get_system_navigation'],
-                'marketing_campaigns' => ['query_customer_student_persona_overview', 'query_sales_lead_performance_deck', 'query_omnichannel_journey_and_automation_analytics', 'get_lead_digital_footprint_360', 'smart_manage_automation_flows_and_campaigns', 'query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'smart_create_or_assign_leads', 'smart_manage_tasks_and_subtasks', 'query_and_manage_projects', 'manage_my_hr_profile_and_requests', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'check_lead_duplicate_and_fairshare_status', 'get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
+                'marketing_campaigns' => ['query_customer_student_persona_overview', 'query_sales_lead_performance_deck', 'query_omnichannel_journey_and_automation_analytics', 'get_lead_digital_footprint_360', 'smart_manage_automation_flows_and_campaigns', 'query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'smart_create_or_assign_leads', 'manage_lead_round_distribution', 'smart_manage_tasks_and_subtasks', 'query_and_manage_projects', 'manage_my_hr_profile_and_requests', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'check_lead_duplicate_and_fairshare_status', 'get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
                 'executive_bi' => ['query_customer_student_persona_overview', 'query_sales_lead_performance_deck', 'query_cross_domain_executive_synthesis', 'query_crm_leads_multitier', 'query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'query_tasks_and_projects_multitier', 'query_deals_and_b2b_multitier', 'query_tickets_and_sla_multitier', 'query_hrm_workforce_and_payroll_multitier', 'query_inventory_and_assets_multitier', 'smart_create_or_assign_leads', 'smart_manage_tasks_and_subtasks', 'query_and_manage_projects', 'manage_my_hr_profile_and_requests', 'smart_manage_hrm_and_payroll', 'smart_manage_po_so_and_approvals', 'get_executive_morning_brief', 'get_sales_leaderboard', 'filter_expenses_advanced', 'get_staff_directory_advanced', 'get_inventory_health_check', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'query_company_attendance_and_work_hours', 'get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'lookup_recent_cash_receipts_and_deposits', 'get_my_tasks', 'get_system_health_status', 'manage_lead_round_distribution', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'reassign_lead_owner', 'draft_action_proposal', 'get_system_navigation'],
                 'system_it' => ['query_tickets_and_sla_multitier', 'get_system_health_status', 'get_ticket_status_and_sla_breaches', 'draft_action_proposal', 'get_system_navigation']
             ];

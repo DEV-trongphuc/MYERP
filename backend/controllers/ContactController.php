@@ -6,9 +6,46 @@ class ContactController {
     private array $stagesCache = [];
     private array $tagIdMapCache = [];
     private static bool $autoReconciled = false;
+    private static array $userProfileCache = [];
+    private static ?array $settingsCache = null;
+    private static array $projectsCache = [];
 
     public function __construct(PDO $db) { 
         $this->db = $db; 
+    }
+
+    public static function invalidatePersonaCache(int $tid = 0): void {
+        try {
+            $pattern = rtrim(sys_get_temp_dir(), '/\\') . '/myerp_persona_overview_t' . ($tid > 0 ? $tid : '*') . '_*.json';
+            $files = @glob($pattern);
+            if (is_array($files)) {
+                foreach ($files as $f) {
+                    @unlink($f);
+                }
+            }
+        } catch (\Throwable $e) {}
+    }
+
+    private function getUserAuthProfile(int $userId): array {
+        if ($userId <= 0) return [];
+        if (isset(self::$userProfileCache[$userId])) {
+            return self::$userProfileCache[$userId];
+        }
+        try {
+            $stmt = $this->db->prepare("
+                SELECT u.id, u.permissions_json, u.department, u.job_title, u.team_id, t.name AS team_name
+                FROM users u
+                LEFT JOIN teams t ON u.team_id = t.id
+                WHERE u.id = ?
+                LIMIT 1
+            ");
+            $stmt->execute([$userId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            self::$userProfileCache[$userId] = is_array($row) ? $row : [];
+        } catch (\Throwable $e) {
+            self::$userProfileCache[$userId] = [];
+        }
+        return self::$userProfileCache[$userId];
     }
 
     private function getTagIdMap(int $tenantId = 1): array {
@@ -140,9 +177,7 @@ class ContactController {
         $role = strtolower($auth['role'] ?? '');
         $isAcademicUser = in_array($role, ['academic', 'hoc_vu', 'hoc_thuat', 'dao_tao', 'tro_giang', 'teacher', 'giang_vien', 'giao_vien', 'tutor'], true);
         if (!$isAcademicUser) {
-            $stmtDept = $this->db->prepare("SELECT u.department, u.job_title, u.team_id, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ? LIMIT 1");
-            $stmtDept->execute([$auth['user_id']]);
-            $uRow = $stmtDept->fetch();
+            $uRow = $this->getUserAuthProfile((int)($auth['user_id'] ?? 0));
             if ($uRow) {
                 $comb = mb_strtolower(($uRow['department'] ?? '') . ' ' . ($uRow['job_title'] ?? '') . ' ' . ($uRow['team_name'] ?? ''));
                 if (
@@ -478,12 +513,14 @@ class ContactController {
                 $aggStmt->execute($baseParams);
                 $aggRows = $aggStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-                $stagesList = $this->db->query("SELECT id, system_slug FROM pipeline_stages WHERE tenant_id = " . (int)$tid)->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                $stagesMapData = $this->getStagesMap((int)$tid);
                 $psMap = [];
                 $slugMap = [];
-                foreach ($stagesList as $stg) {
+                foreach (($stagesMapData['by_id'] ?? []) as $stg) {
                     $psMap[(int)$stg['id']] = $stg['system_slug'];
-                    $slugMap[$stg['system_slug']] = (int)$stg['id'];
+                    if (!empty($stg['system_slug'])) {
+                        $slugMap[$stg['system_slug']] = (int)$stg['id'];
+                    }
                 }
 
                 $activeTotal = 0;
@@ -541,35 +578,20 @@ class ContactController {
                     $stageCounts['uncontacted'] = 0;
                 }
 
-                // Compute multi_program count on demand
+                // Compute multi_program count on demand using O(N) cached multi-program helper
                 if (!empty($_GET['include_multi_program_count']) || !empty($_GET['multi_program'])) {
                     try {
-                        $mpWhere = $baseWhere;
-                        $mpWhere[] = "(
-                            c.duplicate_with_id > 0
-                            OR c.id IN (SELECT duplicate_with_id FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND duplicate_with_id > 0)
-                            OR (c.person_id > 0 AND c.person_id IN (
-                                SELECT person_id FROM contacts 
-                                WHERE tenant_id = ? AND deleted_at IS NULL AND person_id > 0 
-                                GROUP BY person_id 
-                                HAVING COUNT(DISTINCT COALESCE(NULLIF(TRIM(program), ''), '__empty__')) >= 2 
-                                    OR COUNT(DISTINCT stage_id) >= 2 
-                                    OR SUM(CASE WHEN duplicate_with_id > 0 THEN 1 ELSE 0 END) > 0
-                            ))
-                            OR (c.phone != '' AND c.phone IS NOT NULL AND c.phone IN (
-                                SELECT phone FROM contacts 
-                                WHERE tenant_id = ? AND deleted_at IS NULL AND phone != '' AND phone IS NOT NULL 
-                                GROUP BY phone 
-                                HAVING COUNT(DISTINCT COALESCE(NULLIF(TRIM(program), ''), '__empty__')) >= 2 
-                                    OR COUNT(DISTINCT stage_id) >= 2 
-                                    OR SUM(CASE WHEN duplicate_with_id > 0 THEN 1 ELSE 0 END) > 0
-                            ))
-                        )";
-                        $mpWhereStr = implode(' AND ', $mpWhere);
-                        $mpParams = array_merge($baseParams, [$tid, $tid, $tid]);
-                        $mpStmt = $this->db->prepare("SELECT COUNT(*) FROM contacts c WHERE $mpWhereStr");
-                        $mpStmt->execute($mpParams);
-                        $stageCounts['multi_program'] = (int)$mpStmt->fetchColumn();
+                        $mpIdsForCount = function_exists('getCrmMultiProgramContactIds') ? getCrmMultiProgramContactIds($this->db, (int)$tid) : [];
+                        if (!empty($mpIdsForCount)) {
+                            $mpWhere = $baseWhere;
+                            $mpWhere[] = "c.id IN (" . implode(',', array_map('intval', $mpIdsForCount)) . ")";
+                            $mpWhereStr = implode(' AND ', $mpWhere);
+                            $mpStmt = $this->db->prepare("SELECT COUNT(*) FROM contacts c WHERE $mpWhereStr");
+                            $mpStmt->execute($baseParams);
+                            $stageCounts['multi_program'] = (int)$mpStmt->fetchColumn();
+                        } else {
+                            $stageCounts['multi_program'] = 0;
+                        }
                     } catch (\Throwable $e) {
                         $stageCounts['multi_program'] = 0;
                     }
@@ -729,20 +751,10 @@ class ContactController {
                            mc.name as campaign_name,
                            COALESCE(ps.name, ps_fb.name) as stage_name, 
                            COALESCE(ps.color, ps_fb.color) as stage_color,
-                           COALESCE(
-                               (SELECT n.body FROM notes n WHERE n.tenant_id = c.tenant_id AND n.entity_type = 'contact' AND n.entity_id = c.id ORDER BY n.id DESC LIMIT 1),
-                               (SELECT COALESCE(a.body, a.subject) FROM activities a WHERE a.tenant_id = c.tenant_id AND a.related_type = 'contact' AND a.related_id = c.id AND a.deleted_at IS NULL ORDER BY a.id DESC LIMIT 1)
-                           ) as last_interaction,
-                           COALESCE(
-                               (SELECT n.created_at FROM notes n WHERE n.tenant_id = c.tenant_id AND n.entity_type = 'contact' AND n.entity_id = c.id ORDER BY n.id DESC LIMIT 1),
-                               (SELECT a.created_at FROM activities a WHERE a.tenant_id = c.tenant_id AND a.related_type = 'contact' AND a.related_id = c.id AND a.deleted_at IS NULL ORDER BY a.id DESC LIMIT 1)
-                           ) as last_interaction_at,
+                           NULL as last_interaction,
+                           NULL as last_interaction_at,
                            0 as total_deposit,
-                           COALESCE(
-                               NULLIF(c.expected_revenue, 0),
-                               (SELECT COALESCE(SUM(d.value), 0) FROM deals d WHERE d.contact_id = c.id AND d.deleted_at IS NULL),
-                               0
-                           ) as open_deal_value,
+                           COALESCE(NULLIF(c.expected_revenue, 0), 0) as open_deal_value,
                            1 as linked_profiles_count
                     FROM contacts c
                     LEFT JOIN companies comp ON c.company_id = comp.id
@@ -759,6 +771,7 @@ class ContactController {
                 $data = $kStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
                 $this->populateLinkedProfilesCount($data, (int)$tid);
                 $this->populateBatchedFinancialStats($data);
+                $this->populateBatchedRecentInteractions($data, (int)$tid);
             }
 
             $grouped = [];
@@ -884,14 +897,8 @@ class ContactController {
                    dr.status as report_status,
                    dr.id as report_id,
                    dr.reason as report_reason,
-                   COALESCE(
-                       (SELECT n.body FROM notes n WHERE n.tenant_id = c.tenant_id AND n.entity_type = 'contact' AND n.entity_id = c.id ORDER BY n.id DESC LIMIT 1),
-                       (SELECT COALESCE(a.body, a.subject) FROM activities a WHERE a.tenant_id = c.tenant_id AND a.related_type = 'contact' AND a.related_id = c.id AND a.deleted_at IS NULL ORDER BY a.id DESC LIMIT 1)
-                   ) as last_interaction,
-                   COALESCE(
-                       (SELECT n.created_at FROM notes n WHERE n.tenant_id = c.tenant_id AND n.entity_type = 'contact' AND n.entity_id = c.id ORDER BY n.id DESC LIMIT 1),
-                       (SELECT a.created_at FROM activities a WHERE a.tenant_id = c.tenant_id AND a.related_type = 'contact' AND a.related_id = c.id AND a.deleted_at IS NULL ORDER BY a.id DESC LIMIT 1)
-                   ) as last_interaction_at,
+                   NULL as last_interaction,
+                   NULL as last_interaction_at,
                    1 as linked_profiles_count
              FROM contacts c
             LEFT JOIN companies comp ON c.company_id = comp.id
@@ -920,6 +927,7 @@ class ContactController {
         $data = $stmt->fetchAll();
         $this->populateLinkedProfilesCount($data, (int)($tid ?: 1));
         $this->populateBatchedFinancialStats($data);
+        $this->populateBatchedRecentInteractions($data, (int)($tid ?: 1));
         // Parse JSON tags & reconcile effective stage
         foreach ($data as &$row) {
             $row['tags'] = $this->normalizeContactTags($row['tags'] ?? '[]', (int)($tid ?: 1));
@@ -939,9 +947,151 @@ class ContactController {
     }
 
     /**
-     * Batch-populate financial stats (`deposit_count`, `total_deposit`, `total_deposit_amount`, `approved_deposit_amount`, `paid_amount`, `last_deposit_at`)
-     * for the paginated contact IDs without per-row correlated subqueries.
+     * Batch-populate the 3 most recent journal/interaction entries (recent_interactions)
+     * as well as `last_interaction` and `last_interaction_at` for each contact in $data without N+1 queries.
      */
+    private function populateBatchedRecentInteractions(array &$data, int $tid): void {
+        if (empty($data)) return;
+
+        $contactIds = [];
+        foreach ($data as $row) {
+            $cid = (int)($row['id'] ?? 0);
+            if ($cid > 0) {
+                $contactIds[] = $cid;
+            }
+        }
+        $contactIds = array_values(array_unique($contactIds));
+        if (empty($contactIds)) return;
+
+        $ph = implode(',', array_fill(0, count($contactIds), '?'));
+        $rawByContact = [];
+        $latestNoteByContact = [];
+        $latestActivityByContact = [];
+
+        try {
+            $nStmt = $this->db->prepare("
+                SELECT t.id, t.contact_id, t.content, t.created_at, u.full_name AS user_name
+                FROM (
+                    SELECT n.id, n.entity_id AS contact_id, n.body AS content, n.created_at, n.user_id,
+                           ROW_NUMBER() OVER (PARTITION BY n.entity_id ORDER BY n.id DESC) AS rn
+                    FROM notes n
+                    WHERE n.tenant_id = ? AND n.entity_type = 'contact' AND n.entity_id IN ($ph)
+                ) t
+                LEFT JOIN users u ON t.user_id = u.id
+                WHERE t.rn <= 8
+                ORDER BY t.id DESC
+            ");
+            $nStmt->execute(array_merge([$tid], $contactIds));
+            while ($nRow = $nStmt->fetch(PDO::FETCH_ASSOC)) {
+                $cid = (int)$nRow['contact_id'];
+                if (!isset($latestNoteByContact[$cid])) {
+                    $latestNoteByContact[$cid] = [
+                        'content' => (string)($nRow['content'] ?? ''),
+                        'created_at' => $nRow['created_at'] ?? null
+                    ];
+                }
+                if (!isset($rawByContact[$cid])) $rawByContact[$cid] = [];
+                if (count($rawByContact[$cid]) < 8) {
+                    $rawByContact[$cid][] = [
+                        'id' => (int)$nRow['id'],
+                        'content' => (string)($nRow['content'] ?? ''),
+                        'created_at' => $nRow['created_at'] ?? null,
+                        'user_name' => $nRow['user_name'] ?? null,
+                        'source' => 'note'
+                    ];
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        try {
+            $aStmt = $this->db->prepare("
+                SELECT t.id, t.contact_id, t.content, t.created_at, u.full_name AS user_name
+                FROM (
+                    SELECT a.id, a.related_id AS contact_id, COALESCE(NULLIF(TRIM(a.body), ''), a.subject) AS content, a.created_at, a.user_id,
+                           ROW_NUMBER() OVER (PARTITION BY a.related_id ORDER BY a.id DESC) AS rn
+                    FROM activities a
+                    WHERE a.tenant_id = ? AND a.related_type = 'contact' AND a.related_id IN ($ph) AND a.deleted_at IS NULL
+                ) t
+                LEFT JOIN users u ON t.user_id = u.id
+                WHERE t.rn <= 8
+                ORDER BY t.id DESC
+            ");
+            $aStmt->execute(array_merge([$tid], $contactIds));
+            while ($aRow = $aStmt->fetch(PDO::FETCH_ASSOC)) {
+                $cid = (int)$aRow['contact_id'];
+                if (!isset($latestActivityByContact[$cid])) {
+                    $latestActivityByContact[$cid] = [
+                        'content' => (string)($aRow['content'] ?? ''),
+                        'created_at' => $aRow['created_at'] ?? null
+                    ];
+                }
+                if (!isset($rawByContact[$cid])) $rawByContact[$cid] = [];
+                if (count($rawByContact[$cid]) < 16) {
+                    $rawByContact[$cid][] = [
+                        'id' => (int)$aRow['id'],
+                        'content' => (string)($aRow['content'] ?? ''),
+                        'created_at' => $aRow['created_at'] ?? null,
+                        'user_name' => $aRow['user_name'] ?? null,
+                        'source' => 'activity'
+                    ];
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        foreach ($data as &$row) {
+            $cid = (int)($row['id'] ?? 0);
+            if (empty($row['last_interaction'])) {
+                $rawLast = $latestNoteByContact[$cid]['content'] ?? ($latestActivityByContact[$cid]['content'] ?? null);
+                $row['last_interaction'] = $rawLast !== null ? $this->cleanLastInteractionText((string)$rawLast) : null;
+            }
+            if (empty($row['last_interaction_at'])) {
+                $row['last_interaction_at'] = $latestNoteByContact[$cid]['created_at'] ?? ($latestActivityByContact[$cid]['created_at'] ?? null);
+            }
+
+            $candidates = $rawByContact[$cid] ?? [];
+            usort($candidates, function ($a, $b) {
+                $ta = !empty($a['created_at']) ? strtotime((string)$a['created_at']) : 0;
+                $tb = !empty($b['created_at']) ? strtotime((string)$b['created_at']) : 0;
+                if ($tb !== $ta) return $tb <=> $ta;
+                return ((int)($b['id'] ?? 0)) <=> ((int)($a['id'] ?? 0));
+            });
+
+            $cleanList = [];
+            $seenTexts = [];
+            foreach ($candidates as $cand) {
+                $cleaned = $this->cleanLastInteractionText((string)($cand['content'] ?? ''));
+                if ($cleaned === '') continue;
+                $normKey = mb_strtolower($cleaned, 'UTF-8');
+                if (isset($seenTexts[$normKey])) continue;
+                $seenTexts[$normKey] = true;
+                $cleanList[] = [
+                    'content' => $cleaned,
+                    'created_at' => $cand['created_at'] ?? null,
+                    'user_name' => $cand['user_name'] ?? null
+                ];
+                if (count($cleanList) >= 3) break;
+            }
+
+            if (count($cleanList) < 3 && !empty($row['notes'])) {
+                $initCleaned = $this->cleanLastInteractionText((string)$row['notes']);
+                if ($initCleaned !== '') {
+                    $normInit = mb_strtolower($initCleaned, 'UTF-8');
+                    if (!isset($seenTexts[$normInit])) {
+                        $cleanList[] = [
+                            'content' => $initCleaned,
+                            'created_at' => $row['created_at'] ?? null,
+                            'user_name' => null,
+                            'is_initial' => true
+                        ];
+                    }
+                }
+            }
+
+            $row['recent_interactions'] = array_slice($cleanList, 0, 3);
+        }
+        unset($row);
+    }
+
     private function populateBatchedFinancialStats(array &$data): void {
         if (empty($data)) return;
 
@@ -958,6 +1108,7 @@ class ContactController {
         $idPlaceholders = implode(',', array_fill(0, count($contactIds), '?'));
         $depMap = [];
         $invMap = [];
+        $dealMap = [];
 
         try {
             $depositStatsSql = "
@@ -998,6 +1149,19 @@ class ContactController {
             // Non-blocking fallback if invoices table is unavailable
         }
 
+        try {
+            $dealStmt = $this->db->prepare("
+                SELECT contact_id, COALESCE(SUM(value), 0) AS total_deal_value
+                FROM deals
+                WHERE contact_id IN ($idPlaceholders) AND deleted_at IS NULL
+                GROUP BY contact_id
+            ");
+            $dealStmt->execute($contactIds);
+            while ($dlRow = $dealStmt->fetch(PDO::FETCH_ASSOC)) {
+                $dealMap[(int)$dlRow['contact_id']] = (float)($dlRow['total_deal_value'] ?? 0);
+            }
+        } catch (\Throwable $e) {}
+
         foreach ($data as &$row) {
             $cid = (int)($row['id'] ?? 0);
             $depInfo = $depMap[$cid] ?? null;
@@ -1014,6 +1178,8 @@ class ContactController {
             $row['approved_deposit_amount'] = $appDep;
             $row['paid_amount']             = $appDep + $invPaid;
             $row['last_deposit_at']         = $lastDep;
+            $expRev = (float)($row['expected_revenue'] ?? 0);
+            $row['open_deal_value']         = $expRev > 0 ? $expRev : (float)($dealMap[$cid] ?? 0);
         }
         unset($row);
     }
@@ -1484,6 +1650,7 @@ class ContactController {
             }
         } catch (\Throwable $eSyncSub) {
         }
+        self::invalidatePersonaCache((int)($auth['tenant_id'] ?? 1));
         $this->show($auth, $id);
     }
 
@@ -1493,7 +1660,8 @@ class ContactController {
                         WHEN comp.deleted_at IS NOT NULL THEN CONCAT(comp.name, ' (Đã xóa)')
                         ELSE comp.name 
                     END as company_name, 
-                    u.full_name as owner_name, u.avatar_url as owner_avatar, ps.name as stage_name, ps.color as stage_color,
+                    u.full_name as owner_name, u.avatar_url as owner_avatar,
+                    COALESCE(ps.name, ps_fb.name) as stage_name, COALESCE(ps.color, ps_fb.color) as stage_color,
                     CASE 
                         WHEN c.pipeline_status IN ('enrolled', 'hoc_vien') OR c.status = 'customer' THEN
                             COALESCE(
@@ -1558,7 +1726,8 @@ class ContactController {
              FROM contacts c
             LEFT JOIN companies comp ON c.company_id = comp.id
             LEFT JOIN users u ON c.owner_id = u.id
-            LEFT JOIN pipeline_stages ps ON (c.stage_id = ps.id OR (c.stage_id IS NULL AND c.pipeline_status = ps.id) OR (c.stage_id IS NULL AND c.pipeline_status = ps.system_slug))
+            LEFT JOIN pipeline_stages ps ON ps.id = c.stage_id
+            LEFT JOIN pipeline_stages ps_fb ON (c.stage_id IS NULL AND ps_fb.system_slug = c.pipeline_status)
             LEFT JOIN leads l ON l.id = (
                 SELECT MAX(id) FROM leads WHERE person_id = c.person_id
             )
@@ -1589,19 +1758,23 @@ class ContactController {
         // Synchronize project_id <-> program on read: program is the source of truth
         $progTrim = trim((string)($row['program'] ?? ''));
         if ($progTrim !== '') {
-            $stmtMatchProj = $this->db->prepare("
-                SELECT id, name FROM projects
-                WHERE tenant_id = ?
-                  AND (
-                      LOWER(TRIM(name)) = LOWER(?)
-                      OR REPLACE(REPLACE(LOWER(TRIM(name)), ' ', ''), '-', '') = REPLACE(REPLACE(LOWER(?), ' ', ''), '-', '')
-                  )
-                LIMIT 1
-            ");
-            $stmtMatchProj->execute([$auth['tenant_id'], $progTrim, $progTrim]);
-            $matchedProj = $stmtMatchProj->fetch(PDO::FETCH_ASSOC);
-            if ($matchedProj) {
-                $row['project_id'] = (int)$matchedProj['id'];
+            $tidProj = (int)($auth['tenant_id'] ?? 1);
+            if (!isset(self::$projectsCache[$tidProj])) {
+                try {
+                    $stPr = $this->db->prepare("SELECT id, name FROM projects WHERE tenant_id = ?");
+                    $stPr->execute([$tidProj]);
+                    self::$projectsCache[$tidProj] = $stPr->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                } catch (\Throwable $ePr) {
+                    self::$projectsCache[$tidProj] = [];
+                }
+            }
+            $normTarget = str_replace([' ', '-'], '', mb_strtolower($progTrim));
+            foreach (self::$projectsCache[$tidProj] as $prItem) {
+                $prName = trim((string)($prItem['name'] ?? ''));
+                if ($prName !== '' && (mb_strtolower($prName) === mb_strtolower($progTrim) || str_replace([' ', '-'], '', mb_strtolower($prName)) === $normTarget)) {
+                    $row['project_id'] = (int)$prItem['id'];
+                    break;
+                }
             }
         } else {
             $row['project_id'] = null;
@@ -2250,12 +2423,14 @@ class ContactController {
             }
         } catch (\Throwable $eSyncSub) {
         }
+        self::invalidatePersonaCache((int)($auth['tenant_id'] ?? 1));
         $sql = "SELECT c.*, 
                     CASE 
                         WHEN comp.deleted_at IS NOT NULL THEN CONCAT(comp.name, ' (Đã xóa)')
                         ELSE comp.name 
                     END as company_name, 
-                    u.full_name as owner_name, u.avatar_url as owner_avatar, ps.name as stage_name, ps.color as stage_color,
+                    u.full_name as owner_name, u.avatar_url as owner_avatar,
+                    COALESCE(ps.name, ps_fb.name) as stage_name, COALESCE(ps.color, ps_fb.color) as stage_color,
                     ((SELECT COALESCE(SUM(total), 0) FROM invoices WHERE contact_id = c.id AND tenant_id = c.tenant_id AND status = 'paid' AND deleted_at IS NULL) + (SELECT COALESCE(SUM(e.amount), 0) FROM expense_entities ee JOIN expenses e ON ee.expense_id = e.id WHERE ee.entity_type = 'contact' AND ee.entity_id = c.id AND e.tenant_id = c.tenant_id AND e.status IN ('approved', 'paid') AND e.deleted_at IS NULL)) as actual_revenue,
                     (SELECT COUNT(*) FROM invoices WHERE contact_id=c.id AND tenant_id=c.tenant_id AND status='paid' AND deleted_at IS NULL) as paid_invoice_count,
                     (SELECT COALESCE(SUM(ee.amount),0) FROM expense_entities ee JOIN expenses e ON ee.expense_id = e.id WHERE ee.entity_type = 'contact' AND ee.entity_id = c.id AND e.tenant_id = c.tenant_id AND e.status = 'approved' AND e.deleted_at IS NULL) as total_spent,
@@ -2278,7 +2453,8 @@ class ContactController {
             FROM contacts c
             LEFT JOIN companies comp ON c.company_id = comp.id
             LEFT JOIN users u ON c.owner_id = u.id
-            LEFT JOIN pipeline_stages ps ON (c.stage_id = ps.id OR (c.stage_id IS NULL AND c.pipeline_status = ps.id) OR (c.stage_id IS NULL AND c.pipeline_status = ps.system_slug))
+            LEFT JOIN pipeline_stages ps ON ps.id = c.stage_id
+            LEFT JOIN pipeline_stages ps_fb ON (c.stage_id IS NULL AND ps_fb.system_slug = c.pipeline_status)
             WHERE c.id=? AND c.tenant_id=? AND c.deleted_at IS NULL";
         
         $stmt = $this->db->prepare($sql);
@@ -2655,6 +2831,7 @@ class ContactController {
         } catch (\Throwable $eSyncSub) {
         }
 
+        self::invalidatePersonaCache((int)($auth['tenant_id'] ?? 1));
         respond(200, null, 'Đã cập nhật stage thành công');
     }
 
@@ -2776,7 +2953,7 @@ class ContactController {
         $msg = $hasRemainingSiblings 
             ? 'Đã xóa bản nhân bản của khách hàng thành công. Các hồ sơ khác của khách hàng vẫn được giữ nguyên.' 
             : 'Đã xóa liên hệ thành công (chuyển vào thùng rác).';
-            
+        self::invalidatePersonaCache((int)($auth['tenant_id'] ?? 1));
         respond(200, [
             'has_remaining' => $hasRemainingSiblings, 
             'remaining_id' => $remainingSiblingIds[0] ?? null
@@ -2858,14 +3035,25 @@ class ContactController {
         if (function_exists('logActivity')) {
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'BULK_DELETE', 'contact', null, json_encode(['ids' => $allProcessedIds, 'deleted_count' => count($allProcessedIds)]));
         }
+        self::invalidatePersonaCache((int)($auth['tenant_id'] ?? 1));
         respond(200, ['deleted_count' => count($allProcessedIds), 'ids' => $allProcessedIds], "Đã xóa " . count($allProcessedIds) . " liên hệ (chuyển vào thùng rác)");
     }
 
     private function getSetting(string $key, string $default): string {
-        $stmt = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ?");
-        $stmt->execute([$key]);
-        $val = $stmt->fetchColumn();
-        return $val !== false ? $val : $default;
+        if (self::$settingsCache === null) {
+            self::$settingsCache = [];
+            try {
+                $stmt = $this->db->query("SELECT setting_key, setting_value FROM system_settings");
+                if ($stmt) {
+                    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
+                        if (isset($r['setting_key'])) {
+                            self::$settingsCache[(string)$r['setting_key']] = (string)($r['setting_value'] ?? '');
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {}
+        }
+        return array_key_exists($key, self::$settingsCache) ? self::$settingsCache[$key] : $default;
     }
 
     private function getSecurityExpiration(string $status): ?string {
@@ -3181,6 +3369,7 @@ class ContactController {
                 throw $e;
             }
 
+            self::invalidatePersonaCache((int)$tid);
             respond(200, ['action' => 'released'], 'Đã trả khách hàng về Databank chung thành công!');
         } else {
             // 2 or more sales own this Person in parallel.
@@ -3220,6 +3409,7 @@ class ContactController {
                 throw $e;
             }
             
+            self::invalidatePersonaCache((int)$tid);
             respond(200, ['action' => 'deleted'], 'Đã xóa khách hàng khỏi danh sách chăm sóc của bạn thành công!');
         }
     }
@@ -3273,56 +3463,44 @@ class ContactController {
     }
 
     private function getScope(array $auth, string $module, string $action): string {
+        $uRow = $this->getUserAuthProfile((int)($auth['user_id'] ?? 0));
         $permissionsJson = null;
-        $stmtQ = $this->db->prepare("SELECT permissions_json FROM users WHERE id = ? LIMIT 1");
-        $stmtQ->execute([$auth['user_id']]);
-        $resQ = $stmtQ->fetch(PDO::FETCH_ASSOC);
-        if ($resQ && !empty($resQ['permissions_json'])) {
-            $permissionsJson = json_decode($resQ['permissions_json'], true);
+        if (!empty($uRow['permissions_json'])) {
+            $permissionsJson = json_decode((string)$uRow['permissions_json'], true);
         }
 
         $isMarketing = false;
         if (strtolower($auth['role'] ?? '') === 'marketing') {
             $isMarketing = true;
-        } else {
-            $stmtM = $this->db->prepare("SELECT u.team_id, t.name as team_name, u.job_title FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ? LIMIT 1");
-            $stmtM->execute([$auth['user_id']]);
-            $uInfo = $stmtM->fetch(PDO::FETCH_ASSOC);
-            if ($uInfo) {
-                $tName = mb_strtolower($uInfo['team_name'] ?? '');
-                $jTitle = mb_strtolower($uInfo['job_title'] ?? '');
-                if ((int)$uInfo['team_id'] === 3 || strpos($tName, 'marketing') !== false || strpos($jTitle, 'marketing') !== false) {
-                    $isMarketing = true;
-                }
+        } elseif ($uRow) {
+            $tName = mb_strtolower($uRow['team_name'] ?? '');
+            $jTitle = mb_strtolower($uRow['job_title'] ?? '');
+            if ((int)($uRow['team_id'] ?? 0) === 3 || strpos($tName, 'marketing') !== false || strpos($jTitle, 'marketing') !== false) {
+                $isMarketing = true;
             }
         }
 
         $isAcademic = false;
         if (in_array(strtolower($auth['role'] ?? ''), ['academic', 'hoc_vu', 'hoc_thuat', 'dao_tao', 'tro_giang', 'teacher', 'giang_vien', 'giao_vien', 'tutor'], true)) {
             $isAcademic = true;
-        } else {
-            $stmtDept = $this->db->prepare("SELECT u.department, u.job_title, u.team_id, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ? LIMIT 1");
-            $stmtDept->execute([$auth['user_id']]);
-            $uRow = $stmtDept->fetch();
-            if ($uRow) {
-                $comb = mb_strtolower(($uRow['department'] ?? '') . ' ' . ($uRow['job_title'] ?? '') . ' ' . ($uRow['team_name'] ?? ''));
-                if (
-                    (int)($uRow['team_id'] ?? 0) === 5 ||
-                    strpos($comb, 'học vụ') !== false ||
-                    strpos($comb, 'hoc_vu') !== false ||
-                    strpos($comb, 'học thuật') !== false ||
-                    strpos($comb, 'hoc_thuat') !== false ||
-                    strpos($comb, 'đào tạo') !== false ||
-                    strpos($comb, 'dao_tao') !== false ||
-                    strpos($comb, 'academic') !== false ||
-                    strpos($comb, 'giảng viên') !== false ||
-                    strpos($comb, 'giáo viên') !== false ||
-                    strpos($comb, 'trợ giảng') !== false ||
-                    strpos($comb, 'tutor') !== false ||
-                    strpos($comb, 'teacher') !== false
-                ) {
-                    $isAcademic = true;
-                }
+        } elseif ($uRow) {
+            $comb = mb_strtolower(($uRow['department'] ?? '') . ' ' . ($uRow['job_title'] ?? '') . ' ' . ($uRow['team_name'] ?? ''));
+            if (
+                (int)($uRow['team_id'] ?? 0) === 5 ||
+                strpos($comb, 'học vụ') !== false ||
+                strpos($comb, 'hoc_vu') !== false ||
+                strpos($comb, 'học thuật') !== false ||
+                strpos($comb, 'hoc_thuat') !== false ||
+                strpos($comb, 'đào tạo') !== false ||
+                strpos($comb, 'dao_tao') !== false ||
+                strpos($comb, 'academic') !== false ||
+                strpos($comb, 'giảng viên') !== false ||
+                strpos($comb, 'giáo viên') !== false ||
+                strpos($comb, 'trợ giảng') !== false ||
+                strpos($comb, 'tutor') !== false ||
+                strpos($comb, 'teacher') !== false
+            ) {
+                $isAcademic = true;
             }
         }
 
@@ -3668,6 +3846,15 @@ class ContactController {
 
     public function getPrograms(array $auth): void {
         try {
+            $tid = (int)($auth['tenant_id'] ?? 1);
+            $cacheFile = sys_get_temp_dir() . '/myerp_programs_v1_' . $tid . '.json';
+            if (is_file($cacheFile) && (time() - filemtime($cacheFile)) < 120) {
+                $cached = @json_decode((string)@file_get_contents($cacheFile), true);
+                if (is_array($cached)) {
+                    respond(200, $cached, 'Danh sách chương trình');
+                    return;
+                }
+            }
             $sql = "
                 SELECT DISTINCT TRIM(name) as name 
                 FROM projects 
@@ -3675,7 +3862,7 @@ class ContactController {
                 ORDER BY name ASC
             ";
             $stmt = $this->db->prepare($sql);
-            $stmt->execute([$auth['tenant_id']]);
+            $stmt->execute([$tid]);
             $rows = $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
 
             $result = [];
@@ -3686,9 +3873,76 @@ class ContactController {
                 }
             }
             $result = array_values(array_unique($result));
+            @file_put_contents($cacheFile, json_encode($result, JSON_UNESCAPED_UNICODE), LOCK_EX);
             respond(200, $result, 'Danh sách chương trình');
         } catch (\Throwable $e) {
             respond(500, null, 'Lỗi lấy danh sách chương trình: ' . $e->getMessage(), false);
+        }
+    }
+
+    public function getIndustries(array $auth): void {
+        try {
+            $tid = (int)($auth['tenant_id'] ?? 1);
+            $cacheFile = sys_get_temp_dir() . '/myerp_industries_v1_' . $tid . '.json';
+            if (is_file($cacheFile) && (time() - filemtime($cacheFile)) < 120) {
+                $cached = @json_decode((string)@file_get_contents($cacheFile), true);
+                if (is_array($cached)) {
+                    respond(200, $cached, 'Danh sách ngành nghề phổ biến');
+                    return;
+                }
+            }
+
+            $canonicalIndustries = [
+                'Ngân hàng (Banking)',
+                'Tài chính - Chứng khoán - Đầu tư',
+                'Bất động sản & Xây dựng',
+                'Y tế - Dược phẩm - Bệnh viện',
+                'Công nghệ - Viễn thông - Media',
+                'Sản xuất - Công nghiệp - Năng lượng',
+                'Giáo dục & Đào tạo',
+                'Thương mại - Dịch vụ & Bán lẻ',
+                'Vận tải - Logistics - XNK',
+                'F&B - Khách sạn - Du lịch',
+                'Bảo hiểm (Insurance)',
+                'Cơ quan Nhà nước / Hành chính công',
+                'Kế toán - Kiểm toán - Tư vấn Luật',
+                'Nông nghiệp - Thủy sản - Thực phẩm',
+            ];
+
+            $dbIndustries = [];
+            try {
+                $stmt = $this->db->prepare("
+                    SELECT TRIM(industry) AS ind, COUNT(*) AS cnt
+                    FROM contacts
+                    WHERE tenant_id = ? AND deleted_at IS NULL AND industry IS NOT NULL AND TRIM(industry) != ''
+                    GROUP BY TRIM(industry)
+                    ORDER BY cnt DESC, ind ASC
+                    LIMIT 35
+                ");
+                $stmt->execute([$tid]);
+                $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                foreach ($rows as $row) {
+                    $ind = trim((string)($row['ind'] ?? ''));
+                    if ($ind !== '' && mb_strtolower($ind, 'UTF-8') !== 'chưa cập nhật') {
+                        $dbIndustries[] = $ind;
+                    }
+                }
+            } catch (\Throwable $ignore) {}
+
+            $seen = [];
+            $merged = [];
+            foreach (array_merge($dbIndustries, $canonicalIndustries) as $item) {
+                $norm = mb_strtolower(trim($item), 'UTF-8');
+                if ($norm !== '' && !isset($seen[$norm])) {
+                    $seen[$norm] = true;
+                    $merged[] = trim($item);
+                }
+            }
+
+            @file_put_contents($cacheFile, json_encode($merged, JSON_UNESCAPED_UNICODE), LOCK_EX);
+            respond(200, $merged, 'Danh sách ngành nghề phổ biến');
+        } catch (\Throwable $e) {
+            respond(500, null, 'Lỗi lấy danh sách ngành nghề: ' . $e->getMessage(), false);
         }
     }
 
@@ -3917,6 +4171,7 @@ class ContactController {
         }
 
         // 8. Trả về hồ sơ mới vừa tạo
+        self::invalidatePersonaCache((int)($auth['tenant_id'] ?? 1));
         $this->show($auth, $newContactId);
     }
 
@@ -4373,6 +4628,7 @@ class ContactController {
             }
         }
 
+        self::invalidatePersonaCache((int)($auth['tenant_id'] ?? 1));
         respond(200, [
             'study_status' => $targetStatus,
             'activity_id' => $activityId,
@@ -4476,11 +4732,16 @@ class ContactController {
     }
 
     /**
-     * Self-healing table creation for contact_presence
+     * Self-healing table creation for contact_presence (cached via persistent file flag)
      */
     private function ensurePresenceTableExists(): void {
         static $checked = false;
         if ($checked) return;
+        $flagFile = rtrim(sys_get_temp_dir(), '/\\') . '/myerp_contact_presence_table_v1_' . substr(md5(__DIR__), 0, 10) . '.flag';
+        if (is_file($flagFile)) {
+            $checked = true;
+            return;
+        }
         if ($this->db->inTransaction()) return;
         try {
             $this->db->exec("
@@ -4494,6 +4755,7 @@ class ContactController {
                     INDEX idx_contact_ping (tenant_id, contact_id, last_ping_at)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             ");
+            @file_put_contents($flagFile, (string)time());
             $checked = true;
         } catch (\Throwable $e) {
             error_log("Ensure Presence Table Error: " . $e->getMessage());
@@ -4575,6 +4837,7 @@ class ContactController {
             }
         }
 
+        self::invalidatePersonaCache((int)($auth['tenant_id'] ?? 1));
         respond(200, ['contact_id' => $contactId, 'owner_id' => $ownerId, 'assigned_to' => $ownerId, 'reason' => $reason], 'Điều chuyển nhân sự phụ trách thành công');
     }
 
@@ -4652,9 +4915,7 @@ class ContactController {
         $role = strtolower($auth['role'] ?? '');
         $isAcademicUser = in_array($role, ['academic', 'hoc_vu', 'hoc_thuat', 'dao_tao', 'tro_giang', 'teacher', 'giang_vien', 'giao_vien', 'tutor'], true);
         if (!$isAcademicUser) {
-            $stmtDept = $this->db->prepare("SELECT u.department, u.job_title, u.team_id, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ? LIMIT 1");
-            $stmtDept->execute([$auth['user_id']]);
-            $uRow = $stmtDept->fetch();
+            $uRow = $this->getUserAuthProfile((int)($auth['user_id'] ?? 0));
             if ($uRow) {
                 $comb = mb_strtolower(($uRow['department'] ?? '') . ' ' . ($uRow['job_title'] ?? '') . ' ' . ($uRow['team_name'] ?? ''));
                 if (
@@ -4901,29 +5162,12 @@ class ContactController {
             }
 
             if ($multiProgram) {
-                $where[] = "(
-                    c.duplicate_with_id > 0
-                    OR c.id IN (SELECT duplicate_with_id FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND duplicate_with_id > 0)
-                    OR (c.person_id > 0 AND c.person_id IN (
-                        SELECT person_id FROM contacts 
-                        WHERE tenant_id = ? AND deleted_at IS NULL AND person_id > 0 
-                        GROUP BY person_id 
-                        HAVING COUNT(DISTINCT COALESCE(NULLIF(TRIM(program), ''), '__empty__')) >= 2 
-                            OR COUNT(DISTINCT stage_id) >= 2 
-                            OR SUM(CASE WHEN duplicate_with_id > 0 THEN 1 ELSE 0 END) > 0
-                    ))
-                    OR (c.phone != '' AND c.phone IS NOT NULL AND c.phone IN (
-                        SELECT phone FROM contacts 
-                        WHERE tenant_id = ? AND deleted_at IS NULL AND phone != '' AND phone IS NOT NULL 
-                        GROUP BY phone 
-                        HAVING COUNT(DISTINCT COALESCE(NULLIF(TRIM(program), ''), '__empty__')) >= 2 
-                            OR COUNT(DISTINCT stage_id) >= 2 
-                            OR SUM(CASE WHEN duplicate_with_id > 0 THEN 1 ELSE 0 END) > 0
-                    ))
-                )";
-                $params[] = $tid;
-                $params[] = $tid;
-                $params[] = $tid;
+                $mpIds = function_exists('getCrmMultiProgramContactIds') ? getCrmMultiProgramContactIds($this->db, (int)$tid) : [];
+                if (!empty($mpIds)) {
+                    $where[] = "c.id IN (" . implode(',', array_map('intval', $mpIds)) . ")";
+                } else {
+                    $where[] = "1 = 0";
+                }
             }
         }
 
@@ -5095,6 +5339,165 @@ class ContactController {
         respond(200, self::computePersonaOverviewData($this->db, $tid, $_GET));
     }
 
+    /**
+     * Canonical Bank, Financial Institution, Corporation & Enterprise Entity Resolution Engine.
+     * Unifies branches, abbreviations, English/Vietnamese legal names, and group subsidiaries
+     * that share the same origin, while filtering out non-company noise.
+     */
+    private static function resolveCanonicalCompanyEntity(string $raw): array {
+        $clean = trim((string)preg_replace('/\s+/u', ' ', $raw));
+        if ($clean === '' || mb_strlen($clean, 'UTF-8') < 2) {
+            return ['is_valid' => false, 'key' => '', 'name' => ''];
+        }
+
+        $upper = mb_strtoupper($clean, 'UTF-8');
+        $upperAscii = strtr($upper, [
+            'À'=>'A','Á'=>'A','Ạ'=>'A','Ả'=>'A','Ã'=>'A','Â'=>'A','Ầ'=>'A','Ấ'=>'A','Ậ'=>'A','Ẩ'=>'A','Ẫ'=>'A','Ă'=>'A','Ằ'=>'A','Ắ'=>'A','Ặ'=>'A','Ẳ'=>'A','Ẵ'=>'A',
+            'È'=>'E','É'=>'E','Ẹ'=>'E','Ẻ'=>'E','Ẽ'=>'E','Ê'=>'E','Ề'=>'E','Ế'=>'E','Ệ'=>'E','Ể'=>'E','Ễ'=>'E',
+            'Ì'=>'I','Í'=>'I','Ị'=>'I','Ỉ'=>'I','Ĩ'=>'I',
+            'Ò'=>'O','Ó'=>'O','Ọ'=>'O','Ỏ'=>'O','Õ'=>'O','Ô'=>'O','Ồ'=>'O','Ố'=>'O','Ộ'=>'O','Ổ'=>'O','Ỗ'=>'O','Ơ'=>'O','Ờ'=>'O','Ớ'=>'O','Ợ'=>'O','Ở'=>'O','Ỡ'=>'O',
+            'Ù'=>'U','Ú'=>'U','Ụ'=>'U','Ủ'=>'U','Ũ'=>'U','Ư'=>'U','Ừ'=>'U','Ứ'=>'U','Ự'=>'U','Ử'=>'U','Ữ'=>'U',
+            'Ỳ'=>'Y','Ý'=>'Y','Ỵ'=>'Y','Ỷ'=>'Y','Ỹ'=>'Y',
+            'Đ'=>'D',
+            'à'=>'A','á'=>'A','ạ'=>'A','ả'=>'A','ã'=>'A','â'=>'A','ầ'=>'A','ấ'=>'A','ậ'=>'A','ẩ'=>'A','ẫ'=>'A','ă'=>'A','ằ'=>'A','ắ'=>'A','ặ'=>'A','ẳ'=>'A','ẵ'=>'A',
+            'è'=>'E','é'=>'E','ẹ'=>'E','ẻ'=>'E','ẽ'=>'E','ê'=>'E','ề'=>'E','ế'=>'E','ệ'=>'E','ể'=>'E','ễ'=>'E',
+            'ì'=>'I','í'=>'I','ị'=>'I','ỉ'=>'I','ĩ'=>'I',
+            'ò'=>'O','ó'=>'O','ọ'=>'O','ỏ'=>'O','õ'=>'O','ô'=>'O','ồ'=>'O','ố'=>'O','ộ'=>'O','ổ'=>'O','ỗ'=>'O','ơ'=>'O','ờ'=>'O','ớ'=>'O','ợ'=>'O','ở'=>'O','ỡ'=>'O',
+            'ù'=>'U','ú'=>'U','ụ'=>'U','ủ'=>'U','ũ'=>'U','ư'=>'U','ừ'=>'U','ứ'=>'U','ự'=>'U','ử'=>'U','ữ'=>'U',
+            'ỳ'=>'Y','ý'=>'Y','ỵ'=>'Y','ỷ'=>'Y','ỹ'=>'Y',
+            'đ'=>'D',
+        ]);
+
+        // 1. Filter out non-company noise (generic industry labels, job titles, countries, self-employed placeholders)
+        if (
+            str_starts_with($upperAscii, 'LINH VUC ')
+            || in_array($upperAscii, [
+                'CONG TY RIENG', 'FREE BUSINESS', 'FREELANCE PROFESSION', 'FREELANCE', 'FREELANCER',
+                'GIAM DOC', 'HR HEAD', 'PARTNERSHIP MANAGER', 'RESEARCHER', 'SALES MANAGER', 'SALES DESIGN',
+                'F&B', 'THI CONG NOI THAT', 'KINH DOANH NGANH DUOC', 'CONG TAC TAI MY', 'NHAT BAN',
+                'KHONG CO', 'CHUA CO', 'N/A', 'NONE', 'UNKNOWN', '-', '--'
+            ], true)
+            || mb_strlen($clean, 'UTF-8') > 115
+        ) {
+            return ['is_valid' => false, 'key' => '', 'name' => ''];
+        }
+
+        // 2. Canonical Bank & Financial Institution Rules (Ngân hàng & Định chế Tài chính)
+        $bankRules = [
+            ['/\bBIDV\b|DAU TU VA PHAT TRIEN VIET NAM/u', 'BIDV', 'BIDV'],
+            ['/\bSACOMBANK\b|SAI GON THUONG TIN/u', 'SACOMBANK', 'Sacombank'],
+            ['/\bTECHCOMBANK\b|\bTCB\b|KY THUONG VIET NAM/u', 'TECHCOMBANK', 'Techcombank'],
+            ['/\bVIETCOMBANK\b|\bVCB\b|NGOAI THUONG VIET NAM/u', 'VIETCOMBANK', 'Vietcombank (VCB)'],
+            ['/\bVIETIN\s*BANK\b|\bVIETTIN\s*BANK\b|CONG THUONG VIET NAM|\bCTG\b/u', 'VIETINBANK', 'VietinBank'],
+            ['/\bAGRIBANK\b|\bABIC\b|NONG NGHIEP VA PHAT TRIEN NONG THON/u', 'AGRIBANK', 'Agribank'],
+            ['/\bVIB\b|VIETNAM INTERNATIONAL (?:COMMERCIAL JOINT STOCK )?BANK|NGAN HANG QUOC TE/u', 'VIB', 'VIB (Ngân hàng Quốc Tế)'],
+            ['/\bVPBANK\b|\bVPB-FC\b|\bFECREDIT\b|\bFE CREDIT\b|VIETNAM PROSPERITY JOINT STOCK COMMERCIAL BANK|VIET NAM THINH VUONG/u', 'VPBANK', 'VPBank / FE Credit'],
+            ['/\bMB\s*BANK\b|\bMBBANK\b|NGAN HANG QUAN DOI/u', 'MBBANK', 'MB Bank'],
+            ['/\bACB\b|ASIA COMMERCIAL JOINT STOCK BANK|NGAN HANG A CHAU/u', 'ACB', 'ACB (Ngân hàng Á Châu)'],
+            ['/\bHD\s*BANK\b|\bHDBANK\b|PHAT TRIEN TP\.?\s*HCM/u', 'HDBANK', 'HDBank'],
+            ['/\bTP\s*BANK\b|\bTPBANK\b|TIEN PHONG COMMERCIAL JOINT STOCK BANK|NGAN HANG TIEN PHONG/u', 'TPBANK', 'TPBank'],
+            ['/\bOCB\b|ORIENT COMMERCIAL (?:JOINT STOCK )?BANK|NGAN HANG PHUONG DONG/u', 'OCB', 'OCB (Ngân hàng Phương Đông)'],
+            ['/\bSCB\b|NGAN HANG TMCP SAI GON/u', 'SCB', 'SCB (Ngân hàng Sài Gòn)'],
+            ['/\bVIET\s*A\s*BANK\b|\bVIETABANK\b|NGAN HANG VIET A/u', 'VIETABANK', 'VietABank (Ngân hàng Việt Á)'],
+            ['/\bNAM\s*A\s*BANK\b|\bNAMABANK\b|NGAN HANG NAM A/u', 'NAMABANK', 'Nam A Bank'],
+            ['/\bUOB\b|UNITED OVERSEAS BANK/u', 'UOB', 'UOB (United Overseas Bank)'],
+            ['/\bSHINHAN\s*BANK\b|\bSHINHANBANK\b/u', 'SHINHAN_BANK', 'Shinhan Bank'],
+            ['/\bHSBC\b/u', 'HSBC', 'HSBC'],
+            ['/\bBAO\s*VIET\s*BANK\b|\bBAOVIETBANK\b/u', 'BAOVIETBANK', 'BaoViet Bank'],
+            ['/\bSEA\s*BANK\b|\bSEABANK\b|NGAN HANG DONG NAM A/u', 'SEABANK', 'SeABank'],
+            ['/\bLPBANK\b|\bLIENVIETPOSTBANK\b|LOC PHAT VIETNAM COMMERCIAL JOINT STOCK BANK/u', 'LPBANK', 'LPBank (Ngân hàng Lộc Phát)'],
+            ['/\bVIET CAPITAL BANK\b|\bBVBANK\b|NGAN HANG BAN VIET/u', 'BVBANK', 'BVBank (Ngân hàng Bản Việt)'],
+            ['/\bPVCOMBANK\b|DAI CHUNG VIET NAM/u', 'PVCOMBANK', 'PVcomBank'],
+            ['/\bWOORI\s*BANK\b|\bWOORIBANK\b/u', 'WOORI_BANK', 'Woori Bank'],
+            ['/\bCITIBANK\b/u', 'CITIBANK', 'Citibank'],
+            ['/\bSTANDARD CHARTERED\b/u', 'STANDARD_CHARTERED', 'Standard Chartered Bank'],
+            ['/\bCATHAY UNITED BANK\b/u', 'CATHAY_UNITED_BANK', 'Cathay United Bank'],
+            ['/\bNAB INNOVATION CENTRE\b|\bNATIONAL AUSTRALIA BANK\b/u', 'NAB', 'NAB (National Australia Bank)'],
+            ['/\bUNO DIGITAL BANK\b/u', 'UNO_DIGITAL_BANK', 'UNO Digital Bank'],
+            ['/\bEXIMBANK\b/u', 'EXIMBANK', 'Eximbank'],
+            ['/\bSHB\b|SAI GON HA NOI/u', 'SHB', 'SHB'],
+            ['/\bMSB\b|HANG HAI VIET NAM/u', 'MSB', 'MSB (Ngân hàng Hàng Hải)'],
+        ];
+
+        foreach ($bankRules as [$pattern, $canonicalKey, $canonicalName]) {
+            if (preg_match($pattern, $upperAscii)) {
+                return ['is_valid' => true, 'key' => $canonicalKey, 'name' => $canonicalName];
+            }
+        }
+
+        // 3. Canonical Major Corporations, Oil & Gas, Tech, Telecom, Pharma, Insurance & Enterprises
+        $corpRules = [
+            ['/\bVIETSOVPETRO\b|\bVIETSOV\s*PETRO\b|\bVIETSOV\b/u', 'VIETSOVPETRO', 'Vietsovpetro'],
+            ['/\bPETROVIETNAM\b|\bPTSC\b|\bPV\s*GAS\b|LOC HOA DAU BINH SON/u', 'PETROVIETNAM_GROUP', 'Petrovietnam (PVN / PTSC / PV GAS)'],
+            ['/\bPYMEPHARCO\b|\bSTADA\b/u', 'PYMEPHARCO_STADA', 'Pymepharco (STADA Group)'],
+            ['/\bIDEAS INSTITUTE\b|\(IDEAS\)|INSTITUTE DEVELOPMENT\s*&\s*EXCHANGE FOR APPLIED SCIENCES|\bVIEN IDEAS\b/u', 'IDEAS_INSTITUTE', 'Viện IDEAS'],
+            ['/\bVINGROUP\b|\bVINHOMES\b|\bVINFAST\b|\bVINMEC\b|\bVINCOM\b/u', 'VINGROUP', 'Vingroup (Vinhomes / VinFast / Vinmec)'],
+            ['/\bROCHE\s+(?:VIETNAM|DIAGNOSTICS)\b/u', 'ROCHE_VIETNAM', 'Roche Vietnam'],
+            ['/\bNAFOODS\b/u', 'NAFOODS_GROUP', 'Nafoods Group'],
+            ['/\bBECAMEX\b/u', 'BECAMEX', 'Becamex (Becamex IDC / Tokyu)'],
+            ['/\bDKSH\b/u', 'DKSH_VIETNAM', 'DKSH Vietnam'],
+            ['/\bPRUDENTIAL\b/u', 'PRUDENTIAL_VIETNAM', 'Prudential Vietnam'],
+            ['/\bFPT\b/u', 'FPT_CORP', 'FPT Corporation'],
+            ['/\bPNJ\b|VANG BAC DA QUY PHU NHUAN/u', 'PNJ_GROUP', 'PNJ Group'],
+            ['/(?:^|[^A-Z0-9])DHL(?:[^A-Z0-9]|$)/u', 'DHL_VIETNAM', 'DHL Vietnam'],
+            ['/\bVNPT\b/u', 'VNPT', 'VNPT'],
+            ['/\bVIETTEL\b/u', 'VIETTEL_GROUP', 'Viettel Group'],
+            ['/\bDELTA GALIL\b/u', 'DELTA_GALIL', 'Delta Galil Vietnam'],
+            ['/\bO-I BJC\b|\bMALAYA VIETNAM GLASS\b/u', 'OI_BJC_GLASS', 'O-I BJC Vietnam Glass'],
+            ['/\bAIA INSURANCE\b|\bBAO HIEM AIA\b/u', 'AIA_VIETNAM', 'AIA Vietnam'],
+            ['/\bASTELLAS\s*PHARMA\b/u', 'ASTELLAS_PHARMA', 'Astellas Pharma'],
+            ['/\bCOCA-COLA\b|\bCOCA COLA\b/u', 'COCA_COLA', 'Coca-Cola Vietnam'],
+            ['/\bHANWHA\s*LIFE\b|\bHAWAHLIFE\b/u', 'HANWHA_LIFE', 'Hanwha Life'],
+            ['/\bHIEP PHUOC THANH\b/u', 'HIEP_PHUOC_THANH', 'Hiệp Phước Thành'],
+            ['/\bGRAB\b/u', 'GRAB_VIETNAM', 'Grab Vietnam'],
+            ['/\bVIETJET(?:AIR)?\b/u', 'VIETJET_AIR', 'Vietjet Air'],
+            ['/\bTTC\s*GROUP\b|\bTTC\s*SUGAR\b|\bTTCAGRIS\b/u', 'TTC_GROUP', 'TTC Group (Thành Thành Công)'],
+            ['/\bHUAWEI TECHNOLOGIES\b/u', 'HUAWEI', 'Huawei Technologies'],
+            ['/\bNAVAVINA\b/u', 'NAVAVINA_GROUP', 'Navavina Group'],
+            ['/\bBOLDCREATIVE TRAINING LAB\b/u', 'BOLDCREATIVE', 'BoldCreative Training Lab'],
+            ['/\bBASF\s+VIET\s*NAM\b/u', 'BASF_VIETNAM', 'BASF Vietnam'],
+            ['/\bSCANCOM\s+VIET\s*NAM\b/u', 'SCANCOM_VIETNAM', 'ScanCom Vietnam'],
+            ['/\bASTRAZENECA\b/u', 'ASTRAZENECA_VIETNAM', 'AstraZeneca Vietnam'],
+            ['/\bARCHER DANIELS MIDLANDS?\b/u', 'ADM_VIETNAM', 'ADM Vietnam'],
+            ['/\bVIVAS MEDIA\b/u', 'VIVAS_MEDIA', 'Vivas Media'],
+            ['/\bMIRAE ASSET\b/u', 'MIRAE_ASSET', 'Mirae Asset Finance Vietnam'],
+            ['/\bAGGA INTERNATIONAL AESTHETIC\b/u', 'AGGA_AESTHETIC', 'Agga International Aesthetic'],
+            ['/\bALIBABA GROUP\b|\bLAZADA\b/u', 'LAZADA_ALIBABA', 'Lazada / Alibaba Group'],
+            ['/\bANT EDUCATION\b|\bANT VUNG TAU\b/u', 'ANT_EDUCATION', 'ANT Education'],
+            ['/\bART BEAUT+Y\b/u', 'ART_BEAUTY', 'Art Beauty JSC'],
+            ['/\bBOSCH VIETNAM\b/u', 'BOSCH_VIETNAM', 'Bosch Vietnam'],
+            ['/\bCHECKPOINT VIETNAM\b/u', 'CHECKPOINT_VIETNAM', 'Checkpoint Vietnam'],
+            ['/\bFT VIETNAM\b/u', 'FT_VIETNAM', 'FT Vietnam'],
+            ['/\bGENERALI\b/u', 'GENERALI_VIETNAM', 'Generali Vietnam'],
+            ['/\bKPMG\b/u', 'KPMG_VIETNAM', 'KPMG Vietnam'],
+            ['/\bMALIBU HOTEL VUNG TAU\b/u', 'MALIBU_HOTEL', 'Malibu Hotel Vũng Tàu'],
+            ['/\bMERCK\b/u', 'MERCK_VIETNAM', 'Merck Healthcare Vietnam'],
+            ['/\bM_SERVICE\b|\bMOMO\b/u', 'MOMO', 'MoMo (M_Service)'],
+            ['/\bORACLE\b/u', 'ORACLE_VIETNAM', 'Oracle Vietnam'],
+            ['/\bSAVILLS\s+VIET\s*NAM\b/u', 'SAVILLS_VIETNAM', 'Savills Vietnam'],
+            ['/\bSKYPEC\b/u', 'SKYPEC', 'SKYPEC (Vietnam Airlines)'],
+            ['/\bTECHTRONIC INDUSTRIES\b|\bTTI VIET\s*NAM\b/u', 'TTI_VIETNAM', 'Techtronic Industries (TTI)'],
+            ['/\bVINASOY\b/u', 'VINASOY', 'Vinasoy Vietnam'],
+            ['/\bVNDIRECT\b/u', 'VNDIRECT', 'Chứng khoán VNDIRECT'],
+        ];
+
+        foreach ($corpRules as [$pattern, $canonicalKey, $canonicalName]) {
+            if (preg_match($pattern, $upperAscii)) {
+                return ['is_valid' => true, 'key' => $canonicalKey, 'name' => $canonicalName];
+            }
+        }
+
+        // 4. Generic normalization for remaining companies
+        $displayClean = rtrim($clean, " ,.;:-–—");
+        $normKey = (string)preg_replace('/\b(COMPANY LIMITED|CO\.,?\s*LTD\.?|LTD\.?,?\s*CO\.?|LIMITED LIABILITY COMPANY|JOINT STOCK COMPANY|J\.?S\.?C\.?|CONG TY TNHH MTV|CONG TY TNHH|CTY TNHH|CONG TY CO PHAN|CONG TY CP|CTY CP)\b/u', '', $upperAscii);
+        $normKey = trim((string)preg_replace('/[^A-Z0-9]+/u', '_', $normKey), '_');
+        if ($normKey === '') {
+            $normKey = $upper;
+        }
+
+        return ['is_valid' => true, 'key' => $normKey, 'name' => $displayClean];
+    }
+
     public static function computePersonaOverviewData(PDO $db, int $tid, array $queryArgs = []): array {
         $segment = strtolower(trim((string)($queryArgs['segment'] ?? 'student')));
         $programFilter = trim((string)($queryArgs['program'] ?? $queryArgs['school'] ?? ''));
@@ -5103,13 +5506,95 @@ class ContactController {
         $genderFilter = trim((string)($queryArgs['gender'] ?? ''));
         $jobGroupFilter = trim((string)($queryArgs['job_group'] ?? ''));
         $industryFilter = trim((string)($queryArgs['industry'] ?? ''));
+        $companyFilter = trim((string)($queryArgs['company'] ?? ''));
         $multiCourseFilter = strtolower(trim((string)($queryArgs['multi_course'] ?? '')));
+        $dateFilter = trim((string)($queryArgs['date_filter'] ?? $queryArgs['dateFilter'] ?? ''));
+        $fromParam = trim((string)($queryArgs['from_date'] ?? $queryArgs['from'] ?? ''));
+        $toParam = trim((string)($queryArgs['to_date'] ?? $queryArgs['to'] ?? ''));
 
-        // Check if intake / industry columns exist on contacts
-        $colsStmt = $db->query("SHOW COLUMNS FROM contacts");
+        $fromDate = '';
+        $toDate = '';
+        $today = date('Y-m-d');
+        if ($fromParam !== '' && $toParam !== '' && preg_match('/^\d{4}-\d{2}-\d{2}/', $fromParam) && preg_match('/^\d{4}-\d{2}-\d{2}/', $toParam)) {
+            $fromDate = substr($fromParam, 0, 10);
+            $toDate = substr($toParam, 0, 10);
+        } elseif ($dateFilter !== '' && !in_array(mb_strtolower($dateFilter, 'UTF-8'), ['tất cả', 'tất cả thời gian', 'all', 'toàn thời gian'], true)) {
+            if ($dateFilter === 'Hôm nay' || $dateFilter === 'today') {
+                $fromDate = $today;
+                $toDate = $today;
+            } elseif ($dateFilter === 'Hôm qua' || $dateFilter === 'yesterday') {
+                $fromDate = date('Y-m-d', strtotime('-1 day'));
+                $toDate = $fromDate;
+            } elseif ($dateFilter === 'Tuần này' || $dateFilter === 'this_week') {
+                $fromDate = date('Y-m-d', strtotime('monday this week'));
+                $toDate = $today;
+            } elseif ($dateFilter === 'Tuần trước' || $dateFilter === 'last_week') {
+                $fromDate = date('Y-m-d', strtotime('monday last week'));
+                $toDate = date('Y-m-d', strtotime('sunday last week'));
+            } elseif ($dateFilter === 'Tuần trước nữa') {
+                $fromDate = date('Y-m-d', strtotime('monday -2 weeks'));
+                $toDate = date('Y-m-d', strtotime('sunday -2 weeks'));
+            } elseif ($dateFilter === '7 ngày qua' || $dateFilter === '7d') {
+                $fromDate = date('Y-m-d', strtotime('-6 days'));
+                $toDate = $today;
+            } elseif ($dateFilter === '30 ngày qua' || $dateFilter === '30d') {
+                $fromDate = date('Y-m-d', strtotime('-29 days'));
+                $toDate = $today;
+            } elseif ($dateFilter === 'Tháng này' || $dateFilter === 'this_month') {
+                $fromDate = date('Y-m-01');
+                $toDate = date('Y-m-t');
+            } elseif ($dateFilter === 'Tháng trước' || $dateFilter === 'last_month') {
+                $fromDate = date('Y-m-01', strtotime('first day of last month'));
+                $toDate = date('Y-m-t', strtotime('last day of last month'));
+            } elseif ($dateFilter === 'Năm nay' || $dateFilter === 'this_year') {
+                $fromDate = date('Y-01-01');
+                $toDate = date('Y-12-31');
+            } elseif (preg_match('/^(\d{4}-\d{2}-\d{2})\s*(?:đến|to|-)\s*(\d{4}-\d{2}-\d{2})$/iu', $dateFilter, $m)) {
+                $fromDate = $m[1];
+                $toDate = $m[2];
+            } elseif (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})\s*(?:đến|to|-)\s*(\d{2})\/(\d{2})\/(\d{4})$/iu', $dateFilter, $m)) {
+                $fromDate = "{$m[3]}-{$m[2]}-{$m[1]}";
+                $toDate = "{$m[6]}-{$m[5]}-{$m[4]}";
+            }
+        }
+
+        $forceRefresh = !empty($queryArgs['refresh']) || !empty($queryArgs['force_refresh']);
+        $cacheKeyPayload = [
+            'segment' => $segment,
+            'program' => $programFilter,
+            'intake' => $intakeFilter,
+            'owner_id' => $ownerFilter,
+            'gender' => $genderFilter,
+            'job_group' => $jobGroupFilter,
+            'industry' => $industryFilter,
+            'company' => $companyFilter,
+            'multi_course' => $multiCourseFilter,
+            'from_date' => $fromDate,
+            'to_date' => $toDate,
+            'v' => 'canonical_v2'
+        ];
+        $cacheFile = rtrim(sys_get_temp_dir(), '/\\') . '/myerp_persona_overview_t' . $tid . '_' . md5(json_encode($cacheKeyPayload, JSON_UNESCAPED_UNICODE)) . '.json';
+        if (!$forceRefresh && is_file($cacheFile)) {
+            $mtime = @filemtime($cacheFile);
+            if ($mtime && (time() - $mtime) < 30) {
+                $rawCache = @file_get_contents($cacheFile);
+                if (is_string($rawCache) && $rawCache !== '') {
+                    $decodedCache = @json_decode($rawCache, true);
+                    if (is_array($decodedCache) && isset($decodedCache['summary'])) {
+                        return $decodedCache;
+                    }
+                }
+            }
+        }
+
+        // Check if intake / industry columns exist on contacts using cached schema helper
+        require_once __DIR__ . '/../utils/search_helpers.php';
+        $colNamesRaw = function_exists('getCrmTableColumnsCache') ? getCrmTableColumnsCache($db, 'contacts') : [];
         $colNames = [];
-        foreach ($colsStmt->fetchAll(PDO::FETCH_ASSOC) as $cRow) {
-            $colNames[strtolower((string)$cRow['Field'])] = true;
+        foreach ($colNamesRaw as $field => $val) {
+            if ($val) {
+                $colNames[strtolower((string)$field)] = true;
+            }
         }
         $hasIntakeCol = isset($colNames['intake']);
         $hasExpectedIntakeCol = isset($colNames['expected_intake']);
@@ -5369,6 +5854,21 @@ class ContactController {
             $ownerEmailVal = trim((string)($r['owner_email'] ?? ''));
             $ownerAvatarVal = trim((string)($r['owner_avatar'] ?? ''));
 
+            $rawComp = trim((string)($r['company'] ?: $r['department'] ?: ''));
+            $compResolved = self::resolveCanonicalCompanyEntity($rawComp);
+
+            $matchesDateWindow = true;
+            if ($fromDate !== '' && $toDate !== '') {
+                $createdDate = !empty($r['created_at']) ? substr(trim((string)$r['created_at']), 0, 10) : '';
+                $admDate = !empty($r['admission_date']) ? substr(trim((string)$r['admission_date']), 0, 10) : '';
+                if (str_starts_with($admDate, '0000')) {
+                    $admDate = '';
+                }
+                $matchCreated = ($createdDate !== '' && $createdDate >= $fromDate && $createdDate <= $toDate);
+                $matchAdm = ($segment === 'student' && $admDate !== '' && $admDate >= $fromDate && $admDate <= $toDate);
+                $matchesDateWindow = ($matchCreated || $matchAdm);
+            }
+
             $r['_school'] = $school;
             $r['_intake'] = $intake;
             $r['_job_group'] = $jGroup;
@@ -5378,24 +5878,31 @@ class ContactController {
             $r['_owner_name'] = $ownerNameVal;
             $r['_owner_email'] = $ownerEmailVal;
             $r['_owner_avatar'] = $ownerAvatarVal;
+            $r['_company_valid'] = $compResolved['is_valid'];
+            $r['_company_key'] = $compResolved['key'];
+            $r['_company_name'] = $compResolved['name'];
+            $r['_company_raw'] = $rawComp;
+            $r['_matches_date'] = $matchesDateWindow;
 
-            $availableSchoolsMap[$school] = ($availableSchoolsMap[$school] ?? 0) + 1;
-            if ($intake !== '') {
-                $availableIntakesMap[$intake] = ($availableIntakesMap[$intake] ?? 0) + 1;
-            }
-            $availableJobGroupsMap[$jGroup] = ($availableJobGroupsMap[$jGroup] ?? 0) + 1;
-            $availableIndustriesMap[$indGroup] = ($availableIndustriesMap[$indGroup] ?? 0) + 1;
+            if ($matchesDateWindow) {
+                $availableSchoolsMap[$school] = ($availableSchoolsMap[$school] ?? 0) + 1;
+                if ($intake !== '') {
+                    $availableIntakesMap[$intake] = ($availableIntakesMap[$intake] ?? 0) + 1;
+                }
+                $availableJobGroupsMap[$jGroup] = ($availableJobGroupsMap[$jGroup] ?? 0) + 1;
+                $availableIndustriesMap[$indGroup] = ($availableIndustriesMap[$indGroup] ?? 0) + 1;
 
-            if (!isset($availableOwnersMap[$ownerIdVal])) {
-                $availableOwnersMap[$ownerIdVal] = [
-                    'value' => $ownerIdVal,
-                    'name' => $ownerNameVal,
-                    'email' => $ownerEmailVal,
-                    'avatar' => $ownerAvatarVal,
-                    'count' => 0
-                ];
+                if (!isset($availableOwnersMap[$ownerIdVal])) {
+                    $availableOwnersMap[$ownerIdVal] = [
+                        'value' => $ownerIdVal,
+                        'name' => $ownerNameVal,
+                        'email' => $ownerEmailVal,
+                        'avatar' => $ownerAvatarVal,
+                        'count' => 0
+                    ];
+                }
+                $availableOwnersMap[$ownerIdVal]['count']++;
             }
-            $availableOwnersMap[$ownerIdVal]['count']++;
 
             // Person key for detecting multi-course / multi-program students
             $phoneDigits = preg_replace('/[^0-9]/', '', (string)($r['phone'] ?: $r['mobile'] ?: $r['phone2'] ?: ''));
@@ -5423,7 +5930,7 @@ class ContactController {
                     'email' => (string)($r['email'] ?? ''),
                     'gender' => $normGender !== 'Chưa rõ' ? $normGender : (string)($r['gender'] ?? ''),
                     'job_title' => (string)($r['job_title'] ?? ''),
-                    'company' => (string)($r['company'] ?: $r['department'] ?: ''),
+                    'company' => $compResolved['is_valid'] ? $compResolved['name'] : $rawComp,
                     'owner_name' => $ownerNameVal,
                     'owner_avatar' => $ownerAvatarVal,
                     'courses' => [],
@@ -5434,8 +5941,8 @@ class ContactController {
             $personMap[$pKey]['contact_ids'][] = (int)$r['id'];
             if ($personMap[$pKey]['gender'] === '' && $normGender !== 'Chưa rõ') $personMap[$pKey]['gender'] = $normGender;
             if ($personMap[$pKey]['job_title'] === '' && !empty($r['job_title'])) $personMap[$pKey]['job_title'] = (string)$r['job_title'];
-            if ($personMap[$pKey]['company'] === '' && (!empty($r['company']) || !empty($r['department']))) {
-                $personMap[$pKey]['company'] = (string)($r['company'] ?: $r['department']);
+            if ($personMap[$pKey]['company'] === '' && $compResolved['is_valid']) {
+                $personMap[$pKey]['company'] = $compResolved['name'];
             }
 
             $courseLabel = $school . ($intake !== '' ? " ($intake)" : '');
@@ -5502,17 +6009,41 @@ class ContactController {
         }
         unset($r);
 
-        // Identify multi-course person keys
+        // Identify multi-course person keys (clean duplicate empty-intake / unclassified course entries first)
         $multiCoursePersonKeys = [];
-        foreach ($personMap as $pKey => $person) {
-            if (count($person['courses']) >= 2 || count($person['contact_ids']) >= 2) {
+        foreach ($personMap as $pKey => &$person) {
+            $coursesRaw = $person['courses'];
+            $schoolsWithIntake = [];
+            $hasClassifiedSchool = false;
+            foreach ($coursesRaw as $cr) {
+                if ($cr['school'] !== 'Chưa phân loại') {
+                    $hasClassifiedSchool = true;
+                }
+                if ($cr['intake'] !== '') {
+                    $schoolsWithIntake[$cr['school']] = true;
+                }
+            }
+            $cleanedCourses = [];
+            foreach ($coursesRaw as $cr) {
+                if ($hasClassifiedSchool && $cr['school'] === 'Chưa phân loại' && $cr['intake'] === '') {
+                    continue;
+                }
+                if ($cr['intake'] === '' && isset($schoolsWithIntake[$cr['school']])) {
+                    continue;
+                }
+                $cleanedCourses[] = $cr;
+            }
+            $person['courses'] = $cleanedCourses;
+            if (count($person['courses']) >= 2) {
                 $multiCoursePersonKeys[$pKey] = true;
             }
         }
+        unset($person);
 
-        // Apply optional sub-filters (owner_id, program, intake, gender, job_group, industry, multi_course)
+        // Apply optional sub-filters (owner_id, program, intake, gender, job_group, industry, company, multi_course)
         $normProgFilter = ($programFilter !== '' && $programFilter !== 'all') ? $normalizeSchool($programFilter) : '';
         $normIntakeFilter = ($intakeFilter !== '' && $intakeFilter !== 'all') ? $normalizeIntake($intakeFilter, $normProgFilter) : '';
+        $compFilterResolved = ($companyFilter !== '' && $companyFilter !== 'all') ? self::resolveCanonicalCompanyEntity($companyFilter) : ['is_valid' => false, 'key' => '', 'name' => ''];
         $ownerFilterArr = ($ownerFilter !== '' && $ownerFilter !== 'all')
             ? array_values(array_filter(array_map('trim', explode(',', $ownerFilter)), fn($v) => $v !== '' && $v !== 'all'))
             : [];
@@ -5526,9 +6057,14 @@ class ContactController {
             $genderFilter,
             $jobGroupFilter,
             $industryFilter,
+            $companyFilter,
+            $compFilterResolved,
             $multiCourseFilter,
             $multiCoursePersonKeys
         ) {
+            if (empty($r['_matches_date'])) {
+                return false;
+            }
             if (!empty($ownerFilterArr)) {
                 if (!in_array((string)$r['_owner_id'], $ownerFilterArr, true)) {
                     return false;
@@ -5564,6 +6100,16 @@ class ContactController {
             }
             if ($industryFilter !== '' && $industryFilter !== 'all') {
                 if ($r['_industry'] !== $industryFilter) {
+                    return false;
+                }
+            }
+            if ($companyFilter !== '' && $companyFilter !== 'all') {
+                $matchComp = (
+                    $r['_company_name'] === $companyFilter
+                    || ($compFilterResolved['is_valid'] && $r['_company_key'] === $compFilterResolved['key'])
+                    || stripos((string)$r['_company_raw'], $companyFilter) !== false
+                );
+                if (!$matchComp) {
                     return false;
                 }
             }
@@ -5614,7 +6160,10 @@ class ContactController {
             $email = trim((string)($r['email'] ?? ''));
             $bday = trim((string)($r['birthday'] ?? ''));
             $job = trim((string)($r['job_title'] ?? ''));
-            $comp = trim((string)($r['company'] ?: $r['department'] ?: ''));
+            $compValid = (bool)$r['_company_valid'];
+            $compKey = (string)$r['_company_key'];
+            $compName = (string)$r['_company_name'];
+            $compRaw = (string)$r['_company_raw'];
             $intake = (string)$r['_intake'];
             $school = (string)$r['_school'];
             $city = trim((string)($r['city'] ?? ''));
@@ -5630,7 +6179,7 @@ class ContactController {
             if ($email !== '') $withEmail++;
             if ($bday !== '' && $bday !== '0000-00-00') $withBirthday++;
             if ($job !== '') $withJobTitle++;
-            if ($comp !== '') $withCompany++;
+            if ($compValid && $compKey !== '') $withCompany++;
             if ($intake !== '') $withIntake++;
             if ($city !== '') $withCity++;
 
@@ -5685,13 +6234,20 @@ class ContactController {
                 $jobTitleSpecificMap[$normJob] = ($jobTitleSpecificMap[$normJob] ?? 0) + 1;
             }
 
-            // Company
-            if ($comp !== '') {
-                $compKey = mb_strtoupper(preg_replace('/\s+/u', ' ', $comp), 'UTF-8');
+            // Canonical Company / Bank / Enterprise
+            if ($compValid && $compKey !== '') {
                 if (!isset($companyMap[$compKey])) {
-                    $companyMap[$compKey] = ['name' => $comp, 'count' => 0];
+                    $companyMap[$compKey] = [
+                        'key' => $compKey,
+                        'name' => $compName,
+                        'count' => 0,
+                        'variants_map' => []
+                    ];
                 }
                 $companyMap[$compKey]['count']++;
+                if ($compRaw !== '') {
+                    $companyMap[$compKey]['variants_map'][$compRaw] = ($companyMap[$compKey]['variants_map'][$compRaw] ?? 0) + 1;
+                }
             }
 
             // Industry
@@ -5765,14 +6321,25 @@ class ContactController {
         }
         unset($ob);
 
-        // Top Companies
+        // Top Companies (Canonical Bank, Corporation & Enterprise Leaderboard — up to 250 items for instant search & click-to-filter)
         $companiesList = array_values($companyMap);
-        usort($companiesList, fn($a, $b) => $b['count'] <=> $a['count']);
-        $topCompanies = array_map(fn($c) => [
-            'label' => $c['name'],
-            'count' => (int)$c['count'],
-            'pct' => $withCompany > 0 ? round(($c['count'] / $withCompany) * 100, 1) : 0.0
-        ], array_slice($companiesList, 0, 30));
+        usort($companiesList, fn($a, $b) => ($b['count'] <=> $a['count']) ?: strcmp($a['name'], $b['name']));
+        $topCompanies = array_map(function ($c) use ($withCompany) {
+            $vMap = $c['variants_map'] ?? [];
+            arsort($vMap);
+            $variantsArr = [];
+            foreach ($vMap as $vRaw => $vCnt) {
+                $variantsArr[] = "$vRaw ($vCnt)";
+            }
+            return [
+                'label' => $c['name'],
+                'key' => $c['key'],
+                'count' => (int)$c['count'],
+                'pct' => $withCompany > 0 ? round(($c['count'] / $withCompany) * 100, 1) : 0.0,
+                'variants_count' => count($vMap),
+                'variants' => $variantsArr
+            ];
+        }, array_slice($companiesList, 0, 250));
 
         // Top Specific Job Titles
         arsort($jobTitleSpecificMap);
@@ -5788,7 +6355,7 @@ class ContactController {
         // Multi-course / Multi-program students
         $multiCourseStudents = [];
         foreach ($personMap as $pKey => $person) {
-            if (count($person['courses']) >= 2 || count($person['contact_ids']) >= 2) {
+            if (count($person['courses']) >= 2) {
                 if (!isset($uniquePersonsInFilter[$pKey])) continue;
                 $distinctSchools = array_values(array_unique(array_map(fn($c) => $c['school'], $person['courses'])));
                 $multiCourseStudents[] = [
@@ -5801,7 +6368,7 @@ class ContactController {
                     'company' => $person['company'],
                     'owner_name' => $person['owner_name'],
                     'owner_avatar' => $person['owner_avatar'],
-                    'course_count' => max(count($person['courses']), count($person['contact_ids'])),
+                    'course_count' => count($person['courses']),
                     'school_count' => count($distinctSchools),
                     'schools' => $distinctSchools,
                     'courses' => $person['courses'],
@@ -5895,11 +6462,15 @@ class ContactController {
             ['field' => 'birthday', 'label' => 'Ngày sinh / Độ tuổi', 'filled' => $withBirthday, 'total' => $totalProfiles, 'pct' => $totalProfiles > 0 ? round(($withBirthday / $totalProfiles) * 100, 1) : 0],
         ];
 
-        return [
+        $distinctIntakesInFilter = count(array_filter(array_keys($intakeMap), fn($k) => $k !== 'Chưa gắn Intake'));
+        $distinctSchoolsInFilter = count(array_filter(array_keys($schoolMap), fn($k) => $k !== 'Chưa phân loại'));
+
+        $resultPayload = [
             'segment' => $segment,
             'program_filter' => $programFilter ?: 'all',
             'intake_filter' => $intakeFilter ?: 'all',
             'owner_filter' => $ownerFilter ?: 'all',
+            'company_filter' => $companyFilter ?: 'all',
             'summary' => [
                 'total_profiles' => $totalProfiles,
                 'unique_persons' => count($uniquePersonsInFilter),
@@ -5917,8 +6488,8 @@ class ContactController {
                 'with_intake' => $withIntake,
                 'with_birthday' => $withBirthday,
                 'distinct_companies' => count($companyMap),
-                'distinct_intakes' => count($availableIntakesMap),
-                'distinct_schools' => count($schoolMap)
+                'distinct_intakes' => $distinctIntakesInFilter,
+                'distinct_schools' => $distinctSchoolsInFilter > 0 ? $distinctSchoolsInFilter : count($schoolMap)
             ],
             'by_school_program' => $formatBreakdown($schoolMap, $totalProfiles),
             'by_intake' => $byIntake,
@@ -5940,6 +6511,10 @@ class ContactController {
                 'industries' => $industryOptions
             ]
         ];
+        if (!empty($cacheFile)) {
+            @file_put_contents($cacheFile, json_encode($resultPayload, JSON_UNESCAPED_UNICODE), LOCK_EX);
+        }
+        return $resultPayload;
     }
 
 }

@@ -9,12 +9,16 @@ class DepositController {
         $this->db = $db;
         if (!self::$schemaChecked && !$this->db->inTransaction()) {
             self::$schemaChecked = true;
-            try {
-                $col = $this->db->query("SHOW COLUMNS FROM deposits LIKE 'deleted_at'")->fetch();
-                if (!$col) {
-                    $this->db->exec("ALTER TABLE deposits ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL");
+            $flagFile = rtrim(sys_get_temp_dir(), '/\\') . '/myerp_schema_guard_DepositController_v2_' . md5((string)@filemtime(__FILE__)) . '.flag';
+            if (!@is_file($flagFile)) {
+                try {
+                    $col = $this->db->query("SHOW COLUMNS FROM deposits LIKE 'deleted_at'")->fetch();
+                    if (!$col) {
+                        $this->db->exec("ALTER TABLE deposits ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL");
+                    }
+                    @file_put_contents($flagFile, (string)time());
+                } catch (\Throwable $e) {
                 }
-            } catch (\Throwable $e) {
             }
         }
     }
@@ -39,7 +43,7 @@ class DepositController {
             JOIN projects p ON d.project_id = p.id
             JOIN users u ON d.created_by = u.id
             LEFT JOIN users owner ON c.owner_id = owner.id
-            WHERE (
+            WHERE d.deleted_at IS NULL AND (
                 (d.contact_id IS NOT NULL AND c.tenant_id = ?) 
                 OR (d.company_id IS NOT NULL AND comp.tenant_id = ?) 
                 OR (d.supplier_id IS NOT NULL AND sup.tenant_id = ?)
@@ -182,9 +186,10 @@ class DepositController {
                 }
                 $userMap = [];
                 if (!empty($allUids)) {
-                    $inUsers = implode(',', array_fill(0, count(array_keys($allUids)), '?'));
+                    $uidParams = array_values(array_keys($allUids));
+                    $inUsers = implode(',', array_fill(0, count($uidParams), '?'));
                     $stmtU = $this->db->prepare("SELECT id, full_name, email, avatar_url FROM users WHERE id IN ($inUsers)");
-                    $stmtU->execute(array_keys($allUids));
+                    $stmtU->execute($uidParams);
                     $users = $stmtU->fetchAll(PDO::FETCH_ASSOC);
                     foreach ($users as $u) {
                         $userMap[(int)$u['id']] = $u;
@@ -239,7 +244,7 @@ class DepositController {
             JOIN projects p ON d.project_id = p.id
             JOIN users u ON d.created_by = u.id
             LEFT JOIN users owner ON c.owner_id = owner.id
-            WHERE d.id = ? AND (
+            WHERE d.id = ? AND d.deleted_at IS NULL AND (
                 (d.contact_id IS NOT NULL AND c.tenant_id = ?) 
                 OR (d.company_id IS NOT NULL AND comp.tenant_id = ?) 
                 OR (d.supplier_id IS NOT NULL AND sup.tenant_id = ?)
@@ -361,7 +366,7 @@ class DepositController {
             $cs = $stmtCs->fetch(PDO::FETCH_ASSOC);
             if ($cs && !empty($cs['shares_json'])) {
                 $shares = json_decode($cs['shares_json'], true) ?: [];
-                $uIds = array_keys($shares);
+                $uIds = array_values(array_filter(array_map('intval', array_keys($shares))));
                 if (!empty($uIds)) {
                     $inUsers = implode(',', array_fill(0, count($uIds), '?'));
                     $stmtU = $this->db->prepare("SELECT id, full_name, email, avatar_url FROM users WHERE id IN ($inUsers)");
@@ -2011,15 +2016,13 @@ class DepositController {
         $mentions = [];
         // 1. data-user-id
         if (preg_match_all('/data-user-id=(?:&quot;|["\']|\\\\+["\'])?(\d+)/i', (string)$body, $matches)) {
-            $uids = array_filter(array_map('intval', $matches[1]));
-            foreach ($uids as $uid) {
-                if ($uid !== (int)$auth['user_id']) {
-                    $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE id=? AND tenant_id=?");
-                    $stmtUser->execute([$uid, $tid]);
-                    $userRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
-                    if ($userRow) {
-                        $mentions[$uid] = $userRow;
-                    }
+            $uids = array_values(array_unique(array_filter(array_map('intval', $matches[1]), fn($u) => $u > 0 && $u !== (int)$auth['user_id'])));
+            if (!empty($uids)) {
+                $inPh = implode(',', array_fill(0, count($uids), '?'));
+                $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE id IN ($inPh) AND tenant_id=?");
+                $stmtUser->execute(array_merge($uids, [$tid]));
+                foreach ($stmtUser->fetchAll(PDO::FETCH_ASSOC) ?: [] as $userRow) {
+                    $mentions[(int)$userRow['id']] = $userRow;
                 }
             }
         }

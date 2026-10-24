@@ -1,6 +1,8 @@
 <?php
 if (!ob_get_level() && !headers_sent()) {
-    if (extension_loaded('zlib') && !ini_get('zlib.output_compression')) {
+    $reqUriOrAction = (string)($_GET['action'] ?? '') . ' ' . (string)($_SERVER['REQUEST_URI'] ?? '');
+    $isSseOrChatEndpoint = (stripos($reqUriOrAction, 'chat/stream') !== false || stripos($reqUriOrAction, 'chat/messages') !== false || stripos($reqUriOrAction, 'get_sse_updates') !== false);
+    if (!$isSseOrChatEndpoint && extension_loaded('zlib') && !ini_get('zlib.output_compression')) {
         @ob_start('ob_gzhandler');
     } else {
         @ob_start();
@@ -245,21 +247,36 @@ function requireAuth(): array {
         $payload['tenant_id'] = 1;
     }
 
-    // Verify user actually exists and is active in the database (handles stale session tokens gracefully)
+    // Verify user actually exists and is active in the database (with 60s file cache to eliminate per-request DB lookup overhead)
     try {
-        $db = Database::getInstance();
-        $stmt = $db->prepare("SELECT id, role, full_name, email, permissions_json FROM users WHERE id = ? AND tenant_id = ? AND is_active = 1 LIMIT 1");
-        $stmt->execute([$payload['user_id'], $payload['tenant_id']]);
-        $dbUser = $stmt->fetch(PDO::FETCH_ASSOC);
+        $uid = (int)($payload['user_id'] ?? 0);
+        $tid = (int)($payload['tenant_id'] ?? 1);
+        $authCacheFile = sys_get_temp_dir() . "/myerp_auth_u_{$uid}_{$tid}.json";
+        $dbUser = null;
+        if ($uid > 0 && is_file($authCacheFile) && (time() - filemtime($authCacheFile)) < 60) {
+            $cachedAuth = json_decode((string)@file_get_contents($authCacheFile), true);
+            if (is_array($cachedAuth) && !empty($cachedAuth['id'])) {
+                $dbUser = $cachedAuth;
+            }
+        }
         if (!$dbUser) {
-            respond(401, null, 'Tài khoản không tồn tại hoặc đã bị khóa. Vui lòng đăng nhập lại.', false);
+            $db = Database::getInstance();
+            $stmt = $db->prepare("SELECT id, role, full_name, email, permissions_json FROM users WHERE id = ? AND tenant_id = ? AND is_active = 1 LIMIT 1");
+            $stmt->execute([$uid, $tid]);
+            $dbUser = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$dbUser) {
+                respond(401, null, 'Tài khoản không tồn tại hoặc đã bị khóa. Vui lòng đăng nhập lại.', false);
+            }
+            @file_put_contents($authCacheFile, json_encode($dbUser, JSON_UNESCAPED_UNICODE));
         }
         $payload['role'] = $dbUser['role'] === 'sale' ? 'sales' : $dbUser['role'];
         $payload['full_name'] = $dbUser['full_name'];
         $payload['email'] = $dbUser['email'];
         $payload['permissions'] = null;
         if (!empty($dbUser['permissions_json'])) {
-            $payload['permissions'] = json_decode($dbUser['permissions_json'], true);
+            $payload['permissions'] = is_array($dbUser['permissions_json'])
+                ? $dbUser['permissions_json']
+                : json_decode($dbUser['permissions_json'], true);
         }
     } catch (Throwable $e) {
         // Fallback in case Database connection is not ready or has temporary issues during requireAuth
@@ -878,6 +895,7 @@ switch ($resource) {
         if ($resourceId === 'student-counts' && $method === 'GET') $ctrl->getStudentCounts($auth);
         elseif ($resourceId === 'persona-overview' && $method === 'GET') $ctrl->getPersonaOverview($auth);
         elseif ($resourceId === 'programs' && $method === 'GET') $ctrl->getPrograms($auth);
+        elseif ($resourceId === 'industries' && $method === 'GET') $ctrl->getIndustries($auth);
         elseif ($resourceId === 'bulk-delete' && $method === 'POST') $ctrl->bulkDelete($auth);
         elseif ($resourceId === 'static-list' && $method === 'POST') $ctrl->createOrPopulateStaticList($auth);
         elseif ($resourceId === 'pipeline-phones' && $method === 'GET') $ctrl->getPipelinePhones($auth);

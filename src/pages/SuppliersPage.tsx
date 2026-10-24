@@ -718,7 +718,7 @@ export const SuppliersPage: React.FC = () => {
                 className="drawer-backdrop"
                 onClick={() => setShowModal(false)}
                 style={{
-                  zIndex: 2147483600,
+                  zIndex: 2147483620, ...({ '--drawer-backdrop-z': 2147483620 } as any),
                   opacity: animateIn ? 1 : 0,
                   transition: 'opacity 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
                   pointerEvents: animateIn ? 'auto' : 'none'
@@ -727,13 +727,12 @@ export const SuppliersPage: React.FC = () => {
 
               {/* Drawer Sheet */}
               <div
-                className={styles.drawer}
+                className={`${styles.drawer} drawer-panel drawer-sheet`}
                 style={{
                   transform: animateIn ? 'translateX(0)' : 'translateX(100%)',
                   transition: 'transform 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
                   willChange: 'transform',
-                  zIndex: 2147483601
-                }}
+                  zIndex: 2147483625, '--drawer-panel-z': 2147483625} as React.CSSProperties}
               >
                 {/* Header */}
                 <div 

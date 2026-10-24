@@ -96,7 +96,7 @@ export const EntityDrawer: React.FC<EntityDrawerProps> = ({ isOpen, onClose, ent
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
             style={{
-              zIndex: 1000,
+              zIndex: 2147483620, ...({ '--drawer-backdrop-z': 2147483620 } as any),
               background: 'rgba(0, 0, 0, 0.6)',
               backdropFilter: 'blur(6px)',
               WebkitBackdropFilter: 'blur(6px)',
@@ -107,7 +107,7 @@ export const EntityDrawer: React.FC<EntityDrawerProps> = ({ isOpen, onClose, ent
             }}
           />
           <motion.div
-            className={styles.drawer}
+            className={`${styles.drawer} drawer-panel drawer-sheet`} style={{ zIndex: 2147483625, '--drawer-panel-z': 2147483625 } as React.CSSProperties}
             initial={window.innerWidth <= 768 ? { y: '100%' } : { opacity: 0, x: '250px' }}
             animate={{ y: 0, x: 0, opacity: 1 }}
             exit={window.innerWidth <= 768 ? { y: '60%', opacity: 0 } : { opacity: 0, x: '60%' }}
@@ -608,7 +608,7 @@ export const EntityDrawer: React.FC<EntityDrawerProps> = ({ isOpen, onClose, ent
             animate={{ opacity: 1 }} 
             exit={{ opacity: 0 }}
             onClick={() => setHelpModal(null)}
-            style={{ zIndex: 1100, background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
+            style={{ zIndex: 2147483646, '--modal-z': 2147483646, background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' } as React.CSSProperties}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }} 

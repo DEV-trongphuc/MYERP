@@ -1266,7 +1266,7 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
             key={block.id} id={`block-${block.id}`}
             draggable={!isSelected}
             onDragStart={(e) => {
-                if (isSelected || document.activeElement?.closest('[contenteditable="true"], input, textarea')) {
+                if (isSelected || (e.target as HTMLElement)?.closest?.('[contenteditable="true"], input, textarea')) {
                     e.preventDefault();
                     return;
                 }

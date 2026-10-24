@@ -67,6 +67,25 @@ const getEmptyForm = () => ({
   bank_account_name: ''
 });
 
+const expensesCache = new Map<string, { items: any[]; total: number; summary: any; timestamp: number }>();
+const expensesAuxCache: { users: any[]; suppliers: any[]; timestamp: number } = {
+  users: [],
+  suppliers: [],
+  timestamp: 0
+};
+const EXPENSES_SWR_TTL_MS = 45_000;
+
+const buildExpensesCacheKey = (
+  page: number,
+  pageSize: number,
+  from: string,
+  to: string,
+  status: string,
+  category: string,
+  creator: string,
+  search: string
+) => `${page}|${pageSize}|${from || ''}|${to || ''}|${status || ''}|${category || ''}|${creator || ''}|${search || ''}`;
+
 export const ExpensesPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -83,10 +102,14 @@ export const ExpensesPage: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const [items, setItems] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const initialDateRange = urlStatus ? getDateRange('all') : (location.state?.dateRange || getDateRange('all'));
+  const initialCacheKey = buildExpensesCacheKey(1, PAGE_SIZE, initialDateRange.from, initialDateRange.to, urlStatus, '', '', '');
+  const initialCached = expensesCache.get(initialCacheKey);
+
+  const [items, setItems] = useState<any[]>(() => initialCached?.items ?? []);
+  const [loading, setLoading] = useState(() => !initialCached);
   const [period, setPeriod] = useState<Period>(urlStatus ? 'all' : (location.state?.period || 'all'));
-  const [dateRange, setDateRange] = useState<DateRange>(urlStatus ? getDateRange('all') : (location.state?.dateRange || getDateRange('all')));
+  const [dateRange, setDateRange] = useState<DateRange>(initialDateRange);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [catFilter, setCatFilter] = useState('');
@@ -114,21 +137,21 @@ export const ExpensesPage: React.FC = () => {
   }, [location.pathname, searchParams, setSearchParams]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
-  const [total, setTotal] = useState(0);
+  const [total, setTotal] = useState(() => initialCached?.total ?? 0);
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [, setForm] = useState<any>(getEmptyForm);
   const [viewItem, setViewItem] = useState<any>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [users, setUsers] = useState<any[]>([]); // for approver dropdown
-  const [, setSuppliers] = useState<any[]>([]); // for vendor autocomplete
+  const [users, setUsers] = useState<any[]>(() => expensesAuxCache.users); // for approver dropdown
+  const [, setSuppliers] = useState<any[]>(() => expensesAuxCache.suppliers); // for vendor autocomplete
   const [, setVendorSearch] = useState('');
   const [, setShowVendorDropdown] = useState(false);
   const vendorRef = React.useRef<HTMLDivElement>(null);
 
   const { user } = useAuth();
 
-  const [summary, setSummary] = useState<any>({ total: 0, approved: 0 });
+  const [summary, setSummary] = useState<any>(() => initialCached?.summary ?? { total: 0, approved: 0 });
   const expensesAbortRef = useRef<AbortController | null>(null);
   useEffect(() => {
     return () => {
@@ -136,7 +159,30 @@ export const ExpensesPage: React.FC = () => {
     };
   }, []);
 
-  const fetchExpenses = useCallback(async () => {
+  const fetchExpenses = useCallback(async (isSilent = false) => {
+    const cacheKey = buildExpensesCacheKey(
+      page,
+      pageSize,
+      dateRange.from,
+      dateRange.to,
+      statusFilter,
+      catFilter,
+      creatorFilter,
+      debouncedSearch
+    );
+    const cached = expensesCache.get(cacheKey);
+    if (cached) {
+      setItems(cached.items);
+      setTotal(cached.total);
+      setSummary(cached.summary);
+      setLoading(false);
+      if (!isSilent && Date.now() - cached.timestamp < EXPENSES_SWR_TTL_MS) {
+        return;
+      }
+    } else if (!isSilent) {
+      setLoading(true);
+    }
+
     if (expensesAbortRef.current) {
       expensesAbortRef.current.abort();
     }
@@ -144,7 +190,6 @@ export const ExpensesPage: React.FC = () => {
     expensesAbortRef.current = controller;
     const { signal } = controller;
 
-    setLoading(true);
     try {
       const params: any = { 
         page, 
@@ -167,13 +212,23 @@ export const ExpensesPage: React.FC = () => {
         if (amt === 0 && st !== 'draft') return false;
         return true;
       });
+      const nextTotal = data.total || 0;
+      const nextSummary = data.summary || { total: 0, approved: 0 };
       setItems(filteredPoItems);
-      setTotal(data.total || 0);
-      setSummary(data.summary || { total: 0, approved: 0 });
+      setTotal(nextTotal);
+      setSummary(nextSummary);
+      expensesCache.set(cacheKey, {
+        items: filteredPoItems,
+        total: nextTotal,
+        summary: nextSummary,
+        timestamp: Date.now()
+      });
     } catch (e: any) {
       if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
-      setItems([]);
-      setTotal(0);
+      if (!cached) {
+        setItems([]);
+        setTotal(0);
+      }
       addToast('Không thể tải danh sách chi phí', 'error');
     } finally {
       if (!signal.aborted) {
@@ -209,11 +264,32 @@ export const ExpensesPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    api.get('/users').then(r => { const d = r.data.data; setUsers(Array.isArray(d) ? d : (d?.items || [])); }).catch(() => {});
-    api.get('/suppliers').then(r => { const d = r.data.data; setSuppliers(Array.isArray(d) ? d : (d?.items || [])); }).catch(() => {});
+    if (expensesAuxCache.users.length > 0 && Date.now() - expensesAuxCache.timestamp < EXPENSES_SWR_TTL_MS) {
+      setUsers(expensesAuxCache.users);
+      setSuppliers(expensesAuxCache.suppliers);
+      return;
+    }
+    Promise.allSettled([
+      api.get('/users'),
+      api.get('/suppliers')
+    ]).then(([uSettled, sSettled]) => {
+      if (uSettled.status === 'fulfilled') {
+        const d = uSettled.value.data?.data;
+        const list = Array.isArray(d) ? d : (d?.items || []);
+        setUsers(list);
+        expensesAuxCache.users = list;
+      }
+      if (sSettled.status === 'fulfilled') {
+        const d = sSettled.value.data?.data;
+        const list = Array.isArray(d) ? d : (d?.items || []);
+        setSuppliers(list);
+        expensesAuxCache.suppliers = list;
+      }
+      expensesAuxCache.timestamp = Date.now();
+    });
   }, []);
 
-  useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
+  useEffect(() => { fetchExpenses(false); }, [fetchExpenses]);
 
   useEffect(() => {
     if (location.state?.openCreate) {
@@ -1189,13 +1265,18 @@ export const ExpensesPage: React.FC = () => {
                     onConfirm: async () => {
                       if (deleteExpenseInFlightRef.current) return;
                       deleteExpenseInFlightRef.current = true;
+                      const idSet = new Set(idsToDelete);
+                      setItems(prev => prev.filter(item => !idSet.has(item.id)));
+                      setTotal(prev => Math.max(0, prev - idsToDelete.length));
+                      setSelected(new Set());
+                      expensesCache.clear();
                       try {
                         await Promise.all(idsToDelete.map(id => api.delete(`/expenses/${id}`)));
-                        setSelected(new Set());
                         addToast(`Đã xóa ${idsToDelete.length} khoản`, 'success');
-                        fetchExpenses();
+                        fetchExpenses(true);
                       } catch (error: any) {
                         addToast(error?.response?.data?.message || 'Lỗi khi xóa khoản chi', 'error');
+                        fetchExpenses(true);
                       } finally {
                         deleteExpenseInFlightRef.current = false;
                       }
@@ -1364,13 +1445,16 @@ export const ExpensesPage: React.FC = () => {
                                   onConfirm: async () => {
                                     if (deleteExpenseInFlightRef.current) return;
                                     deleteExpenseInFlightRef.current = true;
+                                    setItems(prev => prev.filter(item => item.id !== exp.id));
+                                    setTotal(prev => Math.max(0, prev - 1));
+                                    expensesCache.clear();
                                     try {
                                       await api.delete(`/expenses/${exp.id}`);
-                                      setItems(prev => prev.filter(item => item.id !== exp.id));
                                       addToast('Đã xóa chi phí', 'success');
-                                      fetchExpenses();
+                                      fetchExpenses(true);
                                     } catch (error: any) {
                                       addToast(error.response?.data?.message || 'Lỗi khi xóa chi phí', 'error');
+                                      fetchExpenses(true);
                                     } finally {
                                       deleteExpenseInFlightRef.current = false;
                                     }
@@ -1403,7 +1487,10 @@ export const ExpensesPage: React.FC = () => {
             isOpen={showModal}
             onClose={() => setShowModal(false)}
             editItem={editItem}
-            onSaveSuccess={fetchExpenses}
+            onSaveSuccess={() => {
+              expensesCache.clear();
+              fetchExpenses(true);
+            }}
             user={user}
             users={users}
           />
@@ -1417,7 +1504,10 @@ export const ExpensesPage: React.FC = () => {
           initialItem={viewItem}
           onClose={() => setViewItem(null)}
           user={user}
-          onStatusChange={fetchExpenses}
+          onStatusChange={() => {
+            expensesCache.clear();
+            fetchExpenses(true);
+          }}
           onEditClick={(itemToEdit) => {
             setViewItem(null);
             openEdit(itemToEdit);

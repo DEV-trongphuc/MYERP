@@ -110,7 +110,7 @@ const EmailPreviewDrawer: React.FC<EmailPreviewDrawerProps> = ({ template, htmlC
   const showMock = !contentToRender && !isFetchingFull;
 
   const drawerContent = (
-    <div className="fixed inset-0 z-[2147483647] flex justify-end" style={{ zIndex: 2147483647, pointerEvents: animateIn ? 'auto' : 'none' }}>
+    <div className="fixed inset-0 z-[2147483642] flex justify-end" style={{ zIndex: 2147483642, pointerEvents: animateIn ? 'auto' : 'none' }}>
       <div
         className="drawer-backdrop"
         onClick={onClose}
@@ -121,22 +121,23 @@ const EmailPreviewDrawer: React.FC<EmailPreviewDrawerProps> = ({ template, htmlC
           opacity: animateIn ? 1 : 0,
           transition: 'opacity 0.22s cubic-bezier(0.25, 0.1, 0.25, 1)',
           pointerEvents: animateIn ? 'auto' : 'none',
-          zIndex: 2147483646,
-          '--drawer-backdrop-z': 2147483646
+          zIndex: 2147483640,
+          '--drawer-backdrop-z': 2147483640
         } as React.CSSProperties}
       />
 
       <div
-        className="drawer-panel fixed top-0 right-0 bottom-0 z-[2147483647] w-full bg-[var(--color-bg)] shadow-2xl flex flex-col h-full border-l border-[var(--color-border)]"
+        className="drawer-panel fixed top-0 right-0 bottom-0 z-[2147483642] w-full bg-[var(--color-bg)] shadow-2xl flex flex-col h-full border-l border-[var(--color-border)]"
         style={{
           width: 'calc(100vw - var(--sidebar-width, 220px))',
           maxWidth: 'none',
-          zIndex: 2147483647,
+          zIndex: 2147483642,
+          '--drawer-panel-z': 2147483642,
           opacity: animateIn ? 1 : 0,
           transform: animateIn ? 'translate3d(0, 0, 0)' : 'translate3d(48px, 0, 0)',
           transition: 'transform 0.22s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.20s cubic-bezier(0.25, 0.1, 0.25, 1)',
           pointerEvents: animateIn ? 'auto' : 'none'
-        }}
+        } as React.CSSProperties}
       >
         <div className="px-6 py-4 bg-[var(--color-surface)] border-b border-[var(--color-border)] flex justify-between items-center shrink-0">
           <div className="flex items-center gap-3 min-w-0">

@@ -1,6 +1,8 @@
 <?php
 if (!ob_get_level() && !headers_sent()) {
-    if (extension_loaded('zlib') && !ini_get('zlib.output_compression')) {
+    $reqUriOrAction = (string)($_GET['action'] ?? '') . ' ' . (string)($_SERVER['REQUEST_URI'] ?? '');
+    $isSseOrChatEndpoint = (stripos($reqUriOrAction, 'chat/stream') !== false || stripos($reqUriOrAction, 'chat/messages') !== false || stripos($reqUriOrAction, 'get_sse_updates') !== false);
+    if (!$isSseOrChatEndpoint && extension_loaded('zlib') && !ini_get('zlib.output_compression')) {
         @ob_start('ob_gzhandler');
     } else {
         @ob_start();
@@ -667,48 +669,63 @@ if (!in_array($action, $publicActions)) {
     /** @var int $dbUserId */
     $dbUserId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
     $lookupUserId = $dbUserId;
-    if ($lookupUserId > 0) {
-        $pStmt = $conn->prepare("SELECT permissions_json FROM users WHERE id = ? LIMIT 1");
-        $pStmt->bind_param("i", $lookupUserId);
-        $pStmt->execute();
-        $pRes = $pStmt->get_result()->fetch_assoc();
-        $pStmt->close();
-        if ($pRes && !empty($pRes['permissions_json'])) {
-            $decodedUser['permissions'] = json_decode($pRes['permissions_json'], true);
-        }
-    }
-
-    /** @var int $currentSaleConsultantId */
     $currentSaleConsultantId = 0;
-    $lookupId = $decodedUser['user_id'] ?? $decodedUser['id'] ?? 0;
-    if ($lookupId > 0) {
-        $stmtC = $conn->prepare("SELECT id FROM consultants WHERE id = ? LIMIT 1");
-        $stmtC->bind_param("i", $lookupId);
-        $stmtC->execute();
-        $cRow = $stmtC->get_result()->fetch_assoc();
-        $stmtC->close();
-        if ($cRow) {
-            $currentSaleConsultantId = (int)$cRow['id'];
-        }
+    $apiUserCacheFile = $lookupUserId > 0 ? (sys_get_temp_dir() . "/myerp_api_u_{$lookupUserId}.json") : '';
+    $cachedApiUser = null;
+    if ($apiUserCacheFile !== '' && is_file($apiUserCacheFile) && (time() - filemtime($apiUserCacheFile)) < 120) {
+        $cachedApiUser = json_decode((string)@file_get_contents($apiUserCacheFile), true);
     }
-
-    if ($currentSaleConsultantId === 0 && isset($decodedUser['email']) && !empty($decodedUser['email'])) {
-        $stmtC = $conn->prepare("SELECT id FROM consultants WHERE email = ? LIMIT 1");
-        $stmtC->bind_param("s", $decodedUser['email']);
-        $stmtC->execute();
-        $cRow = $stmtC->get_result()->fetch_assoc();
-        $stmtC->close();
-        if ($cRow) {
-            $currentSaleConsultantId = (int)$cRow['id'];
-        } else if (isset($decodedUser['role']) && in_array($decodedUser['role'], ['sale', 'sales', 'manager'], true)) {
-            // Auto-create consultant record if missing for this company user
-            $stmtInsert = $conn->prepare("INSERT INTO consultants (name, email, status, work_start_time, work_end_time, vacation_mode, overtime_mode) VALUES (?, ?, 'active', '08:00', '17:00', 0, 0)");
-            $userName = $decodedUser['name'] ?? $decodedUser['username'] ?? 'User';
-            $stmtInsert->bind_param("ss", $userName, $decodedUser['email']);
-            if ($stmtInsert->execute()) {
-                $currentSaleConsultantId = $stmtInsert->insert_id;
+    if (is_array($cachedApiUser) && array_key_exists('consultant_id', $cachedApiUser)) {
+        $decodedUser['permissions'] = $cachedApiUser['permissions'] ?? null;
+        $currentSaleConsultantId = (int)($cachedApiUser['consultant_id'] ?? 0);
+    } else {
+        if ($lookupUserId > 0) {
+            $pStmt = $conn->prepare("SELECT permissions_json FROM users WHERE id = ? LIMIT 1");
+            $pStmt->bind_param("i", $lookupUserId);
+            $pStmt->execute();
+            $pRes = $pStmt->get_result()->fetch_assoc();
+            $pStmt->close();
+            if ($pRes && !empty($pRes['permissions_json'])) {
+                $decodedUser['permissions'] = json_decode($pRes['permissions_json'], true);
             }
-            $stmtInsert->close();
+        }
+
+        $lookupId = $decodedUser['user_id'] ?? $decodedUser['id'] ?? 0;
+        if ($lookupId > 0) {
+            $stmtC = $conn->prepare("SELECT id FROM consultants WHERE id = ? LIMIT 1");
+            $stmtC->bind_param("i", $lookupId);
+            $stmtC->execute();
+            $cRow = $stmtC->get_result()->fetch_assoc();
+            $stmtC->close();
+            if ($cRow) {
+                $currentSaleConsultantId = (int)$cRow['id'];
+            }
+        }
+
+        if ($currentSaleConsultantId === 0 && isset($decodedUser['email']) && !empty($decodedUser['email'])) {
+            $stmtC = $conn->prepare("SELECT id FROM consultants WHERE email = ? LIMIT 1");
+            $stmtC->bind_param("s", $decodedUser['email']);
+            $stmtC->execute();
+            $cRow = $stmtC->get_result()->fetch_assoc();
+            $stmtC->close();
+            if ($cRow) {
+                $currentSaleConsultantId = (int)$cRow['id'];
+            } else if (isset($decodedUser['role']) && in_array($decodedUser['role'], ['sale', 'sales', 'manager'], true)) {
+                // Auto-create consultant record if missing for this company user
+                $stmtInsert = $conn->prepare("INSERT INTO consultants (name, email, status, work_start_time, work_end_time, vacation_mode, overtime_mode) VALUES (?, ?, 'active', '08:00', '17:00', 0, 0)");
+                $userName = $decodedUser['name'] ?? $decodedUser['username'] ?? 'User';
+                $stmtInsert->bind_param("ss", $userName, $decodedUser['email']);
+                if ($stmtInsert->execute()) {
+                    $currentSaleConsultantId = $stmtInsert->insert_id;
+                }
+                $stmtInsert->close();
+            }
+        }
+        if ($apiUserCacheFile !== '') {
+            @file_put_contents($apiUserCacheFile, json_encode([
+                'permissions' => $decodedUser['permissions'],
+                'consultant_id' => $currentSaleConsultantId
+            ], JSON_UNESCAPED_UNICODE));
         }
     }
 
@@ -873,9 +890,13 @@ if (!in_array($action, $publicActions)) {
         }
     }
 
-    // Ghi nhận thời gian hoạt động cuối cùng (last active time)
+    // Ghi nhận thời gian hoạt động cuối cùng (throttled to once every 180s per user to prevent InnoDB row lock contention)
     if ($decodedUser && isset($decodedUser['id'])) {
-        $conn->query("UPDATE accounts SET last_login = NOW() WHERE id = " . (int) $decodedUser['id']);
+        $lastActiveFlag = sys_get_temp_dir() . '/myerp_last_login_u_' . (int)$decodedUser['id'] . '.flag';
+        if (!is_file($lastActiveFlag) || (time() - filemtime($lastActiveFlag)) >= 180) {
+            @touch($lastActiveFlag);
+            $conn->query("UPDATE accounts SET last_login = NOW() WHERE id = " . (int) $decodedUser['id']);
+        }
     }
 } else {
     $decodedUser = null; // Public actions have no user context
@@ -2038,6 +2059,14 @@ switch ($action) {
 
     case 'get_unique_sources':
         $onlyContacts = !empty($_GET['only_contacts']) || (isset($_GET['entity']) && $_GET['entity'] === 'contacts');
+        $srcCacheFile = sys_get_temp_dir() . '/myerp_unique_sources_' . ($onlyContacts ? 'contacts' : 'all') . '.json';
+        if (empty($_GET['nocache']) && is_file($srcCacheFile) && (time() - filemtime($srcCacheFile)) < 120) {
+            $cachedSources = json_decode((string)@file_get_contents($srcCacheFile), true);
+            if (is_array($cachedSources)) {
+                echo json_encode(['success' => true, 'data' => $cachedSources]);
+                break;
+            }
+        }
         $sqlSources = $onlyContacts
             ? "SELECT DISTINCT TRIM(source) AS source FROM contacts WHERE deleted_at IS NULL AND source IS NOT NULL AND TRIM(source) != '' ORDER BY source ASC"
             : "SELECT DISTINCT source FROM (
@@ -2054,6 +2083,7 @@ switch ($action) {
                 }
             }
         }
+        @file_put_contents($srcCacheFile, json_encode($sources, JSON_UNESCAPED_UNICODE));
         echo json_encode(['success' => true, 'data' => $sources]);
         break;
 
@@ -2840,10 +2870,13 @@ switch ($action) {
         }
         ob_implicit_flush(true);
 
+        @header_remove('Content-Encoding');
+        @header_remove('Transfer-Encoding');
+        @header_remove('Content-Length');
+        @header_remove('Connection');
         header('Content-Type: text/event-stream; charset=utf-8');
-        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Cache-Control: no-cache, no-store, must-revalidate, no-transform');
         header('Pragma: no-cache');
-        header('Connection: close');
         header('X-Accel-Buffering: no');
 
         echo "retry: 15000\n";
@@ -3322,212 +3355,239 @@ switch ($action) {
 
         $contactsWhereClause = implode(" AND ", $contactsWhere) . " AND " . $contactsDateCondition;
 
-        $stmtContactsCount = $conn->prepare("SELECT COUNT(*) as cnt FROM contacts c WHERE $contactsWhereClause");
         $contactsCount = 0;
-        if ($stmtContactsCount) {
-            $stmtContactsCount->bind_param($contactsTypes, ...$contactsParams);
-            $stmtContactsCount->execute();
-            $contactsCount = (int) ($stmtContactsCount->get_result()->fetch_assoc()['cnt'] ?? 0);
-            $stmtContactsCount->close();
-        }
-
-        // Tab counts (Data lỗi, Databank, Được chia, Hợp tác)
         $errorTicketCount = 0;
         $databankCount = 0;
         $distributedCount = 0;
         $coopCount = 0;
+        $selfCount = 0;
+        $byRound = [];
+        $byHour = array_fill(0, 24, 0);
 
-        // Chỉ tính toán các tab chi tiết khi ở màn hình danh sách liên hệ (limit <= 100 và không bỏ qua counts)
+        // Chỉ tính toán các tab chi tiết, byRound, byHour khi ở màn hình danh sách liên hệ (limit <= 100 và không bỏ qua counts)
         $shouldComputeTabCounts = ($limit <= 100) && empty($_GET['skip_counts']);
         if ($shouldComputeTabCounts) {
-            try {
-                // 1. DATA LỖI & TICKET
-                $stmtErrorTicket = $conn->prepare("
-                    SELECT COUNT(DISTINCT c.id) as cnt 
-                    FROM contacts c 
-                    WHERE $contactsWhereClause 
-                      AND (
-                        EXISTS (
-                            SELECT 1 FROM data_reports dr 
-                            JOIN leads l2 ON dr.lead_id = l2.id 
-                            WHERE l2.person_id = c.person_id
-                        )
-                        OR EXISTS (
-                            SELECT 1 FROM leads l2 
-                            JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
-                            JOIN users u2 ON u2.id = c.owner_id
-                            JOIN consultants cons2 ON u2.email = cons2.email
-                            WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('duplicate', 'error', 'blacklisted')
-                        )
-                      )
-                ");
-                if ($stmtErrorTicket) {
-                    $stmtErrorTicket->bind_param($contactsTypes, ...$contactsParams);
-                    $stmtErrorTicket->execute();
-                    $errorTicketCount = (int) ($stmtErrorTicket->get_result()->fetch_assoc()['cnt'] ?? 0);
-                    $stmtErrorTicket->close();
+            $portalCountsCacheKey = sys_get_temp_dir() . '/myerp_sp_counts_' . md5($contactsWhereClause . '|' . json_encode($contactsParams) . '|' . $saleUserId) . '.json';
+            $cachedPortalCounts = null;
+            if (empty($_GET['nocache']) && empty($_GET['refresh']) && is_file($portalCountsCacheKey) && (time() - filemtime($portalCountsCacheKey)) < 25) {
+                $cachedPortalCounts = json_decode((string)@file_get_contents($portalCountsCacheKey), true);
+            }
+            if (is_array($cachedPortalCounts) && isset($cachedPortalCounts['contactsCount'])) {
+                $contactsCount = (int)$cachedPortalCounts['contactsCount'];
+                $errorTicketCount = (int)($cachedPortalCounts['errorTicketCount'] ?? 0);
+                $databankCount = (int)($cachedPortalCounts['databankCount'] ?? 0);
+                $distributedCount = (int)($cachedPortalCounts['distributedCount'] ?? 0);
+                $coopCount = (int)($cachedPortalCounts['coopCount'] ?? 0);
+                $selfCount = (int)($cachedPortalCounts['selfCount'] ?? 0);
+                $byRound = is_array($cachedPortalCounts['byRound'] ?? null) ? $cachedPortalCounts['byRound'] : [];
+                $byHour = is_array($cachedPortalCounts['byHour'] ?? null) ? $cachedPortalCounts['byHour'] : array_fill(0, 24, 0);
+            } else {
+                $stmtContactsCount = $conn->prepare("SELECT COUNT(*) as cnt FROM contacts c WHERE $contactsWhereClause");
+                if ($stmtContactsCount) {
+                    $stmtContactsCount->bind_param($contactsTypes, ...$contactsParams);
+                    $stmtContactsCount->execute();
+                    $contactsCount = (int) ($stmtContactsCount->get_result()->fetch_assoc()['cnt'] ?? 0);
+                    $stmtContactsCount->close();
                 }
 
-                // 2. TỪ DATABANK
-                $stmtDatabank = $conn->prepare("
-                    SELECT COUNT(DISTINCT c.id) as cnt 
-                    FROM contacts c 
-                    WHERE $contactsWhereClause 
-                      AND NOT (
-                        EXISTS (
-                            SELECT 1 FROM data_reports dr 
-                            JOIN leads l2 ON dr.lead_id = l2.id 
-                            WHERE l2.person_id = c.person_id
-                        )
-                        OR EXISTS (
-                            SELECT 1 FROM leads l2 
-                            JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
-                            JOIN users u2 ON u2.id = c.owner_id
-                            JOIN consultants cons2 ON u2.email = cons2.email
-                            WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('duplicate', 'error', 'blacklisted')
-                        )
-                      )
-                      AND (c.source = 'databank' OR EXISTS (
-                          SELECT 1 FROM leads l2 
-                          JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
-                          JOIN users u2 ON u2.id = c.owner_id
-                          JOIN consultants cons2 ON u2.email = cons2.email
-                          WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status = 'databank_claim'
-                      ))
-                ");
-                if ($stmtDatabank) {
-                    $stmtDatabank->bind_param($contactsTypes, ...$contactsParams);
-                    $stmtDatabank->execute();
-                    $databankCount = (int) ($stmtDatabank->get_result()->fetch_assoc()['cnt'] ?? 0);
-                    $stmtDatabank->close();
+                try {
+                    // 1. DATA LỖI & TICKET
+                    $stmtErrorTicket = $conn->prepare("
+                        SELECT COUNT(DISTINCT c.id) as cnt 
+                        FROM contacts c 
+                        WHERE $contactsWhereClause 
+                          AND (
+                            EXISTS (
+                                SELECT 1 FROM data_reports dr 
+                                JOIN leads l2 ON dr.lead_id = l2.id 
+                                WHERE l2.person_id = c.person_id
+                            )
+                            OR EXISTS (
+                                SELECT 1 FROM leads l2 
+                                JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                                JOIN users u2 ON u2.id = c.owner_id
+                                JOIN consultants cons2 ON u2.email = cons2.email
+                                WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('duplicate', 'error', 'blacklisted')
+                            )
+                          )
+                    ");
+                    if ($stmtErrorTicket) {
+                        $stmtErrorTicket->bind_param($contactsTypes, ...$contactsParams);
+                        $stmtErrorTicket->execute();
+                        $errorTicketCount = (int) ($stmtErrorTicket->get_result()->fetch_assoc()['cnt'] ?? 0);
+                        $stmtErrorTicket->close();
+                    }
+
+                    // 2. TỪ DATABANK
+                    $stmtDatabank = $conn->prepare("
+                        SELECT COUNT(DISTINCT c.id) as cnt 
+                        FROM contacts c 
+                        WHERE $contactsWhereClause 
+                          AND NOT (
+                            EXISTS (
+                                SELECT 1 FROM data_reports dr 
+                                JOIN leads l2 ON dr.lead_id = l2.id 
+                                WHERE l2.person_id = c.person_id
+                            )
+                            OR EXISTS (
+                                SELECT 1 FROM leads l2 
+                                JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                                JOIN users u2 ON u2.id = c.owner_id
+                                JOIN consultants cons2 ON u2.email = cons2.email
+                                WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('duplicate', 'error', 'blacklisted')
+                            )
+                          )
+                          AND (c.source = 'databank' OR EXISTS (
+                              SELECT 1 FROM leads l2 
+                              JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                              JOIN users u2 ON u2.id = c.owner_id
+                              JOIN consultants cons2 ON u2.email = cons2.email
+                              WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status = 'databank_claim'
+                          ))
+                    ");
+                    if ($stmtDatabank) {
+                        $stmtDatabank->bind_param($contactsTypes, ...$contactsParams);
+                        $stmtDatabank->execute();
+                        $databankCount = (int) ($stmtDatabank->get_result()->fetch_assoc()['cnt'] ?? 0);
+                        $stmtDatabank->close();
+                    }
+
+                    // 3. ĐƯỢC CHIA (Exclude coop contacts)
+                    $stmtDistributed = $conn->prepare("
+                        SELECT COUNT(DISTINCT c.id) as cnt 
+                        FROM contacts c 
+                        WHERE $contactsWhereClause 
+                          AND NOT (
+                            EXISTS (
+                                SELECT 1 FROM data_reports dr 
+                                JOIN leads l2 ON dr.lead_id = l2.id 
+                                WHERE l2.person_id = c.person_id
+                            )
+                            OR EXISTS (
+                                SELECT 1 FROM leads l2 
+                                JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                                JOIN users u2 ON u2.id = c.owner_id
+                                JOIN consultants cons2 ON u2.email = cons2.email
+                                WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('duplicate', 'error', 'blacklisted')
+                            )
+                          )
+                          AND c.source NOT IN ('databank', 'ca_nhan', 'gioi_thieu')
+                          AND (c.collaborator_ids IS NULL OR c.collaborator_ids = '')
+                          AND EXISTS (
+                              SELECT 1 FROM leads l2 
+                              JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                              JOIN users u2 ON u2.id = c.owner_id
+                              JOIN consultants cons2 ON u2.email = cons2.email
+                              WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'fallback', 'success', 'reminder')
+                          )
+                    ");
+                    if ($stmtDistributed) {
+                        $stmtDistributed->bind_param($contactsTypes, ...$contactsParams);
+                        $stmtDistributed->execute();
+                        $distributedCount = (int) ($stmtDistributed->get_result()->fetch_assoc()['cnt'] ?? 0);
+                        $stmtDistributed->close();
+                    }
+
+                    // 4. HỢP TÁC (COOP)
+                    $stmtCoop = $conn->prepare("
+                        SELECT COUNT(DISTINCT c.id) as cnt 
+                        FROM contacts c 
+                        WHERE $contactsWhereClause 
+                          AND NOT (
+                            EXISTS (
+                                SELECT 1 FROM data_reports dr 
+                                JOIN leads l2 ON dr.lead_id = l2.id 
+                                WHERE l2.person_id = c.person_id
+                            )
+                            OR EXISTS (
+                                SELECT 1 FROM leads l2 
+                                JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                                JOIN users u2 ON u2.id = c.owner_id
+                                JOIN consultants cons2 ON u2.email = cons2.email
+                                WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('duplicate', 'error', 'blacklisted')
+                            )
+                          )
+                          AND (FIND_IN_SET(?, c.collaborator_ids) OR (c.owner_id = ? AND c.collaborator_ids IS NOT NULL AND c.collaborator_ids != ''))
+                    ");
+                    if ($stmtCoop) {
+                        $coopParams = $contactsParams;
+                        $coopParams[] = $saleUserId;
+                        $coopParams[] = $saleUserId;
+                        $coopTypes = $contactsTypes . "ii";
+                        $stmtCoop->bind_param($coopTypes, ...$coopParams);
+                        $stmtCoop->execute();
+                        $coopCount = (int) ($stmtCoop->get_result()->fetch_assoc()['cnt'] ?? 0);
+                        $stmtCoop->close();
+                    }
+                } catch (\Throwable $countEx) {
+                    error_log("Error computing contacts tab counts: " . $countEx->getMessage());
                 }
 
-                // 3. ĐƯỢC CHIA (Exclude coop contacts)
-                $stmtDistributed = $conn->prepare("
-                    SELECT COUNT(DISTINCT c.id) as cnt 
-                    FROM contacts c 
-                    WHERE $contactsWhereClause 
-                      AND NOT (
-                        EXISTS (
-                            SELECT 1 FROM data_reports dr 
-                            JOIN leads l2 ON dr.lead_id = l2.id 
-                            WHERE l2.person_id = c.person_id
-                        )
-                        OR EXISTS (
-                            SELECT 1 FROM leads l2 
-                            JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
-                            JOIN users u2 ON u2.id = c.owner_id
-                            JOIN consultants cons2 ON u2.email = cons2.email
-                            WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('duplicate', 'error', 'blacklisted')
-                        )
-                      )
-                      AND c.source NOT IN ('databank', 'ca_nhan', 'gioi_thieu')
-                      AND (c.collaborator_ids IS NULL OR c.collaborator_ids = '')
-                      AND EXISTS (
-                          SELECT 1 FROM leads l2 
-                          JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
-                          JOIN users u2 ON u2.id = c.owner_id
-                          JOIN consultants cons2 ON u2.email = cons2.email
-                          WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'fallback', 'success', 'reminder')
-                      )
-                ");
-                if ($stmtDistributed) {
-                    $stmtDistributed->bind_param($contactsTypes, ...$contactsParams);
-                    $stmtDistributed->execute();
-                    $distributedCount = (int) ($stmtDistributed->get_result()->fetch_assoc()['cnt'] ?? 0);
-                    $stmtDistributed->close();
+                // TỰ NHẬP
+                $selfCount = max(0, $contactsCount - $errorTicketCount - $databankCount - $distributedCount - $coopCount);
+
+                // 4. Query distribution by round using contacts table
+                $sqlByRound = "
+                    SELECT COALESCE(r.round_name, 'Tự nhập / Khác') as round_name, COUNT(c.id) as count
+                    FROM contacts c
+                    LEFT JOIN leads l ON c.person_id = l.person_id
+                    LEFT JOIN users u2 ON u2.id = c.owner_id
+                    LEFT JOIN consultants cons2 ON u2.email = cons2.email
+                    LEFT JOIN (
+                        SELECT lead_id, assigned_to, MAX(round_id) as round_id 
+                        FROM distribution_logs 
+                        WHERE status != 'silent'
+                        GROUP BY lead_id, assigned_to
+                    ) dl ON dl.lead_id = l.id AND dl.assigned_to = cons2.id
+                    LEFT JOIN distribution_rounds r ON dl.round_id = r.id
+                    WHERE $contactsWhereClause
+                    GROUP BY COALESCE(r.round_name, 'Tự nhập / Khác')
+                ";
+                $stmtBR = $conn->prepare($sqlByRound);
+                if ($stmtBR) {
+                    if (!empty($contactsTypes)) {
+                        $stmtBR->bind_param($contactsTypes, ...$contactsParams);
+                    }
+                    $stmtBR->execute();
+                    $resBR = $stmtBR->get_result();
+                    while ($row = $resBR->fetch_assoc()) {
+                        $byRound[] = $row;
+                    }
+                    $stmtBR->close();
                 }
 
-                // 4. HỢP TÁC (COOP)
-                $stmtCoop = $conn->prepare("
-                    SELECT COUNT(DISTINCT c.id) as cnt 
-                    FROM contacts c 
-                    WHERE $contactsWhereClause 
-                      AND NOT (
-                        EXISTS (
-                            SELECT 1 FROM data_reports dr 
-                            JOIN leads l2 ON dr.lead_id = l2.id 
-                            WHERE l2.person_id = c.person_id
-                        )
-                        OR EXISTS (
-                            SELECT 1 FROM leads l2 
-                            JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
-                            JOIN users u2 ON u2.id = c.owner_id
-                            JOIN consultants cons2 ON u2.email = cons2.email
-                            WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('duplicate', 'error', 'blacklisted')
-                        )
-                      )
-                      AND (FIND_IN_SET(?, c.collaborator_ids) OR (c.owner_id = ? AND c.collaborator_ids IS NOT NULL AND c.collaborator_ids != ''))
-                ");
-                if ($stmtCoop) {
-                    $coopParams = $contactsParams;
-                    $coopParams[] = $saleUserId;
-                    $coopParams[] = $saleUserId;
-                    $coopTypes = $contactsTypes . "ii";
-                    $stmtCoop->bind_param($coopTypes, ...$coopParams);
-                    $stmtCoop->execute();
-                    $coopCount = (int) ($stmtCoop->get_result()->fetch_assoc()['cnt'] ?? 0);
-                    $stmtCoop->close();
+                // 5. Query distribution by hour using contacts table
+                $sqlByHour = "
+                    SELECT HOUR(c.created_at) as hr, COUNT(c.id) as count
+                    FROM contacts c
+                    WHERE $contactsWhereClause
+                    GROUP BY HOUR(c.created_at)
+                    ORDER BY hr ASC
+                ";
+                $stmtBH = $conn->prepare($sqlByHour);
+                if ($stmtBH) {
+                    if (!empty($contactsTypes)) {
+                        $stmtBH->bind_param($contactsTypes, ...$contactsParams);
+                    }
+                    $stmtBH->execute();
+                    $resBH = $stmtBH->get_result();
+                    while ($row = $resBH->fetch_assoc()) {
+                        $byHour[(int) $row['hr']] = (int) $row['count'];
+                    }
+                    $stmtBH->close();
                 }
-            } catch (\Throwable $countEx) {
-                error_log("Error computing contacts tab counts: " . $countEx->getMessage());
-            }
-        }
 
-        // TỰ NHẬP
-        $selfCount = max(0, $contactsCount - $errorTicketCount - $databankCount - $distributedCount - $coopCount);
-
-        // 4. Query distribution by round using contacts table
-        $sqlByRound = "
-            SELECT COALESCE(r.round_name, 'Tự nhập / Khác') as round_name, COUNT(c.id) as count
-            FROM contacts c
-            LEFT JOIN leads l ON c.person_id = l.person_id
-            LEFT JOIN users u2 ON u2.id = c.owner_id
-            LEFT JOIN consultants cons2 ON u2.email = cons2.email
-            LEFT JOIN (
-                SELECT lead_id, assigned_to, MAX(round_id) as round_id 
-                FROM distribution_logs 
-                WHERE status != 'silent'
-                GROUP BY lead_id, assigned_to
-            ) dl ON dl.lead_id = l.id AND dl.assigned_to = cons2.id
-            LEFT JOIN distribution_rounds r ON dl.round_id = r.id
-            WHERE $contactsWhereClause
-            GROUP BY COALESCE(r.round_name, 'Tự nhập / Khác')
-        ";
-        $byRound = [];
-        $stmtBR = $conn->prepare($sqlByRound);
-        if ($stmtBR) {
-            if (!empty($contactsTypes)) {
-                $stmtBR->bind_param($contactsTypes, ...$contactsParams);
+                @file_put_contents($portalCountsCacheKey, json_encode([
+                    'contactsCount' => $contactsCount,
+                    'errorTicketCount' => $errorTicketCount,
+                    'databankCount' => $databankCount,
+                    'distributedCount' => $distributedCount,
+                    'coopCount' => $coopCount,
+                    'selfCount' => $selfCount,
+                    'byRound' => $byRound,
+                    'byHour' => $byHour
+                ], JSON_UNESCAPED_UNICODE));
             }
-            $stmtBR->execute();
-            $resBR = $stmtBR->get_result();
-            while ($row = $resBR->fetch_assoc()) {
-                $byRound[] = $row;
-            }
-            $stmtBR->close();
-        }
-
-        // 5. Query distribution by hour using contacts table
-        $sqlByHour = "
-            SELECT HOUR(c.created_at) as hr, COUNT(c.id) as count
-            FROM contacts c
-            WHERE $contactsWhereClause
-            GROUP BY HOUR(c.created_at)
-            ORDER BY hr ASC
-        ";
-        $byHour = array_fill(0, 24, 0);
-        $stmtBH = $conn->prepare($sqlByHour);
-        if ($stmtBH) {
-            if (!empty($contactsTypes)) {
-                $stmtBH->bind_param($contactsTypes, ...$contactsParams);
-            }
-            $stmtBH->execute();
-            $resBH = $stmtBH->get_result();
-            while ($row = $resBH->fetch_assoc()) {
-                $byHour[(int) $row['hr']] = (int) $row['count'];
-            }
-            $stmtBH->close();
         }
 
         // 6. Query active consultants list if user is admin
@@ -3661,23 +3721,31 @@ switch ($action) {
         }
 
         $uncontactedCount = 0;
-        $uncontactedQuery = "
-            SELECT COUNT(*) as cnt 
-            FROM contacts c
-            WHERE c.deleted_at IS NULL
-              AND NOT EXISTS (SELECT 1 FROM activities WHERE related_type = 'contact' AND related_id = c.id)
-              AND NOT EXISTS (SELECT 1 FROM notes WHERE entity_type = 'contact' AND entity_id = c.id)
-        ";
-        if ($isSale) {
-            $uncontactedQuery .= " AND c.owner_id = " . (int)$saleUserId;
-        } else {
-            if ($saleFilterId !== null) {
-                $uncontactedQuery .= " AND c.owner_id = " . (int)$saleUserId;
+        if ($shouldComputeTabCounts) {
+            $uncontactedCacheFile = sys_get_temp_dir() . '/myerp_sp_uncontacted_u_' . ($isSale || $saleFilterId !== null ? (int)$saleUserId : 0) . '.txt';
+            if (empty($_GET['nocache']) && is_file($uncontactedCacheFile) && (time() - filemtime($uncontactedCacheFile)) < 30) {
+                $uncontactedCount = (int)@file_get_contents($uncontactedCacheFile);
+            } else {
+                $uncontactedQuery = "
+                    SELECT COUNT(*) as cnt 
+                    FROM contacts c
+                    WHERE c.deleted_at IS NULL
+                      AND NOT EXISTS (SELECT 1 FROM activities WHERE related_type = 'contact' AND related_id = c.id)
+                      AND NOT EXISTS (SELECT 1 FROM notes WHERE entity_type = 'contact' AND entity_id = c.id)
+                ";
+                if ($isSale) {
+                    $uncontactedQuery .= " AND c.owner_id = " . (int)$saleUserId;
+                } else {
+                    if ($saleFilterId !== null) {
+                        $uncontactedQuery .= " AND c.owner_id = " . (int)$saleUserId;
+                    }
+                }
+                $resUncontacted = $conn->query($uncontactedQuery);
+                if ($resUncontacted) {
+                    $uncontactedCount = (int) ($resUncontacted->fetch_assoc()['cnt'] ?? 0);
+                }
+                @file_put_contents($uncontactedCacheFile, (string)$uncontactedCount);
             }
-        }
-        $resUncontacted = $conn->query($uncontactedQuery);
-        if ($resUncontacted) {
-            $uncontactedCount = (int) ($resUncontacted->fetch_assoc()['cnt'] ?? 0);
         }
         $leadRecallMinutes = (int) get_system_setting($conn, 'lead_response_timeout_minutes');
 
@@ -6316,7 +6384,7 @@ switch ($action) {
         $where = "";
 
         if (isset($_GET['active_only']) && ($_GET['active_only'] == '1' || $_GET['active_only'] === 'true')) {
-            $where = "WHERE (c.is_active = 1 OR c.is_active IS NULL) AND (a.is_active = 1 OR a.is_active IS NULL) AND LOWER(COALESCE(c.status, a.status, 'active')) NOT IN ('inactive', 'locked', 'resigned', 'terminated', 'disabled', 'nghi_viec', 'tam_nghi', 'suspended', 'khoa')";
+            $where = "WHERE (c.is_active = 1 OR c.is_active IS NULL) AND (a.is_active = 1 OR a.is_active IS NULL) AND c.id != 9000001 AND LOWER(COALESCE(c.role, a.role, '')) NOT IN ('bot', 'system') AND LOWER(COALESCE(c.email, a.email, '')) NOT IN ('turniodev@gmail.com', 'turnlodev@gmail.com', 'ideas.ai@ideas.vn', 'ai@ideas.edu.vn') AND LOWER(COALESCE(c.status, a.status, 'active')) NOT IN ('inactive', 'locked', 'resigned', 'terminated', 'disabled', 'nghi_viec', 'tam_nghi', 'suspended', 'khoa')";
         }
 
         $res = $conn->query("
@@ -9540,6 +9608,14 @@ switch ($action) {
         $role = $decodedUser['role'] ?? '';
         $tenantId = (int)($decodedUser['tenant_id'] ?? 1);
         $userId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
+        $pendingCountsCacheFile = sys_get_temp_dir() . "/myerp_pending_counts_t{$tenantId}_u{$userId}_r" . preg_replace('/[^a-z0-9_]/i', '', $role) . ".json";
+        if (empty($_GET['nocache']) && empty($_GET['refresh']) && is_file($pendingCountsCacheFile) && (time() - filemtime($pendingCountsCacheFile)) < 15) {
+            $cachedPendingCounts = json_decode((string)@file_get_contents($pendingCountsCacheFile), true);
+            if (is_array($cachedPendingCounts)) {
+                echo json_encode(['success' => true, 'data' => $cachedPendingCounts]);
+                break;
+            }
+        }
 
         $ticketsCount = 0;
         $heldCount = 0;
@@ -9751,17 +9827,21 @@ switch ($action) {
         }
         $salesCoopStmt->close();
 
+        $pendingCountsPayload = [
+            'ticketsCount' => $ticketsCount,
+            'heldCount' => $heldCount,
+            'checkinsCount' => $checkinsCount,
+            'coopsCount' => $coopsCount,
+            'supportCount' => $supportCount,
+            'expensesCount' => $expensesCount,
+            'salesPendingSignCount' => $salesPendingSignCount
+        ];
+        if (!empty($pendingCountsCacheFile)) {
+            @file_put_contents($pendingCountsCacheFile, json_encode($pendingCountsPayload, JSON_UNESCAPED_UNICODE));
+        }
         echo json_encode([
             'success' => true,
-            'data' => [
-                'ticketsCount' => $ticketsCount,
-                'heldCount' => $heldCount,
-                'checkinsCount' => $checkinsCount,
-                'coopsCount' => $coopsCount,
-                'supportCount' => $supportCount,
-                'expensesCount' => $expensesCount,
-                'salesPendingSignCount' => $salesPendingSignCount
-            ]
+            'data' => $pendingCountsPayload
         ]);
         break;
 
@@ -12351,10 +12431,15 @@ switch ($action) {
         break;
 
     case 'get_settings':
-        $res = $conn->query("SELECT * FROM system_settings");
-        $data = [];
-        while ($row = $res->fetch_assoc()) {
-            $data[$row['setting_key']] = $row['setting_value'];
+        $data = get_system_setting($conn, null);
+        if (!is_array($data)) {
+            $data = [];
+            $res = $conn->query("SELECT * FROM system_settings");
+            if ($res) {
+                while ($row = $res->fetch_assoc()) {
+                    $data[$row['setting_key']] = $row['setting_value'];
+                }
+            }
         }
         $data['backend_version'] = defined('BACKEND_VERSION') ? BACKEND_VERSION : '1.5.3';
         echo json_encode(['success' => true, 'data' => $data]);
@@ -12809,6 +12894,10 @@ switch ($action) {
             $stmt->execute();
         }
         $stmt->close();
+        @unlink(sys_get_temp_dir() . '/ideas_system_settings.json');
+        if (isset($GLOBALS['__system_settings_cache'])) {
+            unset($GLOBALS['__system_settings_cache']);
+        }
 
         // Mirror email / verified sender settings into mkt_system_settings & verified_senders so Marketing Automation stays 100% synced
         try {
@@ -14300,6 +14389,9 @@ switch ($action) {
                     $stmtUAct->bind_param("isi", $is_active, $statusStr, $id);
                     $stmtUAct->execute();
                     $stmtUAct->close();
+                }
+                if ((int)$is_active === 0) {
+                    @$conn->query("UPDATE round_consultants SET is_active = 0 WHERE consultant_id = " . (int)$id);
                 }
 
                 // Sync job_title from input or address payload if available

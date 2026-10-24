@@ -12,13 +12,12 @@ const api = axios.create({
 });
 
 // --- CACHING & DEDUPLICATION LAYER ---
-const CACHE_LIFETIME = 5 * 60 * 1000; // 5 minutes
+const CACHE_LIFETIME = 60 * 1000; // 60 seconds fast reference cache TTL
 const cacheMap = new Map<string, { data: any; timestamp: number }>();
 const pendingRequests = new Map<string, Promise<any>>();
 
 export function clearApiCache() {
   cacheMap.clear();
-  pendingRequests.clear();
 }
 
 function getActionFromConfig(config: any): string {
@@ -55,6 +54,7 @@ const CACHEABLE_ENDPOINTS = new Set([
   'roles',
   'workflow_task_templates',
   'workflow-task-templates',
+  'settings',
   'get_settings',
   'get_ticket_settings',
   'get_accounts',
@@ -70,12 +70,24 @@ const CACHEABLE_ENDPOINTS = new Set([
   'contacts/programs'
 ]);
 
+function hasBypassCacheFlag(config: any): boolean {
+  if (config.headers?.['x-bypass-cache']) return true;
+  const p = config.params;
+  if (p && (p._no_cache || p.refresh || p._t)) return true;
+  const url = String(config.url || '');
+  if (url.includes('?')) {
+    const sp = new URLSearchParams(url.split('?')[1]);
+    if (sp.has('_no_cache') || sp.has('refresh') || sp.has('_t')) return true;
+  }
+  return false;
+}
+
 function isCacheable(config: any): boolean {
   const method = (config.method || 'get').toLowerCase();
   if (method !== 'get') {
     return false;
   }
-  if (config.headers?.['x-bypass-cache'] || config.params?._no_cache) {
+  if (hasBypassCacheFlag(config)) {
     return false;
   }
   const action = getActionFromConfig(config);
@@ -84,28 +96,41 @@ function isCacheable(config: any): boolean {
 
 function getCacheKey(config: any): string {
   const action = getActionFromConfig(config);
-  const params = { ...(config.params || {}) };
-  delete params.action;
-  delete params.token;
-  delete params._method;
-  delete params._t;
+  const rawParams: Record<string, any> = {};
 
-  const queryObj: Record<string, string> = {};
   const url = String(config.url || '');
   if (url.includes('?')) {
     const qs = url.split('?')[1];
     const sp = new URLSearchParams(qs);
     sp.forEach((val, key) => {
       if (key !== 'action' && key !== 'token' && key !== '_method' && key !== '_t') {
-        queryObj[key] = val;
+        rawParams[key] = String(val);
       }
     });
   }
-  const allParams = { ...queryObj, ...params };
-  return `${action}::${JSON.stringify(allParams)}`;
+
+  if (config.params && typeof config.params === 'object') {
+    Object.keys(config.params).forEach((key) => {
+      if (key !== 'action' && key !== 'token' && key !== '_method' && key !== '_t') {
+        const val = config.params[key];
+        if (val !== undefined && val !== null) {
+          rawParams[key] = typeof val === 'object' ? JSON.stringify(val) : String(val);
+        }
+      }
+    });
+  }
+
+  const sortedParams: Record<string, string> = {};
+  Object.keys(rawParams)
+    .sort()
+    .forEach((k) => {
+      sortedParams[k] = rawParams[k];
+    });
+
+  return `${action}::${JSON.stringify(sortedParams)}`;
 }
 
-const MAX_CACHE_ENTRIES = 200;
+const MAX_CACHE_ENTRIES = 250;
 
 function setCacheEntry(key: string, data: any) {
   if (cacheMap.size >= MAX_CACHE_ENTRIES) {
@@ -117,43 +142,71 @@ function setCacheEntry(key: string, data: any) {
   cacheMap.set(key, { data, timestamp: Date.now() });
 }
 
-const originalRequest = api.request.bind(api);
-api.request = function (urlOrConfig: any, config?: any) {
-  let finalConfig = urlOrConfig;
-  if (typeof urlOrConfig === 'string') {
-    finalConfig = { ...config, url: urlOrConfig };
-  } else {
-    finalConfig = urlOrConfig || {};
+function attachAbortSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) {
+    const abortErr: any = new Error('canceled');
+    abortErr.name = 'CanceledError';
+    abortErr.code = 'ERR_CANCELED';
+    abortErr.__CANCEL__ = true;
+    return Promise.reject(abortErr);
   }
-  
-  const method = (finalConfig.method || 'get').toLowerCase();
-  
-  // Clear cache on any mutating request
-  if (['post', 'put', 'delete', 'patch'].includes(method)) {
-    clearApiCache();
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      const abortErr: any = new Error('canceled');
+      abortErr.name = 'CanceledError';
+      abortErr.code = 'ERR_CANCELED';
+      abortErr.__CANCEL__ = true;
+      reject(abortErr);
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (val) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(val);
+      },
+      (err) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(err);
+      }
+    );
+  });
+}
+
+const originalRequest = api.request.bind(api);
+
+function customRequest(urlOrConfig: any, config?: any): Promise<any> {
+  let finalConfig: any;
+  if (typeof urlOrConfig === 'string') {
+    finalConfig = { ...(config || {}), url: urlOrConfig };
+  } else {
+    finalConfig = { ...(urlOrConfig || {}) };
   }
 
+  const method = (finalConfig.method || 'get').toLowerCase();
+
+  // Clear reference cache on any mutating request
+  if (['post', 'put', 'delete', 'patch'].includes(method)) {
+    clearApiCache();
+    return originalRequest(finalConfig);
+  }
+
+  // 1. Fast Reference Data Cache (TTL 60s) + Shared In-Flight Deduplication
   if (isCacheable(finalConfig)) {
     const key = getCacheKey(finalConfig);
     const cached = cacheMap.get(key);
-    
-    if (cached && (Date.now() - cached.timestamp < CACHE_LIFETIME)) {
-      // Refresh key order for LRU
+
+    if (cached && Date.now() - cached.timestamp < CACHE_LIFETIME) {
       cacheMap.delete(key);
       cacheMap.set(key, cached);
-      return Promise.resolve(cached.data);
-    }
-    
-    if (finalConfig.signal) {
-      return originalRequest(urlOrConfig, config).then((response) => {
-        setCacheEntry(key, response);
-        return response;
-      });
+      return attachAbortSignal(Promise.resolve(cached.data), finalConfig.signal);
     }
 
     let pending = pendingRequests.get(key);
     if (!pending) {
-      pending = originalRequest(urlOrConfig, config)
+      const sharedConfig = { ...finalConfig };
+      delete sharedConfig.signal;
+      pending = originalRequest(sharedConfig)
         .then((response) => {
           setCacheEntry(key, response);
           pendingRequests.delete(key);
@@ -165,11 +218,47 @@ api.request = function (urlOrConfig: any, config?: any) {
         });
       pendingRequests.set(key, pending);
     }
-    return pending;
+    return attachAbortSignal(pending, finalConfig.signal);
   }
-  
-  return originalRequest(urlOrConfig, config);
-};
+
+  // 2. General In-Flight GET Request Deduplication (when no caller-specific AbortSignal or bypass flag)
+  if (method === 'get' && !finalConfig.signal && !hasBypassCacheFlag(finalConfig) && !finalConfig.responseType) {
+    const dedupKey = `GET_INFLIGHT::${getCacheKey(finalConfig)}`;
+    let inFlight = pendingRequests.get(dedupKey);
+    if (!inFlight) {
+      inFlight = originalRequest(finalConfig).finally(() => {
+        pendingRequests.delete(dedupKey);
+      });
+      pendingRequests.set(dedupKey, inFlight);
+    }
+    return inFlight;
+  }
+
+  return originalRequest(finalConfig);
+}
+
+api.request = customRequest as any;
+api.get = function (url: string, config?: any) {
+  return customRequest({ ...(config || {}), method: 'get', url });
+} as any;
+api.delete = function (url: string, config?: any) {
+  return customRequest({ ...(config || {}), method: 'delete', url });
+} as any;
+api.head = function (url: string, config?: any) {
+  return customRequest({ ...(config || {}), method: 'head', url });
+} as any;
+api.options = function (url: string, config?: any) {
+  return customRequest({ ...(config || {}), method: 'options', url });
+} as any;
+api.post = function (url: string, data?: any, config?: any) {
+  return customRequest({ ...(config || {}), method: 'post', url, data });
+} as any;
+api.put = function (url: string, data?: any, config?: any) {
+  return customRequest({ ...(config || {}), method: 'put', url, data });
+} as any;
+api.patch = function (url: string, data?: any, config?: any) {
+  return customRequest({ ...(config || {}), method: 'patch', url, data });
+} as any;
 // -------------------------------------
 
 
@@ -209,11 +298,13 @@ api.interceptors.request.use((config) => {
     config.method = 'post';
   }
   // Rewrite URL to api.php?action=... to bypass missing web server rewrite rules
-  if (config.url && !config.url.startsWith('http') && !config.url.includes('api.php') && !isAutomationPhpUrl) {
+  if (config.url && !config.url.startsWith('http') && !isAutomationPhpUrl) {
     const cleanUrl = config.url.replace(/^\//, ''); // remove leading slash
     const qParts = cleanUrl.split('?');
     config.params = config.params || {};
-    config.params.action = qParts[0];
+    if (!cleanUrl.startsWith('api.php')) {
+      config.params.action = qParts[0];
+    }
     if (qParts[1]) {
       const searchParams = new URLSearchParams(qParts[1]);
       searchParams.forEach((val, key) => {

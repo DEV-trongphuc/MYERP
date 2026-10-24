@@ -1207,7 +1207,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
               alignItems: 'center',
               justifyContent: 'center',
               padding: '1.5rem',
-              zIndex: 2147483646
+              zIndex: 2147483646, ...({ '--drawer-backdrop-z': 2147483646, '--modal-z': 2147483646 } as any)
             }}
           >
             <motion.div
@@ -1382,14 +1382,14 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
             exit={window.innerWidth <= 768 ? { y: '100%' } : { opacity: 0, x: '250px' }}
             transition={{ type: 'spring', damping: 30, stiffness: 250, mass: 0.8 }}
             onClick={e => e.stopPropagation()}
-            className="drawer-sheet"
+            className="drawer-sheet drawer-panel"
             style={{
               position: 'fixed',
               top: 0,
               bottom: 0,
               left: window.innerWidth <= 768 ? 0 : 'var(--sidebar-width, 220px)',
               right: 0,
-              zIndex: 2147483625,
+              zIndex: 2147483625, ...({ '--drawer-panel-z': 2147483625 } as any),
               backgroundColor: 'var(--color-surface)',
               boxShadow: '-10px 0 30px rgba(0, 0, 0, 0.15)',
               display: 'flex',

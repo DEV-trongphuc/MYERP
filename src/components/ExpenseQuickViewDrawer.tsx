@@ -1208,7 +1208,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
               } as any}
             />
             <motion.div
-              className="drawer-sheet"
+              className="drawer-sheet drawer-panel"
               initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
               animate={{ y: 0, x: 0, opacity: 1 }}
               exit={isMobile ? { y: '60%', opacity: 0 } : { opacity: 0, x: '60%' }}
@@ -1226,7 +1226,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                 boxShadow: isMobile ? 'none' : '-10px 0 30px rgba(0, 0, 0, 0.15)',
                 display: 'flex',
                 flexDirection: 'column',
-                zIndex: baseZIndex + 2,
+                zIndex: baseZIndex + 2, ...({ '--drawer-panel-z': baseZIndex + 2 } as any),
                 overflow: 'hidden'
               }}
             >
@@ -1265,7 +1265,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
 
           {/* Drawer Sheet Panel */}
           <motion.div
-            className="drawer-sheet"
+            className="drawer-sheet drawer-panel"
             initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
             animate={{ y: 0, x: 0, opacity: 1 }}
             exit={isMobile ? { y: '60%', opacity: 0 } : { opacity: 0, x: '60%' }}
@@ -1283,7 +1283,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
               boxShadow: isMobile ? 'none' : '-10px 0 30px rgba(0, 0, 0, 0.15)',
               display: 'flex',
               flexDirection: 'column',
-              zIndex: baseZIndex + 2,
+              zIndex: baseZIndex + 2, ...({ '--drawer-panel-z': baseZIndex + 2 } as any),
               overflow: 'hidden',
               willChange: 'transform, opacity',
               transform: 'translate3d(0, 0, 0)',
@@ -3795,7 +3795,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: baseZIndex + 20
+          zIndex: 2147483646
         }} onClick={() => setReminderTargetUser(null)}>
           <div style={{
             background: 'var(--color-surface)',

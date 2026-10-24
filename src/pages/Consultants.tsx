@@ -2867,12 +2867,12 @@ const ConsultantsInner = () => {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.25 }}
+                transition={{ duration: 0.22 }}
                 style={{
                   position: 'fixed',
                   inset: 0,
-                  zIndex: 2147483619,
-                  '--drawer-backdrop-z': 2147483619,
+                  zIndex: 2147483620,
+                  '--drawer-backdrop-z': 2147483620,
                   background: 'rgba(0, 0, 0, 0.6)',
                   backdropFilter: 'blur(8px)',
                   WebkitBackdropFilter: 'blur(8px)',
@@ -2883,11 +2883,12 @@ const ConsultantsInner = () => {
                 initial={{ x: '100%' }}
                 animate={{ x: 0 }}
                 exit={{ x: '100%' }}
-                transition={{ type: 'tween', duration: 0.3 }}
-                className={`${styles.drawer} drawer-sheet`}
+                transition={{ type: 'tween', duration: 0.22 }}
+                className={`${styles.drawer} drawer-sheet drawer-panel`}
                 style={{
-                  zIndex: 2147483620
-                }}
+                  zIndex: 2147483625,
+                  '--drawer-panel-z': 2147483625
+                } as React.CSSProperties}
               >
                 {/* Header */}
                 <div className={styles.header}>

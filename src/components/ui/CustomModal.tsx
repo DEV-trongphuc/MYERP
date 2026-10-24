@@ -78,9 +78,13 @@ export const CustomModal: React.FC<CustomModalProps> = ({
     openedOverDrawerRef.current = false;
   }
 
+  // Standalone CustomModal sits at 2147483610 so Slide-over Drawers (.drawer-backdrop: 2147483620, .drawer-panel: 2147483625)
+  // opened from inside a modal (e.g. clicking a customer row inside a drilldown modal to open CustomerProfileDrawer)
+  // always render ABOVE the modal. If a CustomModal is opened from inside an already-open Drawer (openedOverDrawerRef = true),
+  // it sits at 2147483646 so nested confirmation/action modals render above the Drawer.
   const resolvedZIndex = openedOverDrawerRef.current
-    ? (zIndex ? Math.min(Math.max(zIndex, 2147483640), 2147483646) : 2147483645)
-    : (zIndex ?? 2147483645);
+    ? (zIndex ? Math.min(Math.max(zIndex, 2147483645), 2147483647) : 2147483646)
+    : (zIndex ? Math.min(Math.max(zIndex, 2147483605), 2147483618) : 2147483610);
 
   // Safe body scroll lock with reference count and LIFO Escape key handling
   useEffect(() => {
@@ -171,14 +175,14 @@ export const CustomModal: React.FC<CustomModalProps> = ({
     }
   } : {};
 
-  const overlayClass = `${styles.overlay} ${fullScreenOnMobile ? styles.fullscreenOverlay : ''} ${centeredOnMobile ? styles.centeredMobileOverlay : ''}`;
+  const overlayClass = `${styles.overlay} modal-above-drawer ${fullScreenOnMobile ? styles.fullscreenOverlay : ''} ${centeredOnMobile ? styles.centeredMobileOverlay : ''}`;
   const modalClass = `${styles.modal} ${fullScreenOnMobile ? styles.fullScreenMobile : ''} ${centeredOnMobile ? styles.centeredMobileModal : ''} ${modalClassName || ''}`;
 
   const modalContent = (
     <AnimatePresence>
       {isOpen && (
         disableAnimation ? (
-          <div className={overlayClass} style={{ zIndex: resolvedZIndex }}>
+          <div className={overlayClass} style={{ zIndex: resolvedZIndex, '--modal-z': resolvedZIndex } as React.CSSProperties}>
             <div
               className={styles.backdrop}
               onClick={handleBackdropClick}
@@ -227,7 +231,7 @@ export const CustomModal: React.FC<CustomModalProps> = ({
             </div>
           </div>
         ) : (
-          <div className={overlayClass} style={{ zIndex: resolvedZIndex }}>
+          <div className={overlayClass} style={{ zIndex: resolvedZIndex, '--modal-z': resolvedZIndex } as React.CSSProperties}>
             <motion.div
               className={styles.backdrop}
               initial={{ opacity: 0 }}

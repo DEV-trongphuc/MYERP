@@ -398,41 +398,52 @@ const TABS = [
   { id: 'tickets', label: 'Helpdesk', icon: <LifeBuoy size={16} /> },
 ];
 
-const renderTabIcon = (tabId: string, iconElement: React.ReactNode, isActive: boolean) => {
+const renderTabIcon = (tabId: string, _iconElement?: React.ReactNode, _isActive?: boolean, tabLabel?: string) => {
   return (
     <div style={{
-      width: '30px',
-      height: '30px',
-      borderRadius: '8px',
+      width: '28px',
+      height: '28px',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      flexShrink: 0,
-      background: isActive ? '#C6333D' : '#f8fafc',
-      border: isActive ? 'none' : '1px solid #e2e8f0',
-      color: isActive ? '#ffffff' : '#64748b',
-      transition: 'all 0.15s ease'
+      flexShrink: 0
     }}>
-      {React.isValidElement(iconElement)
-        ? React.cloneElement(iconElement as React.ReactElement<any>, {
-            size: 15,
-            color: isActive ? '#ffffff' : '#64748b',
-            strokeWidth: 2.2
-          })
-        : iconElement}
+      <AppIcon name={tabLabel || tabId} size={28} />
     </div>
   );
 };
 
+
+const normalizePlainTextMentions = (rawText: string, users: any[]): string => {
+  if (!rawText || !rawText.includes('@')) return rawText;
+  let result = rawText
+    .replace(/@Mai\s+Nhật\s+Huyền\s+Thị\s+Nữ/giu, '@Mai_Thị_Nữ')
+    .replace(/@Nguyễn\s+Châu\s+Vỹ\s+Ái\s+Hiền\s+Thương/giu, '@Nguyễn_Hiền_Thương')
+    .replace(/@Lê\s+Đinh\s+Ý\s+Nhi\s+Thị\s+Huyền\s+Trâm/giu, '@Lê_Thị_Huyền_Trâm')
+    .replace(/@Nguyễn\s+Châu\s+Vỹ\s+Ái\s+Thị\s+Linh\s+Đan/giu, '@Nguyễn_Thị_Linh_Đan');
+  if (!Array.isArray(users) || users.length === 0) return result;
+  const sortedUsers = [...users]
+    .filter((u: any) => u && (u.full_name || u.name))
+    .sort((a: any, b: any) => String(b.full_name || b.name || '').length - String(a.full_name || a.name || '').length);
+  for (const u of sortedUsers) {
+    const fullName = String(u.full_name || u.name || '').trim();
+    if (!fullName || !fullName.includes(' ')) continue;
+    const escaped = fullName.replace(/[.*+?^${}()|[\]\\]/g, (m) => '\\' + m).replace(/\s+/g, '\\s+');
+    const underscored = fullName.replace(/\s+/g, '_');
+    result = result.replace(new RegExp('@' + escaped + '(?![\\p{L}\\p{N}_])', 'giu'), '@' + underscored);
+  }
+  return result;
+};
 
 const renderFormattedText = (text: string, users: any[], onMentionClick?: (e: React.MouseEvent, name: string) => void) => {
   if (!text) return '';
   if (/<[a-z][\s\S]*>/i.test(text)) {
     return <span className="rich-text-editor-content" dangerouslySetInnerHTML={{ __html: text }} style={{ display: 'block', wordBreak: 'break-word' }} />;
   }
+  const preNormalized = normalizePlainTextMentions(text, users);
   // Regex matches URLs or @mentions (supporting unicode characters and parentheses like @Minh_Khôi_(Manager))
   const regex = /(https?:\/\/[^\s]+|@[\p{L}\p{N}_()]+)/gu;
-  const parts = text.split(regex);
+  const parts = preNormalized.split(regex);
   return parts.map((part, index) => {
     if (part.startsWith('http://') || part.startsWith('https://')) {
       return (
@@ -449,13 +460,14 @@ const renderFormattedText = (text: string, users: any[], onMentionClick?: (e: Re
     } else if (part.startsWith('@')) {
       const cleanName = (n: string) => (n || '').trim().replace(/\s+/g, '_').toLowerCase().replace(/_\([^)]+\)/g, '').replace(/\([^)]+\)/g, '');
       const cleanMentionVal = cleanName(part.substring(1));
-      // Look up user to find avatar
+      // Look up user to find avatar (strict exact full_name or username match)
       const taggedUser = users.find((u: any) => {
-        const normalizedUser = cleanName(u.full_name || u.name || u.fullname || u.username);
-        return normalizedUser === cleanMentionVal;
+        const normalizedUser = cleanName(u.full_name || u.name || u.fullname || '');
+        const normalizedUsername = cleanName(u.username || '');
+        return (normalizedUser && normalizedUser === cleanMentionVal) || (normalizedUsername && normalizedUsername === cleanMentionVal);
       });
 
-      if (!taggedUser) {
+      if (!taggedUser && !part.substring(1).includes('_')) {
         return part;
       }
 
@@ -1380,7 +1392,9 @@ const TimelineItem = React.memo<TimelineItemProps>(({
   return prevProps.ev.id === nextProps.ev.id &&
          prevProps.ev.time === nextProps.ev.time &&
          prevProps.ev.status === nextProps.ev.status &&
+         prevProps.ev.note === nextProps.ev.note &&
          prevProps.ev.comment_count === nextProps.ev.comment_count &&
+         prevProps.users === nextProps.users &&
          prevProps.index === nextProps.index;
 });
 
@@ -1426,9 +1440,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     if (/<[a-z][\s\S]*>/i.test(text)) {
       return <span className="rich-text-editor-content" dangerouslySetInnerHTML={{ __html: text }} style={{ display: 'block', wordBreak: 'break-word' }} />;
     }
+    const preNormalized = normalizePlainTextMentions(text, users);
     // Regex matches URLs or @mentions (supporting unicode characters and parentheses like @Minh_Khôi_(Manager))
     const regex = /(https?:\/\/[^\s]+|@[\p{L}\p{N}_()]+)/gu;
-    const parts = text.split(regex);
+    const parts = preNormalized.split(regex);
     return parts.map((part, index) => {
       if (part.startsWith('http://') || part.startsWith('https://')) {
         return (
@@ -1443,14 +1458,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           </a>
         );
       } else if (part.startsWith('@')) {
-        const cleanMention = part.substring(1).toLowerCase();
-        // Look up user to find avatar
+        const cleanMention = part.substring(1).trim().replace(/\s+/g, '_').toLowerCase();
+        // Look up user to find avatar (strict exact full_name or username match)
         const taggedUser = users.find((u: any) => {
-          const normalizedUser = (u.full_name || '').trim().replace(/\s+/g, '_').toLowerCase();
-          return normalizedUser === cleanMention;
+          const normalizedUser = (u.full_name || u.name || '').trim().replace(/\s+/g, '_').toLowerCase();
+          const normalizedUsername = (u.username || '').trim().replace(/\s+/g, '_').toLowerCase();
+          return (normalizedUser && normalizedUser === cleanMention) || (normalizedUsername && normalizedUsername === cleanMention);
         });
 
-        if (!taggedUser) {
+        if (!taggedUser && !part.substring(1).includes('_')) {
           return part;
         }
 
@@ -1864,6 +1880,44 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [isInitialNotesExpanded, setIsInitialNotesExpanded] = useState(true);
   const [isEditingInitialNotes, setIsEditingInitialNotes] = useState(false);
   const [showLiveAdPreviewModal, setShowLiveAdPreviewModal] = useState<boolean>(false);
+  const [liveAdPreviewData, setLiveAdPreviewData] = useState<any | null>(null);
+  const [loadingLiveAdPreview, setLoadingLiveAdPreview] = useState<boolean>(false);
+
+  const resolvedMetaAdId = useMemo(() => {
+    return String(formData?.meta_ad_id || contact?.meta_ad_id || '').trim();
+  }, [formData?.meta_ad_id, contact?.meta_ad_id]);
+
+  useEffect(() => {
+    if (!isOpen || !resolvedMetaAdId) {
+      setLiveAdPreviewData(null);
+      setLoadingLiveAdPreview(false);
+      return;
+    }
+    let cancelled = false;
+    setLoadingLiveAdPreview(true);
+    api
+      .get('/marketing/meta/ad-preview', {
+        params: { ad_id: resolvedMetaAdId, format: 'DESKTOP_FEED_STANDARD' }
+      })
+      .then((res) => {
+        if (!cancelled) {
+          setLiveAdPreviewData(res?.data?.data ?? res?.data ?? null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLiveAdPreviewData(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingLiveAdPreview(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, resolvedMetaAdId]);
 
   const hasMetaAttribution = useMemo(() => {
     return Boolean(
@@ -1882,13 +1936,31 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     );
   }, [formData, contact]);
 
-  // Program & Admission Date state & suggestions
+  // Program, Admission Date & Industry state & suggestions
   const [programSuggestions, setProgramSuggestions] = useState<string[]>([]);
   const [showProgramDropdown, setShowProgramDropdown] = useState(false);
   const [showBodyProgramDropdown, setShowBodyProgramDropdown] = useState(false);
   const programDropdownRef = useRef<HTMLDivElement>(null);
   const programDropdownMobileRef = useRef<HTMLDivElement>(null);
   const bodyProgramDropdownRef = useRef<HTMLDivElement>(null);
+  const [industrySuggestions, setIndustrySuggestions] = useState<string[]>([
+    'Ngân hàng (Banking)',
+    'Tài chính - Chứng khoán - Đầu tư',
+    'Bất động sản & Xây dựng',
+    'Y tế - Dược phẩm - Bệnh viện',
+    'Công nghệ - Viễn thông - Media',
+    'Sản xuất - Công nghiệp - Năng lượng',
+    'Giáo dục & Đào tạo',
+    'Thương mại - Dịch vụ & Bán lẻ',
+    'Vận tải - Logistics - XNK',
+    'F&B - Khách sạn - Du lịch',
+    'Bảo hiểm (Insurance)',
+    'Cơ quan Nhà nước / Hành chính công',
+    'Kế toán - Kiểm toán - Tư vấn Luật',
+    'Nông nghiệp - Thủy sản - Thực phẩm'
+  ]);
+  const [showIndustryDropdown, setShowIndustryDropdown] = useState(false);
+  const industryDropdownRef = useRef<HTMLDivElement>(null);
   const [duplicatePhoneModal, setDuplicatePhoneModal] = useState<{
     isOpen: boolean;
     phone: string;
@@ -1916,6 +1988,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       if (!isInsideBody) {
         setShowBodyProgramDropdown(false);
       }
+
+      const isInsideIndustry = industryDropdownRef.current ? industryDropdownRef.current.contains(target) : false;
+      if (!isInsideIndustry) {
+        setShowIndustryDropdown(false);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -1936,6 +2013,30 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               .filter((p: string) => p.length > 0);
             if (cleaned.length > 0) {
               setProgramSuggestions(Array.from(new Set([...cleaned])));
+            }
+          }
+        })
+        .catch(() => {});
+
+      api.get('/contacts/industries')
+        .then(res => {
+          if (res.data?.data && Array.isArray(res.data.data)) {
+            const cleaned = res.data.data
+              .map((ind: string) => String(ind || '').trim())
+              .filter((ind: string) => ind.length > 0 && ind.toLowerCase() !== 'chưa cập nhật');
+            if (cleaned.length > 0) {
+              setIndustrySuggestions(prev => {
+                const seen = new Set<string>();
+                const merged: string[] = [];
+                [...cleaned, ...prev].forEach(item => {
+                  const k = item.trim().toLowerCase();
+                  if (k && !seen.has(k)) {
+                    seen.add(k);
+                    merged.push(item.trim());
+                  }
+                });
+                return merged;
+              });
             }
           }
         })
@@ -2911,17 +3012,107 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
   const isStudent = useMemo(() => {
     const status = String(formData.pipeline_status || contact?.pipeline_status || 'chua_xac_dinh').trim().toLowerCase();
-    const stageId = String(formData.stage_id || contact?.stage_id || '');
+    const stageId = String(formData.stage_id || contact?.stage_id || '').trim().toLowerCase();
     const currentStage = pipelineStages.find(s => 
-      String(s.id) === stageId ||
+      String(s.id).toLowerCase() === stageId ||
+      String((s as any).db_id || '').toLowerCase() === stageId ||
       String(s.id).toLowerCase() === status ||
       String(s.system_slug || '').toLowerCase() === status ||
       String(s.name || '').toLowerCase() === status
     );
-    const isEnrolledStage = status === 'enrolled' || status === 'hoc_vien' || currentStage?.system_slug === 'enrolled' || currentStage?.system_slug === 'hoc_vien' || Boolean(currentStage?.is_won);
+    const stageOrder = Number(currentStage?.order_index || 0);
+    const isPipeline13Or14 =
+      stageOrder === 13 ||
+      stageOrder === 14 ||
+      Boolean(currentStage?.is_won) ||
+      ['deposit_tuition_payment', 'dong_le_phi', 'enrolled', 'hoc_vien', '43', '44'].includes(status) ||
+      ['deposit_tuition_payment', 'dong_le_phi', 'enrolled', 'hoc_vien', '43', '44'].includes(stageId) ||
+      String(currentStage?.system_slug || '').toLowerCase() === 'deposit_tuition_payment' ||
+      String(currentStage?.system_slug || '').toLowerCase() === 'dong_le_phi' ||
+      String(currentStage?.system_slug || '').toLowerCase() === 'enrolled' ||
+      String(currentStage?.system_slug || '').toLowerCase() === 'hoc_vien' ||
+      status.startsWith('13') ||
+      status.startsWith('14');
     const isCustomerStatus = String(formData.status || contact?.status || '').toLowerCase() === 'customer';
-    return isEnrolledStage || isCustomerStatus;
+    const isStudentsRoute = typeof window !== 'undefined' && window.location.pathname.includes('/students');
+    return isPipeline13Or14 || isCustomerStatus || isStudentsRoute;
   }, [formData.pipeline_status, contact?.pipeline_status, formData.stage_id, contact?.stage_id, formData.status, contact?.status, pipelineStages]);
+
+  const studentMissingFields = useMemo(() => {
+    if (!isStudent) return [] as Array<{ key: string; label: string }>;
+    const missing: Array<{ key: string; label: string }> = [];
+    if (!String(formData.citizen_id || formData.passport || '').trim()) {
+      missing.push({ key: 'citizen_id', label: 'CCCD / Passport' });
+    }
+    if (!String(formData.company || formData.department || formData.company_name || '').trim()) {
+      missing.push({ key: 'company', label: 'Công ty' });
+    }
+    if (!String(formData.job_title || '').trim()) {
+      missing.push({ key: 'job_title', label: 'Chức vụ' });
+    }
+    if (!String(formData.industry || '').trim()) {
+      missing.push({ key: 'industry', label: 'Ngành nghề' });
+    }
+    if (!String(formData.program || '').trim()) {
+      missing.push({ key: 'program', label: 'Chương trình học' });
+    }
+    const rawAdm = String(formData.admission_date || '').trim();
+    if (!rawAdm || rawAdm.startsWith('0000')) {
+      missing.push({ key: 'admission_date', label: 'Ngày nhập học' });
+    }
+    if (!String(formData.student_id || formData.student_code || '').trim()) {
+      missing.push({ key: 'student_id', label: 'ID Student' });
+    }
+    const rawDob = String(formData.birthday || '').trim();
+    if (!rawDob || rawDob.startsWith('0000')) {
+      missing.push({ key: 'birthday', label: 'Ngày sinh' });
+    }
+    if (!String(formData.gender || '').trim()) {
+      missing.push({ key: 'gender', label: 'Giới tính' });
+    }
+    if (!String(formData.email || '').trim()) {
+      missing.push({ key: 'email', label: 'Email' });
+    }
+    if (!String(formData.phone || formData.mobile || formData.phone2 || '').trim()) {
+      missing.push({ key: 'phone', label: 'Số điện thoại' });
+    }
+    if (!String(formData.address || formData.city || '').trim()) {
+      missing.push({ key: 'address', label: 'Địa chỉ' });
+    }
+    return missing;
+  }, [
+    isStudent,
+    formData.citizen_id,
+    formData.passport,
+    formData.company,
+    formData.department,
+    formData.company_name,
+    formData.job_title,
+    formData.industry,
+    formData.program,
+    formData.admission_date,
+    formData.student_id,
+    formData.student_code,
+    formData.birthday,
+    formData.gender,
+    formData.email,
+    formData.phone,
+    formData.mobile,
+    formData.phone2,
+    formData.address,
+    formData.city
+  ]);
+
+  const focusStudentField = useCallback((fieldKey: string) => {
+    const el = document.querySelector(`[data-student-field="${fieldKey}"]`) as HTMLElement | null;
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const input = el.querySelector('input, select, textarea') as HTMLElement | null;
+      if (input) {
+        setTimeout(() => input.focus(), 220);
+      }
+    }
+  }, []);
 
   const referrerOptions = useMemo(() => {
     const list = companiesList.map(c => ({
@@ -3968,32 +4159,43 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   // Academic Program Templates configuration
   const ACADEMIC_PROGRAM_OPTIONS = [
     {
+      id: 'estiam',
+      label: 'Tiến sĩ Quản trị Kinh doanh - Paris Education / ESTIAM (DBA ESTIAM)',
+      school: 'estiam',
+      docLink: 'https://drive.google.com/drive/folders/1tBzBTLL9WPT-OOjKWRNz5qFx8YGSptKG?usp=drive_link'
+    },
+    {
       id: 'msc_ai',
       label: 'Thạc sĩ Khoa học Trí tuệ nhân tạo (MSc AI)',
+      school: 'umef',
       docLink: 'https://drive.google.com/drive/folders/1Byi7lmVQsm9sSD-OGKSHli1FfsnsvkXr'
     },
     {
       id: 'mba_standard',
       label: 'Thạc sĩ Quản trị Kinh doanh - Tiêu chuẩn (MBA / EMBA Standard)',
+      school: 'umef',
       docLink: 'https://drive.google.com/drive/folders/1dvILnySA3MWKR-LutdrdXyrJPqL6ppcy'
     },
     {
       id: 'bba',
       label: 'Cử nhân Quản trị Kinh doanh (BBA)',
+      school: 'umef',
       docLink: 'https://drive.google.com/drive/folders/1E1TZMRz5w05xv4wsNvP5vht3ojHeviAw'
     },
     {
       id: 'mba_high',
       label: 'Thạc sĩ Quản trị Kinh doanh - Nâng cao (MBA / EMBA High)',
+      school: 'umef',
       docLink: 'https://drive.google.com/drive/folders/1FAJL1opSbPEOx9CL1L1QMiug3mfRdRWX'
     }
   ];
 
   const detectAcademicProgram = (programStr: string) => {
-    const p = (programStr || '').toLowerCase();
+    const p = (programStr || '').trim().toLowerCase();
+    if (p.includes('estiam') || p.includes('paris education') || p.includes('dual dba') || p === 'de') return 'estiam';
     if (p.includes('ai') || p.includes('msc') || p.includes('trí tuệ') || p.includes('tri tue')) return 'msc_ai';
     if (p.includes('bba') || p.includes('cử nhân') || p.includes('cu nhan') || p.includes('bachelor')) return 'bba';
-    if (p.includes('high') || p.includes('nâng cao') || p.includes('nang cao')) return 'mba_high';
+    if (p.includes('high') || p.includes('nâng cao') || p.includes('nang cao') || p.includes('hq')) return 'mba_high';
     return 'mba_standard';
   };
 
@@ -4010,10 +4212,48 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     content: ''
   });
 
+  const getAcademicEmailDefaultSubject = useCallback((programKey: string = 'mba_standard') => {
+    if (programKey === 'estiam') {
+      return '[IDEAS] Thông báo Tiếp nhận học viên & Hướng dẫn học tập - Paris Education/ESTIAM';
+    }
+    return '[IDEAS] Thông báo Tiếp nhận học viên & Hướng dẫn học tập - Swiss UMEF';
+  }, []);
+
   const getAcademicEmailDefaultContent = useCallback((studentName: string, programKey: string = 'mba_standard') => {
     const greeting = studentName ? `Kính gửi Quý Anh/Chị học viên <strong>${studentName}</strong>,` : 'Kính gửi Quý Anh/Chị học viên,';
-    const selectedProg = ACADEMIC_PROGRAM_OPTIONS.find(opt => opt.id === programKey) || ACADEMIC_PROGRAM_OPTIONS[1];
+    const selectedProg = ACADEMIC_PROGRAM_OPTIONS.find(opt => opt.id === programKey) || ACADEMIC_PROGRAM_OPTIONS[2];
     const docFolderLink = selectedProg.docLink;
+
+    if (programKey === 'estiam') {
+      return `<p>${greeting}</p>
+<p>Lời đầu tiên, Ban Công tác Sinh viên IDEAS xin gửi lời chúc mừng và trân trọng cảm ơn Anh/Chị đã tin chọn IDEAS làm người bạn đồng hành trên chặng đường chinh phục tấm bằng từ <strong>Paris Education/ESTIAM</strong>. Chúng tôi cam kết đồng hành và hỗ trợ Anh/Chị xuyên suốt quá trình học tập và nghiên cứu.</p>
+
+<p><strong style="color: #BD1D2D; font-size: 15px;">A. KÊNH LIÊN LẠC CHÍNH THỨC</strong></p>
+<p>1. <strong>Kênh Hỗ trợ Nhanh (Zalo/Hotline):</strong> 098 736 3935<br/>
+2. <strong>Kênh Hỗ trợ Học vụ (Email):</strong><br/>
+&nbsp;&nbsp;- Tiếp nhận yêu cầu: <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a><br/>
+&nbsp;&nbsp;- CC (Đồng gửi): <a href="mailto:student.notice@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">student.notice@ideas.edu.vn</a> <em>(Vui lòng luôn CC địa chỉ này để hệ thống ghi nhận và xử lý nhanh nhất)</em></p>
+
+<p><strong style="color: #BD1D2D; font-size: 15px;">B. TÀI KHOẢN HỌC TẬP</strong></p>
+<p>Anh/Chị sẽ được cấp 3 tài khoản học tập, sử dụng xuyên suốt chương trình:</p>
+<ul style="padding-left: 20px; line-height: 1.8;">
+  <li><strong>1. Tài khoản LMS IDEAS</strong> (xem tài liệu, video record buổi học, hỗ trợ học thuật): <a href="https://lms.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://lms.ideas.edu.vn/</a> | Video hướng dẫn: <a href="https://drive.google.com/file/d/1wXQtghJSd7CHoek_hPXOfXuVuGuT8bMv/view?usp=sharing" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></li>
+  <li><strong>2. Tài khoản học tập Paris Education</strong> (làm bài, nộp bài chính thức): <a href="https://pariseducation-global.org/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://pariseducation-global.org/</a></li>
+  <li><strong>3. Platform IDEAS AI</strong> (công cụ bổ trợ học tập): <a href="https://ai.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://ai.ideas.edu.vn/</a></li>
+</ul>
+<p><em>(thông tin tài khoản sẽ được gửi trực tiếp đến email cá nhân của học viên đã đăng ký học tập)</em></p>
+
+<p><strong style="color: #BD1D2D; font-size: 15px;">C. TÀI LIỆU ĐÍNH KÈM</strong></p>
+<ul style="padding-left: 20px; line-height: 1.8;">
+  <li>File Template format APA</li>
+  <li>File hướng dẫn sử dụng các hệ thống học tập</li>
+</ul>
+<p>Link tổng hợp tài liệu hướng dẫn: <a href="${docFolderLink}" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></p>
+
+<p>Nếu có bất kỳ vướng mắc nào, Anh/Chị vui lòng liên hệ CTSV để được hỗ trợ kịp thời. Chúc Anh/Chị có hành trình học tập, nghiên cứu thật thuận lợi và thành công!</p>
+
+<p style="margin-top: 20px;">Trân trọng,<br/><strong>Ban Công tác Sinh viên IDEAS</strong></p>`;
+    }
 
     return `<p>${greeting}</p>
 <p>Lời đầu tiên, Ban Công tác Sinh viên IDEAS xin gửi lời chúc mừng và trân trọng cảm ơn Anh/Chị đã tin chọn IDEAS làm người bạn đồng hành trên chặng đường chinh phục tấm bằng từ <strong>Đại học Swiss UMEF</strong>. Chúng tôi cam kết đồng hành và hỗ trợ Anh/Chị xuyên suốt quá trình học tập.</p>
@@ -4049,13 +4289,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const handleOpenAcademicEmailModal = () => {
     const studentName = (formData.full_name || contact?.full_name || '').trim();
     const recipientEmail = (formData.email || contact?.email || '').trim();
-    const rawProg = formData.program || contact?.program || contact?.product_name || contact?.course || '';
+    const resolvedProj = (formData.project_id || contact?.project_id)
+      ? projectsList.find(p => Number(p.id) === Number(formData.project_id || contact?.project_id))
+      : null;
+    const rawProg = formData.program || resolvedProj?.name || contact?.program || contact?.product_name || contact?.course || '';
     const detectedProg = detectAcademicProgram(rawProg);
     setAcademicEmailProgram(detectedProg);
     setAcademicEmailForm({
       to_email: recipientEmail,
       cc_email: 'student.notice@ideas.edu.vn',
-      subject: `[IDEAS] Thông báo Tiếp nhận học viên & Hướng dẫn học tập - Swiss UMEF`,
+      subject: getAcademicEmailDefaultSubject(detectedProg),
       content: getAcademicEmailDefaultContent(studentName, detectedProg)
     });
     setAcademicEmailTab('preview');
@@ -4067,6 +4310,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     const studentName = (formData.full_name || contact?.full_name || '').trim();
     setAcademicEmailForm(prev => ({
       ...prev,
+      subject: getAcademicEmailDefaultSubject(progKey),
       content: getAcademicEmailDefaultContent(studentName, progKey)
     }));
   };
@@ -4353,10 +4597,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     e.stopPropagation();
     const cleanName = (n: string) => (n || '').trim().replace(/\s+/g, '_').toLowerCase();
     const searchVal = cleanName(name);
-    const user = users.find(u => {
-      const uName = cleanName(u.full_name || u.name || u.username || '');
-      return uName === searchVal || uName.includes(searchVal) || searchVal.includes(uName);
-    });
+    const user =
+      users.find(u => cleanName(u.full_name || u.name || '') === searchVal || cleanName(u.username || '') === searchVal) ||
+      users.find(u => {
+        const uName = cleanName(u.full_name || u.name || u.username || '');
+        return uName.includes(searchVal) || searchVal.includes(uName);
+      });
 
     let empCode = (user as any)?.employee_id || '';
     if (empCode) {
@@ -4452,6 +4698,18 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       }
     }
 
+    // Normalize gender ('Male'/'Nam' -> 'male', 'Female'/'Nữ' -> 'female')
+    if (newC.gender) {
+      const g = String(newC.gender).trim().toLowerCase();
+      if (g === 'male' || g === 'nam' || g === 'm') newC.gender = 'male';
+      else if (g === 'female' || g === 'nữ' || g === 'nu' || g === 'f') newC.gender = 'female';
+      else if (g === 'other' || g === 'khác' || g === 'khac') newC.gender = 'other';
+    }
+
+    if (!newC.student_id && newC.student_code) {
+      newC.student_id = newC.student_code;
+    }
+
     // Ensure mobile and phone2 are populated if one is set
     if (!newC.mobile && newC.phone2) {
       newC.mobile = newC.phone2;
@@ -4481,18 +4739,20 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     if (/<[a-z][\s\S]*>/i.test(normalizedText)) {
       return <span className="rich-text-editor-content" dangerouslySetInnerHTML={{ __html: normalizedText }} style={{ display: 'block', wordBreak: 'break-word' }} />;
     }
-    const parts = normalizedText.split(/(@[a-zA-Z0-9_\u00C0-\u1EF9]+)/g);
+    const preNormalized = normalizePlainTextMentions(normalizedText, users);
+    const parts = preNormalized.split(/(@[\p{L}\p{N}_()]+)/gu);
     return parts.map((part, i) => {
       if (part.startsWith('@')) {
         const name = part.substring(1);
         const cleanName = (n: string) => (n || '').trim().replace(/\s+/g, '_').toLowerCase();
         const searchVal = cleanName(name);
         const taggedUser = users.find(u => {
-          const uName = cleanName(u.full_name || u.name || u.username || '');
-          return uName === searchVal || uName.includes(searchVal);
+          const uName = cleanName(u.full_name || u.name || '');
+          const uUser = cleanName(u.username || '');
+          return (uName && uName === searchVal) || (uUser && uUser === searchVal);
         });
 
-        if (!taggedUser) {
+        if (!taggedUser && !name.includes('_')) {
           return part;
         }
 
@@ -5668,19 +5928,35 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
   useEffect(() => {
     if (isOpen) {
-      // 1. Users cache check
+      // 1. Users cache check (strictly active employees only)
+      const filterActiveTeam = (list: any[]) =>
+        list.filter((u: any) => {
+          if (!u || !u.id) return false;
+          if (Number(u.is_active) === 0 || u.is_active === false) return false;
+          const st = String(u.status || 'active').toLowerCase().trim();
+          if (st !== 'active') return false;
+          if (u.deleted_at) return false;
+          const role = String(u.role || '').toLowerCase().trim();
+          if (role === 'bot' || role === 'system' || Number(u.id) === 9000001) return false;
+          const email = String(u.email || '').toLowerCase().trim();
+          if (['turniodev@gmail.com', 'turnlodev@gmail.com', 'ideas.ai@ideas.vn', 'ai@ideas.edu.vn'].includes(email)) return false;
+          return true;
+        });
+
       if (globalUsersCache && globalUsersCache.length > 0) {
-        setUsers(globalUsersCache);
+        const cleanCached = filterActiveTeam(globalUsersCache);
+        globalUsersCache = cleanCached;
+        setUsers(cleanCached);
       } else {
         api.get('/users?all=1').then(r => {
           const d = r.data.data;
           const list = Array.isArray(d) ? d : (d?.items || []);
-          const team = list.map((u: any) => ({
+          const team = filterActiveTeam(list.map((u: any) => ({
             ...u,
             id: u.id,
             full_name: u.full_name || u.name,
             avatar_url: u.avatar || u.avatar_url
-          }));
+          })));
           globalUsersCache = team;
           setUsers(team);
         }).catch(() => {});
@@ -6085,6 +6361,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         }
       }
       const note = rawNoteBody
+        .replace(/<span[^>]*class=["'][^"']*mention[^"']*["'][^>]*>[\s\S]*?@([^<]+)<\/span>\s*<\/span>/gi, (_, mName) => ` @${String(mName).trim().replace(/\s+/g, '_')} `)
+        .replace(/<span[^>]*class=["'][^"']*mention[^"']*["'][^>]*>@?([^<]+)<\/span>/gi, (_, mName) => ` @${String(mName).trim().replace(/\s+/g, '_')} `)
         .replace(/<[^>]+>/g, ' ')
         .replace(/&nbsp;/gi, ' ')
         .replace(/&amp;/gi, '&')
@@ -9446,7 +9724,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                           }}
                                         >
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                            {renderTabIcon(tab.id, tab.icon, isActive)}
+                                            {renderTabIcon(tab.id, tab.icon, isActive, tab.label)}
                                             <span style={{ fontSize: '0.875rem', fontWeight: isActive ? 700 : 600, color: isActive ? '#0f172a' : '#475569' }}>{tab.label}</span>
                                           </div>
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -9690,7 +9968,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                         }}
                                       >
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                          {renderTabIcon(tab.id, tab.icon, isActive)}
+                                          {renderTabIcon(tab.id, tab.icon, isActive, tab.label)}
                                           <span style={{ fontSize: '0.85rem' }}>{tab.label}</span>
                                         </div>
                                         {tab.id === 'journey360' && journeyBadgeCount > 0 && (
@@ -9965,6 +10243,89 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         />
                       )}
 
+                      {/* Student Missing Critical Profile Info Warning Banner */}
+                      {isStudent && studentMissingFields.length > 0 && (
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px',
+                            padding: '10px 14px',
+                            borderRadius: '12px',
+                            background: '#fffbeb',
+                            border: '1px solid #fde68a',
+                            boxShadow: '0 1px 2px rgba(217, 119, 6, 0.05)'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div
+                                style={{
+                                  width: '24px',
+                                  height: '24px',
+                                  borderRadius: '6px',
+                                  background: '#fef3c7',
+                                  color: '#d97706',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  flexShrink: 0
+                                }}
+                              >
+                                <AlertTriangle size={13} />
+                              </div>
+                              <div>
+                                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#92400e', lineHeight: 1.25 }}>
+                                  Hồ sơ Học viên còn thiếu {studentMissingFields.length} thông tin quan trọng
+                                </div>
+                              </div>
+                            </div>
+                            <span
+                              style={{
+                                fontSize: '0.68rem',
+                                fontWeight: 700,
+                                padding: '2px 8px',
+                                borderRadius: '999px',
+                                background: '#fef3c7',
+                                color: '#b45309',
+                                border: '1px solid #fcd34d',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              Cần bổ sung ({studentMissingFields.length})
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                            {studentMissingFields.map(mf => (
+                              <button
+                                key={mf.key}
+                                type="button"
+                                onClick={() => focusStudentField(mf.key)}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  background: '#ffffff',
+                                  color: '#b45309',
+                                  border: '1px solid #fcd34d',
+                                  fontSize: '0.7rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease',
+                                  lineHeight: 1.25
+                                }}
+                                title={`Nhấn để điền ${mf.label}`}
+                              >
+                                <AlertTriangle size={10.5} style={{ color: '#d97706', flexShrink: 0 }} />
+                                <span>Thiếu {mf.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Quick Stats Dashboard — Executive Brand Red & Slate */}
                       <div style={{ display: 'grid', gridTemplateColumns: isMobileOrTablet ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '0.75rem' }}>
                         <div className="card-panel stat-card hover-lift" style={{ 
@@ -10065,7 +10426,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         <div
                           className="card-panel"
                           style={{
-                            marginBottom: '1.25rem',
+                            order: isStudent ? 10 : 1,
+                            marginBottom: 0,
                             borderRadius: '16px',
                             background: '#ffffff',
                             border: '1px solid #e2e8f0',
@@ -10104,6 +10466,22 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             </div>
 
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {resolvedMetaAdId && (
+                                <span
+                                  style={{
+                                    background: '#f8fafc',
+                                    color: '#475569',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: 6,
+                                    padding: '3px 8px',
+                                    fontSize: '0.7rem',
+                                    fontFamily: 'monospace',
+                                    fontWeight: 600
+                                  }}
+                                >
+                                  Ad ID: {resolvedMetaAdId}
+                                </span>
+                              )}
                               <span
                                 style={{
                                   background: '#f1f5f9',
@@ -10116,81 +10494,172 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               >
                                 Facebook Ads Lead
                               </span>
-                              <button
-                                type="button"
-                                onClick={() => setShowLiveAdPreviewModal(true)}
-                                style={{
-                                  height: 30,
-                                  padding: '0 12px',
-                                  borderRadius: 8,
-                                  border: '1px solid #e2e8f0',
-                                  background: '#ffffff',
-                                  color: '#BD1D2D',
-                                  fontSize: '0.74rem',
-                                  fontWeight: 700,
-                                  cursor: 'pointer',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '5px',
-                                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
-                                }}
-                              >
-                                <Eye size={13} />
-                                <span>Chi tiết Attribution</span>
-                              </button>
                             </div>
                           </div>
 
                           <div
                             style={{
-                              padding: '10px 14px',
-                              borderRadius: 10,
-                              background: '#f8fafc',
-                              border: '1px solid #e2e8f0',
                               display: 'grid',
-                              gridTemplateColumns: isMobileOrTablet ? '1fr' : 'repeat(2, 1fr)',
-                              gap: '10px',
-                              fontSize: '0.76rem'
+                              gridTemplateColumns:
+                                isMobileOrTablet || !resolvedMetaAdId
+                                  ? '1fr'
+                                  : 'minmax(0, 1fr) 235px',
+                              gap: '14px',
+                              alignItems: 'stretch'
                             }}
                           >
-                            <div>
-                              <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Chiến dịch (Campaign):</span>
-                              <strong style={{ color: '#0f172a', fontWeight: 700 }}>
-                                {formData.meta_campaign_name || contact?.meta_campaign_name || formData.utm_campaign || contact?.utm_campaign || 'Chưa ghi nhận'}
-                              </strong>
-                            </div>
-                            <div>
-                              <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Nhóm QC (AdSet):</span>
-                              <strong style={{ color: '#0f172a', fontWeight: 700 }}>
-                                {formData.meta_adset_name || contact?.meta_adset_name || formData.utm_medium || contact?.utm_medium || 'Chưa ghi nhận'}
-                              </strong>
-                            </div>
-                            <div>
-                              <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Bài Quảng Cáo (Ad Name):</span>
-                              <strong style={{ color: '#0f172a', fontWeight: 700 }}>
-                                {formData.meta_ad_name || contact?.meta_ad_name || formData.utm_content || contact?.utm_content || 'Chưa ghi nhận'}
-                              </strong>
-                            </div>
-                            <div>
-                              <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Biểu mẫu Instant Form &amp; Nền tảng:</span>
-                              <strong style={{ color: '#0f172a', fontWeight: 700 }}>
-                                {formData.meta_form_name || contact?.meta_form_name || 'Form Meta'} • {String(formData.meta_platform || contact?.meta_platform || 'fb').toUpperCase()}
-                              </strong>
-                            </div>
-                            {(formData.meta_degree || contact?.meta_degree) && (
+                            {/* Left: Real Attribution Metadata Grid */}
+                            <div
+                              style={{
+                                padding: '12px 14px',
+                                borderRadius: 12,
+                                background: '#f8fafc',
+                                border: '1px solid #e2e8f0',
+                                display: 'grid',
+                                gridTemplateColumns: isMobileOrTablet ? '1fr' : 'repeat(2, minmax(0, 1fr))',
+                                gap: '10px',
+                                fontSize: '0.76rem',
+                                alignContent: 'start'
+                              }}
+                            >
                               <div>
-                                <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Bằng cấp cao nhất khai báo:</span>
+                                <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Chiến dịch (Campaign):</span>
                                 <strong style={{ color: '#0f172a', fontWeight: 700 }}>
-                                  {formData.meta_degree || contact?.meta_degree}
+                                  {formData.meta_campaign_name || contact?.meta_campaign_name || formData.utm_campaign || contact?.utm_campaign || 'Chưa ghi nhận'}
                                 </strong>
                               </div>
-                            )}
-                            {(formData.meta_consultation_time || contact?.meta_consultation_time) && (
                               <div>
-                                <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Khung giờ hẹn tư vấn 1-1:</span>
-                                <strong style={{ color: '#BD1D2D', fontWeight: 700 }}>
-                                  {formData.meta_consultation_time || contact?.meta_consultation_time}
+                                <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Nhóm QC (AdSet):</span>
+                                <strong style={{ color: '#0f172a', fontWeight: 700 }}>
+                                  {formData.meta_adset_name || contact?.meta_adset_name || formData.utm_medium || contact?.utm_medium || 'Chưa ghi nhận'}
                                 </strong>
+                              </div>
+                              <div>
+                                <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Bài Quảng Cáo (Ad Name):</span>
+                                <strong style={{ color: '#0f172a', fontWeight: 700 }}>
+                                  {formData.meta_ad_name || contact?.meta_ad_name || liveAdPreviewData?.ad_name || formData.utm_content || contact?.utm_content || 'Chưa ghi nhận'}
+                                </strong>
+                              </div>
+                              <div>
+                                <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Biểu mẫu Instant Form &amp; Nền tảng:</span>
+                                <strong style={{ color: '#0f172a', fontWeight: 700 }}>
+                                  {formData.meta_form_name || contact?.meta_form_name || 'Form Meta'} • {String(formData.meta_platform || contact?.meta_platform || 'fb').toUpperCase()}
+                                </strong>
+                              </div>
+                              {(formData.meta_degree || contact?.meta_degree) && (
+                                <div>
+                                  <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Bằng cấp cao nhất khai báo:</span>
+                                  <strong style={{ color: '#0f172a', fontWeight: 700 }}>
+                                    {formData.meta_degree || contact?.meta_degree}
+                                  </strong>
+                                </div>
+                              )}
+                              {(formData.meta_consultation_time || contact?.meta_consultation_time) && (
+                                <div>
+                                  <span style={{ color: '#64748b', fontSize: '0.71rem', display: 'block' }}>Khung giờ hẹn tư vấn 1-1:</span>
+                                  <strong style={{ color: '#BD1D2D', fontWeight: 700 }}>
+                                    {formData.meta_consultation_time || contact?.meta_consultation_time}
+                                  </strong>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Right: Real Ad Creative Thumbnail & Live Preview Trigger */}
+                            {resolvedMetaAdId && (
+                              <div
+                                onClick={() => setShowLiveAdPreviewModal(true)}
+                                title="Bấm để xem bài quảng cáo Meta tương tác (Live Iframe Preview)"
+                                style={{
+                                  borderRadius: 12,
+                                  border: '1px solid #e2e8f0',
+                                  background: '#f8fafc',
+                                  overflow: 'hidden',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  cursor: 'pointer',
+                                  position: 'relative',
+                                  minHeight: 148
+                                }}
+                              >
+                                {loadingLiveAdPreview ? (
+                                  <div
+                                    className="animate-pulse"
+                                    style={{
+                                      width: '100%',
+                                      height: 125,
+                                      background: '#e2e8f0'
+                                    }}
+                                  />
+                                ) : liveAdPreviewData?.thumbnail_url ? (
+                                  <div style={{ position: 'relative', width: '100%', height: 125, background: '#0f172a', overflow: 'hidden' }}>
+                                    <img
+                                      src={liveAdPreviewData.thumbnail_url}
+                                      alt={formData.meta_ad_name || contact?.meta_ad_name || 'Meta Ad Thumbnail'}
+                                      style={{
+                                        width: '100%',
+                                        height: '100%',
+                                        objectFit: 'cover',
+                                        display: 'block'
+                                      }}
+                                      referrerPolicy="no-referrer"
+                                    />
+                                    <div
+                                      style={{
+                                        position: 'absolute',
+                                        top: 6,
+                                        right: 6,
+                                        padding: '2px 7px',
+                                        borderRadius: 6,
+                                        background: 'rgba(15, 23, 42, 0.78)',
+                                        color: '#ffffff',
+                                        fontSize: '0.65rem',
+                                        fontWeight: 700,
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 4
+                                      }}
+                                    >
+                                      <Eye size={11} />
+                                      <span>Xem Live Ad</span>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div
+                                    style={{
+                                      width: '100%',
+                                      height: 125,
+                                      background: '#f1f5f9',
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      gap: 6,
+                                      color: '#64748b',
+                                      fontSize: '0.73rem',
+                                      padding: 10,
+                                      textAlign: 'center'
+                                    }}
+                                  >
+                                    <Megaphone size={20} style={{ color: '#BD1D2D' }} />
+                                    <span style={{ fontWeight: 700, color: '#0f172a' }}>Xem mẫu QC #{resolvedMetaAdId.slice(-6)}</span>
+                                  </div>
+                                )}
+                                <div
+                                  style={{
+                                    padding: '6px 10px',
+                                    background: '#ffffff',
+                                    borderTop: '1px solid #e2e8f0',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                    color: '#BD1D2D'
+                                  }}
+                                >
+                                  <span>Mở Live Ad Iframe</span>
+                                  <ExternalLink size={11.5} />
+                                </div>
                               </div>
                             )}
                           </div>
@@ -10199,7 +10668,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
                       {/* Ghi chú học viên / ban đầu (Dạng Toggle, mặc định mở) */}
                       <div className="card-panel" style={{ 
-                        marginBottom: '1.25rem', 
+                        order: isStudent ? 11 : 2,
+                        marginBottom: 0, 
                         overflow: 'hidden',
                         borderRadius: '16px',
                         background: 'var(--color-surface, #ffffff)',
@@ -10345,12 +10815,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       </div>
 
                       <div className="card-panel" style={{ 
+                        order: isStudent ? 1 : 3,
                         borderRadius: '16px',
                         background: 'var(--color-surface, #ffffff)',
                         border: '1px solid var(--color-border-light, #e2e8f0)',
                         boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
                         padding: '1.25rem 1.5rem',
-                        marginBottom: '1.25rem'
+                        marginBottom: 0
                       }}>
                         <div className="flex items-center justify-between mb-4" style={{ flexWrap: 'wrap', gap: '8px' }}>
                           <h4 className="panel-title" style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text, #0f172a)' }}>Thông tin liên hệ & Công việc</h4>
@@ -10411,9 +10882,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             </div>
                           </div>
 
-                          <div className="form-group">
+                          <div className="form-group" data-student-field="phone">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '22px' }}>
-                              <label className="form-label" style={{ margin: 0 }}>Số điện thoại chính</label>
+                              <label className="form-label" style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                                <span>Số điện thoại chính</span>
+                                {isStudent && !String(formData.phone || formData.mobile || formData.phone2 || '').trim() && (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1.5px 6px', borderRadius: '4.5px', background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', fontSize: '0.64rem', fontWeight: 600, lineHeight: 1.2 }}>
+                                    <AlertTriangle size={9.5} /> Chưa cập nhật
+                                  </span>
+                                )}
+                              </label>
                               <span 
                                 onClick={() => {
                                   if (isViewer || !formData.phone?.trim()) return;
@@ -10493,9 +10971,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           </div>
 
                           {/* Row 2: Email & SĐT phụ */}
-                          <div className="form-group">
+                          <div className="form-group" data-student-field="email">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '22px' }}>
-                              <label className="form-label" style={{ margin: 0 }}>Email</label>
+                              <label className="form-label" style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                                <span>Email</span>
+                                {isStudent && !String(formData.email || '').trim() && (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1.5px 6px', borderRadius: '4.5px', background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', fontSize: '0.64rem', fontWeight: 600, lineHeight: 1.2 }}>
+                                    <AlertTriangle size={9.5} /> Chưa cập nhật
+                                  </span>
+                                )}
+                              </label>
                             </div>
                             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                               <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
@@ -10608,8 +11093,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               gridTemplateColumns: isMobileOrTablet ? '1fr' : '1.4fr 1fr 1fr',
                               gap: '12px'
                             }}>
-                              <div ref={bodyProgramDropdownRef} style={{ position: 'relative' }}>
-                                <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '4px' }}>Chương trình học</label>
+                              <div ref={bodyProgramDropdownRef} style={{ position: 'relative' }} data-student-field="program">
+                                <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '4px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                                  <span>Chương trình học</span>
+                                  {isStudent && !String(formData.program || '').trim() && (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1.5px 6px', borderRadius: '4.5px', background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', fontSize: '0.64rem', fontWeight: 600, lineHeight: 1.2 }}>
+                                      <AlertTriangle size={9.5} /> Chưa cập nhật
+                                    </span>
+                                  )}
+                                </label>
                                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                                   <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
                                     <TagIcon size={16} />
@@ -10748,8 +11240,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 )}
                               </div>
 
-                              <div>
-                                <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '4px' }}>Ngày nhập học</label>
+                              <div data-student-field="admission_date">
+                                <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '4px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                                  <span>Ngày nhập học</span>
+                                  {isStudent && (!String(formData.admission_date || '').trim() || String(formData.admission_date).startsWith('0000')) && (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1.5px 6px', borderRadius: '4.5px', background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', fontSize: '0.64rem', fontWeight: 600, lineHeight: 1.2 }}>
+                                      <AlertTriangle size={9.5} /> Chưa cập nhật
+                                    </span>
+                                  )}
+                                </label>
                                 <VietnameseDateInput 
                                   value={formData.admission_date ? String(formData.admission_date).slice(0, 10) : ''} 
                                   onChange={val => setFormData((prev: any) => ({ ...prev, admission_date: val }))}
@@ -10757,8 +11256,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 />
                               </div>
 
-                              <div>
-                                <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '4px' }}>ID Student</label>
+                              <div data-student-field="student_id">
+                                <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '4px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                                  <span>ID Student</span>
+                                  {isStudent && !String(formData.student_id || formData.student_code || '').trim() && (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1.5px 6px', borderRadius: '4.5px', background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', fontSize: '0.64rem', fontWeight: 600, lineHeight: 1.2 }}>
+                                      <AlertTriangle size={9.5} /> Chưa cập nhật
+                                    </span>
+                                  )}
+                                </label>
                                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                                   <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
                                     <GraduationCap size={16} />
@@ -10766,10 +11272,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   <input 
                                     className="form-input form-input-icon-left" 
                                     placeholder="Mã học viên / ID Student..." 
-                                    value={formData.student_id || ''} 
+                                    value={formData.student_id || formData.student_code || ''} 
                                     onChange={e => {
                                       const val = e.target.value;
-                                      setFormData((prev: any) => ({ ...prev, student_id: val }));
+                                      setFormData((prev: any) => ({ ...prev, student_id: val, student_code: val }));
                                     }} 
                                   />
                                 </div>
@@ -10778,8 +11284,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           </div>
 
                           {/* Row 4: Ngày sinh & Giới tính */}
-                          <div className="form-group">
-                            <label className="form-label">Ngày sinh</label>
+                          <div className="form-group" data-student-field="birthday">
+                            <label className="form-label" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                              <span>Ngày sinh</span>
+                              {isStudent && (!String(formData.birthday || '').trim() || String(formData.birthday).startsWith('0000')) && (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1.5px 6px', borderRadius: '4.5px', background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', fontSize: '0.64rem', fontWeight: 600, lineHeight: 1.2 }}>
+                                  <AlertTriangle size={9.5} /> Chưa cập nhật
+                                </span>
+                              )}
+                            </label>
                             <VietnameseDateInput 
                               value={formData.birthday ? String(formData.birthday).slice(0, 10) : ''} 
                               onChange={val => setFormData((prev: any) => ({ ...prev, birthday: val }))}
@@ -10787,8 +11300,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             />
                           </div>
 
-                          <div className="form-group">
-                            <label className="form-label">Giới tính</label>
+                          <div className="form-group" data-student-field="gender">
+                            <label className="form-label" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                              <span>Giới tính</span>
+                              {isStudent && !String(formData.gender || '').trim() && (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1.5px 6px', borderRadius: '4.5px', background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', fontSize: '0.64rem', fontWeight: 600, lineHeight: 1.2 }}>
+                                  <AlertTriangle size={9.5} /> Chưa cập nhật
+                                </span>
+                              )}
+                            </label>
                             <CustomSelect
                               options={[
                                 { value: '', label: '— Chưa chọn —' },
@@ -10801,9 +11321,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             />
                           </div>
 
-                          {/* Row 5: CCCD & Số Passport */}
-                          <div className="form-group">
-                            <label className="form-label">CCCD / CMND</label>
+                          {/* Row 5: CCCD & Số Passport (1 trong 2 là được) */}
+                          <div className="form-group" data-student-field="citizen_id">
+                            <label className="form-label" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                              <span>CCCD / CMND</span>
+                              {isStudent && !String(formData.citizen_id || formData.passport || '').trim() && (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1.5px 6px', borderRadius: '4.5px', background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', fontSize: '0.64rem', fontWeight: 600, lineHeight: 1.2 }}>
+                                  <AlertTriangle size={9.5} /> Thiếu CCCD/Passport
+                                </span>
+                              )}
+                            </label>
                             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                               <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
                                 <CreditCard size={16} />
@@ -10829,7 +11356,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           </div>
 
                           {/* Row 6: Địa chỉ (Spans full width so it's readable) */}
-                          <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                          <div className="form-group" style={{ gridColumn: '1 / -1', position: 'relative' }} data-student-field="address">
+                            {isStudent && !String(formData.address || formData.city || '').trim() && (
+                              <span style={{ position: 'absolute', top: '1px', left: '54px', zIndex: 2, display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1.5px 6px', borderRadius: '4.5px', background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', fontSize: '0.64rem', fontWeight: 600, lineHeight: 1.2 }}>
+                                <AlertTriangle size={9.5} /> Chưa cập nhật
+                              </span>
+                            )}
                             <AddressSelect
                               label="Địa chỉ"
                               value={formData.address || ''}
@@ -10840,8 +11372,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           </div>
 
                           {/* Row 7: Chức danh & Công ty */}
-                          <div className="form-group">
-                            <label className="form-label">Chức danh</label>
+                          <div className="form-group" data-student-field="job_title">
+                            <label className="form-label" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                              <span>Chức danh</span>
+                              {isStudent && !String(formData.job_title || '').trim() && (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1.5px 6px', borderRadius: '4.5px', background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', fontSize: '0.64rem', fontWeight: 600, lineHeight: 1.2 }}>
+                                  <AlertTriangle size={9.5} /> Chưa cập nhật
+                                </span>
+                              )}
+                            </label>
                             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                               <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
                                 <Briefcase size={16} />
@@ -10853,8 +11392,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             </div>
                           </div>
 
-                          <div className="form-group">
-                            <label className="form-label">Công ty</label>
+                          <div className="form-group" data-student-field="company">
+                            <label className="form-label" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                              <span>Công ty</span>
+                              {isStudent && !String(formData.company || formData.department || formData.company_name || '').trim() && (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1.5px 6px', borderRadius: '4.5px', background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', fontSize: '0.64rem', fontWeight: 600, lineHeight: 1.2 }}>
+                                  <AlertTriangle size={9.5} /> Chưa cập nhật
+                                </span>
+                              )}
+                            </label>
                             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                               <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
                                 <Layers size={16} />
@@ -10864,6 +11410,142 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 setFormData((prev: any) => ({ ...prev, company: val, department: val }));
                               }} />
                             </div>
+                          </div>
+
+                          <div ref={industryDropdownRef} className="form-group" style={{ gridColumn: '1 / -1', position: 'relative' }} data-student-field="industry">
+                            <label className="form-label" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                              <span>Ngành nghề / Lĩnh vực hoạt động</span>
+                              {isStudent && !String(formData.industry || '').trim() && (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1.5px 6px', borderRadius: '4.5px', background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', fontSize: '0.64rem', fontWeight: 600, lineHeight: 1.2 }}>
+                                  <AlertTriangle size={9.5} /> Chưa cập nhật
+                                </span>
+                              )}
+                            </label>
+                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                              <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                                <Briefcase size={16} />
+                              </div>
+                              <input
+                                className="form-input form-input-icon-left"
+                                placeholder="Chọn ngành nghề phổ biến hoặc nhập..."
+                                value={formData.industry || ''}
+                                onFocus={() => setShowIndustryDropdown(true)}
+                                onClick={() => setShowIndustryDropdown(true)}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  setFormData((prev: any) => ({ ...prev, industry: val }));
+                                  setShowIndustryDropdown(true);
+                                }}
+                                onKeyDown={e => {
+                                  if (e.key === 'Escape' || e.key === 'Enter') {
+                                    setShowIndustryDropdown(false);
+                                  }
+                                }}
+                                style={{ paddingRight: '32px' }}
+                              />
+                              <div
+                                onClick={() => setShowIndustryDropdown(prev => !prev)}
+                                style={{ position: 'absolute', right: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--color-text-muted)', height: '100%' }}
+                              >
+                                <ChevronDown size={14} style={{ transform: showIndustryDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                              </div>
+                            </div>
+
+                            {showIndustryDropdown && (() => {
+                              const q = String(formData.industry || '').trim().toLowerCase();
+                              const exactMatch = industrySuggestions.some(ind => ind.trim().toLowerCase() === q);
+                              const filteredInds = (!q || exactMatch)
+                                ? industrySuggestions
+                                : industrySuggestions.filter(ind => ind.toLowerCase().includes(q));
+                              const displayInds = filteredInds.length > 0 ? filteredInds : industrySuggestions;
+                              return (
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    top: 'calc(100% + 4px)',
+                                    left: 0,
+                                    width: '100%',
+                                    background: 'var(--color-surface, #ffffff)',
+                                    border: '1px solid var(--color-border, #e2e8f0)',
+                                    borderRadius: '12px',
+                                    boxShadow: '0 12px 28px rgba(15, 23, 42, 0.14), 0 4px 10px rgba(15, 23, 42, 0.05)',
+                                    zIndex: 1200,
+                                    overflow: 'hidden'
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      padding: '7px 12px',
+                                      background: 'var(--color-bg, #f8fafc)',
+                                      borderBottom: '1px solid var(--color-border-light, #f1f5f9)'
+                                    }}
+                                  >
+                                    <span style={{ fontSize: '0.66rem', fontWeight: 800, color: 'var(--color-text-muted, #64748b)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                      <Briefcase size={11} style={{ color: 'var(--color-primary, #C6333D)' }} />
+                                      Đề xuất Ngành nghề phổ biến (Trong hệ thống)
+                                    </span>
+                                    {formData.industry && (
+                                      <button
+                                        type="button"
+                                        onMouseDown={(e) => {
+                                          e.preventDefault();
+                                          setFormData((prev: any) => ({ ...prev, industry: '' }));
+                                          setShowIndustryDropdown(false);
+                                        }}
+                                        style={{
+                                          background: 'transparent',
+                                          border: 'none',
+                                          fontSize: '0.68rem',
+                                          color: 'var(--color-danger, #dc2626)',
+                                          cursor: 'pointer',
+                                          fontWeight: 600,
+                                          padding: '1px 6px'
+                                        }}
+                                      >
+                                        Xóa
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  <div style={{ padding: '10px', display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '210px', overflowY: 'auto' }}>
+                                    {displayInds.map((ind, idx) => {
+                                      const isSelected = String(formData.industry || '').trim().toLowerCase() === ind.toLowerCase();
+                                      return (
+                                        <button
+                                          key={idx}
+                                          type="button"
+                                          onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            setFormData((prev: any) => ({ ...prev, industry: isSelected ? '' : ind }));
+                                            setShowIndustryDropdown(false);
+                                          }}
+                                          style={{
+                                            padding: '4.5px 10px',
+                                            borderRadius: '8px',
+                                            fontSize: '0.73rem',
+                                            fontWeight: isSelected ? 700 : 600,
+                                            cursor: 'pointer',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            transition: 'all 0.15s ease',
+                                            border: isSelected ? '1px solid #C6333D' : '1px solid #e2e8f0',
+                                            background: isSelected ? '#fff1f2' : '#ffffff',
+                                            color: isSelected ? '#C6333D' : '#0f172a'
+                                          }}
+                                        >
+                                          <span>{ind}</span>
+                                          {isSelected && <Check size={11} />}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           {/* Row 9: Zalo & Facebook */}
@@ -16312,7 +16994,34 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                 </button>
               </div>
 
-              <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.8rem' }}>
+              <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.8rem', maxHeight: '80vh', overflowY: 'auto' }}>
+                {liveAdPreviewData?.iframe_src ? (
+                  <div
+                    style={{
+                      borderRadius: 12,
+                      border: '1px solid #e2e8f0',
+                      overflow: 'hidden',
+                      background: '#f8fafc'
+                    }}
+                  >
+                    <iframe
+                      title={`Meta Ad Preview ${resolvedMetaAdId}`}
+                      src={liveAdPreviewData.iframe_src}
+                      style={{ width: '100%', height: '460px', border: 'none', background: '#f8fafc' }}
+                      sandbox="allow-scripts allow-same-origin allow-popups"
+                    />
+                  </div>
+                ) : liveAdPreviewData?.thumbnail_url ? (
+                  <div style={{ borderRadius: 12, border: '1px solid #e2e8f0', overflow: 'hidden', background: '#0f172a' }}>
+                    <img
+                      src={liveAdPreviewData.thumbnail_url}
+                      alt="Meta Ad Thumbnail"
+                      style={{ width: '100%', maxHeight: '340px', objectFit: 'contain', display: 'block' }}
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+                ) : null}
+
                 <div style={{ padding: '10px 12px', borderRadius: 10, background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <div>
                     <span style={{ fontSize: '0.7rem', color: '#64748b', display: 'block' }}>Chiến dịch (Campaign):</span>
@@ -16325,7 +17034,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   <div>
                     <span style={{ fontSize: '0.7rem', color: '#64748b', display: 'block' }}>Bài Quảng Cáo (Ad Name &amp; ID):</span>
                     <strong style={{ color: '#0f172a' }}>
-                      {formData.meta_ad_name || contact?.meta_ad_name || 'Chưa ghi nhận'}{' '}
+                      {formData.meta_ad_name || contact?.meta_ad_name || liveAdPreviewData?.ad_name || 'Chưa ghi nhận'}{' '}
                       {(formData.meta_ad_id || contact?.meta_ad_id) ? `(${formData.meta_ad_id || contact?.meta_ad_id})` : ''}
                     </strong>
                   </div>
@@ -16337,9 +17046,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                     </strong>
                   </div>
                 </div>
-                {(formData.meta_ad_id || contact?.meta_ad_id) && (
+                {(liveAdPreviewData?.post_url || formData.meta_ad_id || contact?.meta_ad_id) && (
                   <a
-                    href={`https://www.facebook.com/ads/library/?id=${encodeURIComponent(String(formData.meta_ad_id || contact?.meta_ad_id))}`}
+                    href={liveAdPreviewData?.post_url || `https://www.facebook.com/ads/library/?id=${encodeURIComponent(String(formData.meta_ad_id || contact?.meta_ad_id))}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
@@ -16356,7 +17065,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       textDecoration: 'none'
                     }}
                   >
-                    <span>Mở xem trên Meta Ad Library</span>
+                    <ExternalLink size={13.5} />
+                    <span>Mở bài quảng cáo gốc trên Facebook</span>
                   </a>
                 )}
               </div>

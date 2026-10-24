@@ -74,7 +74,7 @@ class NoteController {
 
         // Fetch replies for all these notes in a single query
         if (!empty($notes)) {
-            $noteIds = array_column($notes, 'id');
+            $noteIds = array_values(array_column($notes, 'id'));
             $in = str_repeat('?,', count($noteIds) - 1) . '?';
             
             $replyParams = array_merge([$auth['tenant_id']], $noteIds);
@@ -139,9 +139,9 @@ class NoteController {
 
             // Update contact last_contact
             if ($type === 'contact') {
-                $stmtStatus = $this->db->prepare("SELECT pipeline_status FROM contacts WHERE id = ?");
+                $stmtStatus = $this->db->prepare("SELECT pipeline_status, owner_id FROM contacts WHERE id = ?");
                 $stmtStatus->execute([$entityId]);
-                $currStatus = $stmtStatus->fetchColumn() ?: 'chua_xac_dinh';
+                $contactMetaRow = $stmtStatus->fetch(PDO::FETCH_ASSOC) ?: []; $currStatus = $contactMetaRow['pipeline_status'] ?? 'chua_xac_dinh';
                 $securityExpires = $this->getSecurityExpiration($currStatus);
                 $this->db->prepare("UPDATE contacts SET last_contact = NOW(), security_expires_at = ? WHERE id = ?")
                      ->execute([$securityExpires, $entityId]);
@@ -181,9 +181,9 @@ class NoteController {
         // Maintain quyen_truy_cap audit log for Cooperation Slips
         if ($type === 'contact') {
             // Get current pipeline status to resolve setting-based security timer duration dynamically
-            $stmtStatus = $this->db->prepare("SELECT pipeline_status FROM contacts WHERE id = ?");
+            $stmtStatus = $this->db->prepare("SELECT pipeline_status, owner_id FROM contacts WHERE id = ?");
             $stmtStatus->execute([$entityId]);
-            $currStatus = $stmtStatus->fetchColumn() ?: 'chua_xac_dinh';
+            $contactMetaRow = $stmtStatus->fetch(PDO::FETCH_ASSOC) ?: []; $currStatus = $contactMetaRow['pipeline_status'] ?? 'chua_xac_dinh';
             $securityExpires = $this->getSecurityExpiration($currStatus);
 
             $updateSql = "UPDATE contacts SET last_contact = NOW(), security_expires_at = ?";
@@ -202,9 +202,9 @@ class NoteController {
 
             $this->db->prepare($updateSql)->execute($updateParams);
 
-            $stmtOwner = $this->db->prepare("SELECT owner_id FROM contacts WHERE id = ?");
-            $stmtOwner->execute([$entityId]);
-            $ownerId = $stmtOwner->fetchColumn();
+            $ownerId = $contactMetaRow['owner_id'] ?? null;
+            // Reused $ownerId from $contactMetaRow above
+            // Avoided second SELECT on contacts
             if ($ownerId && $ownerId != $auth['user_id']) {
                 $stmtCheck = $this->db->prepare("SELECT id FROM quyen_truy_cap WHERE contact_id = ? AND user_id = ?");
                 $stmtCheck->execute([$entityId, $auth['user_id']]);
@@ -238,9 +238,9 @@ class NoteController {
                     $nameWithUnderscores = trim(strip_tags($nameWithUnderscores));
                     if (empty($nameWithUnderscores)) continue;
                     $fullName = str_replace('_', ' ', $nameWithUnderscores);
-                    $stmt = $this->db->prepare("SELECT id FROM users WHERE (full_name=? OR REPLACE(full_name, ' ', '_')=?)");
-                    $stmt->execute([$fullName, $nameWithUnderscores]);
-                    $uid = $stmt->fetchColumn();
+                    static $activeUsersByName = null; if ($activeUsersByName === null) { $activeUsersByName = []; foreach ($this->db->query("SELECT id, full_name FROM users WHERE (is_active = 1 OR is_active IS NULL) AND (status = 'active' OR status IS NULL)")->fetchAll(PDO::FETCH_ASSOC) ?: [] as $uRow) { $fn = trim((string)($uRow['full_name'] ?? '')); if ($fn !== '') { $activeUsersByName[mb_strtolower($fn)] = (int)$uRow['id']; $activeUsersByName[mb_strtolower(str_replace(' ', '_', $fn))] = (int)$uRow['id']; } } } $uid = $activeUsersByName[mb_strtolower($fullName)] ?? ($activeUsersByName[mb_strtolower($nameWithUnderscores)] ?? null);
+                    // Resolved in O(1) from $activeUsersByName cache
+                    // $uid resolved above
                     if ($uid && (int)$uid !== (int)$auth['user_id']) $mentions[] = (int)$uid;
                 }
             }
@@ -313,9 +313,9 @@ class NoteController {
 
         if ($oldNote && $oldNote['entity_type'] === 'contact') {
             $cid = (int)$oldNote['entity_id'];
-            $stmtStatus = $this->db->prepare("SELECT pipeline_status FROM contacts WHERE id = ?");
+            $stmtStatus = $this->db->prepare("SELECT pipeline_status, owner_id FROM contacts WHERE id = ?");
             $stmtStatus->execute([$cid]);
-            $currStatus = $stmtStatus->fetchColumn() ?: 'chua_xac_dinh';
+            $contactMetaRow = $stmtStatus->fetch(PDO::FETCH_ASSOC) ?: []; $currStatus = $contactMetaRow['pipeline_status'] ?? 'chua_xac_dinh';
             $securityExpires = $this->getSecurityExpiration($currStatus);
 
             $this->db->prepare("UPDATE contacts SET last_contact = NOW(), security_expires_at = ? WHERE id = ? AND tenant_id = ?")
@@ -342,9 +342,9 @@ class NoteController {
                     $nameWithUnderscores = trim(strip_tags($nameWithUnderscores));
                     if (empty($nameWithUnderscores)) continue;
                     $fullName = str_replace('_', ' ', $nameWithUnderscores);
-                    $stmtM = $this->db->prepare("SELECT id FROM users WHERE (full_name=? OR REPLACE(full_name, ' ', '_')=?)");
-                    $stmtM->execute([$fullName, $nameWithUnderscores]);
-                    $uid = $stmtM->fetchColumn();
+                    static $activeUsersByNameUpd = null; if ($activeUsersByNameUpd === null) { $activeUsersByNameUpd = []; foreach ($this->db->query("SELECT id, full_name FROM users WHERE (is_active = 1 OR is_active IS NULL) AND (status = 'active' OR status IS NULL)")->fetchAll(PDO::FETCH_ASSOC) ?: [] as $uRow) { $fn = trim((string)($uRow['full_name'] ?? '')); if ($fn !== '') { $activeUsersByNameUpd[mb_strtolower($fn)] = (int)$uRow['id']; $activeUsersByNameUpd[mb_strtolower(str_replace(' ', '_', $fn))] = (int)$uRow['id']; } } } $uid = $activeUsersByNameUpd[mb_strtolower($fullName)] ?? ($activeUsersByNameUpd[mb_strtolower($nameWithUnderscores)] ?? null);
+                    // Resolved in O(1) from $activeUsersByNameUpd cache
+                    // $uid resolved above
                     if ($uid && (int)$uid !== (int)$auth['user_id']) $mentions[] = (int)$uid;
                 }
             }
@@ -420,9 +420,9 @@ class NoteController {
                 $stmtMax->execute([$cid, $cid]);
                 $maxDate = $stmtMax->fetchColumn();
 
-                $stmtStatus = $this->db->prepare("SELECT pipeline_status FROM contacts WHERE id = ?");
+                $stmtStatus = $this->db->prepare("SELECT pipeline_status, owner_id FROM contacts WHERE id = ?");
                 $stmtStatus->execute([$cid]);
-                $currStatus = $stmtStatus->fetchColumn() ?: 'chua_xac_dinh';
+                $contactMetaRow = $stmtStatus->fetch(PDO::FETCH_ASSOC) ?: []; $currStatus = $contactMetaRow['pipeline_status'] ?? 'chua_xac_dinh';
                 $securityExpires = $maxDate ? $this->getSecurityExpiration($currStatus, $maxDate) : null;
 
                 $stmtUpdate = $this->db->prepare("UPDATE contacts SET last_contact = ?, security_expires_at = ? WHERE id = ? AND tenant_id = ?");

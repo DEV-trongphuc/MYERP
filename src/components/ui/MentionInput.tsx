@@ -73,9 +73,15 @@ export const MentionInput: React.FC<MentionInputProps> = ({
   const mentionRangeRef = useRef<{ node: Node; startOffset: number; endOffset: number } | null>(null);
 
   const isTeamMember = (u: User) => {
-    if (!u) return false;
-    if ((u as any).status && (u as any).status !== 'active') return false;
-    if ((u as any).email === 'turniodev@gmail.com') return false;
+    if (!u || !u.id) return false;
+    if (Number((u as any).is_active) === 0 || (u as any).is_active === false) return false;
+    const status = String((u as any).status || 'active').toLowerCase().trim();
+    if (status !== 'active') return false;
+    if ((u as any).deleted_at) return false;
+    const role = String(u.role || '').toLowerCase().trim();
+    if (role === 'bot' || role === 'system' || Number(u.id) === 9000001) return false;
+    const email = String((u as any).email || '').toLowerCase().trim();
+    if (['turniodev@gmail.com', 'turnlodev@gmail.com', 'ideas.ai@ideas.vn', 'ai@ideas.edu.vn'].includes(email)) return false;
     return true;
   };
 
@@ -201,13 +207,21 @@ export const MentionInput: React.FC<MentionInputProps> = ({
       const text = node.textContent || '';
       const textBeforeCursor = text.slice(0, offset);
 
-      const match = textBeforeCursor.match(/([@#])([^\s@#]*)$/);
+      const match = textBeforeCursor.match(/(?:^|[\s\u00A0(])([@#])([^\n\r@#]{0,35})$/);
       if (match) {
         const triggerChar = match[1] as '@' | '#';
-        const query = match[2];
-        setMentionTrigger(triggerChar);
-        setSearchQuery(query.toLowerCase());
-        setShowDropdown(true);
+        const query = match[2].replace(/\u00A0/g, ' ');
+        const spaceCount = (query.match(/\s+/g) || []).length;
+        const cleanQ = query.trim().toLowerCase();
+        const noAccentQ = removeAccents(cleanQ);
+        const hasMatchingUser = triggerChar !== '@' || !cleanQ.includes(' ') || users.some(u => {
+          const uName = String(u.full_name || '').toLowerCase();
+          return uName.includes(cleanQ) || removeAccents(uName).includes(noAccentQ);
+        });
+        if (!query.startsWith(' ') && !/\s{2,}/.test(query) && spaceCount <= 4 && hasMatchingUser) {
+          setMentionTrigger(triggerChar);
+          setSearchQuery(query.toLowerCase());
+          setShowDropdown(true);
 
         const atIndex = textBeforeCursor.lastIndexOf(triggerChar);
         mentionRangeRef.current = {
@@ -251,6 +265,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
           setDropdownPos(null);
         }
         return;
+        }
       }
     }
 
@@ -596,6 +611,21 @@ export const MentionInput: React.FC<MentionInputProps> = ({
         noAccentUsername.includes(noAccentSearch) ||
         email.includes(cleanSearch)
       );
+    }).sort((a, b) => {
+      const aName = String(a.full_name || '').toLowerCase().trim();
+      const bName = String(b.full_name || '').toLowerCase().trim();
+      const aNo = removeAccents(aName);
+      const bNo = removeAccents(bName);
+      const aExact = (aName === cleanSearch || aNo === noAccentSearch) ? 1 : 0;
+      const bExact = (bName === cleanSearch || bNo === noAccentSearch) ? 1 : 0;
+      if (aExact !== bExact) return bExact - aExact;
+      const aEnds = (aName.endsWith(' ' + cleanSearch) || aNo.endsWith(' ' + noAccentSearch)) ? 1 : 0;
+      const bEnds = (bName.endsWith(' ' + cleanSearch) || bNo.endsWith(' ' + noAccentSearch)) ? 1 : 0;
+      if (aEnds !== bEnds) return bEnds - aEnds;
+      const aStarts = (aName.startsWith(cleanSearch) || aNo.startsWith(noAccentSearch)) ? 1 : 0;
+      const bStarts = (bName.startsWith(cleanSearch) || bNo.startsWith(noAccentSearch)) ? 1 : 0;
+      if (aStarts !== bStarts) return bStarts - aStarts;
+      return aName.localeCompare(bName, 'vi');
     });
   }, [users, searchQuery]);
 

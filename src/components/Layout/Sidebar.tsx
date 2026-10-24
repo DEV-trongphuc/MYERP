@@ -6,7 +6,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useEffect, useState, useRef, Fragment } from 'react';
 import { fetchAPI } from '../../utils/api';
 import { hasModuleApprovalAccess } from '../../utils/approvalPermissions';
-import { isMarketing, isAcademic, canAccessMarketingRoute } from '../../utils/roleUtils';
+import { isMarketing, isAcademic, isExecutive, isHR, isAccountant, canAccessMarketingRoute } from '../../utils/roleUtils';
 import { prefetchRoute } from '../../utils/routePrefetcher';
 
 export interface SidebarItem {
@@ -92,8 +92,7 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
       { name: 'Phòng ban', href: '/consultants?tab=teams', icon: Users },
       { name: 'Nhân sự công ty', href: '/consultants', icon: Users },
       { name: 'Quản lý công', href: '/attendance', icon: Clock },
-      { name: 'Nhân sự & Lương', href: '/hrm', icon: ShieldCheck, hideForRoles: ['manager', 'assistant', 'sale', 'viewer', 'sales', 'accountant', 'marketing', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] },
-      { name: 'Kế toán & Lương A-Z', href: '/accounting-az', icon: DollarSign, hideForRoles: ['manager', 'assistant', 'sale', 'viewer', 'sales', 'marketing', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] }
+      { name: 'Nhân sự & Lương', href: '/hrm', icon: ShieldCheck, hideForRoles: ['manager', 'assistant', 'sale', 'viewer', 'sales', 'accountant', 'marketing', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] }
     ]
   },
   {
@@ -101,8 +100,7 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
     items: [
       { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
       { name: 'Sales Order', href: '/deposits', icon: Receipt, hideForRoles: ['viewer', 'sale_admin', 'saleadmin'], badgeKey: 'pendingDeposits' },
-      { name: 'Dự báo dòng tiền', href: '/cash-flow', icon: TrendingUp, hideForRoles: ['viewer', 'marketing', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] },
-      { name: 'Kế toán & Lương A-Z', href: '/accounting-az', icon: DollarSign, hideForRoles: ['manager', 'assistant', 'sale', 'viewer', 'sales', 'marketing', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] }
+      { name: 'Dự báo dòng tiền', href: '/cash-flow', icon: TrendingUp, hideForRoles: ['viewer', 'marketing', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] }
     ]
   },
   {
@@ -165,7 +163,6 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' }
   ],
   accountant: [
-    { name: 'Kế toán & Lương A-Z', href: '/accounting-az', icon: DollarSign },
     { name: 'Nộp hồ sơ', href: '/students?tab=nop_ho_so', icon: GraduationCap, badgeKey: 'nopHoSo' },
     { name: 'Lệ phí hồ sơ', href: '/students?tab=le_phi', icon: GraduationCap, badgeKey: 'lePhi' },
     { name: 'Học viên chính thức', href: '/students?tab=chinh_thuc', icon: GraduationCap },
@@ -176,7 +173,6 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Phiếu lương', href: '/my-payslips', icon: FileText }
   ],
   hr: [
-    { name: 'Kế toán & Lương A-Z', href: '/accounting-az', icon: DollarSign },
     { name: 'Nhân sự', href: '/hrm', icon: ShieldCheck },
     { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
     { name: 'Duyệt công', href: '/attendance', icon: Clock },
@@ -517,6 +513,17 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
 
       if (group.title === 'MARKETING & AUTOMATION' || String(item.href || '').startsWith('/marketing')) {
         return canAccessMarketingRoute(user, item.href);
+      }
+
+      // Strict role-based visibility for HR, Accounting A-Z, and Cash Flow
+      if (item.href === '/hrm') {
+        return isExecutive(user) || isHR(user, false);
+      }
+      if (item.href === '/accounting-az') {
+        return false;
+      }
+      if (item.href === '/cash-flow') {
+        return isExecutive(user) || isAccountant(user, false);
       }
 
       // Dynamic Unlocking for Approvers / Team Leaders

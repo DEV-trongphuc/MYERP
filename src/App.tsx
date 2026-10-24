@@ -11,7 +11,7 @@ import { CustomModal } from './components/ui/CustomModal';
 import { getDefaultDateFilter } from './utils/api';
 import { GlobalConfirmModal } from './components/ui/GlobalConfirmModal';
 import { hasModuleApprovalAccess } from './utils/approvalPermissions';
-import { isMarketing, isAcademic } from './utils/roleUtils';
+import { isMarketing, isAcademic, isExecutive, isHR, isAccountant } from './utils/roleUtils';
 import { AutoUpdateChecker } from './components/AutoUpdateChecker';
 import { NetworkStatusIndicator } from './components/ui/NetworkStatusIndicator';
 import { GlobalEntityDrawers } from './components/ui/GlobalEntityDrawers';
@@ -64,7 +64,6 @@ const DownloadPage = lazy(() => import('./pages/DownloadPage').then(module => ({
 const AITrainingPage = lazy(() => import('./pages/AITrainingPage').then(module => ({ default: module.AITrainingPage })));
 const QwenAgentLabPage = lazy(() => import('./pages/QwenAgentLabPage').then(module => ({ default: module.QwenAgentLabPage })));
 const HRM = lazy(() => import('./pages/HRM'));
-const HrmAccountingAzWorkspace = lazy(() => import('./components/HRM/HrmAccountingAzWorkspace'));
 const MyPayslips = lazy(() => import('./pages/MyPayslips'));
 const Approvals = lazy(() => import('./pages/Approvals'));
 const EnterpriseFeed = lazy(() => import('./pages/EnterpriseFeed').then(module => ({ default: module.EnterpriseFeed })));
@@ -72,6 +71,7 @@ const PublicSchedulePage = lazy(() => import('./pages/PublicSchedulePage').then(
 const InternalSchedulePage = lazy(() => import('./pages/InternalSchedulePage').then(module => ({ default: module.InternalSchedulePage })));
 const SplashPreviewPage = lazy(() => import('./pages/SplashPreviewPage').then(module => ({ default: module.SplashPreviewPage })));
 const DocumentationPage = lazy(() => import('./pages/DocumentationPage'));
+const AboutErpPage = lazy(() => import('./pages/AboutErpPage'));
 const ApiDocumentationPage = lazy(() => import('./pages/ApiDocumentationPage'));
 const ApiV1DocumentationPage = lazy(() => import('./pages/ApiV1DocumentationPage'));
 const MarketingDashboardPage = lazy(() => import('./pages/marketing/MarketingDashboardPage'));
@@ -261,27 +261,21 @@ const AppTabs = () => {
       case '/cooperations':
         return <CooperationSlipsPage key="cooperation-slips" />;
       case '/cash-flow':
+        if (!(isExecutive(user) || isAccountant(user, false))) {
+          return <AccessDeniedView key="access-denied-cash-flow" />;
+        }
         return <DepositsPage key="cash-flow" defaultTab="stats" />;
       case '/hrm':
-        if (!['admin', 'superadmin', 'super_admin', 'director', 'hr'].includes(user?.role || '')) {
+        if (!(isExecutive(user) || isHR(user, false))) {
           return <AccessDeniedView key="access-denied-hrm" />;
         }
         return <HRM key="hrm" />;
-      case '/accounting-az':
-        if (!['admin', 'superadmin', 'super_admin', 'director', 'accountant', 'hr'].includes(user?.role || '')) {
-          return <AccessDeniedView key="access-denied-accounting-az" />;
-        }
-        return (
-          <div key="accounting-az" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <HrmAccountingAzWorkspace embedMode={false} />
-          </div>
-        );
       case '/my-payslips':
         return <MyPayslips key="my-payslips" />;
       case '/approvals':
         return <Approvals key="approvals" />;
       case '/financial-dashboard':
-        if (!['admin', 'superadmin', 'super_admin', 'director', 'accountant'].includes(user?.role || '')) {
+        if (!(isExecutive(user) || isAccountant(user, false))) {
           return <AccessDeniedView key="access-denied-financial" />;
         }
         return <FinancialDashboard key="financial-dashboard" />;
@@ -307,6 +301,8 @@ const AppTabs = () => {
         return <div className="mkt-scope" key="marketing-web-tracking"><WebTrackingOmnichannelPage /></div>;
       case '/marketing/api-triggers':
         return <div className="mkt-scope" key="marketing-api-triggers"><ApiTriggersPage /></div>;
+      case '/about-erp':
+        return <AboutErpPage key="about-erp" />;
       default:
         if (path.startsWith('/marketing/surveys/') && path.endsWith('/edit')) {
           return <div className="mkt-scope" key={path}><SurveysQuizPage /></div>;
@@ -786,6 +782,7 @@ export default function App() {
                   <Route path="/public-schedule/:customerId" element={<PublicSchedulePage />} />
                   <Route path="/docs" element={<DocumentationPage />} />
                   <Route path="/documentation" element={<DocumentationPage />} />
+                  <Route path="/about-erp" element={<AboutErpPage />} />
                   <Route path="/api-docs" element={<ApiV1DocumentationPage />} />
                   <Route path="/api-v1-docs" element={<ApiV1DocumentationPage />} />
                   <Route path="/api/v1/docs" element={<ApiV1DocumentationPage />} />

@@ -372,7 +372,8 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: Math.min((effectiveZIndex || 2147483625) + 20, 2147483646),
+        zIndex: 2147483646,
+        ...({ '--modal-z': 2147483646 } as any),
         background: 'rgba(0, 0, 0, 0.78)',
         backdropFilter: 'blur(8px)',
         WebkitBackdropFilter: 'blur(8px)',

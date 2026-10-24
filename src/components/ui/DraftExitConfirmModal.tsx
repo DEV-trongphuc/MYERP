@@ -33,7 +33,7 @@ export const DraftExitConfirmModal: React.FC<DraftExitConfirmModalProps> = ({
   const { t } = useLanguage();
   const [isSaving, setIsSaving] = useState(false);
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
-  const effectiveZIndex = zIndex ? Math.min(Math.max(zIndex, 2147483640), 2147483646) : 2147483646;
+  const effectiveZIndex = zIndex ? Math.min(Math.max(zIndex, 2147483646), 2147483647) : 2147483646;
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -77,6 +77,7 @@ export const DraftExitConfirmModal: React.FC<DraftExitConfirmModalProps> = ({
             position: 'fixed',
             inset: 0,
             zIndex: effectiveZIndex,
+            ...({ '--modal-z': effectiveZIndex } as any),
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -92,11 +93,10 @@ export const DraftExitConfirmModal: React.FC<DraftExitConfirmModalProps> = ({
             transition={{ duration: 0.18 }}
             onClick={() => !isSaving && onContinue()}
             style={{
-              position: 'fixed',
+              position: 'absolute',
               inset: 0,
-              background: 'rgba(15, 23, 42, 0.65)',
-              backdropFilter: 'blur(8px)',
-              WebkitBackdropFilter: 'blur(8px)'
+              zIndex: 0,
+              background: 'rgba(15, 23, 42, 0.35)'
             }}
           />
 
@@ -109,6 +109,7 @@ export const DraftExitConfirmModal: React.FC<DraftExitConfirmModalProps> = ({
             onClick={(e) => e.stopPropagation()}
             style={{
               position: 'relative',
+              zIndex: 10,
               width: '100%',
               maxWidth: isMobile ? '94%' : '580px',
               background: 'var(--color-surface, #ffffff)',

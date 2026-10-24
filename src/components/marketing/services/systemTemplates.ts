@@ -351,7 +351,74 @@ const buildNewsletterDigest = (): Template => {
     };
 };
 
+// 10. ESTIAM Student Onboarding (Academic Welcome)
+const buildEstiamStudentOnboarding = (): Template => {
+    const blocks: EmailBlock[] = [
+        createSection([
+            createRow([
+                createColumn([
+                    createBlock('text', '<div style="text-align: center;"><span style="color: #ffffff; font-weight: 800; font-size: 24px; letter-spacing: 2px;">IDEAS</span><p style="color: rgba(255,255,255,0.92); font-size: 12px; font-weight: 700; text-transform: uppercase; margin-top: 6px; letter-spacing: 0.5px;">THÔNG BÁO TIẾP NHẬN HỌC VIÊN &amp; HƯỚNG DẪN HỌC TẬP - PARIS EDUCATION / ESTIAM</p></div>', { textAlign: 'center' })
+                ])
+            ], { backgroundColor: '#BD1D2D', paddingTop: '26px', paddingBottom: '26px', paddingLeft: '20px', paddingRight: '20px' })
+        ], { paddingTop: '0px', paddingBottom: '0px', backgroundColor: '#BD1D2D' }),
+        createSection([
+            createRow([
+                createColumn([
+                    createBlock('text', `<div style="font-size: 14.5px; line-height: 1.7; color: #334155; text-align: left;">
+<p style="margin: 0 0 12px 0;">Kính gửi Quý Anh/Chị học viên <strong>{{full_name}}</strong>,</p>
+<p style="margin: 0 0 16px 0;">Lời đầu tiên, Ban Công tác Sinh viên IDEAS xin gửi lời chúc mừng và trân trọng cảm ơn Anh/Chị đã tin chọn IDEAS làm người bạn đồng hành trên chặng đường chinh phục tấm bằng từ <strong>Paris Education/ESTIAM</strong>. Chúng tôi cam kết đồng hành và hỗ trợ Anh/Chị xuyên suốt quá trình học tập và nghiên cứu.</p>
+
+<p style="margin: 18px 0 8px 0;"><strong style="color: #BD1D2D; font-size: 15px;">A. KÊNH LIÊN LẠC CHÍNH THỨC</strong></p>
+<p style="margin: 0 0 16px 0;">1. <strong>Kênh Hỗ trợ Nhanh (Zalo/Hotline):</strong> 098 736 3935<br/>
+2. <strong>Kênh Hỗ trợ Học vụ (Email):</strong><br/>
+&nbsp;&nbsp;- Tiếp nhận yêu cầu: <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a><br/>
+&nbsp;&nbsp;- CC (Đồng gửi): <a href="mailto:student.notice@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">student.notice@ideas.edu.vn</a> <em>(Vui lòng luôn CC địa chỉ này để hệ thống ghi nhận và xử lý nhanh nhất)</em></p>
+
+<p style="margin: 18px 0 8px 0;"><strong style="color: #BD1D2D; font-size: 15px;">B. TÀI KHOẢN HỌC TẬP</strong></p>
+<p style="margin: 0 0 8px 0;">Anh/Chị sẽ được cấp 3 tài khoản học tập, sử dụng xuyên suốt chương trình:</p>
+<ul style="padding-left: 20px; margin: 0 0 10px 0; line-height: 1.8;">
+  <li><strong>1. Tài khoản LMS IDEAS</strong> (xem tài liệu, video record buổi học, hỗ trợ học thuật): <a href="https://lms.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://lms.ideas.edu.vn/</a> | Video hướng dẫn: <a href="https://drive.google.com/file/d/1wXQtghJSd7CHoek_hPXOfXuVuGuT8bMv/view?usp=sharing" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></li>
+  <li><strong>2. Tài khoản học tập Paris Education</strong> (làm bài, nộp bài chính thức): <a href="https://pariseducation-global.org/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://pariseducation-global.org/</a></li>
+  <li><strong>3. Platform IDEAS AI</strong> (công cụ bổ trợ học tập): <a href="https://ai.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://ai.ideas.edu.vn/</a></li>
+</ul>
+<p style="margin: 0 0 16px 0;"><em>(thông tin tài khoản sẽ được gửi trực tiếp đến email cá nhân của học viên đã đăng ký học tập)</em></p>
+
+<p style="margin: 18px 0 8px 0;"><strong style="color: #BD1D2D; font-size: 15px;">C. TÀI LIỆU ĐÍNH KÈM</strong></p>
+<ul style="padding-left: 20px; margin: 0 0 10px 0; line-height: 1.8;">
+  <li>File Template format APA</li>
+  <li>File hướng dẫn sử dụng các hệ thống học tập</li>
+</ul>
+<p style="margin: 0 0 16px 0;">Link tổng hợp tài liệu hướng dẫn: <a href="https://drive.google.com/drive/folders/1tBzBTLL9WPT-OOjKWRNz5qFx8YGSptKG?usp=drive_link" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></p>
+
+<p style="margin: 0 0 18px 0;">Nếu có bất kỳ vướng mắc nào, Anh/Chị vui lòng liên hệ CTSV để được hỗ trợ kịp thời. Chúc Anh/Chị có hành trình học tập, nghiên cứu thật thuận lợi và thành công!</p>
+
+<p style="margin: 20px 0 0 0;">Trân trọng,<br/><strong>Ban Công tác Sinh viên IDEAS</strong></p>
+</div>`, { textAlign: 'left' })
+                ])
+            ], { paddingTop: '28px', paddingBottom: '28px', paddingLeft: '28px', paddingRight: '28px', backgroundColor: '#ffffff' })
+        ], { backgroundColor: '#ffffff' }),
+        createSection([
+            createRow([
+                createColumn([
+                    createBlock('text', '<div style="text-align: center; font-size: 12px; color: #64748b; line-height: 1.6;"><strong style="color: #334155;">Ban Công tác Sinh viên &amp; Học vụ - Viện Quốc Tế IDEAS</strong><br/>Hotline / Zalo: <strong style="color: #BD1D2D;">098 736 3935</strong> | Email: <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; text-decoration: none;">support@ideas.edu.vn</a><br/>© {{current_year}} Viện Quốc Tế IDEAS. Bảo lưu mọi quyền.</div>', { textAlign: 'center' })
+                ])
+            ], { paddingTop: '18px', paddingBottom: '18px', paddingLeft: '20px', paddingRight: '20px' })
+        ], { backgroundColor: '#f8fafc' })
+    ];
+
+    return {
+        id: 'sys_estiam_onboarding',
+        name: '[ESTIAM] Thông báo Tiếp nhận học viên & Hướng dẫn học tập - Paris Education/ESTIAM',
+        thumbnail: '/uploads/template_thumbs/tpl_sys_saas_welcome.webp?v=1',
+        category: 'welcome',
+        lastModified: new Date().toISOString(),
+        blocks,
+        bodyStyle: { backgroundColor: '#f8fafc', contentWidth: '600px', fontFamily: 'Inter, sans-serif', contentBackgroundColor: '#ffffff', linkColor: '#BD1D2D' }
+    };
+};
+
 export const SYSTEM_TEMPLATES: Template[] = [
+    buildEstiamStudentOnboarding(),
     buildSaaSWelcome(),
     buildProductLaunch(),
     buildEventInvite(),

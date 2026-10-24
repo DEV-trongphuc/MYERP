@@ -36,7 +36,7 @@ class ActivityController {
             $rawIds = array_values(array_unique(array_filter(array_map('intval', $m[1]), fn($id) => $id > 0)));
             if (!empty($rawIds)) {
                 $placeholders = implode(',', array_fill(0, count($rawIds), '?'));
-                $stmtIds = $this->db->prepare("SELECT id FROM users WHERE tenant_id = ? AND id IN ($placeholders)");
+                $stmtIds = $this->db->prepare("SELECT id FROM users WHERE tenant_id = ? AND (is_active = 1 OR is_active IS NULL) AND (status = 'active' OR status IS NULL) AND id IN ($placeholders)");
                 $stmtIds->execute(array_merge([$tenantId], $rawIds));
                 foreach ($stmtIds->fetchAll(PDO::FETCH_COLUMN) as $validId) {
                     $uids[(int)$validId] = true;
@@ -55,7 +55,7 @@ class ActivityController {
             $lookupNames = array_values(array_unique($lookupNames));
             if (!empty($lookupNames)) {
                 $placeholders = implode(',', array_fill(0, count($lookupNames), '?'));
-                $stmtUser = $this->db->prepare("SELECT id FROM users WHERE tenant_id = ? AND (full_name IN ($placeholders) OR REPLACE(full_name, ' ', '_') IN ($placeholders))");
+                $stmtUser = $this->db->prepare("SELECT id FROM users WHERE tenant_id = ? AND (is_active = 1 OR is_active IS NULL) AND (status = 'active' OR status IS NULL) AND (full_name IN ($placeholders) OR REPLACE(full_name, ' ', '_') IN ($placeholders))");
                 $stmtUser->execute(array_merge([$tenantId], $lookupNames, $lookupNames));
                 foreach ($stmtUser->fetchAll(PDO::FETCH_COLUMN) as $uid) {
                     $uid = (int)$uid;
@@ -263,9 +263,14 @@ class ActivityController {
         }
 
         // Team Leaders have management access for non-personal activities
-        $stmtLeader = $this->db->prepare("SELECT 1 FROM teams WHERE tenant_id = ? AND (leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, '')))");
-        $stmtLeader->execute([(int)$auth['tenant_id'], $userId, (string)$userId]);
-        if ($stmtLeader->fetch()) {
+        static $leaderCache = [];
+        $leaderKey = ((int)$auth['tenant_id']) . ':' . $userId;
+        if (!array_key_exists($leaderKey, $leaderCache)) {
+            $stmtLeader = $this->db->prepare("SELECT 1 FROM teams WHERE tenant_id = ? AND (leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, ''))) LIMIT 1");
+            $stmtLeader->execute([(int)$auth['tenant_id'], $userId, (string)$userId]);
+            $leaderCache[$leaderKey] = (bool)$stmtLeader->fetch();
+        }
+        if ($leaderCache[$leaderKey]) {
             return true;
         }
 
@@ -405,19 +410,6 @@ class ActivityController {
             }
         }
 
-        $managedTeamIds = [];
-        $managedUserIds = [];
-        if (in_array($auth['role'], ['manager', 'director', 'sale_admin', 'saleadmin'], true)) {
-            $mTeamsStmt = $this->db->prepare("SELECT id FROM teams WHERE tenant_id = ? AND (leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, '')))");
-            $mTeamsStmt->execute([$tid, $auth['user_id'], $auth['user_id']]);
-            $managedTeamIds = $mTeamsStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
-            if (!empty($managedTeamIds)) {
-                $inTeams = implode(',', array_map('intval', $managedTeamIds));
-                $uStmt = $this->db->query("SELECT id FROM users WHERE tenant_id = $tid AND team_id IN ($inTeams)");
-                $managedUserIds = $uStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
-            }
-        }
-
         $userRole = strtolower($auth['role'] ?? '');
         // "chỉ admin đổ lên mới thấy các task thôi. Còn lại sửa lại quyền director trở xuống chỉ thấy các thứ mình tạo, tag, metion, liên quan và thực hiện thôi."
         $hasBroadOversight = in_array($userRole, ['super_admin', 'superadmin', 'admin'], true);
@@ -525,7 +517,7 @@ class ActivityController {
         }
         if ($type)     { 
             if (strpos($type, ',') !== false) {
-                $types = explode(',', $type);
+                $types = array_values(array_filter(array_map('trim', explode(',', $type)), fn($v) => $v !== ''));
                 $placeholders = implode(',', array_fill(0, count($types), '?'));
                 $where[] = "a.type IN ($placeholders)";
                 foreach ($types as $t) {
@@ -1747,7 +1739,7 @@ class ActivityController {
             $uids = array_values(array_unique(array_filter(array_map('intval', $matches[1]), fn($u) => $u > 0 && $u !== (int)$auth['user_id'])));
             if (!empty($uids)) {
                 $placeholders = implode(',', array_fill(0, count($uids), '?'));
-                $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE tenant_id = ? AND id IN ($placeholders)");
+                $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE tenant_id = ? AND (is_active = 1 OR is_active IS NULL) AND (status = 'active' OR status IS NULL) AND id IN ($placeholders)");
                 $stmtUser->execute(array_merge([(int)$auth['tenant_id']], $uids));
                 foreach ($stmtUser->fetchAll(PDO::FETCH_ASSOC) as $userRow) {
                     $mentions[(int)$userRow['id']] = $userRow;
@@ -1770,7 +1762,7 @@ class ActivityController {
             $lookupNames = array_values(array_unique($lookupNames));
             if (!empty($lookupNames)) {
                 $placeholders = implode(',', array_fill(0, count($lookupNames), '?'));
-                $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE tenant_id = ? AND (full_name IN ($placeholders) OR REPLACE(full_name, ' ', '_') IN ($placeholders))");
+                $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE tenant_id = ? AND (is_active = 1 OR is_active IS NULL) AND (status = 'active' OR status IS NULL) AND (full_name IN ($placeholders) OR REPLACE(full_name, ' ', '_') IN ($placeholders))");
                 $stmtUser->execute(array_merge([(int)$auth['tenant_id']], $lookupNames, $lookupNames));
                 foreach ($stmtUser->fetchAll(PDO::FETCH_ASSOC) as $userRow) {
                     $uid = (int)$userRow['id'];

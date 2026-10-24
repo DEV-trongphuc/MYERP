@@ -121,7 +121,7 @@ export const GlobalConfirmModal: React.FC = () => {
             backgroundColor: 'rgba(0, 0, 0, 0.75)',
             backdropFilter: 'blur(4px)',
             WebkitBackdropFilter: 'blur(4px)',
-            zIndex: 2147483646, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 2147483646, ...({ '--modal-z': 2147483646 } as any), display: 'flex', alignItems: 'center', justifyContent: 'center',
             padding: '1.5rem',
             contain: 'strict',
             willChange: 'opacity'

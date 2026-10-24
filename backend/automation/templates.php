@@ -784,7 +784,27 @@ try {
 
         case 'DELETE':
             $data = json_decode(file_get_contents("php://input"), true) ?: [];
-            $ids = $path ? [$path] : ($data['ids'] ?? []);
+            $rawIds = [];
+            if ($path) {
+                $rawIds[] = $path;
+            }
+            if (!empty($data['ids'])) {
+                $rawIds = array_merge($rawIds, is_array($data['ids']) ? $data['ids'] : explode(',', (string)$data['ids']));
+            }
+            if (!empty($data['id'])) {
+                $rawIds[] = $data['id'];
+            }
+            if (!empty($_GET['ids'])) {
+                $rawIds = array_merge($rawIds, is_array($_GET['ids']) ? $_GET['ids'] : explode(',', (string)$_GET['ids']));
+            }
+            if (!empty($_GET['id']) && $_GET['id'] !== $path) {
+                $rawIds[] = $_GET['id'];
+            }
+            $ids = array_values(array_unique(array_filter(array_map(function ($v) {
+                return trim((string)$v);
+            }, $rawIds), function ($v) {
+                return $v !== '';
+            })));
 
             if (empty($ids))
                 jsonResponse(false, null, 'Thiếu ID mẫu email');
@@ -825,6 +845,9 @@ try {
                 $stmt->execute([$id, $workspace_id]);
                 if ($stmt->rowCount() > 0) {
                     $deletedCount++;
+                    try {
+                        @$pdo->prepare("DELETE FROM `vhvxoigh_mail_auto`.`templates` WHERE id = ?")->execute([$id]);
+                    } catch (\Throwable $ignoreLegacyErr) {}
                     $safeDelId = preg_replace('/[^a-zA-Z0-9_-]/', '_', (string)$id);
                     if ($safeDelId && is_file($thumbsDir . "/tpl_{$safeDelId}.webp")) {
                         @unlink($thumbsDir . "/tpl_{$safeDelId}.webp");

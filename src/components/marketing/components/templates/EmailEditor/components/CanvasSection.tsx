@@ -86,7 +86,7 @@ const CanvasSection: React.FC<CanvasSectionProps> = (props) => {
             }}
             draggable={!isSelected}
             onDragStart={(e) => {
-                if (isSelected || document.activeElement?.closest('[contenteditable="true"], input, textarea')) {
+                if (isSelected || (e.target as HTMLElement)?.closest?.('[contenteditable="true"], input, textarea')) {
                     e.preventDefault();
                     return;
                 }

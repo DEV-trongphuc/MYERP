@@ -233,7 +233,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   onOpenFocusMode,
   taskGroups
 }) => {
-  const effectiveZIndex = zIndex || 2147483640;
+  const effectiveZIndex = Math.min(Math.max(zIndex || 2147483625, 2147483625), 2147483638);
   const navigate = useNavigate();
   const { t } = useLanguage();
   const { startUpload, updateProgress, finishUpload } = useUploadProgress();
@@ -420,8 +420,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     const pId = taskUid || taskCreatedBy || currentUid;
     const found = users.find(u => Number(u.id) === pId);
     if (found) return found;
-    const name = formData.user_name || formData.created_by_name || currentUser?.name || (currentUser as any)?.full_name || 'Tôi';
-    const avatar = formData.created_by_avatar || currentUser?.avatar || (currentUser as any)?.avatar_url || '';
+    const isSelfPersonal = pId > 0 && pId === currentUid;
+    const name = formData.user_name || formData.created_by_name || (isSelfPersonal ? (currentUser?.name || (currentUser as any)?.full_name) : '') || 'Tôi';
+    const avatar = (pId === Number(formData.user_id) ? (formData.user_avatar || formData.assignee_avatar) : '') || (pId === Number(formData.created_by) ? formData.created_by_avatar : '') || (isSelfPersonal ? (currentUser?.avatar || (currentUser as any)?.avatar_url) : '') || '';
     return {
       id: pId,
       name,
@@ -429,7 +430,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       avatar,
       avatar_url: avatar
     };
-  }, [users, taskUid, taskCreatedBy, currentUid, formData.user_name, formData.created_by_name, formData.created_by_avatar, currentUser]);
+  }, [users, taskUid, taskCreatedBy, currentUid, formData.user_id, formData.user_name, formData.user_avatar, formData.assignee_avatar, formData.created_by, formData.created_by_name, formData.created_by_avatar, currentUser]);
 
   const [comments, setComments] = useState<any[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
@@ -1448,6 +1449,15 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       }
       const rawParticipants = task.participant_ids || task.collaborator_ids || task.related_user_ids || '';
       const normalizedParticipants = Array.isArray(rawParticipants) ? rawParticipants.join(',') : String(rawParticipants || '');
+      const creatorIdNum = isTaskNew ? Number(currentUser?.id || task.created_by || 0) : Number(task.created_by || 0);
+      const isCreatorSelf = isTaskNew || (creatorIdNum > 0 && creatorIdNum === Number(currentUser?.id || 0) && !task.created_by_name);
+      const matchedCreatorUser = creatorIdNum > 0 ? users.find(u => Number(u.id) === creatorIdNum) : null;
+      const resolvedCreatorName = isTaskNew
+        ? (currentUser?.name || (currentUser as any)?.full_name || task.created_by_name || '')
+        : (task.created_by_name || matchedCreatorUser?.full_name || matchedCreatorUser?.name || (isCreatorSelf ? (currentUser?.name || (currentUser as any)?.full_name || '') : ''));
+      const resolvedCreatorAvatar = isTaskNew
+        ? (currentUser?.avatar || (currentUser as any)?.avatar_url || task.created_by_avatar || '')
+        : (task.created_by_avatar || matchedCreatorUser?.avatar_url || matchedCreatorUser?.avatar || (isCreatorSelf ? (currentUser?.avatar || (currentUser as any)?.avatar_url || '') : ''));
       const normalizedTask = {
         ...task,
         id: isTaskNew ? 'new' : task.id,
@@ -1457,9 +1467,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         user_id: defaultUserId ? Number(defaultUserId) : null,
         participant_ids: normalizedParticipants,
         team_id: task.team_id ? Number(task.team_id) : undefined,
-        created_by: isNew ? (currentUser?.id || task.created_by) : (task.created_by || currentUser?.id),
-        created_by_name: isNew ? (currentUser?.name || (currentUser as any)?.full_name || task.created_by_name || '') : (task.created_by_name || currentUser?.name || (currentUser as any)?.full_name || ''),
-        created_by_avatar: isNew ? (currentUser?.avatar || (currentUser as any)?.avatar_url || task.created_by_avatar || '') : (task.created_by_avatar || currentUser?.avatar || (currentUser as any)?.avatar_url || ''),
+        created_by: isTaskNew ? (currentUser?.id || task.created_by) : (task.created_by || null),
+        created_by_name: resolvedCreatorName,
+        created_by_avatar: resolvedCreatorAvatar,
         contact_id: task.contact_id || (task.related_type === 'contact' ? task.related_id : null)
       };
       // Parse erp metadata from task body cleanly using parseTaskBody
@@ -3148,7 +3158,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
   const content = (
     <motion.div 
-      className={`${embedMode ? '' : styles.drawer} ${embedMode ? 'focus-right-column' : ''}`}
+      className={`${embedMode ? '' : `${styles.drawer} drawer-panel drawer-sheet`} ${embedMode ? 'focus-right-column' : ''}`}
       {...drawerMotionProps}
       style={embedMode ? {
         width: '100%',
@@ -3170,11 +3180,12 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         overflow: 'hidden',
         boxShadow: isMobileOrTablet ? 'none' : '-10px 0 30px rgba(0,0,0,0.15)',
         zIndex: effectiveZIndex,
+        '--drawer-panel-z': effectiveZIndex,
         display: 'flex',
         flexDirection: 'column',
         position: 'fixed',
         background: 'var(--color-surface)'
-      }}
+      } as React.CSSProperties}
     >
         {/* Drawer Header */}
         <div style={{
@@ -3291,11 +3302,20 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   </span>
                 </h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px', flexWrap: 'wrap', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <span>{t('Người tạo:')}</span>
-                    <Avatar src={formData.created_by_avatar || undefined} name={formData.created_by_name || currentUser?.name || (currentUser as any)?.full_name || t('Hệ thống / Admin')} size={20} />
-                    <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{formData.created_by_name || currentUser?.name || (currentUser as any)?.full_name || t('Hệ thống / Admin')}</span>
-                  </div>
+                  {(() => {
+                    const cId = Number(formData.created_by || task?.created_by || 0);
+                    const matchedCreator = cId > 0 ? users.find(u => Number(u.id) === cId) : null;
+                    const isSelfCreator = isNew || (cId > 0 && cId === Number(currentUser?.id || 0) && !formData.created_by_name);
+                    const creatorName = formData.created_by_name || matchedCreator?.full_name || matchedCreator?.name || (isSelfCreator ? (currentUser?.name || (currentUser as any)?.full_name) : '') || t('Hệ thống / Admin');
+                    const creatorAvatar = formData.created_by_avatar || matchedCreator?.avatar_url || matchedCreator?.avatar || (isSelfCreator ? (currentUser?.avatar || (currentUser as any)?.avatar_url) : '') || undefined;
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <span>{t('Người tạo:')}</span>
+                        <Avatar src={creatorAvatar} name={creatorName} size={20} />
+                        <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{creatorName}</span>
+                      </div>
+                    );
+                  })()}
 
                   {formatHeaderDate(formData.created_at) && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--color-bg)', padding: '2px 8px', borderRadius: '6px', border: '1px solid var(--color-border-light)' }}>
@@ -7591,20 +7611,21 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
 
         {/* PARTICIPANTS & SUBTASKS MODAL */}
-        {showParticipantsModal && (
+        {showParticipantsModal && createPortal(
           <div 
             className="modal-backdrop modal-above-drawer"
             style={{
               position: 'fixed',
               inset: 0,
               background: 'rgba(0, 0, 0, 0.65)',
-              zIndex: 2147483645,
+              zIndex: 2147483646,
+              '--modal-z': 2147483646,
               backdropFilter: 'blur(4px)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               animation: 'fade-in 0.2s ease-out'
-            }}
+            } as React.CSSProperties}
             onClick={() => { setShowParticipantsModal(false); setShowAddParticipantsSection(false); }}
           >
             <div 
@@ -7899,24 +7920,26 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 </button>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* SUBTASK PARTICIPANTS MODAL */}
-        {selectedSubtaskForParticipants && (
+        {selectedSubtaskForParticipants && createPortal(
           <div 
             className="modal-backdrop modal-above-drawer"
             style={{
               position: 'fixed',
               inset: 0,
               background: 'rgba(0, 0, 0, 0.65)',
-              zIndex: 2147483645,
+              zIndex: 2147483646,
+              '--modal-z': 2147483646,
               backdropFilter: 'blur(4px)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               animation: 'fade-in 0.2s ease-out'
-            }}
+            } as React.CSSProperties}
             onClick={() => setSelectedSubtaskForParticipants(null)}
           >
             <div 
@@ -7990,7 +8013,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 </button>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </motion.div>
   );
@@ -8010,15 +8034,16 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
+              transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] as any }}
               style={{
                 position: 'fixed',
                 inset: 0,
                 background: 'rgba(0,0,0,0.45)',
-                zIndex: effectiveZIndex - 1,
+                zIndex: effectiveZIndex - 5,
+                '--drawer-backdrop-z': effectiveZIndex - 5,
                 backdropFilter: 'blur(8px)',
                 WebkitBackdropFilter: 'blur(8px)'
-              }}
+              } as React.CSSProperties}
             />
             {content}
           </>
@@ -8028,7 +8053,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
           {/* Validation Warning Modal */}
           <AnimatePresence>
             {showValidationModal && (
-              <div className="overlay-backdrop" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: Math.min(effectiveZIndex + 5, 2147483646) }} onClick={() => setShowValidationModal(false)}>
+              <div className="overlay-backdrop modal-above-drawer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2147483646, ...({ '--modal-z': 2147483646 } as any) }} onClick={() => setShowValidationModal(false)}>
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
                   onClick={e => e.stopPropagation()}
@@ -8081,8 +8106,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
           <AnimatePresence>
             {showUnsavedNewTaskPrompt && (
               <div 
-                className="overlay-backdrop" 
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: Math.min(effectiveZIndex + 6, 2147483646) }} 
+                className="overlay-backdrop modal-above-drawer" 
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2147483646, ...({ '--modal-z': 2147483646 } as any) }} 
                 onClick={() => setShowUnsavedNewTaskPrompt(false)}
               >
                 <motion.div 
@@ -8215,7 +8240,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
           {/* Approval Success Modal */}
           <AnimatePresence>
             {showApprovalSuccessModal && (
-              <div className="overlay-backdrop" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: Math.min(effectiveZIndex + 6, 2147483646) }} onClick={() => setShowApprovalSuccessModal(null)}>
+              <div className="overlay-backdrop modal-above-drawer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2147483646, ...({ '--modal-z': 2147483646 } as any) }} onClick={() => setShowApprovalSuccessModal(null)}>
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
                   onClick={e => e.stopPropagation()}
@@ -8277,12 +8302,14 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             {/* Meeting Proof Modal */}
             {meetingToComplete && (
               <div 
+                className="modal-above-drawer"
                 style={{
                   position: 'fixed',
                   inset: 0,
                   backgroundColor: 'rgba(0, 0, 0, 0.65)',
                   backdropFilter: 'blur(4px)',
-                  zIndex: Math.min(effectiveZIndex + 6, 2147483646),
+                  zIndex: 2147483646,
+                  ...({ '--modal-z': 2147483646 } as any),
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -8449,12 +8476,14 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             {/* Meeting Cancellation Modal */}
             {cancellingMeeting && (
               <div 
+                className="modal-above-drawer"
                 style={{
                   position: 'fixed',
                   inset: 0,
                   backgroundColor: 'rgba(0, 0, 0, 0.65)',
                   backdropFilter: 'blur(4px)',
-                  zIndex: Math.min(effectiveZIndex + 6, 2147483646),
+                  zIndex: 2147483646,
+                  ...({ '--modal-z': 2147483646 } as any),
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -8545,12 +8574,14 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             {/* Mute Confirmation Modal */}
             {showMuteConfirmModal && (
               <div 
+                className="modal-above-drawer"
                 style={{
                   position: 'fixed',
                   inset: 0,
                   backgroundColor: 'rgba(0, 0, 0, 0.5)',
                   backdropFilter: 'blur(4px)',
-                  zIndex: Math.min(effectiveZIndex + 6, 2147483646),
+                  zIndex: 2147483646,
+                  ...({ '--modal-z': 2147483646 } as any),
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',

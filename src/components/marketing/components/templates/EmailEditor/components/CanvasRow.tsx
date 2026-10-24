@@ -231,7 +231,7 @@ const CanvasRow: React.FC<CanvasRowProps> = (props) => {
             }}
             draggable={!isSelected && resizingIdx === null}
             onDragStart={(e) => {
-                if (isSelected || resizingIdx !== null || document.activeElement?.closest('[contenteditable="true"], input, textarea')) {
+                if (isSelected || resizingIdx !== null || (e.target as HTMLElement)?.closest?.('[contenteditable="true"], input, textarea')) {
                     e.preventDefault();
                     return;
                 }

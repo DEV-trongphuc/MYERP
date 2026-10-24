@@ -570,10 +570,9 @@ const DEFAULT_PIPELINE_STAGES = [
 
 const ContactsFloatingTooltip = React.memo(({
   triggerRef,
-  pipelineStages
 }: {
   triggerRef: React.MutableRefObject<((val: { contact: any; rect: DOMRect } | null) => void) | null>;
-  pipelineStages: any[];
+  pipelineStages?: any[];
 }) => {
   const [hoveredCell, setHoveredCell] = useState<{ contact: any; rect: DOMRect } | null>(null);
   triggerRef.current = setHoveredCell;
@@ -582,34 +581,50 @@ const ContactsFloatingTooltip = React.memo(({
 
   const hc = hoveredCell.contact;
   const rect = hoveredCell.rect;
-  const hcPhone = hc.phone || hc.mobile || hc.phone2 || '';
-  const stageInfo = getContactStage(hc, pipelineStages);
   const lastNote = cleanInteractionText(hc.last_interaction || '');
   const initialNote = cleanInteractionText(hc.notes || '');
-  const uniqueTags = normalizeContactTagList(hc.tags);
-  let displayProg = (hc.program || hc.project_name || '').trim();
-  if (!displayProg && uniqueTags.length > 0) {
-    const progTag = uniqueTags.find((t: string) => {
-      const lt = t.toLowerCase();
-      return lt.includes('mba') || lt.includes('bba') || lt.includes('dba') || lt.includes('msc') || lt.includes('umef') || lt.includes('emba');
-    });
-    if (progTag) displayProg = progTag;
-  }
-  const admDateStr = hc.admission_date ? (() => {
-    const d = new Date(hc.admission_date);
-    if (isNaN(d.getTime())) return String(hc.admission_date).slice(0, 10);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
-  })() : '';
 
-  const tooltipWidth = 350;
+  const rawEntries: Array<{ content: string; created_at?: string | null; user_name?: string | null; is_initial?: boolean }> =
+    Array.isArray(hc.recent_interactions) && hc.recent_interactions.length > 0
+      ? hc.recent_interactions
+          .map((it: any) => ({
+            content: cleanInteractionText(it?.content || ''),
+            created_at: it?.created_at || null,
+            user_name: it?.user_name || null,
+            is_initial: Boolean(it?.is_initial),
+          }))
+          .filter((it: any) => Boolean(it.content))
+          .slice(0, 3)
+      : (() => {
+          const fallback: Array<{ content: string; created_at?: string | null; user_name?: string | null; is_initial?: boolean }> = [];
+          if (lastNote) {
+            fallback.push({
+              content: lastNote,
+              created_at: hc.last_interaction_at || hc.last_contact || null,
+              user_name: null,
+            });
+          }
+          if (initialNote && initialNote !== lastNote) {
+            fallback.push({
+              content: initialNote,
+              created_at: hc.created_at || null,
+              user_name: null,
+              is_initial: true,
+            });
+          }
+          return fallback.slice(0, 3);
+        })();
+
+  if (rawEntries.length === 0) return null;
+
+  const tooltipWidth = 340;
   let left = rect.left + rect.width / 2 - tooltipWidth / 2;
   if (left < 12) left = 12;
   if (typeof window !== 'undefined' && left + tooltipWidth > window.innerWidth - 12) {
     left = window.innerWidth - tooltipWidth - 12;
   }
-  const showAbove = typeof window !== 'undefined' && rect.bottom + 240 > window.innerHeight;
-  const top = showAbove ? Math.max(12, rect.top - 10) : rect.bottom + 8;
+  const showAbove = typeof window !== 'undefined' && rect.bottom + 220 > window.innerHeight;
+  const top = showAbove ? Math.max(12, rect.top - 8) : rect.bottom + 8;
 
   return createPortal(
     <div
@@ -623,134 +638,55 @@ const ContactsFloatingTooltip = React.memo(({
         pointerEvents: 'none',
         background: '#ffffff',
         color: '#0f172a',
-        borderRadius: '14px',
-        padding: '12px 14px',
+        borderRadius: '12px',
+        padding: '10px 12px',
         boxShadow: '0 14px 34px rgba(15, 23, 42, 0.14)',
         border: '1px solid #e2e8f0',
         fontSize: '0.75rem',
-        lineHeight: 1.45
+        lineHeight: 1.45,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '6px'
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px solid #f1f5f9' }}>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontWeight: 800, fontSize: '0.84rem', color: '#0f172a', wordBreak: 'break-word' }}>
-            {hc.full_name || hc.name || 'Khách hàng'}
-          </div>
-          {(hcPhone || hc.email) && (
-            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '5px', marginTop: '2px', fontSize: '0.72rem', lineHeight: 1.3 }}>
-              {hcPhone && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#0f172a', fontWeight: 700 }}>
-                  <Phone size={11} style={{ color: '#64748b', flexShrink: 0 }} />
-                  <span>{hcPhone}</span>
-                </span>
-              )}
-              {hcPhone && hc.email && <span style={{ color: '#cbd5e1' }}>•</span>}
-              {hc.email && (
-                <span style={{ color: '#64748b', fontWeight: 500, wordBreak: 'break-all' }}>
-                  {hc.email}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-        <span
-          style={{
-            fontSize: '0.68rem',
-            fontWeight: 700,
-            padding: '2px 8px',
-            borderRadius: '999px',
-            background: stageInfo.isNewLead ? '#dc2626' : `${stageInfo.color}18`,
-            color: stageInfo.isNewLead ? '#ffffff' : stageInfo.color,
-            whiteSpace: 'nowrap',
-            flexShrink: 0
-          }}
-        >
-          {stageInfo.name}
+      <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+          <MessageSquare size={12} style={{ flexShrink: 0 }} />
+          <span>Nhật ký gần nhất ({rawEntries.length})</span>
         </span>
       </div>
 
-      {(displayProg || admDateStr) && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
-          {displayProg && (
-            <span style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '2px 8px',
-              borderRadius: '6px',
-              fontSize: '0.7rem',
-              fontWeight: 700,
-              background: 'rgba(37, 99, 235, 0.1)',
-              color: '#2563eb'
-            }}>
-              <GraduationCap size={12} style={{ flexShrink: 0 }} />
-              <span>{displayProg}</span>
-            </span>
-          )}
-          {admDateStr && (
-            <span style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '2px 8px',
-              borderRadius: '6px',
-              fontSize: '0.7rem',
-              fontWeight: 700,
-              background: 'rgba(16, 185, 129, 0.1)',
-              color: '#059669'
-            }}>
-              <Calendar size={12} style={{ flexShrink: 0 }} />
-              <span>{admDateStr}</span>
-            </span>
-          )}
-        </div>
-      )}
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 10px', marginBottom: '8px' }}>
-        <div>
-          <span style={{ color: '#64748b', fontSize: '0.68rem' }}>Phụ trách: </span>
-          <strong style={{ color: '#0f172a' }}>{hc.owner_name || 'Chưa giao'}</strong>
-        </div>
-        <div>
-          <span style={{ color: '#64748b', fontSize: '0.68rem' }}>Nguồn: </span>
-          <strong style={{ color: '#0f172a' }}>{hc.source || '—'}</strong>
-        </div>
-      </div>
-
-      {uniqueTags.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '8px' }}>
-          {uniqueTags.map((t, idx) => (
-            <span
-              key={idx}
-              style={{
-                fontSize: '0.65rem',
-                fontWeight: 600,
-                padding: '2px 7px',
-                borderRadius: '6px',
-                background: '#f1f5f9',
-                color: '#334155'
-              }}
-            >
-              #{t}
-            </span>
-          ))}
-        </div>
-      )}
-
-      <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '8px 10px' }}>
-        <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#2563eb', marginBottom: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <MessageSquare size={12} style={{ flexShrink: 0 }} />
-          <span>Tương tác / Ghi chú gần nhất</span>
-        </div>
-        <div style={{ color: '#0f172a', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '140px', overflow: 'hidden' }}>
-          {lastNote || initialNote || 'Chưa có ghi chú tương tác'}
-        </div>
-        {lastNote && initialNote && initialNote !== lastNote && (
-          <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #e2e8f0', fontSize: '0.7rem', color: '#334155' }}>
-            <span style={{ color: '#64748b', fontWeight: 600 }}>Ghi chú gốc: </span>
-            {initialNote}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {rawEntries.map((entry, idx) => (
+          <div
+            key={idx}
+            style={{
+              background: idx === 0 ? '#f8fafc' : '#ffffff',
+              border: '1px solid #f1f5f9',
+              borderRadius: '8px',
+              padding: '7px 9px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '3px'
+            }}
+          >
+            {(entry.created_at || entry.user_name || entry.is_initial) && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', fontSize: '0.67rem', color: '#64748b' }}>
+                <span style={{ fontWeight: 700, color: idx === 0 ? '#0f172a' : '#475569' }}>
+                  {entry.is_initial ? 'Ghi chú gốc' : (entry.user_name || `#${idx + 1}`)}
+                </span>
+                {entry.created_at && (
+                  <span style={{ whiteSpace: 'nowrap' }}>
+                    {formatTimeAgo(entry.created_at)}
+                  </span>
+                )}
+              </div>
+            )}
+            <div style={{ color: '#0f172a', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '110px', overflow: 'hidden' }}>
+              {entry.content}
+            </div>
           </div>
-        )}
+        ))}
       </div>
     </div>,
     document.body
@@ -1021,8 +957,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const [filterDataType, setFilterDataType] = useState('');
   const [filterOwnerId, setFilterOwnerId] = useState('');
   const [filterTeamId, setFilterTeamId] = useState('');
-  const [filterProjectId, setFilterProjectId] = useState('');
-  const [filterCampaignId, setFilterCampaignId] = useState('');
+  const [filterProjectId, setFilterProjectId] = useState(() => searchParams.get('project_id') || '');
+  const [filterCampaignId, setFilterCampaignId] = useState(() => searchParams.get('campaign_id') || '');
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [filterTag, setFilterTag] = useState('');
   const [dynamicSources, setDynamicSources] = useState<string[]>([]);
@@ -1287,8 +1223,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     source: '',
     ownerId: '',
     teamId: '',
-    projectId: '',
-    campaignId: '',
+    projectId: searchParams.get('project_id') || '',
+    campaignId: searchParams.get('campaign_id') || '',
     tag: '',
     interactionStatus: '' as '' | 'uncontacted' | 'contacted',
     staleDays: '',
@@ -1382,37 +1318,39 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     if (!isActiveInstance) return;
     const statusParam = searchParams.get('status');
     const uncontactedParam = searchParams.get('uncontacted');
+    let mutatedParams = false;
+    const newParams = new URLSearchParams(searchParams);
+
     if (statusParam === 'not_contacted' || uncontactedParam === '1' || uncontactedParam === 'true') {
-      setFilterUncontacted(true);
-      const newParams = new URLSearchParams(searchParams);
-      if (statusParam === 'not_contacted') newParams.delete('status');
-      if (uncontactedParam) newParams.delete('uncontacted');
-      setSearchParams(newParams, { replace: true });
+      setFilterUncontacted(prev => prev ? prev : true);
+      if (statusParam === 'not_contacted') { newParams.delete('status'); mutatedParams = true; }
+      if (uncontactedParam) { newParams.delete('uncontacted'); mutatedParams = true; }
     }
     const mpParam = searchParams.get('multi_program');
     if (mpParam === '1' || mpParam === 'true' || mpParam === '2') {
-      setFilterMultiProgram(true);
-      setActiveFilters(prev => ({ ...prev, multiProgram: true }));
-      const newParams = new URLSearchParams(searchParams);
+      setFilterMultiProgram(prev => prev ? prev : true);
+      setActiveFilters(prev => prev.multiProgram ? prev : { ...prev, multiProgram: true });
       newParams.delete('multi_program');
-      setSearchParams(newParams, { replace: true });
+      mutatedParams = true;
     }
 
     const projectIdParam = searchParams.get('project_id');
     if (projectIdParam) {
-      setFilterProjectId(projectIdParam);
-      setActiveFilters(prev => ({ ...prev, projectId: projectIdParam }));
-      const newParams = new URLSearchParams(searchParams);
+      setFilterProjectId(prev => prev === projectIdParam ? prev : projectIdParam);
+      setActiveFilters(prev => prev.projectId === projectIdParam ? prev : { ...prev, projectId: projectIdParam });
       newParams.delete('project_id');
-      setSearchParams(newParams, { replace: true });
+      mutatedParams = true;
     }
 
     const campaignIdParam = searchParams.get('campaign_id');
     if (campaignIdParam) {
-      setFilterCampaignId(campaignIdParam);
-      setActiveFilters(prev => ({ ...prev, campaignId: campaignIdParam }));
-      const newParams = new URLSearchParams(searchParams);
+      setFilterCampaignId(prev => prev === campaignIdParam ? prev : campaignIdParam);
+      setActiveFilters(prev => prev.campaignId === campaignIdParam ? prev : { ...prev, campaignId: campaignIdParam });
       newParams.delete('campaign_id');
+      mutatedParams = true;
+    }
+
+    if (mutatedParams) {
       setSearchParams(newParams, { replace: true });
     }
   }, [searchParams, setSearchParams, isActiveInstance]);
@@ -1823,11 +1761,22 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
   const fetchDataRef = useRef(fetchData);
   fetchDataRef.current = fetchData;
+  const isActiveInstanceRef = useRef(isActiveInstance);
+  isActiveInstanceRef.current = isActiveInstance;
+
+  const usersByIdMap = useMemo(() => {
+    const map = new Map<string, any>();
+    users.forEach(u => {
+      if (u && u.id !== undefined) map.set(String(u.id), u);
+    });
+    return map;
+  }, [users]);
 
   const prevFilterSignatureRef = useRef('');
   const currentFilterSignature = JSON.stringify([debouncedSearch, sortBy, activeFilters, segment, studentSubTab, showLost, quickLeadStatus, quickPipelineStage, filterUncontacted]);
 
   useEffect(() => {
+    if (!isActiveInstance) return;
     const filtersChanged = prevFilterSignatureRef.current !== '' && prevFilterSignatureRef.current !== currentFilterSignature;
     prevFilterSignatureRef.current = currentFilterSignature;
 
@@ -1841,7 +1790,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     }
 
     fetchData();
-  }, [page, pageSize, debouncedSearch, sortBy, activeFilters, segment, studentSubTab, showLost, quickLeadStatus, quickPipelineStage, filterUncontacted]);
+  }, [isActiveInstance, page, pageSize, debouncedSearch, sortBy, activeFilters, segment, studentSubTab, showLost, quickLeadStatus, quickPipelineStage, filterUncontacted]);
 
   // Recalculate lead scores instantly in RAM when scoringRules finishes loading
   useEffect(() => {
@@ -1862,6 +1811,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
   useEffect(() => {
     const handleRefresh = () => {
+      if (!isActiveInstanceRef.current) return;
       if (initialMetadataLoaded) {
         fetchDataRef.current(true);
       }
@@ -2632,12 +2582,15 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   }, [pipelineStages]);
 
   const handleContextChangeStatus = async (item: any, newStatus: string) => {
+    const prevLeadStatus = item.lead_status;
+    const prevStageId = item.stage_id;
+    const prevStageName = item.stage_name;
+    const prevStageColor = item.stage_color;
     try {
       if (newStatus === 'nurture' || newStatus === 'lost') {
-        await api.put(`/contacts/${item.id}`, { lead_status: newStatus });
         setContacts(prev => prev.map(c => c.id === item.id ? { ...c, lead_status: newStatus } : c));
+        await api.put(`/contacts/${item.id}`, { lead_status: newStatus });
       } else {
-        await api.put(`/contacts/${item.id}`, { stage_id: Number(newStatus) });
         const stageObj = pipelineStages.find(s => String(s.id) === String(newStatus));
         setContacts(prev => prev.map(c => c.id === item.id ? { 
           ...c, 
@@ -2645,9 +2598,17 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
           stage_name: stageObj?.name || c.stage_name,
           stage_color: stageObj?.color || c.stage_color
         } : c));
+        await api.put(`/contacts/${item.id}`, { stage_id: Number(newStatus) });
       }
       addToast('Đã cập nhật trạng thái liên hệ!', 'success');
     } catch (err: any) {
+      setContacts(prev => prev.map(c => c.id === item.id ? {
+        ...c,
+        lead_status: prevLeadStatus,
+        stage_id: prevStageId,
+        stage_name: prevStageName,
+        stage_color: prevStageColor
+      } : c));
       addToast(err?.response?.data?.message || 'Không thể cập nhật trạng thái', 'error');
     }
   };
@@ -2756,6 +2717,14 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
             }
           }
           if (successCount > 0) {
+            const selectedSet = new Set(contactIds);
+            setContacts(prev => prev.map(c => {
+              if (!selectedSet.has(c.id)) return c;
+              const existing = normalizeContactTagList(c.tags, dbTagsByIdMap);
+              if (existing.some(t => t.toLowerCase() === cleanTag.toLowerCase())) return c;
+              const nextTags = [...existing, cleanTag];
+              return { ...c, tags: nextTags.join(', ') };
+            }));
             addToast(`Đã gắn tag "${cleanTag}" cho ${successCount} liên hệ`, 'success');
             setSelected(new Set());
             fetchData(true);
@@ -2829,6 +2798,16 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
           await api.post(`/contacts/${cid}/assign`, { owner_id: Number(bulkAssignTargetUserId) });
           successCount++;
         } catch (err) {}
+      }
+      if (successCount > 0) {
+        const targetUser = usersByIdMap.get(String(bulkAssignTargetUserId));
+        const selectedSet = new Set(contactIds);
+        setContacts(prev => prev.map(c => selectedSet.has(c.id) ? {
+          ...c,
+          owner_id: Number(bulkAssignTargetUserId),
+          owner_name: targetUser?.full_name || targetUser?.name || c.owner_name,
+          owner_avatar: targetUser?.avatar_url || targetUser?.avatar || c.owner_avatar
+        } : c));
       }
       addToast(`Đã điều chuyển thành công ${successCount}/${contactIds.length} khách hàng!`, 'success');
       setShowBulkAssignModal(false);
@@ -6667,15 +6646,40 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                       setProfileInitialTab('journey360');
                       setProfileContact(c);
                     };
+                    const rawStageSlug = String(c.pipeline_status || c.stage_id || '').trim().toLowerCase();
+                    const matchedStageObj = pipelineStages.find((s: any) =>
+                      String(s.id).toLowerCase() === rawStageSlug ||
+                      String(s.system_slug || '').toLowerCase() === rawStageSlug ||
+                      String(s.name || '').toLowerCase() === rawStageSlug
+                    );
+                    const stageOrderIdx = Number(matchedStageObj?.order_index || 0);
+                    const isPipeline13Or14 =
+                      stageOrderIdx === 13 ||
+                      stageOrderIdx === 14 ||
+                      Boolean(matchedStageObj?.is_won) ||
+                      ['deposit_tuition_payment', 'dong_le_phi', 'enrolled', 'hoc_vien', '43', '44'].includes(rawStageSlug) ||
+                      rawStageSlug.startsWith('13') ||
+                      rawStageSlug.startsWith('14');
+                    const isStudentRow = segment === 'customer' || String(c.status || '').toLowerCase() === 'customer' || isPipeline13Or14;
+                    const missingStudentFields: string[] = [];
+                    if (isStudentRow) {
+                      if (!String(c.student_code || c.student_id || '').trim()) missingStudentFields.push('ID Student');
+                      if (!String(c.citizen_id || c.id_card || c.cccd || c.passport || c.passport_no || '').trim()) missingStudentFields.push('CCCD');
+                      if (!String(c.company_name || c.company || c.department || '').trim()) missingStudentFields.push('Công ty');
+                      if (!String(c.job_title || c.position || '').trim()) missingStudentFields.push('Chức vụ');
+                      if (!String(c.industry || c.profession || c.career || '').trim()) missingStudentFields.push('Ngành nghề');
+                      if (!String(c.program || '').trim()) missingStudentFields.push('Chương trình');
+                      const rawAdm = String(c.admission_date || '').trim();
+                      if (!rawAdm || rawAdm.startsWith('0000')) missingStudentFields.push('Ngày NH');
+                      const rawDob = String(c.birthday || c.birth_date || c.dob || '').trim();
+                      if (!rawDob || rawDob.startsWith('0000')) missingStudentFields.push('Ngày sinh');
+                      if (!String(c.gender || '').trim()) missingStudentFields.push('Giới tính');
+                      if (!String(c.email || '').trim()) missingStudentFields.push('Email');
+                    }
                     return (
-                      <motion.tr key={c.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                      <tr key={c.id}
                          style={{ transition: 'background 0.2s', cursor: 'pointer' }}
                          className="table-row-hover"
-                         onMouseOver={(e) => {
-                           const cell = (e.target as HTMLElement).closest('td') || e.currentTarget;
-                           setHoveredCell({ contact: c, rect: cell.getBoundingClientRect() });
-                         }}
-                         onMouseLeave={() => setHoveredCell(null)}
                          onClick={() => {
                            setProfileInitialTab('info');
                            setProfileContact(c);
@@ -6696,13 +6700,38 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                         {visibleColsMap['student_code'] && (
                           <td
                             style={{ width: '135px', maxWidth: '155px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}
-                            onMouseEnter={(e) => setHoveredCell({ contact: c, rect: e.currentTarget.getBoundingClientRect() })}
-                            onMouseLeave={() => setHoveredCell(null)}
                           >
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
-                              <span style={{ fontSize: '0.75rem', fontWeight: 700, fontFamily: 'monospace', padding: '2px 7px', borderRadius: '6px', background: 'rgba(100, 116, 139, 0.1)', color: 'var(--color-text-muted)' }}>
-                                {c.student_code || c.student_id || ('KH' + String(c.id).padStart(6, '0'))}
-                              </span>
+                              {(c.student_code || c.student_id) ? (
+                                <span style={{ fontSize: '0.75rem', fontWeight: 700, fontFamily: 'monospace', padding: '2px 7px', borderRadius: '6px', background: 'rgba(100, 116, 139, 0.1)', color: 'var(--color-text-muted)' }}>
+                                  {c.student_code || c.student_id}
+                                </span>
+                              ) : isStudentRow ? (
+                                <span
+                                  title="Học viên chưa cập nhật ID Student / Mã học viên"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '2.5px',
+                                    padding: '1px 4.5px',
+                                    borderRadius: '3.5px',
+                                    background: '#fffbeb',
+                                    color: '#d97706',
+                                    border: '1px solid #fde68a',
+                                    fontSize: '10px',
+                                    fontWeight: 600,
+                                    lineHeight: 1.2,
+                                    zoom: 0.76
+                                  }}
+                                >
+                                  <AlertTriangle size={8.5} style={{ flexShrink: 0 }} />
+                                  Thiếu ID Student
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: '0.75rem', fontWeight: 700, fontFamily: 'monospace', padding: '2px 7px', borderRadius: '6px', background: 'rgba(100, 116, 139, 0.1)', color: 'var(--color-text-muted)' }}>
+                                  {'KH' + String(c.id).padStart(6, '0')}
+                                </span>
+                              )}
                               {c.admission_date ? (() => {
                                 const d = new Date(c.admission_date);
                                 const pad = (n: number) => String(n).padStart(2, '0');
@@ -6715,7 +6744,28 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                     <span>{formatted}</span>
                                   </span>
                                 );
-                              })() : (
+                              })() : isStudentRow ? (
+                                <span
+                                  title="Học viên chưa cập nhật Ngày nhập học"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '2.5px',
+                                    padding: '1px 4.5px',
+                                    borderRadius: '3.5px',
+                                    background: '#fffbeb',
+                                    color: '#d97706',
+                                    border: '1px solid #fde68a',
+                                    fontSize: '10px',
+                                    fontWeight: 600,
+                                    lineHeight: 1.2,
+                                    zoom: 0.76
+                                  }}
+                                >
+                                  <AlertTriangle size={8.5} style={{ flexShrink: 0 }} />
+                                  Thiếu Ngày NH
+                                </span>
+                              ) : (
                                 <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Chưa có ngày NH</span>
                               )}
                             </div>
@@ -6731,8 +6781,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                           return (
                           <td
                             style={{ width: isSale ? '260px' : '250px', maxWidth: isSale ? '320px' : '310px', padding: '0.85rem 0.5rem', borderBottom: '1px solid var(--color-border)' }}
-                            onMouseEnter={(e) => setHoveredCell({ contact: c, rect: e.currentTarget.getBoundingClientRect() })}
-                            onMouseLeave={() => setHoveredCell(null)}
                           >
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                               <Avatar name={fullName} src={c.avatar_url || c.avatar || c.photo} size={32} />
@@ -6780,6 +6828,53 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                     {c.company_name} {c.job_title ? `• ${c.job_title}` : ''}
                                   </p>
                                 )}
+                                {isStudentRow && missingStudentFields.length > 0 && (
+                                  <div
+                                    title={`Hồ sơ học viên còn thiếu (${missingStudentFields.length} mục): ${missingStudentFields.join(', ')}. Nhấn để cập nhật ngay.`}
+                                    style={{ marginTop: '2px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2.5px', zoom: 0.74 }}
+                                  >
+                                    {missingStudentFields.slice(0, 3).map((mf, mfIdx) => (
+                                      <span
+                                        key={mf}
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '2px',
+                                          padding: '1px 4px',
+                                          borderRadius: '3.5px',
+                                          background: '#fffbeb',
+                                          color: '#d97706',
+                                          border: '1px solid #fde68a',
+                                          fontSize: '10px',
+                                          fontWeight: 600,
+                                          whiteSpace: 'nowrap',
+                                          lineHeight: 1.15
+                                        }}
+                                      >
+                                        {mfIdx === 0 && <AlertTriangle size={8.5} style={{ color: '#d97706', flexShrink: 0 }} />}
+                                        <span>-{mf}</span>
+                                      </span>
+                                    ))}
+                                    {missingStudentFields.length > 3 && (
+                                      <span
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          padding: '1px 3.5px',
+                                          borderRadius: '3.5px',
+                                          background: '#fef3c7',
+                                          color: '#b45309',
+                                          border: '1px solid #fcd34d',
+                                          fontSize: '10px',
+                                          fontWeight: 700,
+                                          lineHeight: 1.15
+                                        }}
+                                      >
+                                        +{missingStudentFields.length - 3}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </td>
@@ -6799,8 +6894,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                           return (
                           <td
                             style={{ width: '260px', maxWidth: '320px', padding: '0.85rem 0.75rem', borderBottom: '1px solid var(--color-border)' }}
-                            onMouseEnter={(e) => setHoveredCell({ contact: c, rect: e.currentTarget.getBoundingClientRect() })}
-                            onMouseLeave={() => setHoveredCell(null)}
                           >
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxWidth: '310px', overflow: 'hidden' }}>
                               {hasPhone && (
@@ -6810,11 +6903,33 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   </div>
                                 </div>
                               )}
-                              {hasEmail && (
+                              {hasEmail ? (
                                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', overflow: 'hidden' }}>
                                   <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.email}</span>
                                 </div>
-                              )}
+                              ) : (isStudentRow && visibleColsMap['email']) ? (
+                                <span
+                                  title="Học viên chưa cập nhật Email"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '2.5px',
+                                    width: 'fit-content',
+                                    padding: '1px 4.5px',
+                                    borderRadius: '3.5px',
+                                    background: '#fffbeb',
+                                    color: '#d97706',
+                                    border: '1px solid #fde68a',
+                                    fontSize: '10px',
+                                    fontWeight: 600,
+                                    lineHeight: 1.2,
+                                    zoom: 0.76
+                                  }}
+                                >
+                                  <AlertTriangle size={8.5} style={{ flexShrink: 0 }} />
+                                  Chưa có Email
+                                </span>
+                              ) : null}
                               {isReferred && (() => {
                                 const refColor = refName ? getColorFromName(refName) : '#0284c7';
                                 return (
@@ -6892,16 +7007,30 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
                         {visibleColsMap['company'] && (
                           <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
-                            <p style={{ fontSize: '0.875rem', fontWeight: 600 }}>{c.company_name || '—'}</p>
-                            <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{c.job_title || ''}</p>
+                            {(c.company_name || c.company || c.department) ? (
+                              <p style={{ fontSize: '0.875rem', fontWeight: 600 }}>{c.company_name || c.company || c.department}</p>
+                            ) : isStudentRow ? (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2.5px', padding: '1px 4.5px', borderRadius: '3.5px', background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', fontSize: '10px', fontWeight: 600, lineHeight: 1.2, zoom: 0.76 }}>
+                                <AlertTriangle size={8.5} /> Thiếu Công ty
+                              </span>
+                            ) : (
+                              <p style={{ fontSize: '0.875rem', fontWeight: 600 }}>—</p>
+                            )}
+                            {c.job_title ? (
+                              <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>{c.job_title}</p>
+                            ) : isStudentRow ? (
+                              <div style={{ marginTop: '2px' }}>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2.5px', padding: '1px 4.5px', borderRadius: '3.5px', background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', fontSize: '10px', fontWeight: 600, lineHeight: 1.2, zoom: 0.76 }}>
+                                  <AlertTriangle size={8.5} /> Thiếu Chức vụ
+                                </span>
+                              </div>
+                            ) : null}
                           </td>
                         )}
 
                         {visibleColsMap['tags'] && (
                           <td
                             style={{ width: '150px', maxWidth: '175px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)' }}
-                            onMouseEnter={(e) => setHoveredCell({ contact: c, rect: e.currentTarget.getBoundingClientRect() })}
-                            onMouseLeave={() => setHoveredCell(null)}
                           >
                             {(() => {
                               const uniqueTags = normalizeContactTagList(c.tags, dbTagsByIdMap);
@@ -6959,8 +7088,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                         {visibleColsMap['program'] && (
                           <td
                             style={{ width: '190px', maxWidth: '240px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)' }}
-                            onMouseEnter={(e) => setHoveredCell({ contact: c, rect: e.currentTarget.getBoundingClientRect() })}
-                            onMouseLeave={() => setHoveredCell(null)}
                           >
                             {(() => {
                               let displayProg = (c.program || c.project_name || '').trim();
@@ -7053,8 +7180,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                         {visibleColsMap['admission_date'] && (
                           <td
                             style={{ width: '140px', maxWidth: '160px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}
-                            onMouseEnter={(e) => setHoveredCell({ contact: c, rect: e.currentTarget.getBoundingClientRect() })}
-                            onMouseLeave={() => setHoveredCell(null)}
                           >
                             {c.admission_date ? (() => {
                               const d = new Date(c.admission_date);
@@ -7230,8 +7355,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                         {visibleColsMap['contact'] && (
                           <td
                             style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}
-                            onMouseEnter={(e) => setHoveredCell({ contact: c, rect: e.currentTarget.getBoundingClientRect() })}
-                            onMouseLeave={() => setHoveredCell(null)}
                           >
                             <span style={{ fontSize: '0.8125rem', color: days > 30 ? 'var(--color-danger)' : days > 14 ? 'var(--color-warning)' : 'var(--color-text-muted)', fontWeight: days > 30 ? 700 : 400 }}>
                               {c.last_contact ? (days === 0 ? 'Hôm nay' : days === 1 ? 'Hôm qua' : `${days} ngày trước`) : '—'}
@@ -7255,8 +7378,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                         {visibleColsMap['owner'] && (
                           <td
                             style={{ width: (isSale && !visibleColsMap['last_note']) ? '250px' : '210px', maxWidth: (isSale && !visibleColsMap['last_note']) ? '280px' : '240px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)' }}
-                            onMouseEnter={(e) => setHoveredCell({ contact: c, rect: e.currentTarget.getBoundingClientRect() })}
-                            onMouseLeave={() => setHoveredCell(null)}
+                            onMouseEnter={isSale && !visibleColsMap['last_note'] ? (e) => setHoveredCell({ contact: c, rect: e.currentTarget.getBoundingClientRect() }) : undefined}
+                            onMouseLeave={isSale && !visibleColsMap['last_note'] ? () => setHoveredCell(null) : undefined}
                           >
                             {isSale && !visibleColsMap['last_note'] ? (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -7286,7 +7409,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 .split(',')
                                 .map((s: string) => s.trim())
                                 .filter(Boolean)
-                                .map((id: string) => users.find(u => String(u.id) === String(id)))
+                                .map((id: string) => usersByIdMap.get(String(id)))
                                 .filter(Boolean);
                               const notePreview = visibleColsMap['last_note'] ? '' : cleanInteractionText(c.last_interaction || c.notes || '');
                               
@@ -7567,12 +7690,20 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                         )}
                         {visibleColsMap['job_title'] && (
                           <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)', fontSize: '0.8125rem', color: 'var(--color-text)' }}>
-                            {c.job_title || '—'}
+                            {c.job_title ? c.job_title : isStudentRow ? (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2.5px', padding: '0.5px 4.5px', borderRadius: '4px', background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', fontSize: '0.58rem', fontWeight: 600, lineHeight: 1.2 }}>
+                                <AlertTriangle size={8.5} /> Chưa cập nhật
+                              </span>
+                            ) : '—'}
                           </td>
                         )}
                         {visibleColsMap['birthday'] && (
                           <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)', fontSize: '0.8125rem', color: 'var(--color-text)' }}>
-                            {c.birthday ? new Date(c.birthday).toLocaleDateString('vi-VN') : '—'}
+                            {(c.birthday && !String(c.birthday).startsWith('0000')) ? new Date(c.birthday).toLocaleDateString('vi-VN') : isStudentRow ? (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2.5px', padding: '0.5px 4.5px', borderRadius: '4px', background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', fontSize: '0.58rem', fontWeight: 600, lineHeight: 1.2 }}>
+                                <AlertTriangle size={8.5} /> Chưa cập nhật
+                              </span>
+                            ) : '—'}
                           </td>
                         )}
                         {visibleColsMap['temperature'] && (
@@ -7600,7 +7731,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                           </td>
                         )}
                         {/* Hiding row actions cell */}
-                      </motion.tr>
+                      </tr>
                     );
                   })}
                 </tbody>
@@ -7962,8 +8093,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                             {/* Footer Grid */}
                             <div
                               style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', paddingTop: '0.875rem', borderTop: '1px solid var(--color-border-light)' }}
-                              onMouseEnter={(e) => setHoveredCell({ contact: c, rect: e.currentTarget.getBoundingClientRect() })}
-                              onMouseLeave={() => setHoveredCell(null)}
                             >
                               {segment === 'customer' ? (
                                 <>
@@ -8048,15 +8177,15 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
             onClose={() => {
               setProfileContact(null);
               setProfileInitialTab('info');
-              fetchData(true);
             }}
             contact={profileContact}
             initialTab={profileInitialTab as any}
             onUpdate={updated => {
               if (updated === null) {
                 setContacts(p => p.filter(c => c.id !== profileContact?.id));
+                setTotal(t => Math.max(0, t - 1));
                 setProfileContact(null);
-                fetchData();
+                fetchData(true);
                 return;
               }
               setContacts(p => {

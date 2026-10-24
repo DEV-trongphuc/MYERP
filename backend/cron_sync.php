@@ -1657,6 +1657,11 @@ foreach ($connections as $connItem) {
                 $rowData[$colName] = $row[$colIdx] ?? '';
             }
 
+            $GLOBALS['__CURRENT_SYNC_ROW_DATA__'] = $rowData;
+            $GLOBALS['__CURRENT_SYNC_MAPPINGS__'] = $mappings;
+            $GLOBALS['__CURRENT_SYNC_CONN_ID__'] = $connItem['id'] ?? null;
+            $GLOBALS['__CURRENT_SYNC_SHEET_NAME__'] = $connItem['sheet_name'] ?? '';
+
             // Calculate MD5 hash of this row to check if already synced
             $rowHash = md5(json_encode($rowData));
             
@@ -1892,6 +1897,9 @@ foreach ($connections as $connItem) {
                         } else {
                             $leadId = insertLead($conn, $rowData, $assignedToId, $phone, $email, $name, $source, $type, $note, $connItem['id'], null, true);
                         }
+                        if ($leadId) {
+                            saveMappedExtendedFields($conn, $leadId, $rowData, $mappings);
+                        }
                         $actualOwnerId = ($crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo'])) ? $crmCheckResult['assignedTo'] : $assignedToId;
                         logDistribution($conn, $leadId, $actualOwnerId, null, 'silent', 'Chỉ đồng bộ check trùng, không định tuyến.', false);
                         
@@ -1962,6 +1970,9 @@ foreach ($connections as $connItem) {
                     $conn->begin_transaction();
                     try {
                         $leadId = updateLead($conn, $phone, $email, $assignedTo, $source, $type, $note, $connItem['id'], null, $name);
+                        if ($leadId) {
+                            saveMappedExtendedFields($conn, $leadId, $rowData, $mappings);
+                        }
                         logDistribution($conn, $leadId, $assignedTo, null, 'reminder', 'Khách cũ đăng ký lại < ' . $dupCheckMonths . ' tháng (đồng bộ hệ thống).', false);
                         
                         // Record hash so we don't spam duplicate logs on next run
@@ -2011,6 +2022,9 @@ foreach ($connections as $connItem) {
                     $conn->begin_transaction();
                     try {
                         $leadId = updateLead($conn, $phone, $email, null, $source, $type, $note, $connItem['id'], null, $name);
+                        if ($leadId) {
+                            saveMappedExtendedFields($conn, $leadId, $rowData, $mappings);
+                        }
                         
                         $updStmt = $conn->prepare("UPDATE leads SET status = 'pending_approval', assigned_to = NULL WHERE id = ?");
                         if ($updStmt) {
@@ -2066,6 +2080,9 @@ foreach ($connections as $connItem) {
                         } else {
                             $leadId = insertLead($conn, $rowData, null, $phone, $email, $name, $source, $type, $note, $connItem['id']);
                         }
+                        if ($leadId) {
+                            saveMappedExtendedFields($conn, $leadId, $rowData, $mappings);
+                        }
                         
                         if ($updHeldPending) {
                             $updHeldPending->bind_param("ii", $targetRoundId, $leadId);
@@ -2099,6 +2116,9 @@ foreach ($connections as $connItem) {
                             $leadId = updateLead($conn, $phone, $email, null, $source, $type, $note, $connItem['id'], null, $name);
                         } else {
                             $leadId = insertLead($conn, $rowData, null, $phone, $email, $name, $source, $type, $note, $connItem['id']);
+                        }
+                        if ($leadId) {
+                            saveMappedExtendedFields($conn, $leadId, $rowData, $mappings);
                         }
                         
                         if ($updHeldFailed) {
@@ -2193,7 +2213,7 @@ foreach ($connections as $connItem) {
                         $leadId = insertLead($conn, $rowData, $assignedConsultantId, $phone, $email, $name, $source, $type, $note, $connItem['id']);
                     }
 
-                    if ($leadId && !empty($mappings)) {
+                    if ($leadId) {
                         saveMappedExtendedFields($conn, $leadId, $rowData, $mappings);
                     }
                     

@@ -109,65 +109,143 @@ const EmailCanvas: React.FC<EmailCanvasProps> = ({
         setDraggingBlockId(null);
     };
 
+    const resolveContainerChildTarget = useCallback((
+        containerBlock: EmailBlock | null,
+        clientX: number,
+        clientY: number,
+        skipId: string | null
+    ): { id: string; pos: 'top' | 'bottom' | 'inside' } | null => {
+        if (!containerBlock) return null;
+
+        let targetCol: EmailBlock | null = null;
+        if (containerBlock.type === 'column') {
+            targetCol = containerBlock;
+        } else if (containerBlock.type === 'row') {
+            const cols = (containerBlock.children || []).filter(c => c.id !== skipId);
+            if (cols.length === 1) {
+                targetCol = cols[0];
+            } else if (cols.length > 1) {
+                let bestDist = Infinity;
+                for (const col of cols) {
+                    const el = document.getElementById(`block-${col.id}`);
+                    if (!el) continue;
+                    const r = el.getBoundingClientRect();
+                    const dist = clientX < r.left ? r.left - clientX : (clientX > r.right ? clientX - r.right : 0);
+                    if (dist < bestDist) {
+                        bestDist = dist;
+                        targetCol = col;
+                    }
+                }
+                if (!targetCol) targetCol = cols[0];
+            }
+        } else if (containerBlock.type === 'section') {
+            const rows = (containerBlock.children || []).filter(r => r.id !== skipId);
+            if (rows.length > 0) {
+                let bestRow = rows[0];
+                let bestRowDist = Infinity;
+                for (const row of rows) {
+                    const el = document.getElementById(`block-${row.id}`);
+                    if (!el) continue;
+                    const r = el.getBoundingClientRect();
+                    const dist = clientY < r.top ? r.top - clientY : (clientY > r.bottom ? clientY - r.bottom : 0);
+                    if (dist < bestRowDist) {
+                        bestRowDist = dist;
+                        bestRow = row;
+                    }
+                }
+                return resolveContainerChildTarget(bestRow, clientX, clientY, skipId);
+            }
+        }
+
+        if (!targetCol) return null;
+        const children = (targetCol.children || []).filter(c => c.id !== skipId);
+        if (children.length === 0) {
+            return { id: targetCol.id, pos: 'inside' };
+        }
+
+        const measured: { child: EmailBlock; rect: DOMRect; midY: number }[] = [];
+        for (const child of children) {
+            const el = document.getElementById(`block-${child.id}`);
+            if (!el) continue;
+            const rect = el.getBoundingClientRect();
+            if (rect.height <= 0 && rect.width <= 0) continue;
+            measured.push({ child, rect, midY: rect.top + rect.height / 2 });
+        }
+
+        if (measured.length === 0) {
+            return { id: children[children.length - 1].id, pos: 'bottom' };
+        }
+
+        for (let i = 0; i < measured.length; i++) {
+            const item = measured[i];
+            if (clientY < item.midY) {
+                return { id: item.child.id, pos: 'top' };
+            }
+            if (i < measured.length - 1) {
+                const nextItem = measured[i + 1];
+                if (clientY <= nextItem.rect.top) {
+                    const distToCurrentBottom = Math.abs(clientY - item.rect.bottom);
+                    const distToNextTop = Math.abs(nextItem.rect.top - clientY);
+                    return distToCurrentBottom <= distToNextTop
+                        ? { id: item.child.id, pos: 'bottom' }
+                        : { id: nextItem.child.id, pos: 'top' };
+                }
+            }
+        }
+
+        return { id: measured[measured.length - 1].child.id, pos: 'bottom' };
+    }, []);
+
     const handleDrop = (e: React.DragEvent, targetId: string) => {
         e.preventDefault(); e.stopPropagation();
         const type = e.dataTransfer.getData('type') || (window as any).__mktDraggingToolboxType || '';
         (window as any).__mktDraggingToolboxType = '';
         const layout = e.dataTransfer.getData('layout');
-        const movingId = e.dataTransfer.getData('movingId');
+        const movingId = e.dataTransfer.getData('movingId') || draggingBlockId || '';
         const payload = e.dataTransfer.getData('payload');
+
+        // Use the active dragOverId if valid so dropping on a parent padding gap never loses the highlighted target block
+        const effectiveTargetId = (dragOverId && dragOverId !== movingId) ? dragOverId : targetId;
 
         let blockToInsert: EmailBlock | null = null;
         let nextBlocks = [...blocks];
 
         if (movingId) {
-            if (movingId === targetId) return;
-            if (isDescendant(movingId, targetId, nextBlocks)) return;
+            if (movingId === effectiveTargetId) {
+                setDragOverId(null); setDropPosition(null); setDraggingBlockId(null);
+                return;
+            }
+            if (isDescendant(movingId, effectiveTargetId, nextBlocks)) {
+                setDragOverId(null); setDropPosition(null); setDraggingBlockId(null);
+                return;
+            }
             const found = findBlock(movingId, nextBlocks);
-            if (!found) return;
+            if (!found) {
+                setDragOverId(null); setDropPosition(null); setDraggingBlockId(null);
+                return;
+            }
             blockToInsert = JSON.parse(JSON.stringify(found));
             nextBlocks = deleteBlockDeep(nextBlocks, movingId);
         } else if (type === 'saved' && payload) {
             const savedBlock = JSON.parse(payload);
             blockToInsert = duplicateBlockDeep(savedBlock);
         } else if (type) {
-            // New Block Creation
-            const newBlock = createBlock(type, layout);
-            if (type === 'layout') {
-                const targetBlock = findBlock(targetId, nextBlocks);
-                if (targetBlock && (targetBlock.type === 'column' || targetBlock.type === 'row')) {
-                    blockToInsert = newBlock.children ? newBlock.children[0] : newBlock;
-                } else {
-                    blockToInsert = newBlock;
-                }
-            } else {
-                blockToInsert = newBlock;
-            }
+            blockToInsert = createBlock(type, layout);
         }
 
         if (blockToInsert) {
-            let finalTargetId = targetId;
+            let finalTargetId = effectiveTargetId;
             let finalDropPos = dropPosition || 'bottom';
+            const isRootTarget = nextBlocks.some(b => b.id === finalTargetId);
 
-            // SMART DROP LOGIC:
-            // If we are dropping a SECTION (e.g. Preset) but the target is NOT a root section (e.g. Column, Text),
-            // we must redirect the drop to the Root Ancestor Section.
-            // "Thả vào trong không được thì tự thả ở ngoài"
-            if (blockToInsert.type === 'section') {
-                // Check if targetId is a root block
-                const isRoot = nextBlocks.some(b => b.id === targetId);
-
-                if (!isRoot) {
-                    // Find which root block contains this target
-                    const rootAncestor = nextBlocks.find(root => root.id === targetId || findBlock(targetId, root.children || []));
-                    if (rootAncestor) {
-                        finalTargetId = rootAncestor.id;
-                        // Map internal drop position to external relative position
-                        // If user dropped "inside" or "top" of a nested element, usually implies "top" of section?
-                        // Or "bottom" of nested -> "bottom" of section? 
-                        // Simple heuristic: default to 'bottom' unless explicitly 'top'. 'inside' becomes 'bottom'.
-                        if (finalDropPos === 'inside') finalDropPos = 'bottom';
-                    }
+            // If dropping a section-wrapped block (Layout / Preset / Saved Section) into the middle of an existing section
+            // (e.g. between two blocks inside a column, or inside a column/row), unwrap its inner row so it inserts
+            // at the exact cursor position instead of jumping to the top or bottom of the root section!
+            if (blockToInsert.type === 'section' && (!isRootTarget || finalDropPos === 'inside')) {
+                if (blockToInsert.children && blockToInsert.children.length === 1 && blockToInsert.children[0].type === 'row') {
+                    blockToInsert = blockToInsert.children[0];
+                } else if (blockToInsert.children && blockToInsert.children.length > 0 && !isRootTarget) {
+                    blockToInsert = blockToInsert.children[0];
                 }
             }
 
@@ -192,40 +270,68 @@ const EmailCanvas: React.FC<EmailCanvasProps> = ({
         const w = rect.width;
         const h = rect.height;
 
-        setDragOverId(id);
-
-        // Check if dragging a preset or existing block (since e.dataTransfer.getData('type') is empty in dragover)
         const draggingBlock = draggingBlockId ? findBlock(draggingBlockId, blocks) : null;
         const draggingType = draggingBlock ? draggingBlock.type : (e.dataTransfer.getData('type') || (window as any).__mktDraggingToolboxType || '');
         const smartPresetsConfig = ['double_card', 'review_card', 'download_badges', 'feature_card', 'header_gradient', 'article_list', 'ecommerce_product', 'steps_flow', 'steps_flow_number'];
-        const isPreset = smartPresetsConfig.includes(draggingType);
+        const isSectionLike = draggingType === 'section' || draggingType === 'layout' || draggingType === 'row' || smartPresetsConfig.includes(draggingType);
 
-        // Treat presets as SECTIONs for drop logic
-        const effectiveDraggingType = isPreset ? 'section' : draggingType;
-
-        // Relaxed Logic: Always allow drag over. Smart Drop in handleDrop will fix hierarchy.
         if (type === 'column') {
-            // Hotzones for column splitting vs adding inside
-            if (x < w * 0.15) setDropPosition('left');
-            else if (x > w * 0.85) setDropPosition('right');
-            else if (y < h * 0.2) setDropPosition('top');
-            else if (y > h * 0.2) {
-                // For sections, we allow 'inside' visually, but handleDrop will redirect to 'bottom' of parent Section.
-                // This gives a "responsive" feel (drop anywhere) without blocking the user.
-                if (effectiveDraggingType === 'section') {
-                    setDropPosition('bottom'); // Bias towards bottom for smoother feel when hovering columns
-                } else {
-                    setDropPosition('inside');
+            const colBlock = findBlock(id, blocks);
+            const hasChildren = Boolean(colBlock?.children && colBlock.children.length > 0);
+            const edgePx = Math.min(24, w * 0.1);
+
+            // Allow side-by-side column split only on narrow left/right edge when dragging a single content block
+            if (!isSectionLike && w > 120 && x < edgePx) {
+                setDragOverId(id);
+                setDropPosition('left');
+                return;
+            }
+            if (!isSectionLike && w > 120 && x > w - edgePx) {
+                setDragOverId(id);
+                setDropPosition('right');
+                return;
+            }
+
+            if (hasChildren && colBlock) {
+                const resolved = resolveContainerChildTarget(colBlock, e.clientX, e.clientY, draggingBlockId);
+                if (resolved) {
+                    setDragOverId(resolved.id);
+                    setDropPosition(resolved.pos);
+                    return;
                 }
             }
-            else setDropPosition('bottom');
-        } else if (['section', 'row'].includes(type)) {
-            if (y < h * 0.25) setDropPosition('top');
-            else if (y > h * 0.75) setDropPosition('bottom');
-            else setDropPosition('inside');
+
+            setDragOverId(id);
+            setDropPosition('inside');
+        } else if (type === 'row' || type === 'section') {
+            // Only target the outer section/row directly when hovering the extreme top/bottom 10px border strip
+            const outerEdgePx = Math.min(12, Math.max(6, h * 0.04));
+            if (y <= outerEdgePx) {
+                setDragOverId(id);
+                setDropPosition('top');
+                return;
+            }
+            if (y >= h - outerEdgePx) {
+                setDragOverId(id);
+                setDropPosition('bottom');
+                return;
+            }
+
+            const containerBlock = findBlock(id, blocks);
+            if (containerBlock) {
+                const resolved = resolveContainerChildTarget(containerBlock, e.clientX, e.clientY, draggingBlockId);
+                if (resolved) {
+                    setDragOverId(resolved.id);
+                    setDropPosition(resolved.pos);
+                    return;
+                }
+            }
+
+            setDragOverId(id);
+            setDropPosition(y < h / 2 ? 'top' : 'bottom');
         } else {
-            // General content blocks (text, image, button, etc.)
-            // Only allow vertical dropping (top or bottom) to match their actual placement behavior inside columns.
+            // General content blocks (text, image, button, quote, table, etc.)
+            setDragOverId(id);
             setDropPosition(y < h / 2 ? 'top' : 'bottom');
         }
     };

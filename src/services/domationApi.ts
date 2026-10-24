@@ -587,7 +587,7 @@ async function mutate<T>(
     } else if (method === 'PUT') {
       response = await api.put(path, bodyOrParams, { signal: options?.signal });
     } else {
-      response = await api.delete(path, { params: cleanupParams(bodyOrParams), signal: options?.signal });
+      response = await api.delete(path, { params: cleanupParams(bodyOrParams), data: bodyOrParams, signal: options?.signal });
     }
     const result = normalizePayload<T>(response.data);
     debugLog(method, endpoint, startedAt, result.success ? '' : 'FAIL');

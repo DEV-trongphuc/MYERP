@@ -27,7 +27,6 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { useUIStore } from '../store/uiStore';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import { pushOverlay } from '../utils/overlayStack';
-import { HrmAccountingAzWorkspace } from '../components/HRM/HrmAccountingAzWorkspace';
 
 const PALETTE = [
   '#C6333D',
@@ -148,6 +147,35 @@ const FormattedMoneyInput = ({ value, onChange, disabled, width = '95px' }: { va
   );
 };
 
+interface HrmDashboardMonthCache {
+  payslips: any[];
+  checkIns: any[];
+  shifts: any[];
+  leaves: any[];
+  timestamp: number;
+}
+
+const hrmDashboardMonthCache = new Map<string, HrmDashboardMonthCache>();
+const hrmPayslipsByMonthCache = new Map<string, { data: any[]; timestamp: number }>();
+const hrmGlobalCache: {
+  profiles: any[];
+  leaves: any[];
+  advances: any[];
+  teams: any[];
+  allPayslips: any[];
+  todayCheckIns: any[];
+  timestamp: number;
+} = {
+  profiles: [],
+  leaves: [],
+  advances: [],
+  teams: [],
+  allPayslips: [],
+  todayCheckIns: [],
+  timestamp: 0
+};
+const HRM_SWR_TTL_MS = 45_000;
+
 export default function HRM() {
   const { t } = useLanguage();
   const { user } = useAuth();
@@ -179,7 +207,7 @@ export default function HRM() {
   };
 
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'profiles' | 'leaves' | 'advances' | 'payroll' | 'accounting_az'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'profiles' | 'leaves' | 'advances' | 'payroll'>('dashboard');
 
   useEffect(() => {
     if (!location.pathname.startsWith('/hrm')) return;
@@ -187,14 +215,15 @@ export default function HRM() {
     const tabParam = params.get('tab');
     if (tabParam === 'assets' || tabParam === 'profiles') {
       setActiveTab('profiles');
-    } else if (tabParam === 'dashboard' || tabParam === 'leaves' || tabParam === 'advances' || tabParam === 'payroll' || tabParam === 'accounting_az' || tabParam === 'accounting-az') {
-      setActiveTab(tabParam === 'accounting-az' ? 'accounting_az' : (tabParam as any));
+    } else if (tabParam === 'dashboard' || tabParam === 'leaves' || tabParam === 'advances' || tabParam === 'payroll') {
+      setActiveTab(tabParam as any);
     }
   }, [location.pathname, location.search]);
-  const [profiles, setProfiles] = useState<any[]>([]);
-  const [leaves, setLeaves] = useState<any[]>([]);
-  const [advances, setAdvances] = useState<any[]>([]);
-  const [payslips, setPayslips] = useState<any[]>([]);
+  const [profiles, setProfiles] = useState<any[]>(() => hrmGlobalCache.profiles);
+  const [leaves, setLeaves] = useState<any[]>(() => hrmGlobalCache.leaves);
+  const [advances, setAdvances] = useState<any[]>(() => hrmGlobalCache.advances);
+  const initialPayrollMonth = new Date().toISOString().substring(0, 7);
+  const [payslips, setPayslips] = useState<any[]>(() => hrmPayslipsByMonthCache.get(initialPayrollMonth)?.data ?? []);
   const [showOnlyMyPending, setShowOnlyMyPending] = useState(false);
   const [deptChartMetric, setDeptChartMetric] = useState<'headcount' | 'salary'>('headcount');
   const [lateOrOtTab, setLateOrOtTab] = useState<'late' | 'ot'>('late');
@@ -578,7 +607,6 @@ export default function HRM() {
                 } else {
                   await handleApproveAdvance(item.id, 'rejected');
                 }
-                loadData();
               }}
               style={{
                 display: 'inline-flex',
@@ -611,7 +639,6 @@ export default function HRM() {
                 } else {
                   await handleApproveAdvance(item.id, 'approved');
                 }
-                loadData();
               }}
               style={{
                 display: 'inline-flex',
@@ -656,17 +683,18 @@ export default function HRM() {
   }, []);
   
   // Payroll inputs
-  const [payrollMonth, setPayrollMonth] = useState(new Date().toISOString().substring(0, 7));
-  const [allPayslips, setAllPayslips] = useState<any[]>([]);
+  const [payrollMonth, setPayrollMonth] = useState(initialPayrollMonth);
+  const [allPayslips, setAllPayslips] = useState<any[]>(() => hrmGlobalCache.allPayslips);
   const [viewMode, setViewMode] = useState<'archive' | 'detail'>('archive');
   const [isNewPeriodModalOpen, setIsNewPeriodModalOpen] = useState(false);
-  const [newPeriodMonth, setNewPeriodMonth] = useState(new Date().toISOString().substring(0, 7));
+  const [newPeriodMonth, setNewPeriodMonth] = useState(initialPayrollMonth);
   const [newPeriodWorkDays, setNewPeriodWorkDays] = useState(26);
-  const [dashboardMonth, setDashboardMonth] = useState(new Date().toISOString().substring(0, 7));
-  const [dashboardLoading, setDashboardLoading] = useState(false);
-  const [dashboardPayslips, setDashboardPayslips] = useState<any[]>([]);
-  const [dashboardCheckIns, setDashboardCheckIns] = useState<any[]>([]);
-  const [todayCheckIns, setTodayCheckIns] = useState<any[]>([]);
+  const [dashboardMonth, setDashboardMonth] = useState(initialPayrollMonth);
+  const initialDashMonthCache = hrmDashboardMonthCache.get(initialPayrollMonth);
+  const [dashboardLoading, setDashboardLoading] = useState(() => !initialDashMonthCache);
+  const [dashboardPayslips, setDashboardPayslips] = useState<any[]>(() => initialDashMonthCache?.payslips ?? []);
+  const [dashboardCheckIns, setDashboardCheckIns] = useState<any[]>(() => initialDashMonthCache?.checkIns ?? []);
+  const [todayCheckIns, setTodayCheckIns] = useState<any[]>(() => hrmGlobalCache.todayCheckIns);
 
   const getPeriodLabel = (periodStr: string) => {
     const parts = periodStr.split('-');
@@ -753,7 +781,7 @@ export default function HRM() {
   }, [allPayslips]);
   
   // Teams and Leave balances
-  const [teams, setTeams] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>(() => hrmGlobalCache.teams);
   const [annualLeaveTotal, setAnnualLeaveTotal] = useState(12.0);
   const [annualLeaveUsed, setAnnualLeaveUsed] = useState(0.0);
   const [compensatoryLeaveTotal, setCompensatoryLeaveTotal] = useState(0.0);
@@ -773,8 +801,8 @@ export default function HRM() {
   const [kpiTarget, setKpiTarget] = useState(0);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [dashboardShifts, setDashboardShifts] = useState<any[]>([]);
-  const [dashboardLeaves, setDashboardLeaves] = useState<any[]>([]);
+  const [dashboardShifts, setDashboardShifts] = useState<any[]>(() => initialDashMonthCache?.shifts ?? []);
+  const [dashboardLeaves, setDashboardLeaves] = useState<any[]>(() => initialDashMonthCache?.leaves ?? []);
 
   useEffect(() => {
     if (viewMode !== 'detail') return;
@@ -792,43 +820,72 @@ export default function HRM() {
   }, [isNewPeriodModalOpen]);
 
   useEffect(() => {
-    loadData();
+    loadData(false);
   }, [activeTab]);
 
   useEffect(() => {
     if (activeTab === 'dashboard') {
-      setDashboardLoading(true);
+      const cachedMonth = hrmDashboardMonthCache.get(dashboardMonth);
+      if (cachedMonth) {
+        setDashboardPayslips(cachedMonth.payslips);
+        setDashboardCheckIns(cachedMonth.checkIns);
+        setDashboardShifts(cachedMonth.shifts);
+        setDashboardLeaves(cachedMonth.leaves);
+        setDashboardLoading(false);
+        if (Date.now() - cachedMonth.timestamp < HRM_SWR_TTL_MS) {
+          return;
+        }
+      } else {
+        setDashboardLoading(true);
+      }
+
+      const controller = new AbortController();
+      const { signal } = controller;
       const parts = dashboardMonth.split('-');
       const y = parts[0];
       const m = parts[1];
-      
-      Promise.all([
-        fetchAPI(`hrm/payroll?month_year=${dashboardMonth}`).catch(() => ({ data: [] })),
-        fetchAPI(`check-ins?month=${m}&year=${y}&include_shifts=1`).catch(() => ({ data: [] }))
-      ]).then(([payRes, checkRes]) => {
-        setDashboardPayslips(payRes?.data || payRes || []);
+      const todayStr = new Date().toISOString().substring(0, 10);
+
+      Promise.allSettled([
+        fetchAPI(`hrm/payroll?month_year=${dashboardMonth}`, { signal }),
+        fetchAPI(`check-ins?month=${m}&year=${y}&include_shifts=1`, { signal }),
+        fetchAPI(`check-ins?date=${todayStr}`, { signal })
+      ]).then(([paySettled, checkSettled, todaySettled]) => {
+        if (signal.aborted) return;
+        const payRes = paySettled.status === 'fulfilled' ? paySettled.value : { data: [] };
+        const checkRes = checkSettled.status === 'fulfilled' ? checkSettled.value : { data: [] };
+        const todayRes = todaySettled.status === 'fulfilled' ? todaySettled.value : { data: [] };
+
+        const nextPayslips = payRes?.data || payRes || [];
         const checkData = checkRes?.data || checkRes || {};
         const checkInsList = Array.isArray(checkData) ? checkData : (checkData.check_ins || []);
         const shiftsList = checkData.shifts || [];
         const leavesList = checkData.leaves || [];
+        const nextToday = Array.isArray(todayRes) ? todayRes : (todayRes?.data || []);
+
+        setDashboardPayslips(nextPayslips);
         setDashboardCheckIns(checkInsList);
         setDashboardShifts(shiftsList);
         setDashboardLeaves(leavesList);
-      }).catch(() => {})
-      .finally(() => {
-        setDashboardLoading(false);
+        setTodayCheckIns(nextToday);
+        hrmGlobalCache.todayCheckIns = nextToday;
+
+        hrmDashboardMonthCache.set(dashboardMonth, {
+          payslips: nextPayslips,
+          checkIns: checkInsList,
+          shifts: shiftsList,
+          leaves: leavesList,
+          timestamp: Date.now()
+        });
+      }).finally(() => {
+        if (!signal.aborted) {
+          setDashboardLoading(false);
+        }
       });
+
+      return () => controller.abort();
     }
   }, [activeTab, dashboardMonth]);
-
-  useEffect(() => {
-    if (activeTab === 'dashboard') {
-      const todayStr = new Date().toISOString().substring(0, 10);
-      fetchAPI(`check-ins?date=${todayStr}`).then(res => {
-        setTodayCheckIns(Array.isArray(res) ? res : res?.data || []);
-      }).catch(() => {});
-    }
-  }, [activeTab]);
 
   const topLatenessList = React.useMemo(() => {
     // 1. Ưu tiên tính Realtime từ danh sách chấm công của tháng được chọn
@@ -846,6 +903,12 @@ export default function HRM() {
     if (dashboardCheckIns && dashboardCheckIns.length > 0) {
       dashboardCheckIns.forEach((c: any) => {
         const uid = c.user_id;
+        const profCheck = profilesMap.get(Number(uid));
+        const emailStr = String(profCheck?.email || c.email || c.user_email || '').trim().toLowerCase();
+        const nameStr = String(profCheck?.full_name || profCheck?.name || c.user_name || '').trim().toLowerCase();
+        if (emailStr === 'phucht@ideas.edu.vn' || emailStr.startsWith('phucht@') || nameStr === 'huỳnh trọng phúc') {
+          return;
+        }
         const cDate = c.check_in_date ? String(c.check_in_date).slice(0, 10) : '';
         if (uid && cDate && waivedSet.has(`${uid}:${cDate}`)) {
           return;
@@ -905,7 +968,14 @@ export default function HRM() {
 
     // 2. Fallback từ dashboardPayslips nếu chưa có dữ liệu chấm công realtime
     const fromPayslips = [...dashboardPayslips]
-      .filter(p => Number(p.lateness_minutes || 0) > 0)
+      .filter(p => {
+        if (Number(p.lateness_minutes || 0) <= 0) return false;
+        const prof = profilesMap.get(Number(p.user_id));
+        const emailStr = String(prof?.email || p.email || '').trim().toLowerCase();
+        const nameStr = String(prof?.full_name || p.employee_name || '').trim().toLowerCase();
+        if (emailStr === 'phucht@ideas.edu.vn' || emailStr.startsWith('phucht@') || nameStr === 'huỳnh trọng phúc') return false;
+        return true;
+      })
       .map(p => {
         const prof = profilesMap.get(Number(p.user_id));
         const gRaw = String(p.gender || prof?.gender || '').toLowerCase().trim();
@@ -1049,85 +1119,140 @@ export default function HRM() {
     return [];
   }, [dashboardPayslips, dashboardShifts, dashboardLeaves, profilesMap, t]);
 
-  const loadData = async () => {
+  const filterNonEmployee = useCallback((list: any[]) => {
+    if (!Array.isArray(list)) return [];
+    return list.filter(item => {
+      const role = String(item?.role || '').toLowerCase();
+      const email = String(item?.email || '').toLowerCase();
+      if (role === 'superadmin' || role === 'super_admin') return false;
+      if (email === 'info@ideas.edu.vn') return false;
+      return true;
+    });
+  }, []);
+
+  const loadData = async (forceRefresh = false) => {
+    const now = Date.now();
+    const isFresh = !forceRefresh && now - hrmGlobalCache.timestamp < HRM_SWR_TTL_MS;
+
     try {
       if (activeTab === 'dashboard') {
-        const [profRes, leaveRes, advRes, teamRes] = await Promise.all([
-          fetchAPI('hrm/profiles').catch(() => ({ data: [] })),
-          fetchAPI('hrm/leaves').catch(() => ({ data: [] })),
-          fetchAPI('hrm/advances').catch(() => ({ data: [] })),
-          fetchAPI('teams').catch(() => ({ data: [] }))
+        if (isFresh && hrmGlobalCache.profiles.length > 0) {
+          setProfiles(hrmGlobalCache.profiles);
+          setLeaves(hrmGlobalCache.leaves);
+          setAdvances(hrmGlobalCache.advances);
+          if (hrmGlobalCache.teams.length > 0) setTeams(hrmGlobalCache.teams);
+          return;
+        }
+        const [profSettled, leaveSettled, advSettled, teamSettled] = await Promise.allSettled([
+          fetchAPI('hrm/profiles'),
+          fetchAPI('hrm/leaves'),
+          fetchAPI('hrm/advances'),
+          fetchAPI('teams')
         ]);
-        const filterNonEmployee = (list: any[]) => {
-          if (!Array.isArray(list)) return [];
-          return list.filter(item => {
-            const role = String(item?.role || '').toLowerCase();
-            const email = String(item?.email || '').toLowerCase();
-            if (role === 'superadmin' || role === 'super_admin') return false;
-            if (email === 'info@ideas.edu.vn') return false;
-            return true;
-          });
-        };
-        setProfiles(filterNonEmployee(profRes?.data || profRes || []));
-        setLeaves(leaveRes?.data || leaveRes || []);
-        setAdvances(advRes?.data || advRes || []);
+        const profRes = profSettled.status === 'fulfilled' ? profSettled.value : { data: [] };
+        const leaveRes = leaveSettled.status === 'fulfilled' ? leaveSettled.value : { data: [] };
+        const advRes = advSettled.status === 'fulfilled' ? advSettled.value : { data: [] };
+        const teamRes = teamSettled.status === 'fulfilled' ? teamSettled.value : { data: [] };
+
+        const nextProfiles = filterNonEmployee(profRes?.data || profRes || []);
+        const nextLeaves = leaveRes?.data || leaveRes || [];
+        const nextAdvances = advRes?.data || advRes || [];
         const tList = Array.isArray(teamRes) ? teamRes : (teamRes?.data || []);
+
+        setProfiles(nextProfiles);
+        setLeaves(nextLeaves);
+        setAdvances(nextAdvances);
         if (tList.length > 0) setTeams(tList);
+
+        hrmGlobalCache.profiles = nextProfiles;
+        hrmGlobalCache.leaves = nextLeaves;
+        hrmGlobalCache.advances = nextAdvances;
+        if (tList.length > 0) hrmGlobalCache.teams = tList;
+        hrmGlobalCache.timestamp = Date.now();
       } else if (activeTab === 'profiles') {
-        const [res, teamRes] = await Promise.all([
-          fetchAPI('hrm/profiles').catch(() => ({ data: [] })),
-          fetchAPI('teams').catch(() => ({ data: [] }))
+        if (isFresh && hrmGlobalCache.profiles.length > 0) {
+          setProfiles(hrmGlobalCache.profiles);
+          if (hrmGlobalCache.teams.length > 0) setTeams(hrmGlobalCache.teams);
+          return;
+        }
+        const [profSettled, teamSettled] = await Promise.allSettled([
+          fetchAPI('hrm/profiles'),
+          fetchAPI('teams')
         ]);
-        const filterNonEmployee = (list: any[]) => {
-          if (!Array.isArray(list)) return [];
-          return list.filter(item => {
-            const role = String(item?.role || '').toLowerCase();
-            const email = String(item?.email || '').toLowerCase();
-            if (role === 'superadmin' || role === 'super_admin') return false;
-            if (email === 'info@ideas.edu.vn') return false;
-            return true;
-          });
-        };
-        setProfiles(filterNonEmployee(res?.data || res || []));
+        const res = profSettled.status === 'fulfilled' ? profSettled.value : { data: [] };
+        const teamRes = teamSettled.status === 'fulfilled' ? teamSettled.value : { data: [] };
+        const nextProfiles = filterNonEmployee(res?.data || res || []);
         const tList = Array.isArray(teamRes) ? teamRes : (teamRes?.data || []);
+
+        setProfiles(nextProfiles);
         if (tList.length > 0) setTeams(tList);
+        hrmGlobalCache.profiles = nextProfiles;
+        if (tList.length > 0) hrmGlobalCache.teams = tList;
+        hrmGlobalCache.timestamp = Date.now();
       } else if (activeTab === 'leaves') {
+        if (isFresh && hrmGlobalCache.leaves.length > 0) {
+          setLeaves(hrmGlobalCache.leaves);
+          return;
+        }
         const res = await fetchAPI('hrm/leaves');
-        setLeaves(res?.data || []);
+        const nextLeaves = res?.data || [];
+        setLeaves(nextLeaves);
+        hrmGlobalCache.leaves = nextLeaves;
       } else if (activeTab === 'advances') {
+        if (isFresh && hrmGlobalCache.advances.length > 0) {
+          setAdvances(hrmGlobalCache.advances);
+          return;
+        }
         const res = await fetchAPI('hrm/advances');
-        setAdvances(res?.data || []);
+        const nextAdvances = res?.data || [];
+        setAdvances(nextAdvances);
+        hrmGlobalCache.advances = nextAdvances;
       }
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi tải dữ liệu'));
     }
   };
 
-  const loadAllPayslips = async () => {
+  const loadAllPayslips = async (forceRefresh = false) => {
+    if (!forceRefresh && hrmGlobalCache.allPayslips.length > 0 && Date.now() - hrmGlobalCache.timestamp < HRM_SWR_TTL_MS) {
+      setAllPayslips(hrmGlobalCache.allPayslips);
+      return;
+    }
     try {
       const res = await fetchAPI('hrm/payroll?month_year=all');
       const raw = res?.data || [];
-      setAllPayslips(Array.isArray(raw) ? raw.filter((item: any) => {
+      const filtered = Array.isArray(raw) ? raw.filter((item: any) => {
         const r = String(item?.role || '').toLowerCase();
         const em = String(item?.email || '').toLowerCase();
         return r !== 'superadmin' && r !== 'super_admin' && em !== 'info@ideas.edu.vn';
-      }) : []);
+      }) : [];
+      setAllPayslips(filtered);
+      hrmGlobalCache.allPayslips = filtered;
     } catch (err) {
-      setAllPayslips([]);
+      if (hrmGlobalCache.allPayslips.length === 0) setAllPayslips([]);
     }
   };
 
-  const loadPayslips = async () => {
+  const loadPayslips = async (forceRefresh = false) => {
+    const cached = hrmPayslipsByMonthCache.get(payrollMonth);
+    if (cached) {
+      setPayslips(cached.data);
+      if (!forceRefresh && Date.now() - cached.timestamp < HRM_SWR_TTL_MS) {
+        return;
+      }
+    }
     try {
       const res = await fetchAPI(`hrm/payroll?month_year=${payrollMonth}`);
       const raw = res?.data || [];
-      setPayslips(Array.isArray(raw) ? raw.filter((item: any) => {
+      const filtered = Array.isArray(raw) ? raw.filter((item: any) => {
         const r = String(item?.role || '').toLowerCase();
         const em = String(item?.email || '').toLowerCase();
         return r !== 'superadmin' && r !== 'super_admin' && em !== 'info@ideas.edu.vn';
-      }) : []);
+      }) : [];
+      setPayslips(filtered);
+      hrmPayslipsByMonthCache.set(payrollMonth, { data: filtered, timestamp: Date.now() });
     } catch (err: any) {
-      setPayslips([]);
+      if (!cached) setPayslips([]);
     }
   };
 
@@ -1176,32 +1301,45 @@ export default function HRM() {
     if (!selectedUser || isSavingProfile || saveProfileInFlightRef.current) return;
     saveProfileInFlightRef.current = true;
     setIsSavingProfile(true);
+    const targetUserId = selectedUser.id;
+    const optimisticPatch = {
+      gender: empGender,
+      joined_date: joinedDate,
+      base_salary: baseSalary,
+      deal_salary: dealSalary,
+      has_insurance: hasInsurance ? 1 : 0,
+      allowance_meal: allowanceMeal,
+      allowance_meal_type: allowanceMealType,
+      allowance_travel: allowanceTravel,
+      allowance_phone: allowancePhone,
+      kpi_target: kpiTarget,
+      annual_leave_total: annualLeaveTotal,
+      annual_leave_used: annualLeaveUsed,
+      compensatory_leave_total: compensatoryLeaveTotal,
+      compensatory_leave_used: compensatoryLeaveUsed
+    };
+    const prevProfiles = profiles;
+    setProfiles(prev => {
+      const next = prev.map(p => Number(p.id) === Number(targetUserId) ? { ...p, ...optimisticPatch } : p);
+      hrmGlobalCache.profiles = next;
+      return next;
+    });
+
     try {
       await fetchAPI('hrm/profiles', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: selectedUser.id,
-          gender: empGender,
-          joined_date: joinedDate,
-          base_salary: baseSalary,
-          deal_salary: dealSalary,
-          has_insurance: hasInsurance ? 1 : 0,
-          allowance_meal: allowanceMeal,
-          allowance_meal_type: allowanceMealType,
-          allowance_travel: allowanceTravel,
-          allowance_phone: allowancePhone,
-          kpi_target: kpiTarget,
-          annual_leave_total: annualLeaveTotal,
-          annual_leave_used: annualLeaveUsed,
-          compensatory_leave_total: compensatoryLeaveTotal,
-          compensatory_leave_used: compensatoryLeaveUsed
+          user_id: targetUserId,
+          ...optimisticPatch
         })
       });
       toast.success(t('Cập nhật hồ sơ nhân sự thành công!'));
       setSelectedUser(null);
-      loadData();
+      loadData(true);
     } catch (err: any) {
+      setProfiles(prevProfiles);
+      hrmGlobalCache.profiles = prevProfiles;
       toast.error(err?.message || t('Lỗi khi lưu thông tin'));
     } finally {
       saveProfileInFlightRef.current = false;
@@ -1213,6 +1351,22 @@ export default function HRM() {
     if (approveLeaveInFlightRef.current || actionApprovalId === id) return;
     approveLeaveInFlightRef.current = true;
     setActionApprovalId(id);
+    const prevLeaves = leaves;
+    setLeaves(prev => {
+      const next = prev.map(lv => {
+        if (Number(lv.id) !== Number(id)) return lv;
+        if (status === 'rejected') {
+          return { ...lv, status: 'rejected', status_level_1: lv.status_level_1 === 'pending' ? 'rejected' : lv.status_level_1, status_level_2: lv.status_level_1 === 'approved' ? 'rejected' : lv.status_level_2 };
+        }
+        const hasL2 = Boolean(lv.approver_id_2);
+        if (lv.status_level_1 === 'pending' && hasL2) {
+          return { ...lv, status_level_1: 'approved', status: 'pending' };
+        }
+        return { ...lv, status: 'approved', status_level_1: 'approved', status_level_2: hasL2 ? 'approved' : lv.status_level_2 };
+      });
+      hrmGlobalCache.leaves = next;
+      return next;
+    });
     try {
       await fetchAPI('hrm/leaves', {
         method: 'PUT',
@@ -1220,8 +1374,10 @@ export default function HRM() {
         body: JSON.stringify({ id, status })
       });
       toast.success(status === 'approved' ? t('Đã duyệt đơn nghỉ phép') : t('Đã từ chối đơn nghỉ phép'));
-      loadData();
+      loadData(true);
     } catch (err: any) {
+      setLeaves(prevLeaves);
+      hrmGlobalCache.leaves = prevLeaves;
       toast.error(err?.message || t('Lỗi xử lý'));
     } finally {
       approveLeaveInFlightRef.current = false;
@@ -1233,6 +1389,22 @@ export default function HRM() {
     if (approveAdvanceInFlightRef.current || actionApprovalId === id) return;
     approveAdvanceInFlightRef.current = true;
     setActionApprovalId(id);
+    const prevAdvances = advances;
+    setAdvances(prev => {
+      const next = prev.map(adv => {
+        if (Number(adv.id) !== Number(id)) return adv;
+        if (status === 'rejected') {
+          return { ...adv, status: 'rejected', status_level_1: adv.status_level_1 === 'pending' ? 'rejected' : adv.status_level_1, status_level_2: adv.status_level_1 === 'approved' ? 'rejected' : adv.status_level_2 };
+        }
+        const hasL2 = Boolean(adv.approver_id_2);
+        if (adv.status_level_1 === 'pending' && hasL2) {
+          return { ...adv, status_level_1: 'approved', status: 'pending' };
+        }
+        return { ...adv, status: 'approved', status_level_1: 'approved', status_level_2: hasL2 ? 'approved' : adv.status_level_2 };
+      });
+      hrmGlobalCache.advances = next;
+      return next;
+    });
     try {
       await fetchAPI('hrm/advances', {
         method: 'PUT',
@@ -1240,8 +1412,10 @@ export default function HRM() {
         body: JSON.stringify({ id, status })
       });
       toast.success(status === 'approved' ? t('Đã duyệt tạm ứng lương') : t('Đã từ chối tạm ứng lương'));
-      loadData();
+      loadData(true);
     } catch (err: any) {
+      setAdvances(prevAdvances);
+      hrmGlobalCache.advances = prevAdvances;
       toast.error(err?.message || t('Lỗi xử lý'));
     } finally {
       approveAdvanceInFlightRef.current = false;
@@ -1341,6 +1515,7 @@ export default function HRM() {
     if (sendingPayslipId === ps.id || sendSinglePayslipInFlightRef.current) return;
     sendSinglePayslipInFlightRef.current = true;
     setSendingPayslipId(ps.id);
+    setPayslips(prev => prev.map(item => item.id === ps.id ? { ...item, status: 'sent', signature_url: null, confirmed_at: null, note: null } : item));
     try {
       await fetchAPI('hrm/payroll/send', {
         method: 'POST',
@@ -1348,10 +1523,10 @@ export default function HRM() {
         body: JSON.stringify({ id: ps.id, month_year: payrollMonth })
       });
       toast.success(t(`Đã gửi yêu cầu ký xác nhận lương cho ${ps.employee_name}!`));
-      setPayslips(prev => prev.map(item => item.id === ps.id ? { ...item, status: 'sent', signature_url: null, confirmed_at: null, note: null } : item));
-      loadAllPayslips();
+      loadAllPayslips(true);
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi gửi yêu cầu xác nhận'));
+      loadPayslips(true);
     } finally {
       sendSinglePayslipInFlightRef.current = false;
       setSendingPayslipId(null);
@@ -1369,8 +1544,8 @@ export default function HRM() {
         body: JSON.stringify({ payslips })
       });
       toast.success(t('Đã lưu bảng lương thành công!'));
-      loadPayslips();
-      loadAllPayslips();
+      loadPayslips(true);
+      loadAllPayslips(true);
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi khi lưu bảng lương'));
     } finally {
@@ -1393,8 +1568,8 @@ export default function HRM() {
         })
       });
       toast.success(t('Tính lương hoàn tất!'));
-      loadPayslips();
-      loadAllPayslips();
+      loadPayslips(true);
+      loadAllPayslips(true);
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi tính lương'));
     } finally {
@@ -1407,6 +1582,7 @@ export default function HRM() {
     if (publishPayrollInFlightRef.current || publishing) return;
     publishPayrollInFlightRef.current = true;
     setPublishing(true);
+    setPayslips(prev => prev.map(item => item.status === 'locked' ? item : { ...item, status: 'sent' }));
     try {
       await fetchAPI('hrm/payroll/send', {
         method: 'POST',
@@ -1414,10 +1590,11 @@ export default function HRM() {
         body: JSON.stringify({ month_year: payrollMonth })
       });
       toast.success(t('Đã gửi phiếu lương yêu cầu xác thực đến toàn bộ nhân sự!'));
-      loadPayslips();
-      loadAllPayslips();
+      loadPayslips(true);
+      loadAllPayslips(true);
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi phát hành'));
+      loadPayslips(true);
     } finally {
       publishPayrollInFlightRef.current = false;
       setPublishing(false);
@@ -1428,6 +1605,7 @@ export default function HRM() {
     if (lockPayrollInFlightRef.current || locking) return;
     lockPayrollInFlightRef.current = true;
     setLocking(true);
+    setPayslips(prev => prev.map(item => ({ ...item, status: 'locked' })));
     try {
       await fetchAPI('hrm/payroll', {
         method: 'PUT',
@@ -1435,10 +1613,11 @@ export default function HRM() {
         body: JSON.stringify({ month_year: payrollMonth })
       });
       toast.success(t('Đã chốt và khóa sổ lương thành công!'));
-      loadPayslips();
-      loadAllPayslips();
+      loadPayslips(true);
+      loadAllPayslips(true);
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi khóa sổ'));
+      loadPayslips(true);
     } finally {
       lockPayrollInFlightRef.current = false;
       setLocking(false);
@@ -1456,6 +1635,7 @@ export default function HRM() {
         if (unlockPayrollInFlightRef.current || locking) return;
         unlockPayrollInFlightRef.current = true;
         setLocking(true);
+        setPayslips(prev => prev.map(item => ({ ...item, status: 'draft', signature_url: null, confirmed_at: null })));
         try {
           await fetchAPI('hrm/payroll', {
             method: 'PUT',
@@ -1463,8 +1643,8 @@ export default function HRM() {
             body: JSON.stringify({ month_year: payrollMonth, action: 'unlock' })
           });
           toast.success(t('Đã mở khóa bảng lương thành công!'));
-          loadPayslips();
-          loadAllPayslips();
+          loadPayslips(true);
+          loadAllPayslips(true);
         } catch (err: any) {
           toast.error(err?.message || t('Lỗi mở khóa'));
         } finally {
@@ -1521,8 +1701,7 @@ export default function HRM() {
             { id: 'profiles', label: t('Hồ sơ lương nhân viên'), icon: Users },
             { id: 'leaves', label: t('Phê duyệt Nghỉ Phép'), icon: Calendar, badge: leaves.filter(l => l.status === 'pending' && isMyPendingRequest(l)).length },
             { id: 'advances', label: t('Tạm ứng Lương'), icon: CreditCard, badge: advances.filter(a => a.status === 'pending' && isMyPendingRequest(a)).length },
-            { id: 'payroll', label: t('Tính & Chốt Lương'), icon: DollarSign },
-            { id: 'accounting_az', label: t('Nghiệp vụ Kế toán & Lương A-Z'), icon: ClipboardList }
+            { id: 'payroll', label: t('Tính & Chốt Lương'), icon: DollarSign }
           ].map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -2293,7 +2472,7 @@ export default function HRM() {
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
                     {dashboardLoading ? (
                       Array.from({ length: 4 }).map((_, i) => (
                         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2308,25 +2487,27 @@ export default function HRM() {
                         const isTop3 = idx < 3;
                         const barColor = isTop3 ? '#C6333D' : '#475569';
                         return (
-                          <div key={item.id || idx} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem', fontWeight: 600 }}>
+                          <div key={item.id || idx} style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '9px 12px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #f1f5f9' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem', fontWeight: 600, gap: '8px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                                 <span style={{ fontSize: '0.85rem', width: 22, textAlign: 'center', flexShrink: 0 }}>{rankBadge}</span>
                                 <Avatar src={item.avatar} name={item.name} size={30} />
                                 <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                                   <span style={{ color: '#0f172a', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
-                                  <span style={{ color: '#64748b', fontSize: '0.7rem' }}>{item.department || 'Chung'}</span>
+                                  <span style={{ color: '#64748b', fontSize: '0.68rem', fontWeight: 500 }}>
+                                    {item.department || 'Chung'} • Tổng chấm công: <strong style={{ color: '#334155' }}>{item.totalCheckIns} ca</strong>
+                                  </span>
                                 </div>
                               </div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                                <span style={{ color: '#64748b', fontSize: '0.74rem' }}>{item.onTimeCount} ca</span>
+                                <span style={{ color: '#475569', fontSize: '0.72rem', fontWeight: 600 }}>Đúng giờ: <strong style={{ color: '#0f172a' }}>{item.onTimeCount} ca</strong></span>
                                 <span
                                   style={{
-                                    fontSize: '0.72rem',
+                                    fontSize: '0.7rem',
                                     fontWeight: 700,
-                                    padding: '2px 8px',
-                                    borderRadius: 999,
-                                    background: '#f1f5f9',
+                                    padding: '2px 7px',
+                                    borderRadius: '6px',
+                                    background: '#e2e8f0',
                                     color: '#0f172a'
                                   }}
                                 >
@@ -2334,7 +2515,7 @@ export default function HRM() {
                                 </span>
                               </div>
                             </div>
-                            <div style={{ height: 5, width: '100%', background: '#f1f5f9', borderRadius: 999, overflow: 'hidden', marginLeft: 30 }}>
+                            <div style={{ height: 5, width: '100%', background: '#e2e8f0', borderRadius: 999, overflow: 'hidden' }}>
                               <div style={{ width: `${Math.min(Math.max(item.score, 0), 100)}%`, height: '100%', background: barColor, borderRadius: 999 }} />
                             </div>
                           </div>
@@ -2522,7 +2703,7 @@ export default function HRM() {
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
                     {dashboardLoading ? (
                       Array.from({ length: 4 }).map((_, i) => (
                         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2533,33 +2714,64 @@ export default function HRM() {
                     ) : lateOrOtTab === 'late' ? (
                       topLatenessList && topLatenessList.length > 0 ? (
                         topLatenessList.slice(0, 5).map((item, idx) => {
-                          const isTop3 = idx < 3;
-                          const barColor = isTop3 ? '#C6333D' : '#475569';
                           const grace = item.grace || 60;
                           const totalMins = item.totalMinutes ?? item.value ?? 0;
                           const isExceeded = totalMins > grace;
+                          const excessMins = Math.max(0, totalMins - grace);
+                          const remainingGrace = Math.max(0, grace - totalMins);
+                          const barColor = isExceeded ? '#C6333D' : '#475569';
+                          const medals = ['🥇', '🥈', '🥉'];
+                          const rankBadge = idx < 3 ? medals[idx] : `#${idx + 1}`;
                           return (
-                            <div key={item.id || idx} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem', fontWeight: 600 }}>
+                            <div
+                              key={item.id || idx}
+                              style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '6px',
+                                padding: '9px 12px',
+                                borderRadius: '10px',
+                                background: '#f8fafc',
+                                border: '1px solid #f1f5f9'
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: idx === 0 ? '#BD1D2D' : '#64748b', width: 20 }}>#{idx + 1}</span>
+                                  <span style={{ fontSize: idx < 3 ? '0.85rem' : '0.73rem', fontWeight: 700, color: idx === 0 ? '#BD1D2D' : '#64748b', width: 22, textAlign: 'center', flexShrink: 0 }}>
+                                    {rankBadge}
+                                  </span>
                                   <Avatar src={item.avatar} name={item.name} size={30} />
-                                  <span style={{ color: '#0f172a', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                                  <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                    <span style={{ color: '#0f172a', fontSize: '0.79rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {item.name}
+                                    </span>
+                                    <span style={{ color: '#64748b', fontSize: '0.68rem', fontWeight: 500 }}>
+                                      Trễ <strong style={{ color: '#334155' }}>{item.count || 1} lần</strong> • Định mức miễn trừ ({item.genderLabel || 'Nữ'}): <strong style={{ color: '#334155' }}>{grace}p/tháng</strong>
+                                    </span>
+                                  </div>
                                 </div>
-                                <span
-                                  style={{
-                                    fontSize: '0.72rem',
-                                    fontWeight: 700,
-                                    padding: '2px 8px',
-                                    borderRadius: 999,
-                                    background: '#f1f5f9',
-                                    color: isExceeded ? '#BD1D2D' : '#0f172a'
-                                  }}
-                                >
-                                  {totalMins}p {isExceeded ? `(+${totalMins - grace}p)` : ''}
-                                </span>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                                  <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+                                    Tổng: {totalMins} phút
+                                  </span>
+                                  <span
+                                    style={{
+                                      fontSize: '0.67rem',
+                                      fontWeight: 700,
+                                      padding: '2px 7px',
+                                      borderRadius: '6px',
+                                      background: isExceeded ? 'rgba(189, 29, 45, 0.08)' : '#e2e8f0',
+                                      color: isExceeded ? '#BD1D2D' : '#475569',
+                                      whiteSpace: 'nowrap'
+                                    }}
+                                  >
+                                    {isExceeded ? `Vượt định mức +${excessMins}p` : `Trong định mức (còn ${remainingGrace}p)`}
+                                  </span>
+                                </div>
                               </div>
-                              <div style={{ height: 5, width: '100%', background: '#f1f5f9', borderRadius: 999, overflow: 'hidden', marginLeft: 28 }}>
+
+                              <div style={{ height: 5, width: '100%', background: '#e2e8f0', borderRadius: 999, overflow: 'hidden' }}>
                                 <div style={{ width: `${Math.min(100, item.percent || (totalMins > 0 ? Math.min(100, Math.round((totalMins / 120) * 100)) : 0))}%`, height: '100%', background: barColor, borderRadius: 999 }} />
                               </div>
                             </div>
@@ -2575,28 +2787,49 @@ export default function HRM() {
                         topOTList.slice(0, 5).map((item, idx) => {
                           const isTop3 = idx < 3;
                           const barColor = isTop3 ? '#C6333D' : '#475569';
+                          const medals = ['🥇', '🥈', '🥉'];
+                          const rankBadge = idx < 3 ? medals[idx] : `#${idx + 1}`;
                           return (
-                            <div key={item.id || idx} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem', fontWeight: 600 }}>
+                            <div
+                              key={item.id || idx}
+                              style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '6px',
+                                padding: '9px 12px',
+                                borderRadius: '10px',
+                                background: '#f8fafc',
+                                border: '1px solid #f1f5f9'
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem', fontWeight: 600, gap: '8px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: idx === 0 ? '#BD1D2D' : '#64748b', width: 20 }}>#{idx + 1}</span>
+                                  <span style={{ fontSize: idx < 3 ? '0.85rem' : '0.73rem', fontWeight: 700, color: idx === 0 ? '#BD1D2D' : '#64748b', width: 22, textAlign: 'center', flexShrink: 0 }}>
+                                    {rankBadge}
+                                  </span>
                                   <Avatar src={item.avatar} name={item.name} size={30} />
-                                  <span style={{ color: '#0f172a', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                                  <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                    <span style={{ color: '#0f172a', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                                    <span style={{ color: '#64748b', fontSize: '0.68rem', fontWeight: 500 }}>
+                                      {item.department || 'Chung'} • Số ca đăng ký: <strong style={{ color: '#334155' }}>{item.count || 1} ca</strong>
+                                    </span>
+                                  </div>
                                 </div>
                                 <span
                                   style={{
-                                    fontSize: '0.72rem',
+                                    fontSize: '0.71rem',
                                     fontWeight: 700,
-                                    padding: '2px 8px',
-                                    borderRadius: 999,
-                                    background: '#f1f5f9',
-                                    color: '#0f172a'
+                                    padding: '2.5px 8px',
+                                    borderRadius: '6px',
+                                    background: '#e2e8f0',
+                                    color: '#0f172a',
+                                    flexShrink: 0
                                   }}
                                 >
                                   {item.value} {item.unit || t('giờ')}
                                 </span>
                               </div>
-                              <div style={{ height: 5, width: '100%', background: '#f1f5f9', borderRadius: 999, overflow: 'hidden', marginLeft: 28 }}>
+                              <div style={{ height: 5, width: '100%', background: '#e2e8f0', borderRadius: 999, overflow: 'hidden' }}>
                                 <div style={{ width: `${Math.min(100, item.percent || 0)}%`, height: '100%', background: barColor, borderRadius: 999 }} />
                               </div>
                             </div>
@@ -3192,13 +3425,6 @@ export default function HRM() {
         )}
 
             {/* Calculate New Period Modal / Drawer */}
-            {activeTab === 'accounting_az' && (
-              <HrmAccountingAzWorkspace
-                currentMonth={payrollMonth}
-                onNavigateToPayroll={() => setActiveTab('payroll')}
-                onNavigateToProfiles={() => setActiveTab('profiles')}
-              />
-            )}
             {isNewPeriodModalOpen && createPortal(
               <div className="modal-backdrop modal-above-drawer" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2147483645, padding: '12px' }}>
                 <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '1.5rem', width: 450, maxWidth: 'calc(100vw - 24px)', zIndex: 2147483646 }}>

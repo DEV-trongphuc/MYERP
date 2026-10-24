@@ -27,7 +27,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   cancelText = 'Hủy',
   confirmType = 'danger',
   width = 440,
-  zIndex = 2147483645,
+  zIndex = 2147483646,
   children
 }) => {
   const { t } = useLanguage();
