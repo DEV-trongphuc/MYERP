@@ -1380,7 +1380,7 @@ class FinanceController
         $this->db->beginTransaction();
         try {
             // Check permission and get current state
-            $sqlCheck = "SELECT id, amount, currency, due_date, notes, items, created_by, title, status, approval_status, status_level_1, status_level_2, status_level_3, is_refunded, approver_id, approver_id_2, approver_id_3, related_user_ids FROM expenses WHERE id=? AND tenant_id=? AND deleted_at IS NULL FOR UPDATE";
+            $sqlCheck = "SELECT id, amount, currency, due_date, notes, items, created_by, title, status, approval_status, status_level_1, status_level_2, status_level_3, is_refunded, approver_id, approver_id_2, approver_id_3, related_user_ids FROM expenses WHERE id=? AND tenant_id=? AND deleted_at IS NULL";
             $cp = [$id, $auth['tenant_id']];
             if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
                 $sqlCheck .= " AND created_by=?";
@@ -1393,7 +1393,7 @@ class FinanceController
                 $cp[] = $auth['user_id'];
                 $cp[] = $auth['user_id'];
             }
-            $check = $this->db->prepare($sqlCheck);
+            $check = $this->db->prepare($sqlCheck . " FOR UPDATE");
             $check->execute($cp);
             $row = $check->fetch();
             if (!$row) {
