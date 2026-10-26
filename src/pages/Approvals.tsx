@@ -1607,10 +1607,10 @@ export default function Approvals() {
         finalApproverId = effectiveAppVal1;
       }
 
-      // Always ensure HR Leader / Hành chính is included in related users for attendance/HR workflows
+      // Ensure HR (Duy Phương) is included in related users for attendance/HR workflows when empty, without injecting unexpected directors
       const isHrWf = selectedWorkflowDef?.category === 'hr' || ['leave', 'late_early', 'overtime', 'remote_work', 'attendance_bulk', 'recruitment'].includes(formType);
       let finalRelatedUserIds = [...relatedUserIds];
-      if (isHrWf) {
+      if (isHrWf && finalRelatedUserIds.length === 0) {
         const hrLeader = getDefaultHrLeader();
         const primaryApproverId = appVal1 || finalApproverId;
         if (hrLeader && Number(hrLeader.id) !== Number(primaryApproverId)) {
@@ -2576,40 +2576,48 @@ export default function Approvals() {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [showRelatedDropdown]);
 
-  // Helper to find default HR Leader / Trưởng phòng HR dynamically
+  // Helper to find default HR Leader / Phụ trách HCNS dynamically (ưu tiên Nguyễn Thị Duy Phương / role HR, không lấy nhầm Ban Giám đốc)
   const getDefaultHrLeader = () => {
     if (!users || users.length === 0) return null;
 
-    // 1. Check HR team in teams list first for its designated leader
-    const hrTeam = teams.find(t => {
-      const name = String(t.name || '').toLowerCase();
-      return name.includes('nhân sự') || name.includes('hr') || name.includes('hành chính nhân sự') || name.includes('hcns') || name.includes('human resources');
+    // 1. Ưu tiên số 1: Nhân sự phụ trách HCNS (Duy Phương / phuongntd) hoặc role === 'hr'
+    const explicitHr = users.find(u => {
+      const uname = String(u.username || '').toLowerCase();
+      const fname = String(u.full_name || u.name || '').toLowerCase();
+      return uname === 'phuongntd' || fname.includes('duy phương');
     });
-    if (hrTeam && hrTeam.leader_id) {
-      const leader = users.find(u => Number(u.id) === Number(hrTeam.leader_id));
-      if (leader) return leader;
-    }
+    if (explicitHr) return explicitHr;
 
-    // 2. User with HR Manager / Leader / Head job title
+    const hrRoleUser = users.find(u => String(u.role || '').toLowerCase() === 'hr');
+    if (hrRoleUser) return hrRoleUser;
+
+    // 2. User thuộc bộ phận Nhân sự có chức danh HR (loại trừ Ban Giám đốc 'director')
     const hrLeaderByTitle = users.find(u => {
       const jt = String(u.job_title || '').toLowerCase();
       const r = String(u.role || '').toLowerCase();
-      const isHrDept = jt.includes('nhân sự') || jt.includes('hr') || jt.includes('hcns') || r === 'hr';
+      if (r === 'director' || r === 'superadmin' || r === 'super_admin') return false;
+      const isHrDept = jt.includes('nhân sự') || jt.includes('hr') || jt.includes('hcns');
       const isLead = jt.includes('trưởng') || jt.includes('lead') || jt.includes('manager') || jt.includes('quản lý') || r === 'manager';
       return isHrDept && isLead;
     });
     if (hrLeaderByTitle) return hrLeaderByTitle;
 
-    // 3. Any HR team manager/leader
+    // 3. Check HR team leader (chỉ lấy nếu leader không phải là Director kiêm nhiệm)
+    const hrTeam = teams.find(t => {
+      const name = String(t.name || '').toLowerCase();
+      return name.includes('nhân sự') || name.includes('hr') || name.includes('hành chính nhân sự') || name.includes('hcns') || name.includes('human resources');
+    });
+    if (hrTeam && hrTeam.leader_id) {
+      const leader = users.find(u => Number(u.id) === Number(hrTeam.leader_id) && String(u.role || '').toLowerCase() !== 'director');
+      if (leader) return leader;
+    }
+
     if (hrTeam) {
-      const teamManager = users.find(u => Number(u.team_id) === Number(hrTeam.id) && ['manager', 'leader', 'admin'].includes(String(u.role).toLowerCase()) && !['superadmin', 'super_admin'].includes(String(u.role).toLowerCase()));
-      if (teamManager) return teamManager;
-      const anyHrTeamMember = users.find(u => Number(u.team_id) === Number(hrTeam.id));
+      const anyHrTeamMember = users.find(u => Number(u.team_id) === Number(hrTeam.id) && String(u.role || '').toLowerCase() !== 'director');
       if (anyHrTeamMember) return anyHrTeamMember;
     }
 
-    // 4. Fallback: Any HR role
-    return users.find(u => String(u.role || '').toLowerCase() === 'hr') || null;
+    return null;
   };
 
   // Helper to find default manager / team leader / approver for proposer
