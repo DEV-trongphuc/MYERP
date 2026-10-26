@@ -634,6 +634,27 @@ function applyCrmDateRangeFilter(PDO $db, string $alias, array $input, array &$w
 }
 
 /**
+ * Build word-boundary SQL match clause for a program/project name column so that
+ * searching "MBA" or "MBA ST" or "MBA HQ" NEVER false-matches "EMBA" / "EMBA ST" / "EMBA HQ".
+ */
+function buildCrmProgramColumnMatchSql(string $colExpr, string $token, array &$params): string {
+    $pt = trim($token);
+    if ($pt === '') {
+        return '1=0';
+    }
+    $ptLower = mb_strtolower($pt, 'UTF-8');
+    $regexPattern = '(^|[^a-z0-9])' . preg_quote($ptLower, '/') . '([^a-z0-9]|$)';
+    $sql = "(LOWER(TRIM(COALESCE({$colExpr}, ''))) = ? OR LOWER(COALESCE({$colExpr}, '')) REGEXP ?)";
+    $params[] = $ptLower;
+    $params[] = $regexPattern;
+
+    if (stripos($pt, 'mba') !== false && stripos($pt, 'emba') === false) {
+        $sql = "({$sql} AND LOWER(COALESCE({$colExpr}, '')) NOT LIKE '%emba%')";
+    }
+    return $sql;
+}
+
+/**
  * Shared, reusable Multi-Tier CRM Filter Engine for Contacts / Leads / Students.
  * Supports:
  * 1. Multi-Owner (`owner_id`/`owners`), Collaborator (`collaborator_id`/`collaborators`), Creator (`created_by`), Team (`team_id`/`teams`)
@@ -1397,23 +1418,31 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
     // 5. ACADEMIC, MARKETING, LEAD QUALITY & FINANCIAL FILTERS
     // =========================================================================
     // Programs / Project (`programs`, `program`, `project_id`, `projects`)
-    $progTokens = array_values(array_unique(array_merge(
-        parseCrmMultiFilterValues($input['programs'] ?? null),
-        parseCrmMultiFilterValues($input['program'] ?? null),
+    $numericProjTokens = array_values(array_unique(array_merge(
         parseCrmMultiFilterValues($input['project_id'] ?? null),
         parseCrmMultiFilterValues($input['projects'] ?? null)
     )));
+    $rawProgTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['programs'] ?? null),
+        parseCrmMultiFilterValues($input['program'] ?? null)
+    )));
+    // If numeric project_id is already provided, only keep program tokens if they are distinct from numeric IDs
+    $progTokens = !empty($numericProjTokens)
+        ? $numericProjTokens
+        : $rawProgTokens;
+
     if (!empty($progTokens)) {
         $progOrs = [];
         foreach ($progTokens as $pt) {
             if (is_numeric($pt) && (int)$pt > 0) {
-                $progOrs[] = "({$a}project_id = ? OR ({$a}program IS NOT NULL AND {$a}program != '' AND EXISTS (SELECT 1 FROM projects pr_p WHERE pr_p.id = ? AND ({$a}program = pr_p.name OR {$a}program LIKE CONCAT('%', pr_p.name, '%')))))";
+                $progOrs[] = "({$a}project_id = ? OR (({$a}project_id IS NULL OR {$a}project_id = 0) AND {$a}program IS NOT NULL AND {$a}program != '' AND EXISTS (SELECT 1 FROM projects pr_p WHERE pr_p.id = ? AND LOWER(TRIM({$a}program)) = LOWER(TRIM(pr_p.name)))))";
                 $params[] = (int)$pt;
                 $params[] = (int)$pt;
             } else {
-                $likeP = '%' . $pt . '%';
-                $progOrs[] = "({$a}program LIKE ? OR {$a}project_id IN (SELECT pr_p.id FROM projects pr_p WHERE pr_p.name LIKE ? OR pr_p.code LIKE ?))";
-                array_push($params, $likeP, $likeP, $likeP);
+                $progColMatch = buildCrmProgramColumnMatchSql("{$a}program", (string)$pt, $params);
+                $projNameMatch = buildCrmProgramColumnMatchSql("pr_p.name", (string)$pt, $params);
+                $progOrs[] = "({$progColMatch} OR {$a}project_id IN (SELECT pr_p.id FROM projects pr_p WHERE {$projNameMatch} OR LOWER(TRIM(COALESCE(pr_p.code, ''))) = LOWER(?)))";
+                $params[] = trim((string)$pt);
             }
         }
         $where[] = '(' . implode(' OR ', $progOrs) . ')';

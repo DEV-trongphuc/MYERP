@@ -10548,14 +10548,21 @@ class AgentToolRegistry {
 
                     // 1. Programs / Projects Multi-Filter (matches c.program and linked projects)
                     if (!empty($programsParam) && $programsParam !== 'all') {
+                        require_once __DIR__ . '/../utils/search_helpers.php';
                         $progList = array_filter(array_map('trim', explode(',', $programsParam)));
                         if (!empty($progList)) {
                             $progOrs = [];
                             foreach ($progList as $p) {
-                                $progOrs[] = "(c.program LIKE ? OR EXISTS (SELECT 1 FROM projects prj_f WHERE prj_f.id = c.project_id AND (prj_f.name LIKE ? OR prj_f.code LIKE ?)))";
-                                $params[] = '%' . $p . '%';
-                                $params[] = '%' . $p . '%';
-                                $params[] = '%' . $p . '%';
+                                if (is_numeric($p) && (int)$p > 0) {
+                                    $progOrs[] = "(c.project_id = ? OR ((c.project_id IS NULL OR c.project_id = 0) AND c.program IS NOT NULL AND c.program != '' AND EXISTS (SELECT 1 FROM projects prj_f WHERE prj_f.id = ? AND LOWER(TRIM(c.program)) = LOWER(TRIM(prj_f.name)))))";
+                                    $params[] = (int)$p;
+                                    $params[] = (int)$p;
+                                } else {
+                                    $cProgMatch = buildCrmProgramColumnMatchSql('c.program', $p, $params);
+                                    $prjNameMatch = buildCrmProgramColumnMatchSql('prj_f.name', $p, $params);
+                                    $progOrs[] = "({$cProgMatch} OR EXISTS (SELECT 1 FROM projects prj_f WHERE prj_f.id = c.project_id AND ({$prjNameMatch} OR LOWER(TRIM(COALESCE(prj_f.code, ''))) = LOWER(?))))";
+                                    $params[] = $p;
+                                }
                             }
                             $where[] = "(" . implode(' OR ', $progOrs) . ")";
                         }
@@ -11692,13 +11699,20 @@ class AgentToolRegistry {
 
                     // 1. Program / Project Filter
                     if ($programsParam !== '' && $programsParam !== 'all') {
+                        require_once __DIR__ . '/../utils/search_helpers.php';
                         $progList = array_filter(array_map('trim', explode(',', $programsParam)));
                         if (!empty($progList)) {
                             $progOrs = [];
                             foreach ($progList as $pItem) {
-                                $progOrs[] = "(c.program LIKE ? OR p.name LIKE ?)";
-                                $params[] = '%' . $pItem . '%';
-                                $params[] = '%' . $pItem . '%';
+                                if (is_numeric($pItem) && (int)$pItem > 0) {
+                                    $progOrs[] = "(d.project_id = ? OR c.project_id = ?)";
+                                    $params[] = (int)$pItem;
+                                    $params[] = (int)$pItem;
+                                } else {
+                                    $cProgMatch = buildCrmProgramColumnMatchSql('c.program', $pItem, $params);
+                                    $pNameMatch = buildCrmProgramColumnMatchSql('p.name', $pItem, $params);
+                                    $progOrs[] = "({$cProgMatch} OR {$pNameMatch})";
+                                }
                             }
                             $where[] = "(" . implode(' OR ', $progOrs) . ")";
                         }

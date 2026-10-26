@@ -338,6 +338,17 @@ class ProjectController {
         }
     }
 
+    private function invalidateProgramsCache(int $tid = 0): void {
+        $dir = sys_get_temp_dir();
+        if ($tid > 0) {
+            @unlink($dir . '/myerp_programs_v1_' . $tid . '.json');
+            @unlink($dir . '/myerp_programs_v2_' . $tid . '.json');
+        }
+        foreach (glob($dir . '/myerp_programs_v*.json') ?: [] as $f) {
+            @unlink($f);
+        }
+    }
+
     public function store(array $auth): void {
         requireRole($auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'marketing', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien']);
         $b = getBody();
@@ -411,6 +422,7 @@ class ProjectController {
             $stmtSet->execute(array_merge([$newId, $auth['tenant_id']], $campaignIdsArray));
         }
 
+        $this->invalidateProgramsCache((int)($auth['tenant_id'] ?? 1));
         respond(200, ['id' => $newId, 'code' => $code], 'Tạo dự án thành công');
     }
 
@@ -492,6 +504,7 @@ class ProjectController {
             $stmtSet->execute(array_merge([$id, $auth['tenant_id']], $campaignIdsArray));
         }
 
+        $this->invalidateProgramsCache((int)($auth['tenant_id'] ?? 1));
         respond(200, null, 'Cập nhật dự án thành công');
     }
 
@@ -531,6 +544,7 @@ class ProjectController {
                 ->execute([$id, $auth['tenant_id']]);
 
             $this->db->commit();
+            $this->invalidateProgramsCache((int)($auth['tenant_id'] ?? 1));
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'DELETE_PROJECT', 'project', $id, "Xóa mềm dự án ID: $id (" . ($proj['name'] ?? '') . ")");
             respond(200, ['id' => $id], 'Xóa dự án thành công');
         } catch (\Throwable $e) {
@@ -590,6 +604,7 @@ class ProjectController {
             }
 
             $this->db->commit();
+            $this->invalidateProgramsCache((int)($auth['tenant_id'] ?? 1));
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'DUPLICATE_PROJECT', 'project', $newId, "Nhân bản dự án từ #$id sang #$newId: $newName");
             respond(201, ['id' => $newId, 'name' => $newName, 'code' => $newCode], 'Nhân bản dự án thành công');
         } catch (\Throwable $e) {
@@ -604,6 +619,7 @@ class ProjectController {
         $this->requireProjectEditPermission($auth, $id);
         $this->db->prepare("UPDATE projects SET is_archived = 1, updated_at = NOW() WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL")
             ->execute([$id, $auth['tenant_id']]);
+        $this->invalidateProgramsCache((int)($auth['tenant_id'] ?? 1));
         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'ARCHIVE_PROJECT', 'project', $id, "Lưu trữ dự án ID: $id");
         respond(200, ['id' => $id, 'is_archived' => 1], 'Lưu trữ dự án thành công');
     }
@@ -612,6 +628,7 @@ class ProjectController {
         $this->requireProjectEditPermission($auth, $id);
         $this->db->prepare("UPDATE projects SET is_archived = 0, updated_at = NOW() WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL")
             ->execute([$id, $auth['tenant_id']]);
+        $this->invalidateProgramsCache((int)($auth['tenant_id'] ?? 1));
         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'UNARCHIVE_PROJECT', 'project', $id, "Bỏ lưu trữ dự án ID: $id");
         respond(200, ['id' => $id, 'is_archived' => 0], 'Bỏ lưu trữ dự án thành công');
     }

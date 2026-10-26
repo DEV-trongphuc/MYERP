@@ -2010,10 +2010,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           if (res.data?.data && Array.isArray(res.data.data)) {
             const cleaned = res.data.data
               .map((p: string) => String(p || '').trim())
-              .filter((p: string) => p.length > 0);
-            if (cleaned.length > 0) {
-              setProgramSuggestions(Array.from(new Set([...cleaned])));
-            }
+              .filter((p: string) => p.length > 0 && !/\bbba\b/i.test(p));
+            setProgramSuggestions(Array.from(new Set(cleaned)));
           }
         })
         .catch(() => {});
@@ -2164,15 +2162,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       onUpdate?.(updated);
       window.dispatchEvent(new CustomEvent('contact-updated'));
       window.dispatchEvent(new CustomEvent('notification-trigger'));
-      if (formData.program && String(formData.program).trim()) {
-        const trimmed = String(formData.program).trim();
-        setProgramSuggestions(prev => {
-          if (!prev.some(p => p.toLowerCase() === trimmed.toLowerCase())) {
-            return [trimmed, ...prev];
-          }
-          return prev;
-        });
-      }
       const savedName = (formData.full_name || '').trim();
       addToast(`Đã lưu thông tin hồ sơ của khách hàng ${savedName || ''} thành công!`, 'success');
     } catch (e: any) {
@@ -4178,7 +4167,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     },
     {
       id: 'bba',
-      label: 'Cử nhân Quản trị Kinh doanh (BBA)',
+      label: 'Cử nhân Quản trị Kinh doanh (TOP UP)',
       school: 'umef',
       docLink: 'https://drive.google.com/drive/folders/1E1TZMRz5w05xv4wsNvP5vht3ojHeviAw'
     },
@@ -4194,7 +4183,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     const p = (programStr || '').trim().toLowerCase();
     if (p.includes('estiam') || p.includes('paris education') || p.includes('dual dba') || p === 'de') return 'estiam';
     if (p.includes('ai') || p.includes('msc') || p.includes('trí tuệ') || p.includes('tri tue')) return 'msc_ai';
-    if (p.includes('bba') || p.includes('cử nhân') || p.includes('cu nhan') || p.includes('bachelor')) return 'bba';
+    if (p.includes('top up') || p.includes('topup') || p.includes('bba') || p.includes('cử nhân') || p.includes('cu nhan') || p.includes('bachelor')) return 'bba';
     if (p.includes('high') || p.includes('nâng cao') || p.includes('nang cao') || p.includes('hq')) return 'mba_high';
     return 'mba_standard';
   };
@@ -4859,7 +4848,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
       // 4. Xử lý Projects, Companies, Contacts caching
       if (projectsRes) {
-        const data = projectsRes.data?.data || projectsRes.data || [];
+        const rawData = projectsRes.data?.data || projectsRes.data || [];
+        const data = (Array.isArray(rawData) ? rawData : []).filter(
+          (p: any) => !p?.deleted_at && !Number(p?.is_archived) && p?.status !== 'deleted' && !/\bbba\b/i.test(String(p?.name || ''))
+        );
         globalProjectsCache = data;
         setProjectsList(data);
         setAllowedProjects(data);
@@ -5709,7 +5701,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     if (normalizedMatch) return normalizedMatch;
     const partial = list.filter(p => {
       const pName = String(p.name || '').trim().toLowerCase();
-      return pName && (pName.includes(lower) || lower.includes(pName));
+      if (!pName) return false;
+      if ((pName.includes('mba') && !pName.includes('emba') && lower.includes('emba')) ||
+          (lower.includes('mba') && !lower.includes('emba') && pName.includes('emba'))) {
+        return false;
+      }
+      const escName = pName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const escLow = lower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`(^|[^a-z0-9])${escLow}([^a-z0-9]|$)`, 'i').test(pName) ||
+             new RegExp(`(^|[^a-z0-9])${escName}([^a-z0-9]|$)`, 'i').test(lower);
     });
     if (partial.length === 1) return partial[0];
     return null;
@@ -5789,25 +5789,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     }
   }, [projectsList, formData.program, formData.campaign_id, getDefaultCampaignForProject, effectiveContactId, persistProgramSyncToBackend, handleSelectProgramEverywhere]);
 
-  // Keep programSuggestions enriched with projectsList names
+  // Keep programSuggestions strictly synchronized with active projectsList names
   useEffect(() => {
     if (projectsList.length > 0) {
       const projNames = projectsList
+        .filter((p: any) => !p?.deleted_at && !Number(p?.is_archived) && p?.status !== 'deleted')
         .map((p: any) => String(p.name || '').trim())
-        .filter((n: string) => n.length > 0);
-      if (projNames.length > 0) {
-        setProgramSuggestions(prev => {
-          const combined = [...prev];
-          let added = false;
-          projNames.forEach(n => {
-            if (!combined.some(existing => existing.toLowerCase() === n.toLowerCase())) {
-              combined.push(n);
-              added = true;
-            }
-          });
-          return added ? combined : prev;
-        });
-      }
+        .filter((n: string) => n.length > 0 && !/\bbba\b/i.test(n));
+      const uniqueNames = Array.from(new Set(projNames)).sort((a, b) => a.localeCompare(b, 'vi'));
+      setProgramSuggestions(uniqueNames);
     }
   }, [projectsList]);
 
@@ -5973,18 +5963,23 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         }).catch(() => {});
       }
 
-      // 3. Projects cache check (always bypass_roster=1 so all programs are available)
+      // 3. Projects cache check (always bypass_roster=1 so all programs are available, and hydrate fresh in background)
       if (globalProjectsCache && globalProjectsCache.length > 0) {
-        setAllowedProjects(globalProjectsCache);
-        setProjectsList(globalProjectsCache);
-      } else {
-        api.get('/projects?bypass_roster=1').then(r => {
-          const data = r.data.data || r.data || [];
-          globalProjectsCache = data;
-          setAllowedProjects(data);
-          setProjectsList(data);
-        }).catch(() => {});
+        const filteredCached = globalProjectsCache.filter(
+          (p: any) => !p?.deleted_at && !Number(p?.is_archived) && p?.status !== 'deleted' && !/\bbba\b/i.test(String(p?.name || ''))
+        );
+        setAllowedProjects(filteredCached);
+        setProjectsList(filteredCached);
       }
+      api.get('/projects?bypass_roster=1').then(r => {
+        const rawData = r.data.data || r.data || [];
+        const data = (Array.isArray(rawData) ? rawData : []).filter(
+          (p: any) => !p?.deleted_at && !Number(p?.is_archived) && p?.status !== 'deleted' && !/\bbba\b/i.test(String(p?.name || ''))
+        );
+        globalProjectsCache = data;
+        setAllowedProjects(data);
+        setProjectsList(data);
+      }).catch(() => {});
 
       // 4. Campaigns cache check
       if (globalCampaignsCache && globalCampaignsCache.length > 0) {
@@ -6429,8 +6424,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       const timeWindow = isNaN(timeMs) ? 0 : Math.floor(timeMs / 30000); // 30-second window
       const userKey = (item.user || '').trim().toLowerCase();
 
-      // Check duplicate by note content or title within the same 30s window from same user
-      const eventKey1 = cleanNote ? `${userKey}_${timeWindow}_${cleanNote}` : null;
+      // Check duplicate by note content + title within the same 30s window from same user
+      const eventKey1 = cleanNote ? `${userKey}_${timeWindow}_${cleanTitle}_${cleanNote}` : null;
       const eventKey2 = cleanTitle ? `${userKey}_${timeWindow}_${cleanTitle}` : null;
 
       if (eventKey1 && seenEvents.has(eventKey1)) {
@@ -18106,6 +18101,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         const resolvedPipelineStatus = (targetStage as any)?.system_slug || targetId;
                         const resolvedStageName = targetStage?.name || targetLabel;
                         const resolvedStageColor = targetStage?.color;
+                        const prevStageNameBeforeMove = currentStage?.name || formData.stage_name || contact?.stage_name || '';
 
                         // Optimistically update UI
                         const updatedFields: any = {
@@ -18146,7 +18142,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           expected_intake: pipelineModal.expectedIntake || null,
                           nurture_reason: pipelineModal.leadStatus === 'nurture' ? pipelineModal.nurtureReason : null,
                           lost_reason: pipelineModal.leadStatus === 'lost' ? pipelineModal.lostReason : null,
-                          from_stage_name: formData.stage_name || '',
+                          from_stage_name: prevStageNameBeforeMove,
                           to_stage_name: targetLabel,
                           note: note || '',
                           notify_user_ids: pipelineModal.notifyUserIds || []

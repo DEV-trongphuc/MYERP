@@ -1447,14 +1447,14 @@ class ContactController {
         $reqProgramStr = isset($b['program']) ? trim((string)$b['program']) : (isset($b['major']) ? trim((string)$b['major']) : null);
         $reqProjectId = isset($b['project_id']) ? (int)$b['project_id'] : null;
         if ($reqProgramStr !== null && $reqProgramStr !== '' && !$reqProjectId) {
-            $stmtProj = $this->db->prepare("SELECT id FROM projects WHERE (LOWER(name) = LOWER(?) OR LOWER(code) = LOWER(?)) AND tenant_id = ? LIMIT 1");
+            $stmtProj = $this->db->prepare("SELECT id FROM projects WHERE (LOWER(name) = LOWER(?) OR LOWER(code) = LOWER(?)) AND tenant_id = ? AND deleted_at IS NULL AND COALESCE(is_archived, 0) = 0 AND (status IS NULL OR status != 'deleted') LIMIT 1");
             $stmtProj->execute([$reqProgramStr, $reqProgramStr, $auth['tenant_id']]);
             $matchedProjId = $stmtProj->fetchColumn();
             if ($matchedProjId) {
                 $reqProjectId = (int)$matchedProjId;
             }
         } elseif ($reqProjectId && $reqProjectId > 0 && ($reqProgramStr === null || $reqProgramStr === '')) {
-            $stmtProjName = $this->db->prepare("SELECT name FROM projects WHERE id = ? AND tenant_id = ? LIMIT 1");
+            $stmtProjName = $this->db->prepare("SELECT name FROM projects WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL AND COALESCE(is_archived, 0) = 0 AND (status IS NULL OR status != 'deleted') LIMIT 1");
             $stmtProjName->execute([$reqProjectId, $auth['tenant_id']]);
             $projName = $stmtProjName->fetchColumn();
             if ($projName) {
@@ -1761,7 +1761,7 @@ class ContactController {
             $tidProj = (int)($auth['tenant_id'] ?? 1);
             if (!isset(self::$projectsCache[$tidProj])) {
                 try {
-                    $stPr = $this->db->prepare("SELECT id, name FROM projects WHERE tenant_id = ?");
+                    $stPr = $this->db->prepare("SELECT id, name FROM projects WHERE tenant_id = ? AND deleted_at IS NULL AND COALESCE(is_archived, 0) = 0 AND (status IS NULL OR status != 'deleted')");
                     $stPr->execute([$tidProj]);
                     self::$projectsCache[$tidProj] = $stPr->fetchAll(PDO::FETCH_ASSOC) ?: [];
                 } catch (\Throwable $ePr) {
@@ -1769,13 +1769,15 @@ class ContactController {
                 }
             }
             $normTarget = str_replace([' ', '-'], '', mb_strtolower($progTrim));
+            $matchedActiveProjId = null;
             foreach (self::$projectsCache[$tidProj] as $prItem) {
                 $prName = trim((string)($prItem['name'] ?? ''));
                 if ($prName !== '' && (mb_strtolower($prName) === mb_strtolower($progTrim) || str_replace([' ', '-'], '', mb_strtolower($prName)) === $normTarget)) {
-                    $row['project_id'] = (int)$prItem['id'];
+                    $matchedActiveProjId = (int)$prItem['id'];
                     break;
                 }
             }
+            $row['project_id'] = $matchedActiveProjId;
         } else {
             $row['project_id'] = null;
         }
@@ -1894,7 +1896,7 @@ class ContactController {
                 if (empty($dealWonSetting)) $dealWonSetting = 'dat_coc';
 
                 $isFromDeposit = strpos(strtolower($currStatus), 'coc') !== false || strpos(strtolower($currStatus), 'deposit') !== false || $currStatus === 'dat_coc' || $currStatus === $dealWonSetting;
-                $isToSuccess = strpos(strtolower($newStatus), 'success') !== false || strpos(strtolower($newStatus), 'thanh_cong') !== false || $newStatus === 'dong_deal' || $newStatus === 'thanh_cong';
+                $isToSuccess = strpos(strtolower($newStatus), 'success') !== false || strpos(strtolower($newStatus), 'thanh_cong') !== false || $newStatus === 'dong_deal' || $newStatus === 'thanh_cong' || $newStatus === 'enrolled' || $newStatus === 'hoc_vien' || (int)($b['stage_id'] ?? 0) === 44;
                 $isCancellation = $isFromDeposit && !$isToSuccess;
 
                 $userRole = strtolower($auth['role'] ?? '');
@@ -1953,6 +1955,9 @@ class ContactController {
                 $stmtMatchProj = $this->db->prepare("
                     SELECT id FROM projects
                     WHERE tenant_id = ?
+                      AND deleted_at IS NULL
+                      AND COALESCE(is_archived, 0) = 0
+                      AND (status IS NULL OR status != 'deleted')
                       AND (
                           LOWER(TRIM(name)) = LOWER(?)
                           OR REPLACE(REPLACE(LOWER(TRIM(name)), ' ', ''), '-', '') = REPLACE(REPLACE(LOWER(?), ' ', ''), '-', '')
@@ -1968,7 +1973,7 @@ class ContactController {
                 $reqProjectId = null;
             }
         } elseif ($hasProjectKey && $reqProjectId && $reqProjectId > 0) {
-            $stmtProjName = $this->db->prepare("SELECT name FROM projects WHERE id = ? AND tenant_id = ? LIMIT 1");
+            $stmtProjName = $this->db->prepare("SELECT name FROM projects WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL AND COALESCE(is_archived, 0) = 0 AND (status IS NULL OR status != 'deleted') LIMIT 1");
             $stmtProjName->execute([$reqProjectId, $auth['tenant_id']]);
             $projName = $stmtProjName->fetchColumn();
             if ($projName) {
@@ -2307,7 +2312,54 @@ class ContactController {
             }
 
             // AUTO TRIGGER META CAPI EVENTS ON STATE TRANSITION AND UPDATE SECURITY TIMERS / DATABANK STATUS
-            if ($newStatus && $newStatus !== $currStatus) {
+            $nextStageIdInUpdate = isset($b['stage_id']) && !empty($b['stage_id']) ? (int)$b['stage_id'] : 0;
+            $stageChangedInUpdate = ($newStatus && $newStatus !== $currStatus) || ($nextStageIdInUpdate > 0 && $nextStageIdInUpdate !== $currStageId);
+            if ($stageChangedInUpdate) {
+                if ($newStatus === 'enrolled' || $newStatus === 'hoc_vien' || $nextStageIdInUpdate === 44) {
+                    $this->db->prepare("UPDATE contacts SET status = 'customer' WHERE id = ? AND tenant_id = ?")->execute([$id, $auth['tenant_id']]);
+                }
+
+                // Ensure stage transition history is always recorded even when updated via PUT /contacts/{id}
+                try {
+                    $effOldName = !empty($currEffStage['name']) ? (string)$currEffStage['name'] : $currStatus;
+                    $effNewStage = $this->resolveEffectiveStage(
+                        $nextStageIdInUpdate > 0 ? $nextStageIdInUpdate : null,
+                        $newStatus ?: null,
+                        (int)$auth['tenant_id']
+                    );
+                    $effNewId = (int)($effNewStage['id'] ?? $nextStageIdInUpdate ?: $currStageId);
+                    $effNewSlug = (string)($effNewStage['system_slug'] ?? $newStatus ?: $currStatus);
+                    $effNewName = !empty($effNewStage['name']) ? (string)$effNewStage['name'] : $effNewSlug;
+
+                    $stmtRecentStageLog = $this->db->prepare("
+                        SELECT id FROM activities
+                        WHERE (contact_id = ? OR (related_type = 'contact' AND related_id = ?))
+                          AND tenant_id = ?
+                          AND deleted_at IS NULL
+                          AND subject LIKE 'Chuyển Pipeline%'
+                          AND created_at >= DATE_SUB(NOW(), INTERVAL 10 SECOND)
+                        LIMIT 1
+                    ");
+                    $stmtRecentStageLog->execute([$id, $id, $auth['tenant_id']]);
+                    if (!$stmtRecentStageLog->fetchColumn()) {
+                        $autoSubject = (!empty($effOldName) && $effOldName !== $effNewName)
+                            ? "Chuyển Pipeline: {$effOldName} ➔ {$effNewName}"
+                            : "Chuyển Pipeline sang: {$effNewName}";
+                        $autoNote = trim((string)($b['stage_note'] ?? $b['transition_note'] ?? ''));
+                        logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'note', $autoSubject, $autoNote, 'contact', $id);
+                        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'MOVE_STAGE', 'contact', $id, json_encode([
+                            'stage_id' => $effNewId,
+                            'stage_name' => $effNewName,
+                            'from_stage_name' => $effOldName,
+                            'pipeline_status' => $effNewSlug,
+                            'lead_status' => $b['lead_status'] ?? 'active',
+                            'note' => $autoNote
+                        ], JSON_UNESCAPED_UNICODE));
+                    }
+                } catch (\Throwable $eStageLog) {
+                    error_log("Auto stage log in update error: " . $eStageLog->getMessage());
+                }
+
                 require_once __DIR__ . '/../config/CapiHelper.php';
                 
                 // Load CAPI triggers mapping from settings dynamically
@@ -2316,7 +2368,7 @@ class ContactController {
                 if (!empty($capiTriggersRaw)) {
                     $capiMap = json_decode($capiTriggersRaw, true) ?: [];
                 }
-                    if (isset($capiMap[$newStatus]) && $capiMap[$newStatus] !== 'Skip' && $capiMap[$newStatus] !== 'None' && $capiMap[$newStatus] !== 'BAD') {
+                if (isset($capiMap[$newStatus]) && $capiMap[$newStatus] !== 'Skip' && $capiMap[$newStatus] !== 'None' && $capiMap[$newStatus] !== 'BAD') {
                     $evtName = $capiMap[$newStatus];
                     register_shutdown_function(function() use ($id, $evtName) {
                         try {
@@ -2327,7 +2379,7 @@ class ContactController {
                 }
 
                 // Update security_expires_at
-                $securityExpires = $this->getSecurityExpiration($newStatus);
+                $securityExpires = $this->getSecurityExpiration($newStatus ?: $currStatus);
                 $stmtTimer = $this->db->prepare("UPDATE contacts SET security_expires_at = ? WHERE id = ?");
                 $stmtTimer->execute([$securityExpires, $id]);
 
@@ -2339,8 +2391,12 @@ class ContactController {
                     $targetStageId = (int)$stmtGetStage->fetchColumn();
                 }
                 if ($targetStageId > 0) {
-                    require_once __DIR__ . '/../config/WorkflowHelper.php';
-                    WorkflowHelper::triggerTasks($this->db, $auth['tenant_id'], $id, $targetStageId, $auth['user_id']);
+                    try {
+                        require_once __DIR__ . '/../config/WorkflowHelper.php';
+                        WorkflowHelper::triggerTasks($this->db, $auth['tenant_id'], $id, $targetStageId, $auth['user_id']);
+                    } catch (\Throwable $eWf) {
+                        error_log("WorkflowHelper error in update: " . $eWf->getMessage());
+                    }
                 }
 
                 // Withdraw from databank and terminate other parallel contacts if deal won status is reached
@@ -2348,9 +2404,13 @@ class ContactController {
                 $dealWonStatus = $stmtWon ? $stmtWon->fetchColumn() : 'dat_coc';
                 if (empty($dealWonStatus)) $dealWonStatus = 'dat_coc';
 
-                if ($newStatus === $dealWonStatus) {
-                    require_once __DIR__ . '/../config/ParallelHelper.php';
-                    ParallelHelper::lockPersonForWinningContact($this->db, (int)$id);
+                if ($newStatus === $dealWonStatus || $newStatus === 'enrolled') {
+                    try {
+                        require_once __DIR__ . '/../config/ParallelHelper.php';
+                        ParallelHelper::lockPersonForWinningContact($this->db, (int)$id);
+                    } catch (\Throwable $ePar) {
+                        error_log("ParallelHelper error in update: " . $ePar->getMessage());
+                    }
                 }
             }
         }
@@ -2664,61 +2724,15 @@ class ContactController {
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
 
-        // Trigger CAPI / Security timer updates on status change
-        if ($newStatus !== $currStatus) {
-            require_once __DIR__ . '/../config/CapiHelper.php';
-            
-            $capiTriggersRaw = $this->getSetting('capi_event_triggers', '');
-            $capiMap = [];
-            if (!empty($capiTriggersRaw)) {
-                $capiMap = json_decode($capiTriggersRaw, true) ?: [];
-            }
-            
-            if (empty($capiMap)) {
-                $capiMap = [
-                    'dong_y_gap' => 'Schedule',
-                    'da_gap' => 'Schedule',
-                    'proposal_sent' => 'Schedule',
-                    'not_lead' => 'BAD',
-                    'dat_coc' => 'Purchase',
-                    'deposit_tuition_payment' => 'Purchase',
-                    'enrolled' => 'Purchase'
-                ];
-            }
-            
-            if (isset($capiMap[$newStatus]) && $capiMap[$newStatus] !== 'Skip' && $capiMap[$newStatus] !== 'None' && $capiMap[$newStatus] !== 'BAD') {
-                CapiHelper::sendEvent($this->db, $id, $capiMap[$newStatus]);
-            }
-
-            // Update security timer
-            $securityExpires = $this->getSecurityExpiration($newStatus);
-            $stmtTimer = $this->db->prepare("UPDATE contacts SET security_expires_at = ? WHERE id = ?");
-            $stmtTimer->execute([$securityExpires, $id]);
-
-            // Auto spawn workflow tasks
-            require_once __DIR__ . '/../config/WorkflowHelper.php';
-            WorkflowHelper::triggerTasks($this->db, $auth['tenant_id'], $id, $stageId, $auth['user_id']);
-
-            // Lock winning contact
-            $stmtWon = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'deal_won_status' LIMIT 1");
-            $dealWonStatus = $stmtWon ? $stmtWon->fetchColumn() : 'enrolled';
-            if (empty($dealWonStatus)) $dealWonStatus = 'enrolled';
-
-            if ($newStatus === $dealWonStatus || $newStatus === 'enrolled') {
-                require_once __DIR__ . '/../config/ParallelHelper.php';
-                ParallelHelper::lockPersonForWinningContact($this->db, (int)$id);
-            }
-        }
-
         $currStageName = !empty($b['from_stage_name']) ? trim($b['from_stage_name']) : '';
-        if (empty($currStageName) && $currStageId > 0) {
+        if ((empty($currStageName) || $currStageName === ($b['to_stage_name'] ?? '')) && $currStageId > 0) {
             $sOld = $this->db->prepare("SELECT name FROM pipeline_stages WHERE id = ? AND tenant_id = ? LIMIT 1");
             $sOld->execute([$currStageId, $auth['tenant_id']]);
             $currStageName = $sOld->fetchColumn() ?: '';
         }
         $newStageName = !empty($b['to_stage_name']) ? trim($b['to_stage_name']) : ($targetStageData['name'] ?? $newStatus);
 
-        // Build clear, informative log title and note
+        // Build clear, informative log title and note IMMEDIATELY after stage update so it is never lost
         if ($targetLeadStatus === 'nurture') {
             $subject = "Chuyển trạng thái: Nurture (Nuôi dưỡng)";
         } elseif ($targetLeadStatus === 'lost') {
@@ -2747,6 +2761,71 @@ class ContactController {
         $ownerId = (int)($currentContact['owner_id'] ?? 0);
         if ($ownerId > 0 && $ownerId !== $currentUid && !in_array($ownerId, $notifyUserIds, true)) {
             $notifyUserIds[] = $ownerId;
+        }
+
+        // Record stage transition interaction & audit log FIRST before external helpers
+        logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'note', $subject, $fullNote, 'contact', $id);
+        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'MOVE_STAGE', 'contact', $id, json_encode([
+            'stage_id' => $stageId,
+            'stage_name' => $newStageName,
+            'from_stage_name' => $currStageName,
+            'pipeline_status' => $newStatus,
+            'lead_status' => $targetLeadStatus,
+            'note' => $fullNote,
+            'notify_user_ids' => $notifyUserIds
+        ], JSON_UNESCAPED_UNICODE));
+
+        // Trigger CAPI / Security timer / Workflow / Parallel lock updates safely
+        if ($newStatus !== $currStatus) {
+            try {
+                require_once __DIR__ . '/../config/CapiHelper.php';
+                $capiTriggersRaw = $this->getSetting('capi_event_triggers', '');
+                $capiMap = !empty($capiTriggersRaw) ? (json_decode($capiTriggersRaw, true) ?: []) : [];
+                if (empty($capiMap)) {
+                    $capiMap = [
+                        'dong_y_gap' => 'Schedule',
+                        'da_gap' => 'Schedule',
+                        'proposal_sent' => 'Schedule',
+                        'not_lead' => 'BAD',
+                        'dat_coc' => 'Purchase',
+                        'deposit_tuition_payment' => 'Purchase',
+                        'enrolled' => 'Purchase'
+                    ];
+                }
+                if (isset($capiMap[$newStatus]) && $capiMap[$newStatus] !== 'Skip' && $capiMap[$newStatus] !== 'None' && $capiMap[$newStatus] !== 'BAD') {
+                    CapiHelper::sendEvent($this->db, $id, $capiMap[$newStatus]);
+                }
+            } catch (\Throwable $eCapi) {
+                error_log("CapiHelper error in moveStage: " . $eCapi->getMessage());
+            }
+
+            try {
+                $securityExpires = $this->getSecurityExpiration($newStatus);
+                $stmtTimer = $this->db->prepare("UPDATE contacts SET security_expires_at = ? WHERE id = ?");
+                $stmtTimer->execute([$securityExpires, $id]);
+            } catch (\Throwable $eTimer) {
+                error_log("Security timer error in moveStage: " . $eTimer->getMessage());
+            }
+
+            try {
+                require_once __DIR__ . '/../config/WorkflowHelper.php';
+                WorkflowHelper::triggerTasks($this->db, $auth['tenant_id'], $id, $stageId, $auth['user_id']);
+            } catch (\Throwable $eWf) {
+                error_log("WorkflowHelper error in moveStage: " . $eWf->getMessage());
+            }
+
+            try {
+                $stmtWon = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'deal_won_status' LIMIT 1");
+                $dealWonStatus = $stmtWon ? $stmtWon->fetchColumn() : 'enrolled';
+                if (empty($dealWonStatus)) $dealWonStatus = 'enrolled';
+
+                if ($newStatus === $dealWonStatus || $newStatus === 'enrolled') {
+                    require_once __DIR__ . '/../config/ParallelHelper.php';
+                    ParallelHelper::lockPersonForWinningContact($this->db, (int)$id);
+                }
+            } catch (\Throwable $ePar) {
+                error_log("ParallelHelper error in moveStage: " . $ePar->getMessage());
+            }
         }
 
         if (!empty($notifyUserIds)) {
@@ -2782,17 +2861,6 @@ class ContactController {
                 error_log("Notification error in moveStage: " . $notifEx->getMessage());
             }
         }
-
-        logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'note', $subject, $fullNote, 'contact', $id);
-        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'MOVE_STAGE', 'contact', $id, json_encode([
-            'stage_id' => $stageId,
-            'stage_name' => $newStageName,
-            'from_stage_name' => $currStageName,
-            'pipeline_status' => $newStatus,
-            'lead_status' => $targetLeadStatus,
-            'note' => $fullNote,
-            'notify_user_ids' => $notifyUserIds
-        ], JSON_UNESCAPED_UNICODE));
 
         try {
             if (!class_exists('DomationContactMatcher') && file_exists(__DIR__ . '/../utils/DomationContactMatcher.php')) {
@@ -2832,7 +2900,12 @@ class ContactController {
         }
 
         self::invalidatePersonaCache((int)($auth['tenant_id'] ?? 1));
-        respond(200, null, 'Đã cập nhật stage thành công');
+        respond(200, [
+            'stage_id' => $stageId,
+            'pipeline_status' => $newStatus,
+            'stage_name' => $newStageName,
+            'lead_status' => $targetLeadStatus
+        ], 'Đã cập nhật stage thành công');
     }
 
 
@@ -3844,11 +3917,25 @@ class ContactController {
         }
     }
 
+    public static function invalidateProgramsCache(int $tid = 0): void {
+        $dir = sys_get_temp_dir();
+        if ($tid > 0) {
+            @unlink($dir . '/myerp_programs_v1_' . $tid . '.json');
+            @unlink($dir . '/myerp_programs_v2_' . $tid . '.json');
+            unset(self::$projectsCache[$tid]);
+        } else {
+            foreach (glob($dir . '/myerp_programs_v*.json') ?: [] as $f) {
+                @unlink($f);
+            }
+            self::$projectsCache = [];
+        }
+    }
+
     public function getPrograms(array $auth): void {
         try {
             $tid = (int)($auth['tenant_id'] ?? 1);
-            $cacheFile = sys_get_temp_dir() . '/myerp_programs_v1_' . $tid . '.json';
-            if (is_file($cacheFile) && (time() - filemtime($cacheFile)) < 120) {
+            $cacheFile = sys_get_temp_dir() . '/myerp_programs_v2_' . $tid . '.json';
+            if (is_file($cacheFile) && (time() - filemtime($cacheFile)) < 60) {
                 $cached = @json_decode((string)@file_get_contents($cacheFile), true);
                 if (is_array($cached)) {
                     respond(200, $cached, 'Danh sách chương trình');
@@ -3858,7 +3945,12 @@ class ContactController {
             $sql = "
                 SELECT DISTINCT TRIM(name) as name 
                 FROM projects 
-                WHERE tenant_id = ? AND (status IS NULL OR status != 'deleted') AND name IS NOT NULL AND TRIM(name) != ''
+                WHERE tenant_id = ?
+                  AND deleted_at IS NULL
+                  AND COALESCE(is_archived, 0) = 0
+                  AND (status IS NULL OR status != 'deleted')
+                  AND name IS NOT NULL
+                  AND TRIM(name) != ''
                 ORDER BY name ASC
             ";
             $stmt = $this->db->prepare($sql);
@@ -3868,7 +3960,7 @@ class ContactController {
             $result = [];
             foreach ($rows as $r) {
                 $trimmed = trim((string)$r);
-                if ($trimmed !== '') {
+                if ($trimmed !== '' && !preg_match('/\bbba\b/i', $trimmed)) {
                     $result[] = $trimmed;
                 }
             }
@@ -6071,7 +6163,12 @@ class ContactController {
                 }
             }
             if ($programFilter !== '' && $programFilter !== 'all') {
-                if ($r['_school'] !== $programFilter && $r['_school'] !== $normProgFilter && stripos((string)$r['_school'], $programFilter) === false && stripos((string)$r['school_program_raw'], $programFilter) === false) {
+                $pfHasMbaOnly = (stripos($programFilter, 'mba') !== false && stripos($programFilter, 'emba') === false);
+                $rawSchoolProg = (string)$r['school_program_raw'];
+                if ($pfHasMbaOnly && stripos($rawSchoolProg, 'emba') !== false && $r['_school'] !== $programFilter) {
+                    return false;
+                }
+                if ($r['_school'] !== $programFilter && $r['_school'] !== $normProgFilter && stripos((string)$r['_school'], $programFilter) === false && stripos($rawSchoolProg, $programFilter) === false) {
                     return false;
                 }
             }

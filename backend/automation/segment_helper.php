@@ -861,20 +861,20 @@ function buildSegmentWhereClause($criteriaJson, $workspaceId, $segmentId = null)
                         $allParams[] = $pid;
                         $allParams[] = $pid;
                     } else {
-                        $likeVal = '%' . trim((string)$val) . '%';
+                        require_once __DIR__ . '/../utils/search_helpers.php';
+                        $sProgMatch = buildCrmProgramColumnMatchSql('s.program', (string)$val, $allParams);
+                        $cProgMatch = buildCrmProgramColumnMatchSql('c.program', (string)$val, $allParams);
+                        $prNameMatch = buildCrmProgramColumnMatchSql('pr.name', (string)$val, $allParams);
                         $sqlExpr = "(
-                            s.program LIKE ?
+                            {$sProgMatch}
                             OR EXISTS (
                                 SELECT 1 FROM contacts c
                                 LEFT JOIN projects pr ON pr.id = c.project_id
                                 WHERE c.id = s.contact_id AND c.deleted_at IS NULL
-                                  AND (c.program LIKE ? OR pr.name LIKE ? OR pr.code LIKE ?)
+                                  AND ({$cProgMatch} OR {$prNameMatch} OR LOWER(TRIM(COALESCE(pr.code, ''))) = LOWER(?))
                             )
                         )";
-                        $allParams[] = $likeVal;
-                        $allParams[] = $likeVal;
-                        $allParams[] = $likeVal;
-                        $allParams[] = $likeVal;
+                        $allParams[] = trim((string)$val);
                     }
                     $condSqls[] = $negate ? "NOT $sqlExpr" : $sqlExpr;
                     continue;

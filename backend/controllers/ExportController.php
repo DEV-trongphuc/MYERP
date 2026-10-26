@@ -507,16 +507,23 @@ class ExportController {
                 }
             }
 
-            // Program / Project multi-filter (100% synced with AgentToolRegistry)
+            // Program / Project multi-filter (100% synced with AgentToolRegistry & search_helpers)
             if ($programParam !== '' && $programParam !== 'all') {
+                require_once __DIR__ . '/../utils/search_helpers.php';
                 $progList = array_filter(array_map('trim', explode(',', $programParam)));
                 if (!empty($progList)) {
                     $progOrs = [];
                     foreach ($progList as $pItem) {
-                        $progOrs[] = "(t.program LIKE ? OR EXISTS (SELECT 1 FROM projects prj_f WHERE prj_f.id = t.project_id AND (prj_f.name LIKE ? OR prj_f.code LIKE ?)))";
-                        $params[] = '%' . $pItem . '%';
-                        $params[] = '%' . $pItem . '%';
-                        $params[] = '%' . $pItem . '%';
+                        if (is_numeric($pItem) && (int)$pItem > 0) {
+                            $progOrs[] = "(t.project_id = ? OR ((t.project_id IS NULL OR t.project_id = 0) AND t.program IS NOT NULL AND t.program != '' AND EXISTS (SELECT 1 FROM projects prj_f WHERE prj_f.id = ? AND LOWER(TRIM(t.program)) = LOWER(TRIM(prj_f.name)))))";
+                            $params[] = (int)$pItem;
+                            $params[] = (int)$pItem;
+                        } else {
+                            $progMatch = buildCrmProgramColumnMatchSql('t.program', $pItem, $params);
+                            $projNameMatch = buildCrmProgramColumnMatchSql('prj_f.name', $pItem, $params);
+                            $progOrs[] = "({$progMatch} OR EXISTS (SELECT 1 FROM projects prj_f WHERE prj_f.id = t.project_id AND ({$projNameMatch} OR LOWER(TRIM(COALESCE(prj_f.code, ''))) = LOWER(?))))";
+                            $params[] = $pItem;
+                        }
                     }
                     $where[] = "(" . implode(' OR ', $progOrs) . ")";
                 }
@@ -2175,13 +2182,20 @@ class ExportController {
         }
 
         if ($programsParam !== '' && $programsParam !== 'all') {
+            require_once __DIR__ . '/../utils/search_helpers.php';
             $progList = array_filter(array_map('trim', explode(',', $programsParam)));
             if (!empty($progList)) {
                 $progOrs = [];
                 foreach ($progList as $pItem) {
-                    $progOrs[] = "(c.program LIKE ? OR p.name LIKE ?)";
-                    $params[] = '%' . $pItem . '%';
-                    $params[] = '%' . $pItem . '%';
+                    if (is_numeric($pItem) && (int)$pItem > 0) {
+                        $progOrs[] = "(d.project_id = ? OR c.project_id = ?)";
+                        $params[] = (int)$pItem;
+                        $params[] = (int)$pItem;
+                    } else {
+                        $cProgMatch = buildCrmProgramColumnMatchSql('c.program', $pItem, $params);
+                        $pNameMatch = buildCrmProgramColumnMatchSql('p.name', $pItem, $params);
+                        $progOrs[] = "({$cProgMatch} OR {$pNameMatch})";
+                    }
                 }
                 $where[] = "(" . implode(' OR ', $progOrs) . ")";
             }

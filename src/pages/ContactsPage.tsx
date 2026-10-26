@@ -1589,10 +1589,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     if (activeFilters.projectId) {
       params.project_id = activeFilters.projectId;
       params.projects = activeFilters.projectId;
-      if (!activeFilters.projectId.includes(',')) {
-        const matchedProj = projects.find((p: any) => String(p.id) === String(activeFilters.projectId));
-        if (matchedProj?.name) params.program = matchedProj.name;
-      }
     }
     if (activeFilters.campaignId) {
       params.campaign_id = activeFilters.campaignId;
