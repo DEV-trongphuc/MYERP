@@ -714,16 +714,11 @@ class HRMController {
         }
         $approverId2 = !empty($b['approver_id_2']) ? (int)$b['approver_id_2'] : null;
 
-        // Ensure HR / Hành chính is ALWAYS included in related_user_ids (Người liên quan)
-        $relArr = !empty($b['related_user_ids']) ? (is_array($b['related_user_ids']) ? $b['related_user_ids'] : json_decode($b['related_user_ids'], true)) : [];
+        // Giữ nguyên danh sách related_user_ids do người dùng chọn từ Frontend, không tự ý push thêm
+        $relArr = !empty($b['related_user_ids']) ? (is_array($b['related_user_ids']) ? $b['related_user_ids'] : json_decode((string)$b['related_user_ids'], true)) : [];
         if (!is_array($relArr)) $relArr = [];
-        $stmtHrLead = $this->db->prepare("SELECT id FROM users WHERE (full_name LIKE '%Duy Phương%' OR username = 'phuongntd' OR role = 'hr') AND id != ? LIMIT 1");
-        $stmtHrLead->execute([$auth['user_id']]);
-        $hrLeaderId = (int)$stmtHrLead->fetchColumn();
-        if ($hrLeaderId > 0 && $hrLeaderId !== (int)$approverId && !in_array($hrLeaderId, $relArr, true)) {
-            $relArr[] = $hrLeaderId;
-        }
-        $relatedUserIds = !empty($relArr) ? json_encode(array_values(array_unique($relArr))) : null;
+        $relArr = array_values(array_unique(array_filter(array_map('intval', $relArr))));
+        $relatedUserIds = !empty($relArr) ? json_encode($relArr) : null;
 
         $leaveType = $b['leave_type'];
         $otType = null;

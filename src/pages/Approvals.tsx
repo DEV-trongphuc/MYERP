@@ -1607,19 +1607,8 @@ export default function Approvals() {
         finalApproverId = effectiveAppVal1;
       }
 
-      // Ensure HR (Duy Phương) is included in related users for attendance/HR workflows when empty, without injecting unexpected directors
-      const isHrWf = selectedWorkflowDef?.category === 'hr' || ['leave', 'late_early', 'overtime', 'remote_work', 'attendance_bulk', 'recruitment'].includes(formType);
-      let finalRelatedUserIds = [...relatedUserIds];
-      if (isHrWf && finalRelatedUserIds.length === 0) {
-        const hrLeader = getDefaultHrLeader();
-        const primaryApproverId = appVal1 || finalApproverId;
-        if (hrLeader && Number(hrLeader.id) !== Number(primaryApproverId)) {
-          const hrId = Number(hrLeader.id);
-          if (!finalRelatedUserIds.includes(hrId)) {
-            finalRelatedUserIds.push(hrId);
-          }
-        }
-      }
+      // Giữ nguyên 100% danh sách Người theo dõi (relatedUserIds) mà người dùng đã chọn trên form, tuyệt đối không push thêm khi bấm Gửi
+      const finalRelatedUserIds = [...relatedUserIds];
 
       if (selectedWorkflowDef?.id === 'print_stamp_send') {
         if (!pssReqEmployeeId) {
@@ -2880,32 +2869,25 @@ export default function Approvals() {
     }
   }, [otType, formType, users, editingItemId, currentDraftId]);
 
-  // Mặc định tự động chọn Leader / Trưởng phòng HR vào danh sách Người liên quan (theo dõi) cho đề xuất công / HR
+  // Chỉ tự động fill mặc định Người theo dõi (HR) 1 lần khi mở/chuyển loại quy trình. Sau đó người dùng chọn/xóa như thế nào thì giữ nguyên 100%, không push thêm.
   useEffect(() => {
     if (editingItemId || editingItemIdRef.current || currentDraftId || isHydratingEditOrDraftRef.current) return;
+    if (!showCreateModal) return;
     const isHrWf = selectedWorkflowDef?.category === 'hr' || ['leave', 'late_early', 'overtime', 'remote_work', 'attendance_bulk', 'recruitment'].includes(formType);
     const isProposerManagerOrLeader = ['manager', 'director', 'admin', 'superadmin', 'super_admin', 'leader', 'truongphong', 'head_of_department'].includes(String(proposerUser?.role || user?.role).toLowerCase()) || Boolean(proposerUser?.is_team_leader || (user as any)?.is_team_leader);
 
-    // QUY TẮC: Nếu là Trưởng phòng/Quản lý đề xuất cập nhật công (attendance_bulk):
-    // Tự tạo, tự duyệt cho mình mà KHÔNG cần ai liên quan (để trống).
     if (isHrWf && users.length > 0 && !(formType === 'attendance_bulk' && isProposerManagerOrLeader)) {
       const hrLeader = getDefaultHrLeader();
-      const currentApprover = customApprover1 || getDefaultManagerApprover(proposerUser || user, selectedWorkflowDef);
-      
-      // If HR is not the direct approver, ensure HR leader is in relatedUserIds
-      if (hrLeader && currentApprover && Number(currentApprover.id) !== Number(hrLeader.id)) {
-        const hrId = Number(hrLeader.id);
-        setRelatedUserIds(prev => prev.includes(hrId) ? prev : [...prev, hrId]);
+      const defaultApprover = getDefaultManagerApprover(proposerUser || user, selectedWorkflowDef);
+      if (hrLeader && (!defaultApprover || Number(defaultApprover.id) !== Number(hrLeader.id))) {
+        setRelatedUserIds([Number(hrLeader.id)]);
+      } else {
+        setRelatedUserIds([]);
       }
-    } else if (formType === 'attendance_bulk' && isProposerManagerOrLeader) {
-      // Dọn sạch HR leader nếu đã bị tự động thêm trước đó khi chuyển tab
-      const hrLeader = getDefaultHrLeader();
-      if (hrLeader) {
-        const hrId = Number(hrLeader.id);
-        setRelatedUserIds(prev => prev.filter(id => id !== hrId));
-      }
+    } else {
+      setRelatedUserIds([]);
     }
-  }, [formType, selectedWorkflowDef, proposerUser, customApprover1?.id, users, teams, editingItemId, currentDraftId]);
+  }, [showCreateModal, formType, selectedWorkflowDef?.id, editingItemId, currentDraftId]);
 
   // --- DRAFT & EXIT CONFIRMATION HELPERS ---
   const getFormSnapshot = () => {
@@ -6000,14 +5982,7 @@ export default function Approvals() {
       }
     }
 
-    // Tự động thêm Trưởng phòng HCNS (Phương) vào Người theo dõi cho các đề xuất Chấm công / HR
-    if (item.type === 'checkin' || item.type === 'attendance_bulk' || item.type === 'leave') {
-      const phuongUser = usersByNameMap.get('phuongntd') || usersByNameMap.get('nguyễn thị duy phương') ||
-        Array.from(usersMap.values()).find(u => (u.full_name || u.name || '').toLowerCase().includes('duy phương') || u.username === 'phuongntd');
-      if (phuongUser && !relIds.includes(Number(phuongUser.id))) {
-        relIds.push(Number(phuongUser.id));
-      }
-    }
+
 
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
