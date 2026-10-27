@@ -221,6 +221,7 @@ class CloudFileController {
                 $category, $visibility, $project_id, $contact_id, $campaign_id
             ]);
         }
+        $insertedFileId = $this->db->lastInsertId();
 
         // Auto notification for contact document upload
         if ($contact_id) {
@@ -386,7 +387,7 @@ class CloudFileController {
             });
         }
 
-        respond(201, ['id' => $this->db->lastInsertId(), 'path' => $dbPath], 'Đã tải tệp tin lên thành công');
+        respond(201, ['id' => $insertedFileId, 'path' => $dbPath], 'Đã tải tệp tin lên thành công');
     }
 
     public function update(array $auth, int $id): void {

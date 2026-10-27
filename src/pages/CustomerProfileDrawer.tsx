@@ -4125,9 +4125,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       });
       const resultData = res?.data?.data || res?.data || {};
       const updatedFields: string[] = Array.isArray(resultData.updated_fields) ? resultData.updated_fields : [];
+      if (resultData.contact && resultData.contact.id) {
+        const normalized = normalizeContactData(resultData.contact);
+        setFormData((prev: any) => ({ ...prev, ...normalized }));
+        setBaseData((prev: any) => ({ ...prev, ...normalized }));
+        onUpdate?.(normalized);
+      }
       if (resultData.updated && updatedFields.length > 0) {
         addToast(`✨ AI đã tự động quét hồ sơ & điền: ${updatedFields.join(', ')}`, 'success');
-        fetchData();
+        fetchData(activeTab, true);
         window.dispatchEvent(new CustomEvent('myerp:contact-updated', { detail: { contactId: cid } }));
       } else if (isExplicitButtonClick) {
         addToast('Đã kiểm tra toàn bộ hồ sơ đính kèm (thông tin đã đầy đủ hoặc chưa phát hiện trường mới).', 'info');
@@ -4143,20 +4149,21 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     }
   };
 
-  // Automatically scan "suspect" contacts (has uploaded files in docs, but missing both CCCD and Passport)
+  // Automatically scan contacts that have uploaded files in docs when missing CCCD/Passport or key student fields
   useEffect(() => {
     if (!effectiveContactId || !contact || !Array.isArray(docs) || docs.length === 0) return;
     const realFiles = docs.filter((d: any) => !d.is_link && !d.isMilestoneAttachment);
     if (realFiles.length === 0) return;
     const hasIdOrPassport = Boolean(
-      String(contact.citizen_id || (contact as any).cccd || (contact as any).id_card || contact.passport || (contact as any).passport_no || '').trim()
+      String(formData.citizen_id || contact.citizen_id || (contact as any).cccd || (contact as any).id_card || formData.passport || contact.passport || (contact as any).passport_no || '').trim()
     );
+    const needsStudentEnrich = isStudent && studentMissingFields.some(mf => ['citizen_id', 'company', 'job_title', 'industry', 'birthday', 'gender', 'program', 'admission_date', 'student_id', 'address'].includes(mf.key));
     const key = `${effectiveContactId}_${realFiles.length}`;
-    if (!hasIdOrPassport && !autoScannedContactsRef.current.has(key)) {
+    if ((!hasIdOrPassport || needsStudentEnrich) && !autoScannedContactsRef.current.has(key)) {
       autoScannedContactsRef.current.add(key);
       triggerAutoOcrEnrich(effectiveContactId, false, false);
     }
-  }, [effectiveContactId, contact?.id, contact?.citizen_id, contact?.passport, docs.length]);
+  }, [effectiveContactId, contact?.id, formData.citizen_id, formData.passport, isStudent, studentMissingFields.length, docs.length]);
 
   useEffect(() => {
     if (effectiveContactId) {
@@ -5094,6 +5101,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
       if (tabToLoad === 'docs') {
         await fetchContactDocs(currentCId);
+      } else if (shouldFetchContact) {
+        fetchContactDocs(currentCId).catch(() => {});
       }
     } catch (e: any) {
       console.error("Error fetching tab data:", e);
@@ -10327,20 +10336,49 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 </div>
                               </div>
                             </div>
-                            <span
-                              style={{
-                                fontSize: '0.68rem',
-                                fontWeight: 700,
-                                padding: '2px 8px',
-                                borderRadius: '999px',
-                                background: '#fef3c7',
-                                color: '#b45309',
-                                border: '1px solid #fcd34d',
-                                whiteSpace: 'nowrap'
-                              }}
-                            >
-                              Cần bổ sung ({studentMissingFields.length})
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                              {docs.some((d: any) => !d.is_link && !d.isMilestoneAttachment) && (
+                                <button
+                                  type="button"
+                                  disabled={isAutoOcrScanning}
+                                  onClick={() => triggerAutoOcrEnrich(effectiveContactId, true, true)}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    fontSize: '0.68rem',
+                                    fontWeight: 700,
+                                    padding: '2.5px 9px',
+                                    borderRadius: '999px',
+                                    background: '#BD1D2D',
+                                    color: '#ffffff',
+                                    border: 'none',
+                                    cursor: isAutoOcrScanning ? 'wait' : 'pointer',
+                                    whiteSpace: 'nowrap',
+                                    boxShadow: '0 1px 3px rgba(189, 29, 45, 0.25)',
+                                    opacity: isAutoOcrScanning ? 0.75 : 1
+                                  }}
+                                  title="Quét tự động CCCD/Passport, CV, Admission Form trong mục Hồ sơ để điền các trường còn thiếu"
+                                >
+                                  <Sparkles size={11} className={isAutoOcrScanning ? 'spin' : ''} />
+                                  <span>{isAutoOcrScanning ? 'Đang quét AI...' : 'Quét AI Tự động điền'}</span>
+                                </button>
+                              )}
+                              <span
+                                style={{
+                                  fontSize: '0.68rem',
+                                  fontWeight: 700,
+                                  padding: '2px 8px',
+                                  borderRadius: '999px',
+                                  background: '#fef3c7',
+                                  color: '#b45309',
+                                  border: '1px solid #fcd34d',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                Cần bổ sung ({studentMissingFields.length})
+                              </span>
+                            </div>
                           </div>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
                             {studentMissingFields.map(mf => (
@@ -11363,7 +11401,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 { value: 'female', label: 'Nữ' },
                                 { value: 'other', label: 'Khác' }
                               ]}
-                              value={formData.gender || ''}
+                              value={(() => {
+                                const g = String(formData.gender || '').trim().toLowerCase();
+                                if (g === 'male' || g === 'nam' || g === 'm') return 'male';
+                                if (g === 'female' || g === 'nữ' || g === 'nu' || g === 'f') return 'female';
+                                if (g === 'other' || g === 'khác' || g === 'khac') return 'other';
+                                return formData.gender || '';
+                              })()}
                               onChange={val => setFormData((prev: any) => ({ ...prev, gender: val as string }))}
                             />
                           </div>
@@ -11411,7 +11455,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             )}
                             <AddressSelect
                               label="Địa chỉ"
-                              value={formData.address || ''}
+                              value={formData.address || formData.city || ''}
                               onChange={addr => setFormData((prev: any) => ({ ...prev, address: addr }))}
                               placeholder="Chọn địa chỉ liên hệ..."
                               zIndex={Math.min(effectiveZIndex + 20, 2147483646)}
@@ -12456,15 +12500,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           <div className="form-group">
                             <label className="form-label">Ngành nghề kinh doanh</label>
                             <CustomSelect
+                              searchable
                               options={[
                                 { value: '', label: '— Chưa chọn —' },
-                                { value: 'real_estate', label: 'Bất động sản' },
-                                { value: 'finance', label: 'Tài chính / Ngân hàng' },
-                                { value: 'tech', label: 'Công nghệ / IT' },
-                                { value: 'manufacturing', label: 'Sản xuất / Xây dựng' },
-                                { value: 'medical', label: 'Y tế / Dược phẩm' },
-                                { value: 'education', label: 'Giáo dục' },
-                                { value: 'other', label: 'Ngành nghề khác' }
+                                ...Array.from(new Set([
+                                  ...industrySuggestions,
+                                  ...(formData.industry && !industrySuggestions.includes(formData.industry) ? [formData.industry] : [])
+                                ])).map(ind => ({ value: ind, label: ind }))
                               ]}
                               value={formData.industry || ''}
                               onChange={val => setFormData((prev: any) => ({ ...prev, industry: val as string }))}
