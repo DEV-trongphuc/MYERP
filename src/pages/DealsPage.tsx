@@ -3731,10 +3731,13 @@ export const DealsPage: React.FC = () => {
                           onChange={v => setStudyStatus(v as string)}
                           options={[
                             { value: '', label: 'Tất cả' },
-                            { value: 'studying', label: 'Đang học' },
-                            { value: 'reserved', label: 'Bảo lưu' },
-                            { value: 'completed', label: 'Hoàn thành' },
-                            { value: 'dropped', label: 'Nghỉ học' }
+                            { value: 'enrolled', label: 'Enrolled (Nhập học)' },
+                            { value: 'training', label: 'Tranning (Đào tạo)' },
+                            { value: 'studying', label: 'Studying (Đang học)' },
+                            { value: 'postpone', label: 'Postpone (Bảo lưu)' },
+                            { value: 'withdraw', label: 'Withdraw (Rút / Tạm ngưng)' },
+                            { value: 'completed', label: 'Completed (Hoàn thành)' },
+                            { value: 'graduated', label: 'Graduated (Tốt nghiệp)' }
                           ]}
                         />
                       </div>

@@ -779,40 +779,56 @@ class DepositController {
                 $isFirstMilestone = false;
             }
 
-            // Update contact pipeline stage to deal won status and set temperature to 'hot' (Sôi = xuống tiền)
-            // Also sync the contact's expected_revenue with the actual deposit price and keep stage_id + pipeline_status in sync
-            $stmtWon = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'deal_won_status' LIMIT 1");
-            $dealWonStatus = $stmtWon ? trim((string)$stmtWon->fetchColumn()) : 'deposit_tuition_payment';
-            if (empty($dealWonStatus)) $dealWonStatus = 'deposit_tuition_payment';
+            // Update contact pipeline stage when creating a deposit/SO:
+            // If contact is not already in stage 14 (enrolled), move to Stage 13 (deposit_tuition_payment) and log the transition if stage changed
+            $stmtCurContact = $this->db->prepare("SELECT c.stage_id, c.pipeline_status, ps.name AS stage_name, ps.order_index FROM contacts c LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id WHERE c.id = ? AND c.tenant_id = ? LIMIT 1");
+            $stmtCurContact->execute([$contactId, $auth['tenant_id']]);
+            $curContactRow = $stmtCurContact->fetch(PDO::FETCH_ASSOC) ?: [];
+            $curStageId = !empty($curContactRow['stage_id']) ? (int)$curContactRow['stage_id'] : 0;
+            $curPipelineStatus = (string)($curContactRow['pipeline_status'] ?? '');
+            $curStageName = (string)($curContactRow['stage_name'] ?? $curPipelineStatus);
+            $isAlreadyEnrolled = ($curStageId === 44 || in_array($curPipelineStatus, ['enrolled', 'hoc_vien'], true));
 
-            $wonSlugAliases = [
-                'dat_coc' => 'deposit_tuition_payment',
-                'da_coc' => 'deposit_tuition_payment',
-                'coc' => 'deposit_tuition_payment',
-                'dong_le_phi_ho_so' => 'deposit_tuition_payment',
-                'dong_deal' => 'enrolled',
-                'thanh_cong' => 'enrolled',
-                'hoc_vien' => 'enrolled',
-                'nhap_hoc' => 'enrolled',
-            ];
-            $canonicalWonSlug = $wonSlugAliases[strtolower($dealWonStatus)] ?? $dealWonStatus;
-            $stmtWonStage = $this->db->prepare("SELECT id, system_slug FROM pipeline_stages WHERE tenant_id = ? AND (system_slug = ? OR system_slug = ? OR CAST(id AS CHAR) = ?) ORDER BY order_index DESC LIMIT 1");
-            $stmtWonStage->execute([$auth['tenant_id'], $canonicalWonSlug, $dealWonStatus, $dealWonStatus]);
-            $wonStageRow = $stmtWonStage->fetch(PDO::FETCH_ASSOC);
-            if (!$wonStageRow) {
-                $stmtFallbackStage = $this->db->prepare("SELECT id, system_slug FROM pipeline_stages WHERE tenant_id = ? AND (system_slug IN ('deposit_tuition_payment', 'enrolled') OR is_won = 1) ORDER BY order_index ASC LIMIT 1");
-                $stmtFallbackStage->execute([$auth['tenant_id']]);
-                $wonStageRow = $stmtFallbackStage->fetch(PDO::FETCH_ASSOC);
-            }
-            $targetWonStageId = !empty($wonStageRow['id']) ? (int)$wonStageRow['id'] : null;
-            $targetWonSlug = !empty($wonStageRow['system_slug']) ? (string)$wonStageRow['system_slug'] : $canonicalWonSlug;
-
-            if ($targetWonStageId) {
-                $stmtUpC = $this->db->prepare("UPDATE contacts SET stage_id = ?, pipeline_status = ?, status = 'customer', temperature = 'hot', suggested_temperature = 'hot', expected_revenue = ? WHERE id = ? AND tenant_id = ?");
-                $stmtUpC->execute([$targetWonStageId, $targetWonSlug, $price, $contactId, $auth['tenant_id']]);
+            if ($isAlreadyEnrolled) {
+                $stmtUpC = $this->db->prepare("UPDATE contacts SET temperature = 'hot', suggested_temperature = 'hot', expected_revenue = ? WHERE id = ? AND tenant_id = ?");
+                $stmtUpC->execute([$price, $contactId, $auth['tenant_id']]);
             } else {
-                $stmtUpC = $this->db->prepare("UPDATE contacts SET pipeline_status = ?, status = 'customer', temperature = 'hot', suggested_temperature = 'hot', expected_revenue = ? WHERE id = ? AND tenant_id = ?");
-                $stmtUpC->execute([$targetWonSlug, $price, $contactId, $auth['tenant_id']]);
+                $stmtDepStage = $this->db->prepare("SELECT id, name, system_slug FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('deposit_tuition_payment', 'dat_coc', 'dong_le_phi_ho_so') ORDER BY order_index DESC LIMIT 1");
+                $stmtDepStage->execute([$auth['tenant_id']]);
+                $depStageRow = $stmtDepStage->fetch(PDO::FETCH_ASSOC);
+                $targetDepStageId = !empty($depStageRow['id']) ? (int)$depStageRow['id'] : 43;
+                $targetDepSlug = !empty($depStageRow['system_slug']) ? (string)$depStageRow['system_slug'] : 'deposit_tuition_payment';
+                $targetDepName = !empty($depStageRow['name']) ? (string)$depStageRow['name'] : '13 – Deposit / Tuition Payment';
+
+                $stmtUpC = $this->db->prepare("UPDATE contacts SET stage_id = ?, pipeline_status = ?, temperature = 'hot', suggested_temperature = 'hot', expected_revenue = ? WHERE id = ? AND tenant_id = ?");
+                $stmtUpC->execute([$targetDepStageId, $targetDepSlug, $price, $contactId, $auth['tenant_id']]);
+
+                if ($curStageId !== $targetDepStageId) {
+                    $stmtRecentStageLog = $this->db->prepare("
+                        SELECT id FROM activities
+                        WHERE (contact_id = ? OR (related_type = 'contact' AND related_id = ?))
+                          AND tenant_id = ?
+                          AND deleted_at IS NULL
+                          AND subject LIKE 'Chuyển Pipeline%'
+                          AND created_at >= DATE_SUB(NOW(), INTERVAL 10 SECOND)
+                        LIMIT 1
+                    ");
+                    $stmtRecentStageLog->execute([$contactId, $contactId, $auth['tenant_id']]);
+                    if (!$stmtRecentStageLog->fetchColumn()) {
+                        $subj = (!empty($curStageName) && $curStageName !== $targetDepName)
+                            ? "Chuyển Pipeline: {$curStageName} ➔ {$targetDepName}"
+                            : "Chuyển Pipeline sang: {$targetDepName}";
+                        logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'note', $subj, "Tự động chuyển sang giai đoạn Đặt cọc / Đóng học phí khi tạo SO #{$depositId}", 'contact', $contactId);
+                        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'MOVE_STAGE', 'contact', $contactId, json_encode([
+                            'stage_id' => $targetDepStageId,
+                            'stage_name' => $targetDepName,
+                            'from_stage_name' => $curStageName,
+                            'pipeline_status' => $targetDepSlug,
+                            'lead_status' => 'active',
+                            'note' => "Tạo SO #{$depositId}"
+                        ], JSON_UNESCAPED_UNICODE));
+                    }
+                }
             }
 
             // Withdraw from databank and terminate other parallel contacts

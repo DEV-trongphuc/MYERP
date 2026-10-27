@@ -4248,6 +4248,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   };
 
   // Academic Study Status & Email Notification States
+  const DEFAULT_ACADEMIC_CC_EMAILS = 'it.dept@ideas.edu.vn, student.notice@ideas.edu.vn, support@ideas.edu.vn';
   const [savingStudyStatus, setSavingStudyStatus] = useState(false);
   const [showAcademicEmailModal, setShowAcademicEmailModal] = useState(false);
   const [academicEmailTab, setAcademicEmailTab] = useState<'preview' | 'edit'>('preview');
@@ -4255,7 +4256,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [isSendingAcademicEmail, setIsSendingAcademicEmail] = useState(false);
   const [academicEmailForm, setAcademicEmailForm] = useState({
     to_email: '',
-    cc_email: 'student.notice@ideas.edu.vn',
+    cc_email: DEFAULT_ACADEMIC_CC_EMAILS,
     subject: '[IDEAS] Thông báo Tiếp nhận học viên & Hướng dẫn học tập - Swiss UMEF',
     content: ''
   });
@@ -4280,7 +4281,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 <p>1. <strong>Kênh Hỗ trợ Nhanh (Zalo/Hotline):</strong> 098 736 3935<br/>
 2. <strong>Kênh Hỗ trợ Học vụ (Email):</strong><br/>
 &nbsp;&nbsp;- Tiếp nhận yêu cầu: <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a><br/>
-&nbsp;&nbsp;- CC (Đồng gửi): <a href="mailto:student.notice@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">student.notice@ideas.edu.vn</a> <em>(Vui lòng luôn CC địa chỉ này để hệ thống ghi nhận và xử lý nhanh nhất)</em></p>
+&nbsp;&nbsp;- CC (Đồng gửi): <a href="mailto:it.dept@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">it.dept@ideas.edu.vn</a>, <a href="mailto:student.notice@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">student.notice@ideas.edu.vn</a>, <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a> <em>(Vui lòng luôn CC các địa chỉ này để hệ thống ghi nhận và xử lý nhanh nhất)</em></p>
 
 <p><strong style="color: #BD1D2D; font-size: 15px;">B. TÀI KHOẢN HỌC TẬP</strong></p>
 <p>Anh/Chị sẽ được cấp 3 tài khoản học tập, sử dụng xuyên suốt chương trình:</p>
@@ -4310,7 +4311,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 <p>1. <strong>Kênh Hỗ trợ Nhanh (Zalo/Hotline):</strong> 098 736 3935<br/>
 2. <strong>Kênh Hỗ trợ Học vụ (Email):</strong><br/>
 &nbsp;&nbsp;&bull; Tiếp nhận yêu cầu: <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a><br/>
-&nbsp;&nbsp;&bull; CC (Đồng gửi): <a href="mailto:student.notice@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">student.notice@ideas.edu.vn</a> <em>(Vui lòng luôn CC địa chỉ này để hệ thống ghi nhận và xử lý nhanh nhất)</em></p>
+&nbsp;&nbsp;&bull; CC (Đồng gửi): <a href="mailto:it.dept@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">it.dept@ideas.edu.vn</a>, <a href="mailto:student.notice@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">student.notice@ideas.edu.vn</a>, <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a> <em>(Vui lòng luôn CC các địa chỉ này để hệ thống ghi nhận và xử lý nhanh nhất)</em></p>
 
 <p><strong style="color: #BD1D2D; font-size: 15px;">B. TÀI KHOẢN HỌC TẬP</strong></p>
 <p>Anh/Chị sẽ được cấp 3 tài khoản học tập, sử dụng xuyên suốt chương trình:</p>
@@ -4345,7 +4346,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     setAcademicEmailProgram(detectedProg);
     setAcademicEmailForm({
       to_email: recipientEmail,
-      cc_email: 'student.notice@ideas.edu.vn',
+      cc_email: DEFAULT_ACADEMIC_CC_EMAILS,
       subject: getAcademicEmailDefaultSubject(detectedProg),
       content: getAcademicEmailDefaultContent(studentName, detectedProg)
     });
@@ -4363,17 +4364,39 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     }));
   };
 
+  // Canonical 7 Student Stages: Enrolled => Tranning => Studying => Postpone => Withdraw => Completed => Graduated
+  const STUDENT_STAGE_STEPS = useMemo(() => [
+    { id: 'enrolled', label: 'Enrolled', subLabel: 'Nhập học', color: '#0284c7', bg: '#e0f2fe' },
+    { id: 'training', label: 'Tranning', subLabel: 'Đào tạo', color: '#4f46e5', bg: '#e0e7ff' },
+    { id: 'studying', label: 'Studying', subLabel: 'Đang học', color: '#16a34a', bg: '#dcfce7' },
+    { id: 'postpone', label: 'Postpone', subLabel: 'Bảo lưu', color: '#d97706', bg: '#fef3c7' },
+    { id: 'withdraw', label: 'Withdraw', subLabel: 'Rút / Tạm ngưng', color: '#dc2626', bg: '#fee2e2' },
+    { id: 'completed', label: 'Completed', subLabel: 'Hoàn thành', color: '#2563eb', bg: '#dbeafe' },
+    { id: 'graduated', label: 'Graduated', subLabel: 'Tốt nghiệp', color: '#BD1D2D', bg: '#ffe4e6' }
+  ] as const, []);
+
+  const normalizeStudentStageKey = useCallback((raw?: string | null): 'enrolled' | 'training' | 'studying' | 'postpone' | 'withdraw' | 'completed' | 'graduated' => {
+    const s = String(raw || '').trim().toLowerCase();
+    if (['enrolled', 'moi_nhap_hoc', 'nhap_hoc'].includes(s)) return 'enrolled';
+    if (['training', 'tranning', 'dao_tao'].includes(s)) return 'training';
+    if (['postpone', 'postponed', 'reserved', 'deferred', 'bao_luu', 'tam_hoan'].includes(s)) return 'postpone';
+    if (['withdraw', 'withdrawn', 'suspended', 'tam_ngung', 'dropped', 'bo_hoc', 'nghi_hoc', 'thoi_hoc'].includes(s)) return 'withdraw';
+    if (['completed', 'hoan_thanh'].includes(s)) return 'completed';
+    if (['graduated', 'tot_nghiep'].includes(s)) return 'graduated';
+    return 'studying';
+  }, []);
+
   // Study Status Transition Modal State
   const [studyStatusModal, setStudyStatusModal] = useState<{
     isOpen: boolean;
-    targetStatus: 'studying' | 'completed' | 'reserved' | 'suspended';
+    targetStatus: string;
     targetLabel: string;
     note: string;
     notifyUserIds: number[];
   }>({
     isOpen: false,
     targetStatus: 'studying',
-    targetLabel: 'Đang học',
+    targetLabel: 'Studying',
     note: '',
     notifyUserIds: []
   });
@@ -4396,16 +4419,22 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     };
   }, [showStudyStatusNotifyDropdown]);
 
-  const handleOpenStudyStatusModal = (targetStatus: 'studying' | 'completed' | 'reserved' | 'suspended') => {
-    const rawCurrent = formData.study_status === 'tam_ngung' ? 'suspended' : (formData.study_status || 'studying');
-    const currentStatus = rawCurrent as 'studying' | 'completed' | 'reserved' | 'suspended';
-    if (currentStatus === targetStatus) return;
+  const handleOpenStudyStatusModal = (rawTargetStatus: string) => {
+    const currentStatus = normalizeStudentStageKey(formData.study_status || contact?.study_status || 'studying');
+    const targetStatus = normalizeStudentStageKey(rawTargetStatus);
+    if (currentStatus === targetStatus && (formData.study_status || '') === targetStatus) return;
 
     const statusLabels: Record<string, string> = {
-      studying: 'Đang học',
-      completed: 'Đã hoàn thành',
-      reserved: 'Bảo lưu',
-      suspended: 'Tạm ngưng'
+      enrolled: 'Enrolled (Nhập học)',
+      training: 'Tranning (Đào tạo)',
+      tranning: 'Tranning (Đào tạo)',
+      studying: 'Studying (Đang học)',
+      postpone: 'Postpone (Bảo lưu)',
+      reserved: 'Postpone (Bảo lưu)',
+      withdraw: 'Withdraw (Rút / Tạm ngưng)',
+      suspended: 'Withdraw (Rút / Tạm ngưng)',
+      completed: 'Completed (Hoàn thành)',
+      graduated: 'Graduated (Tốt nghiệp)'
     };
 
     // Default recipients: include contact assigned sale (owner) and Mai Thị Nữ
@@ -7920,6 +7949,87 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           </button>
         )}
       </div>
+
+      {/* Student 7-Stage Stepper Row: Enrolled => Tranning => Studying => Postpone => Withdraw => Completed => Graduated */}
+      {isStudent && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: isMobileOrTablet ? '8px 0.75rem' : '8px 1.25rem',
+          background: '#f8fafc',
+          borderTop: '1px solid #e2e8f0',
+          overflowX: 'auto',
+          scrollbarWidth: 'none'
+        }} className="no-scrollbar">
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px',
+            fontSize: '0.72rem',
+            fontWeight: 800,
+            color: '#0f172a',
+            textTransform: 'uppercase',
+            letterSpacing: '0.04em',
+            paddingRight: '8px',
+            borderRight: '1px solid #cbd5e1',
+            flexShrink: 0,
+            whiteSpace: 'nowrap'
+          }}>
+            <BookOpen size={13} color="#BD1D2D" />
+            <span>Stage Học viên:</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 'max-content' }}>
+            {(() => {
+              const currentNormalized = normalizeStudentStageKey(formData.study_status || contact?.study_status || 'studying');
+              const currentIdx = STUDENT_STAGE_STEPS.findIndex(s => s.id === currentNormalized);
+              return STUDENT_STAGE_STEPS.map((st, idx) => {
+                const isActive = st.id === currentNormalized;
+                const isPassed = currentIdx > idx && !['postpone', 'withdraw'].includes(st.id);
+                return (
+                  <React.Fragment key={st.id}>
+                    <button
+                      type="button"
+                      disabled={isSubmittingStudyStatus || savingStudyStatus}
+                      onClick={() => handleOpenStudyStatusModal(st.id)}
+                      title={`${st.label} (${st.subLabel}) - Nhấn để chuyển trạng thái học viên`}
+                      style={{
+                        height: '28px',
+                        padding: '0 12px',
+                        borderRadius: '8px',
+                        border: isActive ? `1.5px solid ${st.color}` : '1px solid #e2e8f0',
+                        background: isActive ? st.bg : (isPassed ? '#f1f5f9' : '#ffffff'),
+                        color: isActive ? st.color : (isPassed ? '#334155' : '#64748b'),
+                        fontWeight: isActive ? 800 : 600,
+                        fontSize: '0.74rem',
+                        cursor: isActive ? 'default' : 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        whiteSpace: 'nowrap',
+                        boxShadow: isActive ? `0 1px 4px ${st.color}25` : 'none',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <span style={{
+                        width: '7px',
+                        height: '7px',
+                        borderRadius: '50%',
+                        background: isActive ? st.color : (isPassed ? '#64748b' : '#cbd5e1'),
+                        flexShrink: 0
+                      }} />
+                      <span>{st.label}</span>
+                    </button>
+                    {idx < STUDENT_STAGE_STEPS.length - 1 && (
+                      <ArrowRight size={12} style={{ color: '#94a3b8', flexShrink: 0 }} />
+                    )}
+                  </React.Fragment>
+                );
+              });
+            })()}
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -11900,6 +12010,76 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           </button>
                         </div>
 
+                        {/* Thanh tiến trình 7 Stage Học viên: Enrolled => Tranning => Studying => Postpone => Withdraw => Completed => Graduated */}
+                        <div style={{
+                          padding: '12px 14px',
+                          borderRadius: '12px',
+                          background: '#f8fafc',
+                          border: '1px solid #e2e8f0',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+                            <span style={{ fontSize: '0.73rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#64748b' }}>
+                              Tiến trình Stage Học viên (Enrolled ➔ Graduated)
+                            </span>
+                            <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                              Nhấn vào từng stage để chuyển trạng thái học vụ
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }} className="no-scrollbar">
+                            {(() => {
+                              const currentNormalized = normalizeStudentStageKey(formData.study_status || contact?.study_status || 'studying');
+                              const currentIdx = STUDENT_STAGE_STEPS.findIndex(s => s.id === currentNormalized);
+                              return STUDENT_STAGE_STEPS.map((st, idx) => {
+                                const isActive = st.id === currentNormalized;
+                                const isPassed = currentIdx > idx && !['postpone', 'withdraw'].includes(st.id);
+                                return (
+                                  <React.Fragment key={st.id}>
+                                    <button
+                                      type="button"
+                                      disabled={isSubmittingStudyStatus || savingStudyStatus}
+                                      onClick={() => handleOpenStudyStatusModal(st.id)}
+                                      style={{
+                                        flex: '1 0 auto',
+                                        minWidth: '105px',
+                                        padding: '7px 12px',
+                                        borderRadius: '9px',
+                                        border: isActive ? `1.5px solid ${st.color}` : '1px solid #e2e8f0',
+                                        background: isActive ? st.bg : (isPassed ? '#f1f5f9' : '#ffffff'),
+                                        color: isActive ? st.color : (isPassed ? '#334155' : '#64748b'),
+                                        fontWeight: isActive ? 800 : 600,
+                                        fontSize: '0.76rem',
+                                        cursor: isActive ? 'default' : 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '6px',
+                                        whiteSpace: 'nowrap',
+                                        boxShadow: isActive ? `0 2px 6px ${st.color}22` : 'none',
+                                        transition: 'all 0.15s ease'
+                                      }}
+                                    >
+                                      <span style={{
+                                        width: '8px',
+                                        height: '8px',
+                                        borderRadius: '50%',
+                                        background: isActive ? st.color : (isPassed ? '#64748b' : '#cbd5e1'),
+                                        flexShrink: 0
+                                      }} />
+                                      <span>{st.label}</span>
+                                    </button>
+                                    {idx < STUDENT_STAGE_STEPS.length - 1 && (
+                                      <ArrowRight size={13} style={{ color: '#94a3b8', flexShrink: 0 }} />
+                                    )}
+                                  </React.Fragment>
+                                );
+                              });
+                            })()}
+                          </div>
+                        </div>
+
                         {/* Trạng thái học tập, Chương trình & Khóa học */}
                         <div style={{ display: 'grid', gridTemplateColumns: isMobileOrTablet ? '1fr' : 'repeat(3, 1fr)', gap: '1.25rem' }}>
                           <div className="form-group">
@@ -11915,30 +12095,45 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               disabled={isSubmittingStudyStatus || savingStudyStatus}
                               options={[
                                 {
+                                  value: 'enrolled',
+                                  label: 'Enrolled (Nhập học)',
+                                  icon: <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#0284c7', display: 'inline-block', boxShadow: '0 0 0 2px rgba(2, 132, 199, 0.2)' }} />
+                                },
+                                {
+                                  value: 'training',
+                                  label: 'Tranning (Đào tạo)',
+                                  icon: <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#4f46e5', display: 'inline-block', boxShadow: '0 0 0 2px rgba(79, 70, 229, 0.2)' }} />
+                                },
+                                {
                                   value: 'studying',
-                                  label: 'Đang học',
-                                  icon: <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#22c55e', display: 'inline-block', boxShadow: '0 0 0 2px rgba(34, 197, 94, 0.2)' }} />
+                                  label: 'Studying (Đang học)',
+                                  icon: <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#16a34a', display: 'inline-block', boxShadow: '0 0 0 2px rgba(22, 163, 74, 0.2)' }} />
+                                },
+                                {
+                                  value: 'postpone',
+                                  label: 'Postpone (Bảo lưu)',
+                                  icon: <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#d97706', display: 'inline-block', boxShadow: '0 0 0 2px rgba(217, 119, 6, 0.2)' }} />
+                                },
+                                {
+                                  value: 'withdraw',
+                                  label: 'Withdraw (Rút / Tạm ngưng)',
+                                  icon: <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#dc2626', display: 'inline-block', boxShadow: '0 0 0 2px rgba(220, 38, 38, 0.2)' }} />
                                 },
                                 {
                                   value: 'completed',
-                                  label: 'Đã hoàn thành',
-                                  icon: <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#3b82f6', display: 'inline-block', boxShadow: '0 0 0 2px rgba(59, 130, 246, 0.2)' }} />
+                                  label: 'Completed (Hoàn thành)',
+                                  icon: <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#2563eb', display: 'inline-block', boxShadow: '0 0 0 2px rgba(37, 99, 235, 0.2)' }} />
                                 },
                                 {
-                                  value: 'reserved',
-                                  label: 'Bảo lưu',
-                                  icon: <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#f59e0b', display: 'inline-block', boxShadow: '0 0 0 2px rgba(245, 158, 11, 0.2)' }} />
-                                },
-                                {
-                                  value: 'suspended',
-                                  label: 'Tạm ngưng',
-                                  icon: <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#ef4444', display: 'inline-block', boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.2)' }} />
+                                  value: 'graduated',
+                                  label: 'Graduated (Tốt nghiệp)',
+                                  icon: <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#BD1D2D', display: 'inline-block', boxShadow: '0 0 0 2px rgba(189, 29, 45, 0.2)' }} />
                                 }
                               ]}
-                              value={formData.study_status || 'studying'}
+                              value={normalizeStudentStageKey(formData.study_status || contact?.study_status || 'studying')}
                               onChange={val => {
                                 if (val) {
-                                  handleOpenStudyStatusModal(val as 'studying' | 'completed' | 'reserved' | 'suspended');
+                                  handleOpenStudyStatusModal(String(val));
                                 }
                               }}
                             />
@@ -20357,7 +20552,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="student.notice@ideas.edu.vn, ..."
+                  placeholder="it.dept@ideas.edu.vn, student.notice@ideas.edu.vn, support@ideas.edu.vn"
                   value={academicEmailForm.cc_email}
                   onChange={e => setAcademicEmailForm(prev => ({ ...prev, cc_email: e.target.value }))}
                 />
@@ -20594,12 +20789,18 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {/* Transition Badge Header */}
             {(() => {
-              const currentStatus = (formData.study_status || 'studying') as string;
+              const currentStatus = normalizeStudentStageKey(formData.study_status || contact?.study_status || 'studying');
               const statusMeta: Record<string, { label: string; color: string; bg: string }> = {
-                studying: { label: 'Đang học', color: '#16a34a', bg: '#dcfce7' },
-                completed: { label: 'Đã hoàn thành', color: '#2563eb', bg: '#dbeafe' },
-                reserved: { label: 'Bảo lưu', color: '#d97706', bg: '#fef3c7' },
-                suspended: { label: 'Tạm ngưng', color: '#dc2626', bg: '#fee2e2' }
+                enrolled: { label: 'Enrolled (Nhập học)', color: '#0284c7', bg: '#e0f2fe' },
+                training: { label: 'Tranning (Đào tạo)', color: '#4f46e5', bg: '#e0e7ff' },
+                tranning: { label: 'Tranning (Đào tạo)', color: '#4f46e5', bg: '#e0e7ff' },
+                studying: { label: 'Studying (Đang học)', color: '#16a34a', bg: '#dcfce7' },
+                postpone: { label: 'Postpone (Bảo lưu)', color: '#d97706', bg: '#fef3c7' },
+                reserved: { label: 'Postpone (Bảo lưu)', color: '#d97706', bg: '#fef3c7' },
+                withdraw: { label: 'Withdraw (Rút / Tạm ngưng)', color: '#dc2626', bg: '#fee2e2' },
+                suspended: { label: 'Withdraw (Rút / Tạm ngưng)', color: '#dc2626', bg: '#fee2e2' },
+                completed: { label: 'Completed (Hoàn thành)', color: '#2563eb', bg: '#dbeafe' },
+                graduated: { label: 'Graduated (Tốt nghiệp)', color: '#BD1D2D', bg: '#ffe4e6' }
               };
               const cur = statusMeta[currentStatus] || { label: currentStatus, color: '#64748b', bg: '#f1f5f9' };
               const target = statusMeta[studyStatusModal.targetStatus] || { label: studyStatusModal.targetLabel, color: '#BD1D2D', bg: '#fee2e2' };
@@ -20655,28 +20856,51 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                 {(() => {
                   const quickReasons: Record<string, string[]> = {
-                    reserved: [
-                      'Bảo lưu kỳ 1 theo nguyện vọng học viên',
-                      'Tạm hoãn học tập do công tác / việc cá nhân',
+                    enrolled: [
+                      'Đã hoàn tất thủ tục nhập học (Enrolled)',
+                      'Đã tiếp nhận hồ sơ và cấp mã học viên chính thức',
+                      'Chờ xếp lịch định hướng / Tranning đầu khóa'
+                    ],
+                    training: [
+                      'Đang tham gia tuần lễ định hướng & đào tạo đầu khóa (Tranning)',
+                      'Đã cấp tài khoản LMS và hướng dẫn quy chế học thuật',
+                      'Hoàn tất hướng dẫn phương pháp học tập & APA'
+                    ],
+                    studying: [
+                      'Bắt đầu học kỳ chính thức (Studying)',
+                      'Quay trở lại học tập sau thời gian Postpone / Withdraw',
+                      'Cập nhật lại trạng thái theo dõi học vụ'
+                    ],
+                    postpone: [
+                      'Bảo lưu / Tạm hoãn (Postpone) theo nguyện vọng học viên',
+                      'Tạm hoãn học tập do lịch công tác / việc cá nhân',
                       'Bảo lưu chuyển tiếp sang khóa sau',
                       'Chờ hoàn tất thủ tục tài chính'
                     ],
+                    reserved: [
+                      'Bảo lưu / Tạm hoãn (Postpone) theo nguyện vọng học viên',
+                      'Tạm hoãn học tập do lịch công tác / việc cá nhân',
+                      'Bảo lưu chuyển tiếp sang khóa sau'
+                    ],
+                    withdraw: [
+                      'Rút hồ sơ / Tạm ngưng học tập (Withdraw) theo đơn xin phép',
+                      'Ngưng học tập do chưa hoàn tất học phí',
+                      'Ngưng học tập do công việc cá nhân không sắp xếp được thời gian',
+                      'Chờ xét duyệt hồ sơ học vụ'
+                    ],
                     suspended: [
-                      'Tạm ngưng học tập do chưa hoàn tất học phí',
-                      'Tạm ngưng theo đơn xin phép của học viên',
-                      'Tạm ngưng do vi phạm quy chế học vụ / vắng quá số buổi',
-                      'Tạm ngưng chờ xét duyệt học lại'
+                      'Rút hồ sơ / Tạm ngưng học tập (Withdraw) theo đơn xin phép',
+                      'Ngưng học tập do chưa hoàn tất học phí'
                     ],
                     completed: [
-                      'Đã hoàn thành toàn bộ chương trình và đồ án',
-                      'Đã bảo vệ luận văn & đủ điều kiện tốt nghiệp',
-                      'Đã nhận chứng chỉ / văn bằng tốt nghiệp',
-                      'Hoàn tất khóa học xuất sắc'
+                      'Đã hoàn thành toàn bộ môn học và đồ án chương trình (Completed)',
+                      'Đã hoàn tất học phần, chờ xét duyệt tốt nghiệp',
+                      'Đủ điều kiện học thuật hoàn thành khóa học'
                     ],
-                    studying: [
-                      'Quay trở lại học tập sau thời gian bảo lưu / tạm ngưng',
-                      'Bắt đầu học kỳ mới chính thức',
-                      'Cập nhật lại trạng thái theo dõi học vụ'
+                    graduated: [
+                      'Đã bảo vệ luận văn & chính thức tốt nghiệp (Graduated)',
+                      'Đã nhận văn bằng / chứng chỉ tốt nghiệp quốc tế',
+                      'Hoàn tất xuất sắc toàn bộ chương trình đào tạo'
                     ]
                   };
                   const list = quickReasons[studyStatusModal.targetStatus] || quickReasons.studying;

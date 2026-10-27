@@ -1885,15 +1885,20 @@ function getSubscriberProfileForFlow($pdo, $subscriberId)
                     );
                     $sub['erp_is_student'] = $isStudentBool ? 'yes' : 'no';
 
-                    if (in_array($studyStLower, ['completed', 'graduated', 'hoan_thanh', 'hoàn thành', 'tot_nghiep', 'tốt nghiệp'], true)) {
+                    if (in_array($studyStLower, ['graduated', 'tot_nghiep', 'tốt nghiệp'], true)) {
+                        $sub['erp_student_status'] = 'graduated';
+                        $sub['erp_has_certificate'] = 'yes';
+                    } elseif (in_array($studyStLower, ['completed', 'hoan_thanh', 'hoàn thành'], true)) {
                         $sub['erp_student_status'] = 'completed';
                         $sub['erp_has_certificate'] = 'yes';
-                    } elseif (in_array($studyStLower, ['reserved', 'deferred', 'bao_luu', 'bảo lưu'], true)) {
-                        $sub['erp_student_status'] = 'reserved';
-                    } elseif (in_array($studyStLower, ['suspended', 'tam_ngung', 'tạm ngưng'], true)) {
-                        $sub['erp_student_status'] = 'suspended';
-                    } elseif (in_array($studyStLower, ['dropped', 'bo_hoc', 'bỏ học', 'nghi_hoc', 'nghỉ học'], true)) {
-                        $sub['erp_student_status'] = 'dropped';
+                    } elseif (in_array($studyStLower, ['enrolled', 'moi_nhap_hoc', 'nhap_hoc'], true)) {
+                        $sub['erp_student_status'] = 'enrolled';
+                    } elseif (in_array($studyStLower, ['training', 'tranning', 'dao_tao'], true)) {
+                        $sub['erp_student_status'] = 'training';
+                    } elseif (in_array($studyStLower, ['postpone', 'postponed', 'reserved', 'deferred', 'bao_luu', 'bảo lưu'], true)) {
+                        $sub['erp_student_status'] = 'postpone';
+                    } elseif (in_array($studyStLower, ['withdraw', 'withdrawn', 'suspended', 'tam_ngung', 'tạm ngưng', 'dropped', 'bo_hoc', 'bỏ học', 'nghi_hoc', 'nghỉ học'], true)) {
+                        $sub['erp_student_status'] = 'withdraw';
                     } elseif ($isStudentBool || in_array($studyStLower, ['studying', 'dang_hoc', 'đang học', 'active'], true)) {
                         $sub['erp_student_status'] = 'studying';
                     }

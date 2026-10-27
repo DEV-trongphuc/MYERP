@@ -267,7 +267,7 @@ function sendEmailNotification($to, $subject, $title, $content, $ccEmailString =
             $mail->addAddress($to);
 
             if (!empty($ccEmailString)) {
-                $ccList = explode(',', $ccEmailString);
+                $ccList = preg_split('/[,;\s]+/', $ccEmailString, -1, PREG_SPLIT_NO_EMPTY);
                 foreach ($ccList as $cc) {
                     $cc = trim($cc);
                     if (!empty($cc) && filter_var($cc, FILTER_VALIDATE_EMAIL)) {

@@ -134,7 +134,7 @@ function runMailerCron($conn) {
         // BẢO VỆ TUYỆT ĐỐI CC: Chỉ cho phép email nội bộ vào danh sách CC
         $safeCcList = [];
         if (!empty($ccEmailString)) {
-            $ccParts = explode(',', $ccEmailString);
+            $ccParts = preg_split('/[,;\s]+/', $ccEmailString, -1, PREG_SPLIT_NO_EMPTY);
             foreach ($ccParts as $cc) {
                 $cc = trim($cc);
                 $cleanCc = strtolower($cc);

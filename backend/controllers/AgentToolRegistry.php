@@ -252,8 +252,8 @@ class AgentToolRegistry {
                                 ],
                                 'study_status' => [
                                     'type' => 'STRING',
-                                    'enum' => ['all', 'studying', 'completed', 'reserved', 'suspended', 'graduated', 'deferred', 'dropped'],
-                                    'description' => 'Tình trạng học tập'
+                                    'enum' => ['all', 'enrolled', 'training', 'tranning', 'studying', 'postpone', 'withdraw', 'completed', 'graduated', 'reserved', 'suspended', 'deferred', 'dropped'],
+                                    'description' => 'Tình trạng học tập (7 stages: Enrolled => Tranning => Studying => Postpone => Withdraw => Completed => Graduated)'
                                 ],
                                 'missing_doc' => [
                                     'type' => 'STRING',
@@ -1519,7 +1519,7 @@ class AgentToolRegistry {
                                 ],
                                 'study_status' => [
                                     'type' => 'STRING',
-                                    'description' => 'Trạng thái học vụ của học viên (ví dụ: "studying", "reserved", "graduated", "dropped", "bảo lưu", "đang học", "tốt nghiệp").'
+                                    'description' => 'Trạng thái học vụ của học viên theo 7 stage: "enrolled" (Nhập học), "training"/"tranning" (Đào tạo), "studying" (Đang học), "postpone"/"reserved" (Bảo lưu), "withdraw"/"suspended"/"dropped" (Rút/Tạm ngưng), "completed" (Hoàn thành), "graduated" (Tốt nghiệp).'
                                 ],
                                 'student_code' => [
                                     'type' => 'STRING',
@@ -10297,6 +10297,9 @@ class AgentToolRegistry {
                         $pKw = '%' . $programCode . '%';
                         $params = array_merge($params, [$pKw, $pKw, $pKw, $pKw]);
                     }
+                    if (!empty($studyStatus) && $studyStatus !== 'all' && function_exists('applyCrmStudyStatusFilter')) {
+                        applyCrmStudyStatusFilter($db, 'c.', ['study_status' => $studyStatus], $where, $params);
+                    }
 
                     $whereSql = implode(" AND ", $where);
 
@@ -14896,16 +14899,20 @@ class AgentToolRegistry {
                 $ssOrs = [];
                 foreach ($ssList as $ss) {
                     $ssLow = mb_strtolower($ss, 'UTF-8');
-                    if (in_array($ssLow, ['reserved', 'bảo lưu', 'bao luu', 'baoluu'], true)) {
-                        $ssOrs[] = "LOWER(TRIM(COALESCE({$p}study_status, ''))) IN ('reserved', 'bảo lưu', 'bao luu', 'baoluu', 'defer', 'deferred')";
-                    } elseif (in_array($ssLow, ['suspended', 'tam_ngung', 'tạm ngưng', 'pause'], true)) {
-                        $ssOrs[] = "LOWER(TRIM(COALESCE({$p}study_status, ''))) IN ('suspended', 'tam_ngung', 'tạm ngưng', 'pause')";
+                    if (in_array($ssLow, ['enrolled', 'moi_nhap_hoc', 'nhap_hoc', 'nhập học'], true)) {
+                        $ssOrs[] = "LOWER(TRIM(COALESCE({$p}study_status, ''))) IN ('enrolled', 'moi_nhap_hoc', 'nhap_hoc', 'nhập học')";
+                    } elseif (in_array($ssLow, ['training', 'tranning', 'dao_tao', 'đào tạo'], true)) {
+                        $ssOrs[] = "LOWER(TRIM(COALESCE({$p}study_status, ''))) IN ('training', 'tranning', 'dao_tao', 'đào tạo')";
+                    } elseif (in_array($ssLow, ['postpone', 'postponed', 'reserved', 'bảo lưu', 'bao luu', 'baoluu', 'deferred', 'bao_luu'], true)) {
+                        $ssOrs[] = "LOWER(TRIM(COALESCE({$p}study_status, ''))) IN ('postpone', 'postponed', 'reserved', 'bảo lưu', 'bao luu', 'baoluu', 'defer', 'deferred', 'bao_luu')";
+                    } elseif (in_array($ssLow, ['withdraw', 'withdrawn', 'suspended', 'tam_ngung', 'tạm ngưng', 'pause', 'dropped', 'nghỉ học', 'nghi hoc', 'dropout', 'cancelled', 'bo_hoc', 'bỏ học'], true)) {
+                        $ssOrs[] = "LOWER(TRIM(COALESCE({$p}study_status, ''))) IN ('withdraw', 'withdrawn', 'suspended', 'tam_ngung', 'tạm ngưng', 'pause', 'dropped', 'nghỉ học', 'nghi hoc', 'dropout', 'cancelled', 'thôi học', 'bo_hoc', 'bỏ học')";
                     } elseif (in_array($ssLow, ['studying', 'đang học', 'dang hoc', 'active'], true)) {
                         $ssOrs[] = "LOWER(TRIM(COALESCE({$p}study_status, ''))) IN ('studying', 'đang học', 'dang hoc', 'active')";
-                    } elseif (in_array($ssLow, ['graduated', 'completed', 'hoan_thanh', 'hoàn thành', 'tốt nghiệp', 'tot nghiep'], true)) {
-                        $ssOrs[] = "LOWER(TRIM(COALESCE({$p}study_status, ''))) IN ('graduated', 'tốt nghiệp', 'tot nghiep', 'completed', 'hoan_thanh', 'hoàn thành')";
-                    } elseif (in_array($ssLow, ['dropped', 'nghỉ học', 'nghi hoc', 'dropout', 'cancelled'], true)) {
-                        $ssOrs[] = "LOWER(TRIM(COALESCE({$p}study_status, ''))) IN ('dropped', 'nghỉ học', 'nghi hoc', 'dropout', 'cancelled', 'thôi học')";
+                    } elseif (in_array($ssLow, ['completed', 'hoan_thanh', 'hoàn thành'], true)) {
+                        $ssOrs[] = "LOWER(TRIM(COALESCE({$p}study_status, ''))) IN ('completed', 'hoan_thanh', 'hoàn thành')";
+                    } elseif (in_array($ssLow, ['graduated', 'tốt nghiệp', 'tot nghiep', 'tot_nghiep'], true)) {
+                        $ssOrs[] = "LOWER(TRIM(COALESCE({$p}study_status, ''))) IN ('graduated', 'tốt nghiệp', 'tot nghiep', 'tot_nghiep')";
                     } else {
                         $ssOrs[] = "{$p}study_status LIKE ?";
                         $params[] = '%' . $ss . '%';

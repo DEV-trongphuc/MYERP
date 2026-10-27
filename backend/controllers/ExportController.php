@@ -1504,17 +1504,22 @@ class ExportController {
                         elseif ($g === 'other' || $g === 'khac' || $g === 'khác') $record['gender'] = 'Khác';
                     }
 
-                    // 16. Friendly study_status
+                    // 16. Friendly study_status (7 Student Stages + legacy aliases)
                     $studyStatusMap = [
-                        'studying' => 'Đang học',
-                        'completed' => 'Đã hoàn thành',
-                        'graduated' => 'Đã tốt nghiệp',
-                        'reserved' => 'Bảo lưu',
-                        'deferred' => 'Bảo lưu',
-                        'suspended' => 'Tạm ngưng',
-                        'tam_ngung' => 'Tạm ngưng',
-                        'dropped' => 'Thôi học',
-                        'enrolled' => 'Mới nhập học'
+                        'enrolled' => 'Enrolled (Nhập học)',
+                        'training' => 'Tranning (Đào tạo)',
+                        'tranning' => 'Tranning (Đào tạo)',
+                        'studying' => 'Studying (Đang học)',
+                        'postpone' => 'Postpone (Bảo lưu)',
+                        'reserved' => 'Postpone (Bảo lưu)',
+                        'deferred' => 'Postpone (Bảo lưu)',
+                        'bao_luu' => 'Postpone (Bảo lưu)',
+                        'withdraw' => 'Withdraw (Rút / Tạm ngưng)',
+                        'suspended' => 'Withdraw (Rút / Tạm ngưng)',
+                        'tam_ngung' => 'Withdraw (Rút / Tạm ngưng)',
+                        'dropped' => 'Withdraw (Rút / Tạm ngưng)',
+                        'completed' => 'Completed (Hoàn thành)',
+                        'graduated' => 'Graduated (Tốt nghiệp)'
                     ];
                     if (!empty($record['study_status']) && isset($studyStatusMap[$record['study_status']])) {
                         $record['study_status'] = $studyStatusMap[$record['study_status']];

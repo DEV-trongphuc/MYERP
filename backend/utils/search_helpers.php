@@ -664,6 +664,56 @@ function buildCrmProgramColumnMatchSql(string $colExpr, string $token, array &$p
  * 5. Academic, Marketing, Lead Quality & Financial (`programs`/`program`/`project_id`, `campaign_id`/`campaigns`/`campaign_or_utm`, `sources`/`source`, `tags`/`tag`+`tag_op`, `temperature`, `score_min`/`score_max`, `study_status`, `student_code`, `expected_intake`, `major`, `missing_document`, `financial_filter`/`deposit_status`, `min_deposit`/`max_deposit`, `min_expected_revenue`/`max_expected_revenue`)
  * 6. Dynamic Schema Rule Builder (`custom_rules` + `custom_rules_logic` = 'AND'|'OR')
  */
+function applyCrmStudyStatusFilter(PDO $db, string $alias, array $input, array &$where, array &$params): void {
+    $trimmedAlias = trim($alias);
+    $a = $trimmedAlias === '' ? '' : (str_ends_with($trimmedAlias, '.') ? $trimmedAlias : $trimmedAlias . '.');
+    $contactCols = getCrmTableColumnsCache($db, 'contacts');
+    $studyTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['study_status'] ?? null),
+        parseCrmMultiFilterValues($input['study_statuses'] ?? null)
+    )));
+    if (!empty($studyTokens) && isset($contactCols['study_status'])) {
+        $studyOrClauses = [];
+        $nonStudyingStatuses = [];
+        $includesStudying = false;
+        foreach ($studyTokens as $stTok) {
+            $sLow = mb_strtolower(trim($stTok), 'UTF-8');
+            if (in_array($sLow, ['enrolled', 'moi_nhap_hoc', 'nhap_hoc', 'nhập học'], true)) {
+                $nonStudyingStatuses = array_merge($nonStudyingStatuses, ['enrolled', 'moi_nhap_hoc', 'nhap_hoc', 'nhập học']);
+            } elseif (in_array($sLow, ['training', 'tranning', 'dao_tao', 'đào tạo'], true)) {
+                $nonStudyingStatuses = array_merge($nonStudyingStatuses, ['training', 'tranning', 'dao_tao', 'đào tạo']);
+            } elseif (in_array($sLow, ['studying', 'dang_hoc', 'đang học', 'active'], true)) {
+                $includesStudying = true;
+            } elseif (in_array($sLow, ['postpone', 'postponed', 'reserved', 'deferred', 'bao_luu', 'bảo lưu', 'tam_hoan', 'tạm hoãn'], true)) {
+                $nonStudyingStatuses = array_merge($nonStudyingStatuses, ['postpone', 'postponed', 'reserved', 'deferred', 'bao_luu', 'bảo lưu', 'tam_hoan', 'tạm hoãn']);
+            } elseif (in_array($sLow, ['withdraw', 'withdrawn', 'suspended', 'tam_ngung', 'tạm ngưng', 'pause', 'dropped', 'bo_hoc', 'bỏ học', 'nghi_hoc', 'nghỉ học', 'thoi_hoc', 'thôi học'], true)) {
+                $nonStudyingStatuses = array_merge($nonStudyingStatuses, ['withdraw', 'withdrawn', 'suspended', 'tam_ngung', 'tạm ngưng', 'pause', 'dropped', 'bo_hoc', 'bỏ học', 'nghi_hoc', 'nghỉ học', 'thoi_hoc', 'thôi học']);
+            } elseif (in_array($sLow, ['completed', 'hoan_thanh', 'hoàn thành'], true)) {
+                $nonStudyingStatuses = array_merge($nonStudyingStatuses, ['completed', 'hoan_thanh', 'hoàn thành']);
+            } elseif (in_array($sLow, ['graduated', 'tot_nghiep', 'tốt nghiệp'], true)) {
+                $nonStudyingStatuses = array_merge($nonStudyingStatuses, ['graduated', 'tot_nghiep', 'tốt nghiệp']);
+            } else {
+                $nonStudyingStatuses[] = $sLow;
+            }
+        }
+        if ($includesStudying) {
+            // Note: contacts.study_status has DEFAULT 'studying', so require actual enrollment/student indicators for 'studying'
+            $studyOrClauses[] = "(LOWER(TRIM(COALESCE({$a}study_status, 'studying'))) IN ('studying', 'dang_hoc', 'đang học', '') AND ({$a}status = 'customer' OR {$a}stage_id = 44 OR {$a}pipeline_status IN ('enrolled', 'hoc_vien', 'won') OR ({$a}student_id IS NOT NULL AND TRIM({$a}student_id) != '') OR {$a}admission_date IS NOT NULL))";
+        }
+        $nonStudyingStatuses = array_values(array_unique($nonStudyingStatuses));
+        if (!empty($nonStudyingStatuses)) {
+            $phSt = implode(',', array_fill(0, count($nonStudyingStatuses), '?'));
+            $studyOrClauses[] = "LOWER(TRIM(COALESCE({$a}study_status, ''))) IN ($phSt)";
+            foreach ($nonStudyingStatuses as $es) {
+                $params[] = $es;
+            }
+        }
+        if (!empty($studyOrClauses)) {
+            $where[] = '(' . implode(' OR ', $studyOrClauses) . ')';
+        }
+    }
+}
+
 function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, array &$where, array &$params): void {
     $trimmedAlias = trim($alias);
     $a = $trimmedAlias === '' ? '' : (str_ends_with($trimmedAlias, '.') ? $trimmedAlias : $trimmedAlias . '.');
@@ -1635,45 +1685,8 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
     }
 
     // Study Status (`study_status` / `study_statuses`)
-    $studyTokens = array_values(array_unique(array_merge(
-        parseCrmMultiFilterValues($input['study_status'] ?? null),
-        parseCrmMultiFilterValues($input['study_statuses'] ?? null)
-    )));
-    if (!empty($studyTokens) && isset($contactCols['study_status'])) {
-        $studyOrClauses = [];
-        $nonStudyingStatuses = [];
-        $includesStudying = false;
-        foreach ($studyTokens as $stTok) {
-            $sLow = mb_strtolower(trim($stTok), 'UTF-8');
-            if (in_array($sLow, ['studying', 'dang_hoc', 'đang học', 'active'], true)) {
-                $includesStudying = true;
-            } elseif (in_array($sLow, ['completed', 'graduated', 'hoan_thanh', 'hoàn thành', 'tot_nghiep', 'tốt nghiệp'], true)) {
-                $nonStudyingStatuses = array_merge($nonStudyingStatuses, ['completed', 'graduated', 'hoan_thanh', 'hoàn thành', 'tot_nghiep', 'tốt nghiệp']);
-            } elseif (in_array($sLow, ['reserved', 'deferred', 'bao_luu', 'bảo lưu'], true)) {
-                $nonStudyingStatuses = array_merge($nonStudyingStatuses, ['reserved', 'deferred', 'bao_luu', 'bảo lưu']);
-            } elseif (in_array($sLow, ['suspended', 'tam_ngung', 'tạm ngưng', 'pause'], true)) {
-                $nonStudyingStatuses = array_merge($nonStudyingStatuses, ['suspended', 'tam_ngung', 'tạm ngưng']);
-            } elseif (in_array($sLow, ['dropped', 'bo_hoc', 'bỏ học', 'nghi_hoc', 'nghỉ học'], true)) {
-                $nonStudyingStatuses = array_merge($nonStudyingStatuses, ['dropped', 'bo_hoc', 'bỏ học', 'nghi_hoc', 'nghỉ học']);
-            } else {
-                $nonStudyingStatuses[] = $sLow;
-            }
-        }
-        if ($includesStudying) {
-            // Note: contacts.study_status has DEFAULT 'studying', so require actual enrollment/student indicators for 'studying'
-            $studyOrClauses[] = "(LOWER(TRIM(COALESCE({$a}study_status, 'studying'))) IN ('studying', 'dang_hoc', 'đang học', '') AND ({$a}status = 'customer' OR {$a}stage_id = 44 OR {$a}pipeline_status IN ('enrolled', 'hoc_vien', 'won') OR ({$a}student_id IS NOT NULL AND TRIM({$a}student_id) != '') OR {$a}admission_date IS NOT NULL))";
-        }
-        $nonStudyingStatuses = array_values(array_unique($nonStudyingStatuses));
-        if (!empty($nonStudyingStatuses)) {
-            $phSt = implode(',', array_fill(0, count($nonStudyingStatuses), '?'));
-            $studyOrClauses[] = "LOWER(TRIM(COALESCE({$a}study_status, ''))) IN ($phSt)";
-            foreach ($nonStudyingStatuses as $es) {
-                $params[] = $es;
-            }
-        }
-        if (!empty($studyOrClauses)) {
-            $where[] = '(' . implode(' OR ', $studyOrClauses) . ')';
-        }
+    if (empty($input['_defer_study_status_filter'])) {
+        applyCrmStudyStatusFilter($db, $a, $input, $where, $params);
     }
 
     // Student Code (`student_code`)

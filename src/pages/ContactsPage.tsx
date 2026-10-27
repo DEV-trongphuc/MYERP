@@ -469,10 +469,13 @@ const FINANCIAL_STATUS_OPTIONS = [
 
 const STUDY_STATUS_OPTIONS = [
   { value: 'all', label: 'Tất cả trạng thái học tập' },
-  { value: 'studying', label: 'Đang học' },
-  { value: 'completed', label: 'Đã hoàn thành' },
-  { value: 'reserved', label: 'Bảo lưu' },
-  { value: 'suspended', label: 'Tạm ngưng' },
+  { value: 'enrolled', label: 'Enrolled (Nhập học)' },
+  { value: 'training', label: 'Tranning (Đào tạo)' },
+  { value: 'studying', label: 'Studying (Đang học)' },
+  { value: 'postpone', label: 'Postpone (Bảo lưu)' },
+  { value: 'withdraw', label: 'Withdraw (Rút / Tạm ngưng)' },
+  { value: 'completed', label: 'Completed (Hoàn thành)' },
+  { value: 'graduated', label: 'Graduated (Tốt nghiệp)' },
 ];
 
 const COMMON_CITY_OPTIONS = [
@@ -3473,6 +3476,114 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
               <ChevronRight size={16} />
             </button>
           )}
+        </div>
+      )}
+
+      {/* STUDENT 7-STAGE QUICK FILTER TABS: Enrolled => Tranning => Studying => Postpone => Withdraw => Completed => Graduated */}
+      {segment === 'customer' && studentSubTab === 'chinh_thuc' && (
+        <div
+          className="no-scrollbar"
+          style={{
+            display: 'flex',
+            flexWrap: 'nowrap',
+            alignItems: 'center',
+            gap: '8px',
+            padding: isMobile ? '8px 10px' : '10px 14px',
+            marginBottom: '0.85rem',
+            background: 'var(--color-surface)',
+            borderRadius: '12px',
+            border: '1px solid var(--color-border)',
+            boxShadow: 'var(--shadow-sm)',
+            overflowX: 'auto',
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+            WebkitOverflowScrolling: 'touch'
+          }}
+        >
+          {[
+            { id: '', label: 'Tất cả', color: '#BD1D2D', countKey: 'study_all' },
+            { id: 'enrolled', label: 'Enrolled', color: '#0284c7', countKey: 'study_enrolled' },
+            { id: 'training', label: 'Tranning', color: '#4f46e5', countKey: 'study_training' },
+            { id: 'studying', label: 'Studying', color: '#16a34a', countKey: 'study_studying' },
+            { id: 'postpone', label: 'Postpone', color: '#d97706', countKey: 'study_postpone' },
+            { id: 'withdraw', label: 'Withdraw', color: '#dc2626', countKey: 'study_withdraw' },
+            { id: 'completed', label: 'Completed', color: '#2563eb', countKey: 'study_completed' },
+            { id: 'graduated', label: 'Graduated', color: '#BD1D2D', countKey: 'study_graduated' }
+          ].map((stTab, idx, arr) => {
+            const currentSt = (activeFilters.studyStatus || '').trim().toLowerCase();
+            const isActive = stTab.id === ''
+              ? !currentSt || currentSt === 'all'
+              : currentSt === stTab.id ||
+                (stTab.id === 'postpone' && ['reserved', 'deferred', 'bao_luu'].includes(currentSt)) ||
+                (stTab.id === 'withdraw' && ['suspended', 'tam_ngung', 'dropped'].includes(currentSt)) ||
+                (stTab.id === 'training' && currentSt === 'tranning');
+            const tabCount = stageCounts[stTab.countKey] !== undefined
+              ? stageCounts[stTab.countKey]
+              : (stTab.id === '' ? total : undefined);
+
+            return (
+              <React.Fragment key={stTab.id || 'all'}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextVal = (isActive && stTab.id !== '') ? '' : stTab.id;
+                    setFilterStudyStatus(nextVal);
+                    setActiveFilters(prev => ({ ...prev, studyStatus: nextVal }));
+                    setPage(1);
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: isMobile ? '5px 10px' : '6px 13px',
+                    borderRadius: '20px',
+                    fontSize: isMobile ? '0.72rem' : '0.77rem',
+                    fontWeight: isActive ? 700 : 600,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                    transition: 'all 0.15s ease',
+                    border: isActive ? `1.5px solid ${stTab.color}` : '1px solid var(--color-border)',
+                    background: isActive ? `${stTab.color}15` : 'var(--color-bg)',
+                    color: isActive ? stTab.color : 'var(--color-text)',
+                    boxShadow: isActive ? `0 2px 8px ${stTab.color}24` : 'none'
+                  }}
+                >
+                  <span
+                    style={{
+                      width: '7px',
+                      height: '7px',
+                      borderRadius: '50%',
+                      backgroundColor: stTab.color,
+                      flexShrink: 0
+                    }}
+                  />
+                  <span>{stTab.label}</span>
+                  {tabCount !== undefined && (
+                    <span
+                      style={{
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        padding: '1px 6px',
+                        borderRadius: '10px',
+                        background: isActive ? stTab.color : 'var(--color-bg-light)',
+                        color: isActive ? '#ffffff' : 'var(--color-text-muted)',
+                        marginLeft: '2px',
+                        minWidth: '18px',
+                        textAlign: 'center',
+                        lineHeight: '1.4'
+                      }}
+                    >
+                      {loading && stageCounts[stTab.countKey] === undefined ? '...' : Number(tabCount || 0).toLocaleString('vi-VN')}
+                    </span>
+                  )}
+                </button>
+                {idx > 0 && idx < arr.length - 1 && (
+                  <span style={{ color: '#cbd5e1', fontSize: '0.75rem', fontWeight: 700, userSelect: 'none' }}>➔</span>
+                )}
+              </React.Fragment>
+            );
+          })}
         </div>
       )}
 
@@ -7319,17 +7430,30 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   </span>
                                 );
                               }
-                              if (segment === 'customer' && studentSubTab === 'chinh_thuc' && c.study_status) {
+                              if (segment === 'customer' && studentSubTab === 'chinh_thuc') {
                                 const stMap: Record<string, { label: string; color: string; bg: string }> = {
-                                  studying: { label: 'Đang học', color: '#16a34a', bg: '#dcfce7' },
-                                  dang_hoc: { label: 'Đang học', color: '#16a34a', bg: '#dcfce7' },
-                                  completed: { label: 'Đã hoàn thành', color: '#2563eb', bg: '#dbeafe' },
-                                  reserved: { label: 'Bảo lưu', color: '#d97706', bg: '#fef3c7' },
-                                  bao_luu: { label: 'Bảo lưu', color: '#d97706', bg: '#fef3c7' },
-                                  suspended: { label: 'Tạm ngưng', color: '#dc2626', bg: '#fee2e2' },
-                                  tam_ngung: { label: 'Tạm ngưng', color: '#dc2626', bg: '#fee2e2' }
+                                  enrolled: { label: 'Enrolled', color: '#0284c7', bg: '#e0f2fe' },
+                                  moi_nhap_hoc: { label: 'Enrolled', color: '#0284c7', bg: '#e0f2fe' },
+                                  training: { label: 'Tranning', color: '#4f46e5', bg: '#e0e7ff' },
+                                  tranning: { label: 'Tranning', color: '#4f46e5', bg: '#e0e7ff' },
+                                  studying: { label: 'Studying', color: '#16a34a', bg: '#dcfce7' },
+                                  dang_hoc: { label: 'Studying', color: '#16a34a', bg: '#dcfce7' },
+                                  postpone: { label: 'Postpone', color: '#d97706', bg: '#fef3c7' },
+                                  reserved: { label: 'Postpone', color: '#d97706', bg: '#fef3c7' },
+                                  deferred: { label: 'Postpone', color: '#d97706', bg: '#fef3c7' },
+                                  bao_luu: { label: 'Postpone', color: '#d97706', bg: '#fef3c7' },
+                                  withdraw: { label: 'Withdraw', color: '#dc2626', bg: '#fee2e2' },
+                                  suspended: { label: 'Withdraw', color: '#dc2626', bg: '#fee2e2' },
+                                  tam_ngung: { label: 'Withdraw', color: '#dc2626', bg: '#fee2e2' },
+                                  dropped: { label: 'Withdraw', color: '#dc2626', bg: '#fee2e2' },
+                                  bo_hoc: { label: 'Withdraw', color: '#dc2626', bg: '#fee2e2' },
+                                  completed: { label: 'Completed', color: '#2563eb', bg: '#dbeafe' },
+                                  hoan_thanh: { label: 'Completed', color: '#2563eb', bg: '#dbeafe' },
+                                  graduated: { label: 'Graduated', color: '#BD1D2D', bg: '#ffe4e6' },
+                                  tot_nghiep: { label: 'Graduated', color: '#BD1D2D', bg: '#ffe4e6' }
                                 };
-                                const stMeta = stMap[String(c.study_status).toLowerCase()];
+                                const rawStKey = String(c.study_status || 'studying').trim().toLowerCase();
+                                const stMeta = stMap[rawStKey] || stMap.studying;
                                 if (stMeta) {
                                   return (
                                     <span

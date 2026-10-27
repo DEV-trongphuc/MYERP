@@ -264,6 +264,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   const justHydratedRef = useRef(false);
   const isEditMode = Boolean(editItem?.id && !editItem?.isClone);
   const isCloneMode = Boolean(editItem?.isClone);
+  const isRealEditOrClone = Boolean(isEditMode || isCloneMode || (editItem && (editItem.amount !== undefined || editItem.title !== undefined)));
   const [form, setForm] = useState<any>({ ...EMPTY_FORM });
   const [titlePrefix, setTitlePrefix] = useState<string>('Đề nghị thanh toán');
   const [titleSuffix, setTitleSuffix] = useState<string>('');
@@ -392,7 +393,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
 
   // Check for saved draft
   useEffect(() => {
-    if (isOpen && !editItem) {
+    if (isOpen && !isRealEditOrClone) {
       try {
         const saved = localStorage.getItem(EXPENSE_DRAFT_KEY);
         if (saved) {
@@ -778,11 +779,11 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
     return () => {
       controller.abort();
     };
-  }, [isOpen, propUsers]);
+  }, [isOpen]);
 
   // Auto-fill logged in user's bank details if target is 'Nội bộ'
   useEffect(() => {
-    if (isOpen && !editItem && user && paymentTarget === 'Nội bộ' && !paymentEmployeeId) {
+    if (isOpen && !isRealEditOrClone && user && paymentTarget === 'Nội bộ' && !paymentEmployeeId) {
       const currentEmp = users.find(u => Number(u.id) === Number(user.id)) || user;
       if (currentEmp) {
         setPaymentEmployeeId(String(currentEmp.id));
@@ -794,19 +795,24 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
         if (currentEmp.phone) setPaymentPhone(currentEmp.phone);
       }
     }
-  }, [isOpen, editItem, user, paymentTarget, paymentEmployeeId, users]);
+  }, [isOpen, isRealEditOrClone, user, paymentTarget, paymentEmployeeId, users]);
 
   // Initialize form state when opening or when editItem changes
   useEffect(() => {
     if (isOpen) {
       const isNewlyOpened = !prevOpenRef.current;
-      const isItemChanged = editItem !== prevEditItemRef.current;
+      const editItemKey = editItem?.id
+        ? `edit_${editItem.id}`
+        : editItem?.isClone
+          ? `clone_${editItem.title || ''}_${editItem.amount || ''}`
+          : `new_${editItem?.contact_id || editItem?.entity_id || ''}`;
+      const isItemChanged = editItemKey !== prevEditItemRef.current;
 
       if (isNewlyOpened || isItemChanged) {
         prevOpenRef.current = true;
-        prevEditItemRef.current = editItem;
+        prevEditItemRef.current = editItemKey;
 
-        if (editItem) {
+        if (isRealEditOrClone) {
           justHydratedRef.current = true;
 
           // Extract existing images with strict deduplication
@@ -1108,8 +1114,17 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
             setInvoiceType('none');
           }
         } else {
-          // Fresh create mode
+          // Fresh create mode (including pre-filled contact from CustomerProfileDrawer)
           const defaultApproverId = resolveTeamLeaderId(user, users, teams) || (users[0]?.id || null);
+          const prefillContactId = editItem?.contact_id || editItem?.entity_id || null;
+          const prefillContactName = editItem?.contact_name || '';
+          const prefillEntities = prefillContactId
+            ? [{
+                entity_type: editItem?.entity_type || 'contact',
+                entity_id: Number(prefillContactId),
+                name: prefillContactName || `Khách hàng #${prefillContactId}`
+              }]
+            : [];
 
           setImages([]);
           setTitlePrefix('Đề nghị thanh toán');
@@ -1138,7 +1153,8 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
             title: '',
             date: initialDate || new Date().toISOString().split('T')[0],
             due_date: '',
-            approver_id: defaultApproverId
+            approver_id: defaultApproverId,
+            entities: prefillEntities
           });
         }
 
@@ -1209,13 +1225,13 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
 
   // Keep approver_id updated with team leader
   useEffect(() => {
-    if (isOpen && !editItem && !form.approver_id && (users.length > 0 || teams.length > 0)) {
+    if (isOpen && !isRealEditOrClone && !form.approver_id && (users.length > 0 || teams.length > 0)) {
       const leaderId = resolveTeamLeaderId(user, users, teams) || users[0]?.id || null;
       if (leaderId) {
         setForm((prev: any) => ({ ...prev, approver_id: leaderId }));
       }
     }
-  }, [isOpen, editItem, users, teams, user, form.approver_id]);
+  }, [isOpen, isRealEditOrClone, users, teams, user, form.approver_id]);
 
   const isManagerOrAbove = Boolean(user && ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'accountant', 'ketoan', 'leader', 'truongphong', 'head_of_department'].includes(String(user.role).toLowerCase()));
   const isAutoApprove = Boolean(isManagerOrAbove && form.approver_id !== null && user?.id !== undefined && Number(form.approver_id) === Number(user.id));
@@ -2130,7 +2146,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                           ]}
                           value={paymentContactId}
                           onChange={val => {
-                            const cId = String(val);
+                            const cId = String(val || '');
                             setPaymentContactId(cId);
                             const con = contactOptions.find(c => c.value === cId);
                             if (con) {
@@ -2139,6 +2155,17 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                               if (con.bank_account) setPaymentBankAccount(con.bank_account);
                               if (con.bank_account_name || con.label) setPaymentAccountName((con.bank_account_name || con.label).toUpperCase());
                               if (con.phone) setPaymentPhone(con.phone);
+                              setForm((prev: any) => {
+                                const curEntities = Array.isArray(prev.entities) ? prev.entities : [];
+                                const numId = Number(cId);
+                                if (numId > 0 && !curEntities.some((e: any) => Number(e.entity_id) === numId && e.entity_type === 'contact')) {
+                                  return {
+                                    ...prev,
+                                    entities: [...curEntities, { entity_type: 'contact', entity_id: numId, name: con.label, avatar_url: con.avatar }]
+                                  };
+                                }
+                                return prev;
+                              });
                               if (con.bank_account) {
                                 addToast(`Đã trích xuất STK khách hàng: ${con.label}`, 'success');
                               }

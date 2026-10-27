@@ -421,6 +421,7 @@ class ContactController {
         $baseFilterInput['_defer_data_type_filter'] = true;
         $baseFilterInput['_defer_lead_status_filter'] = true;
         $baseFilterInput['_defer_multi_program_filter'] = true;
+        $baseFilterInput['_defer_study_status_filter'] = ($segment === 'customer');
         $baseFilterInput['_skip_omnichannel_filter'] = true;
         unset($baseFilterInput['uncontacted']);
         applyCrmAdvancedMultiTierFilters($this->db, 'c.', $baseFilterInput, $where, $params);
@@ -560,6 +561,51 @@ class ContactController {
                 $stageCounts['nurture'] = $nurtureTotal;
                 $stageCounts['lost'] = $lostTotal;
 
+                // Compute 7-Stage Student counts when viewing /students (segment === 'customer')
+                if ($segment === 'customer') {
+                    try {
+                        $stCountsWhere = $baseWhere;
+                        $stCountsWhere[] = "(c.lead_status NOT IN ('lost', 'nurture') OR c.lead_status IS NULL)";
+                        $stCountsWhereStr = !empty($stCountsWhere) ? implode(' AND ', $stCountsWhere) : '1=1';
+                        $stStmt = $this->db->prepare("SELECT LOWER(TRIM(COALESCE(c.study_status, 'studying'))) AS st, COUNT(*) AS cnt FROM contacts c WHERE $stCountsWhereStr GROUP BY st");
+                        $stStmt->execute($baseParams);
+                        $stRows = $stStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                        $stMapCounts = [
+                            'study_all' => 0,
+                            'study_enrolled' => 0,
+                            'study_training' => 0,
+                            'study_studying' => 0,
+                            'study_postpone' => 0,
+                            'study_withdraw' => 0,
+                            'study_completed' => 0,
+                            'study_graduated' => 0,
+                        ];
+                        foreach ($stRows as $sr) {
+                            $stVal = (string)($sr['st'] ?? '');
+                            $cVal = (int)($sr['cnt'] ?? 0);
+                            $stMapCounts['study_all'] += $cVal;
+                            if (in_array($stVal, ['enrolled', 'moi_nhap_hoc', 'nhap_hoc', 'nhập học'], true)) {
+                                $stMapCounts['study_enrolled'] += $cVal;
+                            } elseif (in_array($stVal, ['training', 'tranning', 'dao_tao', 'đào tạo'], true)) {
+                                $stMapCounts['study_training'] += $cVal;
+                            } elseif (in_array($stVal, ['postpone', 'postponed', 'reserved', 'deferred', 'bao_luu', 'bảo lưu', 'tam_hoan', 'tạm hoãn'], true)) {
+                                $stMapCounts['study_postpone'] += $cVal;
+                            } elseif (in_array($stVal, ['withdraw', 'withdrawn', 'suspended', 'tam_ngung', 'tạm ngưng', 'pause', 'dropped', 'bo_hoc', 'bỏ học', 'nghi_hoc', 'nghỉ học', 'thoi_hoc', 'thôi học'], true)) {
+                                $stMapCounts['study_withdraw'] += $cVal;
+                            } elseif (in_array($stVal, ['completed', 'hoan_thanh', 'hoàn thành'], true)) {
+                                $stMapCounts['study_completed'] += $cVal;
+                            } elseif (in_array($stVal, ['graduated', 'tot_nghiep', 'tốt nghiệp'], true)) {
+                                $stMapCounts['study_graduated'] += $cVal;
+                            } else {
+                                $stMapCounts['study_studying'] += $cVal;
+                            }
+                        }
+                        foreach ($stMapCounts as $kSt => $vSt) {
+                            $stageCounts[$kSt] = $vSt;
+                        }
+                    } catch (\Throwable $eSt) {}
+                }
+
                 // Compute uncontacted count on demand only
                 if (!empty($_GET['include_uncontacted_count']) || !empty($_GET['uncontacted'])) {
                     try {
@@ -601,6 +647,11 @@ class ContactController {
             } catch (\Exception $e) {
                 $stageCounts = [];
             }
+        }
+
+        // Apply deferred study_status filter for customer segment after computing 7-stage counts
+        if ($segment === 'customer' && function_exists('applyCrmStudyStatusFilter')) {
+            applyCrmStudyStatusFilter($this->db, 'c.', $_GET, $where, $params);
         }
 
         // Filter by Lead Status (active, nurture, lost) or default hide lost & nurture for active pipeline
@@ -4531,8 +4582,9 @@ class ContactController {
         if (!$contact) respond(404, null, 'Không tìm thấy thông tin học viên', false);
 
         $body = getBody();
+        $defaultAcademicCc = 'it.dept@ideas.edu.vn, student.notice@ideas.edu.vn, support@ideas.edu.vn';
         $toEmail = trim($body['to_email'] ?? $contact['email'] ?? '');
-        $ccEmail = trim($body['cc_email'] ?? '');
+        $ccEmail = array_key_exists('cc_email', $body) ? trim((string)$body['cc_email']) : $defaultAcademicCc;
         $subject = trim($body['subject'] ?? 'Thông báo Tiếp nhận học viên & Hướng dẫn học tập');
         $contentHtml = trim($body['content'] ?? $body['content_html'] ?? '');
 
@@ -4618,13 +4670,22 @@ class ContactController {
         if (!$contact) respond(404, null, 'Không tìm thấy thông tin học viên', false);
 
         $body = getBody();
-        $targetStatus = trim($body['study_status'] ?? '');
-        $allowedStatuses = ['studying', 'completed', 'reserved', 'suspended', 'tam_ngung'];
+        $targetStatus = strtolower(trim($body['study_status'] ?? ''));
+        $allowedStatuses = [
+            'enrolled', 'training', 'tranning', 'studying',
+            'postpone', 'reserved', 'deferred', 'bao_luu',
+            'withdraw', 'suspended', 'tam_ngung', 'dropped',
+            'completed', 'graduated'
+        ];
         if (!in_array($targetStatus, $allowedStatuses, true)) {
             respond(422, null, 'Trạng thái học tập không hợp lệ', false);
         }
-        if ($targetStatus === 'tam_ngung') {
-            $targetStatus = 'suspended';
+        if ($targetStatus === 'tranning') {
+            $targetStatus = 'training';
+        } elseif ($targetStatus === 'tam_ngung') {
+            $targetStatus = 'withdraw';
+        } elseif (in_array($targetStatus, ['deferred', 'bao_luu'], true)) {
+            $targetStatus = 'postpone';
         }
 
         $userNote = trim($body['note'] ?? '');
@@ -4634,11 +4695,20 @@ class ContactController {
 
         $oldStatus = $contact['study_status'] ?: 'studying';
         $statusLabels = [
-            'studying' => 'Đang học',
-            'completed' => 'Đã hoàn thành',
-            'reserved' => 'Bảo lưu',
-            'suspended' => 'Tạm ngưng',
-            'tam_ngung' => 'Tạm ngưng'
+            'enrolled' => 'Enrolled (Nhập học)',
+            'training' => 'Tranning (Đào tạo)',
+            'tranning' => 'Tranning (Đào tạo)',
+            'studying' => 'Studying (Đang học)',
+            'postpone' => 'Postpone (Bảo lưu)',
+            'reserved' => 'Postpone (Bảo lưu)',
+            'deferred' => 'Postpone (Bảo lưu)',
+            'bao_luu' => 'Postpone (Bảo lưu)',
+            'withdraw' => 'Withdraw (Rút / Tạm ngưng)',
+            'suspended' => 'Withdraw (Rút / Tạm ngưng)',
+            'tam_ngung' => 'Withdraw (Rút / Tạm ngưng)',
+            'dropped' => 'Withdraw (Rút / Tạm ngưng)',
+            'completed' => 'Completed (Hoàn thành)',
+            'graduated' => 'Graduated (Tốt nghiệp)'
         ];
         $oldStatusLabel = $statusLabels[$oldStatus] ?? $oldStatus;
         $newStatusLabel = $statusLabels[$targetStatus] ?? $targetStatus;

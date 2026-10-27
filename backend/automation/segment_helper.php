@@ -799,29 +799,41 @@ function buildSegmentWhereClause($criteriaJson, $workspaceId, $segmentId = null)
                                   )
                               )
                         )";
-                    } elseif (in_array($vLower, ['completed', 'graduated', 'hoan_thanh', 'tot_nghiep'], true)) {
+                    } elseif (in_array($vLower, ['enrolled', 'moi_nhap_hoc', 'nhap_hoc'], true)) {
                         $sqlExpr = "EXISTS (
                             SELECT 1 FROM contacts c
                             WHERE c.id = s.contact_id AND c.deleted_at IS NULL
-                              AND LOWER(COALESCE(c.study_status, '')) IN ('completed', 'graduated', 'hoan_thanh', 'hoàn thành', 'tot_nghiep', 'tốt nghiệp')
+                              AND LOWER(COALESCE(c.study_status, '')) IN ('enrolled', 'moi_nhap_hoc', 'nhap_hoc', 'nhập học')
                         )";
-                    } elseif (in_array($vLower, ['reserved', 'deferred', 'bao_luu'], true)) {
+                    } elseif (in_array($vLower, ['training', 'tranning', 'dao_tao'], true)) {
                         $sqlExpr = "EXISTS (
                             SELECT 1 FROM contacts c
                             WHERE c.id = s.contact_id AND c.deleted_at IS NULL
-                              AND LOWER(COALESCE(c.study_status, '')) IN ('reserved', 'deferred', 'bao_luu', 'bảo lưu')
+                              AND LOWER(COALESCE(c.study_status, '')) IN ('training', 'tranning', 'dao_tao', 'đào tạo')
                         )";
-                    } elseif (in_array($vLower, ['suspended', 'tam_ngung'], true)) {
+                    } elseif (in_array($vLower, ['completed', 'hoan_thanh'], true)) {
                         $sqlExpr = "EXISTS (
                             SELECT 1 FROM contacts c
                             WHERE c.id = s.contact_id AND c.deleted_at IS NULL
-                              AND LOWER(COALESCE(c.study_status, '')) IN ('suspended', 'tam_ngung', 'tạm ngưng')
+                              AND LOWER(COALESCE(c.study_status, '')) IN ('completed', 'hoan_thanh', 'hoàn thành')
                         )";
-                    } elseif (in_array($vLower, ['dropped', 'bo_hoc', 'nghi_hoc'], true)) {
+                    } elseif (in_array($vLower, ['graduated', 'tot_nghiep'], true)) {
                         $sqlExpr = "EXISTS (
                             SELECT 1 FROM contacts c
                             WHERE c.id = s.contact_id AND c.deleted_at IS NULL
-                              AND LOWER(COALESCE(c.study_status, '')) IN ('dropped', 'bo_hoc', 'bỏ học', 'nghi_hoc', 'nghỉ học')
+                              AND LOWER(COALESCE(c.study_status, '')) IN ('graduated', 'tot_nghiep', 'tốt nghiệp')
+                        )";
+                    } elseif (in_array($vLower, ['postpone', 'postponed', 'reserved', 'deferred', 'bao_luu'], true)) {
+                        $sqlExpr = "EXISTS (
+                            SELECT 1 FROM contacts c
+                            WHERE c.id = s.contact_id AND c.deleted_at IS NULL
+                              AND LOWER(COALESCE(c.study_status, '')) IN ('postpone', 'postponed', 'reserved', 'deferred', 'bao_luu', 'bảo lưu')
+                        )";
+                    } elseif (in_array($vLower, ['withdraw', 'withdrawn', 'suspended', 'tam_ngung', 'dropped', 'bo_hoc', 'nghi_hoc'], true)) {
+                        $sqlExpr = "EXISTS (
+                            SELECT 1 FROM contacts c
+                            WHERE c.id = s.contact_id AND c.deleted_at IS NULL
+                              AND LOWER(COALESCE(c.study_status, '')) IN ('withdraw', 'withdrawn', 'suspended', 'tam_ngung', 'tạm ngưng', 'dropped', 'bo_hoc', 'bỏ học', 'nghi_hoc', 'nghỉ học')
                         )";
                     } else {
                         $sqlExpr = "EXISTS (

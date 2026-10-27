@@ -372,7 +372,7 @@ const buildEstiamStudentOnboarding = (): Template => {
 <p style="margin: 0 0 16px 0;">1. <strong>Kênh Hỗ trợ Nhanh (Zalo/Hotline):</strong> 098 736 3935<br/>
 2. <strong>Kênh Hỗ trợ Học vụ (Email):</strong><br/>
 &nbsp;&nbsp;- Tiếp nhận yêu cầu: <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a><br/>
-&nbsp;&nbsp;- CC (Đồng gửi): <a href="mailto:student.notice@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">student.notice@ideas.edu.vn</a> <em>(Vui lòng luôn CC địa chỉ này để hệ thống ghi nhận và xử lý nhanh nhất)</em></p>
+&nbsp;&nbsp;- CC (Đồng gửi): <a href="mailto:it.dept@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">it.dept@ideas.edu.vn</a>, <a href="mailto:student.notice@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">student.notice@ideas.edu.vn</a>, <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a> <em>(Vui lòng luôn CC các địa chỉ này để hệ thống ghi nhận và xử lý nhanh nhất)</em></p>
 
 <p style="margin: 18px 0 8px 0;"><strong style="color: #BD1D2D; font-size: 15px;">B. TÀI KHOẢN HỌC TẬP</strong></p>
 <p style="margin: 0 0 8px 0;">Anh/Chị sẽ được cấp 3 tài khoản học tập, sử dụng xuyên suốt chương trình:</p>
