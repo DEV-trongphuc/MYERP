@@ -364,6 +364,9 @@ const EmailCanvas: React.FC<EmailCanvasProps> = ({
         onSelectBlock(null);
     }, [blocks, onUpdateBlocks, onSelectBlock]);
 
+    const latestBlocksRef = useRef<EmailBlock[]>(blocks);
+    latestBlocksRef.current = blocks;
+
     const handleUpdateBlockContent = useCallback((id: string, content: string) => {
         const updateDeep = (list: EmailBlock[]): EmailBlock[] => {
             return list.map(b => {
@@ -372,8 +375,10 @@ const EmailCanvas: React.FC<EmailCanvasProps> = ({
                 return b;
             });
         };
-        onUpdateBlocks(updateDeep(blocks), false); // Don't push every keystroke to history
-    }, [blocks, onUpdateBlocks]);
+        const next = updateDeep(latestBlocksRef.current);
+        latestBlocksRef.current = next;
+        onUpdateBlocks(next, false); // Don't push every keystroke to history
+    }, [onUpdateBlocks]);
 
     const handleUpdateBlockStyle = useCallback((id: string, newStyle: Partial<EmailBlock['style']>) => {
         const updateDeep = (list: EmailBlock[]): EmailBlock[] => {
@@ -383,10 +388,12 @@ const EmailCanvas: React.FC<EmailCanvasProps> = ({
                 return b;
             });
         };
-        onUpdateBlocks(updateDeep(blocks), false);
-    }, [blocks, onUpdateBlocks]);
+        const next = updateDeep(latestBlocksRef.current);
+        latestBlocksRef.current = next;
+        onUpdateBlocks(next, false);
+    }, [onUpdateBlocks]);
 
-    // Atomic combined update — used by TableBlockCanvas, timeline, etc. to update block data safely
+    // Atomic combined update — used by TableBlockCanvas, timeline, check_list, etc. to update block data safely
     const handleUpdateBlock = useCallback((id: string, data: Partial<EmailBlock>) => {
         const updateDeep = (list: EmailBlock[]): EmailBlock[] => {
             return list.map(b => {
@@ -399,8 +406,10 @@ const EmailCanvas: React.FC<EmailCanvasProps> = ({
                 return b;
             });
         };
-        onUpdateBlocks(updateDeep(blocks), false);
-    }, [blocks, onUpdateBlocks]);
+        const next = updateDeep(latestBlocksRef.current);
+        latestBlocksRef.current = next;
+        onUpdateBlocks(next, false);
+    }, [onUpdateBlocks]);
 
     /**
      * Handle column resize: cập nhật width của col [colIndex] và col [colIndex+1] trong row [rowId].

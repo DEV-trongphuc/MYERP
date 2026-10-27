@@ -668,6 +668,9 @@ export const deleteBlockDeep = (list: EmailBlock[], id: string): EmailBlock[] =>
 export const duplicateBlockDeep = (b: EmailBlock): EmailBlock => ({
     ...b,
     id: createUniqueId(),
+    style: b.style ? { ...b.style, ...(b.style.mobile ? { mobile: { ...b.style.mobile } } : {}) } : ({} as any),
+    items: b.items?.map(item => ({ ...item, id: createUniqueId() })),
+    socialLinks: b.socialLinks?.map(link => ({ ...link, id: createUniqueId() })),
     children: b.children?.map(duplicateBlockDeep)
 });
 
@@ -778,10 +781,41 @@ export const swapColumnsInRow = (colId: string, blocks: EmailBlock[]): EmailBloc
     return process(blocks);
 };
 
-export const ensureUniqueIds = (list: EmailBlock[]): EmailBlock[] => {
-    return list.map(b => ({
-        ...b,
-        id: createUniqueId(),
-        children: b.children ? ensureUniqueIds(b.children) : undefined
-    }));
+export const ensureUniqueIds = (
+    list: EmailBlock[],
+    seenIds: Set<string> = new Set<string>()
+): EmailBlock[] => {
+    if (!Array.isArray(list)) return [];
+    return list.map(b => {
+        let blockId = b.id && typeof b.id === 'string' && !seenIds.has(b.id) ? b.id : createUniqueId();
+        seenIds.add(blockId);
+
+        const nextItems = Array.isArray(b.items)
+            ? b.items.map(item => {
+                const itemId = item.id && typeof item.id === 'string' && !seenIds.has(item.id)
+                    ? item.id
+                    : createUniqueId();
+                seenIds.add(itemId);
+                return itemId === item.id ? item : { ...item, id: itemId };
+            })
+            : b.items;
+
+        const nextSocialLinks = Array.isArray(b.socialLinks)
+            ? b.socialLinks.map(link => {
+                const linkId = link.id && typeof link.id === 'string' && !seenIds.has(link.id)
+                    ? link.id
+                    : createUniqueId();
+                seenIds.add(linkId);
+                return linkId === link.id ? link : { ...link, id: linkId };
+            })
+            : b.socialLinks;
+
+        return {
+            ...b,
+            id: blockId,
+            ...(nextItems !== undefined ? { items: nextItems } : {}),
+            ...(nextSocialLinks !== undefined ? { socialLinks: nextSocialLinks } : {}),
+            children: b.children ? ensureUniqueIds(b.children, seenIds) : undefined
+        };
+    });
 };

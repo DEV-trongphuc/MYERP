@@ -6664,7 +6664,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                       if (!String(c.company_name || c.company || c.department || '').trim()) missingStudentFields.push('Công ty');
                       if (!String(c.job_title || c.position || '').trim()) missingStudentFields.push('Chức vụ');
                       if (!String(c.industry || c.profession || c.career || '').trim()) missingStudentFields.push('Ngành nghề');
-                      if (!String(c.program || '').trim()) missingStudentFields.push('Chương trình');
+                      if (!String(c.program || c.project_name || '').trim()) missingStudentFields.push('Chương trình');
                       const rawAdm = String(c.admission_date || '').trim();
                       if (!rawAdm || rawAdm.startsWith('0000')) missingStudentFields.push('Ngày NH');
                       const rawDob = String(c.birthday || c.birth_date || c.dob || '').trim();

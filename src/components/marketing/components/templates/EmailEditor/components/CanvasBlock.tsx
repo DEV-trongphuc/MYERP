@@ -40,10 +40,11 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
     const {
         block, bodyStyle, viewMode, selectedBlockId, dragOverId, dropPosition, draggingBlockId,
         onSelectBlock, onDragStart, onDragOver, onDrop, onMoveOrder, onSwapColumns,
-        onDuplicateBlock, onDeleteBlock, onUpdateBlockContent, onUpdateBlockStyle, onUpdateBlock, onSaveSection, onSelectParent,
+        onDuplicateBlock, onDeleteBlock, onUpdateBlockContent, onUpdateBlockStyle, onUpdateBlock: propOnUpdateBlock, onSaveSection, onSelectParent,
         customMergeTags = [],
     } = props;
-    const { usedColors } = useEditorContext();
+    const { usedColors, onUpdateBlock: ctxOnUpdateBlock } = useEditorContext();
+    const onUpdateBlock = propOnUpdateBlock || ctxOnUpdateBlock;
     const isSelected = selectedBlockId === block.id;
     const css = buildCss(block.style, viewMode, bodyStyle.fontFamily, block.type);
     // cssAny: typed escape hatch for custom canvas properties not in CSSProperties

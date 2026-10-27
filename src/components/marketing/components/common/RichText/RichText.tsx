@@ -48,9 +48,12 @@ const RichText: React.FC<RichTextProps> = ({ value, onChange, className = "", bo
 
     const FONT_SIZES = ['10px', '12px', '14px', '16px', '18px', '20px', '24px', '28px', '32px', '48px', '64px'];
 
+    const lastCommittedHtmlRef = useRef<string>(sanitizeHtmlLineHeight(value));
+
     useEffect(() => {
+        const sanitized = sanitizeHtmlLineHeight(value);
+        lastCommittedHtmlRef.current = sanitized;
         if (editorRef.current) {
-            const sanitized = sanitizeHtmlLineHeight(value);
             if (editorRef.current.innerHTML !== sanitized) {
                 if (document.activeElement !== editorRef.current) {
                     editorRef.current.innerHTML = sanitized;
@@ -60,7 +63,11 @@ const RichText: React.FC<RichTextProps> = ({ value, onChange, className = "", bo
     }, [value]);
 
     const handleChange = (htmlVal: string) => {
-        onChange(sanitizeHtmlLineHeight(htmlVal));
+        const sanitized = sanitizeHtmlLineHeight(htmlVal);
+        if (sanitized !== lastCommittedHtmlRef.current) {
+            lastCommittedHtmlRef.current = sanitized;
+            onChange(sanitized);
+        }
     };
 
     const checkActiveFormats = () => {

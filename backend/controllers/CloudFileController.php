@@ -364,6 +364,28 @@ class CloudFileController {
             }
         }
 
+        // Auto-OCR & enrich contact profile in background if contact lacks CCCD/Passport or key fields
+        if ($contact_id && !$isLink) {
+            $scanContactId = (int)$contact_id;
+            $dbRef = $this->db;
+            register_shutdown_function(function () use ($dbRef, $scanContactId) {
+                try {
+                    if (function_exists('fastcgi_finish_request')) {
+                        @fastcgi_finish_request();
+                    }
+                    $ocrServicePath = __DIR__ . '/../utils/StudentDocOcrService.php';
+                    if (is_file($ocrServicePath)) {
+                        require_once $ocrServicePath;
+                        if (class_exists('StudentDocOcrService') && \StudentDocOcrService::shouldScanContact($dbRef, $scanContactId)) {
+                            \StudentDocOcrService::scanAndEnrichContact($dbRef, $scanContactId);
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    // Fail silently in shutdown hook so response is never affected
+                }
+            });
+        }
+
         respond(201, ['id' => $this->db->lastInsertId(), 'path' => $dbPath], 'Đã tải tệp tin lên thành công');
     }
 

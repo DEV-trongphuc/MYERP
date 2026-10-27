@@ -357,12 +357,17 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
     const hasInitialBlockObjects = Boolean(
         template?.blocks && template.blocks.length > 0 && typeof template.blocks[0] === 'object'
     );
+    const expectsBlocks = hasInitialBlockObjects || Boolean((template as any)?.hasBlocks) || (Array.isArray(template?.blocks) && template!.blocks.length > 0);
+    const initialBlocksRef = useRef<EmailBlock[] | null>(null);
+    if (!initialBlocksRef.current) {
+        initialBlocksRef.current = hasInitialBlockObjects ? ensureUniqueIds(template!.blocks) : DEFAULT_BLOCKS;
+    }
     const [editorMode, setEditorMode] = useState<'visual' | 'code'>(
-        (template?.htmlContent && (!template.blocks || template.blocks.length === 0)) ? 'code' : 'visual'
+        (template?.htmlContent && !expectsBlocks) ? 'code' : 'visual'
     );
-    const [blocks, setBlocks] = useState<EmailBlock[]>(
-        hasInitialBlockObjects ? ensureUniqueIds(template!.blocks) : DEFAULT_BLOCKS
-    );
+    const [blocks, setBlocks] = useState<EmailBlock[]>(() => initialBlocksRef.current!);
+    const latestBlocksRef = useRef<EmailBlock[]>(blocks);
+    latestBlocksRef.current = blocks;
     const [bodyStyle, setBodyStyle] = useState<EmailBodyStyle>(template?.bodyStyle || DEFAULT_BODY_STYLE);
     const [name, setName] = useState(template?.name || 'Thiết kế mới');
     const [groupId, setGroupId] = useState(template?.groupId || '');
@@ -374,15 +379,13 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
     const [customHtml, setCustomHtml] = useState(template?.htmlContent || '');
     const handleSetEditorMode = useCallback((newMode: 'visual' | 'code') => {
         if (newMode === 'code' && editorMode === 'visual') {
-            setCustomHtml(compileHTML(blocks, bodyStyle, name));
+            setCustomHtml(compileHTML(latestBlocksRef.current, bodyStyle, name));
         }
         setEditorMode(newMode);
-    }, [editorMode, blocks, bodyStyle, name]);
+    }, [editorMode, bodyStyle, name]);
     const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop');
-    const [history, setHistory] = useState<EmailBlock[][]>([
-        hasInitialBlockObjects ? ensureUniqueIds(template!.blocks) : DEFAULT_BLOCKS
-    ]);
+    const [history, setHistory] = useState<EmailBlock[][]>(() => [initialBlocksRef.current!]);
     const [historyIndex, setHistoryIndex] = useState(0);
     // [UX] Track which history index was last saved to compute isDirty
     const [savedHistoryIndex, setSavedHistoryIndex] = useState(0);
@@ -392,7 +395,7 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
     const isDirty = historyIndex !== savedHistoryIndex || hasUncommittedChanges;
 
     // Sync real blocks or raw HTML if template opened instantaneously from lightweight thumbnail list and full payload arrives
-    const syncedRealBlocksRef = useRef<boolean>(hasInitialBlockObjects || Boolean(template?.htmlContent));
+    const syncedRealBlocksRef = useRef<boolean>(hasInitialBlockObjects || (!expectsBlocks && Boolean(template?.htmlContent)));
     useEffect(() => {
         const nowHasRealBlocks = Boolean(
             template?.blocks && template.blocks.length > 0 && typeof template.blocks[0] === 'object'
@@ -401,25 +404,27 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
             if (nowHasRealBlocks) {
                 const unique = ensureUniqueIds(template!.blocks);
                 syncedRealBlocksRef.current = true;
+                latestBlocksRef.current = unique;
                 setBlocks(unique);
                 setHistory([unique]);
                 setHistoryIndex(0);
                 setSavedHistoryIndex(0);
+                setEditorMode('visual');
                 if (template?.bodyStyle) setBodyStyle(template.bodyStyle);
                 if (template?.htmlContent) setCustomHtml(template.htmlContent);
-            } else if (template?.htmlContent) {
+            } else if (!expectsBlocks && template?.htmlContent) {
                 syncedRealBlocksRef.current = true;
                 setCustomHtml(template.htmlContent);
                 setEditorMode('code');
                 if (template?.bodyStyle) setBodyStyle(template.bodyStyle);
             }
         }
-    }, [template, historyIndex, hasUncommittedChanges]);
+    }, [template, expectsBlocks, historyIndex, hasUncommittedChanges]);
 
     useEffect(() => {
         if (!template?.id || template.id.startsWith('sys_') || syncedRealBlocksRef.current) return;
         let cancelled = false;
-        api.get<Template>(`templates/${template.id}`)
+        api.get<Template>(`templates/${template.id}`, { force: true })
             .then(res => {
                 if (cancelled || syncedRealBlocksRef.current) return;
                 if (res.success && res.data) {
@@ -428,10 +433,12 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
                     if (fullHasBlocks) {
                         const unique = ensureUniqueIds(full.blocks);
                         syncedRealBlocksRef.current = true;
+                        latestBlocksRef.current = unique;
                         setBlocks(unique);
                         setHistory([unique]);
                         setHistoryIndex(0);
                         setSavedHistoryIndex(0);
+                        setEditorMode('visual');
                         if (full.bodyStyle) setBodyStyle(full.bodyStyle);
                         if (full.htmlContent) setCustomHtml(full.htmlContent);
                     } else if (full.htmlContent) {
@@ -644,24 +651,35 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
     }, [history, historyIndex]);
 
     const handleSaveData = useCallback(async () => {
-        const finalHtml = editorMode === 'code' ? customHtml : compileHTML(blocks, bodyStyle, name);
+        const currentBlocks = latestBlocksRef.current;
+        const finalHtml = editorMode === 'code' ? customHtml : compileHTML(currentBlocks, bodyStyle, name);
         const effectiveVisibility: TemplateVisibilityMode = (!canSetShared && visibility === 'shared') ? 'personal' : visibility;
         const finalAccessConfig: TemplateAccessConfig = {
             ...accessConfig,
             visibility: effectiveVisibility,
         };
+        if (historyDebounceRef.current) {
+            clearTimeout(historyDebounceRef.current);
+            historyDebounceRef.current = null;
+        }
+        setHasUncommittedChanges(false);
+        setSavedHistoryIndex(historyIndex);
+
         let capturedThumb = '';
         try {
-            capturedThumb = await captureEmailTopWebp(finalHtml, editorMode === 'code' ? [] : blocks, bodyStyle, name);
+            capturedThumb = await Promise.race([
+                captureEmailTopWebp(finalHtml, editorMode === 'code' ? [] : currentBlocks, bodyStyle, name),
+                new Promise<string>(resolve => setTimeout(() => resolve(''), 800))
+            ]);
         } catch {
             capturedThumb = '';
         }
-        onSave({
+        await onSave({
             name,
             groupId,
             visibility: effectiveVisibility,
             accessConfig: finalAccessConfig,
-            blocks: (blocks && blocks.length > 0) ? blocks : [],
+            blocks: (currentBlocks && currentBlocks.length > 0) ? currentBlocks : [],
             bodyStyle: {
                 ...(bodyStyle || DEFAULT_BODY_STYLE),
                 visibility: effectiveVisibility,
@@ -670,14 +688,8 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
             htmlContent: finalHtml,
             thumbnail: capturedThumb || template?.thumbnail || ''
         });
-        if (historyDebounceRef.current) {
-            clearTimeout(historyDebounceRef.current);
-            historyDebounceRef.current = null;
-        }
-        setHasUncommittedChanges(false);
-        setSavedHistoryIndex(historyIndex);
         setTimeout(() => silentScan(), 0);
-    }, [editorMode, customHtml, blocks, bodyStyle, name, groupId, visibility, accessConfig, canSetShared, historyIndex, onSave, silentScan, template?.thumbnail]);
+    }, [editorMode, customHtml, bodyStyle, name, groupId, visibility, accessConfig, canSetShared, historyIndex, onSave, silentScan, template?.thumbnail]);
 
     // Keyboard Shortcuts: Ctrl+Z (Undo), Ctrl+Y/Ctrl+Shift+Z (Redo), Ctrl+S (Save)
     useEffect(() => {
@@ -709,6 +721,7 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
 
 
     const updateBlocks = (newBlocks: EmailBlock[], pushToHistory: boolean = true) => {
+        latestBlocksRef.current = newBlocks;
         if (pushToHistory) {
             addToHistory(newBlocks);
         } else {
@@ -862,7 +875,7 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
                         return b;
                     });
                 };
-                updateBlocks(updateDeep(blocks));
+                updateBlocks(updateDeep(latestBlocksRef.current), false);
             }}
             onUpdateBodyStyle={setBodyStyle}
             onDeleteBlock={(id) => { updateBlocks(deleteBlockDeep(blocks, id)); setSelectedBlockId(null); }}

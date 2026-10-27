@@ -27,10 +27,12 @@ const RichText: React.FC<RichTextProps> = ({ html, onChange, placeholder, classN
     const toolbarInteractingRef = useRef(false);
     // Unique id to scope CSS rules to this instance
     const instanceId = useRef(`rte-${Math.random().toString(36).slice(2, 8)}`).current;
+    const lastCommittedHtmlRef = useRef<string>(sanitizeHtmlLineHeight(html));
 
     useEffect(() => {
+        const sanitized = sanitizeHtmlLineHeight(html);
+        lastCommittedHtmlRef.current = sanitized;
         if (elementRef.current && document.activeElement !== elementRef.current) {
-            const sanitized = sanitizeHtmlLineHeight(html);
             if (elementRef.current.innerHTML !== sanitized) {
                 elementRef.current.innerHTML = sanitized;
             }
@@ -47,7 +49,10 @@ const RichText: React.FC<RichTextProps> = ({ html, onChange, placeholder, classN
     const handleInput = () => {
         if (elementRef.current) {
             const sanitized = sanitizeHtmlLineHeight(elementRef.current.innerHTML);
-            onChange(sanitized);
+            if (sanitized !== lastCommittedHtmlRef.current) {
+                lastCommittedHtmlRef.current = sanitized;
+                onChange(sanitized);
+            }
         }
     };
 

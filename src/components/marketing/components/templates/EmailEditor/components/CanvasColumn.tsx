@@ -198,6 +198,8 @@ const CanvasColumn: React.FC<CanvasColumnProps> = (props) => {
                                         onDuplicateBlock={onDuplicateBlock}
                                         onDeleteBlock={onDeleteBlock}
                                         onUpdateBlockContent={onUpdateBlockContent}
+                                        onUpdateBlockStyle={onUpdateBlockStyle}
+                                        onUpdateBlock={onUpdateBlock}
                                         onSaveSection={onSaveSection}
                                         onSelectParent={() => onSelectBlock(col.id)}
                                         onResizeColumns={onResizeColumns}
