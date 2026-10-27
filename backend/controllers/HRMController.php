@@ -6013,11 +6013,11 @@ class HRMController {
         [$y, $m] = array_map('intval', explode('-', $month));
         $params = $this->getLegalParameters($y, $m);
 
-        // 1. Thống kê nhân sự thực tế (users table uses is_active, NOT status)
+        // 1. Thống kê nhân sự thực tế (users table uses is_active, NOT status; loại trừ bot SI IDEAS)
         $uStmt = $this->db->prepare("
             SELECT id, full_name, email, phone, role, is_active, citizen_id, bank_name, bank_account, avatar_url, job_title, gender, created_at
             FROM users
-            WHERE tenant_id = ? AND role NOT IN ('superadmin', 'super_admin') AND email != 'info@ideas.edu.vn'
+            WHERE tenant_id = ? AND role NOT IN ('superadmin', 'super_admin') AND email != 'info@ideas.edu.vn' AND id != 9000001 AND full_name != 'SI IDEAS' AND deleted_at IS NULL
         ");
         $uStmt->execute([$tid]);
         $allUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -6071,11 +6071,11 @@ class HRMController {
         $profStmt = $this->db->prepare("
             SELECT 
                 COUNT(u.id) as active_count,
-                COALESCE(SUM(COALESCE(p.base_salary, 0) + COALESCE(p.deal_salary, 0) + COALESCE(p.allowance_meal, 0) + COALESCE(p.allowance_travel, 0) + COALESCE(p.allowance_phone, 0)), 0) as projected_gross,
-                COALESCE(SUM(CASE WHEN COALESCE(p.has_insurance, 1) = 1 THEN COALESCE(p.base_salary, 0) ELSE 0 END), 0) as projected_ins_salary
+                COALESCE(SUM((CASE WHEN COALESCE(p.base_salary, 0) > 0 THEN p.base_salary ELSE COALESCE(p.deal_salary, 0) END) + COALESCE(p.allowance_meal, 0) + COALESCE(p.allowance_travel, 0) + COALESCE(p.allowance_phone, 0)), 0) as projected_gross,
+                COALESCE(SUM(CASE WHEN COALESCE(p.has_insurance, 1) = 1 THEN (CASE WHEN COALESCE(p.base_salary, 0) > 0 THEN p.base_salary ELSE COALESCE(p.deal_salary, 0) END) ELSE 0 END), 0) as projected_ins_salary
             FROM users u
             LEFT JOIN hrm_profiles p ON u.id = p.user_id
-            WHERE u.tenant_id = ? AND u.is_active = 1 AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
+            WHERE u.tenant_id = ? AND u.is_active = 1 AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn' AND u.id != 9000001 AND u.full_name != 'SI IDEAS' AND u.deleted_at IS NULL
         ");
         $profStmt->execute([$tid]);
         $profData = $profStmt->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -6462,11 +6462,11 @@ class HRMController {
         $profStmt = $this->db->prepare("
             SELECT 
                 COUNT(u.id) as active_count,
-                COALESCE(SUM(COALESCE(p.base_salary, 0) + COALESCE(p.deal_salary, 0) + COALESCE(p.allowance_meal, 0) + COALESCE(p.allowance_travel, 0) + COALESCE(p.allowance_phone, 0)), 0) as projected_gross,
-                COALESCE(SUM(CASE WHEN COALESCE(p.has_insurance, 1) = 1 THEN COALESCE(p.base_salary, 0) ELSE 0 END), 0) as projected_ins_salary
+                COALESCE(SUM((CASE WHEN COALESCE(p.base_salary, 0) > 0 THEN p.base_salary ELSE COALESCE(p.deal_salary, 0) END) + COALESCE(p.allowance_meal, 0) + COALESCE(p.allowance_travel, 0) + COALESCE(p.allowance_phone, 0)), 0) as projected_gross,
+                COALESCE(SUM(CASE WHEN COALESCE(p.has_insurance, 1) = 1 THEN (CASE WHEN COALESCE(p.base_salary, 0) > 0 THEN p.base_salary ELSE COALESCE(p.deal_salary, 0) END) ELSE 0 END), 0) as projected_ins_salary
             FROM users u
             LEFT JOIN hrm_profiles p ON u.id = p.user_id
-            WHERE u.tenant_id = ? AND u.is_active = 1 AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
+            WHERE u.tenant_id = ? AND u.is_active = 1 AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn' AND u.id != 9000001 AND u.full_name != 'SI IDEAS' AND u.deleted_at IS NULL
         ");
         $profStmt->execute([$tid]);
         $profData = $profStmt->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -7151,7 +7151,7 @@ class HRMController {
             }
         } catch (\Throwable $e) {}
 
-        // 2. Lấy danh sách nhân sự thật từ users + hrm_profiles
+        // 2. Lấy danh sách nhân sự thật từ users + hrm_profiles (loại trừ tài khoản AI bot SI IDEAS)
         $uStmt = $this->db->prepare("
             SELECT 
                 u.id, u.full_name, u.email, u.phone, u.role, u.department, u.job_title,
@@ -7161,7 +7161,7 @@ class HRMController {
                 p.allowance_meal, p.allowance_travel, p.allowance_phone, p.custom_fields_json
             FROM users u
             LEFT JOIN hrm_profiles p ON u.id = p.user_id
-            WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn' AND u.deleted_at IS NULL
+            WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn' AND u.id != 9000001 AND u.full_name != 'SI IDEAS' AND u.deleted_at IS NULL
             ORDER BY u.is_active DESC, u.id ASC
         ");
         $uStmt->execute([$tid]);
@@ -7547,12 +7547,15 @@ class HRMController {
             if (is_array($savedPrimary)) {
                 $savedEmpsById = [];
                 foreach ($savedPrimary['employees'] ?? [] as $se) {
-                    if (!empty($se['id'])) $savedEmpsById[$se['id']] = $se;
+                    if (!empty($se['id']) && $se['id'] !== 'u_9000001' && ($se['ten'] ?? '') !== 'SI IDEAS') {
+                        $savedEmpsById[$se['id']] = $se;
+                    }
                 }
                 $mergedEmps = [];
                 foreach ($livePrimary['employees'] as $le) {
                     if (isset($savedEmpsById[$le['id']])) {
                         $se = $savedEmpsById[$le['id']];
+                        $mergedPc = !empty($se['pc']) && is_array($se['pc']) ? $se['pc'] : (is_array($le['pc']) ? $le['pc'] : []);
                         // Ưu tiên giữ các trường chuyên sâu kế toán đã chỉnh sửa, nhưng cập nhật avatar và tên/CCCD/STK nếu mới bổ sung
                         $mergedEmps[] = array_merge($le, $se, [
                             'avatar_url' => $le['avatar_url'] ?? ($se['avatar_url'] ?? null),
@@ -7561,15 +7564,19 @@ class HRMController {
                             'nh'         => !empty($se['nh']) ? $se['nh'] : $le['nh'],
                             'stk'        => !empty($se['stk']) ? $se['stk'] : $le['stk'],
                             'luongCB'    => ((float)($se['luongCB'] ?? 0) > 0) ? (float)$se['luongCB'] : $le['luongCB'],
+                            'pc'         => !empty($mergedPc) ? (object)$mergedPc : new \stdClass(),
                         ]);
                         unset($savedEmpsById[$le['id']]);
                     } else {
                         $mergedEmps[] = $le;
                     }
                 }
-                // Giữ lại các nhân sự thời vụ/CTV thêm trực tiếp trên Kế Toán A-Z
-                foreach ($savedEmpsById as $extraEmp) {
-                    $mergedEmps[] = $extraEmp;
+                // Giữ lại các nhân sự thời vụ/CTV thêm trực tiếp trên Kế Toán A-Z (loại trừ các u_ đã xóa hoặc bot)
+                foreach ($savedEmpsById as $extraId => $extraEmp) {
+                    if (!str_starts_with((string)$extraId, 'u_')) {
+                        $extraEmp['pc'] = !empty($extraEmp['pc']) && is_array($extraEmp['pc']) ? (object)$extraEmp['pc'] : new \stdClass();
+                        $mergedEmps[] = $extraEmp;
+                    }
                 }
 
                 $mergedMonths = $livePrimary['months'];
@@ -7579,9 +7586,11 @@ class HRMController {
 
                 $savedPrimary['employees'] = $mergedEmps;
                 $savedPrimary['months'] = $mergedMonths;
-                if (empty($savedPrimary['contracts'])) {
-                    $savedPrimary['contracts'] = $livePrimary['contracts'];
-                }
+                $savedContracts = array_values(array_filter(
+                    $savedPrimary['contracts'] ?? [],
+                    fn($c) => ($c['empId'] ?? '') !== 'u_9000001'
+                ));
+                $savedPrimary['contracts'] = !empty($savedContracts) ? $savedContracts : $livePrimary['contracts'];
                 $savedState['companies'][$savedPrimary['id'] ?? 'myerp-primary'] = $savedPrimary;
             }
             respond(200, array_merge($savedState, ['workspace' => $savedState]), 'Tải dữ liệu Kế Toán A-Z thành công');
@@ -7655,7 +7664,7 @@ class HRMController {
                         if ($empUid <= 0 && preg_match('/^u_(\d+)$/', (string)($emp['id'] ?? ''), $m)) {
                             $empUid = (int)$m[1];
                         }
-                        if ($empUid <= 0) continue;
+                        if ($empUid <= 0 || $empUid === 9000001) continue;
 
                         // Bảo toàn cấu trúc JSON erp_profile trong users.address nếu có
                         $chkAddr = $this->db->prepare("SELECT address FROM users WHERE id = ? AND tenant_id = ? LIMIT 1");
@@ -7666,7 +7675,10 @@ class HRMController {
                         if (str_starts_with(trim($existingAddr), '{')) {
                             $parsedAddr = json_decode($existingAddr, true);
                             if (is_array($parsedAddr) && isset($parsedAddr['erp_profile']) && is_array($parsedAddr['erp_profile'])) {
-                                if ($newDiaChi !== '') $parsedAddr['erp_profile']['address_detail'] = $newDiaChi;
+                                if ($newDiaChi !== '') {
+                                    $parsedAddr['erp_profile']['address_text'] = $newDiaChi;
+                                    $parsedAddr['erp_profile']['address_detail'] = $newDiaChi;
+                                }
                                 if (!empty($emp['mst'])) $parsedAddr['erp_profile']['tax_id'] = trim((string)$emp['mst']);
                                 if (!empty($emp['soBHXH'])) $parsedAddr['erp_profile']['insurance_id'] = trim((string)$emp['soBHXH']);
                                 if (!empty($emp['cn'])) $parsedAddr['erp_profile']['bank_branch'] = trim((string)$emp['cn']);
@@ -7724,7 +7736,7 @@ class HRMController {
                             'bh'        => $emp['bh'] ?? 'Có',
                             'soBHXH'    => $emp['soBHXH'] ?? '',
                             'luongBH'   => (float)($emp['luongBH'] ?? 0),
-                            'pc'        => $pc,
+                            'pc'        => !empty($pc) ? (object)$pc : new \stdClass(),
                             'npt'       => (int)($emp['npt'] ?? 0),
                             'gtbt'      => $emp['gtbt'] ?? 'Có',
                             'uyq'       => $emp['uyq'] ?? 'Có',
@@ -7764,16 +7776,55 @@ class HRMController {
                         $syncedEmployees++;
                     }
 
+                    // 1b. Đồng bộ hợp đồng lao động sang hrm_contracts
+                    foreach ($co['contracts'] ?? [] as $ct) {
+                        $rawEmpId = (string)($ct['empId'] ?? '');
+                        if (!preg_match('/^u_(\d+)$/', $rawEmpId, $cm)) continue;
+                        $ctUid = (int)$cm[1];
+                        if ($ctUid <= 0 || $ctUid === 9000001) continue;
+
+                        $soHD = trim((string)($ct['so'] ?? ''));
+                        $loaiHD = strtoupper(trim((string)($ct['loai'] ?? 'XD')));
+                        $tuNgay = !empty($ct['tu']) ? substr((string)$ct['tu'], 0, 10) : date('Y-01-01');
+                        $denNgay = (!empty($ct['den']) && $loaiHD !== 'KXD') ? substr((string)$ct['den'], 0, 10) : null;
+                        $luongHD = (float)($ct['luong'] ?? 0);
+
+                        $chkCt = $this->db->prepare("SELECT id FROM hrm_contracts WHERE user_id = ? AND (contract_code = ? OR start_date = ?) LIMIT 1");
+                        $chkCt->execute([$ctUid, $soHD, $tuNgay]);
+                        $existingCtId = (int)($chkCt->fetchColumn() ?: 0);
+
+                        if ($existingCtId > 0) {
+                            $updCt = $this->db->prepare("
+                                UPDATE hrm_contracts
+                                SET contract_code = COALESCE(NULLIF(?, ''), contract_code),
+                                    contract_type = ?,
+                                    salary_base = ?,
+                                    salary_deal = ?,
+                                    start_date = ?,
+                                    end_date = ?,
+                                    updated_at = NOW()
+                                WHERE id = ?
+                            ");
+                            $updCt->execute([$soHD, $loaiHD, $luongHD, $luongHD, $tuNgay, $denNgay, $existingCtId]);
+                        } else {
+                            $insCt = $this->db->prepare("
+                                INSERT INTO hrm_contracts (user_id, contract_code, contract_type, salary_base, salary_deal, salary_type, probation_rate, start_date, end_date, status, created_at, updated_at)
+                                VALUES (?, ?, ?, ?, ?, 'gross', 100, ?, ?, 'active', NOW(), NOW())
+                            ");
+                            $insCt->execute([$ctUid, $soHD ?: ('HĐ-' . $ctUid), $loaiHD, $luongHD, $luongHD, $tuNgay, $denNgay]);
+                        }
+                    }
+
                     // 2. Đồng bộ bảng lương tháng sang monthly_payslips nếu có truyền computed_payslips / payroll_rows
                     if (!empty($payrollRows) && preg_match('/^\d{4}-\d{2}$/', $syncMonth)) {
                         foreach ($payrollRows as $pr) {
                             $empData = is_array($pr['emp'] ?? null) ? $pr['emp'] : [];
                             $empUid = (int)($pr['user_id'] ?? ($empData['user_id'] ?? 0));
-                            $rawId  = (string)($pr['emp_id'] ?? ($empData['id'] ?? ''));
+                            $rawId  = (string)($pr['empId'] ?? $pr['emp_id'] ?? ($empData['id'] ?? ''));
                             if ($empUid <= 0 && preg_match('/^u_(\d+)$/', $rawId, $m)) {
                                 $empUid = (int)$m[1];
                             }
-                            if ($empUid <= 0) continue;
+                            if ($empUid <= 0 || $empUid === 9000001) continue;
 
                             $chkMp = $this->db->prepare("SELECT id, status FROM monthly_payslips WHERE user_id = ? AND month_year = ? LIMIT 1");
                             $chkMp->execute([$empUid, $syncMonth]);
@@ -7781,27 +7832,51 @@ class HRMController {
 
                             $workReq  = (float)($pr['congChuan'] ?? $pr['cong_chuan'] ?? 22);
                             $workAct  = (float)($pr['congTL'] ?? $pr['cong_tl'] ?? $workReq);
-                            $salCalc  = (float)($pr['luongCB'] ?? $pr['luong_theo_cong'] ?? 0);
-                            $pcInfo   = is_array($pr['pc'] ?? null) ? $pr['pc'] : [];
-                            $allowTot = isset($pcInfo['tong'])
-                                ? ((float)$pcInfo['tong'] + (float)($pr['khacMien'] ?? 0))
-                                : ((float)($pr['phu_cap'] ?? 0) + (float)($pr['khac_mien'] ?? 0));
-                            $otInfo   = is_array($pr['ot'] ?? null) ? $pr['ot'] : [];
-                            $otHours  = isset($otInfo['ot150'])
-                                ? ((float)($otInfo['ot150'] ?? 0) + (float)($otInfo['ot200'] ?? 0) + (float)($otInfo['ot300'] ?? 0) + (float)($otInfo['otDem'] ?? 0))
-                                : (float)($pr['ot_hours'] ?? 0);
-                            $otDays   = round($otHours / 8, 2);
-                            $otSal    = isset($otInfo['tong']) ? (float)$otInfo['tong'] : (float)($pr['ot_amount'] ?? 0);
-                            $bonus    = (float)($pr['thuong'] ?? 0);
-                            $bhInfo   = is_array($pr['bhNLD'] ?? null) ? $pr['bhNLD'] : [];
-                            $bhxh     = isset($bhInfo['bhxh']) ? (float)$bhInfo['bhxh'] : (float)($pr['bhxh_nld'] ?? 0);
-                            $bhyt     = isset($bhInfo['bhyt']) ? (float)$bhInfo['bhyt'] : (float)($pr['bhyt_nld'] ?? 0);
-                            $bhtn     = isset($bhInfo['bhtn']) ? (float)$bhInfo['bhtn'] : (float)($pr['bhtn_nld'] ?? 0);
-                            $pit      = (float)($pr['thue'] ?? $pr['thue_tncn'] ?? 0);
-                            $adv      = (float)($pr['tamUng'] ?? $pr['tam_ung'] ?? 0)
-                                      + (float)($pr['khauTru'] ?? $pr['khau_tru'] ?? 0)
-                                      + (float)($pr['doanPhi'] ?? $pr['doan_phi'] ?? 0);
-                            $net      = (float)($pr['net'] ?? 0);
+                            $salCalc  = (float)($pr['lTheoCong'] ?? $pr['luong_theo_cong'] ?? $pr['luongCB'] ?? 0);
+
+                            if (is_numeric($pr['pc'] ?? null)) {
+                                $allowTot = (float)$pr['pc'] + (float)($pr['khacMien'] ?? $pr['khac_mien'] ?? 0);
+                            } else {
+                                $pcInfo   = is_array($pr['pc'] ?? null) ? $pr['pc'] : [];
+                                $allowTot = isset($pcInfo['tong'])
+                                    ? ((float)$pcInfo['tong'] + (float)($pr['khacMien'] ?? 0))
+                                    : ((float)($pr['phu_cap'] ?? 0) + (float)($pr['khac_mien'] ?? 0));
+                            }
+
+                            if (is_numeric($pr['ot'] ?? null)) {
+                                $otSal   = (float)$pr['ot'];
+                                $otHours = (float)($pr['otH'] ?? $pr['ot_hours'] ?? 0);
+                            } else {
+                                $otInfo  = is_array($pr['ot'] ?? null) ? $pr['ot'] : [];
+                                $otHours = isset($otInfo['ot150'])
+                                    ? ((float)($otInfo['ot150'] ?? 0) + (float)($otInfo['ot200'] ?? 0) + (float)($otInfo['ot300'] ?? 0) + (float)($otInfo['otDem'] ?? 0))
+                                    : (float)($pr['otH'] ?? $pr['ot_hours'] ?? 0);
+                                $otSal   = isset($otInfo['tong']) ? (float)$otInfo['tong'] : (float)($pr['ot_amount'] ?? 0);
+                            }
+                            $otDays = round($otHours / 8, 2);
+                            $bonus  = (float)($pr['thuong'] ?? 0);
+
+                            $nldArr = is_array($pr['nld'] ?? null) ? $pr['nld'] : (is_array($pr['bhNLD'] ?? null) ? $pr['bhNLD'] : []);
+                            if (!empty($nldArr)) {
+                                $bhxh = (float)($nldArr['bhxh'] ?? 0);
+                                $bhyt = (float)($nldArr['bhyt'] ?? 0);
+                                $bhtn = (float)($nldArr['bhtn'] ?? 0);
+                            } elseif (is_numeric($pr['bhNLD'] ?? null) && (float)$pr['bhNLD'] > 0) {
+                                $totBh = (float)$pr['bhNLD'];
+                                $bhxh  = round($totBh * (8.0 / 10.5));
+                                $bhyt  = round($totBh * (1.5 / 10.5));
+                                $bhtn  = max(0, $totBh - $bhxh - $bhyt);
+                            } else {
+                                $bhxh = (float)($pr['bhxh_nld'] ?? 0);
+                                $bhyt = (float)($pr['bhyt_nld'] ?? 0);
+                                $bhtn = (float)($pr['bhtn_nld'] ?? 0);
+                            }
+
+                            $pit = (float)($pr['thue'] ?? $pr['thue_tncn'] ?? 0);
+                            $adv = (float)($pr['tamUng'] ?? $pr['tam_ung'] ?? 0)
+                                 + (float)($pr['khauTru'] ?? $pr['khau_tru'] ?? 0)
+                                 + (float)($pr['doanPhi'] ?? $pr['doan_phi'] ?? 0);
+                            $net = (float)($pr['net'] ?? 0);
 
                             if ($existingMp) {
                                 $mpUpd = $this->db->prepare("
