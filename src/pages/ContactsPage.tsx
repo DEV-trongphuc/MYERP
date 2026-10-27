@@ -1760,6 +1760,33 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const isActiveInstanceRef = useRef(isActiveInstance);
   isActiveInstanceRef.current = isActiveInstance;
 
+  const autoScannedSuspectsRef = useRef(false);
+
+  useEffect(() => {
+    const onContactUpdated = () => {
+      if (isActiveInstanceRef.current) {
+        fetchDataRef.current(true);
+      }
+    };
+    window.addEventListener('myerp:contact-updated', onContactUpdated);
+    return () => window.removeEventListener('myerp:contact-updated', onContactUpdated);
+  }, []);
+
+  useEffect(() => {
+    if (!isActiveInstance || segment !== 'customer' || autoScannedSuspectsRef.current) return;
+    autoScannedSuspectsRef.current = true;
+    api.post('/cloud-files/auto-scan-suspects', { limit: 6 })
+      .then((res) => {
+        const result = res?.data?.data || res?.data || {};
+        const updCount = Number(result.updated_count || 0);
+        if (updCount > 0) {
+          addToast(`✨ AI đã tự động dò tìm & bổ sung thông tin hồ sơ cho ${updCount} học viên!`, 'success');
+          fetchDataRef.current(true);
+        }
+      })
+      .catch(() => {});
+  }, [isActiveInstance, segment]);
+
   const usersByIdMap = useMemo(() => {
     const map = new Map<string, any>();
     users.forEach(u => {

@@ -2315,8 +2315,22 @@ class ContactController {
             $nextStageIdInUpdate = isset($b['stage_id']) && !empty($b['stage_id']) ? (int)$b['stage_id'] : 0;
             $stageChangedInUpdate = ($newStatus && $newStatus !== $currStatus) || ($nextStageIdInUpdate > 0 && $nextStageIdInUpdate !== $currStageId);
             if ($stageChangedInUpdate) {
-                if ($newStatus === 'enrolled' || $newStatus === 'hoc_vien' || $nextStageIdInUpdate === 44) {
+                if ($newStatus === 'enrolled' || $newStatus === 'hoc_vien' || $nextStageIdInUpdate === 44 || $nextStageIdInUpdate === 14) {
                     $this->db->prepare("UPDATE contacts SET status = 'customer' WHERE id = ? AND tenant_id = ?")->execute([$id, $auth['tenant_id']]);
+                    $dbRef = $this->db;
+                    $cidRef = (int)$id;
+                    register_shutdown_function(function () use ($dbRef, $cidRef) {
+                        try {
+                            if (function_exists('fastcgi_finish_request')) @fastcgi_finish_request();
+                            $ocrPath = __DIR__ . '/../utils/StudentDocOcrService.php';
+                            if (is_file($ocrPath)) {
+                                require_once $ocrPath;
+                                if (class_exists('StudentDocOcrService') && \StudentDocOcrService::shouldScanContact($dbRef, $cidRef)) {
+                                    \StudentDocOcrService::scanAndEnrichContact($dbRef, $cidRef);
+                                }
+                            }
+                        } catch (\Throwable $e) {}
+                    });
                 }
 
                 // Ensure stage transition history is always recorded even when updated via PUT /contacts/{id}
@@ -2819,9 +2833,23 @@ class ContactController {
                 $dealWonStatus = $stmtWon ? $stmtWon->fetchColumn() : 'enrolled';
                 if (empty($dealWonStatus)) $dealWonStatus = 'enrolled';
 
-                if ($newStatus === $dealWonStatus || $newStatus === 'enrolled') {
+                if ($newStatus === $dealWonStatus || $newStatus === 'enrolled' || $newStatus === 'hoc_vien' || in_array((int)$stageId, [13, 14, 43, 44], true)) {
                     require_once __DIR__ . '/../config/ParallelHelper.php';
                     ParallelHelper::lockPersonForWinningContact($this->db, (int)$id);
+                    $dbRef = $this->db;
+                    $cidRef = (int)$id;
+                    register_shutdown_function(function () use ($dbRef, $cidRef) {
+                        try {
+                            if (function_exists('fastcgi_finish_request')) @fastcgi_finish_request();
+                            $ocrPath = __DIR__ . '/../utils/StudentDocOcrService.php';
+                            if (is_file($ocrPath)) {
+                                require_once $ocrPath;
+                                if (class_exists('StudentDocOcrService') && \StudentDocOcrService::shouldScanContact($dbRef, $cidRef)) {
+                                    \StudentDocOcrService::scanAndEnrichContact($dbRef, $cidRef);
+                                }
+                            }
+                        } catch (\Throwable $e) {}
+                    });
                 }
             } catch (\Throwable $ePar) {
                 error_log("ParallelHelper error in moveStage: " . $ePar->getMessage());

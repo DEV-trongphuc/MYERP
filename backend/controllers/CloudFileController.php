@@ -1216,6 +1216,54 @@ EOT;
 
         respond(200, $result, 'Trích xuất hợp đồng thành công');
     }
+
+    /**
+     * Automatically scan all uploaded documents of a contact and fill missing profile/student fields.
+     */
+    public function autoOcrContact(array $auth): void {
+        $b = getBody();
+        $contactId = (int)($b['contact_id'] ?? $_GET['contact_id'] ?? 0);
+        $force = !empty($b['force']);
+        if ($contactId <= 0) {
+            respond(422, null, 'Thiếu ID khách hàng/học viên', false);
+        }
+
+        $ocrServicePath = __DIR__ . '/../utils/StudentDocOcrService.php';
+        if (!is_file($ocrServicePath)) {
+            respond(500, null, 'Không tìm thấy dịch vụ StudentDocOcrService', false);
+        }
+        require_once $ocrServicePath;
+
+        $res = \StudentDocOcrService::scanAndEnrichContact($this->db, $contactId, $force);
+        if (!empty($res['updated']) && class_exists('ContactController') && method_exists('ContactController', 'invalidatePersonaCache')) {
+            \ContactController::invalidatePersonaCache((int)($auth['tenant_id'] ?? 1));
+        }
+
+        $msg = !empty($res['updated'])
+            ? ('AI đã tự động quét hồ sơ & cập nhật: ' . implode(', ', $res['updated_fields'] ?? []))
+            : 'Đã kiểm tra hồ sơ đính kèm (thông tin đã đầy đủ hoặc chưa phát hiện trường mới)';
+        respond(200, $res, $msg);
+    }
+
+    /**
+     * Automatically find and scan suspect contacts (have cloud_files but missing CCCD & Passport).
+     */
+    public function autoScanSuspects(array $auth): void {
+        $b = getBody();
+        $limit = isset($b['limit']) ? (int)$b['limit'] : 6;
+        $ocrServicePath = __DIR__ . '/../utils/StudentDocOcrService.php';
+        if (!is_file($ocrServicePath)) {
+            respond(500, null, 'Không tìm thấy dịch vụ StudentDocOcrService', false);
+        }
+        require_once $ocrServicePath;
+
+        $res = \StudentDocOcrService::scanAllSuspectContacts($this->db, $limit);
+        if (!empty($res['updated_count']) && class_exists('ContactController') && method_exists('ContactController', 'invalidatePersonaCache')) {
+            \ContactController::invalidatePersonaCache((int)($auth['tenant_id'] ?? 1));
+        }
+
+        respond(200, $res, 'Đã hoàn tất tự động dò tìm và quét hồ sơ học viên');
+    }
 }
 
 

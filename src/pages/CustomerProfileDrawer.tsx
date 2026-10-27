@@ -3740,6 +3740,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         isUploading: { ...prev.isUploading, [docName]: false }
       }));
       fetchData();
+      if (effectiveContactId) {
+        triggerAutoOcrEnrich(effectiveContactId, true);
+      }
     } catch (err) {
       addToast(`Lỗi khi tải lên tài liệu ${cleanDocName}`, 'error');
       setRequiredDocsUploadModal(prev => ({
@@ -4105,6 +4108,55 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       setSavingDriveLink(false);
     }
   };
+
+  const [isAutoOcrScanning, setIsAutoOcrScanning] = useState(false);
+  const autoOcrInFlightRef = useRef(false);
+  const autoScannedContactsRef = useRef<Set<string>>(new Set());
+
+  const triggerAutoOcrEnrich = async (targetId: string | number | undefined, isManualOrUpload = false, isExplicitButtonClick = false) => {
+    const cid = Number(targetId);
+    if (!cid || autoOcrInFlightRef.current) return;
+    autoOcrInFlightRef.current = true;
+    setIsAutoOcrScanning(true);
+    try {
+      const res = await api.post('/cloud-files/auto-ocr-contact', {
+        contact_id: cid,
+        force: isManualOrUpload
+      });
+      const resultData = res?.data?.data || res?.data || {};
+      const updatedFields: string[] = Array.isArray(resultData.updated_fields) ? resultData.updated_fields : [];
+      if (resultData.updated && updatedFields.length > 0) {
+        addToast(`✨ AI đã tự động quét hồ sơ & điền: ${updatedFields.join(', ')}`, 'success');
+        fetchData();
+        window.dispatchEvent(new CustomEvent('myerp:contact-updated', { detail: { contactId: cid } }));
+      } else if (isExplicitButtonClick) {
+        addToast('Đã kiểm tra toàn bộ hồ sơ đính kèm (thông tin đã đầy đủ hoặc chưa phát hiện trường mới).', 'info');
+      }
+    } catch (err) {
+      console.error('Auto OCR enrich error:', err);
+      if (isExplicitButtonClick) {
+        addToast('Không thể quét AI hồ sơ lúc này, vui lòng thử lại.', 'error');
+      }
+    } finally {
+      autoOcrInFlightRef.current = false;
+      setIsAutoOcrScanning(false);
+    }
+  };
+
+  // Automatically scan "suspect" contacts (has uploaded files in docs, but missing both CCCD and Passport)
+  useEffect(() => {
+    if (!effectiveContactId || !contact || !Array.isArray(docs) || docs.length === 0) return;
+    const realFiles = docs.filter((d: any) => !d.is_link && !d.isMilestoneAttachment);
+    if (realFiles.length === 0) return;
+    const hasIdOrPassport = Boolean(
+      String(contact.citizen_id || (contact as any).cccd || (contact as any).id_card || contact.passport || (contact as any).passport_no || '').trim()
+    );
+    const key = `${effectiveContactId}_${realFiles.length}`;
+    if (!hasIdOrPassport && !autoScannedContactsRef.current.has(key)) {
+      autoScannedContactsRef.current.add(key);
+      triggerAutoOcrEnrich(effectiveContactId, false, false);
+    }
+  }, [effectiveContactId, contact?.id, contact?.citizen_id, contact?.passport, docs.length]);
 
   useEffect(() => {
     if (effectiveContactId) {
@@ -15641,6 +15693,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   if (successCount > 0) {
                                     addToast(`Đã tải lên ${successCount}/${totalFiles} tài liệu thành công!`, 'success');
                                     fetchData();
+                                    if (effectiveContactId) {
+                                      triggerAutoOcrEnrich(effectiveContactId, true, false);
+                                    }
                                   } else {
                                     addToast('Lỗi khi tải tài liệu lên server', 'error');
                                   }
@@ -15649,6 +15704,34 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               }} />
                               <Plus size={16} /> Upload
                             </label>
+                            {docs.length > 0 && (
+                              <button
+                                type="button"
+                                disabled={isAutoOcrScanning}
+                                onClick={() => triggerAutoOcrEnrich(effectiveContactId, true, true)}
+                                title="AI tự động quét CCCD/Passport, CV, Admission Form và điền các thông tin học viên còn thiếu"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  padding: '8px 14px',
+                                  borderRadius: '8px',
+                                  background: 'rgba(189, 29, 45, 0.08)',
+                                  color: '#BD1D2D',
+                                  border: '1px solid rgba(189, 29, 45, 0.22)',
+                                  fontSize: '0.825rem',
+                                  fontWeight: 700,
+                                  cursor: isAutoOcrScanning ? 'wait' : 'pointer',
+                                  transition: 'all 0.2s',
+                                  height: '36px',
+                                  opacity: isAutoOcrScanning ? 0.7 : 1
+                                }}
+                                className="hover-lift"
+                              >
+                                <Sparkles size={15} className={isAutoOcrScanning ? 'spin' : ''} />
+                                {isAutoOcrScanning ? 'Đang quét AI...' : 'Quét AI Hồ sơ'}
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => {
@@ -15966,6 +16049,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 if (successCount > 0) {
                                   addToast(`Đã tải lên ${successCount}/${totalFiles} tài liệu thành công!`, 'success');
                                   fetchData();
+                                  if (effectiveContactId) {
+                                    triggerAutoOcrEnrich(effectiveContactId, true, false);
+                                  }
                                 } else {
                                   addToast('Lỗi khi tải tài liệu lên server', 'error');
                                 }
