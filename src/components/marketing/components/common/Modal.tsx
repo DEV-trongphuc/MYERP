@@ -62,10 +62,13 @@ const Modal: React.FC<ModalProps> = ({
     return 2147483636;
   })();
 
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
-      const unregister = pushOverlay(modalId, onClose, resolvedZIndex);
+      const unregister = pushOverlay(modalId, () => onCloseRef.current(), resolvedZIndex);
       autoFocusFirstInput(modalContentRef.current);
       return () => {
         document.body.style.overflow = 'unset';
@@ -74,7 +77,7 @@ const Modal: React.FC<ModalProps> = ({
     } else {
       document.body.style.overflow = 'unset';
     }
-  }, [isOpen, modalId, onClose, resolvedZIndex]);
+  }, [isOpen, modalId, resolvedZIndex]);
 
   const sizeClasses = {
     sm: 'max-w-md rounded-[var(--radius-xl)] max-h-[90vh]',

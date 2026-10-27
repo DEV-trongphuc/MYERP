@@ -81,8 +81,8 @@ function normalizeOverlayPriority(id: string, rawPriority: number): number {
     return 2147483625;
   }
 
-  // Tier 5 Modals / Dialogs / Command Palette / Menus (2147483642 - 2147483645)
-  if (rawPriority >= 2147483640) {
+  // Tier 5 Modals / Dialogs / Command Palette / Menus (2147483630 - 2147483646)
+  if (rawPriority >= 2147483630) {
     return Math.min(rawPriority, 2147483646);
   }
   return 2147483644;

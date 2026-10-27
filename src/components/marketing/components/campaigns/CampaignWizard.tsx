@@ -22,6 +22,7 @@ import LaunchPreview from './LaunchPreview';
 import TestEmailModal from './TestEmailModal';
 import TabTransition from '../common/TabTransition';
 const EmailEditor = React.lazy(() => import('../templates/EmailEditor/index'));
+import { invalidateEmailTemplatesMemoryCache } from '../../../../pages/marketing/EmailTemplatesPage';
 import PreSendReviewModal from './PreSendReviewModal';
 import ConfirmModal from '../common/ConfirmModal';
 import { interpolateMergeTags } from '../../utils/formatters';
@@ -2168,37 +2169,47 @@ const CampaignWizard: React.FC<CampaignWizardProps> = ({
                 activateFlowId={activateFlowId}
                 setActivateFlowId={setActivateFlowId}
             />
-            {/* AI Email Editor Modal (Quick edit) */}
+            {/* AI Email Editor Modal (Quick edit — EmailEditor self-portals to getMktPortalRoot at zIndex 2147483638) */}
             {isEditingTemplate && activeEditTemplateId && (
-                <div className="fixed inset-0 z-[2147483646] bg-slate-900/40 backdrop-blur-sm" style={{ zIndex: 2147483646 }}>
-                    <React.Suspense fallback={null}><EmailEditor
-                        template={allTemplates.find(t => t.id === activeEditTemplateId)!}
-                        groups={[]}
-                        onSave={async (data) => {
-                            if (activeEditTemplateId.startsWith('sys_')) {
-                                toast.error('Lỗi: Bạn không thể sửa mẫu mặc định của hệ thống.');
-                                return;
+                <React.Suspense fallback={null}><EmailEditor
+                    template={allTemplates.find(t => t.id === activeEditTemplateId)!}
+                    groups={[]}
+                    onSave={async (data) => {
+                        if (activeEditTemplateId.startsWith('sys_')) {
+                            toast.error('Lỗi: Bạn không thể sửa mẫu mặc định của hệ thống.');
+                            return;
+                        }
+                        const currentTpl = allTemplates.find(t => t.id === activeEditTemplateId);
+                        const res = await api.put(`templates/${activeEditTemplateId}`, { ...currentTpl, ...data, lastModified: new Date().toISOString() });
+                        if (res.success) {
+                            const immediateUpdated = {
+                                ...currentTpl,
+                                ...data,
+                                ...(res.data || {}),
+                                lastModified: new Date().toISOString(),
+                            } as Template;
+                            if (immediateUpdated.htmlContent) {
+                                setTemplatePreviews(prev => ({ ...prev, [activeEditTemplateId]: immediateUpdated.htmlContent }));
                             }
-                            const res = await api.put(`templates/${activeEditTemplateId}`, { ...allTemplates.find(t => t.id === activeEditTemplateId), ...data, lastModified: new Date().toISOString() });
-                            if (res.success) {
-                                toast.success('Đã lưu mẫu!');
-                                setIsEditingTemplate(false);
-                                setActiveEditTemplateId(null);
-                                // Update preview
-                                const detail = await api.get<Template>(`templates?id=${activeEditTemplateId}`);
-                                if (detail.success && detail.data) {
-                                    setTemplatePreviews(prev => ({ ...prev, [activeEditTemplateId]: detail.data!.htmlContent }));
-                                }
-                            } else {
-                                toast.error('Lỗi lưu mẫu: ' + (res.message || 'Không rõ lý do'));
-                            }
-                        }}
-                        onCancel={() => {
+                            invalidateEmailTemplatesMemoryCache(activeEditTemplateId, immediateUpdated);
+                            toast.success('Đã lưu mẫu!');
                             setIsEditingTemplate(false);
                             setActiveEditTemplateId(null);
-                        }}
-                    /></React.Suspense>
-                </div>
+                            // Update preview from server
+                            const detail = await api.get<Template>(`templates?id=${activeEditTemplateId}`, {}, { force: true });
+                            if (detail.success && detail.data) {
+                                invalidateEmailTemplatesMemoryCache(activeEditTemplateId, detail.data);
+                                setTemplatePreviews(prev => ({ ...prev, [activeEditTemplateId]: detail.data!.htmlContent }));
+                            }
+                        } else {
+                            toast.error('Lỗi lưu mẫu: ' + (res.message || 'Không rõ lý do'));
+                        }
+                    }}
+                    onCancel={() => {
+                        setIsEditingTemplate(false);
+                        setActiveEditTemplateId(null);
+                    }}
+                /></React.Suspense>
             )}
             {/* Confirm modal when closing wizard with unsaved changes */}
             {showUnsavedConfirmModal && (

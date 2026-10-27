@@ -400,7 +400,7 @@ const AIEmailGeneratorModal: React.FC<AIEmailGeneratorModalProps> = ({
     const modalNode = (
         <div
             className="fixed inset-0 flex items-center justify-center p-3 sm:p-5"
-            style={{ zIndex: 2147483646 }}
+            style={{ zIndex: 2147483644 }}
         >
             {/* App-Standard Dark Blur Backdrop (100% matched with CustomerProfileDrawer) */}
             <div

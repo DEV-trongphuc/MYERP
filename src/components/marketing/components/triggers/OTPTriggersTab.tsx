@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import { ShieldAlert, Plus, Edit3, Trash2, CheckCircle2, Copy, Settings2, Key, Clock, FileText } from 'lucide-react';
 import { api } from '../../services/storageAdapter';
 import { Template } from '../../types';
@@ -10,7 +9,6 @@ import Select from '../common/Select';
 import toast from 'react-hot-toast';
 import ConfirmModal from '../common/ConfirmModal';
 import EmailEditor from '../templates/EmailEditor/index';
-import { getMktPortalRoot } from '../../utils/portalRoot';
 import { AppIcon } from '../../../common/AppIcons';
 
 export interface OTPProfile {
@@ -279,17 +277,14 @@ const OTPTriggersTab: React.FC = () => {
             </Modal>
             <ConfirmModal isOpen={!!confirmDeleteId} onClose={() => setConfirmDeleteId(null)} onConfirm={executeDelete} title="Xác nhận xóa" message="Xóa OTP Profile này sẽ khiến các Form/API đang tích hợp không thể gửi mã xác nhận nữa." variant="danger" confirmLabel="Xóa Profile" />
 
-            {/* Quick Edit Email Template Modal */}
-            {isEditorOpen && editingTemplate && createPortal(
-                <div className="fixed inset-0 z-[99999] bg-slate-50 flex flex-col">
-                    <EmailEditor
-                        template={editingTemplate}
-                        groups={[]}
-                        onSave={handleSaveTemplate}
-                        onCancel={() => setIsEditorOpen(false)}
-                    />
-                </div>,
-                getMktPortalRoot()
+            {/* Quick Edit Email Template Modal (EmailEditor self-portals to getMktPortalRoot at zIndex 2147483638) */}
+            {isEditorOpen && editingTemplate && (
+                <EmailEditor
+                    template={editingTemplate}
+                    groups={[]}
+                    onSave={handleSaveTemplate}
+                    onCancel={() => setIsEditorOpen(false)}
+                />
             )}
         </div>
     );

@@ -10,6 +10,7 @@ import Select from '../../common/Select';
 import TemplateSelector from '../TemplateSelector';
 import EmailPreviewDrawer from './EmailPreviewDrawer';
 import EmailEditor from '../../templates/EmailEditor/index';
+import { invalidateEmailTemplatesMemoryCache } from '../../../../../pages/marketing/EmailTemplatesPage';
 import toast from 'react-hot-toast';
 import ConfirmModal from '../../common/ConfirmModal';
 import { MultiFileUploadModal } from '../../campaigns/MultiFileUploadModal';
@@ -72,8 +73,30 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
         api.get<Template[]>('templates').then(res => {
             if (res.success) {
                 const raw = Array.isArray(res.data) ? res.data : ((res.data as any)?.data || []);
-                const personalTemplates = raw.filter((t: any) => t && !String(t.id || '').startsWith('sys_'));
-                setTemplates(personalTemplates);
+                const personalTemplates: Template[] = raw.filter((t: any) => t && !String(t.id || '').startsWith('sys_'));
+                setTemplates(prev => {
+                    const prevMap = new Map(prev.map(t => [t.id, t]));
+                    const merged = personalTemplates.map(t => {
+                        const existing = prevMap.get(t.id);
+                        const existingHasFullBlocks = Boolean(existing?.blocks && Array.isArray(existing.blocks) && typeof existing.blocks[0] === 'object');
+                        if (existing && (existingHasFullBlocks || (existing.htmlContent && !t.htmlContent))) {
+                            return {
+                                ...t,
+                                blocks: existingHasFullBlocks ? existing.blocks : t.blocks,
+                                htmlContent: existing.htmlContent || t.htmlContent,
+                                bodyStyle: existing.bodyStyle || t.bodyStyle,
+                            };
+                        }
+                        return t;
+                    });
+                    // Also keep any single-fetched template not yet in list
+                    prev.forEach(p => {
+                        if (!merged.some(m => m.id === p.id)) {
+                            merged.push(p);
+                        }
+                    });
+                    return merged;
+                });
             }
         });
         api.get<TemplateGroup[]>('template_groups').then(res => {
@@ -106,17 +129,17 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
     useEffect(() => {
         if (config.templateId && sourceMode === 'template') {
             setTemplateDeleted(false); // Reset khi templateId thay đổi
-            api.get<Template>(`templates?id=${config.templateId}`).then(res => {
+            api.get<Template>(`templates?id=${config.templateId}`, {}, { force: true }).then(res => {
                 if (res.success && res.data) {
                     // Update templates array with full data
                     setTemplates(prev => {
                         const index = prev.findIndex(t => t.id === config.templateId);
                         if (index >= 0) {
                             const updated = [...prev];
-                            updated[index] = res.data;
+                            updated[index] = res.data!;
                             return updated;
                         }
-                        return [...prev, res.data];
+                        return [...prev, res.data!];
                     });
                 } else {
                     // Template đã bị xóa hoặc không tồn tại
@@ -628,6 +651,10 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                 htmlContent={previewData?.html}
                 isOpen={!!previewData}
                 onClose={() => setPreviewData(null)}
+                onEdit={previewData?.template && !disabled ? () => {
+                    setPreviewData(null);
+                    setIsEditingTemplate(true);
+                } : undefined}
             />
 
             <ConfirmModal
@@ -671,42 +698,56 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                 }}
             />
 
-            {/* AI Email Editor Modal (Quick edit) */}
-            {isEditingTemplate && selectedTemplate && typeof document !== 'undefined' && createPortal(
-                <div className="fixed inset-0 z-[2147483646] bg-slate-900/40 backdrop-blur-sm" style={{ zIndex: 2147483646 }}>
-                    <EmailEditor
-                        template={templates.find(t => t.id === selectedTemplate.id) || selectedTemplate}
-                        groups={groups}
-                        onSave={async (data) => {
-                            if (selectedTemplate.id.startsWith('sys_')) {
-                                toast.error('Lỗi: Bạn không thể sửa mẫu mặc định của hệ thống.');
-                                return;
-                            }
-                            const res = await api.put(`templates/${selectedTemplate.id}`, { ...selectedTemplate, ...data, lastModified: new Date().toISOString() });
-                            if (res.success) {
-                                toast.success('Đã cấu hình & lưu lại mẫu!');
-                                setIsEditingTemplate(false);
-                                // Refresh template view to update thumbnail/changes
-                                const detail = await api.get<Template>(`templates?id=${selectedTemplate.id}`);
-                                if (detail.success && detail.data) {
-                                    setTemplates(prev => {
-                                        const idx = prev.findIndex(t => t.id === selectedTemplate.id);
-                                        if (idx >= 0) {
-                                            const updated = [...prev];
-                                            updated[idx] = detail.data!;
-                                            return updated;
-                                        }
-                                        return [...prev, detail.data!];
-                                    });
+            {/* AI Email Editor Modal (Quick edit — EmailEditor self-portals to getMktPortalRoot at zIndex 2147483638) */}
+            {isEditingTemplate && selectedTemplate && typeof document !== 'undefined' && (
+                <EmailEditor
+                    template={templates.find(t => t.id === selectedTemplate.id) || selectedTemplate}
+                    groups={groups}
+                    onSave={async (data) => {
+                        if (selectedTemplate.id.startsWith('sys_')) {
+                            toast.error('Lỗi: Bạn không thể sửa mẫu mặc định của hệ thống.');
+                            return;
+                        }
+                        const res = await api.put(`templates/${selectedTemplate.id}`, { ...selectedTemplate, ...data, lastModified: new Date().toISOString() });
+                        if (res.success) {
+                            const immediateUpdated: Template = {
+                                ...selectedTemplate,
+                                ...data,
+                                ...(res.data || {}),
+                                lastModified: new Date().toISOString(),
+                            } as Template;
+                            setTemplates(prev => {
+                                const idx = prev.findIndex(t => t.id === selectedTemplate.id);
+                                if (idx >= 0) {
+                                    const updated = [...prev];
+                                    updated[idx] = immediateUpdated;
+                                    return updated;
                                 }
-                            } else {
-                                toast.error('Lỗi lưu mẫu: ' + (res.message || 'Không rõ lý do'));
+                                return [...prev, immediateUpdated];
+                            });
+                            invalidateEmailTemplatesMemoryCache(selectedTemplate.id, immediateUpdated);
+                            toast.success('Đã cấu hình & lưu lại mẫu!');
+                            setIsEditingTemplate(false);
+                            // Refresh template view to update thumbnail/changes from server
+                            const detail = await api.get<Template>(`templates?id=${selectedTemplate.id}`, {}, { force: true });
+                            if (detail.success && detail.data) {
+                                invalidateEmailTemplatesMemoryCache(selectedTemplate.id, detail.data);
+                                setTemplates(prev => {
+                                    const idx = prev.findIndex(t => t.id === selectedTemplate.id);
+                                    if (idx >= 0) {
+                                        const updated = [...prev];
+                                        updated[idx] = detail.data!;
+                                        return updated;
+                                    }
+                                    return [...prev, detail.data!];
+                                });
                             }
-                        }}
-                        onCancel={() => setIsEditingTemplate(false)}
-                    />
-                </div>,
-                getMktPortalRoot()
+                        } else {
+                            toast.error('Lỗi lưu mẫu: ' + (res.message || 'Không rõ lý do'));
+                        }
+                    }}
+                    onCancel={() => setIsEditingTemplate(false)}
+                />
             )}
         </div>
     );

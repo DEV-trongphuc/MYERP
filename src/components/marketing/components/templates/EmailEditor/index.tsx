@@ -24,6 +24,7 @@ import { createBlock, insertDeep, deleteBlockDeep, duplicateBlockDeep, ensureUni
 import { API_BASE_URL } from '../../../utils/config';
 import { api } from '../../../services/storageAdapter';
 import { getMktPortalRoot } from '../../../utils/portalRoot';
+import { pushOverlay } from '../../../../../utils/overlayStack';
 import {
     type TemplateAccessConfig,
     type TemplateVisibilityMode,
@@ -424,7 +425,7 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
     useEffect(() => {
         if (!template?.id || template.id.startsWith('sys_') || syncedRealBlocksRef.current) return;
         let cancelled = false;
-        api.get<Template>(`templates/${template.id}`, { force: true })
+        api.get<Template>(`templates/${template.id}`, {}, { force: true })
             .then(res => {
                 if (cancelled || syncedRealBlocksRef.current) return;
                 if (res.success && res.data) {
@@ -897,8 +898,28 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
         />
     );
 
+    const selectedBlockIdRef = useRef<string | null>(selectedBlockId);
+    selectedBlockIdRef.current = selectedBlockId;
+    const onCancelRef = useRef(onCancel);
+    onCancelRef.current = onCancel;
+
+    useEffect(() => {
+        return pushOverlay(
+            'email-editor-overlay',
+            () => {
+                if (selectedBlockIdRef.current) {
+                    setSelectedBlockId(null);
+                    return true;
+                }
+                onCancelRef.current();
+                return true;
+            },
+            2147483638
+        );
+    }, []);
+
     const editorContent = (
-        <div className="fixed inset-0 z-[2147483630] bg-[#f1f5f9] flex flex-col animate-in zoom-in-[0.98] fade-in slide-in-from-bottom-4 duration-300 font-sans shadow-2xl" style={{ zIndex: 2147483630 }}>
+        <div className="fixed inset-0 z-[2147483638] bg-[#f1f5f9] flex flex-col animate-in zoom-in-[0.98] fade-in slide-in-from-bottom-4 duration-300 font-sans shadow-2xl" style={{ zIndex: 2147483638 }}>
             <EmailTopBar
                 name={name} setName={setName}
                 groupId={groupId} setGroupId={setGroupId}

@@ -64,6 +64,32 @@ const fullTemplateBlocksCache = new Map<string, Template>();
 const prefetchingTemplateIds = new Set<string>();
 const compiledPreviewHtmlCache = new Map<string, string>();
 
+export function invalidateEmailTemplatesMemoryCache(templateId?: string, updatedTemplate?: Template): void {
+    if (templateId) {
+        if (updatedTemplate && updatedTemplate.blocks && Array.isArray(updatedTemplate.blocks) && typeof updatedTemplate.blocks[0] === 'object') {
+            fullTemplateBlocksCache.set(templateId, updatedTemplate);
+        } else {
+            fullTemplateBlocksCache.delete(templateId);
+        }
+        prefetchingTemplateIds.delete(templateId);
+        for (const key of Array.from(compiledPreviewHtmlCache.keys())) {
+            if (key.startsWith(`${templateId}::`)) {
+                compiledPreviewHtmlCache.delete(key);
+            }
+        }
+        if (cachedUserTemplates && updatedTemplate) {
+            cachedUserTemplates = cachedUserTemplates.map(t => t.id === templateId ? { ...t, ...updatedTemplate } : t);
+        } else {
+            cachedUserTemplates = null;
+        }
+    } else {
+        cachedUserTemplates = null;
+        fullTemplateBlocksCache.clear();
+        prefetchingTemplateIds.clear();
+        compiledPreviewHtmlCache.clear();
+    }
+}
+
 const fmtTemplateDate = (tpl: Template) => {
     if (tpl.id.startsWith('sys_')) return 'Mẫu hệ thống';
     const raw = tpl.created_at || tpl.createdAt || tpl.lastModified;
