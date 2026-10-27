@@ -1327,6 +1327,9 @@ switch ($resource) {
         elseif ($resourceId === 'approvals' && $subResource === 'update-related-users' && in_array($method, ['POST', 'PUT', 'PATCH'], true)) $ctrl->updateRelatedUsers($auth);
         elseif ($resourceId === 'accounting-az') {
             if ($subResource === 'overview' && $method === 'GET') $ctrl->getAccountingAzOverview($auth);
+            elseif (in_array($subResource, ['workspace', 'state', 'db'], true) && $method === 'GET') $ctrl->getAccountingAzWorkspace($auth);
+            elseif (in_array($subResource, ['workspace', 'state', 'db'], true) && in_array($method, ['POST', 'PUT', 'PATCH'], true)) $ctrl->saveAccountingAzWorkspace($auth);
+            elseif (in_array($subResource, ['sync-from-myerp', 'sync'], true) && in_array($method, ['POST', 'GET'], true)) $ctrl->syncAccountingAzFromMyerp($auth);
             elseif (in_array($subResource, ['simulate-payroll', 'simulator'], true) && in_array($method, ['POST', 'GET'], true)) $ctrl->simulatePayroll($auth);
             elseif (in_array($subResource, ['general-journal', 'journal'], true) && $method === 'GET') $ctrl->getGeneralJournal($auth);
             elseif (in_array($subResource, ['tax-declaration', 'tax'], true) && $method === 'GET') $ctrl->getTaxDeclaration($auth);

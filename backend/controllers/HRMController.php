@@ -7110,5 +7110,806 @@ class HRMController {
             ], 'Tính trợ cấp mất việc làm thành công');
         }
     }
+
+    /**
+     * Đảm bảo bảng lưu trữ trạng thái Kế Toán A-Z tồn tại (Idempotent DDL)
+     */
+    private function ensureAccountingAzTable(): void {
+        static $ensured = false;
+        if ($ensured) return;
+        try {
+            $this->db->exec("
+                CREATE TABLE IF NOT EXISTS hrm_accounting_az_workspace (
+                    tenant_id INT NOT NULL PRIMARY KEY,
+                    state_json LONGTEXT NULL,
+                    updated_by INT NULL,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ");
+            $ensured = true;
+        } catch (\Throwable $e) {
+            // Ignore if lacks DDL privilege
+        }
+    }
+
+    /**
+     * Xây dựng dữ liệu nhân sự, hợp đồng, chấm công & lương thực tế từ MYERP cho Kế Toán A-Z
+     */
+    private function buildLiveMyerpCompanyData(int $tid, string $targetMonth = ''): array {
+        if ($targetMonth === '' || !preg_match('/^\d{4}-\d{2}$/', $targetMonth)) {
+            $targetMonth = date('Y-m');
+        }
+
+        // 1. Lấy thông tin Tenant
+        $tenantName = 'CÔNG TY TNHH VIỆN QUỐC TẾ IDEAS';
+        try {
+            $tStmt = $this->db->prepare("SELECT name FROM tenants WHERE id = ? LIMIT 1");
+            $tStmt->execute([$tid]);
+            $tRow = $tStmt->fetch(PDO::FETCH_ASSOC);
+            if (!empty($tRow['name'])) {
+                $tenantName = $tRow['name'];
+            }
+        } catch (\Throwable $e) {}
+
+        // 2. Lấy danh sách nhân sự thật từ users + hrm_profiles
+        $uStmt = $this->db->prepare("
+            SELECT 
+                u.id, u.full_name, u.email, u.phone, u.role, u.department, u.job_title,
+                u.is_active, u.dob, u.gender, u.citizen_id, u.address, u.bank_name, u.bank_account,
+                u.avatar_url, u.created_at,
+                p.joined_date, p.base_salary, p.deal_salary, p.has_insurance,
+                p.allowance_meal, p.allowance_travel, p.allowance_phone, p.custom_fields_json
+            FROM users u
+            LEFT JOIN hrm_profiles p ON u.id = p.user_id
+            WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn' AND u.deleted_at IS NULL
+            ORDER BY u.is_active DESC, u.id ASC
+        ");
+        $uStmt->execute([$tid]);
+        $users = $uStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $employees = [];
+        $erpContractMeta = [];
+        foreach ($users as $u) {
+            $uid = (int)$u['id'];
+            $empId = 'u_' . $uid;
+            $custom = [];
+            if (!empty($u['custom_fields_json'])) {
+                $decoded = json_decode((string)$u['custom_fields_json'], true);
+                if (is_array($decoded)) $custom = $decoded;
+            }
+
+            $rawAddr = trim((string)($u['address'] ?? ''));
+            $erpProfile = [];
+            $cleanAddr = $rawAddr;
+            if (str_starts_with($rawAddr, '{')) {
+                $addrJson = json_decode($rawAddr, true);
+                if (is_array($addrJson)) {
+                    $erpProfile = is_array($addrJson['erp_profile'] ?? null) ? $addrJson['erp_profile'] : $addrJson;
+                    $cleanAddr = trim((string)($erpProfile['address_text'] ?? ($erpProfile['address_temporary'] ?? '')));
+                }
+            }
+
+            $rawGender = strtolower(trim((string)($u['gender'] ?? '')));
+            $gt = in_array($rawGender, ['female', 'nữ', 'nu', 'f'], true) ? 'Nữ' : 'Nam';
+            $baseSal = (float)(($u['base_salary'] ?? 0) > 0 ? $u['base_salary'] : ($u['deal_salary'] ?? 0));
+            $joined = !empty($u['joined_date'])
+                ? substr((string)$u['joined_date'], 0, 10)
+                : (!empty($erpProfile['date_joined'])
+                    ? substr((string)$erpProfile['date_joined'], 0, 10)
+                    : (!empty($u['created_at']) ? substr((string)$u['created_at'], 0, 10) : date('Y-01-01')));
+
+            $pc = is_array($custom['pc'] ?? null) ? $custom['pc'] : [];
+            if (!isset($pc['antrua']) && (float)($u['allowance_meal'] ?? 0) > 0) {
+                $pc['antrua'] = (float)$u['allowance_meal'];
+            }
+            if (!isset($pc['xangxe']) && (float)($u['allowance_travel'] ?? 0) > 0) {
+                $pc['xangxe'] = (float)$u['allowance_travel'];
+            }
+            if (!isset($pc['dienthoai']) && (float)($u['allowance_phone'] ?? 0) > 0) {
+                $pc['dienthoai'] = (float)$u['allowance_phone'];
+            }
+
+            $erpContractMeta[$empId] = [
+                'type'   => strtolower(trim((string)($erpProfile['contract_type'] ?? 'official'))),
+                'joined' => $joined,
+                'salary' => $baseSal,
+            ];
+
+            $employees[] = [
+                'id'        => $empId,
+                'user_id'   => $uid,
+                'avatar_url'=> $u['avatar_url'] ?? null,
+                'ma'        => !empty($custom['ma']) ? $custom['ma'] : (!empty($erpProfile['employee_id']) ? $erpProfile['employee_id'] : ('NV' . str_pad((string)$uid, 3, '0', STR_PAD_LEFT))),
+                'ten'       => $u['full_name'] ?: ('Nhân viên #' . $uid),
+                'gt'        => $gt,
+                'ns'        => !empty($u['dob']) ? substr((string)$u['dob'], 0, 10) : ($custom['ns'] ?? ''),
+                'qt'        => !empty($custom['qt']) ? $custom['qt'] : (!empty($erpProfile['nationality']) ? $erpProfile['nationality'] : 'Việt Nam'),
+                'diaChi'    => $cleanAddr !== '' ? $cleanAddr : ($custom['diaChi'] ?? ''),
+                'cccd'      => $u['citizen_id'] ?: ($custom['cccd'] ?? ''),
+                'mst'       => !empty($custom['mst']) ? $custom['mst'] : ($erpProfile['tax_id'] ?? ''),
+                'trinhDo'   => $custom['trinhDo'] ?? 'Đại học',
+                'bacNghe'   => $custom['bacNghe'] ?? '',
+                'viTri'     => $u['job_title'] ?: (!empty($erpProfile['job_title']) ? $erpProfile['job_title'] : ($custom['viTri'] ?? 'Nhân viên')),
+                'phong'     => $u['department'] ?: (!empty($erpProfile['department']) ? $erpProfile['department'] : ($custom['phong'] ?? 'Vận hành')),
+                'vaoLam'    => $joined,
+                'nghiViec'  => ((int)($u['is_active'] ?? 1) === 0) ? ($custom['nghiViec'] ?? date('Y-m-d')) : ($custom['nghiViec'] ?? ''),
+                'lyDoNghi'  => $custom['lyDoNghi'] ?? '',
+                'cuTru'     => $custom['cuTru'] ?? 'Có',
+                'bh'        => isset($u['has_insurance']) ? (((int)$u['has_insurance'] === 1) ? 'Có' : 'Không') : ($custom['bh'] ?? 'Có'),
+                'soBHXH'    => !empty($custom['soBHXH']) ? $custom['soBHXH'] : ($erpProfile['insurance_id'] ?? ''),
+                'luongCB'   => $baseSal,
+                'luongBH'   => (float)($custom['luongBH'] ?? 0),
+                'pc'        => !empty($pc) ? $pc : new \stdClass(),
+                'npt'       => (int)($custom['npt'] ?? 0),
+                'gtbt'      => $custom['gtbt'] ?? 'Có',
+                'uyq'       => $custom['uyq'] ?? 'Có',
+                'doanVien'  => $custom['doanVien'] ?? 'Không',
+                'nh'        => $u['bank_name'] ?: ($custom['nh'] ?? ''),
+                'stk'       => $u['bank_account'] ?: ($custom['stk'] ?? ''),
+                'cn'        => !empty($custom['cn']) ? $custom['cn'] : ($erpProfile['bank_branch'] ?? ''),
+                'sdt'       => $u['phone'] ?: ($custom['sdt'] ?? ''),
+                'email'     => $u['email'] ?: ($custom['email'] ?? ''),
+                'nangLuong' => $custom['nangLuong'] ?? '',
+                'daoTao'    => $custom['daoTao'] ?? '',
+                'kyLuat'    => $custom['kyLuat'] ?? '',
+                'tnld'      => $custom['tnld'] ?? '',
+                'ghiChu'    => $custom['ghiChu'] ?? '',
+            ];
+        }
+
+        // 3. Lấy danh sách hợp đồng thật từ hrm_contracts (hoặc tự động đồng bộ từ hồ sơ nhân sự nếu bảng hrm_contracts chưa có dòng)
+        $contracts = [];
+        $empHasContract = [];
+        try {
+            $cStmt = $this->db->prepare("
+                SELECT c.*
+                FROM hrm_contracts c
+                JOIN users u ON c.user_id = u.id
+                WHERE u.tenant_id = ?
+                ORDER BY c.start_date ASC, c.id ASC
+            ");
+            $cStmt->execute([$tid]);
+            $cRows = $cStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            foreach ($cRows as $cr) {
+                $rawType = strtolower(trim((string)($cr['contract_type'] ?? 'xd')));
+                $loai = match ($rawType) {
+                    'kxd', 'indefinite', 'khong_xac_dinh' => 'KXD',
+                    'tv', 'probation', 'thu_viec'         => 'TV',
+                    'dv', 'service', 'ctv', 'dich_vu'     => 'DV',
+                    default                               => 'XD',
+                };
+                $empKey = 'u_' . $cr['user_id'];
+                $empHasContract[$empKey] = true;
+                $contracts[] = [
+                    'id'      => 'ct_' . $cr['id'],
+                    'db_id'   => (int)$cr['id'],
+                    'empId'   => $empKey,
+                    'loai'    => $loai,
+                    'so'      => $cr['contract_code'] ?: ('HĐ-' . $cr['id']),
+                    'tu'      => !empty($cr['start_date']) ? substr((string)$cr['start_date'], 0, 10) : '',
+                    'den'     => !empty($cr['end_date']) ? substr((string)$cr['end_date'], 0, 10) : '',
+                    'luong'   => (float)(($cr['salary_base'] ?? 0) > 0 ? $cr['salary_base'] : ($cr['salary_deal'] ?? 0)),
+                    'ghiChu'  => '',
+                ];
+            }
+        } catch (\Throwable $e) {}
+
+        foreach ($employees as $idx => $emp) {
+            $eId = $emp['id'];
+            if (empty($empHasContract[$eId])) {
+                $meta = $erpContractMeta[$eId] ?? ['type' => 'official', 'joined' => $emp['vaoLam'], 'salary' => $emp['luongCB']];
+                $loai = match ($meta['type']) {
+                    'kxd', 'indefinite', 'khong_xac_dinh' => 'KXD',
+                    'tv', 'probation', 'thu_viec'         => 'TV',
+                    'dv', 'service', 'ctv', 'part_time', 'intern' => 'DV',
+                    default                               => 'XD',
+                };
+                $tu = $meta['joined'] ?: date('Y-01-01');
+                $den = '';
+                if ($loai === 'XD') {
+                    $den = date('Y-m-d', strtotime($tu . ' +1 year -1 day'));
+                } elseif ($loai === 'TV') {
+                    $den = date('Y-m-d', strtotime($tu . ' +2 months -1 day'));
+                }
+                $contracts[] = [
+                    'id'      => 'ct_auto_' . $emp['user_id'],
+                    'empId'   => $eId,
+                    'loai'    => $loai,
+                    'so'      => sprintf('%02d/%s/HĐLĐ-IDEAS', $idx + 1, substr($tu, 0, 4)),
+                    'tu'      => $tu,
+                    'den'     => $den,
+                    'luong'   => (float)$emp['luongCB'],
+                    'ghiChu'  => 'Đồng bộ từ hồ sơ nhân sự MYERP',
+                ];
+            }
+        }
+
+        // 4. Lấy dữ liệu chấm công (check_ins), nghỉ phép (hrm_leave_requests), tạm ứng (hrm_salary_advances) & phiếu lương (monthly_payslips)
+        $months = [];
+        $monthList = [$targetMonth];
+        try {
+            $mStmt = $this->db->prepare("
+                SELECT DISTINCT mp.month_year
+                FROM monthly_payslips mp
+                JOIN users u ON mp.user_id = u.id
+                WHERE u.tenant_id = ? AND mp.month_year IS NOT NULL AND mp.month_year != ''
+                ORDER BY mp.month_year DESC
+                LIMIT 12
+            ");
+            $mStmt->execute([$tid]);
+            foreach ($mStmt->fetchAll(PDO::FETCH_COLUMN) ?: [] as $mVal) {
+                if (preg_match('/^\d{4}-\d{2}$/', (string)$mVal) && !in_array($mVal, $monthList, true)) {
+                    $monthList[] = $mVal;
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        foreach ($monthList as $ym) {
+            [$y, $m] = array_map('intval', explode('-', $ym));
+            $dim = (int)date('t', (int)mktime(0, 0, 0, $m, 1, $y));
+            $startDate = sprintf('%04d-%02d-01', $y, $m);
+            $endDate   = sprintf('%04d-%02d-%02d', $y, $m, $dim);
+
+            $att = [];
+            $var = [];
+
+            // Điền mặc định công theo lịch cho nhân sự đang làm việc trong tháng
+            foreach ($employees as $emp) {
+                if (!empty($emp['vaoLam']) && $emp['vaoLam'] > $endDate) continue;
+                if (!empty($emp['nghiViec']) && $emp['nghiViec'] < $startDate) continue;
+                $dMap = [];
+                for ($d = 1; $d <= $dim; $d++) {
+                    $ds = sprintf('%04d-%02d-%02d', $y, $m, $d);
+                    if ((!empty($emp['vaoLam']) && $ds < $emp['vaoLam']) || (!empty($emp['nghiViec']) && $ds > $emp['nghiViec'])) {
+                        continue;
+                    }
+                    $dow = (int)date('w', (int)mktime(0, 0, 0, $m, $d, $y));
+                    if ($dow >= 1 && $dow <= 5) {
+                        $dMap[(string)$d] = 'X';
+                    }
+                }
+                // Đánh dấu ngày lễ cố định
+                foreach (['01-01', '04-30', '05-01', '09-02'] as $hol) {
+                    [$hm, $hd] = array_map('intval', explode('-', $hol));
+                    if ($hm === $m) {
+                        $dMap[(string)$hd] = 'L';
+                    }
+                }
+                $att[$emp['id']] = ['d' => $dMap];
+            }
+
+            // Áp dụng đơn nghỉ phép & OT đã duyệt từ hrm_leave_requests
+            try {
+                $lStmt = $this->db->prepare("
+                    SELECT lr.*
+                    FROM hrm_leave_requests lr
+                    JOIN users u ON lr.user_id = u.id
+                    WHERE u.tenant_id = ? AND lr.status = 'approved'
+                      AND lr.start_date <= ? AND lr.end_date >= ?
+                ");
+                $lStmt->execute([$tid, $endDate, $startDate]);
+                foreach ($lStmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $lr) {
+                    $empId = 'u_' . $lr['user_id'];
+                    $lType = strtolower(trim((string)($lr['leave_type'] ?? '')));
+                    if ($lType === 'overtime' || !empty($lr['ot_type'])) {
+                        $otHours = max(0.0, (float)($lr['total_days'] ?? 0) * 8);
+                        $otRate = (float)($lr['ot_rate'] ?? 1.5);
+                        if (!isset($var[$empId])) $var[$empId] = [];
+                        if ($otRate >= 3.0) {
+                            $var[$empId]['ot3'] = ($var[$empId]['ot3'] ?? 0) + $otHours;
+                        } elseif ($otRate >= 2.0) {
+                            $var[$empId]['ot2'] = ($var[$empId]['ot2'] ?? 0) + $otHours;
+                        } else {
+                            $var[$empId]['ot1'] = ($var[$empId]['ot1'] ?? 0) + $otHours;
+                        }
+                        continue;
+                    }
+                    $code = match ($lType) {
+                        'unpaid', 'khong_luong' => 'KL',
+                        'sick', 'maternity', 'om', 'thai_san' => 'O',
+                        'holiday', 'le' => 'L',
+                        'special', 'wedding', 'funeral', 'che_do' => 'R',
+                        default => 'P',
+                    };
+                    $cur = max(strtotime($startDate), strtotime((string)$lr['start_date']));
+                    $end = min(strtotime($endDate), strtotime((string)$lr['end_date']));
+                    while ($cur !== false && $end !== false && $cur <= $end) {
+                        $dayNum = (int)date('j', $cur);
+                        if (!isset($att[$empId])) $att[$empId] = ['d' => []];
+                        $att[$empId]['d'][(string)$dayNum] = $code;
+                        $cur = strtotime('+1 day', $cur);
+                    }
+                }
+            } catch (\Throwable $e) {}
+
+            // Áp dụng tạm ứng đã duyệt từ hrm_salary_advances
+            try {
+                $advStmt = $this->db->prepare("
+                    SELECT sa.user_id, COALESCE(SUM(sa.amount), 0) as total_adv
+                    FROM hrm_salary_advances sa
+                    JOIN users u ON sa.user_id = u.id
+                    WHERE u.tenant_id = ? AND sa.status = 'approved'
+                      AND sa.request_date >= ? AND sa.request_date <= ?
+                    GROUP BY sa.user_id
+                ");
+                $advStmt->execute([$tid, $startDate, $endDate]);
+                foreach ($advStmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $adv) {
+                    $empId = 'u_' . $adv['user_id'];
+                    if (!isset($var[$empId])) $var[$empId] = [];
+                    $var[$empId]['tamUng'] = (float)$adv['total_adv'];
+                }
+            } catch (\Throwable $e) {}
+
+            // Áp dụng thưởng / tạm ứng / OT từ monthly_payslips nếu đã có
+            try {
+                $mpStmt = $this->db->prepare("
+                    SELECT mp.*
+                    FROM monthly_payslips mp
+                    JOIN users u ON mp.user_id = u.id
+                    WHERE u.tenant_id = ? AND mp.month_year = ?
+                ");
+                $mpStmt->execute([$tid, $ym]);
+                foreach ($mpStmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $mp) {
+                    $empId = 'u_' . $mp['user_id'];
+                    if (!isset($var[$empId])) $var[$empId] = [];
+                    $bonus = (float)($mp['kpi_bonus'] ?? 0) + (float)($mp['diligence_bonus'] ?? 0);
+                    if ($bonus > 0) $var[$empId]['thuong'] = $bonus;
+                    if ((float)($mp['advance_deduction'] ?? 0) > 0) {
+                        $var[$empId]['tamUng'] = (float)$mp['advance_deduction'];
+                    }
+                    if ((float)($mp['overtime_days'] ?? 0) > 0 && empty($var[$empId]['ot1'])) {
+                        $var[$empId]['ot1'] = round((float)$mp['overtime_days'] * 8, 1);
+                    }
+                }
+            } catch (\Throwable $e) {}
+
+            $months[$ym] = [
+                'att' => $att,
+                'var' => $var,
+            ];
+        }
+
+        return [
+            'id'        => 'myerp-primary',
+            'sample'    => false,
+            'info'      => [
+                'mst'           => '0316892451',
+                'tenNNT'        => $tenantName,
+                'dchiNNT'       => 'TP. Hồ Chí Minh',
+                'tenXaNNT'      => '',
+                'maXaNNT'       => '',
+                'tenTinhNNT'    => 'TP. Hồ Chí Minh',
+                'maTinhNNT'     => '79',
+                'maCQTNoiNop'   => '70100',
+                'tenCQTNoiNop'  => 'Cục Thuế TP. Hồ Chí Minh',
+                'nguoiKy'       => 'BAN GIÁM ĐỐC',
+                'nganhNgheKD'   => 'Giáo dục và Đào tạo quốc tế',
+                'dthoaiNNT'     => '',
+                'emailNNT'      => 'info@ideas.edu.vn',
+            ],
+            'cfg'       => [
+                'vung'      => 1,
+                'congChuan' => 'lich',
+                't7'        => 'nghi',
+                'kpcd'      => true,
+                'payLag'    => 0,
+                'otMode'    => 'chenh',
+                'otCap'     => 40,
+                'anTrua1'   => 730000,
+                'anTrua2'   => 1200000,
+                'casualOld' => 2000000,
+                'casualNew' => 5000000,
+                'kkType'    => 'Q',
+                'autoFull'  => true,
+            ],
+            'allowances'=> [
+                ['id' => 'trachnhiem', 'name' => 'PC trách nhiệm',      'tax' => 'chiu',   'prorate' => true,  'bh' => true],
+                ['id' => 'xangxe',     'name' => 'PC xăng xe',          'tax' => 'chiu',   'prorate' => true,  'bh' => false],
+                ['id' => 'dienthoai',  'name' => 'PC điện thoại',       'tax' => 'chiu',   'prorate' => true,  'bh' => false],
+                ['id' => 'chuyencan',  'name' => 'Chuyên cần',          'tax' => 'chiu',   'prorate' => false, 'bh' => false],
+                ['id' => 'antrua',     'name' => 'Ăn trưa (tiền mặt)',  'tax' => 'antrua', 'prorate' => true,  'bh' => false],
+            ],
+            'employees' => $employees,
+            'contracts' => $contracts,
+            'months'    => $months,
+            'tpl'       => null,
+        ];
+    }
+
+    /**
+     * GET /api/hrm/accounting-az/workspace
+     * Tải toàn bộ trạng thái Kế Toán A-Z (đồng bộ 2 chiều với dữ liệu nhân sự & bảng lương MYERP)
+     */
+    public function getAccountingAzWorkspace(array $auth): void {
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $month = trim($_GET['month'] ?? date('Y-m'));
+        if (!preg_match('/^\d{4}-\d{2}$/', $month)) $month = date('Y-m');
+
+        $this->ensureAccountingAzTable();
+        $livePrimary = $this->buildLiveMyerpCompanyData($tid, $month);
+
+        $savedState = null;
+        try {
+            $stmt = $this->db->prepare("SELECT state_json, updated_at FROM hrm_accounting_az_workspace WHERE tenant_id = ? LIMIT 1");
+            $stmt->execute([$tid]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!empty($row['state_json'])) {
+                $decoded = json_decode((string)$row['state_json'], true);
+                if (is_array($decoded) && !empty($decoded['companies'])) {
+                    $savedState = $decoded;
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        if ($savedState) {
+            // Hợp nhất thông minh công ty chính myerp-primary với dữ liệu live từ bảng users/hrm_profiles
+            $savedPrimary = $savedState['companies']['myerp-primary'] ?? reset($savedState['companies']);
+            if (is_array($savedPrimary)) {
+                $savedEmpsById = [];
+                foreach ($savedPrimary['employees'] ?? [] as $se) {
+                    if (!empty($se['id'])) $savedEmpsById[$se['id']] = $se;
+                }
+                $mergedEmps = [];
+                foreach ($livePrimary['employees'] as $le) {
+                    if (isset($savedEmpsById[$le['id']])) {
+                        $se = $savedEmpsById[$le['id']];
+                        // Ưu tiên giữ các trường chuyên sâu kế toán đã chỉnh sửa, nhưng cập nhật avatar và tên/CCCD/STK nếu mới bổ sung
+                        $mergedEmps[] = array_merge($le, $se, [
+                            'avatar_url' => $le['avatar_url'] ?? ($se['avatar_url'] ?? null),
+                            'user_id'    => $le['user_id'],
+                            'cccd'       => !empty($se['cccd']) ? $se['cccd'] : $le['cccd'],
+                            'nh'         => !empty($se['nh']) ? $se['nh'] : $le['nh'],
+                            'stk'        => !empty($se['stk']) ? $se['stk'] : $le['stk'],
+                            'luongCB'    => ((float)($se['luongCB'] ?? 0) > 0) ? (float)$se['luongCB'] : $le['luongCB'],
+                        ]);
+                        unset($savedEmpsById[$le['id']]);
+                    } else {
+                        $mergedEmps[] = $le;
+                    }
+                }
+                // Giữ lại các nhân sự thời vụ/CTV thêm trực tiếp trên Kế Toán A-Z
+                foreach ($savedEmpsById as $extraEmp) {
+                    $mergedEmps[] = $extraEmp;
+                }
+
+                $mergedMonths = $livePrimary['months'];
+                foreach ($savedPrimary['months'] ?? [] as $mKey => $mVal) {
+                    $mergedMonths[$mKey] = $mVal;
+                }
+
+                $savedPrimary['employees'] = $mergedEmps;
+                $savedPrimary['months'] = $mergedMonths;
+                if (empty($savedPrimary['contracts'])) {
+                    $savedPrimary['contracts'] = $livePrimary['contracts'];
+                }
+                $savedState['companies'][$savedPrimary['id'] ?? 'myerp-primary'] = $savedPrimary;
+            }
+            respond(200, array_merge($savedState, ['workspace' => $savedState]), 'Tải dữ liệu Kế Toán A-Z thành công');
+            return;
+        }
+
+        $initialDb = [
+            'v'         => 1,
+            'companies' => [
+                'myerp-primary' => $livePrimary,
+            ],
+            'active'    => 'myerp-primary',
+            'ui'        => [
+                'tab' => 'tongquan',
+                'ym'  => $month,
+            ],
+            'manual'    => [
+                'kk'  => new \stdClass(),
+                'qtt' => new \stdClass(),
+            ],
+        ];
+
+        respond(200, array_merge($initialDb, ['workspace' => $initialDb]), 'Khởi tạo dữ liệu Kế Toán A-Z từ MYERP thành công');
+    }
+
+    /**
+     * POST /api/hrm/accounting-az/workspace
+     * Lưu trạng thái Kế Toán A-Z & đồng bộ ngược về bảng users, hrm_profiles, hrm_contracts, monthly_payslips
+     */
+    public function saveAccountingAzWorkspace(array $auth): void {
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $uid = (int)($auth['user_id'] ?? 0);
+        $body = getBody();
+
+        $this->ensureAccountingAzTable();
+
+        $dbState = $body['workspace'] ?? $body['db'] ?? $body;
+        if (!is_array($dbState) || empty($dbState['companies'])) {
+            respond(400, null, 'Dữ liệu trạng thái Kế Toán A-Z không hợp lệ', false);
+            return;
+        }
+
+        $syncToMyerp = (bool)($body['sync_to_myerp'] ?? true);
+        $syncMonth   = trim((string)($body['month'] ?? $body['sync_month'] ?? ($dbState['ui']['ym'] ?? date('Y-m'))));
+        $payrollRows = is_array($body['computed_payslips'] ?? null)
+            ? $body['computed_payslips']
+            : (is_array($body['payroll_rows'] ?? null) ? $body['payroll_rows'] : []);
+
+        try {
+            $this->db->beginTransaction();
+
+            $jsonStr = json_encode($dbState, JSON_UNESCAPED_UNICODE);
+            $stmt = $this->db->prepare("
+                INSERT INTO hrm_accounting_az_workspace (tenant_id, state_json, updated_by, updated_at)
+                VALUES (?, ?, ?, NOW())
+                ON DUPLICATE KEY UPDATE state_json = VALUES(state_json), updated_by = VALUES(updated_by), updated_at = NOW()
+            ");
+            $stmt->execute([$tid, $jsonStr, $uid]);
+
+            $syncedEmployees = 0;
+            $syncedPayslips  = 0;
+
+            if ($syncToMyerp) {
+                $activeId = $dbState['active'] ?? 'myerp-primary';
+                $co = $dbState['companies'][$activeId] ?? reset($dbState['companies']);
+
+                if (is_array($co) && empty($co['sample'])) {
+                    // 1. Đồng bộ thông tin nhân viên về users & hrm_profiles
+                    foreach ($co['employees'] ?? [] as $emp) {
+                        $empUid = (int)($emp['user_id'] ?? 0);
+                        if ($empUid <= 0 && preg_match('/^u_(\d+)$/', (string)($emp['id'] ?? ''), $m)) {
+                            $empUid = (int)$m[1];
+                        }
+                        if ($empUid <= 0) continue;
+
+                        // Bảo toàn cấu trúc JSON erp_profile trong users.address nếu có
+                        $chkAddr = $this->db->prepare("SELECT address FROM users WHERE id = ? AND tenant_id = ? LIMIT 1");
+                        $chkAddr->execute([$empUid, $tid]);
+                        $existingAddr = (string)($chkAddr->fetchColumn() ?: '');
+                        $newDiaChi = trim((string)($emp['diaChi'] ?? ''));
+                        $addrToSave = $newDiaChi;
+                        if (str_starts_with(trim($existingAddr), '{')) {
+                            $parsedAddr = json_decode($existingAddr, true);
+                            if (is_array($parsedAddr) && isset($parsedAddr['erp_profile']) && is_array($parsedAddr['erp_profile'])) {
+                                if ($newDiaChi !== '') $parsedAddr['erp_profile']['address_detail'] = $newDiaChi;
+                                if (!empty($emp['mst'])) $parsedAddr['erp_profile']['tax_id'] = trim((string)$emp['mst']);
+                                if (!empty($emp['soBHXH'])) $parsedAddr['erp_profile']['insurance_id'] = trim((string)$emp['soBHXH']);
+                                if (!empty($emp['cn'])) $parsedAddr['erp_profile']['bank_branch'] = trim((string)$emp['cn']);
+                                if (!empty($emp['vaoLam'])) $parsedAddr['erp_profile']['date_joined'] = trim((string)$emp['vaoLam']);
+                                $addrToSave = json_encode($parsedAddr, JSON_UNESCAPED_UNICODE);
+                            }
+                        }
+
+                        $uUpd = $this->db->prepare("
+                            UPDATE users
+                            SET full_name = COALESCE(NULLIF(?, ''), full_name),
+                                gender = ?,
+                                dob = NULLIF(?, ''),
+                                citizen_id = COALESCE(NULLIF(?, ''), citizen_id),
+                                address = COALESCE(NULLIF(?, ''), address),
+                                phone = COALESCE(NULLIF(?, ''), phone),
+                                job_title = COALESCE(NULLIF(?, ''), job_title),
+                                department = COALESCE(NULLIF(?, ''), department),
+                                bank_name = COALESCE(NULLIF(?, ''), bank_name),
+                                bank_account = COALESCE(NULLIF(?, ''), bank_account)
+                            WHERE id = ? AND tenant_id = ?
+                        ");
+                        $uUpd->execute([
+                            trim((string)($emp['ten'] ?? '')),
+                            ($emp['gt'] ?? 'Nam') === 'Nữ' ? 'Nữ' : 'Nam',
+                            trim((string)($emp['ns'] ?? '')),
+                            trim((string)($emp['cccd'] ?? '')),
+                            $addrToSave,
+                            trim((string)($emp['sdt'] ?? '')),
+                            trim((string)($emp['viTri'] ?? '')),
+                            trim((string)($emp['phong'] ?? '')),
+                            trim((string)($emp['nh'] ?? '')),
+                            trim((string)($emp['stk'] ?? '')),
+                            $empUid,
+                            $tid
+                        ]);
+
+                        $pc = is_array($emp['pc'] ?? null) ? $emp['pc'] : [];
+                        $mealAmt   = (float)($pc['antrua'] ?? 0);
+                        $travelAmt = (float)($pc['xangxe'] ?? 0);
+                        $phoneAmt  = (float)($pc['dienthoai'] ?? 0);
+                        $hasIns    = (($emp['bh'] ?? 'Có') === 'Có') ? 1 : 0;
+                        $baseSal   = (float)($emp['luongCB'] ?? 0);
+                        $joined    = !empty($emp['vaoLam']) ? $emp['vaoLam'] : null;
+
+                        $customMeta = [
+                            'ma'        => $emp['ma'] ?? '',
+                            'qt'        => $emp['qt'] ?? 'Việt Nam',
+                            'mst'       => $emp['mst'] ?? '',
+                            'trinhDo'   => $emp['trinhDo'] ?? '',
+                            'bacNghe'   => $emp['bacNghe'] ?? '',
+                            'nghiViec'  => $emp['nghiViec'] ?? '',
+                            'lyDoNghi'  => $emp['lyDoNghi'] ?? '',
+                            'cuTru'     => $emp['cuTru'] ?? 'Có',
+                            'bh'        => $emp['bh'] ?? 'Có',
+                            'soBHXH'    => $emp['soBHXH'] ?? '',
+                            'luongBH'   => (float)($emp['luongBH'] ?? 0),
+                            'pc'        => $pc,
+                            'npt'       => (int)($emp['npt'] ?? 0),
+                            'gtbt'      => $emp['gtbt'] ?? 'Có',
+                            'uyq'       => $emp['uyq'] ?? 'Có',
+                            'doanVien'  => $emp['doanVien'] ?? 'Không',
+                            'cn'        => $emp['cn'] ?? '',
+                            'nangLuong' => $emp['nangLuong'] ?? '',
+                            'daoTao'    => $emp['daoTao'] ?? '',
+                            'kyLuat'    => $emp['kyLuat'] ?? '',
+                            'tnld'      => $emp['tnld'] ?? '',
+                            'ghiChu'    => $emp['ghiChu'] ?? '',
+                        ];
+
+                        $pUpd = $this->db->prepare("
+                            INSERT INTO hrm_profiles (user_id, joined_date, base_salary, deal_salary, has_insurance, allowance_meal, allowance_travel, allowance_phone, custom_fields_json, updated_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                            ON DUPLICATE KEY UPDATE
+                                joined_date = COALESCE(VALUES(joined_date), joined_date),
+                                base_salary = VALUES(base_salary),
+                                has_insurance = VALUES(has_insurance),
+                                allowance_meal = VALUES(allowance_meal),
+                                allowance_travel = VALUES(allowance_travel),
+                                allowance_phone = VALUES(allowance_phone),
+                                custom_fields_json = VALUES(custom_fields_json),
+                                updated_at = NOW()
+                        ");
+                        $pUpd->execute([
+                            $empUid,
+                            $joined,
+                            $baseSal,
+                            $baseSal,
+                            $hasIns,
+                            $mealAmt,
+                            $travelAmt,
+                            $phoneAmt,
+                            json_encode($customMeta, JSON_UNESCAPED_UNICODE)
+                        ]);
+                        $syncedEmployees++;
+                    }
+
+                    // 2. Đồng bộ bảng lương tháng sang monthly_payslips nếu có truyền computed_payslips / payroll_rows
+                    if (!empty($payrollRows) && preg_match('/^\d{4}-\d{2}$/', $syncMonth)) {
+                        foreach ($payrollRows as $pr) {
+                            $empData = is_array($pr['emp'] ?? null) ? $pr['emp'] : [];
+                            $empUid = (int)($pr['user_id'] ?? ($empData['user_id'] ?? 0));
+                            $rawId  = (string)($pr['emp_id'] ?? ($empData['id'] ?? ''));
+                            if ($empUid <= 0 && preg_match('/^u_(\d+)$/', $rawId, $m)) {
+                                $empUid = (int)$m[1];
+                            }
+                            if ($empUid <= 0) continue;
+
+                            $chkMp = $this->db->prepare("SELECT id, status FROM monthly_payslips WHERE user_id = ? AND month_year = ? LIMIT 1");
+                            $chkMp->execute([$empUid, $syncMonth]);
+                            $existingMp = $chkMp->fetch(PDO::FETCH_ASSOC);
+
+                            $workReq  = (float)($pr['congChuan'] ?? $pr['cong_chuan'] ?? 22);
+                            $workAct  = (float)($pr['congTL'] ?? $pr['cong_tl'] ?? $workReq);
+                            $salCalc  = (float)($pr['luongCB'] ?? $pr['luong_theo_cong'] ?? 0);
+                            $pcInfo   = is_array($pr['pc'] ?? null) ? $pr['pc'] : [];
+                            $allowTot = isset($pcInfo['tong'])
+                                ? ((float)$pcInfo['tong'] + (float)($pr['khacMien'] ?? 0))
+                                : ((float)($pr['phu_cap'] ?? 0) + (float)($pr['khac_mien'] ?? 0));
+                            $otInfo   = is_array($pr['ot'] ?? null) ? $pr['ot'] : [];
+                            $otHours  = isset($otInfo['ot150'])
+                                ? ((float)($otInfo['ot150'] ?? 0) + (float)($otInfo['ot200'] ?? 0) + (float)($otInfo['ot300'] ?? 0) + (float)($otInfo['otDem'] ?? 0))
+                                : (float)($pr['ot_hours'] ?? 0);
+                            $otDays   = round($otHours / 8, 2);
+                            $otSal    = isset($otInfo['tong']) ? (float)$otInfo['tong'] : (float)($pr['ot_amount'] ?? 0);
+                            $bonus    = (float)($pr['thuong'] ?? 0);
+                            $bhInfo   = is_array($pr['bhNLD'] ?? null) ? $pr['bhNLD'] : [];
+                            $bhxh     = isset($bhInfo['bhxh']) ? (float)$bhInfo['bhxh'] : (float)($pr['bhxh_nld'] ?? 0);
+                            $bhyt     = isset($bhInfo['bhyt']) ? (float)$bhInfo['bhyt'] : (float)($pr['bhyt_nld'] ?? 0);
+                            $bhtn     = isset($bhInfo['bhtn']) ? (float)$bhInfo['bhtn'] : (float)($pr['bhtn_nld'] ?? 0);
+                            $pit      = (float)($pr['thue'] ?? $pr['thue_tncn'] ?? 0);
+                            $adv      = (float)($pr['tamUng'] ?? $pr['tam_ung'] ?? 0)
+                                      + (float)($pr['khauTru'] ?? $pr['khau_tru'] ?? 0)
+                                      + (float)($pr['doanPhi'] ?? $pr['doan_phi'] ?? 0);
+                            $net      = (float)($pr['net'] ?? 0);
+
+                            if ($existingMp) {
+                                $mpUpd = $this->db->prepare("
+                                    UPDATE monthly_payslips
+                                    SET work_days_required = ?,
+                                        work_days_actual = ?,
+                                        salary_basic_calculated = ?,
+                                        allowance_total = ?,
+                                        overtime_days = ?,
+                                        overtime_salary = ?,
+                                        kpi_bonus = ?,
+                                        insurance_bhxh = ?,
+                                        insurance_bhyt = ?,
+                                        insurance_bhtn = ?,
+                                        tax_pit = ?,
+                                        advance_deduction = ?,
+                                        net_salary = ?,
+                                        updated_at = NOW()
+                                    WHERE id = ?
+                                ");
+                                $mpUpd->execute([
+                                    $workReq, $workAct, $salCalc, $allowTot, $otDays, $otSal,
+                                    $bonus, $bhxh, $bhyt, $bhtn, $pit, $adv, $net,
+                                    (int)$existingMp['id']
+                                ]);
+                            } else {
+                                $mpIns = $this->db->prepare("
+                                    INSERT INTO monthly_payslips (
+                                        user_id, month_year, work_days_required, work_days_actual,
+                                        salary_basic_calculated, allowance_total, overtime_days, overtime_salary,
+                                        kpi_bonus, insurance_bhxh, insurance_bhyt, insurance_bhtn,
+                                        tax_pit, advance_deduction, net_salary, status, created_at, updated_at
+                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', NOW(), NOW())
+                                ");
+                                $mpIns->execute([
+                                    $empUid, $syncMonth, $workReq, $workAct,
+                                    $salCalc, $allowTot, $otDays, $otSal,
+                                    $bonus, $bhxh, $bhyt, $bhtn,
+                                    $pit, $adv, $net
+                                ]);
+                            }
+                            $syncedPayslips++;
+                        }
+                    }
+                }
+            }
+
+            $this->db->commit();
+            respond(200, [
+                'saved'            => true,
+                'synced_employees' => $syncedEmployees,
+                'synced_payslips'  => $syncedPayslips,
+                'month'            => $syncMonth,
+            ], 'Đã lưu và đồng bộ dữ liệu Kế Toán A-Z thành công');
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi khi lưu dữ liệu Kế Toán A-Z: ' . $e->getMessage(), false);
+        }
+    }
+
+    /**
+     * POST /api/hrm/accounting-az/sync-from-myerp
+     * Kéo dữ liệu mới nhất từ Nhân sự, Hợp đồng, Chấm công, Nghỉ phép & Tạm ứng của MYERP vào Kế Toán A-Z
+     */
+    public function syncAccountingAzFromMyerp(array $auth): void {
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $body = getBody();
+        $month = trim((string)($body['month'] ?? ($_GET['month'] ?? date('Y-m'))));
+        if (!preg_match('/^\d{4}-\d{2}$/', $month)) $month = date('Y-m');
+
+        $this->ensureAccountingAzTable();
+        $liveData = $this->buildLiveMyerpCompanyData($tid, $month);
+
+        $stmt = $this->db->prepare("SELECT state_json FROM hrm_accounting_az_workspace WHERE tenant_id = ? LIMIT 1");
+        $stmt->execute([$tid]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        $savedState = $row && !empty($row['state_json']) ? json_decode((string)$row['state_json'], true) : null;
+
+        if (is_array($savedState) && !empty($savedState['companies'])) {
+            $savedState['companies']['myerp-primary'] = $liveData;
+            $savedState['active'] = 'myerp-primary';
+            $updatedState = $savedState;
+        } else {
+            $updatedState = [
+                'v'         => 1,
+                'companies' => [
+                    'myerp-primary' => $liveData,
+                ],
+                'active'    => 'myerp-primary',
+                'ui'        => [
+                    'tab' => 'tongquan',
+                    'ym'  => $month,
+                ],
+                'manual'    => [
+                    'kk'  => new \stdClass(),
+                    'qtt' => new \stdClass(),
+                ],
+            ];
+        }
+
+        respond(200, [
+            'company'   => $liveData,
+            'workspace' => $updatedState,
+            'month'     => $month,
+        ], "Đã đồng bộ hồ sơ nhân sự, hợp đồng, chấm công và tạm ứng tháng {$month} từ MYERP");
+    }
 }
+
 

@@ -64,6 +64,7 @@ const DownloadPage = lazy(() => import('./pages/DownloadPage').then(module => ({
 const AITrainingPage = lazy(() => import('./pages/AITrainingPage').then(module => ({ default: module.AITrainingPage })));
 const QwenAgentLabPage = lazy(() => import('./pages/QwenAgentLabPage').then(module => ({ default: module.QwenAgentLabPage })));
 const HRM = lazy(() => import('./pages/HRM'));
+const HrmAccountingAzWorkspace = lazy(() => import('./components/HRM/HrmAccountingAzWorkspace').then(m => ({ default: m.HrmAccountingAzWorkspace })));
 const MyPayslips = lazy(() => import('./pages/MyPayslips'));
 const Approvals = lazy(() => import('./pages/Approvals'));
 const EnterpriseFeed = lazy(() => import('./pages/EnterpriseFeed').then(module => ({ default: module.EnterpriseFeed })));
@@ -266,10 +267,19 @@ const AppTabs = () => {
         }
         return <DepositsPage key="cash-flow" defaultTab="stats" />;
       case '/hrm':
-        if (!(isExecutive(user) || isHR(user, false))) {
+        if (!(isExecutive(user) || isHR(user, false) || isAccountant(user, false))) {
           return <AccessDeniedView key="access-denied-hrm" />;
         }
         return <HRM key="hrm" />;
+      case '/accounting-az':
+        if (!(isExecutive(user) || isHR(user, false) || isAccountant(user, false))) {
+          return <AccessDeniedView key="access-denied-accounting-az" />;
+        }
+        return (
+          <div key="accounting-az" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <HrmAccountingAzWorkspace embedMode={false} />
+          </div>
+        );
       case '/my-payslips':
         return <MyPayslips key="my-payslips" />;
       case '/approvals':

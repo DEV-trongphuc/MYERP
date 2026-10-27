@@ -27,6 +27,7 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { useUIStore } from '../store/uiStore';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import { pushOverlay } from '../utils/overlayStack';
+import { HrmAccountingAzWorkspace } from '../components/HRM/HrmAccountingAzWorkspace';
 
 const PALETTE = [
   '#C6333D',
@@ -207,7 +208,7 @@ export default function HRM() {
   };
 
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'profiles' | 'leaves' | 'advances' | 'payroll'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'profiles' | 'leaves' | 'advances' | 'payroll' | 'accounting_az'>('dashboard');
 
   useEffect(() => {
     if (!location.pathname.startsWith('/hrm')) return;
@@ -215,7 +216,7 @@ export default function HRM() {
     const tabParam = params.get('tab');
     if (tabParam === 'assets' || tabParam === 'profiles') {
       setActiveTab('profiles');
-    } else if (tabParam === 'dashboard' || tabParam === 'leaves' || tabParam === 'advances' || tabParam === 'payroll') {
+    } else if (tabParam === 'dashboard' || tabParam === 'leaves' || tabParam === 'advances' || tabParam === 'payroll' || tabParam === 'accounting_az') {
       setActiveTab(tabParam as any);
     }
   }, [location.pathname, location.search]);
@@ -3422,6 +3423,16 @@ export default function HRM() {
               </div>
             ) : null}
           </div>
+        )}
+
+            {/* Tab K? to?n & L??ng A-Z */}
+        {activeTab === 'accounting_az' && (
+          <HrmAccountingAzWorkspace
+            currentMonth={payrollMonth}
+            onNavigateToPayroll={() => setActiveTab('payroll')}
+            onNavigateToProfiles={() => setActiveTab('profiles')}
+            embedMode={true}
+          />
         )}
 
             {/* Calculate New Period Modal / Drawer */}
