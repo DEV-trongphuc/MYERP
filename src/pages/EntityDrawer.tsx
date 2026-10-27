@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, FileText, FileBadge, Tag as TagIcon, Phone, Mail, MapPin, Search, History, Briefcase, Plus, HelpCircle, Settings, Download, Trash2, CheckCircle, ShoppingCart, Lock, Calendar, Building2 } from 'lucide-react';
+import { X, User, FileText, FileBadge, Tag as TagIcon, Phone, Mail, MapPin, Search, History, Briefcase, Plus, HelpCircle, Settings, Download, Trash2, CheckCircle, ShoppingCart, Calendar, Building2 } from 'lucide-react';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { CustomCheckbox } from '../components/ui/CustomCheckbox';
 import { CustomRadio } from '../components/ui/CustomRadio';
@@ -252,18 +252,21 @@ export const EntityDrawer: React.FC<EntityDrawerProps> = ({ isOpen, onClose, ent
                           <div className="form-group">
                             <label className="form-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                               <span>Nguồn khách (Source)</span>
-                               {(user?.role === 'sale' || user?.role === 'sales') && (
-                                 <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '3px' }}><Lock size={11} /> Chỉ Quản lý/Admin</span>
-                               )}
                             </label>
                             <CustomSelect
-                              disabled={user?.role === 'sale' || user?.role === 'sales'}
                               options={[
                                 { value: 'website', label: 'Từ Website' },
                                 { value: 'facebook', label: 'Facebook Ads' },
+                                { value: 'google', label: 'Google Ads' },
+                                { value: 'tiktok', label: 'Tiktok Ads' },
+                                { value: 'zalo', label: 'Zalo Ads' },
+                                { value: 'youtube', label: 'Youtube Ads' },
                                 { value: 'gioi_thieu', label: 'Giới thiệu' },
                                 { value: 'ca_nhan', label: 'Cá nhân tự khai thác' },
-                                { value: 'cold_call', label: 'Cold Call' }
+                                { value: 'cold_call', label: 'Cold Call' },
+                                { value: 'event', label: 'Sự kiện / Workshop' },
+                                { value: 'databank', label: 'Databank' },
+                                { value: 'other', label: 'Nguồn khác (Other)' }
                               ]}
                               value={formData?.source || 'website'}
                               onChange={val => setFormData((prev: any) => ({ ...prev, source: val as string }))}
