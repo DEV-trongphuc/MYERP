@@ -1702,7 +1702,8 @@ export default function HRM() {
             { id: 'profiles', label: t('Hồ sơ lương nhân viên'), icon: Users },
             { id: 'leaves', label: t('Phê duyệt Nghỉ Phép'), icon: Calendar, badge: leaves.filter(l => l.status === 'pending' && isMyPendingRequest(l)).length },
             { id: 'advances', label: t('Tạm ứng Lương'), icon: CreditCard, badge: advances.filter(a => a.status === 'pending' && isMyPendingRequest(a)).length },
-            { id: 'payroll', label: t('Tính & Chốt Lương'), icon: DollarSign }
+            { id: 'payroll', label: t('Tính & Chốt Lương'), icon: DollarSign },
+            { id: 'accounting_az', label: t('Kế toán & Lương A-Z'), icon: ShieldCheck }
           ].map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;

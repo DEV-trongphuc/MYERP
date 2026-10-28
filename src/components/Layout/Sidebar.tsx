@@ -142,7 +142,8 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
     items: [
       { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
       { name: 'Sales Order', href: '/deposits', icon: Receipt, hideForRoles: ['viewer', 'sale_admin', 'saleadmin'], badgeKey: 'pendingDeposits' },
-      { name: 'Dự báo dòng tiền', href: '/cash-flow', icon: TrendingUp, hideForRoles: ['viewer', 'marketing', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] }
+      { name: 'Dự báo dòng tiền', href: '/cash-flow', icon: TrendingUp, hideForRoles: ['viewer', 'marketing', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] },
+      { name: 'Kế toán A-Z', href: '/accounting-az', icon: Scale, hideForRoles: ['viewer', 'marketing', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'sale', 'sales', 'manager', 'assistant'] }
     ]
   },
   {
@@ -211,11 +212,13 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
     { name: 'Sales Order', href: '/deposits', icon: Receipt, badgeKey: 'pendingDeposits' },
     { name: 'Dự báo dòng tiền', href: '/cash-flow', icon: TrendingUp },
+    { name: 'Kế toán A-Z', href: '/accounting-az', icon: Scale },
     { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' },
     { name: 'Phiếu lương', href: '/my-payslips', icon: FileText }
   ],
   hr: [
     { name: 'Nhân sự', href: '/hrm', icon: ShieldCheck },
+    { name: 'Kế toán A-Z', href: '/accounting-az', icon: Scale },
     { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
     { name: 'Duyệt công', href: '/attendance', icon: Clock },
     { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' },
@@ -326,7 +329,7 @@ const GROUP_ORDER_BY_ROLE: Record<string, string[]> = {
   sale: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ'],
   sales: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ'],
   accountant: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ'],
-  hr: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'NHÂN SỰ', 'CHƯƠNG TRÌNH'],
+  hr: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'NHÂN SỰ', 'TÀI CHÍNH', 'CHƯƠNG TRÌNH'],
   marketing: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'MARKETING & AUTOMATION', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
   sale_admin: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'MARKETING & AUTOMATION', 'CHƯƠNG TRÌNH', 'NHÂN SỰ'],
   saleadmin: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'MARKETING & AUTOMATION', 'CHƯƠNG TRÌNH', 'NHÂN SỰ'],
@@ -562,7 +565,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
         return isExecutive(user) || isHR(user, false);
       }
       if (item.href === '/accounting-az') {
-        return false;
+        return isExecutive(user) || isHR(user, false) || isAccountant(user, false);
       }
       if (item.href === '/cash-flow') {
         return isExecutive(user) || isAccountant(user, false);
