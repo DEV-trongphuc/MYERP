@@ -196,11 +196,11 @@ const parseCustomRangeFromFilter = (
 ): { from: string; to: string } | null => {
   const raw = String(filter || '').trim();
   if (raw) {
-    const mIso = raw.match(/(\d{4}-\d{2}-\d{2})\s*(?:đến|den|to|-|→|~)\s*(\d{4}-\d{2}-\d{2})/i);
+    const mIso = raw.match(/(\d{4}-\d{2}-\d{2})\D+(\d{4}-\d{2}-\d{2})/);
     if (mIso) {
       return mIso[1] <= mIso[2] ? { from: mIso[1], to: mIso[2] } : { from: mIso[2], to: mIso[1] };
     }
-    const mVn = raw.match(/(\d{2})\/(\d{2})\/(\d{4})\s*(?:đến|den|to|-|→|~)\s*(\d{2})\/(\d{2})\/(\d{4})/i);
+    const mVn = raw.match(/(\d{2})\/(\d{2})\/(\d{4})\D+(\d{2})\/(\d{2})\/(\d{4})/);
     if (mVn) {
       const d1 = `${mVn[3]}-${mVn[2]}-${mVn[1]}`;
       const d2 = `${mVn[6]}-${mVn[5]}-${mVn[4]}`;

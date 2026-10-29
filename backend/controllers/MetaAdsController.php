@@ -539,10 +539,10 @@ class MetaAdsController
         }
 
         // Also allow rawDateRange itself to be "YYYY-MM-DD đến YYYY-MM-DD" or "DD/MM/YYYY - DD/MM/YYYY"
-        if ((!$customFrom || !$customTo) && preg_match('/(\d{4}-\d{2}-\d{2})\s*(?:đến|den|to|-|→|~)\s*(\d{4}-\d{2}-\d{2})/iu', $rawDateRange, $mRange)) {
+        if ((!$customFrom || !$customTo) && preg_match('/(\d{4}-\d{2}-\d{2})\D+(\d{4}-\d{2}-\d{2})/', $rawDateRange, $mRange)) {
             $customFrom = $mRange[1];
             $customTo = $mRange[2];
-        } elseif ((!$customFrom || !$customTo) && preg_match('/(\d{2})\/(\d{2})\/(\d{4})\s*(?:đến|den|to|-|→|~)\s*(\d{2})\/(\d{2})\/(\d{4})/iu', $rawDateRange, $mRangeVn)) {
+        } elseif ((!$customFrom || !$customTo) && preg_match('/(\d{2})\/(\d{2})\/(\d{4})\D+(\d{2})\/(\d{2})\/(\d{4})/', $rawDateRange, $mRangeVn)) {
             $customFrom = "{$mRangeVn[3]}-{$mRangeVn[2]}-{$mRangeVn[1]}";
             $customTo = "{$mRangeVn[6]}-{$mRangeVn[5]}-{$mRangeVn[4]}";
         }

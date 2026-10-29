@@ -1037,14 +1037,14 @@ class DashboardController {
                 $prevFrom = '2019-01-01';
                 $prevTo = '2019-12-31';
                 $periodLabel = 'Tất cả thời gian';
-            } elseif (preg_match('/^(\d{4}-\d{2}-\d{2})\s*(?:đến|den|to|-|→|~)\s*(\d{4}-\d{2}-\d{2})$/iu', $dateParam, $m)) {
+            } elseif (preg_match('/^(\d{4}-\d{2}-\d{2})\D+(\d{4}-\d{2}-\d{2})$/', $dateParam, $m)) {
                 $from = $m[1];
                 $to = $m[2];
                 $spanDays = max(1, (int)round((strtotime($to) - strtotime($from)) / 86400) + 1);
                 $prevTo = date('Y-m-d', strtotime($from . ' -1 day'));
                 $prevFrom = date('Y-m-d', strtotime($prevTo . ' -' . ($spanDays - 1) . ' days'));
                 $periodLabel = $dateParam;
-            } elseif (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})\s*(?:đến|den|to|-|→|~)\s*(\d{2})\/(\d{2})\/(\d{4})$/iu', $dateParam, $mVn)) {
+            } elseif (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})\D+(\d{2})\/(\d{2})\/(\d{4})$/', $dateParam, $mVn)) {
                 $from = "{$mVn[3]}-{$mVn[2]}-{$mVn[1]}";
                 $to = "{$mVn[6]}-{$mVn[5]}-{$mVn[4]}";
                 $spanDays = max(1, (int)round((strtotime($to) - strtotime($from)) / 86400) + 1);

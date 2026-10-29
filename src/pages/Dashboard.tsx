@@ -360,16 +360,16 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
 
   const [showDateModal, setShowDateModal] = useState(false);
   const [startDate, setStartDate] = useState(() => {
-    const m = String(initialDateFilter || '').match(/(\d{4}-\d{2}-\d{2})\s*(?:đến|den|to|-|→)\s*(\d{4}-\d{2}-\d{2})/i);
+    const m = String(initialDateFilter || '').match(/(\d{4}-\d{2}-\d{2})\D+(\d{4}-\d{2}-\d{2})/);
     return m ? m[1] : '';
   });
   const [endDate, setEndDate] = useState(() => {
-    const m = String(initialDateFilter || '').match(/(\d{4}-\d{2}-\d{2})\s*(?:đến|den|to|-|→)\s*(\d{4}-\d{2}-\d{2})/i);
+    const m = String(initialDateFilter || '').match(/(\d{4}-\d{2}-\d{2})\D+(\d{4}-\d{2}-\d{2})/);
     return m ? m[2] : '';
   });
 
   useEffect(() => {
-    const m = String(dateFilter || '').match(/(\d{4}-\d{2}-\d{2})\s*(?:đến|den|to|-|→)\s*(\d{4}-\d{2}-\d{2})/i);
+    const m = String(dateFilter || '').match(/(\d{4}-\d{2}-\d{2})\D+(\d{4}-\d{2}-\d{2})/);
     if (m) {
       setStartDate((prev) => (prev === m[1] ? prev : m[1]));
       setEndDate((prev) => (prev === m[2] ? prev : m[2]));

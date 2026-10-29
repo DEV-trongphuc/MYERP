@@ -5743,10 +5743,10 @@ class ContactController {
             } elseif ($dateFilter === 'Năm nay' || $dateFilter === 'this_year') {
                 $fromDate = date('Y-01-01');
                 $toDate = date('Y-12-31');
-            } elseif (preg_match('/^(\d{4}-\d{2}-\d{2})\s*(?:đến|den|to|-|→|~)\s*(\d{4}-\d{2}-\d{2})$/iu', $dateFilter, $m)) {
+            } elseif (preg_match('/^(\d{4}-\d{2}-\d{2})\D+(\d{4}-\d{2}-\d{2})$/', $dateFilter, $m)) {
                 $fromDate = $m[1];
                 $toDate = $m[2];
-            } elseif (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})\s*(?:đến|den|to|-|→|~)\s*(\d{2})\/(\d{2})\/(\d{4})$/iu', $dateFilter, $m)) {
+            } elseif (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})\D+(\d{2})\/(\d{2})\/(\d{4})$/', $dateFilter, $m)) {
                 $fromDate = "{$m[3]}-{$m[2]}-{$m[1]}";
                 $toDate = "{$m[6]}-{$m[5]}-{$m[4]}";
             }
