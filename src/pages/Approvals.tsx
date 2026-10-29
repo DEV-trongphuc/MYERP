@@ -42,6 +42,95 @@ import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import { getSystemTitle } from '../config/env';
 import { pushOverlay } from '../utils/overlayStack';
 
+function cleanLeaveReasonText(raw?: string, keepTrailingBrackets = false): string {
+  if (!raw) return '';
+  let r = String(raw).trim().replace(/^["']+|["']+$/g, '');
+
+  let trailingAttachments = '';
+  const attMatch = r.match(/(\s*\[Tài liệu đính kèm[^\]]*\]:[\s\S]*)$/i);
+  if (attMatch) {
+    trailingAttachments = attMatch[1];
+    r = r.slice(0, -attMatch[1].length);
+  }
+
+  const trailingTags: string[] = [];
+  while (true) {
+    const mTag = r.match(/\s*(\[(?:Khấu trừ thực tế|Đã duyệt WFH|Đã tự động cộng|Ngày nghỉ chi tiết|Ngày nghỉ lẻ|Ngày WFH lẻ|Lặp lại định kỳ|Từ chối)[^\]]*\])\s*$/i);
+    if (!mTag) break;
+    trailingTags.unshift(mTag[1]);
+    r = r.slice(0, -mTag[0].length);
+  }
+
+  r = r.replace(/(?:\s*-\s*Cấp\s*\d+(?:\s*\([^)]*\))?)+$/gi, '');
+
+  let guard = 0;
+  let prev = '';
+  do {
+    prev = r;
+    r = r
+      .replace(/^\[(?:Đăng ký làm việc từ xa|Tăng ca|Đi muộn\/Về sớm|Nghỉ phép)\]\s*(?:[^:\-\n]+:\s*)?/i, '')
+      .replace(/^(?:Đăng ký WFH|Đăng ký OT|Đăng ký đi muộn\/về sớm|Đăng ký đi trễ\s*\/\s*về sớm|Đăng ký công tác|Đơn xin nghỉ phép(?:\s*\([^)]*\))?|Đề xuất nghỉ[^:\-]*|Đề xuất tạm ứng lương|Đề nghị tạm ứng lương)\s*:?\s*/i, '')
+      .replace(/^\[(?:Tỷ lệ hưởng lương|Hình thức|Nghỉ buổi sáng|Nghỉ buổi chiều|Nghỉ cả ngày|Nghỉ nhiều ngày|Nghỉ ngắt quãng|Làm việc từ xa)[^\]]*\]\s*/i, '')
+      .replace(/^(?:Thời gian:\s*)?\d{1,2}\/\d{1,2}\/\d{4}(?:\s*-\s*\d{1,2}\/\d{1,2}\/\d{4})?\s*(?:\([\d.,]+\s*ngày(?:\/giờ)?\))?\s*(?:-\s*)?/i, '')
+      .replace(/^Thời gian:\s*[^.]+\.\s*/i, '')
+      .replace(/^Lý do:\s*/i, '')
+      .replace(/^[\s"'-]+|[\s"'-]+$/g, '');
+    guard++;
+  } while (r !== prev && guard < 10);
+
+  r = r.replace(/(?:^|\s*-\s*)\d{1,2}\/\d{1,2}\/\d{4}(?:\s*-\s*\d{1,2}\/\d{1,2}\/\d{4})?\s*\([\d.,]+\s*ngày(?:\/giờ)?\)\s*(?=-|$)/gi, '');
+  r = r.replace(/^[\s"'-]+|[\s"'-]+$/g, '');
+
+  if (r.includes(' - ')) {
+    const parts = r.split(/\s+-\s+/);
+    const uniqueParts: string[] = [];
+    for (const part of parts) {
+      const pClean = part.trim().replace(/^["']+|["']+$/g, '');
+      if (!pClean) continue;
+      if (/^\d{1,2}\/\d{1,2}\/\d{4}(?:\s*-\s*\d{1,2}\/\d{1,2}\/\d{4})?(?:\s*\([\d.,]+\s*ngày\))?$/i.test(pClean)) continue;
+      if (/^Cấp\s*\d+(?:\s*\([^)]*\))?$/i.test(pClean)) continue;
+      const pLower = pClean.toLowerCase();
+      let exists = false;
+      for (let i = 0; i < uniqueParts.length; i++) {
+        const exLower = uniqueParts[i].toLowerCase();
+        if (pLower === exLower || exLower.includes(pLower)) {
+          exists = true;
+          break;
+        }
+        if (pLower.includes(exLower)) {
+          uniqueParts[i] = pClean;
+          exists = true;
+          break;
+        }
+      }
+      if (!exists) uniqueParts.push(pClean);
+    }
+    r = uniqueParts.join(' - ');
+  }
+
+  if (keepTrailingBrackets) {
+    if (trailingTags.length > 0) {
+      r = (r + ' ' + Array.from(new Set(trailingTags)).join(' ')).trim();
+    }
+    if (trailingAttachments) {
+      r += trailingAttachments;
+    }
+  }
+  return r.trim();
+}
+
+function combineUniqueReason(titleSuffix?: string, detailReason?: string): string {
+  const s = cleanLeaveReasonText(titleSuffix, false);
+  const r = cleanLeaveReasonText(detailReason, false);
+  if (!s) return r;
+  if (!r) return s;
+  const sLower = s.toLowerCase();
+  const rLower = r.toLowerCase();
+  if (sLower === rLower || rLower.includes(sLower)) return r;
+  if (sLower.includes(rLower)) return s;
+  return `${s} - ${r}`;
+}
+
 const workflowList = [
   { id: 'payment', name: 'Đề nghị thanh toán', description: 'Đề xuất thanh toán nhà cung cấp, chi phí vận hành, đối tác.', category: 'finance', icon: FileSignature, bg: 'rgba(16, 185, 129, 0.08)', color: '#10b981' },
   { id: 'advance_money', name: 'Đề nghị tạm ứng', description: 'Đề xuất tạm ứng chi phí công tác, mua hàng hoặc ứng lương.', category: 'finance', icon: DollarSign, bg: 'rgba(59, 130, 246, 0.08)', color: '#3b82f6' },
@@ -1001,25 +1090,29 @@ export default function Approvals() {
 
   const extractTitleSuffix = useCallback((title: string, defName?: string): string => {
     if (!title) return '';
+    let cleanTitle = title.replace(/(?:\s*-\s*Cấp\s*\d+(?:\s*\([^)]*\))?)+$/gi, '').trim();
+    if (/^(?:\[(?:Nghỉ phép|Đăng ký làm việc từ xa|Tăng ca|Đi muộn\/Về sớm)\]|Đăng ký (?:WFH|OT|đi muộn\/về sớm|đi trễ\s*\/\s*về sớm|công tác)|Đơn xin nghỉ phép|Đề xuất tạm ứng lương)/i.test(cleanTitle)) {
+      return cleanLeaveReasonText(cleanTitle, false);
+    }
     const prefix = defName || selectedWorkflowDef?.name || '';
     if (prefix) {
-      const lowerTitle = title.toLowerCase();
+      const lowerTitle = cleanTitle.toLowerCase();
       const lowerPrefix = prefix.toLowerCase();
       if (lowerTitle.startsWith((lowerPrefix + ' - ').toLowerCase())) {
-        return title.substring(prefix.length + 3).trim();
+        return cleanLeaveReasonText(cleanTitle.substring(prefix.length + 3).trim(), false);
       }
       if (lowerTitle.startsWith((lowerPrefix + ' — ').toLowerCase())) {
-        return title.substring(prefix.length + 3).trim();
+        return cleanLeaveReasonText(cleanTitle.substring(prefix.length + 3).trim(), false);
       }
       if (lowerTitle.startsWith((lowerPrefix + ': ').toLowerCase())) {
-        return title.substring(prefix.length + 2).trim();
+        return cleanLeaveReasonText(cleanTitle.substring(prefix.length + 2).trim(), false);
       }
       if (lowerTitle.startsWith(lowerPrefix)) {
-        const rest = title.substring(prefix.length).trim();
-        return rest.replace(/^[\s\-–—:]+/, '').trim();
+        const rest = cleanTitle.substring(prefix.length).trim();
+        return cleanLeaveReasonText(rest.replace(/^[\s\-–—:]+/, '').trim(), false);
       }
     }
-    return title.trim();
+    return cleanLeaveReasonText(cleanTitle.trim(), false);
   }, [selectedWorkflowDef]);
   const [jobPosition, setJobPosition] = useState('');
   const [departmentName, setDepartmentName] = useState('');
@@ -1722,7 +1815,7 @@ export default function Approvals() {
           daysVal = calculateWorkingDays(leaveFrom, leaveTo, 'range');
         }
 
-        const effectiveReason = [workflowTitleSuffix?.trim(), leaveReason?.trim()].filter(Boolean).join(' - ') || leaveReason?.trim() || workflowTitleSuffix?.trim() || '';
+        const effectiveReason = combineUniqueReason(workflowTitleSuffix, leaveReason);
         if (!effectiveReason) {
           toast.error(t('Vui lòng nhập lý do xin nghỉ phép!'));
           setSubmitting(false);
@@ -1767,7 +1860,7 @@ export default function Approvals() {
           setSubmitting(false);
           return;
         }
-        const effectiveReason = [workflowTitleSuffix?.trim(), leaveReason?.trim()].filter(Boolean).join(' - ') || leaveReason?.trim() || workflowTitleSuffix?.trim() || '';
+        const effectiveReason = combineUniqueReason(workflowTitleSuffix, leaveReason);
         if (!effectiveReason) {
           toast.error(t('Vui lòng nhập lý do đi muộn/về sớm!'));
           setSubmitting(false);
@@ -1810,7 +1903,7 @@ export default function Approvals() {
           });
         }
       } else if (formType === 'overtime') {
-        const effectiveReason = [workflowTitleSuffix?.trim(), leaveReason?.trim()].filter(Boolean).join(' - ') || leaveReason?.trim() || workflowTitleSuffix?.trim() || '';
+        const effectiveReason = combineUniqueReason(workflowTitleSuffix, leaveReason);
         if (!effectiveReason) {
           toast.error(t('Vui lòng nhập lý do tăng ca!'));
           setSubmitting(false);
@@ -1874,7 +1967,7 @@ export default function Approvals() {
           return;
         }
 
-        const effectiveReason = [workflowTitleSuffix?.trim(), leaveReason?.trim()].filter(Boolean).join(' - ') || leaveReason?.trim() || workflowTitleSuffix?.trim() || '';
+        const effectiveReason = combineUniqueReason(workflowTitleSuffix, leaveReason);
         if (!effectiveReason) {
           toast.error(t('Vui lòng nhập lý do / kế hoạch làm việc từ xa!'));
           setSubmitting(false);
@@ -1902,7 +1995,7 @@ export default function Approvals() {
           });
         }
       } else if (formType === 'advance') {
-        const effectiveAdvReason = [workflowTitleSuffix?.trim(), leaveReason?.trim()].filter(Boolean).join(' - ') || leaveReason?.trim() || workflowTitleSuffix?.trim() || 'Tạm ứng';
+        const effectiveAdvReason = combineUniqueReason(workflowTitleSuffix, leaveReason) || 'Tạm ứng';
         let advReasonStr = effectiveAdvReason;
         if (isRecurring) {
           advReasonStr += ` [Lặp lại định kỳ: ${recurringFrequency} - Hạn: ${recurringEndDate || 'Vô thời hạn'}]`;
@@ -2085,7 +2178,7 @@ export default function Approvals() {
         }
         
         if (selectedWorkflowDef?.id !== 'print_stamp_send') {
-          const effectiveGeneralReason = [workflowTitleSuffix?.trim(), leaveReason?.trim()].filter(Boolean).join(' - ') || leaveReason?.trim() || workflowTitleSuffix?.trim() || '';
+          const effectiveGeneralReason = combineUniqueReason(workflowTitleSuffix, leaveReason);
           generalDesc += `Vị trí: ${jobPosition}\nPhòng ban: ${departmentName}\nNội dung đề xuất: ${paymentDetails || workflowTitleSuffix || ''}\nLý do: ${effectiveGeneralReason}`;
           if (isRecurring) {
             generalDesc += `\n[Lặp lại định kỳ]: Tần suất ${recurringFrequency} (Kết thúc: ${recurringEndDate || 'Vô thời hạn'})`;
@@ -4021,7 +4114,30 @@ export default function Approvals() {
       }
     }
 
+    // Deduplicate any repeated segments in leave/HRM titles
+    const hrmHeaderMatch = t.match(/^((?:\[Nghỉ phép\][^:]*|Đăng ký (?:WFH|OT|đi muộn\/về sớm|công tác))\s*(?::\s*\d{1,2}\/\d{1,2}\/\d{4}(?:\s*-\s*\d{1,2}\/\d{1,2}\/\d{4})?)?\s*(?:\([\d.,]+\s*ngày\))?)\s*-\s*(.+)$/i);
+    if (hrmHeaderMatch) {
+      const headerPart = hrmHeaderMatch[1].trim();
+      const rawTail = hrmHeaderMatch[2].trim();
+      const levelMatch = rawTail.match(/(\s*-\s*Cấp\s*\d+(?:\s*\([^)]*\))?)$/i);
+      const levelSuffix = levelMatch ? levelMatch[1] : '';
+      const cleanTail = cleanLeaveReasonText(rawTail, false);
+      t = cleanTail ? `${headerPart} - ${cleanTail}${levelSuffix}` : `${headerPart}${levelSuffix}`;
+    }
+
     return t || `Quy trình #${it.id}`;
+  }, []);
+
+  const getApprovalCardSubtitle = useCallback((it: ApprovalItem): string => {
+    const desc = (it.description || '').trim();
+    if (!desc) return '';
+    if (it.type === 'leave') {
+      // Title already displays leave type, date range, days, and reason.
+      // Only show bracket status badges (e.g. [Khấu trừ thực tế:...], [Đã duyệt WFH:...], [Đã tự động cộng...]) if present.
+      const tags = desc.match(/\[(?:Khấu trừ thực tế|Đã duyệt WFH|Đã tự động cộng|Từ chối)[^\]]*\]/gi);
+      return tags && tags.length > 0 ? Array.from(new Set(tags)).join(' • ') : '';
+    }
+    return desc;
   }, []);
 
   const inFlightOpsRef = useRef<Record<string, boolean>>({});
@@ -4592,8 +4708,6 @@ export default function Approvals() {
             const def = workflowList.find(w => w.id === 'late_early') || matchingDef;
             setSelectedWorkflowDef(def);
             setFormType('late_early');
-            setExpenseTitle(found.title || item.title || def.name);
-            setWorkflowTitleSuffix(extractTitleSuffix(found.title || item.title || '', def?.name));
             setLateEarlyType(cleanR.includes('Về sớm') ? 'early' : 'late');
             const minMatch = cleanR.match(/(\d+)\s*phút/i);
             if (minMatch) setLateEarlyMinutes(Number(minMatch[1]));
@@ -4602,13 +4716,14 @@ export default function Approvals() {
             const startD = String(found.from_date || found.start_date || '').split(/[T ]/)[0] || getTodayDateString();
             setLeaveFrom(startD);
             const baseReasonMatch = cleanR.match(/Lý do:\s*([\s\S]*)$/i);
-            setLeaveReason(baseReasonMatch ? baseReasonMatch[1].trim() : cleanR);
+            const cleanReasonVal = cleanLeaveReasonText(baseReasonMatch ? baseReasonMatch[1].trim() : cleanR, false);
+            setLeaveReason(cleanReasonVal);
+            setWorkflowTitleSuffix(cleanReasonVal);
+            setExpenseTitle(getFullWorkflowTitle(def, cleanReasonVal));
           } else if (lType === 'overtime') {
             const def = workflowList.find(w => w.id === 'overtime') || matchingDef;
             setSelectedWorkflowDef(def);
             setFormType('overtime');
-            setExpenseTitle(found.title || item.title || def.name);
-            setWorkflowTitleSuffix(extractTitleSuffix(found.title || item.title || '', def?.name));
             setOtType(found.ot_type || (cleanR.includes('Lấy OT bù') || cleanR.includes('Nghỉ bù') ? 'compensatory' : 'salary'));
             setOtRate(Number(found.ot_rate) || 1.5);
             const d = String(found.from_date || found.start_date || '').split(/[T ]/)[0] || getTodayDateString();
@@ -4622,13 +4737,14 @@ export default function Approvals() {
               if (found.to_date?.includes('T')) setOtEnd(found.to_date.split('T')[1].substring(0, 5));
             }
             const baseReasonMatch = cleanR.match(/Lý do:\s*([\s\S]*)$/i);
-            setLeaveReason(baseReasonMatch ? baseReasonMatch[1].trim() : cleanR);
+            const cleanReasonVal = cleanLeaveReasonText(baseReasonMatch ? baseReasonMatch[1].trim() : cleanR, false);
+            setLeaveReason(cleanReasonVal);
+            setWorkflowTitleSuffix(cleanReasonVal);
+            setExpenseTitle(getFullWorkflowTitle(def, cleanReasonVal));
           } else if (lType === 'remote_work') {
             const def = workflowList.find(w => w.id === 'remote_work') || matchingDef;
             setSelectedWorkflowDef(def);
             setFormType('remote_work');
-            setExpenseTitle(found.title || item.title || def.name);
-            setWorkflowTitleSuffix(extractTitleSuffix(found.title || item.title || '', def?.name));
             const startD = String(found.start_date || found.from_date || '').split(/[T ]/)[0] || getTodayDateString();
             const endD = String(found.end_date || found.to_date || startD).split(/[T ]/)[0] || startD;
             setLeaveFrom(startD);
@@ -4656,19 +4772,22 @@ export default function Approvals() {
               else setWfhSalaryRate(85);
             }
 
-            const strippedReason = cleanR
-              .replace(/^\[Làm việc từ xa[^\]]*\]\s*/i, '')
-              .replace(/\[Ngày WFH lẻ:[^\]]*\]\s*/gi, '')
-              .replace(/^Lý do:\s*/i, '')
-              .trim();
+            const strippedReason = cleanLeaveReasonText(
+              cleanR
+                .replace(/^\[Làm việc từ xa[^\]]*\]\s*/i, '')
+                .replace(/\[Ngày WFH lẻ:[^\]]*\]\s*/gi, '')
+                .replace(/^Lý do:\s*/i, '')
+                .trim(),
+              false
+            );
             setLeaveReason(strippedReason);
+            setWorkflowTitleSuffix(strippedReason);
+            setExpenseTitle(getFullWorkflowTitle(def, strippedReason));
           } else {
             const def = workflowList.find(w => w.id === 'leave_late') || matchingDef;
             setSelectedWorkflowDef(def);
             setFormType('leave');
-            setExpenseTitle(found.title || item.title || def.name);
-            setWorkflowTitleSuffix(extractTitleSuffix(found.title || item.title || '', def?.name));
-            setLeaveType(found.leave_type || 'annual');
+            setLeaveType(found.leave_type || (item as any).leave_type || 'annual');
             const startD = String(found.start_date || found.from_date || '').split(/[T ]/)[0] || getTodayDateString();
             const endD = String(found.end_date || found.to_date || startD).split(/[T ]/)[0] || startD;
             setLeaveFrom(startD);
@@ -4692,11 +4811,16 @@ export default function Approvals() {
               if (parsedDates.length > 0) setIntermittentDates(parsedDates);
             }
 
-            const strippedReason = cleanR
-              .replace(/^\[(?:Nghỉ buổi sáng|Nghỉ buổi chiều|Nghỉ cả ngày|Nghỉ nhiều ngày|Nghỉ ngắt quãng)[^\]]*\]\s*/i, '')
-              .replace(/\[(?:Ngày nghỉ chi tiết|Ngày nghỉ lẻ):[^\]]*\]\s*/gi, '')
-              .trim();
+            const strippedReason = cleanLeaveReasonText(
+              cleanR
+                .replace(/^\[(?:Nghỉ buổi sáng|Nghỉ buổi chiều|Nghỉ cả ngày|Nghỉ nhiều ngày|Nghỉ ngắt quãng)[^\]]*\]\s*/i, '')
+                .replace(/\[(?:Ngày nghỉ chi tiết|Ngày nghỉ lẻ):[^\]]*\]\s*/gi, '')
+                .trim(),
+              false
+            );
             setLeaveReason(strippedReason);
+            setWorkflowTitleSuffix(strippedReason);
+            setExpenseTitle(getFullWorkflowTitle(def, strippedReason));
           }
           parseMultiAttachmentsFromText(r, found.attachment_url || found.image_url);
           restoreApproversAndRelated(found);
@@ -4806,12 +4930,17 @@ export default function Approvals() {
             const endRecMatch = r.match(/đến\s*([0-9\-/]+)/i);
             if (endRecMatch) setRecurringEndDate(endRecMatch[1].trim());
           }
-          const cleanReason = r.replace(/\[Thông tin chuyển khoản[^\]]*\]:[^\n]*/gi, '')
-                               .replace(/\[Tài liệu đính kèm[^\]]*\]:[\s\S]*$/gi, '')
-                               .replace(/\[Đề nghị tạm ứng[^\]]*\]:[^\n]*(\n•[^\n]*)*\s*/gi, '')
-                               .replace(/\[Lặp lại định kỳ[^\]]*\]\s*/gi, '')
-                               .trim();
+          const cleanReason = cleanLeaveReasonText(
+            r.replace(/\[Thông tin chuyển khoản[^\]]*\]:[^\n]*/gi, '')
+             .replace(/\[Tài liệu đính kèm[^\]]*\]:[\s\S]*$/gi, '')
+             .replace(/\[Đề nghị tạm ứng[^\]]*\]:[^\n]*(\n•[^\n]*)*\s*/gi, '')
+             .replace(/\[Lặp lại định kỳ[^\]]*\]\s*/gi, '')
+             .trim(),
+            false
+          );
           setLeaveReason(cleanReason);
+          setWorkflowTitleSuffix(cleanReason);
+          setExpenseTitle(getFullWorkflowTitle(def, cleanReason));
           parseMultiAttachmentsFromText(r, found.image_url);
           restoreApproversAndRelated(found);
         }
@@ -7000,7 +7129,7 @@ export default function Approvals() {
                           </span>
                           <span>{getApprovalDisplayTitle(item)}</span>
                         </div>
-                        {item.description && (
+                        {getApprovalCardSubtitle(item) && (
                           <div style={{
                             fontSize: '0.75rem',
                             color: 'var(--color-text-muted)',
@@ -7011,7 +7140,7 @@ export default function Approvals() {
                             WebkitBoxOrient: 'vertical',
                             WebkitTextSizeAdjust: '100%'
                           }}>
-                            {item.description}
+                            {getApprovalCardSubtitle(item)}
                           </div>
                         )}
                       </div>
@@ -7232,7 +7361,9 @@ export default function Approvals() {
                                 </span>
                                 <span>{getApprovalDisplayTitle(item)}</span>
                               </div>
-                              <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: '2px', WebkitTextSizeAdjust: '100%' }}>{item.description}</div>
+                              {getApprovalCardSubtitle(item) && (
+                                <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: '2px', WebkitTextSizeAdjust: '100%' }}>{getApprovalCardSubtitle(item)}</div>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -8993,9 +9124,9 @@ export default function Approvals() {
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Lý do xin nghỉ')}</label>
-                              <input
-                                type="text"
+                              <textarea
                                 className="form-input"
+                                rows={4}
                                 value={leaveReason}
                                 onChange={e => {
                                   const val = e.target.value;
@@ -9005,8 +9136,8 @@ export default function Approvals() {
                                     setExpenseTitle(getFullWorkflowTitle(selectedWorkflowDef, val));
                                   }
                                 }}
-                                placeholder={t('Lý do chi tiết...')}
-                                style={{ height: '36px', fontSize: '0.8rem' }}
+                                placeholder={t('Nhập chi tiết lý do xin nghỉ phép, phương án bàn giao / hỗ trợ công việc...')}
+                                style={{ minHeight: '110px', fontSize: '0.85rem', padding: '10px 12px', lineHeight: 1.5, resize: 'vertical' }}
                                 required
                               />
                             </div>
@@ -9322,13 +9453,20 @@ export default function Approvals() {
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                   <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Lý do đi muộn / về sớm')}</label>
-                                  <input
-                                    type="text"
+                                  <textarea
                                     className="form-input"
+                                    rows={3}
                                     value={leaveReason}
-                                    onChange={e => setLeaveReason(e.target.value)}
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      setLeaveReason(val);
+                                      if (!workflowTitleSuffix || workflowTitleSuffix === leaveReason) {
+                                        setWorkflowTitleSuffix(val);
+                                        setExpenseTitle(getFullWorkflowTitle(selectedWorkflowDef, val));
+                                      }
+                                    }}
                                     placeholder={t('Ví dụ: Đi khám bệnh, kẹt xe, giải quyết việc cá nhân...')}
-                                    style={{ height: '36px', fontSize: '0.8rem' }}
+                                    style={{ minHeight: '90px', fontSize: '0.85rem', padding: '10px 12px', lineHeight: 1.5, resize: 'vertical' }}
                                     required
                                   />
                                 </div>
@@ -9477,13 +9615,20 @@ export default function Approvals() {
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Nội dung công việc tăng ca')}</label>
-                              <input
-                                type="text"
+                              <textarea
                                 className="form-input"
+                                rows={3}
                                 value={leaveReason}
-                                onChange={e => setLeaveReason(e.target.value)}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  setLeaveReason(val);
+                                  if (!workflowTitleSuffix || workflowTitleSuffix === leaveReason) {
+                                    setWorkflowTitleSuffix(val);
+                                    setExpenseTitle(getFullWorkflowTitle(selectedWorkflowDef, val));
+                                  }
+                                }}
                                 placeholder={t('Chi tiết công việc cần tăng ca...')}
-                                style={{ height: '36px', fontSize: '0.8rem' }}
+                                style={{ minHeight: '90px', fontSize: '0.85rem', padding: '10px 12px', lineHeight: 1.5, resize: 'vertical' }}
                                 required
                               />
                             </div>
@@ -9719,10 +9864,18 @@ export default function Approvals() {
                               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Kế hoạch công việc từ xa')}</label>
                               <textarea
                                 className="form-input"
+                                rows={4}
                                 value={leaveReason}
-                                onChange={e => setLeaveReason(e.target.value)}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  setLeaveReason(val);
+                                  if (!workflowTitleSuffix || workflowTitleSuffix === leaveReason) {
+                                    setWorkflowTitleSuffix(val);
+                                    setExpenseTitle(getFullWorkflowTitle(selectedWorkflowDef, val));
+                                  }
+                                }}
                                 placeholder={t('Chi tiết các đầu việc thực hiện từ xa...')}
-                                style={{ height: '70px', fontSize: '0.8rem', padding: '8px', resize: 'none' }}
+                                style={{ minHeight: '110px', fontSize: '0.85rem', padding: '10px 12px', lineHeight: 1.5, resize: 'vertical' }}
                                 required
                               />
                             </div>
@@ -16296,14 +16449,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     const contentVal = extractMetaField(rawDesc, 'Nội dung đề xuất') || extractMetaField(rawDesc, 'Nội dung') || detail?.content || '';
     
     const cleanRawReason = (str?: string) => {
-      if (!str) return '';
-      let r = String(str).trim();
-      r = r.replace(/^\[(?:Đăng ký làm việc từ xa|Tăng ca|Đi muộn\/Về sớm|Nghỉ phép)\]\s*/i, '')
-           .replace(/^\[(?:Tỷ lệ hưởng lương|Hình thức):[^\]]+\]\s*/i, '')
-           .replace(/^Thời gian:\s*[^.]+\.\s*/i, '')
-           .replace(/^Lý do:\s*/i, '')
-           .trim();
-      return r;
+      return cleanLeaveReasonText(str, false);
     };
 
     let reasonVal = cleanRawReason(extractMetaField(rawDesc, 'Lý do'));
@@ -16603,6 +16749,13 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           cleanHeaderTitle = cleanHeaderTitle.substring(0, lastDashIndex) + ' - ' + fullReason;
         }
       }
+    }
+
+    const hrmDrawerHeaderMatch = cleanHeaderTitle.match(/^((?:\[Nghỉ phép\][^:]*|Đăng ký (?:WFH|OT|đi muộn\/về sớm|công tác))\s*(?::\s*\d{1,2}\/\d{1,2}\/\d{4}(?:\s*-\s*\d{1,2}\/\d{1,2}\/\d{4})?)?\s*(?:\([\d.,]+\s*ngày\))?)\s*-\s*(.+)$/i);
+    if (hrmDrawerHeaderMatch) {
+      const hPart = hrmDrawerHeaderMatch[1].trim();
+      const tPart = cleanLeaveReasonText(hrmDrawerHeaderMatch[2].trim(), false);
+      cleanHeaderTitle = tPart ? `${hPart} - ${tPart}` : hPart;
     }
 
     const cleanNoteText = cleanRawReason(detail?.reason || detail?.notes || detail?.description || rawDesc || '')

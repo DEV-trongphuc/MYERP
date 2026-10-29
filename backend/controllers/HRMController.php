@@ -127,10 +127,84 @@ class HRMController {
     public static function cleanLeaveReason(?string $reason): string {
         if (!$reason) return '';
         $r = trim($reason);
-        $r = preg_replace('/^\[(?:Đăng ký làm việc từ xa|Tăng ca|Đi muộn\/Về sớm|Nghỉ phép)\]\s*/iu', '', $r);
-        $r = preg_replace('/^\[(?:Tỷ lệ hưởng lương|Hình thức):[^\]]+\]\s*/iu', '', $r);
-        $r = preg_replace('/^Thời gian:\s*[^.]+\.\s*/iu', '', $r);
-        $r = preg_replace('/^Lý do:\s*/iu', '', $r);
+        $r = trim($r, "\"'");
+
+        // Preserve trailing attachments block
+        $trailingAttachments = '';
+        if (preg_match('/(\s*\[Tài liệu đính kèm[^\]]*\]:[\s\S]*)$/iu', $r, $mAtt)) {
+            $trailingAttachments = $mAtt[1];
+            $r = substr($r, 0, -strlen($mAtt[1]));
+        }
+
+        // Preserve trailing bracket metadata tags
+        $trailingTags = [];
+        while (preg_match('/\s*(\[(?:Khấu trừ thực tế|Đã duyệt WFH|Đã tự động cộng|Ngày nghỉ chi tiết|Ngày nghỉ lẻ|Ngày WFH lẻ|Lặp lại định kỳ|Từ chối)[^\]]*\])\s*$/iu', $r, $mTag)) {
+            array_unshift($trailingTags, $mTag[1]);
+            $r = substr($r, 0, -strlen($mTag[0]));
+        }
+
+        // Strip trailing approval level labels if accidentally appended
+        $r = preg_replace('/(?:\s*-\s*Cấp\s*\d+(?:\s*\([^)]*\))?)+$/iu', '', $r);
+
+        // Iteratively strip any leading auto-generated title/header prefixes
+        $guard = 0;
+        do {
+            $prev = $r;
+            $r = preg_replace('/^\[(?:Đăng ký làm việc từ xa|Tăng ca|Đi muộn\/Về sớm|Nghỉ phép)\]\s*(?:[^:\-\n]+:\s*)?/iu', '', $r);
+            $r = preg_replace('/^(?:Đăng ký WFH|Đăng ký OT|Đăng ký đi muộn\/về sớm|Đăng ký đi trễ\s*\/\s*về sớm|Đăng ký công tác|Đơn xin nghỉ phép(?:\s*\([^)]*\))?|Đề xuất nghỉ[^\:\-]*)\s*:?\s*/iu', '', $r);
+            $r = preg_replace('/^\[(?:Tỷ lệ hưởng lương|Hình thức|Nghỉ buổi sáng|Nghỉ buổi chiều|Nghỉ cả ngày|Nghỉ nhiều ngày|Nghỉ ngắt quãng|Làm việc từ xa)[^\]]*\]\s*/iu', '', $r);
+            $r = preg_replace('/^(?:Thời gian:\s*)?\d{1,2}\/\d{1,2}\/\d{4}(?:\s*-\s*\d{1,2}\/\d{1,2}\/\d{4})?\s*(?:\([\d.,]+\s*ngày(?:\/giờ)?\))?\s*(?:-\s*)?/iu', '', $r);
+            $r = preg_replace('/^Thời gian:\s*[^.]+\.\s*/iu', '', $r);
+            $r = preg_replace('/^Lý do:\s*/iu', '', $r);
+            $r = trim($r, " \t\n\r\0\x0B\"'-");
+            $guard++;
+        } while ($r !== $prev && $guard < 10);
+
+        // Remove any inline auto-generated "dd/mm/yyyy - dd/mm/yyyy (X ngày)" fragments before splitting
+        $r = preg_replace('/(?:^|\s*-\s*)\d{1,2}\/\d{1,2}\/\d{4}(?:\s*-\s*\d{1,2}\/\d{1,2}\/\d{4})?\s*\([\d.,]+\s*ngày(?:\/giờ)?\)\s*(?=-|$)/iu', '', $r);
+        $r = trim($r, " \t\n\r\0\x0B\"'-");
+
+        // Deduplicate repeated segments separated by " - " (e.g. "A - A" or "A - A - A - A")
+        if (strpos($r, ' - ') !== false) {
+            $parts = preg_split('/\s+-\s+/u', $r);
+            $uniqueParts = [];
+            foreach ($parts as $part) {
+                $pClean = trim($part, " \t\n\r\0\x0B\"'");
+                if ($pClean === '') continue;
+                if (preg_match('/^\d{1,2}\/\d{1,2}\/\d{4}(?:\s*-\s*\d{1,2}\/\d{1,2}\/\d{4})?(?:\s*\([\d.,]+\s*ngày\))?$/iu', $pClean)) {
+                    continue;
+                }
+                if (preg_match('/^Cấp\s*\d+(?:\s*\([^)]*\))?$/iu', $pClean)) {
+                    continue;
+                }
+                $pLower = mb_strtolower($pClean, 'UTF-8');
+                $alreadyExists = false;
+                foreach ($uniqueParts as $idx => $existing) {
+                    $exLower = mb_strtolower($existing, 'UTF-8');
+                    if ($pLower === $exLower || mb_strpos($exLower, $pLower) !== false) {
+                        $alreadyExists = true;
+                        break;
+                    }
+                    if (mb_strpos($pLower, $exLower) !== false) {
+                        $uniqueParts[$idx] = $pClean;
+                        $alreadyExists = true;
+                        break;
+                    }
+                }
+                if (!$alreadyExists) {
+                    $uniqueParts[] = $pClean;
+                }
+            }
+            $r = implode(' - ', $uniqueParts);
+        }
+
+        if (!empty($trailingTags)) {
+            $r = trim($r . ' ' . implode(' ', array_unique($trailingTags)));
+        }
+        if ($trailingAttachments !== '') {
+            $r .= $trailingAttachments;
+        }
+
         return trim($r);
     }
 
@@ -157,7 +231,8 @@ class HRMController {
         }
 
         $cleanReason = self::cleanLeaveReason($l['reason'] ?? '');
-        $reasonStr = $cleanReason ? " - {$cleanReason}" : '';
+        $cleanReasonForTitle = trim(preg_replace('/\s*\[(?:Khấu trừ thực tế|Đã duyệt WFH|Đã tự động cộng|Ngày nghỉ chi tiết|Ngày nghỉ lẻ|Ngày WFH lẻ|Lặp lại định kỳ|Từ chối|Tài liệu đính kèm)[^\]]*\][\s\S]*$/iu', '', $cleanReason));
+        $reasonStr = $cleanReasonForTitle !== '' ? " - {$cleanReasonForTitle}" : '';
 
         if ($type === 'remote_work') {
             return "Đăng ký WFH{$dateStr}{$daysStr}{$reasonStr}";
@@ -796,7 +871,7 @@ class HRMController {
             $endDate,
             $totalDays,
             $unpaidDays,
-            $rawReason !== '' ? $rawReason : $reason,
+            $reason !== '' ? $reason : $rawReason,
             $initialStatus,
             $approverId,
             $approverId2,
@@ -916,6 +991,7 @@ class HRMController {
             if ($newStatus === 'pending') {
                 $rawReason = trim(preg_replace('/\s*\[Từ chối:[^\]]*\]/u', '', $rawReason));
             }
+            $rawReason = self::cleanLeaveReason($rawReason);
 
             $approverId = array_key_exists('approver_id', $b) ? (!empty($b['approver_id']) ? (int)$b['approver_id'] : null) : (!empty($row['approver_id']) ? (int)$row['approver_id'] : null);
             $approverId2 = array_key_exists('approver_id_2', $b) ? (!empty($b['approver_id_2']) ? (int)$b['approver_id_2'] : null) : (!empty($row['approver_id_2']) ? (int)$row['approver_id_2'] : null);
