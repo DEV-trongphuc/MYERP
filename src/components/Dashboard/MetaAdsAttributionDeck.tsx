@@ -189,22 +189,104 @@ const renderPlatformLogo = (platformRaw: string, size: number = 22): React.React
   );
 };
 
-const mapExternalDateFilterToRange = (filter?: string): string => {
+const parseCustomRangeFromFilter = (
+  filter?: string,
+  fallbackStart?: string,
+  fallbackEnd?: string
+): { from: string; to: string } | null => {
+  const raw = String(filter || '').trim();
+  if (raw) {
+    const mIso = raw.match(/(\d{4}-\d{2}-\d{2})\s*(?:đến|den|to|-|→|~)\s*(\d{4}-\d{2}-\d{2})/i);
+    if (mIso) {
+      return mIso[1] <= mIso[2] ? { from: mIso[1], to: mIso[2] } : { from: mIso[2], to: mIso[1] };
+    }
+    const mVn = raw.match(/(\d{2})\/(\d{2})\/(\d{4})\s*(?:đến|den|to|-|→|~)\s*(\d{2})\/(\d{2})\/(\d{4})/i);
+    if (mVn) {
+      const d1 = `${mVn[3]}-${mVn[2]}-${mVn[1]}`;
+      const d2 = `${mVn[6]}-${mVn[5]}-${mVn[4]}`;
+      return d1 <= d2 ? { from: d1, to: d2 } : { from: d2, to: d1 };
+    }
+  }
+  const fStart = String(fallbackStart || '').trim().slice(0, 10);
+  const fEnd = String(fallbackEnd || '').trim().slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(fStart) && /^\d{4}-\d{2}-\d{2}$/.test(fEnd)) {
+    return fStart <= fEnd ? { from: fStart, to: fEnd } : { from: fEnd, to: fStart };
+  }
+  return null;
+};
+
+const mapExternalDateFilterToRange = (
+  filter?: string,
+  fallbackStart?: string,
+  fallbackEnd?: string
+): string => {
   const s = String(filter || '').trim().toLowerCase();
   if (!s) return 'this_month';
+  if (parseCustomRangeFromFilter(filter)) return 'custom';
+  if (s === 'tùy chỉnh' || s === 'tùy chỉnh...' || s === 'custom') {
+    return parseCustomRangeFromFilter(filter, fallbackStart, fallbackEnd) ? 'custom' : 'this_month';
+  }
   if (s === 'hôm nay' || s === 'today') return 'today';
   if (s === 'hôm qua' || s === 'yesterday') return 'yesterday';
   if (s === 'tuần này' || s === 'this_week') return 'this_week';
   if (s === 'tuần trước' || s === 'last_week') return 'last_week';
+  if (s === 'tuần trước nữa' || s === 'two_weeks_ago') return 'two_weeks_ago';
   if (s === '7 ngày qua' || s === 'last_7_days' || s === '7d') return 'last_7_days';
   if (s === '30 ngày qua' || s === 'last_30_days' || s === '30d') return 'last_30_days';
   if (s === 'tháng này' || s === 'this_month') return 'this_month';
   if (s === 'tháng trước' || s === 'last_month') return 'last_month';
   if (s === 'quý này' || s === 'this_quarter') return 'this_quarter';
   if (s === 'năm nay' || s === 'this_year') return 'this_year';
-  if (s === 'tất cả' || s === 'toàn thời gian' || s === 'all_time' || s === 'all') return 'all_time';
-  if (s === 'tùy chỉnh' || s === 'custom') return 'custom';
+  if (
+    s === 'tất cả' ||
+    s === 'tất cả thời gian' ||
+    s === 'toàn thời gian' ||
+    s === 'all_time' ||
+    s === 'all'
+  ) {
+    return 'all_time';
+  }
   return 'this_month';
+};
+
+const mapRangeKeyToGlobalFilterLabel = (
+  rangeKey: string,
+  customStart?: string,
+  customEnd?: string
+): string => {
+  switch (rangeKey) {
+    case 'today':
+      return 'Hôm nay';
+    case 'yesterday':
+      return 'Hôm qua';
+    case 'this_week':
+      return 'Tuần này';
+    case 'last_week':
+      return 'Tuần trước';
+    case 'two_weeks_ago':
+      return 'Tuần trước nữa';
+    case 'last_7_days':
+      return '7 ngày qua';
+    case 'last_30_days':
+      return '30 ngày qua';
+    case 'this_month':
+      return 'Tháng này';
+    case 'last_month':
+      return 'Tháng trước';
+    case 'this_quarter':
+      return 'Quý này';
+    case 'this_year':
+      return 'Năm nay';
+    case 'all_time':
+      return 'Tất cả thời gian';
+    case 'custom':
+      if (customStart && customEnd) {
+        return `${customStart} đến ${customEnd}`;
+      }
+      return 'Tháng này';
+    default:
+      return 'Tháng này';
+  }
 };
 
 const CleanSearchBox: React.FC<{
@@ -283,7 +365,15 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
   const [viewMode, setViewMode] = useState<'funnel' | 'campaigns' | 'preview'>('funnel');
   const [selectedCampaignFilter, setSelectedCampaignFilter] = useState<string>('all');
   const [selectedOwnerFilter, setSelectedOwnerFilter] = useState<string>('all');
-  const [dateRange, setDateRange] = useState<string>(() => mapExternalDateFilterToRange(externalDateFilter));
+  const initialParsedCustom = useMemo(
+    () => parseCustomRangeFromFilter(externalDateFilter, customStartDate, customEndDate),
+    [externalDateFilter, customStartDate, customEndDate]
+  );
+  const [dateRange, setDateRange] = useState<string>(() =>
+    mapExternalDateFilterToRange(externalDateFilter, customStartDate, customEndDate)
+  );
+  const [localCustomStart, setLocalCustomStart] = useState<string>(() => initialParsedCustom?.from || customStartDate || '');
+  const [localCustomEnd, setLocalCustomEnd] = useState<string>(() => initialParsedCustom?.to || customEndDate || '');
   const [dailyMetric, setDailyMetric] = useState<'spend' | 'leads' | 'reach' | 'impressions' | 'messages' | 'clicks'>('spend');
   const [ageOnlyMode, setAgeOnlyMode] = useState<boolean>(false);
   const [showPlacementModal, setShowPlacementModal] = useState<boolean>(false);
@@ -300,10 +390,13 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
   const [adsetSearch, setAdsetSearch] = useState<string>('');
   const [adPreviewSearch, setAdPreviewSearch] = useState<string>('');
 
+  const effectiveCustomStart = initialParsedCustom?.from || localCustomStart || customStartDate || '';
+  const effectiveCustomEnd = initialParsedCustom?.to || localCustomEnd || customEndDate || '';
+
   const initialMetaKey = buildMetaAdsCacheKey(
-    mapExternalDateFilterToRange(externalDateFilter),
-    customStartDate,
-    customEndDate,
+    mapExternalDateFilterToRange(externalDateFilter, customStartDate, customEndDate),
+    effectiveCustomStart,
+    effectiveCustomEnd,
     'all',
     'all'
   );
@@ -316,21 +409,41 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
   // Selected Ad for Inspector Modal
   const [previewAdModal, setPreviewAdModal] = useState<any | null>(null);
 
-  // Sync with top-right Dashboard header dateFilter automatically
+  // Sync with top-right Dashboard header dateFilter & customStartDate/customEndDate automatically
   useEffect(() => {
     if (externalDateFilter) {
-      const mapped = mapExternalDateFilterToRange(externalDateFilter);
+      const parsed = parseCustomRangeFromFilter(externalDateFilter, customStartDate, customEndDate);
+      if (parsed) {
+        setLocalCustomStart(parsed.from);
+        setLocalCustomEnd(parsed.to);
+      }
+      const mapped = mapExternalDateFilterToRange(externalDateFilter, customStartDate, customEndDate);
       setDateRange((prev) => (prev === mapped ? prev : mapped));
     }
-  }, [externalDateFilter]);
+  }, [externalDateFilter, customStartDate, customEndDate]);
+
+  const handleDateRangeSelectChange = useCallback(
+    (val: string) => {
+      const nextRange = String(val);
+      setDateRange(nextRange);
+      const globalLabel = mapRangeKeyToGlobalFilterLabel(nextRange, effectiveCustomStart, effectiveCustomEnd);
+      try {
+        localStorage.setItem('Ideas_global_date', globalLabel);
+        window.dispatchEvent(new CustomEvent('global-date-change', { detail: globalLabel }));
+      } catch {
+        // ignore storage errors
+      }
+    },
+    [effectiveCustomStart, effectiveCustomEnd]
+  );
 
   // Fetch 100% real backend Meta Graph API + CRM Attribution analytics with 0ms SWR Cache
   const fetchMetaAnalytics = useCallback(
     async (isSilent = false) => {
       const cacheKey = buildMetaAdsCacheKey(
         dateRange,
-        customStartDate,
-        customEndDate,
+        effectiveCustomStart,
+        effectiveCustomEnd,
         selectedCampaignFilter,
         selectedOwnerFilter
       );
@@ -361,8 +474,8 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
         const res = await api.get('/marketing/meta/overview', {
           params: {
             date_range: dateRange,
-            from_date: dateRange === 'custom' && customStartDate ? customStartDate : undefined,
-            to_date: dateRange === 'custom' && customEndDate ? customEndDate : undefined,
+            from_date: dateRange === 'custom' && effectiveCustomStart ? effectiveCustomStart : undefined,
+            to_date: dateRange === 'custom' && effectiveCustomEnd ? effectiveCustomEnd : undefined,
             campaign_id: selectedCampaignFilter !== 'all' ? selectedCampaignFilter : undefined,
             owner_id: selectedOwnerFilter !== 'all' ? selectedOwnerFilter : undefined,
             refresh: isSilent ? 1 : undefined
@@ -387,7 +500,7 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
         }
       }
     },
-    [dateRange, customStartDate, customEndDate, selectedCampaignFilter, selectedOwnerFilter]
+    [dateRange, effectiveCustomStart, effectiveCustomEnd, selectedCampaignFilter, selectedOwnerFilter]
   );
 
   useEffect(() => {
@@ -578,17 +691,31 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
     return opts;
   }, [overviewData]);
 
-  const dateOptions = [
-    { value: 'this_month', label: 'Tháng này' },
-    { value: 'today', label: 'Hôm nay' },
-    { value: 'yesterday', label: 'Hôm qua' },
-    { value: 'last_7_days', label: '7 ngày qua' },
-    { value: 'last_30_days', label: '30 ngày qua' },
-    { value: 'last_month', label: 'Tháng trước' },
-    { value: 'this_quarter', label: 'Quý này' },
-    { value: 'this_year', label: 'Năm nay' },
-    { value: 'all_time', label: 'Toàn thời gian' }
-  ];
+  const dateOptions = useMemo(() => {
+    const opts = [
+      { value: 'this_month', label: 'Tháng này' },
+      { value: 'today', label: 'Hôm nay' },
+      { value: 'yesterday', label: 'Hôm qua' },
+      { value: 'this_week', label: 'Tuần này' },
+      { value: 'last_week', label: 'Tuần trước' },
+      { value: 'two_weeks_ago', label: 'Tuần trước nữa' },
+      { value: 'last_7_days', label: '7 ngày qua' },
+      { value: 'last_30_days', label: '30 ngày qua' },
+      { value: 'last_month', label: 'Tháng trước' },
+      { value: 'this_quarter', label: 'Quý này' },
+      { value: 'this_year', label: 'Năm nay' },
+      { value: 'all_time', label: 'Toàn thời gian' }
+    ];
+    if (effectiveCustomStart && effectiveCustomEnd) {
+      opts.push({
+        value: 'custom',
+        label: `${effectiveCustomStart} đến ${effectiveCustomEnd}`
+      });
+    } else if (dateRange === 'custom') {
+      opts.push({ value: 'custom', label: 'Khoảng ngày tùy chỉnh' });
+    }
+    return opts;
+  }, [effectiveCustomStart, effectiveCustomEnd, dateRange]);
 
   // Real Funnel Stages
   const funnelStages = useMemo(() => {
@@ -965,11 +1092,11 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                 </div>
 
                 {/* Date Range Selector */}
-                <div style={{ width: '135px', flexShrink: 0 }}>
+                <div style={{ width: dateRange === 'custom' ? '185px' : '135px', flexShrink: 0 }}>
                   <CustomSelect
                     options={dateOptions}
                     value={dateRange}
-                    onChange={(val) => setDateRange(String(val))}
+                    onChange={(val) => handleDateRangeSelectChange(String(val))}
                     size="sm"
                     width="100%"
                   />
@@ -1117,7 +1244,7 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
             <CustomSelect
               options={dateOptions}
               value={dateRange}
-              onChange={(val) => setDateRange(String(val))}
+              onChange={(val) => handleDateRangeSelectChange(String(val))}
               size="sm"
               width="100%"
             />

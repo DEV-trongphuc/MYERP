@@ -5736,13 +5736,17 @@ class ContactController {
             } elseif ($dateFilter === 'Tháng trước' || $dateFilter === 'last_month') {
                 $fromDate = date('Y-m-01', strtotime('first day of last month'));
                 $toDate = date('Y-m-t', strtotime('last day of last month'));
+            } elseif ($dateFilter === 'Quý này' || $dateFilter === 'this_quarter') {
+                $qMonth = (int)(floor(((int)date('n') - 1) / 3) * 3 + 1);
+                $fromDate = sprintf('%04d-%02d-01', (int)date('Y'), $qMonth);
+                $toDate = $today;
             } elseif ($dateFilter === 'Năm nay' || $dateFilter === 'this_year') {
                 $fromDate = date('Y-01-01');
                 $toDate = date('Y-12-31');
-            } elseif (preg_match('/^(\d{4}-\d{2}-\d{2})\s*(?:đến|to|-)\s*(\d{4}-\d{2}-\d{2})$/iu', $dateFilter, $m)) {
+            } elseif (preg_match('/^(\d{4}-\d{2}-\d{2})\s*(?:đến|den|to|-|→|~)\s*(\d{4}-\d{2}-\d{2})$/iu', $dateFilter, $m)) {
                 $fromDate = $m[1];
                 $toDate = $m[2];
-            } elseif (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})\s*(?:đến|to|-)\s*(\d{2})\/(\d{2})\/(\d{4})$/iu', $dateFilter, $m)) {
+            } elseif (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})\s*(?:đến|den|to|-|→|~)\s*(\d{2})\/(\d{2})\/(\d{4})$/iu', $dateFilter, $m)) {
                 $fromDate = "{$m[3]}-{$m[2]}-{$m[1]}";
                 $toDate = "{$m[6]}-{$m[5]}-{$m[4]}";
             }

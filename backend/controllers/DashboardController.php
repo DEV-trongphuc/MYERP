@@ -1017,19 +1017,40 @@ class DashboardController {
                 $prevFrom = date('Y-m-01', strtotime($from . ' -1 month'));
                 $prevTo = date('Y-m-t', strtotime($prevFrom));
                 $periodLabel = 'Tháng trước';
-            } elseif ($dateParam === 'Tất cả' || $dateParam === 'all') {
+            } elseif ($dateParam === 'Quý này' || $dateParam === 'this_quarter') {
+                $qMonth = (int)(floor(((int)date('n') - 1) / 3) * 3 + 1);
+                $from = sprintf('%04d-%02d-01', (int)date('Y'), $qMonth);
+                $to = $today;
+                $prevFrom = date('Y-m-d', strtotime($from . ' -3 months'));
+                $prevTo = date('Y-m-d', strtotime($from . ' -1 day'));
+                $periodLabel = 'Quý này';
+            } elseif ($dateParam === 'Năm nay' || $dateParam === 'this_year') {
+                $from = date('Y-01-01');
+                $to = $today;
+                $prevYear = (int)date('Y') - 1;
+                $prevFrom = "{$prevYear}-01-01";
+                $prevTo = "{$prevYear}-12-31";
+                $periodLabel = 'Năm nay';
+            } elseif (in_array($dateParam, ['Tất cả', 'Tất cả thời gian', 'Toàn thời gian', 'all', 'all_time'], true)) {
                 $from = '2020-01-01';
                 $to = date('Y-m-t');
                 $prevFrom = '2019-01-01';
                 $prevTo = '2019-12-31';
                 $periodLabel = 'Tất cả thời gian';
-            } elseif (preg_match('/^(\d{4}-\d{2}-\d{2})\s*(?:đến|to|-)\s*(\d{4}-\d{2}-\d{2})$/iu', $dateParam, $m)) {
+            } elseif (preg_match('/^(\d{4}-\d{2}-\d{2})\s*(?:đến|den|to|-|→|~)\s*(\d{4}-\d{2}-\d{2})$/iu', $dateParam, $m)) {
                 $from = $m[1];
                 $to = $m[2];
                 $spanDays = max(1, (int)round((strtotime($to) - strtotime($from)) / 86400) + 1);
                 $prevTo = date('Y-m-d', strtotime($from . ' -1 day'));
                 $prevFrom = date('Y-m-d', strtotime($prevTo . ' -' . ($spanDays - 1) . ' days'));
                 $periodLabel = $dateParam;
+            } elseif (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})\s*(?:đến|den|to|-|→|~)\s*(\d{2})\/(\d{2})\/(\d{4})$/iu', $dateParam, $mVn)) {
+                $from = "{$mVn[3]}-{$mVn[2]}-{$mVn[1]}";
+                $to = "{$mVn[6]}-{$mVn[5]}-{$mVn[4]}";
+                $spanDays = max(1, (int)round((strtotime($to) - strtotime($from)) / 86400) + 1);
+                $prevTo = date('Y-m-d', strtotime($from . ' -1 day'));
+                $prevFrom = date('Y-m-d', strtotime($prevTo . ' -' . ($spanDays - 1) . ' days'));
+                $periodLabel = $from . ' đến ' . $to;
             } elseif (preg_match('/^\d{4}-\d{2}$/', $dateParam)) {
                 $from = $dateParam . '-01';
                 $to = date('Y-m-t', strtotime($from));

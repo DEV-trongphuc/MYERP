@@ -530,9 +530,29 @@ class MetaAdsController
         $dr = mb_strtolower(trim($rawDateRange), 'UTF-8');
         $canonicalKey = 'this_month';
 
+        // Normalize DD/MM/YYYY customFrom / customTo if passed
+        if ($customFrom && preg_match('/^(\d{2})\/(\d{2})\/(\d{4})$/', trim($customFrom), $mF)) {
+            $customFrom = "{$mF[3]}-{$mF[2]}-{$mF[1]}";
+        }
+        if ($customTo && preg_match('/^(\d{2})\/(\d{2})\/(\d{4})$/', trim($customTo), $mT)) {
+            $customTo = "{$mT[3]}-{$mT[2]}-{$mT[1]}";
+        }
+
+        // Also allow rawDateRange itself to be "YYYY-MM-DD đến YYYY-MM-DD" or "DD/MM/YYYY - DD/MM/YYYY"
+        if ((!$customFrom || !$customTo) && preg_match('/(\d{4}-\d{2}-\d{2})\s*(?:đến|den|to|-|→|~)\s*(\d{4}-\d{2}-\d{2})/iu', $rawDateRange, $mRange)) {
+            $customFrom = $mRange[1];
+            $customTo = $mRange[2];
+        } elseif ((!$customFrom || !$customTo) && preg_match('/(\d{2})\/(\d{2})\/(\d{4})\s*(?:đến|den|to|-|→|~)\s*(\d{2})\/(\d{2})\/(\d{4})/iu', $rawDateRange, $mRangeVn)) {
+            $customFrom = "{$mRangeVn[3]}-{$mRangeVn[2]}-{$mRangeVn[1]}";
+            $customTo = "{$mRangeVn[6]}-{$mRangeVn[5]}-{$mRangeVn[4]}";
+        }
+
         if ($customFrom && $customTo && preg_match('/^\d{4}-\d{2}-\d{2}/', $customFrom) && preg_match('/^\d{4}-\d{2}-\d{2}/', $customTo)) {
             $since = substr($customFrom, 0, 10);
             $until = substr($customTo, 0, 10);
+            if ($since > $until) {
+                [$since, $until] = [$until, $since];
+            }
             $canonicalKey = 'custom';
         } else {
             switch ($dr) {
@@ -569,6 +589,7 @@ class MetaAdsController
                     $canonicalKey = 'last_week';
                     break;
 
+                case 'two_weeks_ago':
                 case 'tuần trước nữa':
                 case 'tuan truoc nua':
                     $since = $now->modify('monday last week')->modify('-7 days')->format('Y-m-d');
@@ -628,6 +649,8 @@ class MetaAdsController
                 case 'toan thoi gian':
                 case 'tất cả':
                 case 'tat ca':
+                case 'tất cả thời gian':
+                case 'tat ca thoi gian':
                     return [
                         'canonical_key' => 'all_time',
                         'from_sql' => null,
@@ -1052,9 +1075,13 @@ class MetaAdsController
     public function getOverview(array $auth): void
     {
         $tenantId = (int)($auth['tenant_id'] ?? 1);
-        $dateRange = trim((string)($_GET['date_range'] ?? 'this_month'));
-        $customFrom = isset($_GET['from_date']) ? trim((string)$_GET['from_date']) : null;
-        $customTo = isset($_GET['to_date']) ? trim((string)$_GET['to_date']) : null;
+        $dateRange = trim((string)($_GET['date_range'] ?? $_GET['date'] ?? $_GET['date_filter'] ?? 'this_month'));
+        $customFrom = isset($_GET['from_date'])
+            ? trim((string)$_GET['from_date'])
+            : (isset($_GET['start_date']) ? trim((string)$_GET['start_date']) : (isset($_GET['from']) ? trim((string)$_GET['from']) : null));
+        $customTo = isset($_GET['to_date'])
+            ? trim((string)$_GET['to_date'])
+            : (isset($_GET['end_date']) ? trim((string)$_GET['end_date']) : (isset($_GET['to']) ? trim((string)$_GET['to']) : null));
         $campaignFilter = trim((string)($_GET['campaign_id'] ?? $_GET['campaign'] ?? 'all'));
         $formFilter = trim((string)($_GET['form_name'] ?? 'all'));
         $ownerFilter = trim((string)($_GET['owner_id'] ?? 'all'));
