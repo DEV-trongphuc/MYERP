@@ -2246,14 +2246,14 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                       const rawNotes = viewItem.notes || viewItem.description || '';
                       
                       const extractMetaField = (text: string, label: string) => {
-                        const reg = new RegExp(`${label}:\\s*([^\\n]+(?:\\n(?!Vị trí:|Phòng ban:|Nội dung đề xuất:|Lý do:|DANH SÁCH|\\[Tài liệu|\\[Lặp lại|\\[Thanh toán)[^\\n]+)*)`, 'i');
+                        const reg = new RegExp(`(?:^|\\n)\\s*${label}:\\s*([\\s\\S]*?)(?=(?:\\n\\s*(?:Vị trí:|Phòng ban:|Nội dung đề xuất:|Lý do:|DANH SÁCH|\\[Tài liệu|\\[Lặp lại|\\[Thanh toán|\\[Thông tin|\\[Hồ sơ chi phí|Đối tượng:|Thụ hưởng|Hình thức:|Thời hạn thanh toán:|Chi tiết:))|$)`, 'i');
                         const m = text.match(reg);
                         return m ? m[1].trim() : '';
                       };
 
                       const contentVal = extractMetaField(rawNotes, 'Nội dung đề xuất');
                       const reasonVal = extractMetaField(rawNotes, 'Lý do');
-                      const detailsMatch = rawNotes.match(/Chi tiết:\s*([\s\S]+?)(?=\n\n|\n\[|$)/i);
+                      const detailsMatch = rawNotes.match(/(?:^|\n)\s*Chi tiết:\s*([\s\S]*?)(?=(?:\n\s*(?:\[Tài liệu|\[Lặp lại|\[Thanh toán|\[Thông tin|\[Hồ sơ chi phí|Phòng ban:|Đối tượng:|Thụ hưởng|Hình thức:|Thời hạn thanh toán:))|$)/i);
                       const detailText = detailsMatch ? detailsMatch[1].trim() : '';
 
                       let cleanNotes = rawNotes
@@ -2798,7 +2798,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                 }
 
                 const extractMetaField = (text: string, label: string) => {
-                  const reg = new RegExp(`${label}:\\s*([^\\n]+(?:\\n(?!Vị trí:|Phòng ban:|Nội dung đề xuất:|Lý do:|DANH SÁCH|\\[Tài liệu|\\[Lặp lại|\\[Thanh toán)[^\\n]+)*)`, 'i');
+                  const reg = new RegExp(`(?:^|\\n)\\s*${label}:\\s*([\\s\\S]*?)(?=(?:\\n\\s*(?:Vị trí:|Phòng ban:|Nội dung đề xuất:|Lý do:|DANH SÁCH|\\[Tài liệu|\\[Lặp lại|\\[Thanh toán|\\[Thông tin|\\[Hồ sơ chi phí|Đối tượng:|Thụ hưởng|Hình thức:|Thời hạn thanh toán:|Chi tiết:))|$)`, 'i');
                   const m = text.match(reg);
                   return m ? m[1].trim() : '';
                 };

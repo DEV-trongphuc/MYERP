@@ -2146,6 +2146,8 @@ export default function Approvals() {
         }
       } else if (formType === 'general') {
         let generalDesc = '';
+        const validStationery = stationeryItems.filter(it => it.name.trim());
+        const effectiveGenReason = combineUniqueReason(workflowTitleSuffix, leaveReason);
         let totalStationeryCost = 0;
         let totalStationeryVat = 0;
         if (selectedWorkflowDef?.id === 'stationery' || selectedWorkflowDef?.id === 'purchase_request' || selectedWorkflowDef?.id === 'it_request') {
@@ -2216,6 +2218,13 @@ export default function Approvals() {
             title: getFullWorkflowTitle(),
             description: generalDesc,
             notes: generalDesc,
+            items: {
+              stationery_items: validStationery,
+              job_position: jobPosition,
+              department_name: departmentName,
+              payment_details: paymentDetails,
+              leave_reason: effectiveGenReason
+            },
             amount: totalStationeryCost,
             vat_amount: totalStationeryVat || 0,
             status: 'pending',
@@ -2236,6 +2245,13 @@ export default function Approvals() {
             title: getFullWorkflowTitle(),
             description: generalDesc,
             notes: generalDesc,
+            items: {
+              stationery_items: validStationery,
+              job_position: jobPosition,
+              department_name: departmentName,
+              payment_details: paymentDetails,
+              leave_reason: effectiveGenReason
+            },
             amount: totalStationeryCost,
             vat_amount: totalStationeryVat || 0,
             status: 'pending',
@@ -5351,7 +5367,7 @@ export default function Approvals() {
           }
 
           const extractMetaField = (text: string, label: string) => {
-            const reg = new RegExp(`${label}:\\s*([^\\n]+(?:\\n(?!Vị trí:|Phòng ban:|Nội dung đề xuất:|Lý do:|DANH SÁCH|\\[Tài liệu|\\[Lặp lại|\\[Thanh toán|\\[Thông tin)[^\\n]+)*)`, 'i');
+            const reg = new RegExp(`(?:^|\\n)\\s*${label}:\\s*([\\s\\S]*?)(?=(?:\\n\\s*(?:Vị trí:|Phòng ban:|Nội dung đề xuất:|Lý do:|DANH SÁCH|\\[Tài liệu|\\[Lặp lại|\\[Thanh toán|\\[Thông tin|\\[Hồ sơ chi phí|Đối tượng:|Thụ hưởng|Hình thức:|Thời hạn thanh toán:|Chi tiết:))|$)`, 'i');
             const m = text.match(reg);
             return m ? m[1].trim() : '';
           };
@@ -5363,7 +5379,13 @@ export default function Approvals() {
 
           if (pos) setJobPosition(pos);
           if (dept) setDepartmentName(dept);
-          if (content) setPaymentDetails(content);
+          let itemsMeta: any = null;
+          try {
+            if (typeof expData.items === 'string') itemsMeta = JSON.parse(expData.items);
+            else if (typeof expData.items === 'object') itemsMeta = expData.items;
+          } catch (e) {}
+          const effectiveContent = itemsMeta?.payment_details || itemsMeta?.content || content;
+          if (effectiveContent) setPaymentDetails(effectiveContent);
           if (reason) setLeaveReason(reason);
 
           if (expData.vendor_name) setPaymentBeneficiaryName(expData.vendor_name);
@@ -5513,7 +5535,8 @@ export default function Approvals() {
         }
 
         // 5. Payment details (Chi tiết)
-        const details = extractField('Chi tiết');
+        const multilineDetailsMatch = notes.match(/(?:^|\n)\s*Chi tiết:\s*([\s\S]*?)(?=(?:\n\s*(?:\[Tài liệu|\[Lặp lại|\[Thanh toán|\[Thông tin|\[Hồ sơ chi phí|Phòng ban:|Đối tượng:|Thụ hưởng|Hình thức:|Thời hạn thanh toán:))|$)/i);
+        const details = multilineDetailsMatch ? multilineDetailsMatch[1].trim() : extractField('Chi tiết');
         if (details) {
           setPaymentDetails(details);
         } else {
@@ -16503,7 +16526,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
 
     const extractMetaField = (text: string, label: string) => {
       if (!text) return '';
-      const reg = new RegExp(`${label}:\\s*([^\\n]+(?:\\n(?!Vị trí:|Phòng ban:|Nội dung đề xuất:|Lý do:|DANH SÁCH|\\[Tài liệu|\\[Lặp lại|\\[Thanh toán)[^\\n]+)*)`, 'i');
+      const reg = new RegExp(`(?:^|\\n)\\s*${label}:\\s*([\\s\\S]*?)(?=(?:\\n\\s*(?:Vị trí:|Phòng ban:|Nội dung đề xuất:|Lý do:|DANH SÁCH|\\[Tài liệu|\\[Lặp lại|\\[Thanh toán|\\[Thông tin|\\[Hồ sơ chi phí|Đối tượng:|Thụ hưởng|Hình thức:|Thời hạn thanh toán:|Chi tiết:))|$)`, 'i');
       const m = text.match(reg);
       return m ? m[1].trim() : '';
     };
@@ -16664,7 +16687,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       }
       const deptMatch = text.match(/Phòng ban:\s*([^\n]+)/i);
       const profileMatch = text.match(/\[Hồ sơ chi phí\]:\s*([^\n]+)/i);
-      const detailsMatch = text.match(/Chi tiết:\s*([\s\S]+?)(?=\n\n|\n\[|$)/i);
+      const detailsMatch = text.match(/(?:^|\n)\s*Chi tiết:\s*([\s\S]*?)(?=(?:\n\s*(?:\[Tài liệu|\[Lặp lại|\[Thanh toán|\[Thông tin|\[Hồ sơ chi phí|Phòng ban:|Đối tượng:|Thụ hưởng|Hình thức:|Thời hạn thanh toán:))|$)/i);
       const dept = deptMatch ? deptMatch[1].trim() : '';
       const profileInfo = profileMatch ? profileMatch[1].trim() : '';
       const paymentDetails = detailsMatch ? detailsMatch[1].trim() : '';
