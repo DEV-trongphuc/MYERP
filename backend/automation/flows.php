@@ -530,7 +530,7 @@ if (isset($_GET['route']) && $_GET['route'] === 'participants') {
                 } elseif ($branchFilter === 'fallback') {
                     $countSql .= " AND EXISTS (SELECT 1 FROM subscriber_activity b WHERE b.flow_id = sa.flow_id AND b.subscriber_id = sa.subscriber_id AND " . str_replace('reference_id', 'b.reference_id', $stepIdClause) . " AND (b.details LIKE 'Matched: Fallback%' OR b.details LIKE 'Matched: fallback%'))";
                     $countParams = array_merge($countParams, $stepIdParams);
-                } else {
+                } elseif (!empty($branchFilter)) {
                     $countSql .= " AND EXISTS (SELECT 1 FROM subscriber_activity b WHERE b.flow_id = sa.flow_id AND b.subscriber_id = sa.subscriber_id AND " . str_replace('reference_id', 'b.reference_id', $stepIdClause) . " AND b.type IN ('advanced_condition', 'condition_true', 'condition_false', 'ab_test_a', 'ab_test_b', 'split_test') AND (b.details LIKE ? OR b.details LIKE ?))";
                     $countParams = array_merge($countParams, $stepIdParams);
                     $countParams[] = "%Matched: $branchFilter%";
@@ -559,7 +559,7 @@ if (isset($_GET['route']) && $_GET['route'] === 'participants') {
                 } elseif ($branchFilter === 'fallback') {
                     $countSql .= " AND EXISTS (SELECT 1 FROM subscriber_activity b WHERE b.workspace_id = sa.workspace_id AND b.flow_id = sa.flow_id AND b.subscriber_id = sa.subscriber_id AND " . str_replace('reference_id', 'b.reference_id', $stepIdClause) . " AND (b.details LIKE 'Matched: Fallback%' OR b.details LIKE 'Matched: fallback%'))";
                     $countParamsExec = array_merge($countParamsExec, $stepIdParams);
-                } else {
+                } elseif (!empty($branchFilter)) {
                     $countSql .= " AND EXISTS (SELECT 1 FROM subscriber_activity b WHERE b.workspace_id = sa.workspace_id AND b.flow_id = sa.flow_id AND b.subscriber_id = sa.subscriber_id AND " . str_replace('reference_id', 'b.reference_id', $stepIdClause) . " AND b.type IN ('advanced_condition', 'condition_true', 'condition_false', 'ab_test_a', 'ab_test_b', 'split_test') AND (b.details LIKE ? OR b.details LIKE ?))";
                     $countParamsExec = array_merge($countParamsExec, $stepIdParams);
                     $countParamsExec[] = "%Matched: $branchFilter%";

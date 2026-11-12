@@ -13,8 +13,15 @@ import { getDefaultRouteByRole } from '../utils/roleUtils';
 export const Login = () => {
   const { t } = useLanguage();
   const [email, setEmail] = useState(() => localStorage.getItem('ideas_remembered_email') || '');
-  const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(() => !!localStorage.getItem('ideas_remembered_email'));
+  const [password, setPassword] = useState(() => {
+    try {
+      const savedPw = localStorage.getItem('ideas_remembered_pw');
+      return savedPw ? decodeURIComponent(escape(atob(savedPw))) : '';
+    } catch {
+      return '';
+    }
+  });
+  const [rememberMe, setRememberMe] = useState(() => localStorage.getItem('ideas_remember_me') !== 'false');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -117,9 +124,15 @@ export const Login = () => {
     setError('');
 
     if (rememberMe) {
+      localStorage.setItem('ideas_remember_me', 'true');
       localStorage.setItem('ideas_remembered_email', email.trim());
+      try {
+        localStorage.setItem('ideas_remembered_pw', btoa(unescape(encodeURIComponent(password))));
+      } catch {}
     } else {
+      localStorage.setItem('ideas_remember_me', 'false');
       localStorage.removeItem('ideas_remembered_email');
+      localStorage.removeItem('ideas_remembered_pw');
     }
 
     if (localStorage.getItem('IDEAS_DEMO_MODE') === 'true') {

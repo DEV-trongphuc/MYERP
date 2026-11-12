@@ -457,11 +457,21 @@ const RichText: React.FC<RichTextProps> = ({ value, onChange, className = "", bo
                 ref={editorRef}
                 contentEditable
                 className="rich-text-editor p-4 outline-none text-sm text-slate-700 leading-relaxed custom-scrollbar prose prose-sm max-w-none empty:before:content-['Nhập_nội_dung_văn_bản...'] empty:before:text-slate-300 empty:before:italic cursor-text"
-                style={{ minHeight }}
+                style={{ minHeight, whiteSpace: 'pre-wrap' }}
                 onInput={() => handleChange(editorRef.current?.innerHTML || '')}
+                onKeyDown={(e) => {
+                    if (!(e.ctrlKey || e.metaKey) && e.key !== 'Escape') {
+                        e.stopPropagation();
+                    }
+                }}
                 onBlur={() => { handleChange(editorRef.current?.innerHTML || ''); checkActiveFormats(); }}
                 onMouseUp={saveSelection}
-                onKeyUp={saveSelection}
+                onKeyUp={(e) => {
+                    if (!(e.ctrlKey || e.metaKey) && e.key !== 'Escape') {
+                        e.stopPropagation();
+                    }
+                    saveSelection();
+                }}
                 onFocus={checkActiveFormats}
             />
             <style>{`

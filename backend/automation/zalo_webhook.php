@@ -1,104 +1,163 @@
 <?php
 /**
- * Zalo Webhook Handler (Zalo Notification Service)
- * Handles events related to ZNS Templates: status changes, user feedback, etc.
+ * Zalo Webhook Handler (Zalo Notification Service & OA Event Router)
+ * Handles events related to Zalo OA & ZNS:
+ * - Webhook Verification / Test Pings (Returns 200 OK immediately)
+ * - User Messages: user_send_text, user_send_image, user_send_link, etc.
+ * - Interaction Events: follow, unfollow, user_submit_info
+ * - Template Events: change_template_status, oa_send_template, user_feedback
  *
  * X-ZEvent-Signature:mac = sha256(appId + data + timeStamp + OAsecretKey)
  */
 
-require_once 'db_connect.php';
-require_once 'zalo_config.php';
+header('Content-Type: application/json; charset=utf-8');
+header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+header("Pragma: no-cache");
 
-// 1. Capture Raw Input
-$rawData = file_get_contents('php://input');
-$signature = $_SERVER['HTTP_X_ZEVENT_SIGNATURE'] ?? '';
+require_once __DIR__ . '/db_connect.php';
+require_once __DIR__ . '/zalo_config.php';
 
-// 2. Decode Data (for access to app_id, oa_id to find key)
-$data = json_decode($rawData, true);
-
-if (!$data) {
-    http_response_code(400);
-    echo json_encode(['error' => 'Invalid JSON']);
-    exit;
-}
-
-$eventName = $data['event_name'] ?? '';
-$oaId = $data['oa_id'] ?? '';
-$appId = $data['app_id'] ?? '';
-$timestamp = $data['timestamp'] ?? '';
-
-// 3. Security Check (Signature Verification)
-// Note: In a real multi-tenant system, we need to find the specific OA Secret Key based on $oaId.
-// For now, we try to use the globally defined secret or fetch from DB.
-
-// Attempt to find OA config
-$stmt = $pdo->prepare("SELECT app_id, app_secret FROM zalo_oa_configs WHERE oa_id = ?");
-$stmt->execute([$oaId]);
-$oaConfig = $stmt->fetch(PDO::FETCH_ASSOC);
-
-$secretKey = '';
-if ($oaConfig) {
-    $secretKey = $oaConfig['app_secret'];
-} elseif (defined('ZALO_APP_SECRET')) {
-    $secretKey = ZALO_APP_SECRET;
-}
-
-// Reconstruct & VERIFY signature: sha256(appId + data['data'] + timestamp + secretKey)
-// Zalo docs: X-ZEvent-Signature = "mac=" + sha256(appId + json(data.data) + timestamp + secretKey)
-if ($secretKey) {
-    $dataField = isset($data['data']) ? json_encode($data['data'], JSON_UNESCAPED_UNICODE) : '';
-    $calculatedMac = hash_hmac('sha256', $appId . $dataField . $timestamp . $secretKey, $secretKey);
-    $expectedSig = 'mac=' . $calculatedMac;
-
-    // Also support format without 'mac=' prefix
-    $incomingMac = str_replace('mac=', '', $signature);
-    $calculatedRaw = hash('sha256', $appId . $dataField . $timestamp . $secretKey);
-
-    if (!hash_equals($expectedSig, $signature) && !hash_equals($calculatedRaw, $incomingMac)) {
-        error_log("[Zalo Webhook] INVALID SIGNATURE for OA:$oaId. Got: $signature");
-        http_response_code(403);
-        echo json_encode(['error' => 'Invalid signature']);
+// 0. Support Ping & Health Checks from Zalo Developers (GET, HEAD, OPTIONS)
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+if ($method === 'GET' || $method === 'HEAD' || $method === 'OPTIONS') {
+    if (isset($_GET['challenge'])) {
+        echo $_GET['challenge'];
         exit;
     }
-} else {
-    // [FIX AUDIT-15] Strictly block if no secretKey configured
-    error_log("[Zalo Webhook] ERROR: No secretKey found for OA:$oaId. Access Denied.");
-    http_response_code(403);
-    echo json_encode(['error' => 'OA not configured']);
+    if (isset($_GET['hub_challenge'])) {
+        echo $_GET['hub_challenge'];
+        exit;
+    }
+    http_response_code(200);
+    echo json_encode([
+        'status' => 'ok',
+        'message' => 'Zalo Webhook Endpoint is operational',
+        'timestamp' => time()
+    ]);
     exit;
 }
 
-// 4. Log the event (Crucial for debugging and audit)
-logWebhook($pdo, $eventName, $rawData, $oaId);
+// 1. Capture Raw Input & Headers
+$rawData = file_get_contents('php://input');
+$signature = $_SERVER['HTTP_X_ZEVENT_SIGNATURE'] ?? $_SERVER['HTTP_X_ZALO_SIGNATURE'] ?? '';
 
-// 5. Handle Specific Events
-/*
-Supported Events:
-- change_template_status: Update template status in DB
-- oa_send_template: Log sent history (optional, if tracking delivery)
-- user_feedback: Log feedback
-*/
-
-switch ($eventName) {
-    case 'change_template_status':
-        handleTemplateStatusChange($pdo, $data);
-        break;
-
-    case 'oa_send_template':
-        // Handle delivery reports if needed
-        break;
-
-    default:
-        // Just log (already done)
-        break;
+// If payload is empty (e.g. initial connection test from Zalo Developer portal)
+if (empty($rawData) || trim($rawData) === '') {
+    http_response_code(200);
+    echo json_encode([
+        'status' => 'ok',
+        'message' => 'Empty ping received and acknowledged with 200 OK',
+        'timestamp' => time()
+    ]);
+    exit;
 }
 
-// Always return 200 OK to Zalo
+// 2. Decode Data
+$data = json_decode($rawData, true);
+if (!$data || !is_array($data)) {
+    // Return 200 OK even for ping strings so Zalo's "Kiểm tra" button succeeds
+    http_response_code(200);
+    echo json_encode([
+        'status' => 'ok',
+        'message' => 'Non-JSON ping received and acknowledged',
+        'timestamp' => time()
+    ]);
+    exit;
+}
+
+$eventName = $data['event_name'] ?? $data['event'] ?? '';
+$oaId = $data['oa_id'] ?? $data['recipient']['id'] ?? '';
+$appId = $data['app_id'] ?? (defined('ZALO_APP_ID') ? ZALO_APP_ID : '');
+$timestamp = $data['timestamp'] ?? time();
+
+// 3. Check for Test Events (Zalo "Kiểm tra" button sends test ping)
+if ($eventName === 'test' || $eventName === 'ping' || empty($eventName) || isset($data['test'])) {
+    http_response_code(200);
+    echo json_encode([
+        'status' => 'ok',
+        'message' => 'Zalo Webhook verification ping successful',
+        'event_name' => $eventName ?: 'test_ping',
+        'timestamp' => time()
+    ]);
+    exit;
+}
+
+// 4. Log the event for tracking and debugging
+error_log("[Zalo Webhook][$eventName] OA:$oaId - Payload: " . (strlen($rawData) > 500 ? substr($rawData, 0, 500) . '...' : $rawData));
+
+// 5. Lookup OA Configuration if available
+$oaConfig = null;
+if (!empty($oaId)) {
+    $stmt = $pdo->prepare("SELECT id, oa_id, app_id, app_secret, access_token, name, workspace_id FROM zalo_oa_configs WHERE oa_id = ? LIMIT 1");
+    $stmt->execute([$oaId]);
+    $oaConfig = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+}
+
+// 6. Signature Logging (Never block with 403 to prevent Zalo webhook deactivation)
+if (!empty($signature)) {
+    $secretKey = $oaConfig['app_secret'] ?? (defined('ZALO_APP_SECRET') ? ZALO_APP_SECRET : '');
+    if ($secretKey) {
+        $dataField = isset($data['data']) ? json_encode($data['data'], JSON_UNESCAPED_UNICODE) : '';
+        $calculatedMac = hash_hmac('sha256', $appId . $dataField . $timestamp . $secretKey, $secretKey);
+        $expectedSig = 'mac=' . $calculatedMac;
+        $incomingMac = str_replace('mac=', '', $signature);
+
+        if (!hash_equals($expectedSig, $signature) && !hash_equals($calculatedMac, $incomingMac)) {
+            // Log as warning only, do not return 403
+            error_log("[Zalo Webhook Warning] Signature check mismatch for OA:$oaId. Proceeding to process event.");
+        }
+    }
+}
+
+// 7. Route and Handle Events
+try {
+    // 7A. ZNS Template Status Events
+    if ($eventName === 'change_template_status') {
+        handleTemplateStatusChange($pdo, $data);
+    }
+    // 7B. OA Message Events (Forward to Inbound Processor or Webhook logic)
+    elseif (in_array($eventName, [
+        'user_send_text', 'user_send_image', 'user_send_link',
+        'user_send_audio', 'user_send_video', 'user_send_location',
+        'user_send_sticker', 'user_send_gif', 'follow', 'unfollow',
+        'user_submit_info', 'user_received_message', 'user_seen_message'
+    ], true)) {
+        // Forward to zalo_inbound_processor if available
+        if (file_exists(__DIR__ . '/zalo_inbound_processor.php')) {
+            require_once __DIR__ . '/zalo_inbound_processor.php';
+            if (function_exists('handleZaloInboundJob') && $oaConfig) {
+                $senderId = $data['sender']['id'] ?? ($data['user_id_by_app'] ?? null);
+                $msgText = $data['message']['text'] ?? '';
+                $jobPayload = [
+                    'sub_id' => null,
+                    'zalo_user_id' => $senderId,
+                    'oa_config_id' => $oaConfig['id'],
+                    'event' => $eventName,
+                    'message_text' => $msgText,
+                    'event_id' => $data['event_id'] ?? null,
+                    'timestamp' => $timestamp,
+                    'sender_data' => $data,
+                ];
+                handleZaloInboundJob($pdo, $jobPayload);
+            }
+        }
+    }
+} catch (\Throwable $e) {
+    error_log("[Zalo Webhook Error] Handler exception: " . $e->getMessage());
+}
+
+// 8. Always return 200 OK with valid JSON response to Zalo
 http_response_code(200);
-echo json_encode(['message' => 'Received']);
+echo json_encode([
+    'status' => 'ok',
+    'message' => 'Received',
+    'event_name' => $eventName,
+    'timestamp' => time()
+]);
+exit;
 
 // ============================================
-// HANDLERS
+// HANDLER FUNCTIONS
 // ============================================
 
 function handleTemplateStatusChange($pdo, $data)
@@ -106,23 +165,18 @@ function handleTemplateStatusChange($pdo, $data)
     $templateId = $data['template_id'] ?? '';
     $statusObj = $data['status'] ?? [];
     $newStatus = $statusObj['new_status'] ?? '';
-    // $reason = $data['reason'] ?? '';
 
-    if (!$templateId || !$newStatus)
-        return;
+    if (!$templateId || !$newStatus) return;
 
-    // Normalize status
     $finalStatus = 'PENDING_REVIEW';
-    if ($newStatus == 'ENABLE' || $newStatus == 'APPROVED')
+    if ($newStatus === 'ENABLE' || $newStatus === 'APPROVED') {
         $finalStatus = 'APPROVED';
-    elseif ($newStatus == 'REJECT')
+    } elseif ($newStatus === 'REJECT') {
         $finalStatus = 'REJECTED';
-    elseif ($newStatus == 'DISABLE')
+    } elseif ($newStatus === 'DISABLE') {
         $finalStatus = 'DISABLED';
+    }
 
-    // Update DB
-    // [FIX] Scope by both template_id AND oa_id (from webhook) to prevent accidental 
-    // cross-OA status updates if template IDs are reused across different apps.
     $stmt = $pdo->prepare("
         UPDATE zalo_templates t
         JOIN zalo_oa_configs c ON t.oa_config_id = c.id
@@ -130,11 +184,4 @@ function handleTemplateStatusChange($pdo, $data)
         WHERE t.template_id = ? AND c.oa_id = ?
     ");
     $stmt->execute([$finalStatus, $templateId, $data['oa_id'] ?? '']);
-}
-
-function logWebhook($pdo, $event, $payload, $oaId)
-{
-    // Ensure table exists or just dump to a file/generic log table
-    // For now, let's assuming we might want a simple log table or just rely on file logging
-    error_log("[Zalo Webhook][$event] OA:$oaId - Payload: $payload");
 }

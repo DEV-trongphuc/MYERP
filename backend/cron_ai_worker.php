@@ -320,7 +320,6 @@ function distributeLeadAfterAI($conn, $leadId, $targetRoundId, $aiScreenerResult
             if (!isConsultantInWorkHours($currentTime, $whStart, $whEnd, $workSchedule, $assignedConsultantId, $conn)) {
                 $status = 'pending_work_hours';
                 $message .= ' (Trì hoãn: ngoài khung giờ làm việc)';
-                $assignedConsultantId = null;
             }
         } else {
             $message = 'Không có tư vấn viên hoạt động trong vòng xoay.' . $dupSuffix;
@@ -332,22 +331,27 @@ function distributeLeadAfterAI($conn, $leadId, $targetRoundId, $aiScreenerResult
     $conn->begin_transaction();
     try {
         $leadStatus = 'active';
-        $updLead = $conn->prepare("UPDATE leads SET status = ?, assigned_to = ?, ai_screener_status = ?, ai_evaluation = ?, ai_prompt_tokens = ?, ai_completion_tokens = ?, ai_total_tokens = ?, is_accepted = IF(? > 0, 1, is_accepted), accepted_at = IF(? > 0, IFNULL(accepted_at, NOW()), accepted_at) WHERE id = ?");
+        $isAcceptedFlag = ($assignedConsultantId > 0 && $status !== 'pending_work_hours') ? 1 : 0;
+        $updLead = $conn->prepare("UPDATE leads SET status = ?, assigned_to = ?, ai_screener_status = ?, ai_evaluation = ?, ai_prompt_tokens = ?, ai_completion_tokens = ?, ai_total_tokens = ?, is_accepted = IF(? = 1, 1, is_accepted), accepted_at = IF(? = 1, IFNULL(accepted_at, NOW()), accepted_at) WHERE id = ?");
         $aiStatus = $aiScreenerResult['status'];
         $aiEval = $aiScreenerResult['reason'];
         $promptT = isset($aiScreenerResult['prompt_tokens']) ? (int) $aiScreenerResult['prompt_tokens'] : 0;
         $completionT = isset($aiScreenerResult['completion_tokens']) ? (int) $aiScreenerResult['completion_tokens'] : 0;
         $totalT = isset($aiScreenerResult['total_tokens']) ? (int) $aiScreenerResult['total_tokens'] : 0;
-        $updLead->bind_param("sisssiiiii", $leadStatus, $assignedConsultantId, $aiStatus, $aiEval, $promptT, $completionT, $totalT, $assignedConsultantId, $assignedConsultantId, $leadId);
+        $updLead->bind_param("sisssiiiii", $leadStatus, $assignedConsultantId, $aiStatus, $aiEval, $promptT, $completionT, $totalT, $isAcceptedFlag, $isAcceptedFlag, $leadId);
         $updLead->execute();
         $updLead->close();
 
-        // Append duplicate note if duplicate exists
-        if ($crmCheckResult['isDuplicate']) {
+        // Append duplicate note ONLY when re-allocated to a new round (>6 months or old consultant inactive)
+        if (!$isDuplicate && $crmCheckResult['leadExists'] && !empty($crmCheckResult['originalAssignedTo'])) {
             $prevName = $crmCheckResult['assignedName'] ?? 'Sale cũ';
             $prevDate = !empty($crmCheckResult['lastInteractionDate']) ? date('d/m/Y', strtotime($crmCheckResult['lastInteractionDate'])) : 'Không rõ';
             $dupMonths = $crmCheckResult['monthsSinceLastInteraction'] ?? $dupCheckMonths;
-            $noteAppend = "\n[Lưu ý: Trùng số của $prevName trên $dupMonths tháng. Cập nhật lần cuối: $prevDate]";
+            if (($crmCheckResult['consultantStatus'] ?? '') === 'inactive') {
+                $noteAppend = "\n[Lưu ý: Khách cũ của TVV ngưng hoạt động ($prevName). Cập nhật lần cuối: $prevDate - Chia lại vòng mới]";
+            } else {
+                $noteAppend = "\n[Lưu ý: Trùng số của $prevName trên $dupMonths tháng. Cập nhật lần cuối: $prevDate]";
+            }
 
             $conn->query("UPDATE leads SET note = CONCAT(IFNULL(note, ''), '" . $conn->real_escape_string($noteAppend) . "') WHERE id = " . (int) $leadId);
         }
@@ -358,17 +362,17 @@ function distributeLeadAfterAI($conn, $leadId, $targetRoundId, $aiScreenerResult
         $logRow = $chkLog->get_result()->fetch_assoc();
         $chkLog->close();
 
+        $effectiveRoundId = $isDuplicate ? null : ($targetRoundId > 0 ? $targetRoundId : null);
         if ($logRow) {
             $updLog = $conn->prepare("UPDATE distribution_logs SET assigned_to = ?, round_id = ?, status = ?, message = ?, received_at = NOW() WHERE id = ?");
-            $targetRoundVal = $targetRoundId > 0 ? $targetRoundId : null;
-            $updLog->bind_param("iissi", $assignedConsultantId, $targetRoundVal, $status, $message, $logRow['id']);
+            $updLog->bind_param("iissi", $assignedConsultantId, $effectiveRoundId, $status, $message, $logRow['id']);
             $updLog->execute();
             $updLog->close();
         } else {
-            logDistribution($conn, $leadId, $assignedConsultantId, $targetRoundId, $status, $message, false);
+            logDistribution($conn, $leadId, $assignedConsultantId, $effectiveRoundId, $status, $message, false);
         }
 
-        if ($assignedConsultantId > 0) {
+        if ($assignedConsultantId > 0 && $status !== 'pending_work_hours') {
             ensurePersonAndContact($conn, $leadId);
         }
 

@@ -102,7 +102,8 @@ class UserController {
 
         $joinWhere = $where;
         $joinParams = $params;
-        $joinWhere[] = "(u.tenant_id = ? OR u.tenant_id IS NULL)";
+        $joinWhere[] = "(u.tenant_id = ? OR a.tenant_id = ? OR u.tenant_id IS NULL)";
+        $joinParams[] = (int)($auth['tenant_id'] ?? 1);
         $joinParams[] = (int)($auth['tenant_id'] ?? 1);
         $joinWhere[] = "(u.is_active = 1 OR u.is_active IS NULL)";
         $joinWhere[] = "LOWER(COALESCE(NULLIF(u.status, ''), NULLIF(a.status, ''), 'active')) NOT IN ('inactive', 'locked', 'resigned', 'terminated', 'disabled', 'nghi_viec', 'tam_nghi', 'suspended', 'khoa')";
@@ -305,6 +306,9 @@ class UserController {
         $oldUserStmt = $this->db->prepare("SELECT email, avatar_url, signature_url FROM users WHERE id = ? AND tenant_id = ?");
         $oldUserStmt->execute([$id, $auth['tenant_id']]);
         $oldUser = $oldUserStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$oldUser) {
+            respond(404, null, 'Không tìm thấy nhân sự trong hệ thống của bạn', false);
+        }
 
         // Delete old physical signature if new signature URL or base64 is provided
         if (!empty($b['signature_url']) && $oldUser && !empty($oldUser['signature_url']) && $oldUser['signature_url'] !== $b['signature_url']) {

@@ -25,12 +25,17 @@ class DomationOmnichannelController
     }
 
     /**
-     * Fetch and verify access to an existing MYERP contact (`deleted_at IS NULL`).
+     * Fetch and verify access to an existing MYERP contact (`deleted_at IS NULL`),
+     * or resolve an unmatched DOMATION subscriber into a virtual read-only contact object
+     * without ever creating a row in `contacts` (strict "3 KHÔNG" compliance).
      */
-    private function getAuthorizedContact(array $auth, int $contactId): array
+    private function getAuthorizedContact(array $auth, int|string $contactId): array
     {
         $tenantId = (int)($auth['tenant_id'] ?? 1);
-        $stmt = $this->db->prepare("
+        $rawId    = trim((string)$contactId);
+        $isNumeric = ctype_digit($rawId) && (int)$rawId > 0;
+
+        $sql = "
             SELECT
                 c.id,
                 c.tenant_id,
@@ -62,9 +67,74 @@ class DomationOmnichannelController
             FROM contacts c
             WHERE c.id = ? AND c.tenant_id = ? AND c.deleted_at IS NULL
             LIMIT 1
-        ");
-        $stmt->execute([$contactId, $tenantId]);
-        $contact = $stmt->fetch(PDO::FETCH_ASSOC);
+        ";
+
+        $contact = null;
+        if ($isNumeric) {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([(int)$rawId, $tenantId]);
+            $contact = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        }
+
+        if (!$contact && $rawId !== '') {
+            try {
+                $stmtSub = $this->db->prepare("SELECT * FROM subscribers WHERE id = ? LIMIT 1");
+                $stmtSub->execute([$rawId]);
+                $sub = $stmtSub->fetch(PDO::FETCH_ASSOC);
+                if ($sub) {
+                    $matchedContactId = (int)($sub['contact_id'] ?? 0);
+                    if ($matchedContactId <= 0) {
+                        $syncRes = DomationContactMatcher::syncSubscriberMatchOnly($this->db, (string)$sub['id']);
+                        if (!empty($syncRes['contact_id'])) {
+                            $matchedContactId = (int)$syncRes['contact_id'];
+                        }
+                    }
+                    if ($matchedContactId > 0) {
+                        $stmt = $this->db->prepare($sql);
+                        $stmt->execute([$matchedContactId, $tenantId]);
+                        $contact = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+                    }
+                    if (!$contact) {
+                        $fullName = trim(((string)($sub['first_name'] ?? '')) . ' ' . ((string)($sub['last_name'] ?? '')));
+                        if ($fullName === '') {
+                            $fullName = (string)($sub['email'] ?? $sub['phone_number'] ?? 'Subscriber');
+                        }
+                        return [
+                            'id'                     => 0,
+                            'is_subscriber_only'     => true,
+                            'tenant_id'              => $tenantId,
+                            'full_name'              => $fullName,
+                            'email'                  => $sub['email'] ?? null,
+                            'phone'                  => $sub['phone_number'] ?? null,
+                            'mobile'                 => $sub['phone_number'] ?? null,
+                            'phone2'                 => null,
+                            'zalo_phone'             => $sub['phone_number'] ?? null,
+                            'owner_id'               => null,
+                            'collaborator_ids'       => null,
+                            'domation_subscriber_id' => (string)$sub['id'],
+                            'marketing_status'       => (($sub['status'] ?? 'active') === 'unsubscribed') ? 'unsubscribed' : 'subscribed',
+                            'engagement_score'       => (int)($sub['engagement_score'] ?? 0),
+                            'stats_email_sent'       => (int)($sub['stats_sent'] ?? 0),
+                            'stats_email_opened'     => (int)($sub['stats_opened'] ?? 0),
+                            'stats_email_clicked'    => (int)($sub['stats_clicked'] ?? 0),
+                            'last_email_open_at'     => $sub['last_open_at'] ?? null,
+                            'last_email_click_at'    => $sub['last_click_at'] ?? null,
+                            'last_web_visit_at'      => null,
+                            'web_pageviews_count'    => 0,
+                            'max_scroll_depth'       => 0,
+                            'active_flow_count'      => 0,
+                            'active_flow_names'      => null,
+                            'active_voucher_code'    => null,
+                            'survey_completed_count' => 0,
+                            'zalo_user_id'           => $sub['zalo_user_id'] ?? null,
+                            'meta_psid'              => $sub['meta_psid'] ?? null,
+                        ];
+                    }
+                }
+            } catch (\Throwable $eSub) {
+            }
+        }
+
         if (!$contact) {
             respond(404, null, 'Không tìm thấy liên hệ', false);
         }
@@ -74,19 +144,24 @@ class DomationOmnichannelController
     /**
      * Find all linked subscriber IDs for a contact (Match-Only).
      */
-    private function getSubscriberIdsForContact(int|array $contact): array
+    private function getSubscriberIdsForContact(int|string|array $contact): array
     {
-        if (is_int($contact)) {
-            $contactId = $contact;
-            $contact = ['id' => $contactId];
-            try {
-                $stmtC = $this->db->prepare("SELECT id, email, phone, mobile, phone2, zalo_phone, domation_subscriber_id FROM contacts WHERE id = ? AND deleted_at IS NULL LIMIT 1");
-                $stmtC->execute([$contactId]);
-                $fetched = $stmtC->fetch(PDO::FETCH_ASSOC);
-                if ($fetched) {
-                    $contact = $fetched;
+        if (!is_array($contact)) {
+            $rawId = trim((string)$contact);
+            if (ctype_digit($rawId) && (int)$rawId > 0) {
+                $contactId = (int)$rawId;
+                $contact = ['id' => $contactId];
+                try {
+                    $stmtC = $this->db->prepare("SELECT id, email, phone, mobile, phone2, zalo_phone, domation_subscriber_id FROM contacts WHERE id = ? AND deleted_at IS NULL LIMIT 1");
+                    $stmtC->execute([$contactId]);
+                    $fetched = $stmtC->fetch(PDO::FETCH_ASSOC);
+                    if ($fetched) {
+                        $contact = $fetched;
+                    }
+                } catch (\Throwable $eC) {
                 }
-            } catch (\Throwable $eC) {
+            } else {
+                return $rawId !== '' ? [$rawId] : [];
             }
         } else {
             $contactId = (int)($contact['id'] ?? 0);
@@ -100,8 +175,12 @@ class DomationOmnichannelController
             $rawPhone  = (string)(($contact['phone'] ?? '') ?: (($contact['mobile'] ?? '') ?: ($contact['phone2'] ?? '')));
             $phone9    = DomationContactMatcher::normalizePhone9($rawPhone);
 
-            $conds  = ["contact_id = ?"];
-            $params = [$contactId];
+            $conds  = [];
+            $params = [];
+            if ($contactId > 0) {
+                $conds[]  = "contact_id = ?";
+                $params[] = $contactId;
+            }
             if ($emailNorm !== '') {
                 $conds[]  = "(email_norm = ? OR LOWER(TRIM(email)) = ?)";
                 $params[] = $emailNorm;
@@ -112,12 +191,14 @@ class DomationOmnichannelController
                 $params[] = $phone9;
             }
 
-            $stmt = $this->db->prepare("SELECT id FROM subscribers WHERE (" . implode(' OR ', $conds) . ") ORDER BY updated_at DESC, joined_at DESC LIMIT 20");
-            $stmt->execute($params);
-            while ($id = $stmt->fetchColumn()) {
-                $idStr = (string)$id;
-                if ($idStr !== '' && !in_array($idStr, $subIds, true)) {
-                    $subIds[] = $idStr;
+            if (!empty($conds)) {
+                $stmt = $this->db->prepare("SELECT id FROM subscribers WHERE (" . implode(' OR ', $conds) . ") ORDER BY updated_at DESC, joined_at DESC LIMIT 20");
+                $stmt->execute($params);
+                while ($id = $stmt->fetchColumn()) {
+                    $idStr = (string)$id;
+                    if ($idStr !== '' && !in_array($idStr, $subIds, true)) {
+                        $subIds[] = $idStr;
+                    }
                 }
             }
         } catch (\Throwable $e) {
@@ -132,11 +213,13 @@ class DomationOmnichannelController
      */
     private function ensureSubscriberForContact(array &$contact, int $workspaceId = 1): ?string
     {
-        $contactId = (int)$contact['id'];
-        $syncRes = DomationContactMatcher::syncContactMatchOnly($this->db, $contactId);
-        if (!empty($syncRes['subscriber_id'])) {
-            $contact['domation_subscriber_id'] = (string)$syncRes['subscriber_id'];
-            return (string)$syncRes['subscriber_id'];
+        $contactId = (int)($contact['id'] ?? 0);
+        if ($contactId > 0) {
+            $syncRes = DomationContactMatcher::syncContactMatchOnly($this->db, $contactId);
+            if (!empty($syncRes['subscriber_id'])) {
+                $contact['domation_subscriber_id'] = (string)$syncRes['subscriber_id'];
+                return (string)$syncRes['subscriber_id'];
+            }
         }
 
         if (!empty($contact['domation_subscriber_id'])) {
@@ -145,6 +228,10 @@ class DomationOmnichannelController
             if ($stmtChk->fetchColumn()) {
                 return (string)$contact['domation_subscriber_id'];
             }
+        }
+
+        if ($contactId <= 0) {
+            return !empty($contact['domation_subscriber_id']) ? (string)$contact['domation_subscriber_id'] : null;
         }
 
         // Create a subscriber row in `subscribers` linked to this existing contactId
@@ -195,17 +282,20 @@ class DomationOmnichannelController
     /**
      * GET /api/contacts/:id/omnichannel-journey
      * Returns unified Omnichannel 360 summary, chronological timeline, active flows,
-     * vouchers, surveys, web sessions, and chat transcripts for an existing contact.
+     * vouchers, surveys, web sessions, and chat transcripts for an existing contact or subscriber.
      */
-    public function getOmnichannelJourney(array $auth, int $contactId): void
+    public function getOmnichannelJourney(array $auth, int|string $contactId): void
     {
         $contact = $this->getAuthorizedContact($auth, $contactId);
+        $realContactId = (int)($contact['id'] ?? 0);
 
-        // Silently run Match-Only sync for this contact so any matching subscriber by 9-digit phone or email is linked
-        DomationContactMatcher::syncContactMatchOnly($this->db, $contactId);
+        if ($realContactId > 0) {
+            // Silently run Match-Only sync for this contact so any matching subscriber by 9-digit phone or email is linked
+            DomationContactMatcher::syncContactMatchOnly($this->db, $realContactId);
 
-        // Re-fetch updated omnichannel columns on contact
-        $contact = $this->getAuthorizedContact($auth, $contactId);
+            // Re-fetch updated omnichannel columns on contact
+            $contact = $this->getAuthorizedContact($auth, $realContactId);
+        }
         $subIds  = $this->getSubscriberIdsForContact($contact);
         $primarySubId = $subIds[0] ?? null;
 
@@ -250,13 +340,13 @@ class DomationOmnichannelController
             }
         }
 
-        $activeFlowsData = $this->fetchContactFlowsData($contactId, $subIds);
-        $vouchersData    = $this->fetchContactVouchersData($contactId, $subIds);
-        $surveysData     = $this->fetchContactSurveysData($contactId, $subIds);
-        $webSessionsData = $this->fetchContactWebSessionsData($contactId, $subIds, $contact);
-        $chatMessages    = $this->fetchContactChatMessages($contactId, $subIds, $contact);
+        $activeFlowsData = $this->fetchContactFlowsData($realContactId, $subIds);
+        $vouchersData    = $this->fetchContactVouchersData($realContactId, $subIds);
+        $surveysData     = $this->fetchContactSurveysData($realContactId, $subIds);
+        $webSessionsData = $this->fetchContactWebSessionsData($realContactId, $subIds, $contact);
+        $chatMessages    = $this->fetchContactChatMessages($realContactId, $subIds, $contact);
         $timeline        = $this->buildUnifiedTimeline(
-            $contactId,
+            $realContactId,
             $subIds,
             $surveysData,
             $vouchersData['vouchers'],
@@ -271,8 +361,12 @@ class DomationOmnichannelController
         // Match by contact_id OR normalized 9-digit phone OR email so sibling contact rows always resolve attribution
         $metaAttribution = null;
         try {
-            $metaConds = ['contact_id = ?'];
-            $metaParams = [$contactId];
+            $metaConds = [];
+            $metaParams = [];
+            if ($realContactId > 0) {
+                $metaConds[] = 'contact_id = ?';
+                $metaParams[] = $realContactId;
+            }
 
             $rawDigits = preg_replace('/[^0-9]/', '', (string)($contact['phone'] ?: ($contact['mobile'] ?? '')));
             if (strlen($rawDigits) >= 9) {
@@ -287,26 +381,28 @@ class DomationOmnichannelController
                 $metaParams[] = $contactEmail;
             }
 
-            $stmtMeta = $this->db->prepare("
-                SELECT *
-                FROM contact_meta_attribution
-                WHERE deleted_at IS NULL
-                  AND (" . implode(' OR ', $metaConds) . ")
-                ORDER BY (CASE WHEN contact_id = " . (int)$contactId . " THEN 0 ELSE 1 END) ASC,
-                         COALESCE(lead_created_time, created_at) DESC, id DESC
-                LIMIT 1
-            ");
-            $stmtMeta->execute(array_values($metaParams));
-            $metaAttribution = $stmtMeta->fetch(PDO::FETCH_ASSOC) ?: null;
-            if ($metaAttribution) {
-                if (!empty($metaAttribution['form_answers_json'])) {
-                    $metaAttribution['form_answers'] = json_decode((string)$metaAttribution['form_answers_json'], true) ?: [];
-                }
-                $rawAdId = trim((string)($metaAttribution['ad_id'] ?? ''));
-                if ($rawAdId !== '') {
-                    require_once __DIR__ . '/MetaAdsController.php';
-                    $metaAttribution['ad_preview'] = MetaAdsController::resolveAdPreviewData($this->db, $rawAdId, 'MOBILE_FEED_STANDARD');
-                    $metaAttribution['clean_ad_id'] = preg_replace('/[^0-9]/', '', $rawAdId);
+            if (!empty($metaConds)) {
+                $stmtMeta = $this->db->prepare("
+                    SELECT *
+                    FROM contact_meta_attribution
+                    WHERE deleted_at IS NULL
+                      AND (" . implode(' OR ', $metaConds) . ")
+                    ORDER BY (CASE WHEN contact_id = " . (int)$realContactId . " THEN 0 ELSE 1 END) ASC,
+                             COALESCE(lead_created_time, created_at) DESC, id DESC
+                    LIMIT 1
+                ");
+                $stmtMeta->execute(array_values($metaParams));
+                $metaAttribution = $stmtMeta->fetch(PDO::FETCH_ASSOC) ?: null;
+                if ($metaAttribution) {
+                    if (!empty($metaAttribution['form_answers_json'])) {
+                        $metaAttribution['form_answers'] = json_decode((string)$metaAttribution['form_answers_json'], true) ?: [];
+                    }
+                    $rawAdId = trim((string)($metaAttribution['ad_id'] ?? ''));
+                    if ($rawAdId !== '') {
+                        require_once __DIR__ . '/MetaAdsController.php';
+                        $metaAttribution['ad_preview'] = MetaAdsController::resolveAdPreviewData($this->db, $rawAdId, 'MOBILE_FEED_STANDARD');
+                        $metaAttribution['clean_ad_id'] = preg_replace('/[^0-9]/', '', $rawAdId);
+                    }
                 }
             }
         } catch (\Throwable $eMeta) {
@@ -314,7 +410,7 @@ class DomationOmnichannelController
         }
 
         $summary = [
-            'contact_id'             => (int)$contact['id'],
+            'contact_id'             => $realContactId,
             'subscriber_id'          => $primarySubId,
             'subscriber_ids'         => $subIds,
             'marketing_status'       => $contact['marketing_status'] ?? 'subscribed',
@@ -362,12 +458,12 @@ class DomationOmnichannelController
     }
 
     // Aliases for flexible routing
-    public function journey(array $auth, int $contactId): void
+    public function journey(array $auth, int|string $contactId): void
     {
         $this->getOmnichannelJourney($auth, $contactId);
     }
 
-    public function show(array $auth, int $contactId): void
+    public function show(array $auth, int|string $contactId): void
     {
         $this->getOmnichannelJourney($auth, $contactId);
     }
@@ -375,14 +471,14 @@ class DomationOmnichannelController
     /**
      * GET /api/contacts/:id/omnichannel-flows
      */
-    public function getContactFlows(array $auth, int $contactId): void
+    public function getContactFlows(array $auth, int|string $contactId): void
     {
         $contact = $this->getAuthorizedContact($auth, $contactId);
         $subIds  = $this->getSubscriberIdsForContact($contact);
-        respond(200, $this->fetchContactFlowsData($contactId, $subIds));
+        respond(200, $this->fetchContactFlowsData((int)($contact['id'] ?? 0), $subIds));
     }
 
-    public function flows(array $auth, int $contactId): void
+    public function flows(array $auth, int|string $contactId): void
     {
         $this->getContactFlows($auth, $contactId);
     }
@@ -391,13 +487,15 @@ class DomationOmnichannelController
      * POST /api/contacts/:id/omnichannel-flows/enroll
      * Body: { "flow_id": "...", "step_id": optional }
      */
-    public function enrollContactInFlow(array $auth, int $contactId): void
+    public function enrollContactInFlow(array $auth, int|string $contactId): void
     {
         if (strtolower($auth['role'] ?? '') === 'viewer') {
             respond(403, null, 'Bạn không có quyền thực hiện thao tác này', false);
         }
 
         $contact = $this->getAuthorizedContact($auth, $contactId);
+        $realContactId = (int)($contact['id'] ?? 0);
+        $dbContactId = $realContactId > 0 ? $realContactId : null;
         $b = getBody();
         $flowId = trim((string)($b['flow_id'] ?? ''));
         $flowNameInput = trim((string)($b['flow_name'] ?? ''));
@@ -463,14 +561,16 @@ class DomationOmnichannelController
         }
 
         // Check if already active in this flow
+        $chkCond = $realContactId > 0 ? "(subscriber_id = ? OR contact_id = ?)" : "subscriber_id = ?";
+        $chkParams = $realContactId > 0 ? [$subId, $realContactId, $flowId] : [$subId, $flowId];
         $stmtChk = $this->db->prepare("
             SELECT id FROM subscriber_flow_states
-            WHERE (subscriber_id = ? OR contact_id = ?)
+            WHERE $chkCond
               AND flow_id = ?
               AND status IN ('waiting', 'processing')
             LIMIT 1
         ");
-        $stmtChk->execute([$subId, $contactId, $flowId]);
+        $stmtChk->execute($chkParams);
         $existingStateId = $stmtChk->fetchColumn();
         if ($existingStateId) {
             respond(409, null, 'Liên hệ này đang ở trong kịch bản "' . ($flow['name'] ?? $flowId) . '" rồi', false);
@@ -483,7 +583,7 @@ class DomationOmnichannelController
                     scheduled_at, status, created_at, updated_at
                 ) VALUES (?, ?, ?, ?, ?, NOW(), 'waiting', NOW(), NOW())
             ");
-            $stmtIns->execute([$workspaceId, $subId, $contactId, $flowId, $startStepId]);
+            $stmtIns->execute([$workspaceId, $subId, $dbContactId, $flowId, $startStepId]);
             $newStateId = (int)$this->db->lastInsertId();
 
             // Increment flow stat_enrolled
@@ -502,7 +602,7 @@ class DomationOmnichannelController
                 ")->execute([
                     $workspaceId,
                     $subId,
-                    $contactId,
+                    $dbContactId,
                     $flowId,
                     'Tham gia kịch bản: ' . ($flow['name'] ?? $flowId),
                     json_encode([
@@ -514,20 +614,22 @@ class DomationOmnichannelController
             } catch (\Throwable $eAct) {
             }
 
-            DomationContactMatcher::refreshContactOmnichannelStats($this->db, $contactId);
+            if ($realContactId > 0) {
+                DomationContactMatcher::refreshContactOmnichannelStats($this->db, $realContactId);
+            }
 
             $subIds = $this->getSubscriberIdsForContact($contact);
             respond(200, [
                 'state_id' => $newStateId,
                 'flow_id'  => $flowId,
-                'flows'    => $this->fetchContactFlowsData($contactId, $subIds),
+                'flows'    => $this->fetchContactFlowsData($realContactId, $subIds),
             ], 'Đã thêm liên hệ vào kịch bản "' . ($flow['name'] ?? $flowId) . '"');
         } catch (\Throwable $e) {
             respond(500, null, 'Không thể thêm vào kịch bản: ' . $e->getMessage(), false);
         }
     }
 
-    public function enrollFlow(array $auth, int $contactId): void
+    public function enrollFlow(array $auth, int|string $contactId): void
     {
         $this->enrollContactInFlow($auth, $contactId);
     }
@@ -536,13 +638,14 @@ class DomationOmnichannelController
      * PUT/PATCH/DELETE /api/contacts/:id/omnichannel-flows/:stateId
      * Body: { "action": "pause" | "resume" | "cancel", "state_id": optional }
      */
-    public function updateContactFlowState(array $auth, int $contactId, int $stateId = 0): void
+    public function updateContactFlowState(array $auth, int|string $contactId, int $stateId = 0): void
     {
         if (strtolower($auth['role'] ?? '') === 'viewer') {
             respond(403, null, 'Bạn không có quyền thực hiện thao tác này', false);
         }
 
         $contact = $this->getAuthorizedContact($auth, $contactId);
+        $realContactId = (int)($contact['id'] ?? 0);
         $subIds  = $this->getSubscriberIdsForContact($contact);
         $b       = getBody();
 
@@ -553,9 +656,16 @@ class DomationOmnichannelController
             $stateId = (int)$b['enrollment_id'];
         }
         if ($stateId <= 0 && !empty($b['flow_id'])) {
-            $stmtFindState = $this->db->prepare("SELECT id FROM subscriber_flow_states WHERE contact_id = ? AND flow_id = ? ORDER BY id DESC LIMIT 1");
-            $stmtFindState->execute([$contactId, (string)$b['flow_id']]);
-            $stateId = (int)($stmtFindState->fetchColumn() ?: 0);
+            if ($realContactId > 0) {
+                $stmtFindState = $this->db->prepare("SELECT id FROM subscriber_flow_states WHERE contact_id = ? AND flow_id = ? ORDER BY id DESC LIMIT 1");
+                $stmtFindState->execute([$realContactId, (string)$b['flow_id']]);
+                $stateId = (int)($stmtFindState->fetchColumn() ?: 0);
+            } elseif (!empty($subIds)) {
+                $inSub = implode(',', array_fill(0, count($subIds), '?'));
+                $stmtFindState = $this->db->prepare("SELECT id FROM subscriber_flow_states WHERE subscriber_id IN ($inSub) AND flow_id = ? ORDER BY id DESC LIMIT 1");
+                $stmtFindState->execute(array_merge($subIds, [(string)$b['flow_id']]));
+                $stateId = (int)($stmtFindState->fetchColumn() ?: 0);
+            }
         }
         $action = strtolower(trim((string)($b['action'] ?? ($_SERVER['REQUEST_METHOD'] === 'DELETE' ? 'cancel' : 'cancel'))));
 
@@ -571,7 +681,7 @@ class DomationOmnichannelController
             respond(404, null, 'Không tìm thấy trạng thái kịch bản', false);
         }
 
-        $belongsToContact = ((int)($stateRow['contact_id'] ?? 0) === $contactId)
+        $belongsToContact = ($realContactId > 0 && (int)($stateRow['contact_id'] ?? 0) === $realContactId)
             || (!empty($stateRow['subscriber_id']) && in_array((string)$stateRow['subscriber_id'], $subIds, true));
         if (!$belongsToContact) {
             respond(403, null, 'Trạng thái kịch bản không thuộc về liên hệ này', false);
@@ -594,16 +704,18 @@ class DomationOmnichannelController
             $msg = 'Đã dừng và gỡ liên hệ khỏi kịch bản';
         }
 
-        DomationContactMatcher::refreshContactOmnichannelStats($this->db, $contactId);
+        if ($realContactId > 0) {
+            DomationContactMatcher::refreshContactOmnichannelStats($this->db, $realContactId);
+        }
 
         respond(200, [
             'state_id'   => $stateId,
             'new_status' => $newStatus,
-            'flows'      => $this->fetchContactFlowsData($contactId, $subIds),
+            'flows'      => $this->fetchContactFlowsData($realContactId, $subIds),
         ], $msg);
     }
 
-    public function updateFlowState(array $auth, int $contactId, int $stateId = 0): void
+    public function updateFlowState(array $auth, int|string $contactId, int $stateId = 0): void
     {
         $this->updateContactFlowState($auth, $contactId, $stateId);
     }
@@ -611,14 +723,14 @@ class DomationOmnichannelController
     /**
      * GET /api/contacts/:id/omnichannel-vouchers
      */
-    public function getContactVouchers(array $auth, int $contactId): void
+    public function getContactVouchers(array $auth, int|string $contactId): void
     {
         $contact = $this->getAuthorizedContact($auth, $contactId);
         $subIds  = $this->getSubscriberIdsForContact($contact);
-        respond(200, $this->fetchContactVouchersData($contactId, $subIds));
+        respond(200, $this->fetchContactVouchersData((int)($contact['id'] ?? 0), $subIds));
     }
 
-    public function vouchers(array $auth, int $contactId): void
+    public function vouchers(array $auth, int|string $contactId): void
     {
         $this->getContactVouchers($auth, $contactId);
     }
@@ -627,13 +739,15 @@ class DomationOmnichannelController
      * POST /api/contacts/:id/omnichannel-vouchers/issue
      * Body: { "campaign_id": 123 }
      */
-    public function issueContactVoucher(array $auth, int $contactId): void
+    public function issueContactVoucher(array $auth, int|string $contactId): void
     {
         if (strtolower($auth['role'] ?? '') === 'viewer') {
             respond(403, null, 'Bạn không có quyền cấp mã voucher', false);
         }
 
         $contact = $this->getAuthorizedContact($auth, $contactId);
+        $realContactId = (int)($contact['id'] ?? 0);
+        $dbContactId = $realContactId > 0 ? $realContactId : null;
         $b = getBody();
         $campaignId = (int)($b['campaign_id'] ?? $b['voucher_id'] ?? 0);
         if ($campaignId <= 0) {
@@ -689,7 +803,7 @@ class DomationOmnichannelController
                     $campaignId,
                     $generatedCode,
                     $subId,
-                    $contactId,
+                    $dbContactId,
                     $expiresAt,
                 ]);
                 $voucherId = (int)$this->db->lastInsertId();
@@ -708,7 +822,7 @@ class DomationOmnichannelController
                 ")->execute([
                     $workspaceId,
                     $subId,
-                    $contactId,
+                    $dbContactId,
                     (string)$campaignId,
                     'Cấp mã Voucher: ' . $generatedCode,
                     json_encode([
@@ -734,25 +848,27 @@ class DomationOmnichannelController
             }
         } else {
             // Ensure contact_id is stamped on the assigned voucher_codes row
-            if (!empty($result['voucher_id'])) {
+            if (!empty($result['voucher_id']) && $dbContactId !== null) {
                 try {
                     $this->db->prepare("UPDATE voucher_codes SET contact_id = ? WHERE id = ?")
-                             ->execute([$contactId, (int)$result['voucher_id']]);
+                             ->execute([$dbContactId, (int)$result['voucher_id']]);
                 } catch (\Throwable $eUpdVc) {
                 }
             }
         }
 
-        DomationContactMatcher::refreshContactOmnichannelStats($this->db, $contactId);
+        if ($realContactId > 0) {
+            DomationContactMatcher::refreshContactOmnichannelStats($this->db, $realContactId);
+        }
         $subIds = $this->getSubscriberIdsForContact($contact);
 
         respond(200, [
             'issued_voucher' => $result,
-            'vouchers_data'  => $this->fetchContactVouchersData($contactId, $subIds),
+            'vouchers_data'  => $this->fetchContactVouchersData($realContactId, $subIds),
         ], 'Đã cấp mã Voucher ' . ($result['code'] ?? '') . ' thành công');
     }
 
-    public function issueVoucher(array $auth, int $contactId): void
+    public function issueVoucher(array $auth, int|string $contactId): void
     {
         $this->issueContactVoucher($auth, $contactId);
     }
@@ -761,13 +877,15 @@ class DomationOmnichannelController
      * POST /api/contacts/:id/omnichannel-vouchers/redeem
      * Body: { "code": "VIP-XXXX" }
      */
-    public function redeemContactVoucher(array $auth, int $contactId): void
+    public function redeemContactVoucher(array $auth, int|string $contactId): void
     {
         if (strtolower($auth['role'] ?? '') === 'viewer') {
             respond(403, null, 'Bạn không có quyền gạch nợ voucher', false);
         }
 
         $contact = $this->getAuthorizedContact($auth, $contactId);
+        $realContactId = (int)($contact['id'] ?? 0);
+        $dbContactId = $realContactId > 0 ? $realContactId : null;
         $subIds  = $this->getSubscriberIdsForContact($contact);
         $b       = getBody();
         $code    = strtoupper(trim((string)($b['code'] ?? '')));
@@ -813,7 +931,7 @@ class DomationOmnichannelController
                     contact_id = COALESCE(contact_id, ?)
                 WHERE id = ? AND status != 'used'
             ");
-            $stmtUpd->execute([$contactId, (int)$voucher['id']]);
+            $stmtUpd->execute([$dbContactId, (int)$voucher['id']]);
             if ($stmtUpd->rowCount() === 0) {
                 $this->db->rollBack();
                 respond(409, null, 'Mã Voucher đã được sử dụng ở phiên giao dịch khác', false);
@@ -827,7 +945,7 @@ class DomationOmnichannelController
                 ")->execute([
                     (int)($voucher['workspace_id'] ?? 1),
                     $subId,
-                    $contactId,
+                    $dbContactId,
                     (string)($voucher['campaign_id'] ?? ''),
                     'Đã sử dụng mã ưu đãi: ' . $code,
                     json_encode([
@@ -847,15 +965,17 @@ class DomationOmnichannelController
             respond(500, null, 'Lỗi khi gạch nợ Voucher: ' . $e->getMessage(), false);
         }
 
-        DomationContactMatcher::refreshContactOmnichannelStats($this->db, $contactId);
+        if ($realContactId > 0) {
+            DomationContactMatcher::refreshContactOmnichannelStats($this->db, $realContactId);
+        }
 
         respond(200, [
             'code'          => $code,
-            'vouchers_data' => $this->fetchContactVouchersData($contactId, $subIds),
+            'vouchers_data' => $this->fetchContactVouchersData($realContactId, $subIds),
         ], 'Đã xác nhận sử dụng mã Voucher "' . $code . '"');
     }
 
-    public function redeemVoucher(array $auth, int $contactId): void
+    public function redeemVoucher(array $auth, int|string $contactId): void
     {
         $this->redeemContactVoucher($auth, $contactId);
     }
@@ -863,14 +983,14 @@ class DomationOmnichannelController
     /**
      * GET /api/contacts/:id/omnichannel-surveys
      */
-    public function getContactSurveys(array $auth, int $contactId): void
+    public function getContactSurveys(array $auth, int|string $contactId): void
     {
         $contact = $this->getAuthorizedContact($auth, $contactId);
         $subIds  = $this->getSubscriberIdsForContact($contact);
-        respond(200, $this->fetchContactSurveysData($contactId, $subIds));
+        respond(200, $this->fetchContactSurveysData((int)($contact['id'] ?? 0), $subIds));
     }
 
-    public function surveys(array $auth, int $contactId): void
+    public function surveys(array $auth, int|string $contactId): void
     {
         $this->getContactSurveys($auth, $contactId);
     }
@@ -878,14 +998,14 @@ class DomationOmnichannelController
     /**
      * GET /api/contacts/:id/omnichannel-web-sessions
      */
-    public function getContactWebSessions(array $auth, int $contactId): void
+    public function getContactWebSessions(array $auth, int|string $contactId): void
     {
         $contact = $this->getAuthorizedContact($auth, $contactId);
         $subIds  = $this->getSubscriberIdsForContact($contact);
-        respond(200, $this->fetchContactWebSessionsData($contactId, $subIds, $contact));
+        respond(200, $this->fetchContactWebSessionsData((int)($contact['id'] ?? 0), $subIds, $contact));
     }
 
-    public function webSessions(array $auth, int $contactId): void
+    public function webSessions(array $auth, int|string $contactId): void
     {
         $this->getContactWebSessions($auth, $contactId);
     }
@@ -894,14 +1014,17 @@ class DomationOmnichannelController
      * POST /api/contacts/:id/omnichannel-sync
      * Runs Match-Only identity resolution for a single contact and returns updated journey.
      */
-    public function syncContactMatchOnly(array $auth, int $contactId): void
+    public function syncContactMatchOnly(array $auth, int|string $contactId): void
     {
-        $this->getAuthorizedContact($auth, $contactId);
-        DomationContactMatcher::syncContactMatchOnly($this->db, $contactId);
+        $contact = $this->getAuthorizedContact($auth, $contactId);
+        $realContactId = (int)($contact['id'] ?? 0);
+        if ($realContactId > 0) {
+            DomationContactMatcher::syncContactMatchOnly($this->db, $realContactId);
+        }
         $this->getOmnichannelJourney($auth, $contactId);
     }
 
-    public function syncContact(array $auth, int $contactId): void
+    public function syncContact(array $auth, int|string $contactId): void
     {
         $this->syncContactMatchOnly($auth, $contactId);
     }
@@ -1001,38 +1124,46 @@ class DomationOmnichannelController
         $availableFlows = [];
 
         try {
-            $conds  = ["sfs.contact_id = ?"];
-            $params = [$contactId];
+            $conds  = [];
+            $params = [];
+            if ($contactId > 0) {
+                $conds[]  = "sfs.contact_id = ?";
+                $params[] = $contactId;
+            }
             if (!empty($subIds)) {
                 $inSub  = implode(',', array_fill(0, count($subIds), '?'));
                 $conds[] = "sfs.subscriber_id IN ($inSub)";
                 $params  = array_merge($params, $subIds);
             }
 
-            $stmt = $this->db->prepare("
-                SELECT
-                    sfs.id,
-                    sfs.subscriber_id,
-                    sfs.contact_id,
-                    sfs.flow_id,
-                    sfs.step_id,
-                    sfs.scheduled_at,
-                    sfs.status,
-                    sfs.created_at,
-                    sfs.updated_at,
-                    f.name AS flow_name,
-                    f.status AS flow_status,
-                    f.trigger_type,
-                    f.steps,
-                    f.config AS nodes
-                FROM subscriber_flow_states sfs
-                LEFT JOIN flows f ON f.id = sfs.flow_id
-                WHERE (" . implode(' OR ', $conds) . ")
-                ORDER BY sfs.updated_at DESC, sfs.id DESC
-                LIMIT 50
-            ");
-            $stmt->execute($params);
-            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            if (!empty($conds)) {
+                $stmt = $this->db->prepare("
+                    SELECT
+                        sfs.id,
+                        sfs.subscriber_id,
+                        sfs.contact_id,
+                        sfs.flow_id,
+                        sfs.step_id,
+                        sfs.scheduled_at,
+                        sfs.status,
+                        sfs.created_at,
+                        sfs.updated_at,
+                        f.name AS flow_name,
+                        f.status AS flow_status,
+                        f.trigger_type,
+                        f.steps,
+                        f.config AS nodes
+                    FROM subscriber_flow_states sfs
+                    LEFT JOIN flows f ON f.id = sfs.flow_id
+                    WHERE (" . implode(' OR ', $conds) . ")
+                    ORDER BY sfs.updated_at DESC, sfs.id DESC
+                    LIMIT 50
+                ");
+                $stmt->execute($params);
+                $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            } else {
+                $rows = [];
+            }
 
             foreach ($rows as $r) {
                 $stepLabel = (string)($r['step_id'] ?? '');
@@ -1085,38 +1216,44 @@ class DomationOmnichannelController
         $availableCampaigns = [];
 
         try {
-            $conds  = ["vc.contact_id = ?"];
-            $params = [$contactId];
+            $conds  = [];
+            $params = [];
+            if ($contactId > 0) {
+                $conds[]  = "vc.contact_id = ?";
+                $params[] = $contactId;
+            }
             if (!empty($subIds)) {
                 $inSub   = implode(',', array_fill(0, count($subIds), '?'));
                 $conds[] = "vc.subscriber_id IN ($inSub)";
                 $params  = array_merge($params, $subIds);
             }
 
-            $stmt = $this->db->prepare("
-                SELECT
-                    vc.id,
-                    vc.campaign_id,
-                    vc.code,
-                    vc.status,
-                    vc.subscriber_id,
-                    vc.contact_id,
-                    vc.sent_at,
-                    vc.claimed_at,
-                    vc.used_at,
-                    vc.expires_at,
-                    vc.created_at,
-                    vcamp.name AS campaign_name,
-                    vcamp.description AS campaign_description,
-                    vcamp.rewards AS campaign_rewards
-                FROM voucher_codes vc
-                LEFT JOIN voucher_campaigns vcamp ON vcamp.id = vc.campaign_id
-                WHERE (" . implode(' OR ', $conds) . ")
-                ORDER BY COALESCE(vc.claimed_at, vc.sent_at, vc.created_at) DESC, vc.id DESC
-                LIMIT 50
-            ");
-            $stmt->execute($params);
-            $vouchers = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            if (!empty($conds)) {
+                $stmt = $this->db->prepare("
+                    SELECT
+                        vc.id,
+                        vc.campaign_id,
+                        vc.code,
+                        vc.status,
+                        vc.subscriber_id,
+                        vc.contact_id,
+                        vc.sent_at,
+                        vc.claimed_at,
+                        vc.used_at,
+                        vc.expires_at,
+                        vc.created_at,
+                        vcamp.name AS campaign_name,
+                        vcamp.description AS campaign_description,
+                        vcamp.rewards AS campaign_rewards
+                    FROM voucher_codes vc
+                    LEFT JOIN voucher_campaigns vcamp ON vcamp.id = vc.campaign_id
+                    WHERE (" . implode(' OR ', $conds) . ")
+                    ORDER BY COALESCE(vc.claimed_at, vc.sent_at, vc.created_at) DESC, vc.id DESC
+                    LIMIT 50
+                ");
+                $stmt->execute($params);
+                $vouchers = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            }
         } catch (\Throwable $e) {
         }
 
@@ -1145,27 +1282,35 @@ class DomationOmnichannelController
     {
         $surveys = [];
         try {
-            $conds  = ["sr.contact_id = ?"];
-            $params = [$contactId];
+            $conds  = [];
+            $params = [];
+            if ($contactId > 0) {
+                $conds[]  = "sr.contact_id = ?";
+                $params[] = $contactId;
+            }
             if (!empty($subIds)) {
                 $inSub   = implode(',', array_fill(0, count($subIds), '?'));
                 $conds[] = "sr.subscriber_id IN ($inSub)";
                 $params  = array_merge($params, array_values($subIds));
             }
 
-            $stmt = $this->db->prepare("
-                SELECT
-                    sr.*,
-                    s.name AS survey_title,
-                    sr.submitted_at AS created_at
-                FROM survey_responses sr
-                LEFT JOIN surveys s ON s.id = sr.survey_id
-                WHERE (" . implode(' OR ', $conds) . ")
-                ORDER BY sr.submitted_at DESC, sr.id DESC
-                LIMIT 50
-            ");
-            $stmt->execute($params);
-            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            if (!empty($conds)) {
+                $stmt = $this->db->prepare("
+                    SELECT
+                        sr.*,
+                        s.name AS survey_title,
+                        sr.submitted_at AS created_at
+                    FROM survey_responses sr
+                    LEFT JOIN surveys s ON s.id = sr.survey_id
+                    WHERE (" . implode(' OR ', $conds) . ")
+                    ORDER BY sr.submitted_at DESC, sr.id DESC
+                    LIMIT 50
+                ");
+                $stmt->execute($params);
+                $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            } else {
+                $rows = [];
+            }
 
             if (!empty($rows)) {
                 $respIds = array_values(array_unique(array_filter(array_map(static fn($r) => (string)($r['id'] ?? ''), $rows), static fn($v) => $v !== '')));
@@ -1216,8 +1361,12 @@ class DomationOmnichannelController
         $webEvents = [];
 
         try {
-            $conds  = ["wv.contact_id = ?"];
-            $params = [$contactId];
+            $conds  = [];
+            $params = [];
+            if ($contactId > 0) {
+                $conds[]  = "wv.contact_id = ?";
+                $params[] = $contactId;
+            }
             if (!empty($subIds)) {
                 $inSub   = implode(',', array_fill(0, count($subIds), '?'));
                 $conds[] = "wv.subscriber_id IN ($inSub)";
@@ -1229,15 +1378,17 @@ class DomationOmnichannelController
                 $params[] = $emailNorm;
             }
 
-            $stmtVis = $this->db->prepare("
-                SELECT *
-                FROM web_visitors wv
-                WHERE (" . implode(' OR ', $conds) . ")
-                ORDER BY wv.last_visit_at DESC
-                LIMIT 20
-            ");
-            $stmtVis->execute($params);
-            $visitors = $stmtVis->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            if (!empty($conds)) {
+                $stmtVis = $this->db->prepare("
+                    SELECT *
+                    FROM web_visitors wv
+                    WHERE (" . implode(' OR ', $conds) . ")
+                    ORDER BY wv.last_visit_at DESC
+                    LIMIT 20
+                ");
+                $stmtVis->execute($params);
+                $visitors = $stmtVis->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            }
 
             if (!empty($visitors)) {
                 $visitorUuids = [];
@@ -1453,34 +1604,36 @@ class DomationOmnichannelController
         }
 
         // 3. AI Chatbot transcripts (`domation_ai_conversations` & `domation_ai_messages`)
-        try {
-            $stmtAi = $this->db->prepare("
-                SELECT
-                    dam.id,
-                    dam.conversation_id,
-                    dam.sender AS role,
-                    dam.message AS content,
-                    dam.created_at,
-                    COALESCE(dac.visitor_id, '') AS visitor_name,
-                    'web' AS platform
-                FROM domation_ai_messages dam
-                JOIN domation_ai_conversations dac ON dac.id = dam.conversation_id
-                WHERE dac.contact_id = ?
-                ORDER BY dam.created_at DESC
-                LIMIT 40
-            ");
-            $stmtAi->execute([$contactId]);
-            while ($am = $stmtAi->fetch(PDO::FETCH_ASSOC)) {
-                $messages[] = [
-                    'channel'     => 'ai_chatbot',
-                    'direction'   => ($am['role'] ?? '') === 'user' ? 'inbound' : 'outbound',
-                    'sender_name' => ($am['role'] ?? '') === 'user' ? ($am['visitor_name'] ?: ($contact['full_name'] ?? 'Khách hàng')) : 'AI Chatbot',
-                    'content'     => $am['content'] ?? '',
-                    'occurred_at' => $am['created_at'] ?? null,
-                    'raw'         => $am,
-                ];
+        if ($contactId > 0) {
+            try {
+                $stmtAi = $this->db->prepare("
+                    SELECT
+                        dam.id,
+                        dam.conversation_id,
+                        dam.sender AS role,
+                        dam.message AS content,
+                        dam.created_at,
+                        COALESCE(dac.visitor_id, '') AS visitor_name,
+                        'web' AS platform
+                    FROM domation_ai_messages dam
+                    JOIN domation_ai_conversations dac ON dac.id = dam.conversation_id
+                    WHERE dac.contact_id = ?
+                    ORDER BY dam.created_at DESC
+                    LIMIT 40
+                ");
+                $stmtAi->execute([$contactId]);
+                while ($am = $stmtAi->fetch(PDO::FETCH_ASSOC)) {
+                    $messages[] = [
+                        'channel'     => 'ai_chatbot',
+                        'direction'   => ($am['role'] ?? '') === 'user' ? 'inbound' : 'outbound',
+                        'sender_name' => ($am['role'] ?? '') === 'user' ? ($am['visitor_name'] ?: ($contact['full_name'] ?? 'Khách hàng')) : 'AI Chatbot',
+                        'content'     => $am['content'] ?? '',
+                        'occurred_at' => $am['created_at'] ?? null,
+                        'raw'         => $am,
+                    ];
+                }
+            } catch (\Throwable $eAi) {
             }
-        } catch (\Throwable $eAi) {
         }
 
         usort($messages, static function (array $a, array $b): int {
@@ -1620,33 +1773,39 @@ class DomationOmnichannelController
 
         // 1. Subscriber Activity (`subscriber_activity`)
         try {
-            $conds  = ["sa.contact_id = ?"];
-            $params = [$contactId];
+            $conds  = [];
+            $params = [];
+            if ($contactId > 0) {
+                $conds[]  = "sa.contact_id = ?";
+                $params[] = $contactId;
+            }
             if (!empty($subIds)) {
                 $inSub   = implode(',', array_fill(0, count($subIds), '?'));
                 $conds[] = "sa.subscriber_id IN ($inSub)";
                 $params  = array_merge($params, $subIds);
             }
 
-            $stmtSa = $this->db->prepare("
-                SELECT
-                    sa.id,
-                    sa.subscriber_id,
-                    sa.type,
-                    sa.campaign_id,
-                    sa.flow_id,
-                    sa.reference_id,
-                    sa.reference_name,
-                    sa.details,
-                    sa.created_at
-                FROM subscriber_activity sa
-                WHERE (" . implode(' OR ', $conds) . ")
-                ORDER BY sa.created_at DESC, sa.id DESC
-                LIMIT 120
-            ");
-            $stmtSa->execute($params);
-            while ($sa = $stmtSa->fetch(PDO::FETCH_ASSOC)) {
-                $events[] = $mapActivityRow($sa, 'sa_');
+            if (!empty($conds)) {
+                $stmtSa = $this->db->prepare("
+                    SELECT
+                        sa.id,
+                        sa.subscriber_id,
+                        sa.type,
+                        sa.campaign_id,
+                        sa.flow_id,
+                        sa.reference_id,
+                        sa.reference_name,
+                        sa.details,
+                        sa.created_at
+                    FROM subscriber_activity sa
+                    WHERE (" . implode(' OR ', $conds) . ")
+                    ORDER BY sa.created_at DESC, sa.id DESC
+                    LIMIT 120
+                ");
+                $stmtSa->execute($params);
+                while ($sa = $stmtSa->fetch(PDO::FETCH_ASSOC)) {
+                    $events[] = $mapActivityRow($sa, 'sa_');
+                }
             }
         } catch (\Throwable $eSa) {
         }

@@ -360,9 +360,20 @@ const buildMetaAdsCacheKey = (
 export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
   externalDateFilter,
   customStartDate,
-  customEndDate
+  customEndDate,
+  onOpenContact
 }) => {
   const [viewMode, setViewMode] = useState<'funnel' | 'campaigns' | 'preview'>('funnel');
+  const [matrixTabMode, setMatrixTabMode] = useState<'by_ad' | 'by_lead'>('by_ad');
+  const [matrixPipelineFilter, setMatrixPipelineFilter] = useState<string>('all');
+  const [matrixOnlyAdsWithLeads, setMatrixOnlyAdsWithLeads] = useState<boolean>(true);
+  const [matrixShowAll14Cols, setMatrixShowAll14Cols] = useState<boolean>(false);
+  const [matrixSearch, setMatrixSearch] = useState<string>('');
+  const [matrixSortBy, setMatrixSortBy] = useState<'leads' | 'spend' | 'qualified_pct'>('leads');
+  const [expandedMatrixAds, setExpandedMatrixAds] = useState<Record<string, boolean>>({});
+  const [matrixAdPageMap, setMatrixAdPageMap] = useState<Record<string, number>>({});
+  const [matrixFlatLeadPage, setMatrixFlatLeadPage] = useState<number>(1);
+  const [copiedMatrixAdId, setCopiedMatrixAdId] = useState<string | null>(null);
   const [selectedCampaignFilter, setSelectedCampaignFilter] = useState<string>('all');
   const [selectedOwnerFilter, setSelectedOwnerFilter] = useState<string>('all');
   const initialParsedCustom = useMemo(
@@ -767,6 +778,160 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
   const dataQualityMetrics = useMemo(() => {
     return Array.isArray(overviewData?.data_quality_metrics) ? overviewData.data_quality_metrics : [];
   }, [overviewData]);
+
+  // Pipeline Stages Catalog & Attributed Leads for Lead-by-Ad & Pipeline Matrix Table
+  const pipelineStagesCatalog = useMemo(() => {
+    const raw = Array.isArray(overviewData?.pipeline_stages_catalog) ? overviewData.pipeline_stages_catalog : [];
+    if (raw.length > 0) return raw;
+    const fallback14 = [
+      { key: '1', stage_order: 1, stage_name: '01 – New Lead', bucket: 'new_1_2', count: 0 },
+      { key: '2', stage_order: 2, stage_name: '02 – Contact Attempted', bucket: 'new_1_2', count: 0 },
+      { key: '3', stage_order: 3, stage_name: '03 – Connected', bucket: 'qualified_3_12', count: 0 },
+      { key: '4', stage_order: 4, stage_name: '04 – Needed', bucket: 'qualified_3_12', count: 0 },
+      { key: '5', stage_order: 5, stage_name: '05 – Discovery Completed', bucket: 'qualified_3_12', count: 0 },
+      { key: '6', stage_order: 6, stage_name: '06 – Program Matched', bucket: 'qualified_3_12', count: 0 },
+      { key: '7', stage_order: 7, stage_name: '07 – Proposal Sent', bucket: 'qualified_3_12', count: 0 },
+      { key: '8', stage_order: 8, stage_name: '08 – Evaluation / Objection', bucket: 'qualified_3_12', count: 0 },
+      { key: '9', stage_order: 9, stage_name: '09 – Application Started', bucket: 'qualified_3_12', count: 0 },
+      { key: '10', stage_order: 10, stage_name: '10 – Application Completed', bucket: 'qualified_3_12', count: 0 },
+      { key: '11', stage_order: 11, stage_name: '11 – Admission Approved', bucket: 'qualified_3_12', count: 0 },
+      { key: '12', stage_order: 12, stage_name: '12 – Offer Accepted', bucket: 'qualified_3_12', count: 0 },
+      { key: '13', stage_order: 13, stage_name: '13 – Deposit / Tuition Payment', bucket: 'win_13_14', count: 0 },
+      { key: '14', stage_order: 14, stage_name: '14 – Enrolled', bucket: 'win_13_14', count: 0 },
+      { key: 'nurture', stage_order: 98, stage_name: 'CS dài hạn (Nurture)', bucket: 'nurture', count: 0 },
+      { key: 'lost', stage_order: 99, stage_name: 'Lost / Không tiềm năng', bucket: 'lost', count: 0 }
+    ];
+    return fallback14;
+  }, [overviewData]);
+
+  const visibleMatrixColumns = useMemo(() => {
+    if (matrixShowAll14Cols) return pipelineStagesCatalog;
+    // Show key stages + any stage that has count > 0 so the matrix fits cleanly while showing all real pipeline stages
+    const hasLeadsOrCore = pipelineStagesCatalog.filter((st: any) => {
+      const k = String(st.key);
+      if (Number(st.count || 0) > 0) return true;
+      return ['1', '2', '3', '4', '6', '13', '14', 'nurture', 'lost'].includes(k);
+    });
+    return hasLeadsOrCore.length > 0 ? hasLeadsOrCore : pipelineStagesCatalog;
+  }, [pipelineStagesCatalog, matrixShowAll14Cols]);
+
+  const allAdsForMatrix = useMemo(() => {
+    return Array.isArray(overviewData?.by_ad) ? overviewData.by_ad : [];
+  }, [overviewData]);
+
+  const adsWithLeadCount = useMemo(() => {
+    return allAdsForMatrix.filter((a: any) => Number(a.leads || 0) > 0).length;
+  }, [allAdsForMatrix]);
+
+  const matrixAdsList = useMemo(() => {
+    const q = matrixSearch.trim().toLowerCase();
+    const filtered = allAdsForMatrix
+      .map((ad: any) => {
+        const rawLeads: any[] = Array.isArray(ad.attributed_leads) ? ad.attributed_leads : [];
+        const stageFilteredLeads =
+          matrixPipelineFilter === 'all'
+            ? rawLeads
+            : rawLeads.filter((l: any) => String(l.stage_key) === matrixPipelineFilter);
+        const searchFilteredLeads = !q
+          ? stageFilteredLeads
+          : stageFilteredLeads.filter(
+              (l: any) =>
+                String(l.full_name || '').toLowerCase().includes(q) ||
+                String(l.phone || '').toLowerCase().includes(q) ||
+                String(l.owner_name || '').toLowerCase().includes(q) ||
+                String(l.stage_name || '').toLowerCase().includes(q)
+            );
+        const adNameMatches =
+          !q ||
+          String(ad.name || '').toLowerCase().includes(q) ||
+          String(ad.adset_name || '').toLowerCase().includes(q) ||
+          String(ad.campaign_name || '').toLowerCase().includes(q) ||
+          String(ad.ad_id || ad.id || '').toLowerCase().includes(q);
+
+        return {
+          ...ad,
+          filtered_leads: adNameMatches && q && searchFilteredLeads.length === 0 ? stageFilteredLeads : searchFilteredLeads,
+          _matchesSearch: adNameMatches || searchFilteredLeads.length > 0
+        };
+      })
+      .filter((ad: any) => {
+        if (!ad._matchesSearch) return false;
+        if (matrixPipelineFilter !== 'all') {
+          const stCnt = Number(ad.stage_counts?.[matrixPipelineFilter] || 0);
+          if (stCnt <= 0) return false;
+        } else if (matrixOnlyAdsWithLeads && Number(ad.leads || 0) <= 0) {
+          return false;
+        }
+        return true;
+      });
+
+    filtered.sort((a: any, b: any) => {
+      if (matrixSortBy === 'spend') {
+        return Number(b.spend || 0) - Number(a.spend || 0) || Number(b.leads || 0) - Number(a.leads || 0);
+      }
+      if (matrixSortBy === 'qualified_pct') {
+        const pctA = Number(a.leads || 0) > 0 ? Number(a.qualified || 0) / Number(a.leads || 1) : 0;
+        const pctB = Number(b.leads || 0) > 0 ? Number(b.qualified || 0) / Number(b.leads || 1) : 0;
+        return pctB - pctA || Number(b.leads || 0) - Number(a.leads || 0);
+      }
+      return Number(b.leads || 0) - Number(a.leads || 0) || Number(b.spend || 0) - Number(a.spend || 0);
+    });
+
+    return filtered;
+  }, [allAdsForMatrix, matrixSearch, matrixPipelineFilter, matrixOnlyAdsWithLeads, matrixSortBy]);
+
+  const allAttributedLeads = useMemo(() => {
+    return Array.isArray(overviewData?.attributed_leads) ? overviewData.attributed_leads : [];
+  }, [overviewData]);
+
+  const filteredMatrixLeads = useMemo(() => {
+    const q = matrixSearch.trim().toLowerCase();
+    return allAttributedLeads.filter((l: any) => {
+      if (matrixPipelineFilter !== 'all' && String(l.stage_key) !== matrixPipelineFilter) {
+        return false;
+      }
+      if (!q) return true;
+      return (
+        String(l.full_name || '').toLowerCase().includes(q) ||
+        String(l.phone || '').toLowerCase().includes(q) ||
+        String(l.email || '').toLowerCase().includes(q) ||
+        String(l.ad_name || '').toLowerCase().includes(q) ||
+        String(l.ad_id || '').toLowerCase().includes(q) ||
+        String(l.owner_name || '').toLowerCase().includes(q) ||
+        String(l.stage_name || '').toLowerCase().includes(q)
+      );
+    });
+  }, [allAttributedLeads, matrixSearch, matrixPipelineFilter]);
+
+  const openMatrixLeadDrawer = useCallback(
+    (lead: any) => {
+      if (!lead) return;
+      const cid = Number(lead.contact_id || 0);
+      if (cid > 0) {
+        if (onOpenContact) {
+          onOpenContact(cid, lead);
+        } else {
+          window.dispatchEvent(new CustomEvent('open-customer-drawer', { detail: { id: cid, contact: lead } }));
+        }
+      }
+    },
+    [onOpenContact]
+  );
+
+  const toggleMatrixAdExpand = useCallback((adKey: string) => {
+    setExpandedMatrixAds((prev) => ({
+      ...prev,
+      [adKey]: !prev[adKey]
+    }));
+  }, []);
+
+  const copyMatrixAdId = useCallback((rawId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!rawId) return;
+    navigator.clipboard?.writeText(rawId);
+    setCopiedMatrixAdId(rawId);
+    setTimeout(() => setCopiedMatrixAdId(null), 1500);
+  }, []);
 
   // Real Hierarchical Campaigns -> AdSets -> Ads
   const filteredHierarchy = useMemo(() => {
@@ -2226,6 +2391,945 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                   <div style={{ width: `${summary.qualified_3_12_pct}%`, background: '#C6333D', height: '100%' }} title={`Qualified (3-12): ${summary.qualified_3_12_leads} (${summary.qualified_3_12_pct}%)`} />
                   <div style={{ width: `${summary.won_pct}%`, background: '#ec4899', height: '100%' }} title={`Học viên / Win (13-14): ${summary.won_leads} (${summary.won_pct}%)`} />
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* BẢNG ĐỐI CHIẾU CÁC LEAD THEO QUẢNG CÁO & PIPELINE (AD x PIPELINE MATRIX & INLINE EXPANDABLE LEADS) */}
+          <div
+            className="card"
+            style={{
+              padding: '1.25rem 1.35rem',
+              borderRadius: 16,
+              border: '1px solid #e2e8f0',
+              background: '#ffffff',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1rem',
+              boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)'
+            }}
+          >
+            {/* Top Toolbar: Switcher (Theo Bài Quảng Cáo / Đối Chiếu Từng Lead) + Search & Mode Toggles */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+              <div
+                style={{
+                  display: 'inline-flex',
+                  padding: '3px',
+                  borderRadius: '10px',
+                  background: '#f1f5f9',
+                  border: '1px solid #e2e8f0',
+                  gap: '3px'
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setMatrixTabMode('by_ad')}
+                  style={{
+                    height: '32px',
+                    padding: '0 14px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    background: matrixTabMode === 'by_ad' ? '#BD1D2D' : 'transparent',
+                    color: matrixTabMode === 'by_ad' ? '#ffffff' : '#64748b',
+                    fontWeight: 700,
+                    fontSize: '0.78rem',
+                    boxShadow: matrixTabMode === 'by_ad' ? '0 1px 3px rgba(189, 29, 45, 0.25)' : 'none',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Megaphone size={13} />
+                  <span>Theo Bài Quảng Cáo ({adsWithLeadCount})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMatrixTabMode('by_lead');
+                    setMatrixFlatLeadPage(1);
+                  }}
+                  style={{
+                    height: '32px',
+                    padding: '0 14px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    background: matrixTabMode === 'by_lead' ? '#BD1D2D' : 'transparent',
+                    color: matrixTabMode === 'by_lead' ? '#ffffff' : '#64748b',
+                    fontWeight: 700,
+                    fontSize: '0.78rem',
+                    boxShadow: matrixTabMode === 'by_lead' ? '0 1px 3px rgba(189, 29, 45, 0.25)' : 'none',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Layers size={13} />
+                  <span>Đối Chiếu Từng Lead ({allAttributedLeads.length})</span>
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <CleanSearchBox
+                  value={matrixSearch}
+                  onChange={(v) => {
+                    setMatrixSearch(v);
+                    setMatrixFlatLeadPage(1);
+                  }}
+                  placeholder="Tìm bài QC, #ID, tên/SĐT lead, Sale..."
+                  width={isMobile ? '100%' : 240}
+                />
+
+                {matrixTabMode === 'by_ad' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setMatrixOnlyAdsWithLeads((prev) => !prev)}
+                      style={{
+                        height: '32px',
+                        padding: '0 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #e2e8f0',
+                        background: matrixOnlyAdsWithLeads ? '#ffffff' : '#f8fafc',
+                        color: '#0f172a',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                      title="Chuyển đổi hiển thị chỉ các bài QC có sinh Lead hoặc toàn bộ bài QC"
+                    >
+                      <span>{matrixOnlyAdsWithLeads ? `Bài QC có sinh Lead (${adsWithLeadCount})` : `Tất cả bài QC (${allAdsForMatrix.length})`}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setMatrixShowAll14Cols((prev) => !prev)}
+                      style={{
+                        height: '32px',
+                        padding: '0 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #e2e8f0',
+                        background: matrixShowAll14Cols ? '#fef2f2' : '#f8fafc',
+                        color: matrixShowAll14Cols ? '#BD1D2D' : '#475569',
+                        fontSize: '0.74rem',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {matrixShowAll14Cols ? 'Đang hiện đủ 14 bước Pipeline' : 'Mở rộng đủ 14 cột Pipeline'}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* PIPELINE Quick Filter Bar */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                flexWrap: 'wrap',
+                padding: '8px 12px',
+                borderRadius: '10px',
+                background: '#f8fafc',
+                border: '1px solid #f1f5f9'
+              }}
+            >
+              <span
+                style={{
+                  fontSize: '0.71rem',
+                  fontWeight: 800,
+                  color: '#64748b',
+                  letterSpacing: '0.04em',
+                  textTransform: 'uppercase',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  marginRight: '4px'
+                }}
+              >
+                <SlidersHorizontal size={12} />
+                PIPELINE:
+              </span>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMatrixPipelineFilter('all');
+                  setMatrixFlatLeadPage(1);
+                }}
+                style={{
+                  height: '27px',
+                  padding: '0 11px',
+                  borderRadius: '999px',
+                  border: matrixPipelineFilter === 'all' ? '1.5px solid #BD1D2D' : '1px solid #e2e8f0',
+                  background: matrixPipelineFilter === 'all' ? '#fef2f2' : '#ffffff',
+                  color: matrixPipelineFilter === 'all' ? '#BD1D2D' : '#334155',
+                  fontSize: '0.74rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}
+              >
+                <span>Tất cả ({allAttributedLeads.length})</span>
+              </button>
+
+              {pipelineStagesCatalog.map((st: any) => {
+                const stKey = String(st.key);
+                const stCnt = Number(st.count || 0);
+                const isSelected = matrixPipelineFilter === stKey;
+                const shortName = String(st.stage_name || '')
+                  .replace(/^0(\d)\s*[–-]\s*/, '$1. ')
+                  .replace(/^(\d{2})\s*[–-]\s*/, '$1. ');
+
+                let badgeBg = '#f1f5f9';
+                let badgeColor = '#475569';
+                if (st.bucket === 'win_13_14') {
+                  badgeBg = '#dcfce7';
+                  badgeColor = '#15803d';
+                } else if (st.bucket === 'qualified_3_12') {
+                  badgeBg = Number(st.stage_order) >= 6 ? '#dbeafe' : '#dcfce7';
+                  badgeColor = Number(st.stage_order) >= 6 ? '#1d4ed8' : '#15803d';
+                } else if (st.bucket === 'nurture') {
+                  badgeBg = '#e0f2fe';
+                  badgeColor = '#0369a1';
+                } else if (st.bucket === 'lost') {
+                  badgeBg = '#ffe4e6';
+                  badgeColor = '#e11d48';
+                }
+
+                return (
+                  <button
+                    key={stKey}
+                    type="button"
+                    onClick={() => {
+                      setMatrixPipelineFilter(isSelected ? 'all' : stKey);
+                      setMatrixFlatLeadPage(1);
+                    }}
+                    style={{
+                      height: '27px',
+                      padding: '0 9px',
+                      borderRadius: '999px',
+                      border: isSelected ? '1.5px solid #BD1D2D' : '1px solid #e2e8f0',
+                      background: isSelected ? '#fef2f2' : '#ffffff',
+                      color: isSelected ? '#BD1D2D' : '#334155',
+                      fontSize: '0.73rem',
+                      fontWeight: isSelected ? 800 : 600,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      opacity: stCnt === 0 && !isSelected ? 0.72 : 1
+                    }}
+                  >
+                    <span>{shortName}</span>
+                    <span
+                      style={{
+                        padding: '1px 6px',
+                        borderRadius: '999px',
+                        background: badgeBg,
+                        color: badgeColor,
+                        fontSize: '0.69rem',
+                        fontWeight: 800,
+                        fontVariantNumeric: 'tabular-nums'
+                      }}
+                    >
+                      {stCnt}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* MODE 1: THEO BÀI QUẢNG CÁO (MATRIX TABLE + INLINE EXPANDABLE LEADS) */}
+            {matrixTabMode === 'by_ad' ? (
+              matrixAdsList.length === 0 ? (
+                <div style={{ padding: '2.5rem 1rem', textAlign: 'center', color: '#64748b', fontSize: '0.83rem' }}>
+                  Không có bài quảng cáo nào khớp với bộ lọc Pipeline hiện tại.
+                </div>
+              ) : (
+                <div className="custom-scrollbar" style={{ overflowX: 'auto', border: '1px solid #f1f5f9', borderRadius: 12 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem', minWidth: 980 }}>
+                    <thead>
+                      <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b', textTransform: 'uppercase', fontSize: '0.69rem', letterSpacing: '0.03em' }}>
+                        <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 800, minWidth: 270 }}>
+                          BÀI QUẢNG CÁO
+                        </th>
+                        <th
+                          onClick={() =>
+                            setMatrixSortBy((prev) =>
+                              prev === 'leads' ? 'spend' : prev === 'spend' ? 'qualified_pct' : 'leads'
+                            )
+                          }
+                          style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 800, minWidth: 185, cursor: 'pointer', color: '#BD1D2D', userSelect: 'none' }}
+                          title="Bấm để đổi sắp xếp theo Số lượng Lead / Chi phí / Tỷ lệ Tiềm năng"
+                        >
+                          HIỆU SUẤT &amp; CHI PHÍ ▼
+                        </th>
+                        <th style={{ padding: '10px 10px', textAlign: 'center', fontWeight: 800, minWidth: 64 }}>
+                          TỔNG
+                        </th>
+                        {visibleMatrixColumns.map((col: any) => {
+                          const shortHeader = String(col.stage_name || '')
+                            .replace(/^0(\d)\s*[–-]\s*/, '$1. ')
+                            .replace(/^(\d{2})\s*[–-]\s*/, '$1. ');
+                          let headerColor = '#475569';
+                          if (col.bucket === 'win_13_14') headerColor = '#be185d';
+                          else if (col.bucket === 'qualified_3_12') {
+                            headerColor = Number(col.stage_order) >= 6 ? '#1d4ed8' : '#15803d';
+                          } else if (col.bucket === 'nurture') headerColor = '#0284c7';
+                          else if (col.bucket === 'lost') headerColor = '#e11d48';
+
+                          return (
+                            <th
+                              key={col.key}
+                              style={{
+                                padding: '10px 8px',
+                                textAlign: 'center',
+                                fontWeight: 800,
+                                color: headerColor,
+                                minWidth: 82,
+                                whiteSpace: 'nowrap'
+                              }}
+                              title={col.stage_name}
+                            >
+                              {shortHeader}
+                            </th>
+                          );
+                        })}
+                        <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, minWidth: 96 }}>
+                          CHI TIẾT
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {matrixAdsList.map((ad: any, adIdx: number) => {
+                        const adKey = String(ad.id || ad.ad_id || adIdx);
+                        const rawAdId = String(ad.ad_id || '').replace(/[^0-9]/g, '');
+                        const shortAdId = rawAdId ? rawAdId.slice(-6) : String(adKey).slice(-6);
+                        const totalAdLeads = Number(ad.leads || 0);
+                        const qualCount = Number(ad.qualified || 0);
+                        const qualPct = totalAdLeads > 0 ? Math.round((qualCount / totalAdLeads) * 1000) / 10 : 0;
+                        const isExpanded = expandedMatrixAds[adKey] ?? (adIdx === 0 && totalAdLeads > 0 && Object.keys(expandedMatrixAds).length === 0);
+                        const adLeadsList: any[] = Array.isArray(ad.filtered_leads)
+                          ? ad.filtered_leads
+                          : Array.isArray(ad.attributed_leads)
+                          ? ad.attributed_leads
+                          : [];
+                        const currentPage = matrixAdPageMap[adKey] || 1;
+                        const pageSize = 8;
+                        const totalPages = Math.max(1, Math.ceil(adLeadsList.length / pageSize));
+                        const safePage = Math.min(currentPage, totalPages);
+                        const pageSlice = adLeadsList.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+                        return (
+                          <React.Fragment key={adKey}>
+                            <tr
+                              style={{
+                                borderBottom: '1px solid #f1f5f9',
+                                background: isExpanded ? '#fcfcfd' : '#ffffff',
+                                transition: 'background 0.15s ease'
+                              }}
+                            >
+                              {/* Col 1: BÀI QUẢNG CÁO */}
+                              <td style={{ padding: '11px 14px', verticalAlign: 'middle' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                  <div
+                                    onClick={() => rawAdId && setPreviewAdModal(ad)}
+                                    style={{
+                                      width: 44,
+                                      height: 44,
+                                      borderRadius: 9,
+                                      overflow: 'hidden',
+                                      background: '#f1f5f9',
+                                      border: '1px solid #e2e8f0',
+                                      flexShrink: 0,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      cursor: rawAdId ? 'pointer' : 'default'
+                                    }}
+                                  >
+                                    {ad.thumbnail_url ? (
+                                      <img
+                                        src={ad.thumbnail_url}
+                                        alt={ad.name}
+                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                      />
+                                    ) : (
+                                      <Megaphone size={18} style={{ color: '#BD1D2D' }} />
+                                    )}
+                                  </div>
+                                  <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <div
+                                      style={{
+                                        fontSize: '0.8rem',
+                                        fontWeight: 800,
+                                        color: '#0f172a',
+                                        maxWidth: 230,
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap'
+                                      }}
+                                      title={ad.name}
+                                    >
+                                      {ad.name}
+                                    </div>
+                                    <div
+                                      style={{
+                                        fontSize: '0.7rem',
+                                        color: '#64748b',
+                                        maxWidth: 230,
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap'
+                                      }}
+                                      title={ad.adset_name || ad.campaign_name}
+                                    >
+                                      {ad.adset_name || ad.campaign_name || 'Meta Lead Ads'}
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                                      {rawAdId && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setPreviewAdModal(ad)}
+                                          style={{
+                                            padding: '2px 7px',
+                                            borderRadius: 5,
+                                            border: '1px solid #fecdd3',
+                                            background: '#fff1f2',
+                                            color: '#BD1D2D',
+                                            fontSize: '0.67rem',
+                                            fontWeight: 800,
+                                            cursor: 'pointer',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '3px'
+                                          }}
+                                        >
+                                          <Eye size={10} />
+                                          <span>Iframe QC</span>
+                                        </button>
+                                      )}
+                                      <span
+                                        onClick={(e) => copyMatrixAdId(rawAdId || adKey, e)}
+                                        style={{
+                                          fontSize: '0.67rem',
+                                          color: copiedMatrixAdId === (rawAdId || adKey) ? '#16a34a' : '#94a3b8',
+                                          fontFamily: 'monospace',
+                                          cursor: 'pointer'
+                                        }}
+                                        title={rawAdId ? `Bấm để sao chép Ad ID: ${rawAdId}` : adKey}
+                                      >
+                                        {copiedMatrixAdId === (rawAdId || adKey) ? 'Đã chép!' : `#${shortAdId}`}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* Col 2: HIỆU SUẤT & CHI PHÍ */}
+                              <td style={{ padding: '11px 12px', verticalAlign: 'middle' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                    {qualCount > 0 ? (
+                                      <>
+                                        <span
+                                          style={{
+                                            padding: '2px 7px',
+                                            borderRadius: 6,
+                                            background: '#dbeafe',
+                                            color: '#1d4ed8',
+                                            fontSize: '0.68rem',
+                                            fontWeight: 800
+                                          }}
+                                        >
+                                          Tiềm năng
+                                        </span>
+                                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#15803d', fontVariantNumeric: 'tabular-nums' }}>
+                                          {qualPct}% ({qualCount}/{totalAdLeads})
+                                        </span>
+                                      </>
+                                    ) : totalAdLeads > 0 ? (
+                                      <>
+                                        <span
+                                          style={{
+                                            padding: '2px 7px',
+                                            borderRadius: 6,
+                                            background: '#fef3c7',
+                                            color: '#b45309',
+                                            fontSize: '0.68rem',
+                                            fontWeight: 800
+                                          }}
+                                        >
+                                          Chờ đánh giá
+                                        </span>
+                                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#15803d', fontVariantNumeric: 'tabular-nums' }}>
+                                          0% (0/{totalAdLeads})
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <span
+                                        style={{
+                                          padding: '2px 7px',
+                                          borderRadius: 6,
+                                          background: '#f1f5f9',
+                                          color: '#64748b',
+                                          fontSize: '0.68rem',
+                                          fontWeight: 700
+                                        }}
+                                      >
+                                        Chưa sinh Lead CRM
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div style={{ fontSize: '0.72rem', color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>
+                                    Chi: <strong style={{ color: '#0f172a' }}>{formatShortMoney(ad.spend)}</strong> • CPL:{' '}
+                                    <strong style={{ color: '#334155' }}>
+                                      {Number(ad.cpl || 0) > 0 ? formatShortMoney(ad.cpl) : '—'}
+                                    </strong>
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* Col 3: TỔNG */}
+                              <td style={{ padding: '11px 10px', textAlign: 'center', verticalAlign: 'middle' }}>
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    minWidth: 30,
+                                    padding: '3px 8px',
+                                    borderRadius: 6,
+                                    background: totalAdLeads > 0 ? '#fef2f2' : '#f8fafc',
+                                    color: totalAdLeads > 0 ? '#BD1D2D' : '#94a3b8',
+                                    fontWeight: 800,
+                                    fontSize: '0.78rem',
+                                    fontVariantNumeric: 'tabular-nums'
+                                  }}
+                                >
+                                  {totalAdLeads}
+                                </span>
+                              </td>
+
+                              {/* Dynamic Pipeline Stage Columns */}
+                              {visibleMatrixColumns.map((col: any) => {
+                                const cnt = Number(ad.stage_counts?.[col.key] || 0);
+                                let cellBg = 'transparent';
+                                let cellColor = '#cbd5e1';
+                                if (cnt > 0) {
+                                  if (col.bucket === 'win_13_14') {
+                                    cellBg = 'rgba(236, 72, 153, 0.08)';
+                                    cellColor = '#be185d';
+                                  } else if (col.bucket === 'qualified_3_12') {
+                                    cellBg = 'rgba(22, 163, 74, 0.08)';
+                                    cellColor = '#15803d';
+                                  } else if (col.bucket === 'lost') {
+                                    cellBg = 'rgba(225, 29, 72, 0.07)';
+                                    cellColor = '#e11d48';
+                                  } else if (col.bucket === 'nurture') {
+                                    cellBg = 'rgba(2, 132, 199, 0.08)';
+                                    cellColor = '#0369a1';
+                                  } else {
+                                    cellBg = '#f8fafc';
+                                    cellColor = '#0f172a';
+                                  }
+                                }
+                                return (
+                                  <td
+                                    key={col.key}
+                                    style={{
+                                      padding: '11px 8px',
+                                      textAlign: 'center',
+                                      verticalAlign: 'middle',
+                                      background: cellBg,
+                                      color: cellColor,
+                                      fontWeight: cnt > 0 ? 800 : 500,
+                                      fontSize: '0.78rem',
+                                      fontVariantNumeric: 'tabular-nums'
+                                    }}
+                                  >
+                                    {cnt}
+                                  </td>
+                                );
+                              })}
+
+                              {/* Sticky Right: CHI TIẾT */}
+                              <td style={{ padding: '11px 12px', textAlign: 'center', verticalAlign: 'middle' }}>
+                                <button
+                                  type="button"
+                                  disabled={adLeadsList.length === 0}
+                                  onClick={() => toggleMatrixAdExpand(adKey)}
+                                  style={{
+                                    height: '28px',
+                                    padding: '0 10px',
+                                    borderRadius: 7,
+                                    border: isExpanded ? '1px solid #BD1D2D' : '1px solid #e2e8f0',
+                                    background: isExpanded ? '#fef2f2' : '#f8fafc',
+                                    color: isExpanded ? '#BD1D2D' : adLeadsList.length > 0 ? '#0f172a' : '#94a3b8',
+                                    fontSize: '0.73rem',
+                                    fontWeight: 700,
+                                    cursor: adLeadsList.length > 0 ? 'pointer' : 'not-allowed',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  Xem ({adLeadsList.length}) {isExpanded ? '▲' : '▼'}
+                                </button>
+                              </td>
+                            </tr>
+
+                            {/* INLINE EXPANDED SUB-TABLE OF LEADS FOR THIS AD */}
+                            {isExpanded && adLeadsList.length > 0 && (
+                              <tr>
+                                <td
+                                  colSpan={4 + visibleMatrixColumns.length}
+                                  style={{
+                                    padding: '0 14px 14px 14px',
+                                    background: '#f8fafc',
+                                    borderBottom: '2px solid #e2e8f0'
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      marginTop: 8,
+                                      borderRadius: 12,
+                                      border: '1px solid #e2e8f0',
+                                      background: '#ffffff',
+                                      overflow: 'hidden',
+                                      boxShadow: '0 2px 6px rgba(15, 23, 42, 0.04)'
+                                    }}
+                                  >
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem' }}>
+                                      <tbody>
+                                        {pageSlice.map((lead: any, lIdx: number) => {
+                                          let pillBg = '#f1f5f9';
+                                          let pillColor = '#334155';
+                                          let dotColor = '#64748b';
+                                          if (lead.stage_bucket === 'win_13_14') {
+                                            pillBg = '#fdf2f8';
+                                            pillColor = '#be185d';
+                                            dotColor = '#ec4899';
+                                          } else if (lead.stage_bucket === 'qualified_3_12') {
+                                            if (Number(lead.stage_order) >= 5) {
+                                              pillBg = '#dcfce7';
+                                              pillColor = '#15803d';
+                                              dotColor = '#16a34a';
+                                            } else {
+                                              pillBg = '#fef3c7';
+                                              pillColor = '#b45309';
+                                              dotColor = '#f59e0b';
+                                            }
+                                          } else if (lead.stage_bucket === 'lost') {
+                                            pillBg = '#ffe4e6';
+                                            pillColor = '#e11d48';
+                                            dotColor = '#f43f5e';
+                                          } else if (lead.stage_bucket === 'nurture') {
+                                            pillBg = '#e0f2fe';
+                                            pillColor = '#0369a1';
+                                            dotColor = '#0284c7';
+                                          }
+
+                                          return (
+                                            <tr
+                                              key={lead.attribution_id || `${adKey}_lead_${lIdx}`}
+                                              onClick={() => openMatrixLeadDrawer(lead)}
+                                              style={{
+                                                borderBottom: '1px solid #f1f5f9',
+                                                cursor: Number(lead.contact_id || 0) > 0 ? 'pointer' : 'default'
+                                              }}
+                                            >
+                                              {/* Lead Avatar + Name */}
+                                              <td style={{ padding: '9px 14px', width: '22%' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                                                  <Avatar name={lead.full_name || 'KH'} size={26} />
+                                                  <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.78rem' }}>
+                                                    {lead.full_name}
+                                                  </span>
+                                                </div>
+                                              </td>
+
+                                              {/* Phone */}
+                                              <td
+                                                style={{
+                                                  padding: '9px 10px',
+                                                  width: '15%',
+                                                  fontFamily: 'monospace',
+                                                  fontWeight: 700,
+                                                  color: '#334155',
+                                                  fontSize: '0.76rem',
+                                                  fontVariantNumeric: 'tabular-nums'
+                                                }}
+                                              >
+                                                {lead.phone || '—'}
+                                              </td>
+
+                                              {/* Consultant (Sale) */}
+                                              <td style={{ padding: '9px 10px', width: '18%' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                                                  <Avatar name={lead.owner_name || 'Sale'} src={lead.owner_avatar || undefined} size={24} />
+                                                  <span style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.76rem' }}>
+                                                    {lead.owner_name || 'Chưa phân bổ'}
+                                                  </span>
+                                                </div>
+                                              </td>
+
+                                              {/* Pipeline Stage Pill */}
+                                              <td style={{ padding: '9px 10px', width: '18%' }}>
+                                                <span
+                                                  style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '5px',
+                                                    padding: '3px 9px',
+                                                    borderRadius: '999px',
+                                                    background: pillBg,
+                                                    color: pillColor,
+                                                    fontSize: '0.71rem',
+                                                    fontWeight: 800,
+                                                    whiteSpace: 'nowrap'
+                                                  }}
+                                                >
+                                                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: dotColor }} />
+                                                  <span>{lead.stage_name}</span>
+                                                </span>
+                                              </td>
+
+                                              {/* Note / Program Interest */}
+                                              <td
+                                                style={{
+                                                  padding: '9px 10px',
+                                                  color: '#64748b',
+                                                  fontSize: '0.73rem',
+                                                  maxWidth: 240,
+                                                  overflow: 'hidden',
+                                                  textOverflow: 'ellipsis',
+                                                  whiteSpace: 'nowrap'
+                                                }}
+                                                title={lead.note_snippet || lead.program || ''}
+                                              >
+                                                {lead.note_snippet || (lead.program ? `Quan tâm: ${lead.program}` : '-')}
+                                              </td>
+
+                                              {/* Timestamp */}
+                                              <td
+                                                style={{
+                                                  padding: '9px 14px',
+                                                  textAlign: 'right',
+                                                  color: '#64748b',
+                                                  fontSize: '0.72rem',
+                                                  fontFamily: 'monospace',
+                                                  whiteSpace: 'nowrap'
+                                                }}
+                                              >
+                                                {lead.created_at || '—'}
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+
+                                    {/* Sub-table Pagination Footer */}
+                                    <div
+                                      style={{
+                                        padding: '8px 14px',
+                                        background: '#f8fafc',
+                                        borderTop: '1px solid #f1f5f9',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        fontSize: '0.73rem',
+                                        color: '#64748b'
+                                      }}
+                                    >
+                                      <span>
+                                        Hiển thị {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, adLeadsList.length)} /{' '}
+                                        <strong style={{ color: '#0f172a' }}>{adLeadsList.length} Lead</strong>
+                                      </span>
+                                      {totalPages > 1 && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                          {Array.from({ length: totalPages }, (_, i) => i + 1).map((pNum) => (
+                                            <button
+                                              key={pNum}
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setMatrixAdPageMap((prev) => ({ ...prev, [adKey]: pNum }));
+                                              }}
+                                              style={{
+                                                minWidth: 26,
+                                                height: 26,
+                                                padding: '0 6px',
+                                                borderRadius: 6,
+                                                border: pNum === safePage ? 'none' : '1px solid #e2e8f0',
+                                                background: pNum === safePage ? '#BD1D2D' : '#ffffff',
+                                                color: pNum === safePage ? '#ffffff' : '#334155',
+                                                fontSize: '0.72rem',
+                                                fontWeight: 800,
+                                                cursor: 'pointer'
+                                              }}
+                                            >
+                                              {pNum}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            ) : (
+              /* MODE 2: ĐỐI CHIẾU TỪNG LEAD (FLAT PAGINATED LEAD ATTRIBUTION TABLE) */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {filteredMatrixLeads.length === 0 ? (
+                  <div style={{ padding: '2.5rem 1rem', textAlign: 'center', color: '#64748b', fontSize: '0.83rem' }}>
+                    Không có Lead nào khớp với điều kiện tìm kiếm.
+                  </div>
+                ) : (
+                  <>
+                    <div className="custom-scrollbar" style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 12 }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem', minWidth: 920 }}>
+                        <thead>
+                          <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b', textTransform: 'uppercase', fontSize: '0.69rem' }}>
+                            <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 800 }}>KHÁCH HÀNG (LEAD)</th>
+                            <th style={{ padding: '10px 10px', textAlign: 'left', fontWeight: 800 }}>SỐ ĐIỆN THOẠI</th>
+                            <th style={{ padding: '10px 10px', textAlign: 'left', fontWeight: 800 }}>BÀI QUẢNG CÁO &amp; CHIẾN DỊCH</th>
+                            <th style={{ padding: '10px 10px', textAlign: 'left', fontWeight: 800 }}>TƯ VẤN VIÊN</th>
+                            <th style={{ padding: '10px 10px', textAlign: 'left', fontWeight: 800 }}>PIPELINE</th>
+                            <th style={{ padding: '10px 10px', textAlign: 'left', fontWeight: 800 }}>GHI CHÚ / CHƯƠNG TRÌNH</th>
+                            <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 800 }}>THỜI GIAN</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredMatrixLeads
+                            .slice((matrixFlatLeadPage - 1) * 15, matrixFlatLeadPage * 15)
+                            .map((lead: any, idx: number) => {
+                              let pillBg = '#f1f5f9';
+                              let pillColor = '#334155';
+                              let dotColor = '#64748b';
+                              if (lead.stage_bucket === 'win_13_14') {
+                                pillBg = '#fdf2f8';
+                                pillColor = '#be185d';
+                                dotColor = '#ec4899';
+                              } else if (lead.stage_bucket === 'qualified_3_12') {
+                                pillBg = '#dcfce7';
+                                pillColor = '#15803d';
+                                dotColor = '#16a34a';
+                              } else if (lead.stage_bucket === 'lost') {
+                                pillBg = '#ffe4e6';
+                                pillColor = '#e11d48';
+                                dotColor = '#f43f5e';
+                              }
+                              return (
+                                <tr
+                                  key={lead.attribution_id || idx}
+                                  onClick={() => openMatrixLeadDrawer(lead)}
+                                  style={{
+                                    borderBottom: '1px solid #f1f5f9',
+                                    cursor: Number(lead.contact_id || 0) > 0 ? 'pointer' : 'default'
+                                  }}
+                                >
+                                  <td style={{ padding: '10px 14px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <Avatar name={lead.full_name || 'KH'} size={26} />
+                                      <span style={{ fontWeight: 700, color: '#0f172a' }}>{lead.full_name}</span>
+                                    </div>
+                                  </td>
+                                  <td style={{ padding: '10px 10px', fontFamily: 'monospace', fontWeight: 700, color: '#334155' }}>
+                                    {lead.phone || '—'}
+                                  </td>
+                                  <td style={{ padding: '10px 10px', maxWidth: 240 }}>
+                                    <div style={{ fontWeight: 700, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={lead.ad_name}>
+                                      {lead.ad_name || 'Meta Lead Ads'}
+                                    </div>
+                                    <div style={{ fontSize: '0.69rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {lead.campaign_name}
+                                    </div>
+                                  </td>
+                                  <td style={{ padding: '10px 10px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <Avatar name={lead.owner_name || 'Sale'} src={lead.owner_avatar || undefined} size={22} />
+                                      <span style={{ fontWeight: 600, color: '#0f172a' }}>{lead.owner_name}</span>
+                                    </div>
+                                  </td>
+                                  <td style={{ padding: '10px 10px' }}>
+                                    <span
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '5px',
+                                        padding: '3px 9px',
+                                        borderRadius: '999px',
+                                        background: pillBg,
+                                        color: pillColor,
+                                        fontSize: '0.71rem',
+                                        fontWeight: 800
+                                      }}
+                                    >
+                                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: dotColor }} />
+                                      <span>{lead.stage_name}</span>
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '10px 10px', color: '#64748b', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {lead.note_snippet || (lead.program ? `Quan tâm: ${lead.program}` : '-')}
+                                  </td>
+                                  <td style={{ padding: '10px 14px', textAlign: 'right', fontFamily: 'monospace', color: '#64748b', fontSize: '0.72rem' }}>
+                                    {lead.created_at || '—'}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+                    {Math.ceil(filteredMatrixLeads.length / 15) > 1 && (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.74rem', color: '#64748b', padding: '4px 4px 0' }}>
+                        <span>
+                          Hiển thị {(matrixFlatLeadPage - 1) * 15 + 1}–{Math.min(matrixFlatLeadPage * 15, filteredMatrixLeads.length)} /{' '}
+                          <strong style={{ color: '#0f172a' }}>{filteredMatrixLeads.length} Lead</strong>
+                        </span>
+                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                          {Array.from({ length: Math.min(12, Math.ceil(filteredMatrixLeads.length / 15)) }, (_, i) => i + 1).map((pNum) => (
+                            <button
+                              key={pNum}
+                              type="button"
+                              onClick={() => setMatrixFlatLeadPage(pNum)}
+                              style={{
+                                minWidth: 28,
+                                height: 28,
+                                borderRadius: 6,
+                                border: pNum === matrixFlatLeadPage ? 'none' : '1px solid #e2e8f0',
+                                background: pNum === matrixFlatLeadPage ? '#BD1D2D' : '#ffffff',
+                                color: pNum === matrixFlatLeadPage ? '#ffffff' : '#334155',
+                                fontSize: '0.73rem',
+                                fontWeight: 800,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {pNum}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
           </div>

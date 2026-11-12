@@ -381,6 +381,11 @@ export function isTaskPersonalForUser(task: any, currentUserId: number | string 
     return true;
   }
 
+  // Nếu không có tag cá nhân tường minh thì cả người tạo và người thực hiện phải là chính user này (không phải việc giao cho người khác hoặc người khác giao)
+  if ((taskUid > 0 && taskUid !== uid) || (taskCreatedBy > 0 && taskCreatedBy !== uid)) {
+    return false;
+  }
+
   // 2. Kiểm tra nếu có người khác cùng tham gia:
   // a) Người liên quan khác
   if (task.participant_ids) {

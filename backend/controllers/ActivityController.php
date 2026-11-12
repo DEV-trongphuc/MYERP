@@ -1016,7 +1016,8 @@ class ActivityController {
                    c.name as company_name,
                    p.name as project_name,
                    camp.name as campaign_name,
-                   t.name as team_name
+                   t.name as team_name,
+                   (SELECT COUNT(*) FROM activity_comments ac WHERE ac.activity_id = a.id) as comment_count
             FROM activities a 
             LEFT JOIN users u ON a.user_id=u.id
             LEFT JOIN users creator ON a.created_by=creator.id
@@ -1092,6 +1093,215 @@ class ActivityController {
 
             if (!$isAllowedRole && !$isOwnManager && !$isSaleRole) {
                 respond(403, null, 'Người phê duyệt phải là Admin hoặc Quản lý của bạn', false);
+            }
+        }
+
+        // Re-fetch latest activity row with FOR UPDATE lock right before merging body & status to eliminate race conditions
+        $ownTxUpdate = !$this->db->inTransaction();
+        if ($ownTxUpdate) {
+            $this->db->beginTransaction();
+        }
+        $checkLatest = $this->db->prepare("SELECT * FROM activities WHERE id=? AND tenant_id=? AND deleted_at IS NULL FOR UPDATE");
+        $checkLatest->execute([$id, $auth['tenant_id']]);
+        $latestRow = $checkLatest->fetch(PDO::FETCH_ASSOC);
+        if ($latestRow) {
+            $activity = $latestRow;
+        }
+
+        // Concurrent-safe merge for body (erp_task: checklist, description, links, recurrence, etc.)
+        if (isset($b['body']) && is_string($b['body'])) {
+            $oldBodyArr = json_decode($activity['body'] ?? '', true);
+            $newBodyArr = json_decode($b['body'], true);
+            if (is_array($newBodyArr) && isset($newBodyArr['erp_task']) && is_array($newBodyArr['erp_task'])) {
+                $oldMeta = (is_array($oldBodyArr) && isset($oldBodyArr['erp_task']) && is_array($oldBodyArr['erp_task']))
+                    ? $oldBodyArr['erp_task']
+                    : [];
+                $newMeta = $newBodyArr['erp_task'];
+
+                $deletedSubtaskIds = array_values(array_unique(array_map('strval', array_merge(
+                    is_array($b['_deleted_subtask_ids'] ?? null) ? $b['_deleted_subtask_ids'] : [],
+                    is_array($newMeta['_deleted_subtask_ids'] ?? null) ? $newMeta['_deleted_subtask_ids'] : []
+                ))));
+                $dirtySubtaskIds = array_values(array_unique(array_map('strval', array_merge(
+                    is_array($b['_dirty_subtask_ids'] ?? null) ? $b['_dirty_subtask_ids'] : [],
+                    is_array($newMeta['_dirty_subtask_ids'] ?? null) ? $newMeta['_dirty_subtask_ids'] : []
+                ))));
+                $dirtyMetaFields = array_values(array_unique(array_map('strval', array_merge(
+                    is_array($b['_dirty_meta_fields'] ?? null) ? $b['_dirty_meta_fields'] : [],
+                    is_array($newMeta['_dirty_meta_fields'] ?? null) ? $newMeta['_dirty_meta_fields'] : []
+                ))));
+
+                unset(
+                    $b['_deleted_subtask_ids'],
+                    $b['_dirty_subtask_ids'],
+                    $b['_dirty_meta_fields'],
+                    $newMeta['_deleted_subtask_ids'],
+                    $newMeta['_dirty_subtask_ids'],
+                    $newMeta['_dirty_meta_fields'],
+                    $newBodyArr['_deleted_subtask_ids'],
+                    $newBodyArr['_dirty_subtask_ids'],
+                    $newBodyArr['_dirty_meta_fields']
+                );
+
+                // Extract historical snapshots from edit_history to detect stale client overwrites
+                $historySnapshots = json_decode($activity['edit_history'] ?? '[]', true);
+                $historicalChecklistItems = [];
+                $historicalDescriptions = [];
+                if (is_array($historySnapshots)) {
+                    foreach ($historySnapshots as $hSnap) {
+                        $hBody = isset($hSnap['old_body']) && is_string($hSnap['old_body']) ? json_decode($hSnap['old_body'], true) : null;
+                        if (is_array($hBody) && isset($hBody['erp_task']) && is_array($hBody['erp_task'])) {
+                            if (isset($hBody['erp_task']['description']) && is_string($hBody['erp_task']['description'])) {
+                                $historicalDescriptions[] = $hBody['erp_task']['description'];
+                            }
+                            if (!empty($hBody['erp_task']['checklist']) && is_array($hBody['erp_task']['checklist'])) {
+                                foreach ($hBody['erp_task']['checklist'] as $hItem) {
+                                    if (!empty($hItem['id'])) {
+                                        $historicalChecklistItems[(string)$hItem['id']][] = $hItem;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 1. Protect description from stale overwrite
+                if (!empty($dirtyMetaFields) && !in_array('description', $dirtyMetaFields, true)) {
+                    if (array_key_exists('description', $oldMeta)) {
+                        $newMeta['description'] = $oldMeta['description'];
+                    }
+                } elseif (empty($dirtyMetaFields)) {
+                    $oldDescVal = (string)($oldMeta['description'] ?? '');
+                    $newDescVal = (string)($newMeta['description'] ?? '');
+                    if ($newDescVal !== $oldDescVal && $oldDescVal !== '' && in_array($newDescVal, $historicalDescriptions, true)) {
+                        $newMeta['description'] = $oldMeta['description'];
+                    }
+                }
+
+                // 2. Protect links from stale overwrite when saving other meta fields
+                if (!empty($dirtyMetaFields) && !in_array('links', $dirtyMetaFields, true)) {
+                    if (array_key_exists('links', $oldMeta)) {
+                        $newMeta['links'] = $oldMeta['links'];
+                    }
+                }
+
+                // 3. Protect recurrence, related_contact_ids, team_ids when not dirty
+                foreach (['recurrence', 'related_contact_ids', 'team_ids', 'team_id', 'project_id', 'campaign_id'] as $metaKey) {
+                    if (!empty($dirtyMetaFields) && !in_array($metaKey, $dirtyMetaFields, true) && array_key_exists($metaKey, $oldMeta)) {
+                        $newMeta[$metaKey] = $oldMeta[$metaKey];
+                    }
+                }
+
+                // 4. Concurrent-safe Checklist (Subtasks) Merge
+                $oldChecklist = (isset($oldMeta['checklist']) && is_array($oldMeta['checklist'])) ? $oldMeta['checklist'] : [];
+                $newChecklist = (isset($newMeta['checklist']) && is_array($newMeta['checklist'])) ? $newMeta['checklist'] : [];
+                $checklistWasMerged = false;
+
+                if (!empty($dirtyMetaFields) && !in_array('checklist', $dirtyMetaFields, true)) {
+                    // Client did not touch checklist at all -> keep DB checklist 100% intact
+                    if (count($newChecklist) !== count($oldChecklist) || json_encode($newChecklist) !== json_encode($oldChecklist)) {
+                        $checklistWasMerged = true;
+                    }
+                    $newMeta['checklist'] = $oldChecklist;
+                } else {
+                    $oldMap = [];
+                    foreach ($oldChecklist as $item) {
+                        if (is_array($item) && isset($item['id'])) {
+                            $oldMap[(string)$item['id']] = $item;
+                        }
+                    }
+                    $newMap = [];
+                    foreach ($newChecklist as $item) {
+                        if (is_array($item) && isset($item['id'])) {
+                            $newMap[(string)$item['id']] = $item;
+                        }
+                    }
+
+                    $mergedChecklist = [];
+                    $seenIds = [];
+
+                    // First pass: preserve all DB subtasks in order unless explicitly deleted in $deletedSubtaskIds
+                    foreach ($oldChecklist as $oldItem) {
+                        if (!is_array($oldItem) || !isset($oldItem['id'])) continue;
+                        $idKey = (string)$oldItem['id'];
+                        if (in_array($idKey, $deletedSubtaskIds, true)) {
+                            // Explicitly deleted by user
+                            continue;
+                        }
+                        $seenIds[$idKey] = true;
+                        if (!isset($newMap[$idKey])) {
+                            // Missing from incoming client payload and NOT explicitly deleted -> added concurrently by another user! Preserve it!
+                            $mergedChecklist[] = $oldItem;
+                            $checklistWasMerged = true;
+                        } else {
+                            $newItem = $newMap[$idKey];
+                            if (!empty($dirtySubtaskIds)) {
+                                if (in_array($idKey, $dirtySubtaskIds, true)) {
+                                    $mergedChecklist[] = $newItem;
+                                } else {
+                                    if (json_encode($newItem) !== json_encode($oldItem)) {
+                                        $checklistWasMerged = true;
+                                    }
+                                    $mergedChecklist[] = $oldItem;
+                                }
+                            } else {
+                                // No explicit dirtySubtaskIds: check if client's item is a stale snapshot from edit_history
+                                $isStaleItem = false;
+                                if (json_encode($newItem) !== json_encode($oldItem) && !empty($historicalChecklistItems[$idKey])) {
+                                    foreach ($historicalChecklistItems[$idKey] as $histItem) {
+                                        if (json_encode($newItem) === json_encode($histItem)) {
+                                            $isStaleItem = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if ($isStaleItem) {
+                                    $mergedChecklist[] = $oldItem;
+                                    $checklistWasMerged = true;
+                                } else {
+                                    $mergedChecklist[] = $newItem;
+                                }
+                            }
+                        }
+                    }
+
+                    // Second pass: append genuinely new subtasks created by this client
+                    foreach ($newChecklist as $newItem) {
+                        if (!is_array($newItem) || !isset($newItem['id'])) continue;
+                        $idKey = (string)$newItem['id'];
+                        if (isset($seenIds[$idKey]) || in_array($idKey, $deletedSubtaskIds, true)) {
+                            continue;
+                        }
+                        // If not in $dirtySubtaskIds and it existed in edit_history, another user just deleted it -> do not resurrect
+                        if (empty($dirtySubtaskIds) && !empty($historicalChecklistItems[$idKey])) {
+                            $checklistWasMerged = true;
+                            continue;
+                        }
+                        if (!empty($dirtySubtaskIds) && !in_array($idKey, $dirtySubtaskIds, true) && !empty($historicalChecklistItems[$idKey])) {
+                            $checklistWasMerged = true;
+                            continue;
+                        }
+                        $seenIds[$idKey] = true;
+                        $mergedChecklist[] = $newItem;
+                    }
+
+                    $newMeta['checklist'] = $mergedChecklist;
+                }
+
+                // Recalculate progress if checklist items exist and checklist was updated or merged
+                $finalChecklist = $newMeta['checklist'] ?? [];
+                if (is_array($finalChecklist) && count($finalChecklist) > 0 && (in_array('checklist', $dirtyMetaFields, true) || $checklistWasMerged)) {
+                    $doneCount = 0;
+                    foreach ($finalChecklist as $cItem) {
+                        if (!empty($cItem['done']) || !empty($cItem['checked'])) {
+                            $doneCount++;
+                        }
+                    }
+                    $b['progress'] = (int)round(($doneCount / count($finalChecklist)) * 100);
+                }
+
+                $newBodyArr['erp_task'] = $newMeta;
+                $b['body'] = json_encode($newBodyArr, JSON_UNESCAPED_UNICODE);
             }
         }
 
@@ -1243,7 +1453,12 @@ class ActivityController {
                 }
             }
         }
-        if(!$sets) respond(422,null,'Không có dữ liệu',false);
+        if(!$sets) {
+            if (!empty($ownTxUpdate) && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(422,null,'Không có dữ liệu',false);
+        }
 
         // Calculate edit history (cap at 3)
         $history = json_decode($activity['edit_history'] ?? '[]', true);
@@ -1267,6 +1482,9 @@ class ActivityController {
         $params[]=$id;$params[]=$auth['tenant_id'];
         $stmt = $this->db->prepare("UPDATE activities SET ".implode(',',$sets)." WHERE id=? AND tenant_id=?");
         $stmt->execute($params);
+        if (!empty($ownTxUpdate) && $this->db->inTransaction()) {
+            $this->db->commit();
+        }
 
         // Cascading reschedule if due_date is updated
         if (isset($b['due_date']) && $b['due_date'] !== $activity['due_date']) {
@@ -1457,6 +1675,10 @@ class ActivityController {
             }
         }
 
+        // Pre-parse old and new body for accurate audit logging
+        $oldBodyData = json_decode($activity['body'] ?? '', true);
+        $newBodyData = isset($b['body']) ? json_decode($b['body'] ?? '', true) : null;
+
         // Calculate actual changes to log in audit_logs
         $actualChanges = [];
         foreach ($fields as $f) {
@@ -1498,8 +1720,8 @@ class ActivityController {
 
                 if ($f === 'body') {
                     // Handled specifically for task description vs checklist
-                    $oldDesc = $oldBodyData['erp_task']['description'] ?? (is_string($oldNorm) ? $oldNorm : '');
-                    $newDesc = $newBodyData['erp_task']['description'] ?? (is_string($newNorm) ? $newNorm : '');
+                    $oldDesc = is_array($oldBodyData) ? ($oldBodyData['erp_task']['description'] ?? '') : (is_string($oldNorm) ? $oldNorm : '');
+                    $newDesc = is_array($newBodyData) ? ($newBodyData['erp_task']['description'] ?? '') : (is_string($newNorm) ? $newNorm : '');
                     if ($oldDesc !== $newDesc) {
                         $actualChanges['body'] = [
                             'old' => $oldDesc,
@@ -1519,9 +1741,6 @@ class ActivityController {
         }
 
         // Compare old and new checklist for subtask changes
-        $oldBodyData = json_decode($activity['body'] ?? '', true);
-        $newBodyData = isset($b['body']) ? json_decode($b['body'] ?? '', true) : null;
-
         if ($newBodyData !== null) {
             $oldChecklist = $oldBodyData['erp_task']['checklist'] ?? [];
             $newChecklist = $newBodyData['erp_task']['checklist'] ?? [];
@@ -1551,33 +1770,8 @@ class ActivityController {
                     } elseif ($oldDone && !$newDone) {
                         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'INCOMPLETE_SUBTASK', 'activity', $id, json_encode(['title' => $newItem['title'] ?? 'Công việc con']));
                     }
-
-                    // Check if subtask assignee changed
-                    $oldSubAssignee = !empty($oldItem['assignee_id']) ? (int)$oldItem['assignee_id'] : null;
-                    $newSubAssignee = !empty($newItem['assignee_id']) ? (int)$newItem['assignee_id'] : null;
-                    if ($newSubAssignee && $newSubAssignee !== $oldSubAssignee && $newSubAssignee !== (int)$auth['user_id']) {
-                        $this->notifyUser(
-                            $newSubAssignee,
-                            'Bạn được giao công việc con mới',
-                            ($auth['full_name'] ?? 'Hệ thống') . ' đã giao việc con "' . ($newItem['title'] ?? 'Công việc con') . '" cho bạn trong nhiệm vụ "' . ($activity['subject'] ?? '') . '".' . (!empty($newItem['due_date']) && strtotime($newItem['due_date']) ? " (Hạn: " . date('d/m/Y', strtotime($newItem['due_date'])) . ")" : ""),
-                            'task_assignment',
-                            "/workspace?task_id={$id}&subtask_id={$idKey}",
-                            $id
-                        );
-                    }
                 } else {
                     logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'ADD_SUBTASK', 'activity', $id, json_encode(['title' => $newItem['title'] ?? 'Công việc con']));
-                    // Notify new subtask assignee
-                    if (!empty($newItem['assignee_id']) && (int)$newItem['assignee_id'] !== (int)$auth['user_id']) {
-                        $this->notifyUser(
-                            (int)$newItem['assignee_id'],
-                            'Bạn được giao công việc con mới',
-                            ($auth['full_name'] ?? 'Hệ thống') . ' đã giao việc con "' . ($newItem['title'] ?? 'Công việc con') . '" cho bạn trong nhiệm vụ "' . ($activity['subject'] ?? '') . '".' . (!empty($newItem['due_date']) && strtotime($newItem['due_date']) ? " (Hạn: " . date('d/m/Y', strtotime($newItem['due_date'])) . ")" : ""),
-                            'task_assignment',
-                            "/workspace?task_id={$id}&subtask_id={$idKey}",
-                            $id
-                        );
-                    }
                 }
             }
 
@@ -1773,24 +1967,40 @@ class ActivityController {
             }
         }
 
-        // Auto-add mentioned users to participant_ids if not already related
+        // Auto-add mentioned users to participant_ids if not already related (with row lock to prevent concurrent overwrite)
         // "Khi công việc ko có người đó liên quan nhưng trong mention, comment có nhắc thì tự động add liên quan luôn."
-        $currentPids = $this->parseUserIds($activity['participant_ids'] ?? '');
-        $pidsChanged = false;
         if (!empty($mentions)) {
-            foreach (array_keys($mentions) as $mentionedUid) {
-                $mentionedUid = (int)$mentionedUid;
-                if ($mentionedUid > 0 && $mentionedUid !== (int)$activity['user_id'] && !in_array($mentionedUid, $currentPids, true)) {
-                    $currentPids[] = $mentionedUid;
-                    $pidsChanged = true;
+            $ownTxPids = !$this->db->inTransaction();
+            if ($ownTxPids) {
+                $this->db->beginTransaction();
+            }
+            try {
+                $lockStmt = $this->db->prepare("SELECT participant_ids, user_id FROM activities WHERE id = ? AND tenant_id = ? FOR UPDATE");
+                $lockStmt->execute([$id, $auth['tenant_id']]);
+                $lockedAct = $lockStmt->fetch(PDO::FETCH_ASSOC) ?: $activity;
+                $currentPids = $this->parseUserIds($lockedAct['participant_ids'] ?? '');
+                $pidsChanged = false;
+                foreach (array_keys($mentions) as $mentionedUid) {
+                    $mentionedUid = (int)$mentionedUid;
+                    if ($mentionedUid > 0 && $mentionedUid !== (int)($lockedAct['user_id'] ?? 0) && !in_array($mentionedUid, $currentPids, true)) {
+                        $currentPids[] = $mentionedUid;
+                        $pidsChanged = true;
+                    }
+                }
+                if ($pidsChanged) {
+                    $newPidsStr = implode(',', $currentPids);
+                    $this->db->prepare("UPDATE activities SET participant_ids = ? WHERE id = ? AND tenant_id = ?")
+                             ->execute([$newPidsStr, $id, $auth['tenant_id']]);
+                    $activity['participant_ids'] = $newPidsStr;
+                }
+                if ($ownTxPids && $this->db->inTransaction()) {
+                    $this->db->commit();
+                }
+            } catch (\Throwable $pidEx) {
+                if ($ownTxPids && $this->db->inTransaction()) {
+                    $this->db->rollBack();
                 }
             }
-        }
-        if ($pidsChanged) {
-            $newPidsStr = implode(',', $currentPids);
-            $this->db->prepare("UPDATE activities SET participant_ids = ? WHERE id = ? AND tenant_id = ?")
-                     ->execute([$newPidsStr, $id, $auth['tenant_id']]);
-            $activity['participant_ids'] = $newPidsStr;
         }
 
         require_once __DIR__ . '/../NotificationService.php';
@@ -1996,21 +2206,6 @@ class ActivityController {
             $p[] = $auth['user_id'];
             $p[] = $auth['user_id'];
         }
-        // Fetch activity proof photo & description files (Skipping legacy proof/attachments)
-        $stmtFullAct = $this->db->prepare("SELECT id FROM activities WHERE id = ? AND tenant_id = ?");
-        $stmtFullAct->execute([$id, $auth['tenant_id']]);
-        $fullAct = $stmtFullAct->fetch(PDO::FETCH_ASSOC);
-
-        // Fetch activity comments attachments & content
-        $actCommentsStmt = $this->db->prepare("SELECT attachments, content FROM activity_comments WHERE activity_id = ? AND tenant_id = ?");
-        $actCommentsStmt->execute([$id, $auth['tenant_id']]);
-        $actComments = $actCommentsStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-        foreach ($actComments as $ac) {
-            if (!empty($ac['attachments'])) deleteAttachmentFiles($ac['attachments']);
-            if (!empty($ac['content'])) deleteAttachmentFiles($ac['content']);
-        }
-        $this->db->prepare("DELETE FROM activity_comments WHERE activity_id = ? AND tenant_id = ?")->execute([$id, $auth['tenant_id']]);
-
         $stmt=$this->db->prepare($sql);
         $stmt->execute($p);
         if(!$stmt->rowCount()) respond(404,null,'Không tìm thấy hoặc không có quyền',false);

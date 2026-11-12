@@ -83,11 +83,20 @@ function getAllOAs($pdo)
     // [FIX P43-L1] workspace_id passed as global — OA configs scoped per workspace
     global $workspace_id;
     
-    // Auto-assign existing OAs to the current workspace if they lack one
+    // Auto-assign existing OAs to the current workspace if they lack one or use legacy ws_default
     try {
-        $stmtFix = $pdo->prepare("UPDATE zalo_oa_configs SET workspace_id = ? WHERE workspace_id IS NULL OR workspace_id = ''");
+        $stmtFix = $pdo->prepare("UPDATE zalo_oa_configs SET workspace_id = ? WHERE workspace_id IS NULL OR workspace_id = '' OR workspace_id = 'ws_default'");
         $stmtFix->execute([$workspace_id]);
+        // Auto-heal connected OAs whose status was coerced to empty string by legacy ENUM
+        $pdo->exec("UPDATE zalo_oa_configs SET status = 'active' WHERE oa_id IS NOT NULL AND oa_id != '' AND (status IS NULL OR status = '' OR status = 'error_refresh')");
+        // Remove stale incomplete connecting rows older than 2 hours
+        $pdo->exec("DELETE FROM zalo_oa_configs WHERE (oa_id IS NULL OR oa_id = '') AND created_at < DATE_SUB(NOW(), INTERVAL 2 HOUR)");
     } catch (Exception $e) {}
+
+    // Sync any fresher tokens from peer database on the same server
+    if (function_exists('syncZaloTokensFromPeerDb')) {
+        syncZaloTokensFromPeerDb($pdo);
+    }
 
     try {
         $stmt = $pdo->prepare("
@@ -99,7 +108,9 @@ function getAllOAs($pdo)
                 quota_used_today, quota_reset_date,
                 status, token_expires_at, created_at, updated_at
             FROM zalo_oa_configs
-            WHERE workspace_id = ? AND status != 'verifying'
+            WHERE (workspace_id = ? OR workspace_id = '1' OR workspace_id IS NULL)
+              AND oa_id IS NOT NULL AND oa_id != ''
+              AND status != 'verifying'
             ORDER BY created_at DESC
         ");
         $stmt->execute([$workspace_id]);
@@ -291,8 +302,11 @@ function isWithinSendingHours()
 function refreshAccessToken($pdo, $id)
 {
     global $workspace_id;
-    // ... Existing logic ...
-    $stmt = $pdo->prepare("SELECT app_id, app_secret, refresh_token FROM zalo_oa_configs WHERE id = ? AND workspace_id = ?");
+    if (function_exists('syncZaloTokensFromPeerDb')) {
+        syncZaloTokensFromPeerDb($pdo, $id);
+    }
+
+    $stmt = $pdo->prepare("SELECT id, oa_id, app_id, app_secret, access_token, refresh_token, token_expires_at FROM zalo_oa_configs WHERE id = ? AND (workspace_id = ? OR workspace_id = '1')");
     $stmt->execute([$id, $workspace_id]);
     $oa = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -301,17 +315,23 @@ function refreshAccessToken($pdo, $id)
         return;
     }
 
+    // If peer DB already synced a healthy token with >12h remaining, use it directly without burning single-use refresh_token
+    if (!empty($oa['access_token']) && !empty($oa['token_expires_at']) && strtotime($oa['token_expires_at']) > time() + 43200) {
+        syncZaloQuota($pdo, $id, $oa['access_token']);
+        jsonResponse(true, ['message' => 'Token synced and active', 'expires_at' => $oa['token_expires_at']]);
+        return;
+    }
+
     $url = 'https://oauth.zaloapp.com/v4/oa/access_token';
     $params = [
-        'app_id' => $oa['app_id'],
+        'app_id' => !empty($oa['app_id']) ? $oa['app_id'] : (defined('ZALO_APP_ID') ? ZALO_APP_ID : ''),
         'grant_type' => 'refresh_token',
         'refresh_token' => $oa['refresh_token']
     ];
 
-    // Use stored app_secret or from config? 
-    // Code below uses stored. But config is safer.
-    // Let's use stored to respect if different OAs have diff apps (legacy support).
-    $secret_key = $oa['app_secret'];
+    $secret_key = (!empty($oa['app_secret']) && $oa['app_secret'] !== '********')
+        ? $oa['app_secret']
+        : (defined('ZALO_APP_SECRET') ? ZALO_APP_SECRET : '');
 
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
@@ -342,17 +362,21 @@ function refreshAccessToken($pdo, $id)
 
         $stmt = $pdo->prepare("
             UPDATE zalo_oa_configs
-            SET access_token = ?, refresh_token = ?, token_expires_at = ?
-            WHERE id = ? AND workspace_id = ?
+            SET access_token = ?, refresh_token = ?, token_expires_at = ?, status = 'active', token_status = 'healthy', last_token_check = NOW(), updated_at = NOW()
+            WHERE id = ?
         ");
-        $stmt->execute([$result['access_token'], $new_refresh_token, $expires_at, $id, $workspace_id]);
+        $stmt->execute([$result['access_token'], $new_refresh_token, $expires_at, $id]);
+
+        if (function_exists('propagateZaloTokenToPeerDbs')) {
+            propagateZaloTokenToPeerDbs($pdo, $id, $oa['oa_id'] ?? '', $result['access_token'], $new_refresh_token, $expires_at);
+        }
 
         // [NEW] Also Sync Quota while we have a fresh token
         syncZaloQuota($pdo, $id, $result['access_token']);
 
         jsonResponse(true, ['message' => 'Token refreshed successfully', 'expires_at' => $expires_at]);
     } else {
-        jsonResponse(false, null, 'Invalid response from Zalo API');
+        jsonResponse(false, null, 'Invalid response from Zalo API: ' . ($result['error_description'] ?? $result['message'] ?? $response));
     }
 }
 
@@ -420,7 +444,7 @@ function generateAuthUrl($pdo, $id = null)
     // The unique_oa_id constraint treats multiple NULL oa_id as duplicates on some
     // MySQL configurations, causing "Duplicate entry '' for key 'unique_oa_id'".
     try {
-        $pdo->exec("DELETE FROM zalo_oa_configs WHERE status = 'verifying' AND (oa_id IS NULL OR oa_id = '')");
+        $pdo->exec("DELETE FROM zalo_oa_configs WHERE oa_id IS NULL OR oa_id = ''");
     } catch (Exception $e) {
         // Silent — don't block new connection attempt
         error_log('[Zalo OA] Could not clean stale verifying rows: ' . $e->getMessage());
@@ -429,14 +453,25 @@ function generateAuthUrl($pdo, $id = null)
     // [FIX P43-L2] Include workspace_id in INSERT for new OA
     $stmt = $pdo->prepare("
         INSERT INTO zalo_oa_configs 
-        (id, workspace_id, name, app_id, app_secret, daily_quota, quota_used_today, quota_reset_date, status, pkce_verifier, created_at)
-        VALUES (?, ?, 'Zalo Connecting...', ?, ?, 0, 0, CURDATE(), 'verifying', ?, NOW())
+        (id, workspace_id, name, oa_id, app_id, app_secret, daily_quota, quota_used_today, quota_reset_date, status, pkce_verifier, created_at)
+        VALUES (?, ?, 'Zalo Connecting...', NULL, ?, ?, 0, 0, CURDATE(), 'verifying', ?, NOW())
     ");
 
     $app_id = defined('ZALO_APP_ID') ? ZALO_APP_ID : '';
     $app_secret = defined('ZALO_APP_SECRET') ? ZALO_APP_SECRET : '';
 
-    $stmt->execute([$session_id, $workspace_id, $app_id, $app_secret, $verifier]);
+    $stmt->execute([$session_id, $workspace_id ?: '1', $app_id, $app_secret, $verifier]);
+
+    // Also mirror the PKCE session row into peer DB in case Zalo Callback URL points to automation.ideas.edu.vn
+    try {
+        $pdo->exec("DELETE FROM `vhvxoigh_mail_auto`.`zalo_oa_configs` WHERE oa_id IS NULL OR oa_id = ''");
+        $stmtPeer = $pdo->prepare("
+            INSERT INTO `vhvxoigh_mail_auto`.`zalo_oa_configs`
+            (id, workspace_id, name, oa_id, app_id, app_secret, daily_quota, quota_used_today, quota_reset_date, status, pkce_verifier, created_at)
+            VALUES (?, '1', 'Zalo Connecting...', NULL, ?, ?, 0, 0, CURDATE(), 'verifying', ?, NOW())
+        ");
+        $stmtPeer->execute([$session_id, $app_id, $app_secret, $verifier]);
+    } catch (Throwable $e) {}
 
     $callback_url = defined('ZALO_CALLBACK_URL') ? ZALO_CALLBACK_URL : API_BASE_URL . '/zalo_oauth_callback.php';
     $state = $session_id;
@@ -561,6 +596,15 @@ function ensureZaloConfigSchema($pdo)
             // Ignore errors
         }
     }
+
+    // Ensure status column is VARCHAR(50) so values like 'verifying' or 'error_refresh' never get coerced to ''
+    try {
+        $stmtStatus = $pdo->query("SHOW COLUMNS FROM zalo_oa_configs LIKE 'status'");
+        $colInfo = $stmtStatus ? $stmtStatus->fetch(PDO::FETCH_ASSOC) : null;
+        if ($colInfo && stripos($colInfo['Type'] ?? '', 'enum') !== false) {
+            $pdo->exec("ALTER TABLE zalo_oa_configs MODIFY COLUMN status VARCHAR(50) NOT NULL DEFAULT 'active'");
+        }
+    } catch (Exception $e) {}
 }
 
 function getJsonInput()

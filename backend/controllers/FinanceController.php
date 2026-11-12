@@ -1055,10 +1055,10 @@ class FinanceController
         if ($auth['role'] === 'viewer') respond(403, null, 'Bạn không có quyền tạo chi phí', false);
         $data = getBody();
 
-        // Cấp Quản lý trở lên toàn quyền tạo phiếu chi approved; nhân sự cấp dưới bắt buộc pending chờ duyệt (hoặc draft)
-        $isManagerOrAbove = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager'], true);
+        // Chỉ Admin/Director mới toàn quyền tạo phiếu chi approved trực tiếp; các cấp khác bắt buộc pending chờ duyệt (hoặc draft)
+        $canDirectApprove = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
         $statusVal = $data['status'] ?? 'pending';
-        if ($statusVal !== 'draft' && !$isManagerOrAbove) {
+        if ($statusVal !== 'draft' && !$canDirectApprove) {
             $statusVal = 'pending';
         }
 
@@ -1074,7 +1074,13 @@ class FinanceController
 
         // Validate split amounts
         if (!empty($entities)) {
-            $splitSum = array_reduce($entities, fn($s, $e) => $s + (float) ($e['amount'] ?? 0), 0);
+            $splitSum = 0.0;
+            foreach ($entities as $e) {
+                if ((float)($e['amount'] ?? 0) < 0) {
+                    respond(422, null, 'Số tiền phân bổ cho từng đối tượng không được âm', false);
+                }
+                $splitSum += (float)($e['amount'] ?? 0);
+            }
             if ($totalAmount > 0 && $splitSum > $totalAmount) {
                 respond(422, null, 'Tổng số tiền phân bổ không được lớn hơn tổng số tiền chi phí', false);
             }
@@ -1085,8 +1091,7 @@ class FinanceController
         $approver_id_3 = !empty($data['approver_id_3']) ? (int)$data['approver_id_3'] : null;
 
         $canSelfApprove = in_array(strtolower($auth['role'] ?? ''), [
-            'admin', 'superadmin', 'super_admin', 'director',
-            'manager', 'accountant', 'ketoan', 'leader', 'truongphong', 'head_of_department'
+            'admin', 'superadmin', 'super_admin', 'director'
         ], true);
         if (!$canSelfApprove) {
             foreach (['approver_id', 'approver_id_2', 'approver_id_3'] as $af) {
@@ -1359,8 +1364,7 @@ class FinanceController
         }
 
         $canSelfApprove = in_array(strtolower($auth['role'] ?? ''), [
-            'admin', 'superadmin', 'super_admin', 'director',
-            'manager', 'accountant', 'ketoan', 'leader', 'truongphong', 'head_of_department'
+            'admin', 'superadmin', 'super_admin', 'director'
         ], true);
         if (!$canSelfApprove) {
             foreach (['approver_id', 'approver_id_2', 'approver_id_3'] as $af) {
@@ -1565,7 +1569,13 @@ class FinanceController
 
             if (isset($data['entities']) && is_array($data['entities'])) {
                 $entities = $data['entities'];
-                $splitSum = array_reduce($entities, fn($s, $e) => $s + (float) ($e['amount'] ?? 0), 0);
+                $splitSum = 0.0;
+                foreach ($entities as $e) {
+                    if ((float)($e['amount'] ?? 0) < 0) {
+                        throw new Exception('Số tiền phân bổ cho từng đối tượng không được âm');
+                    }
+                    $splitSum += (float)($e['amount'] ?? 0);
+                }
                 if ($splitSum > $currentTotal) {
                     throw new Exception('Tổng số tiền phân bổ không được lớn hơn tổng số tiền chi phí');
                 }
@@ -1798,10 +1808,9 @@ class FinanceController
                             stripos($expenseRow['notes'] ?? '', 'hoa hồng') !== false;
 
             $canSelfApprove = in_array(strtolower($auth['role'] ?? ''), [
-                'admin', 'superadmin', 'super_admin', 'director',
-                'manager', 'accountant', 'ketoan', 'leader', 'truongphong', 'head_of_department'
+                'admin', 'superadmin', 'super_admin', 'director'
             ], true);
-            if ($isCreator && !$isCommission && !$canSelfApprove) {
+            if ($isCreator && !$canSelfApprove) {
                 $this->db->rollBack();
                 respond(403, null, 'Người tạo đề xuất không được tự phê duyệt chi phí của chính mình', false);
             }
@@ -2336,9 +2345,10 @@ class FinanceController
 
     public function payCommissionItem(array $auth, int $id): void
     {
-        $allowedRoles = ['admin', 'super_admin', 'superadmin', 'director', 'accountant', 'manager', 'sale_admin', 'saleadmin'];
-        if (!in_array($auth['role'] ?? '', $allowedRoles, true)) {
-            respond(403, null, 'Bạn không có quyền thực hiện xác nhận chi trả hoa hồng', false);
+        $roleLower = strtolower(trim($auth['role'] ?? ''));
+        $allowedRoles = ['admin', 'super_admin', 'superadmin', 'director', 'accountant', 'ketoan', 'cfo'];
+        if (!in_array($roleLower, $allowedRoles, true)) {
+            respond(403, null, 'Chỉ Kế toán hoặc Ban Giám đốc mới có quyền xác nhận chi trả hoa hồng', false);
         }
 
         $data = getBody();
@@ -2399,8 +2409,16 @@ class FinanceController
                 respond(404, null, 'Không tìm thấy dòng người thụ hưởng trong phiếu', false);
             }
 
-            // Update item
+            // Update item (with idempotency and anti-self-payout guard)
             $targetItem = &$itemsList[$foundIndex];
+            if (!empty($targetItem['is_paid'])) {
+                $this->db->rollBack();
+                respond(409, null, 'Khoản hoa hồng của nhân sự này đã được xác nhận chi trả trước đó', false);
+            }
+            if (isset($targetItem['user_id']) && (int)$targetItem['user_id'] === (int)$auth['user_id'] && !in_array($roleLower, ['admin', 'super_admin', 'superadmin', 'director'], true)) {
+                $this->db->rollBack();
+                respond(403, null, 'Bạn không thể tự xác nhận chi trả khoản hoa hồng của chính mình', false);
+            }
             $targetItem['is_paid'] = 1;
             $targetItem['paid_at'] = date('Y-m-d H:i:s');
             $targetItem['paid_by'] = (int)$auth['user_id'];
@@ -2487,6 +2505,10 @@ class FinanceController
      */
     public function getAccountingFinancialSummary(array $auth): void
     {
+        $role = strtolower(trim($auth['role'] ?? ''));
+        if (!in_array($role, ['admin', 'super_admin', 'superadmin', 'director', 'accountant', 'ketoan', 'cfo', 'hr', 'manager'], true)) {
+            respond(403, null, 'Bạn không có quyền xem báo cáo tổng hợp tài chính & thuế doanh nghiệp', false);
+        }
         $tid = (int)($auth['tenant_id'] ?? 1);
         $month = trim($_GET['month'] ?? date('Y-m'));
         if (!preg_match('/^\d{4}-\d{2}$/', $month)) $month = date('Y-m');
@@ -2496,14 +2518,21 @@ class FinanceController
         $monthEndTs = $monthEnd . ' 23:59:59';
 
         // 1. DOANH THU THỰC TẾ
-        // Doanh thu Đặt cọc (SARGable date range + soft-delete filter)
+        // Doanh thu Đặt cọc / SO theo đúng đợt thanh toán trong kỳ (deposit_milestones)
         $depStmt = $this->db->prepare("
-            SELECT COALESCE(SUM(d.price), 0) as total_deposit
+            SELECT COALESCE(SUM(
+                CASE WHEN dm.id IS NOT NULL THEN dm.expected_amount ELSE d.price END
+            ), 0) as total_deposit
             FROM deposits d
             JOIN contacts c ON d.contact_id = c.id
-            WHERE c.tenant_id = ? AND d.deleted_at IS NULL AND d.status = 'approved' AND d.created_at >= ? AND d.created_at <= ?
+            LEFT JOIN deposit_milestones dm ON dm.deposit_id = d.id
+            WHERE c.tenant_id = ? AND d.deleted_at IS NULL AND d.status != 'cancelled'
+              AND (
+                  (dm.id IS NOT NULL AND dm.status = 'approved' AND dm.expected_pay_date >= ? AND dm.expected_pay_date <= ?)
+                  OR (dm.id IS NULL AND d.status = 'approved' AND d.created_at >= ? AND d.created_at <= ?)
+              )
         ");
-        $depStmt->execute([$tid, $monthStartTs, $monthEndTs]);
+        $depStmt->execute([$tid, $monthStart, $monthEnd, $monthStartTs, $monthEndTs]);
         $depRev = (float)($depStmt->fetch(PDO::FETCH_ASSOC)['total_deposit'] ?? 0);
 
         // Doanh thu Hóa đơn (Invoices Paid - SARGable date range)

@@ -79,7 +79,7 @@ if (strpos($action, '?') !== false) {
     $_GET['action'] = $action;
 }
 
-$segments = array_values(array_filter(explode('/', $action)));
+$segments = array_values(array_filter(explode('/', $action), fn($s) => $s !== ''));
 if (isset($segments[0]) && in_array($segments[0], ['v1', 'api'], true)) {
     array_shift($segments);
     $action = implode('/', $segments);
@@ -155,7 +155,9 @@ if (in_array($baseAction, [
     'hrm',
     'chat',
     'qwen-agent',
-    'customer-journey-summary'
+    'customer-journey-summary',
+    'academic',
+    'academic-affairs'
 ], true)) {
     $_SERVER['REQUEST_URI'] = '/backend/' . $action . (!empty($_GET) ? '?' . http_build_query($_GET) : '');
     require_once __DIR__ . '/index.php';
@@ -2353,6 +2355,44 @@ switch ($action) {
                 }
             }
 
+            // Include confirmed 1:1 Mentoring Bookings on Lecturer / Internal Schedule Calendar
+            try {
+                $sql1on1 = "
+                    SELECT b.*, c.subject_name, c.lecturer_id, c.lecturer_name, c.zoom_link, c.zoom_id, c.zoom_pass
+                    FROM mentoring_1on1_bookings b
+                    INNER JOIN mentoring_1on1_configs c ON c.id = b.config_id
+                    WHERE b.status = 'confirmed'
+                " . (!$isAllLecturers ? " AND c.lecturer_id = " . (int)$lecturerId : "") . "
+                    ORDER BY b.slot_date ASC, b.slot_time_start ASC
+                ";
+                $res1on1 = @$conn->query($sql1on1);
+                if ($res1on1 && $res1on1->num_rows > 0) {
+                    $mentoringSeminars = [];
+                    while ($mb = $res1on1->fetch_assoc()) {
+                        $mentoringSeminars[] = [
+                            'topic' => "Hướng dẫn 1:1: HV {$mb['student_name']}" . (!empty($mb['topic']) ? " ({$mb['topic']})" : ""),
+                            'date' => $mb['slot_date'],
+                            'time_slot' => "{$mb['slot_time_start']} - {$mb['slot_time_end']}",
+                            'lecturer_id' => $mb['lecturer_id'] ?: $lecturerId,
+                            'location' => 'Online (1:1 Mentoring)',
+                            'zoom_link' => $mb['zoom_link'] ?? '',
+                            'zoom_id' => $mb['zoom_id'] ?? '',
+                            'zoom_pass' => $mb['zoom_pass'] ?? ''
+                        ];
+                    }
+                    if (!empty($mentoringSeminars)) {
+                        $matchingSubjects[] = [
+                            'code' => '1:1 MENTORING',
+                            'name' => 'Hướng dẫn 1:1 Cá nhân (30 phút)',
+                            'lecturer_id' => $isAllLecturers ? 0 : $lecturerId,
+                            'zoom_shared' => true,
+                            'host_sessions' => [],
+                            'seminars' => $mentoringSeminars
+                        ];
+                    }
+                }
+            } catch (\Throwable $e1on1) {}
+
             echo json_encode([
                 'success' => true,
                 'data' => [
@@ -2428,6 +2468,47 @@ switch ($action) {
         }
 
 
+        $courseSubjectsOut = $campaign && !empty($campaign['subjects_json']) ? (json_decode($campaign['subjects_json'], true) ?: []) : [];
+        try {
+            $cond1on1 = $customerId > 0
+                ? "b.contact_id = " . (int)$customerId
+                : "c.campaign_id = " . (int)$campaignId;
+            $res1on1Stu = @$conn->query("
+                SELECT b.*, c.subject_name, c.lecturer_id, c.lecturer_name, c.zoom_link, c.zoom_id, c.zoom_pass
+                FROM mentoring_1on1_bookings b
+                INNER JOIN mentoring_1on1_configs c ON c.id = b.config_id
+                WHERE b.status = 'confirmed' AND ({$cond1on1})
+                ORDER BY b.slot_date ASC, b.slot_time_start ASC
+            ");
+            if ($res1on1Stu && $res1on1Stu->num_rows > 0) {
+                $stuSeminars = [];
+                $firstLectId = 0;
+                while ($mb = $res1on1Stu->fetch_assoc()) {
+                    if (!$firstLectId && !empty($mb['lecturer_id'])) $firstLectId = (int)$mb['lecturer_id'];
+                    $stuSeminars[] = [
+                        'topic' => "Hướng dẫn 1:1: HV {$mb['student_name']}" . (!empty($mb['topic']) ? " ({$mb['topic']})" : ""),
+                        'date' => $mb['slot_date'],
+                        'time_slot' => "{$mb['slot_time_start']} - {$mb['slot_time_end']}",
+                        'lecturer_id' => $mb['lecturer_id'] ?? 0,
+                        'location' => 'Online (1:1 Mentoring)',
+                        'zoom_link' => $mb['zoom_link'] ?? '',
+                        'zoom_id' => $mb['zoom_id'] ?? '',
+                        'zoom_pass' => $mb['zoom_pass'] ?? ''
+                    ];
+                }
+                if (!empty($stuSeminars)) {
+                    $courseSubjectsOut[] = [
+                        'code' => '1:1 MENTORING',
+                        'name' => 'Hướng dẫn 1:1 Cá nhân (30 phút)',
+                        'lecturer_id' => $firstLectId,
+                        'zoom_shared' => true,
+                        'host_sessions' => [],
+                        'seminars' => $stuSeminars
+                    ];
+                }
+            }
+        } catch (\Throwable $e1on1Stu) {}
+
         echo json_encode([
             'success' => true,
             'data' => [
@@ -2442,7 +2523,7 @@ switch ($action) {
                 'course' => $campaign ? [
                     'id' => $campaign['id'],
                     'name' => $campaign['name'] ?? '',
-                    'subjects' => $campaign['subjects_json'] ? json_decode($campaign['subjects_json'], true) : [],
+                    'subjects' => $courseSubjectsOut,
                     'thesis_milestones' => $campaign['thesis_milestones_json'] ? json_decode($campaign['thesis_milestones_json'], true) : []
                 ] : null,
                 'program' => $project ? [
@@ -8362,20 +8443,25 @@ switch ($action) {
             $conns[] = $row;
         }
 
-        // Fetch stats grouped by connection_id for the last 30 days to prevent full table join bottleneck
+        // Fetch accurate stats grouped by connection_id & source using the latest distribution log per lead
         $statsRes = $conn->query("
             SELECT 
                 l.connection_id,
                 l.source,
-                COUNT(DISTINCT l.id) as total_leads,
-                SUM(CASE WHEN dl.status = 'assigned' THEN 1 ELSE 0 END) as assigned_count,
-                SUM(CASE WHEN dl.status = 'duplicate' THEN 1 ELSE 0 END) as duplicate_count,
-                SUM(CASE WHEN dl.status = 'reminder' THEN 1 ELSE 0 END) as reminder_count,
-                SUM(CASE WHEN dl.status = 'error' THEN 1 ELSE 0 END) as error_count
+                COUNT(l.id) as total_leads,
+                SUM(CASE WHEN COALESCE(l.status, '') NOT IN ('pending_approval', 'rejected', 'blacklisted') AND dl.status IN ('assigned', 'compensation', 'pending_work_hours', 'fallback', 'rule_6_month', 'databank_claim', 'success') THEN 1 ELSE 0 END) as assigned_count,
+                SUM(CASE WHEN COALESCE(l.status, '') NOT IN ('pending_approval', 'rejected', 'blacklisted') AND dl.status IN ('duplicate', 'silent') THEN 1 ELSE 0 END) as duplicate_count,
+                SUM(CASE WHEN COALESCE(l.status, '') NOT IN ('pending_approval', 'rejected', 'blacklisted') AND dl.status = 'reminder' THEN 1 ELSE 0 END) as reminder_count,
+                SUM(CASE WHEN COALESCE(l.status, '') IN ('pending_approval', 'rejected', 'blacklisted') OR dl.status IN ('error', 'pending_approval', 'rejected', 'blacklisted', 'unassigned') THEN 1 ELSE 0 END) as error_count
             FROM leads l
-            LEFT JOIN distribution_logs dl ON l.id = dl.lead_id
+            LEFT JOIN (
+                SELECT lead_id, MAX(id) as max_dl_id
+                FROM distribution_logs
+                WHERE lead_id IS NOT NULL
+                GROUP BY lead_id
+            ) latest_dl ON l.id = latest_dl.lead_id
+            LEFT JOIN distribution_logs dl ON dl.id = latest_dl.max_dl_id
             WHERE (l.connection_id IS NOT NULL OR l.source IS NOT NULL)
-              AND l.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
             GROUP BY l.connection_id, l.source
         ");
 
@@ -11697,12 +11783,16 @@ switch ($action) {
                 }
             }
 
-            // Append duplicate note if duplicate exists
-            if ($crmCheckResult['isDuplicate']) {
+            // Append duplicate note ONLY when re-allocated to a new round (>6 months or old consultant inactive)
+            if (!$isDuplicate && $crmCheckResult['leadExists'] && !empty($crmCheckResult['originalAssignedTo'])) {
                 $prevName = $crmCheckResult['assignedName'] ?? 'Sale cũ';
                 $prevDate = !empty($crmCheckResult['lastInteractionDate']) ? date('d/m/Y', strtotime($crmCheckResult['lastInteractionDate'])) : 'Không rõ';
                 $dupMonths = $crmCheckResult['monthsSinceLastInteraction'] ?? $dupCheckMonths;
-                $noteAppend = "\n[Lưu ý: Trùng số của $prevName trên $dupMonths tháng. Cập nhật lần cuối: $prevDate]";
+                if (($crmCheckResult['consultantStatus'] ?? '') === 'inactive') {
+                    $noteAppend = "\n[Lưu ý: Khách cũ của TVV ngưng hoạt động ($prevName). Cập nhật lần cuối: $prevDate - Chia lại vòng mới]";
+                } else {
+                    $noteAppend = "\n[Lưu ý: Trùng số của $prevName trên $dupMonths tháng. Cập nhật lần cuối: $prevDate]";
+                }
                 $lead['note'] .= $noteAppend;
             }
 
@@ -12020,7 +12110,7 @@ switch ($action) {
                 $note = $lead['note'] . $adminNote;
 
                 $upd = $conn->prepare("UPDATE leads SET status = 'active', target_round_id = ?, assigned_to = ?, note = ?, last_interaction_date = NOW(), ai_screener_status = 'failed', is_accepted = IF(? > 0, 1, is_accepted), accepted_at = IF(? > 0, IFNULL(accepted_at, NOW()), accepted_at) WHERE id = ?");
-                $upd->bind_param("iisiiii", $targetRoundId, $assignedConsultantId, $note, $assignedConsultantId, $assignedConsultantId, $lead_id);
+                $upd->bind_param("iisiii", $targetRoundId, $assignedConsultantId, $note, $assignedConsultantId, $assignedConsultantId, $lead_id);
                 $upd->execute();
                 $upd->close();
 
@@ -14217,7 +14307,7 @@ switch ($action) {
             $hash = password_hash($password, PASSWORD_DEFAULT);
             $token = bin2hex(random_bytes(32));
 
-            $stmt = $conn->prepare("INSERT INTO accounts (username, password_hash, name, role, email, is_confirmed, confirm_token, zalo_chat_id, avatar, dob, gender, citizen_id, address, bank_name, bank_account, phone, is_active) VALUES (?, ?, ?, ?, ?, 1, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt = $conn->prepare("INSERT INTO accounts (username, password_hash, name, role, email, is_confirmed, confirm_token, zalo_chat_id, avatar, dob, gender, citizen_id, address, bank_name, bank_account, phone, is_active) VALUES (?, ?, ?, ?, ?, 1, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->bind_param("ssssssssssssssi", $username, $hash, $name, $role, $email, $zalo_chat_id, $avatar, $dob, $gender, $citizen_id, $address, $bank_name, $bank_account, $phone, $is_active);
 
             if ($stmt->execute()) {

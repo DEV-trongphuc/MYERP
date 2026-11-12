@@ -318,7 +318,7 @@ export const computeEmployeeAttendanceSummary = (
     let unpaidDays = 0;
 
     const waivedDates: string[] = [];
-    const halfLeaveDates = new Set<string>();
+    const leaveDaysByDate: Record<string, number> = {};
 
     // Sắp xếp đơn nghỉ theo thứ tự thời gian tăng dần để tích lũy hạn mức WFH theo tháng chuẩn xác
     const sortedLeaves = [...uLeaves].sort((a: any, b: any) => {
@@ -337,7 +337,7 @@ export const computeEmployeeAttendanceSummary = (
       const days = Number(lv.total_days) || 1;
       const type = lv.leave_type;
       const sDate = lv.start_date_only || String(lv.start_date || lv.from_date || '').slice(0, 10);
-      const eDate = lv.end_date_only || String(lv.end_date || lv.to_date || '').slice(0, 10);
+      const eDate = lv.end_date_only || String(lv.end_date || lv.to_date || sDate).slice(0, 10);
 
       let rateStr = (lv.salary_rate !== undefined && lv.salary_rate !== null) ? `${lv.salary_rate}%` : '50%';
 
@@ -376,8 +376,20 @@ export const computeEmployeeAttendanceSummary = (
         waivedDates.push(sDate);
       }
 
-      if (Number(lv.total_days) === 0.5) {
-        halfLeaveDates.add(sDate);
+      // Chống tính trùng (Anti-Double-Counting) giữa Check-in và Đơn nghỉ / WFH trên cùng ngày
+      if (['annual', 'compensatory', 'remote_work', 'unpaid', 'special_paid', 'maternity', 'paternity', 'marriage', 'funeral', 'business_trip', 'sick'].includes(type)) {
+        if (!eDate || sDate === eDate) {
+          leaveDaysByDate[sDate] = Math.min(1.0, (leaveDaysByDate[sDate] || 0) + days);
+        } else {
+          const cur = new Date(`${sDate}T00:00:00`);
+          const end = new Date(`${eDate}T00:00:00`);
+          const perDay = days < 1.0 ? days : 1.0;
+          while (!Number.isNaN(cur.getTime()) && !Number.isNaN(end.getTime()) && cur <= end) {
+            const dKey = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+            leaveDaysByDate[dKey] = Math.min(1.0, (leaveDaysByDate[dKey] || 0) + perDay);
+            cur.setDate(cur.getDate() + 1);
+          }
+        }
       }
 
       detailLeaveRows.push([
@@ -407,11 +419,8 @@ export const computeEmployeeAttendanceSummary = (
 
       if (isAppr && !checkedDates.has(cDate)) {
         checkedDates.add(cDate);
-        if (halfLeaveDates.has(cDate)) {
-          actualDays += 0.5;
-        } else {
-          actualDays += 1.0;
-        }
+        const leaveOnDate = Number(leaveDaysByDate[cDate] || 0);
+        actualDays += Math.max(0, 1.0 - Math.min(1.0, leaveOnDate));
       }
 
       const lMin = Number(ci.late_minutes) || 0;
@@ -465,8 +474,8 @@ export const computeEmployeeAttendanceSummary = (
 
     // D. Totals
     const stdDays = standardDays;
-    const totalPaidDays = Number((actualDays + annualDays + compDays + specialDays + wfhDays).toFixed(1));
-    const diffDays = Number((totalPaidDays - stdDays).toFixed(1));
+    const totalPaidDays = Number((actualDays + annualDays + compDays + specialDays + wfhDays).toFixed(2));
+    const diffDays = Number((totalPaidDays - stdDays).toFixed(2));
 
     sumStdDays += stdDays;
     sumActDays += actualDays;
@@ -989,6 +998,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         
         payload = {
           leave_type: 'late_early',
+          late_early_type: lateEarlyTypeField,
+          ot_type: lateEarlyTypeField,
           reason: leaveReasonField.trim(),
           from_date: fromStr,
           to_date: toStr,
@@ -2219,7 +2230,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         halfLeave,
         lateEarly,
         wfh,
-        isLockedByLeave: !!fullLeave
+        isLockedByLeave: !!fullLeave || (!!wfh && Number(wfh.total_days) >= 1)
       };
     });
   }, [selectedDateForDetail, usersList, calendarCheckIns, calendarLeaves]);

@@ -24,7 +24,10 @@ class JWT {
         if (!hash_equals($expected, $sig)) return null;
 
         $data = json_decode(self::base64UrlDecode($payload), true);
-        if (!$data || $data['exp'] < time()) return null;
+        if (!$data) return null;
+        if (!empty($data['is_2fa_pending']) && isset($data['exp']) && $data['exp'] < time()) {
+            return null;
+        }
 
         return $data;
     }

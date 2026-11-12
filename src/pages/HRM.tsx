@@ -7,7 +7,8 @@ import {
   Send, Lock, Award, FileText, ChevronLeft, ChevronRight, Play, CheckCircle, ArrowLeft,
   LayoutDashboard, Clock, User, Building2, MapPin, ClipboardList, PenTool, MessageSquare, Info, Save, Plus, HelpCircle,
   Search, CheckCircle2, XCircle, Trash2, Eye, Flame, AlertCircle, Briefcase, BarChart2, Loader2, RefreshCw
-, ShieldCheck, Layers, GitBranch, ArrowRight } from 'lucide-react';
+, ShieldCheck, Layers, GitBranch, ArrowRight, Download, FileSpreadsheet } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../contexts/LanguageContext';
 import { EmptyCard } from '../components/ui/EmptyCard';
@@ -857,12 +858,14 @@ export default function HRM() {
         const checkRes = checkSettled.status === 'fulfilled' ? checkSettled.value : { data: [] };
         const todayRes = todaySettled.status === 'fulfilled' ? todaySettled.value : { data: [] };
 
-        const nextPayslips = payRes?.data || payRes || [];
+        const rawPayslips = payRes?.data || payRes || [];
+        const nextPayslips = Array.isArray(rawPayslips) ? rawPayslips : [];
         const checkData = checkRes?.data || checkRes || {};
-        const checkInsList = Array.isArray(checkData) ? checkData : (checkData.check_ins || []);
-        const shiftsList = checkData.shifts || [];
-        const leavesList = checkData.leaves || [];
-        const nextToday = Array.isArray(todayRes) ? todayRes : (todayRes?.data || []);
+        const checkInsList = Array.isArray(checkData) ? checkData : (Array.isArray(checkData.check_ins) ? checkData.check_ins : []);
+        const shiftsList = Array.isArray(checkData.shifts) ? checkData.shifts : [];
+        const leavesList = Array.isArray(checkData.leaves) ? checkData.leaves : [];
+        const rawToday = Array.isArray(todayRes) ? todayRes : (todayRes?.data || []);
+        const nextToday = Array.isArray(rawToday) ? rawToday : [];
 
         setDashboardPayslips(nextPayslips);
         setDashboardCheckIns(checkInsList);
@@ -1661,6 +1664,237 @@ export default function HRM() {
     return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(num) + ' đ';
   };
 
+  const resolveLeaveCompMetrics = useCallback((ps: any, targetPeriod?: string) => {
+    const uid = Number(ps.user_id || ps.id || 0);
+    const prof = profilesMap.get(uid) || ps;
+    const periodStr = String(targetPeriod || ps.month_year || payrollMonth || '').substring(0, 7);
+
+    const annualTotal = Number(ps.annual_leave_total ?? prof?.annual_leave_total ?? 12);
+    const annualUsedTotal = Number(ps.annual_leave_used ?? prof?.annual_leave_used ?? 0);
+    const annualRem = ps.remaining_annual_leave !== undefined
+      ? Number(ps.remaining_annual_leave)
+      : Math.max(0, Number((annualTotal - annualUsedTotal).toFixed(2)));
+
+    const compTotal = Number(ps.compensatory_leave_total ?? prof?.compensatory_leave_total ?? 0);
+    const compUsedTotal = Number(ps.compensatory_leave_used ?? prof?.compensatory_leave_used ?? 0);
+    const compRem = ps.remaining_compensatory_leave !== undefined
+      ? Number(ps.remaining_compensatory_leave)
+      : Math.max(0, Number((compTotal - compUsedTotal).toFixed(2)));
+
+    let annualMonthUsed = ps.annual_leave_month_used !== undefined ? Number(ps.annual_leave_month_used) : -1;
+    let compMonthUsed = ps.comp_leave_month_used !== undefined ? Number(ps.comp_leave_month_used) : -1;
+
+    if (annualMonthUsed < 0 || compMonthUsed < 0) {
+      let calcAnnual = 0;
+      let calcComp = 0;
+      if (Array.isArray(leaves) && periodStr) {
+        leaves.forEach((lv: any) => {
+          if (Number(lv.user_id) !== uid || lv.status !== 'approved') return;
+          const sMonth = String(lv.start_date || '').substring(0, 7);
+          const eMonth = String(lv.end_date || '').substring(0, 7);
+          if (sMonth === periodStr || eMonth === periodStr) {
+            const d = Number(lv.days_count || 0);
+            if (lv.leave_type === 'annual') calcAnnual += d;
+            else if (lv.leave_type === 'compensatory') calcComp += d;
+          }
+        });
+      }
+      calcAnnual += Number(ps.lateness_annual_deducted || 0);
+      calcComp += Number(ps.lateness_compensatory_deducted || 0);
+      if (annualMonthUsed < 0) annualMonthUsed = Number(calcAnnual.toFixed(2));
+      if (compMonthUsed < 0) compMonthUsed = Number(calcComp.toFixed(2));
+    }
+
+    const totalMonthUsed = Number((annualMonthUsed + compMonthUsed).toFixed(2));
+    const totalUsedAll = Number((annualUsedTotal + compUsedTotal).toFixed(2));
+    const totalRem = Number((annualRem + compRem).toFixed(2));
+
+    return {
+      annualTotal,
+      annualMonthUsed,
+      annualUsedTotal,
+      annualRem,
+      compTotal,
+      compMonthUsed,
+      compUsedTotal,
+      compRem,
+      totalMonthUsed,
+      totalUsedAll,
+      totalRem,
+    };
+  }, [profilesMap, leaves, payrollMonth]);
+
+  const handleExportMonthlyPayrollExcel = useCallback((periodOverride?: string) => {
+    const targetPeriod = periodOverride || payrollMonth;
+    const targetRows = periodOverride
+      ? allPayslips.filter((ps: any) => ps.month_year === periodOverride)
+      : (payslips.length > 0 ? payslips : allPayslips.filter((ps: any) => ps.month_year === targetPeriod));
+
+    if (!Array.isArray(targetRows) || targetRows.length === 0) {
+      toast.error(t('Không có dữ liệu bảng lương trong kỳ này để xuất file Excel'));
+      return;
+    }
+
+    const periodLabel = getPeriodLabel(targetPeriod);
+    const headers = [
+      'STT',
+      'Mã NV',
+      'Họ và tên',
+      'Phòng ban',
+      'Chức vụ',
+      'Giới tính',
+      'Kỳ lương',
+      'Lương thỏa thuận (Deal)',
+      'Lương đóng BHXH',
+      'Công thực tế',
+      'Công tiêu chuẩn',
+      'Tổng phép năm',
+      'Phép năm sử dụng (Trong tháng)',
+      'Phép năm đã dùng (Lũy kế)',
+      'Phép năm còn lại',
+      'Tổng phép bù',
+      'Phép bù sử dụng (Trong tháng)',
+      'Phép bù đã dùng (Lũy kế)',
+      'Phép bù còn lại',
+      'Tổng Phép + Bù sử dụng (Trong tháng)',
+      'Tổng Phép + Bù đã dùng (Lũy kế)',
+      'Tổng Phép + Bù còn lại',
+      'Đi trễ (Phút)',
+      'Định mức miễn trễ (Phút)',
+      'Tăng ca (Ngày)',
+      'Lương ngày công',
+      'Lương tăng ca',
+      'Thưởng chuyên cần',
+      'Thưởng KPI / Hoa hồng',
+      'Tổng phụ cấp',
+      'Khấu trừ BHXH (10.5%)',
+      'Thuế TNCN',
+      'Trừ tạm ứng',
+      'Thực lĩnh (NET)',
+      'Ngân hàng',
+      'Số tài khoản',
+      'Trạng thái',
+    ];
+
+    const dataRows = targetRows.map((ps: any, idx: number) => {
+      const uid = Number(ps.user_id || 0);
+      const prof = profilesMap.get(uid) || ps;
+      const lv = resolveLeaveCompMetrics(ps, targetPeriod);
+      const gRaw = String(ps.gender || prof?.gender || '').toLowerCase().trim();
+      const isMale = gRaw === 'male' || gRaw === 'nam';
+      const genderLabel = isMale ? 'Nam' : 'Nữ';
+      const grace = Number(ps.late_grace_minutes) || (isMale ? 30 : 60);
+      const dealSalary = Number(ps.deal_salary || prof?.deal_salary || ps.base_salary || prof?.base_salary || 0);
+      const baseSalary = Number(ps.base_salary || prof?.base_salary || 0);
+      const statusMap: Record<string, string> = {
+        draft: 'Bản nháp',
+        pending_confirm: 'Chờ NV xác nhận',
+        confirmed: 'Đã xác nhận',
+        disputed: 'Đang khiếu nại',
+        locked: 'Đã chốt sổ',
+      };
+
+      return [
+        idx + 1,
+        ps.employee_code || prof?.employee_code || `NV${String(uid).padStart(3, '0')}`,
+        ps.employee_name || prof?.name || '',
+        ps.department || prof?.department || 'Văn phòng',
+        ps.job_title || prof?.job_title || 'Nhân viên',
+        genderLabel,
+        targetPeriod,
+        Math.round(dealSalary),
+        Math.round(baseSalary),
+        Number(ps.work_days_actual || 0),
+        Number(ps.work_days_required || 26),
+        lv.annualTotal,
+        lv.annualMonthUsed,
+        lv.annualUsedTotal,
+        lv.annualRem,
+        lv.compTotal,
+        lv.compMonthUsed,
+        lv.compUsedTotal,
+        lv.compRem,
+        lv.totalMonthUsed,
+        lv.totalUsedAll,
+        lv.totalRem,
+        Number(ps.lateness_minutes || 0),
+        grace,
+        Number(ps.overtime_days || 0),
+        Math.round(Number(ps.salary_basic_calculated || 0)),
+        Math.round(Number(ps.overtime_salary || 0)),
+        Math.round(Number(ps.diligence_bonus || 0)),
+        Math.round(Number(ps.kpi_bonus || 0)),
+        Math.round(Number(ps.allowance_total || 0)),
+        Math.round(Number(ps.insurance_bhxh || 0)),
+        Math.round(Number(ps.tax_tncn || 0)),
+        Math.round(Number(ps.advance_deducted || 0)),
+        Math.round(Number(ps.net_salary || 0)),
+        ps.bank_name || prof?.bank_name || '',
+        ps.bank_account || prof?.bank_account || '',
+        statusMap[String(ps.status || 'draft')] || String(ps.status || 'Bản nháp'),
+      ];
+    });
+
+    const sumCol = (colIdx: number) => dataRows.reduce((s, r) => s + Number(r[colIdx] || 0), 0);
+    const totalRow: (string | number)[] = [
+      '',
+      '',
+      'TỔNG CỘNG',
+      `${dataRows.length} nhân sự`,
+      '',
+      '',
+      targetPeriod,
+      sumCol(7),
+      sumCol(8),
+      Number(sumCol(9).toFixed(2)),
+      Number(sumCol(10).toFixed(2)),
+      Number(sumCol(11).toFixed(2)),
+      Number(sumCol(12).toFixed(2)),
+      Number(sumCol(13).toFixed(2)),
+      Number(sumCol(14).toFixed(2)),
+      Number(sumCol(15).toFixed(2)),
+      Number(sumCol(16).toFixed(2)),
+      Number(sumCol(17).toFixed(2)),
+      Number(sumCol(18).toFixed(2)),
+      Number(sumCol(19).toFixed(2)),
+      Number(sumCol(20).toFixed(2)),
+      Number(sumCol(21).toFixed(2)),
+      sumCol(22),
+      '',
+      Number(sumCol(24).toFixed(2)),
+      sumCol(25),
+      sumCol(26),
+      sumCol(27),
+      sumCol(28),
+      sumCol(29),
+      sumCol(30),
+      sumCol(31),
+      sumCol(32),
+      sumCol(33),
+      '',
+      '',
+      '',
+    ];
+
+    const aoa: (string | number)[][] = [
+      [`BẢNG LƯƠNG THÁNG & THEO DÕI PHÉP NĂM / NGHỈ BÙ — ${periodLabel.toUpperCase()}`],
+      [`Ngày xuất báo cáo: ${new Date().toLocaleString('vi-VN')} | Bao gồm chi tiết Phép năm & Phép bù sử dụng / còn lại`],
+      [],
+      headers,
+      ...dataRows,
+      totalRow,
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = headers.map((h, i) => ({
+      wch: i === 2 ? 26 : i === 3 || i === 4 ? 20 : Math.max(h.length + 4, 14),
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `BangLuong_${String(targetPeriod).substring(0, 10)}`);
+    XLSX.writeFile(wb, `Bang_Luong_Va_Phep_Bu_${targetPeriod}.xlsx`);
+    toast.success(`Đã xuất Excel Bảng lương & Phép/Bù (${periodLabel})`);
+  }, [payrollMonth, payslips, allPayslips, profilesMap, resolveLeaveCompMetrics, t]);
+
   return (
     <div>
       {/* Top Header */}
@@ -1803,6 +2037,33 @@ export default function HRM() {
               width="100%"
             />
           </div>
+
+          {/* Nút Xuất Excel Bảng Lương & Phép Bù */}
+          {(activeTab === 'payroll' || activeTab === 'profiles' || activeTab === 'dashboard') && (
+            <button
+              onClick={() => handleExportMonthlyPayrollExcel(payrollMonth)}
+              className="btn outline sm"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                height: '32px',
+                padding: '0 12px',
+                borderRadius: '8px',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                color: '#0f172a',
+                borderColor: '#cbd5e1',
+                background: '#ffffff',
+                whiteSpace: 'nowrap',
+                cursor: 'pointer'
+              }}
+              title="Xuất Excel Bảng lương tháng kèm Phép năm & Nghỉ bù sử dụng / còn lại"
+            >
+              <FileSpreadsheet size={14} style={{ color: '#BD1D2D' }} />
+              {t('Xuất Excel Bảng lương')}
+            </button>
+          )}
 
           {/* Checkbox Chờ tôi duyệt (chỉ hiện khi ở tab leaves hoặc advances) */}
           {(activeTab === 'leaves' || activeTab === 'advances') && (
@@ -3339,18 +3600,28 @@ export default function HRM() {
                     <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>{t('Lịch sử & Danh sách kỳ lương')}</h3>
                     <p style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)', marginTop: 2 }}>{t('Quản lý, theo dõi các kỳ tính lương, chốt số và lưu trữ hồ sơ lương công ty.')}</p>
                   </div>
-                  <button
-                    onClick={() => {
-                      setNewPeriodMonth(new Date().toISOString().substring(0, 7));
-                      setNewPeriodWorkDays(26);
-                      setIsNewPeriodModalOpen(true);
-                    }}
-                    className="btn primary"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}
-                  >
-                    <Plus size={16} />
-                    {t('Tính lương Kỳ mới')}
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={() => handleExportMonthlyPayrollExcel(payrollMonth)}
+                      className="btn outline"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, fontWeight: 700, borderColor: '#cbd5e1', color: '#0f172a' }}
+                    >
+                      <Download size={16} style={{ color: '#BD1D2D' }} />
+                      {t('Xuất Excel Bảng lương & Phép/Bù')}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setNewPeriodMonth(new Date().toISOString().substring(0, 7));
+                        setNewPeriodWorkDays(26);
+                        setIsNewPeriodModalOpen(true);
+                      }}
+                      className="btn primary"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}
+                    >
+                      <Plus size={16} />
+                      {t('Tính lương Kỳ mới')}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Grid of Grouped Periods */}
@@ -3405,14 +3676,23 @@ export default function HRM() {
                           </div>
                         </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: 4 }}>
+                          <button
+                            onClick={() => handleExportMonthlyPayrollExcel(group.period)}
+                            className="btn outline sm"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', justifyContent: 'center', padding: '0 10px', flexShrink: 0 }}
+                            title="Xuất Excel Bảng lương & Phép/Bù kỳ này"
+                          >
+                            <Download size={14} style={{ color: '#BD1D2D' }} />
+                            Excel
+                          </button>
                           <button
                             onClick={() => {
                               setPayrollMonth(group.period);
                               setViewMode('detail');
                             }}
                             className="btn outline sm"
-                            style={{ width: '100%', justifyContent: 'center' }}
+                            style={{ flex: 1, justifyContent: 'center' }}
                           >
                             {t('Xem chi tiết')} &rarr;
                           </button>
@@ -3844,6 +4124,16 @@ export default function HRM() {
 
               {/* Main Month Action Controls & Close Button */}
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center', overflowX: 'auto', paddingBottom: '2px' }} className="custom-scrollbar">
+                <button
+                  onClick={() => handleExportMonthlyPayrollExcel(payrollMonth)}
+                  disabled={payslips.length === 0}
+                  className="btn outline"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', fontSize: '0.85rem', fontWeight: 700, color: '#0f172a', borderColor: '#cbd5e1', background: '#ffffff', whiteSpace: 'nowrap', height: '38px' }}
+                  title="Xuất Excel Bảng lương tháng kèm Phép năm & Nghỉ bù sử dụng / còn lại"
+                >
+                  <Download size={16} style={{ color: '#BD1D2D' }} />
+                  {t('Xuất Excel (Kèm Phép/Bù)')}
+                </button>
                 {!payslips.some(ps => ps.status === 'locked') && (
                   <>
                     {/* Secondary Actions */}
@@ -4090,6 +4380,8 @@ export default function HRM() {
                             {t('Nhân viên')}
                           </th>
                         <th style={{ padding: '12px 8px' }}>{t('Công thực tế / Chuẩn')}</th>
+                        <th style={{ padding: '12px 8px', minWidth: '138px' }}>{t('Phép / Bù sử dụng')}</th>
+                        <th style={{ padding: '12px 8px', minWidth: '138px' }}>{t('Phép / Bù còn lại')}</th>
                         <th style={{ padding: '12px 8px' }}>{t('Đi trễ (phút)')}</th>
                         <th style={{ padding: '12px 8px' }}>{t('Tăng ca (ngày)')}</th>
                         <th style={{ padding: '12px 8px' }}>{t('Lương ngày công')}</th>
@@ -4178,6 +4470,39 @@ export default function HRM() {
                                 )}
                               </div>
                             </td>
+                            {(() => {
+                              const lv = resolveLeaveCompMetrics(ps, payrollMonth);
+                              return (
+                                <>
+                                  <td style={{ padding: '12px 8px', whiteSpace: 'nowrap' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.76rem' }}>
+                                      <div>
+                                        <span style={{ color: 'var(--color-text-muted)' }}>Trong kỳ: </span>
+                                        <strong style={{ color: '#0f172a' }}>{lv.annualMonthUsed}P</strong>
+                                        <span style={{ color: '#94a3b8' }}> + </span>
+                                        <strong style={{ color: '#334155' }}>{lv.compMonthUsed}B</strong>
+                                      </div>
+                                      <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                                        Lũy kế: <strong>{lv.annualUsedTotal}/{lv.annualTotal}P</strong> • <strong>{lv.compUsedTotal}/{lv.compTotal}B</strong>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td style={{ padding: '12px 8px', whiteSpace: 'nowrap' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.76rem' }}>
+                                      <div>
+                                        <span style={{ color: 'var(--color-text-muted)' }}>Còn: </span>
+                                        <strong style={{ color: lv.annualRem > 0 ? '#0f172a' : '#BD1D2D' }}>{lv.annualRem}P</strong>
+                                        <span style={{ color: '#94a3b8' }}> • </span>
+                                        <strong style={{ color: lv.compRem > 0 ? '#0f172a' : '#64748b' }}>{lv.compRem}B</strong>
+                                      </div>
+                                      <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                                        Tổng quỹ còn: <strong style={{ color: lv.totalRem > 0 ? '#10b981' : '#BD1D2D' }}>{lv.totalRem} ngày</strong>
+                                      </div>
+                                    </div>
+                                  </td>
+                                </>
+                              );
+                            })()}
                             <td style={{ padding: '14px 8px' }}>
                               {(() => {
                                 const empProf = profilesMap.get(Number(ps.user_id));

@@ -79,53 +79,74 @@ export const FinancialDashboard: React.FC = () => {
         api.get('/deposits').catch(() => ({ data: [] }))
       ]);
 
-      const wonVal = sRes.data?.data?.won_value || 1450000000;
-      const expensesVal = sRes.data?.data?.expenses || 480000000;
+      const rawPos = poRes?.data?.data?.items || poRes?.data?.data || poRes?.data?.items || poRes?.data || [];
+      const safePos = Array.isArray(rawPos) ? rawPos : [];
+      const rawSos = soRes?.data?.data?.items || soRes?.data?.data || soRes?.data?.items || soRes?.data || [];
+      const safeSos = Array.isArray(rawSos) ? rawSos : [];
+
+      setPoList(safePos);
+      setSoList(safeSos);
+
+      const dashData = sRes?.data?.data || {};
+      const salesReport = eRes?.data?.data || {};
+      const wonVal = Number(dashData.won_value ?? dashData.revenue ?? 0);
+      const expensesVal = Number(dashData.expenses ?? dashData.total_expenses ?? 0);
       const netVal = wonVal - expensesVal;
-      
+
+      const cancelledDeposits = safeSos.filter((d: any) => d.status === 'cancelled' || d.status === 'failed');
+      const cancelledSum = cancelledDeposits.reduce((acc: number, d: any) => acc + Number(d.price || 0), 0);
+
       setStats({
         revenue: wonVal,
-        revenueChange: '+12.5%',
+        revenueChange: dashData.revenue_growth_pct != null ? `${dashData.revenue_growth_pct >= 0 ? '+' : ''}${dashData.revenue_growth_pct}%` : '0%',
         expenses: expensesVal,
-        expensesChange: '+3.2%',
+        expensesChange: dashData.expense_growth_pct != null ? `${dashData.expense_growth_pct >= 0 ? '+' : ''}${dashData.expense_growth_pct}%` : '0%',
         netProfit: netVal,
-        netChange: '+16.8%',
-        cancellations: 45000000,
-        cancellationsChange: '-8.5%',
+        netChange: '0%',
+        cancellations: cancelledSum,
+        cancellationsChange: `${cancelledDeposits.length} đơn`,
         cancellationBullets: [
-          { text: t('Trước doanh thu (hạ cấp): 15M'), color: '#f59e0b' },
-          { text: t('Sau doanh thu (giữ cọc): 30M'), color: 'var(--color-primary)' }
+          { text: `${t('Tổng đơn hủy/bể cọc')}: ${cancelledDeposits.length}`, color: '#f59e0b' },
+          { text: `${t('Đơn hoàn tất cọc')}: ${safeSos.filter((d: any) => d.status === 'approved').length}`, color: 'var(--color-primary)' }
         ]
       });
 
-      // Giả lập biểu đồ dòng tiền thu chi
-      setFlowData([
-        { name: t('Tháng 2'), revenue: 980000000, expenses: 320000000, profit: 660000000 },
-        { name: t('Tháng 3'), revenue: 1100000000, expenses: 390000000, profit: 710000000 },
-        { name: t('Tháng 4'), revenue: 1350000000, expenses: 420000000, profit: 930000000 },
-        { name: t('Tháng 5'), revenue: 1200000000, expenses: 450000000, profit: 750000000 },
-        { name: t('Tháng 6'), revenue: 1500000000, expenses: 490000000, profit: 1010000000 },
-        { name: t('Tháng 7'), revenue: wonVal, expenses: expensesVal, profit: netVal }
-      ]);
+      const monthlyTrend = Array.isArray(salesReport?.monthly_trend) ? salesReport.monthly_trend : (Array.isArray(dashData?.monthly_revenue) ? dashData.monthly_revenue : []);
+      if (monthlyTrend.length > 0) {
+        setFlowData(monthlyTrend.map((m: any) => {
+          const rev = Number(m.revenue ?? m.won_value ?? 0);
+          const exp = Number(m.expenses ?? 0);
+          return {
+            name: m.month || m.label || m.name || '—',
+            revenue: rev,
+            expenses: exp,
+            profit: rev - exp
+          };
+        }));
+      } else {
+        setFlowData([
+          { name: t('Kỳ hiện tại'), revenue: wonVal, expenses: expensesVal, profit: netVal }
+        ]);
+      }
 
-      // Phân bổ trạng thái hóa đơn
+      const approvedCount = safeSos.filter((d: any) => d.status === 'approved').length;
+      const pendingCount = safeSos.filter((d: any) => d.status === 'pending' || d.status === 'paid').length;
+      const cancelledCount = cancelledDeposits.length;
       setInvoiceStatuses([
-        { name: t('Đã thanh toán'), value: 70, color: '#10b981' },
-        { name: t('Chờ thanh toán'), value: 20, color: '#3b82f6' },
-        { name: t('Quá hạn'), value: 7, color: '#f59e0b' },
-        { name: t('Đã hủy'), value: 3, color: '#ef4444' }
+        { name: t('Đã thanh toán'), value: approvedCount, color: '#10b981' },
+        { name: t('Chờ thanh toán'), value: pendingCount, color: '#3b82f6' },
+        { name: t('Đã hủy'), value: cancelledCount, color: '#ef4444' }
       ]);
 
-      // Danh sách đối soát cọc và đổi căn
-      setCancellationList([
-        { id: 'deal-009', client: 'Nguyễn Văn Hùng', amount: 15000000, type: t('Hủy cọc trước doanh thu'), status: t('Đã hạ cấp lead'), date: '2026-07-25', note: 'Tự động giải phóng lead về Databank sau khi hết giờ bảo mật.' },
-        { id: 'deal-012', client: 'Trần Thị Mai', amount: 30000000, type: t('Hủy cọc sau doanh thu'), status: t('Giữ nguyên cọc'), date: '2026-07-20', note: 'Đã phát sinh dòng tiền thực thu đợt 1, giữ nguyên trạng thái đặt cọc.' },
-        { id: 'deal-015', client: 'Lê Hoàng Nam', amount: 0, type: t('Đổi căn hộ'), status: t('Liên kết deal mới'), date: '2026-07-18', note: 'Đổi từ căn CH-1205 sang CH-1208. Deal cũ đánh dấu Đã đổi.' }
-      ]);
-
-      const rawPos = poRes?.data?.data?.items || poRes?.data?.data || poRes?.data || [];
-      setPoList(Array.isArray(rawPos) ? rawPos : []);
-      setSoList(soRes?.data?.data || soRes?.data || []);
+      setCancellationList(cancelledDeposits.slice(0, 10).map((d: any) => ({
+        id: d.unit_code || `#${d.id}`,
+        client: d.full_name || d.customer_name || '—',
+        amount: Number(d.price || 0),
+        type: t('Hủy đặt cọc'),
+        status: t('Đã hủy'),
+        date: d.updated_at ? new Date(d.updated_at).toLocaleDateString('vi-VN') : (d.created_at ? new Date(d.created_at).toLocaleDateString('vi-VN') : '—'),
+        note: d.notes || d.cancel_reason || '—'
+      })));
 
     } catch (e) {
       toast.error(t('Lỗi tải dữ liệu kế toán'));

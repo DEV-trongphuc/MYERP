@@ -1022,9 +1022,11 @@ trait ChatGeminiEngineTrait {
                         'id' => $stepId,
                         'turn' => $toolTurn,
                         'tool_name' => $toolName,
+                        'args' => $toolArgs,
                         'status' => $stepStatus,
                         'duration_ms' => $durationMs,
-                        'label' => $isDisambig ? "Phát hiện nhiều lựa chọn cần xác nhận ({$toolName})" : "Hoàn tất tra cứu {$toolName} ({$durationMs}ms)"
+                        'label' => $isDisambig ? "Phát hiện nhiều lựa chọn cần xác nhận ({$toolName})" : "Hoàn tất tra cứu {$toolName} ({$durationMs}ms)",
+                        'working_state' => $this->buildStepWorkingState($toolName, $toolArgs, is_array($toolResult) ? $toolResult : [])
                     ];
                     $localSteps[] = $stepEntry;
 

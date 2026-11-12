@@ -28,6 +28,15 @@ const PublicSurvey: React.FC = () => {
     const [timeLeft, setTimeLeft] = useState<number | null>(null);
     const startTime = useRef(Date.now());
     const sessionToken = useRef(crypto.randomUUID());
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+    const scrollToSurveyTop = () => {
+        if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        } else if (typeof window !== 'undefined') {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    };
 
     const srcParam = searchParams.get('src') || searchParams.get('utm_source') || 'direct_link';
     const utmMedium = searchParams.get('utm_medium') || undefined;
@@ -330,6 +339,7 @@ const PublicSurvey: React.FC = () => {
         }
         setPageHistory(prev => [...prev, currentPage]);
         setCurrentPage(p => p + 1);
+        scrollToSurveyTop();
     };
 
     const handleBack = () => {
@@ -340,6 +350,7 @@ const PublicSurvey: React.FC = () => {
         } else {
             setCurrentPage(p => Math.max(0, p - 1));
         }
+        scrollToSurveyTop();
     };
 
     const evaluateCorrect = (correct: any, ans: SurveyAnswer | undefined, matchType?: 'exact' | 'contains') => {
@@ -486,8 +497,12 @@ const PublicSurvey: React.FC = () => {
 
     // ─── Loading ────────────────────────────────────────────────────────────
     if (isLoading) return (
-        <div className="min-h-screen py-10 px-4 relative overflow-hidden" style={{ background: pageBgColor, fontFamily: theme.fontFamily }}>
-            <div className="relative z-10 max-w-2xl mx-auto bg-white dark:bg-[#111827] rounded-[20px] border border-slate-200 overflow-hidden">
+        <div
+            ref={scrollContainerRef}
+            className="w-full h-dvh flex-1 min-w-0 overflow-y-auto overflow-x-hidden py-6 sm:py-10 px-3 sm:px-4 relative"
+            style={{ background: pageBgColor, fontFamily: theme.fontFamily, WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', touchAction: 'pan-y pan-x' }}
+        >
+            <div className="relative z-10 w-full max-w-2xl mx-auto bg-white dark:bg-[#111827] rounded-[20px] border border-slate-200 overflow-hidden">
                 <div className="h-32 w-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06]" />
                 <div className="p-6 sm:p-8 space-y-5">
                     <div className="space-y-2">
@@ -517,7 +532,11 @@ const PublicSurvey: React.FC = () => {
         };
         const m = msgs[error] ?? { icon: '❌', title: 'Có lỗi xảy ra', desc: error };
         return (
-            <div className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden" style={{ background: pageBgColor, fontFamily: theme.fontFamily }}>
+            <div
+                ref={scrollContainerRef}
+                className="w-full h-dvh flex-1 min-w-0 overflow-y-auto overflow-x-hidden flex items-center justify-center p-6 relative"
+                style={{ background: pageBgColor, fontFamily: theme.fontFamily, WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', touchAction: 'pan-y pan-x' }}
+            >
                 <div className="relative z-10 text-center max-w-sm bg-white border border-slate-200 rounded-[18px] p-10">
                     <div className="text-5xl mb-4">{m.icon}</div>
                     <h1 className="text-xl font-bold text-slate-900 mb-2">{m.title}</h1>
@@ -531,7 +550,11 @@ const PublicSurvey: React.FC = () => {
     if (submitted) {
         const ty = thankYouData ?? survey?.thankYouPage;
         return (
-            <div className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden" style={{ background: pageBgColor, fontFamily: theme.fontFamily }}>
+            <div
+                ref={scrollContainerRef}
+                className="w-full h-dvh flex-1 min-w-0 overflow-y-auto overflow-x-hidden flex items-center justify-center p-6 relative"
+                style={{ background: pageBgColor, fontFamily: theme.fontFamily, WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', touchAction: 'pan-y pan-x' }}
+            >
                 <CanvasConfetti particleCount={150} />
                 
                 <motion.div 
@@ -631,10 +654,14 @@ const PublicSurvey: React.FC = () => {
     const progress = totalPages > 1 ? ((currentPage + 1) / totalPages) * 100 : 100;
 
     return (
-        <div className="min-h-screen py-10 px-4 relative overflow-hidden" style={{ background: pageBgColor, fontFamily: theme.fontFamily }}>
+        <div
+            ref={scrollContainerRef}
+            className="w-full h-dvh flex-1 min-w-0 overflow-y-auto overflow-x-hidden py-5 sm:py-10 px-3 sm:px-4 relative"
+            style={{ background: pageBgColor, fontFamily: theme.fontFamily, WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', touchAction: 'pan-y pan-x' }}
+        >
             {/* Progress bar — floats ABOVE the white card */}
             {survey.settings?.showProgressBar !== false && totalPages > 1 && (
-                <div className="relative z-10 max-w-2xl mx-auto mb-4">
+                <div className="relative z-10 w-full max-w-2xl mx-auto mb-4">
                     <div className="flex items-center justify-between text-xs text-slate-600 mb-2">
                         <span className="font-semibold tracking-wide">Trang {currentPage + 1} / {totalPages}</span>
                         <span className="font-bold" style={{ color: theme.primaryColor ?? '#BD1D2D' }}>{Math.round(progress)}%</span>
@@ -647,7 +674,7 @@ const PublicSurvey: React.FC = () => {
 
             {/* Quiz Timer */}
             {timeLeft !== null && (
-                <div className="relative z-20 max-w-2xl mx-auto mb-4 flex justify-end">
+                <div className="relative z-20 w-full max-w-2xl mx-auto mb-4 flex justify-end">
                     <div className="bg-white border border-slate-200 rounded-[var(--radius-md)] px-4 py-2 flex items-center gap-2 text-slate-900">
                         <div className={`w-2.5 h-2.5 rounded-full ${timeLeft < 60 ? 'bg-red-500 animate-pulse border border-red-300' : 'bg-green-500'}`}></div>
                         <span className="text-sm font-black tracking-widest font-mono">{formatTime(timeLeft)}</span>
@@ -656,7 +683,7 @@ const PublicSurvey: React.FC = () => {
             )}
 
             {/* White content card */}
-            <div className="relative z-10 max-w-2xl mx-auto bg-white rounded-[18px] border border-slate-200 overflow-hidden">
+            <div className="relative z-10 w-full max-w-2xl mx-auto bg-white rounded-[18px] border border-slate-200 overflow-hidden mb-6">
 
                 {/* Survey header */}
                 {currentPage === 0 && (
@@ -664,7 +691,7 @@ const PublicSurvey: React.FC = () => {
                 )}
 
                 {/* Blocks */}
-                <div className="flex flex-col gap-5 mt-6 px-5 sm:px-8">
+                <div className="flex flex-col gap-4 sm:gap-5 mt-5 sm:mt-6 px-3.5 sm:px-8 min-w-0">
                     {currentBlocks.map((block, idx) => (
                         <BlockRenderer
                             key={block.id}
@@ -971,7 +998,7 @@ const BlockRenderer: React.FC<{
     return (
         <div 
             id={`block-${block.id}`}
-            className={`p-5 border transition-all ${hasError ? 'border-red-500' : 'border-slate-200'}`}
+            className={`p-4 sm:p-5 border transition-all min-w-0 max-w-full overflow-hidden ${hasError ? 'border-red-500' : 'border-slate-200'}`}
             style={cardStyle}
         >
             <label className="block font-bold mb-3 text-sm text-slate-900" style={{ color: textColor, textAlign }}>
@@ -1267,42 +1294,54 @@ const BlockRenderer: React.FC<{
 
             {/* Matrix single/multi */}
             {(block.type === 'matrix_single' || block.type === 'matrix_multi') && (
-                <div className="overflow-x-auto w-full mt-2">
-                    <table className="w-full text-sm text-left border-collapse">
+                <div
+                    className="overflow-x-auto w-full max-w-full mt-2 rounded-xl border border-slate-200/80"
+                    style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y' }}
+                >
+                    <table className="survey-matrix-table w-full text-xs sm:text-sm text-left border-collapse">
                         <thead>
-                            <tr>
-                                <th className="p-2 border-b border-slate-200"></th>
+                            <tr className="bg-slate-100/90">
+                                <th className="sticky left-0 z-10 bg-slate-100 p-2 sm:p-2.5 border-b border-r border-slate-200/80 min-w-[105px] max-w-[145px] sm:min-w-[160px] sm:max-w-[260px] text-[11px] sm:text-xs font-bold text-slate-600">
+                                    Tiêu chí
+                                </th>
                                 {(block.matrixCols ?? []).map(col => (
-                                    <th key={col.id} className="p-2 border-b border-slate-200 text-center font-semibold text-slate-700 leading-tight">{col.label}</th>
+                                    <th key={col.id} className="p-1.5 sm:p-2.5 border-b border-slate-200 text-center font-semibold text-slate-700 text-[11px] sm:text-xs leading-tight min-w-[54px] sm:min-w-[76px] whitespace-normal">
+                                        {col.label}
+                                    </th>
                                 ))}
                             </tr>
                         </thead>
                         <tbody>
-                            {(block.matrixRows ?? []).map((row, rIdx) => (
-                                <tr key={row.id} className={rIdx % 2 === 0 ? 'bg-slate-50/50' : 'bg-white'}>
-                                    <td className="p-2.5 font-medium text-slate-800 min-w-[120px]">{row.label}</td>
-                                    {(block.matrixCols ?? []).map(col => {
-                                        const ansObj = (answer?.answer_json as Record<string, string[]>) ?? {};
-                                        const isSelected = (ansObj[row.id] ?? []).includes(col.id);
-                                        const toggle = () => {
-                                            const curList = ansObj[row.id] ?? [];
-                                            const newList = block.type === 'matrix_single'
-                                                ? [col.id]
-                                                : (isSelected ? curList.filter(id => id !== col.id) : [...curList, col.id]);
-                                            onAnswer({ answer_json: { ...ansObj, [row.id]: newList } as any });
-                                        };
-                                        return (
-                                            <td key={col.id} className="p-2.5 text-center" onClick={toggle}>
-                                                <div className={`mx-auto w-5 h-5 flex items-center justify-center cursor-pointer transition-all ${block.type === 'matrix_single' ? 'rounded-full' : 'rounded-md'} border-2`}
-                                                    style={{ borderColor: isSelected ? accent : '#94a3b8', background: isSelected ? accent : 'white' }}
-                                                >
-                                                    {isSelected && (block.type === 'matrix_single' ? <div className="w-2 h-2 bg-white rounded-full" /> : <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>)}
-                                                </div>
-                                            </td>
-                                        );
-                                    })}
-                                </tr>
-                            ))}
+                            {(block.matrixRows ?? []).map((row, rIdx) => {
+                                const rowBg = rIdx % 2 === 0 ? 'bg-slate-50' : 'bg-white';
+                                return (
+                                    <tr key={row.id} className={`${rowBg} border-b border-slate-100 last:border-b-0`}>
+                                        <td className={`sticky left-0 z-10 ${rowBg} p-2 sm:p-2.5 border-r border-slate-200/70 font-medium text-slate-800 text-xs sm:text-sm min-w-[105px] max-w-[145px] sm:min-w-[160px] sm:max-w-[260px] whitespace-normal break-words leading-snug`}>
+                                            {row.label}
+                                        </td>
+                                        {(block.matrixCols ?? []).map(col => {
+                                            const ansObj = (answer?.answer_json as Record<string, string[]>) ?? {};
+                                            const isSelected = (ansObj[row.id] ?? []).includes(col.id);
+                                            const toggle = () => {
+                                                const curList = ansObj[row.id] ?? [];
+                                                const newList = block.type === 'matrix_single'
+                                                    ? [col.id]
+                                                    : (isSelected ? curList.filter(id => id !== col.id) : [...curList, col.id]);
+                                                onAnswer({ answer_json: { ...ansObj, [row.id]: newList } as any });
+                                            };
+                                            return (
+                                                <td key={col.id} className="p-2 sm:p-2.5 text-center cursor-pointer select-none" onClick={toggle}>
+                                                    <div className={`mx-auto w-5 h-5 flex items-center justify-center cursor-pointer transition-all ${block.type === 'matrix_single' ? 'rounded-full' : 'rounded-md'} border-2`}
+                                                        style={{ borderColor: isSelected ? accent : '#94a3b8', background: isSelected ? accent : 'white' }}
+                                                    >
+                                                        {isSelected && (block.type === 'matrix_single' ? <div className="w-2 h-2 bg-white rounded-full" /> : <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>)}
+                                                    </div>
+                                                </td>
+                                            );
+                                        })}
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>

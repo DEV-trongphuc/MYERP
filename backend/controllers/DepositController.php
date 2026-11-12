@@ -428,10 +428,18 @@ class DepositController {
                 $params[] = trim($b['unit_code']) ?: '—';
             }
             if (isset($b['price'])) {
+                if ((float)$b['price'] <= 0) {
+                    $this->db->rollBack();
+                    respond(422, null, 'Giá trị đặt cọc (price) phải lớn hơn 0', false);
+                }
                 $fields[] = "price = ?";
                 $params[] = (float)$b['price'];
             }
             if (isset($b['expected_commission'])) {
+                if ((float)$b['expected_commission'] < 0) {
+                    $this->db->rollBack();
+                    respond(422, null, 'Hoa hồng dự kiến không được âm', false);
+                }
                 $fields[] = "expected_commission = ?";
                 $params[] = (float)$b['expected_commission'];
             }
@@ -925,16 +933,23 @@ class DepositController {
             respond(400, null, 'Lỗi tải file: ' . $file['error'], false);
         }
 
-        // Check ownership of deposit
+        // Check ownership of deposit (supports both contact and company/supplier deposits)
         $stmtDep = $this->db->prepare("
-            SELECT d.id, d.contact_id, d.created_by, d.accountant_id, d.price, c.tenant_id, c.owner_id, c.full_name AS customer_name
+            SELECT d.id, d.contact_id, d.created_by, d.accountant_id, d.price, d.status,
+                   COALESCE(c.tenant_id, comp.tenant_id, sup.tenant_id) AS tenant_id,
+                   c.owner_id, COALESCE(c.full_name, comp.name, sup.name) AS customer_name
             FROM deposits d 
-            JOIN contacts c ON d.contact_id = c.id 
-            WHERE d.id = ? AND c.tenant_id = ?
+            LEFT JOIN contacts c ON d.contact_id = c.id 
+            LEFT JOIN companies comp ON d.company_id = comp.id
+            LEFT JOIN suppliers sup ON d.supplier_id = sup.id
+            WHERE d.id = ? AND COALESCE(c.tenant_id, comp.tenant_id, sup.tenant_id) = ?
         ");
         $stmtDep->execute([$id, $auth['tenant_id']]);
         $dep = $stmtDep->fetch();
         if (!$dep) respond(404, null, 'Đơn hàng không tồn tại', false);
+        if (($dep['status'] ?? '') === 'cancelled') {
+            respond(422, null, 'Đơn hàng đã bị hủy, không thể tải lên UNC', false);
+        }
 
         if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
             $stmtCoop = $this->db->prepare("
@@ -998,7 +1013,7 @@ class DepositController {
 
             $stmt = $this->db->prepare("
                 UPDATE deposit_milestones 
-                SET unc_file_path = ?, status = 'paid' 
+                SET unc_file_path = ?, status = CASE WHEN status = 'approved' THEN 'approved' ELSE 'paid' END
                 WHERE id = ? AND deposit_id = ?
             ");
             $stmt->execute([$relPath, $milestoneId, $id]);
@@ -1258,18 +1273,33 @@ class DepositController {
             respond(404, null, 'Đơn đặt hàng không tồn tại', false);
         }
 
-        $stmt = $this->db->prepare("
-            UPDATE deposit_milestones 
-            SET status = 'failed', unc_file_path = NULL 
-            WHERE id = ? AND deposit_id = ?
-        ");
-        $stmt->execute([$milestoneId, $id]);
+        $this->db->beginTransaction();
+        try {
+            $stmtLockMile = $this->db->prepare("SELECT status, milestone_name, expected_amount FROM deposit_milestones WHERE id = ? AND deposit_id = ? FOR UPDATE");
+            $stmtLockMile->execute([$milestoneId, $id]);
+            $mileData = $stmtLockMile->fetch();
+            if (!$mileData) {
+                $this->db->rollBack();
+                respond(404, null, 'Giai đoạn thanh toán không tồn tại', false);
+            }
+            if (($mileData['status'] ?? '') === 'approved') {
+                $this->db->rollBack();
+                respond(422, null, 'Giai đoạn thanh toán này đã được duyệt thu tiền, không thể từ chối', false);
+            }
+
+            $stmt = $this->db->prepare("
+                UPDATE deposit_milestones 
+                SET status = 'failed', unc_file_path = NULL 
+                WHERE id = ? AND deposit_id = ? AND status != 'approved'
+            ");
+            $stmt->execute([$milestoneId, $id]);
+            $this->db->commit();
+        } catch (\Throwable $eRej) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            respond(500, null, 'Lỗi từ chối đợt thanh toán: ' . $eRej->getMessage(), false);
+        }
 
         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'REJECT_DEPOSIT_MILESTONE', 'deposit_milestone', $milestoneId, "Từ chối đóng tiền đợt ID: $milestoneId. Lý do: $reason");
-
-        $stmtMile = $this->db->prepare("SELECT milestone_name, expected_amount FROM deposit_milestones WHERE id = ? AND deposit_id = ?");
-        $stmtMile->execute([$milestoneId, $id]);
-        $mileData = $stmtMile->fetch();
 
         if ($depositData && $mileData) {
             $uIdsToNotify = [];
@@ -1477,10 +1507,12 @@ class DepositController {
 
         // 1. Verify deposit ownership/permissions
         $stmtDep = $this->db->prepare("
-            SELECT d.id, d.created_by, c.owner_id, d.contact_id, d.currency, d.exchange_rate, c.full_name 
+            SELECT d.id, d.created_by, c.owner_id, d.contact_id, d.currency, d.exchange_rate, COALESCE(c.full_name, comp.name, sup.name) AS full_name
             FROM deposits d
-            JOIN contacts c ON d.contact_id = c.id
-            WHERE d.id = ? AND c.tenant_id = ?
+            LEFT JOIN contacts c ON d.contact_id = c.id
+            LEFT JOIN companies comp ON d.company_id = comp.id
+            LEFT JOIN suppliers sup ON d.supplier_id = sup.id
+            WHERE d.id = ? AND COALESCE(c.tenant_id, comp.tenant_id, sup.tenant_id) = ?
         ");
         $stmtDep->execute([$id, $tid]);
         $dep = $stmtDep->fetch();
@@ -1528,6 +1560,10 @@ class DepositController {
             if ($isAdmin) {
                 if (isset($input['expected_commission'])) {
                     $expComm = (float)$input['expected_commission'];
+                    if ($expComm < 0) {
+                        $this->db->rollBack();
+                        respond(422, null, 'Hoa hồng dự kiến không được âm', false);
+                    }
                     
                     $stmtGetComm = $this->db->prepare("SELECT expected_commission FROM deposits WHERE id = ?");
                     $stmtGetComm->execute([$id]);
@@ -1739,6 +1775,10 @@ class DepositController {
                     $origAmount = isset($m['original_amount']) ? (float)$m['original_amount'] : null;
                     $payDate = !empty($m['expected_pay_date']) ? $m['expected_pay_date'] : null;
                     if (empty($mName)) continue;
+                    if ($mAmount <= 0 && ($origAmount === null || $origAmount <= 0)) {
+                        $this->db->rollBack();
+                        respond(422, null, 'Số tiền giai đoạn thanh toán phải lớn hơn 0', false);
+                    }
 
                     if ($currency !== 'VND') {
                         if ($origAmount === null || $origAmount <= 0) {

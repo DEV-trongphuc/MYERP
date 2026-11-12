@@ -208,7 +208,7 @@ class MetaAdsController
         } catch (\Throwable $e) {}
 
         // 3. Verified IDEAS MBA 577 Token fallback
-        $tokens[] = 'EAAUZCMBsoUygBSJ5GBZB5lUXSaZAqlUxSBeGUs8E0DlVY6ln5ATcYjc6hEXINJdq3LZBDWptd8GdqJra8hbZAnBNfTtW2bytZB4dlXHZBulrZATdiNPfh56bZAbOjPi2PIEdD4BcxvmB9CotZCKKrBmKiIZBFRO6JrxgOwZBBgZCDsZCvRuEKCGTtfdiMazjsiZCoGPZCUz9Id02WQuN';
+        $tokens[] = 'EAAUZCMBsoUygBSteDpzZBVVgR7KZA45pYIexVjVdZAYulIycwiIIMY8OdHZCWf3g5efpZBOIS4yPE5ngkTmOuLZBEWaC0r4tmUzgGD6bagCp5B4PdgFhwmcE8frtAR672e4TnFBorRfQp876imahcT3Y8CAEbFWRYRKpoNlftAKlMTU6YtSGZCPmrbuiOKGHrhTTyQBqJQ1h';
         $tokens = array_values(array_unique(array_filter($tokens)));
 
         $res = [
@@ -1092,7 +1092,7 @@ class MetaAdsController
         $toDate = $bounds['to_sql'];
 
         $overviewCacheKey = implode('|', [$tenantId, $bounds['canonical_key'], (string)$fromDate, (string)$toDate, $campaignFilter, $formFilter, $ownerFilter]);
-        $overviewCacheFile = rtrim(sys_get_temp_dir(), '/\\') . '/myerp_meta_overview_v3_' . $tenantId . '_' . md5($overviewCacheKey) . '.json';
+        $overviewCacheFile = rtrim(sys_get_temp_dir(), '/\\') . '/myerp_meta_overview_v5_' . $tenantId . '_' . md5($overviewCacheKey) . '.json';
         if (!$forceRefresh && empty($_GET['nocache']) && @is_file($overviewCacheFile) && (time() - (int)@filemtime($overviewCacheFile)) < 15) {
             $cachedOv = @json_decode((string)@file_get_contents($overviewCacheFile), true);
             if (is_array($cachedOv) && isset($cachedOv['summary'])) {
@@ -1100,6 +1100,96 @@ class MetaAdsController
                 return;
             }
         }
+
+        // Fetch tenant's canonical pipeline stages catalog (1..14 + nurture/lost)
+        $pipelineCatalogMap = [];
+        $minDbOrderIndex = 1;
+        try {
+            $stmtPsCat = $this->db->prepare("
+                SELECT id, name, system_slug, order_index, color
+                FROM pipeline_stages
+                WHERE tenant_id = ?
+                ORDER BY order_index ASC, id ASC
+            ");
+            $stmtPsCat->execute([$tenantId]);
+            $psCatRows = $stmtPsCat->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            foreach ($psCatRows as $psCatRow) {
+                if ((int)($psCatRow['order_index'] ?? 1) === 0) {
+                    $minDbOrderIndex = 0;
+                    break;
+                }
+            }
+            foreach ($psCatRows as $psCatRow) {
+                $rawName = trim((string)($psCatRow['name'] ?? ''));
+                if (preg_match('/^\s*0?(\d{1,2})\s*[-–]/u', $rawName, $mOrd)) {
+                    $ord = (int)$mOrd[1];
+                } else {
+                    $rawOrd = (int)($psCatRow['order_index'] ?? 0);
+                    $ord = $minDbOrderIndex === 0 ? ($rawOrd + 1) : $rawOrd;
+                }
+                $slug = strtolower(trim((string)($psCatRow['system_slug'] ?? '')));
+                if ($ord >= 1 && $ord <= 14 && !isset($pipelineCatalogMap[(string)$ord])) {
+                    $pipelineCatalogMap[(string)$ord] = [
+                        'key' => (string)$ord,
+                        'stage_order' => $ord,
+                        'stage_name' => $rawName,
+                        'system_slug' => $slug,
+                        'color' => (string)($psCatRow['color'] ?? '#64748b'),
+                        'bucket' => $ord >= 13 ? 'win_13_14' : ($ord >= 3 ? 'qualified_3_12' : 'new_1_2'),
+                        'count' => 0,
+                    ];
+                }
+            }
+        } catch (\Throwable $ePsCat) {
+        }
+        $default14Names = [
+            1 => '01 – New Lead',
+            2 => '02 – Contact Attempted',
+            3 => '03 – Connected',
+            4 => '04 – Needed',
+            5 => '05 – Discovery Completed',
+            6 => '06 – Program Matched',
+            7 => '07 – Proposal Sent',
+            8 => '08 – Evaluation / Objection',
+            9 => '09 – Application Started',
+            10 => '10 – Application Completed',
+            11 => '11 – Admission Approved',
+            12 => '12 – Offer Accepted',
+            13 => '13 – Deposit / Tuition Payment',
+            14 => '14 – Enrolled',
+        ];
+        for ($i = 1; $i <= 14; $i++) {
+            $k = (string)$i;
+            if (!isset($pipelineCatalogMap[$k])) {
+                $pipelineCatalogMap[$k] = [
+                    'key' => $k,
+                    'stage_order' => $i,
+                    'stage_name' => $default14Names[$i],
+                    'system_slug' => 'stage_' . $i,
+                    'color' => $i >= 13 ? '#10b981' : ($i >= 3 ? '#2563eb' : '#64748b'),
+                    'bucket' => $i >= 13 ? 'win_13_14' : ($i >= 3 ? 'qualified_3_12' : 'new_1_2'),
+                    'count' => 0,
+                ];
+            }
+        }
+        $pipelineCatalogMap['nurture'] = [
+            'key' => 'nurture',
+            'stage_order' => 98,
+            'stage_name' => 'CS dài hạn (Nurture)',
+            'system_slug' => 'nurture',
+            'color' => '#0284c7',
+            'bucket' => 'nurture',
+            'count' => 0,
+        ];
+        $pipelineCatalogMap['lost'] = [
+            'key' => 'lost',
+            'stage_order' => 99,
+            'stage_name' => 'Lost / Không tiềm năng',
+            'system_slug' => 'lost',
+            'color' => '#e11d48',
+            'bucket' => 'lost',
+            'count' => 0,
+        ];
 
         // 1. Query all real attributed leads from `contact_meta_attribution` joined with `contacts`, `users`, `pipeline_stages`
         $where = ["cma.tenant_id = ?", "cma.deleted_at IS NULL"];
@@ -1162,8 +1252,12 @@ class MetaAdsController
                 c.stage_id,
                 c.owner_id,
                 c.program AS contact_program,
+                c.notes AS contact_notes,
+                c.source AS contact_source,
+                c.created_at AS contact_created_at,
                 COALESCE(ps.order_index, 1) AS stage_order,
                 COALESCE(ps.name, '01 - New Lead') AS stage_name,
+                ps.system_slug AS stage_slug,
                 u.full_name AS owner_name,
                 u.avatar_url AS owner_avatar,
                 u.email AS owner_email
@@ -1499,6 +1593,8 @@ class MetaAdsController
                 'won' => 0,
                 'revenue' => 0.0,
                 'sample_programs' => [],
+                'stage_counts' => [],
+                'attributed_leads' => [],
             ];
 
             if ($asId !== '' && isset($adsetsMap[$asId])) {
@@ -1548,6 +1644,7 @@ class MetaAdsController
         $programBuckets = [];
         $consultTimeBuckets = [];
         $engExpBuckets = [];
+        $allAttributedLeads = [];
 
         foreach ($rows as $r) {
             $isOrganic = ((int)($r['is_organic'] ?? 0)) === 1;
@@ -1587,8 +1684,13 @@ class MetaAdsController
                 $surveyCompletedCount++;
             }
 
-            $stageOrder = (int)($r['stage_order'] ?? 1);
-            $stageName = trim((string)($r['stage_name'] ?? '01 - New Lead'));
+            $stageName = trim((string)($r['stage_name'] ?? '01 – New Lead'));
+            if (preg_match('/^\s*0?(\d{1,2})\s*[-–]/u', $stageName, $mStageNum)) {
+                $stageOrder = (int)$mStageNum[1];
+            } else {
+                $rawOrd = (int)($r['stage_order'] ?? 0);
+                $stageOrder = ($minDbOrderIndex === 0 && !empty($r['stage_id'])) ? ($rawOrd + 1) : max(1, $rawOrd);
+            }
             $contactStatus = strtolower(trim((string)($r['contact_status'] ?? 'lead')));
             $actCount = (int)($r['activity_count'] ?? 0);
             $depAmt = (float)($r['deposit_amount'] ?? 0);
@@ -1629,8 +1731,26 @@ class MetaAdsController
             }
             $actualRevenue += $depAmt;
 
-            $effStageOrder = $isEnrolled ? 14 : ($isWon ? 13 : max(1, $stageOrder));
+            $effStageOrder = $isEnrolled ? 14 : ($isWon ? 13 : max(1, min(14, $stageOrder)));
             $effBucket = $isWon ? 'win_13_14' : ($isQualified312 ? 'qualified_3_12' : 'new_1_2');
+            $rawPipeStatus = strtolower(trim((string)($r['pipeline_status'] ?? '')));
+            $rawLeadStatus = strtolower(trim((string)($r['lead_status'] ?? '')));
+            $rawStageSlug = strtolower(trim((string)($r['stage_slug'] ?? '')));
+
+            if ($rawPipeStatus === 'lost' || $rawPipeStatus === 'not_lead' || $rawStageSlug === 'lost' || $rawLeadStatus === 'unqualified' || $contactStatus === 'churned' || $stageOrder === 99) {
+                $matrixStageKey = 'lost';
+                $matrixStageName = $pipelineCatalogMap['lost']['stage_name'] ?? 'Lost / Không tiềm năng';
+            } elseif ($rawPipeStatus === 'nurture' || $rawStageSlug === 'nurture' || $stageOrder === 98) {
+                $matrixStageKey = 'nurture';
+                $matrixStageName = $pipelineCatalogMap['nurture']['stage_name'] ?? 'CS dài hạn (Nurture)';
+            } else {
+                $matrixStageKey = (string)$effStageOrder;
+                $matrixStageName = $pipelineCatalogMap[$matrixStageKey]['stage_name'] ?? ($stageName !== '' ? $stageName : sprintf('%02d - Stage %d', $effStageOrder, $effStageOrder));
+            }
+            if (isset($pipelineCatalogMap[$matrixStageKey])) {
+                $pipelineCatalogMap[$matrixStageKey]['count']++;
+            }
+
             if (!isset($pipelineStagesMap[$effStageOrder])) {
                 $pipelineStagesMap[$effStageOrder] = [
                     'stage_order' => $effStageOrder,
@@ -1838,6 +1958,8 @@ class MetaAdsController
                     'won' => 0,
                     'revenue' => 0.0,
                     'sample_programs' => [],
+                    'stage_counts' => [],
+                    'attributed_leads' => [],
                 ];
             } else {
                 if (empty($adsMap[$adKey]['form_name']) && $formName !== '') {
@@ -1845,6 +1967,52 @@ class MetaAdsController
                 }
             }
             $adsMap[$adKey]['leads']++;
+            $adsMap[$adKey]['stage_counts'][$matrixStageKey] = ($adsMap[$adKey]['stage_counts'][$matrixStageKey] ?? 0) + 1;
+
+            $leadNoteSnippet = '';
+            $rawContactNotes = trim((string)($r['contact_notes'] ?? ''));
+            if ($rawContactNotes !== '') {
+                if (preg_match('/\[Cập nhật nguồn:[^\]]+\]/u', $rawContactNotes, $mNote)) {
+                    $leadNoteSnippet = $mNote[0];
+                } else {
+                    $lines = array_values(array_filter(array_map('trim', preg_split('/\r\n|\r|\n/', $rawContactNotes)), static fn($l) => $l !== '' && $l !== '---'));
+                    if (!empty($lines)) {
+                        $leadNoteSnippet = mb_substr((string)end($lines), 0, 95, 'UTF-8');
+                    }
+                }
+            }
+            $leadCreatedAt = trim((string)($r['lead_created_time'] ?: ($r['contact_created_at'] ?? '')));
+            $leadRecord = [
+                'attribution_id' => (int)($r['attribution_id'] ?? 0),
+                'contact_id' => (int)($r['contact_id'] ?? 0),
+                'full_name' => trim((string)($r['full_name'] ?? '')) ?: 'Khách hàng Meta Ads',
+                'phone' => trim((string)($r['phone'] ?? '')),
+                'email' => trim((string)($r['email'] ?? '')),
+                'ad_id' => $adId,
+                'ad_key' => $adKey,
+                'ad_name' => $adName,
+                'adset_id' => $adsetId,
+                'adset_name' => $adsetName,
+                'campaign_id' => $campId,
+                'campaign_name' => $campName,
+                'form_name' => $formName,
+                'stage_key' => $matrixStageKey,
+                'stage_order' => $effStageOrder,
+                'stage_name' => $matrixStageName,
+                'stage_bucket' => $matrixStageKey === 'lost' ? 'lost' : ($matrixStageKey === 'nurture' ? 'nurture' : $effBucket),
+                'is_qualified' => $isQualified && $matrixStageKey !== 'lost',
+                'is_won' => $isWon,
+                'owner_id' => $ownerId,
+                'owner_name' => $ownerId > 0 ? trim((string)($r['owner_name'] ?: ('Tư vấn viên #' . $ownerId))) : 'Chưa phân bổ',
+                'owner_avatar' => $ownerId > 0 ? ($r['owner_avatar'] ?? null) : null,
+                'program' => $progRaw,
+                'degree' => $degRaw,
+                'consultation_time' => $timeRaw,
+                'note_snippet' => $leadNoteSnippet,
+                'created_at' => $leadCreatedAt,
+            ];
+            $adsMap[$adKey]['attributed_leads'][] = $leadRecord;
+            $allAttributedLeads[] = $leadRecord;
             if ($isNew12) {
                 $adsMap[$adKey]['new_1_2'] = ($adsMap[$adKey]['new_1_2'] ?? 0) + 1;
             }
@@ -2012,6 +2180,8 @@ class MetaAdsController
                         'won' => $adObj['won'],
                         'revenue' => $adObj['revenue'],
                         'sample_programs' => array_keys($adObj['sample_programs']),
+                        'stage_counts' => $adObj['stage_counts'] ?? [],
+                        'attributed_leads' => $adObj['attributed_leads'] ?? [],
                     ];
                 }
                 usort($nestedAds, static fn($a, $b) => ($b['spend'] <=> $a['spend']) ?: ($b['leads'] <=> $a['leads']));
@@ -2198,6 +2368,8 @@ class MetaAdsController
                 'won' => $adItem['won'],
                 'revenue' => $adItem['revenue'],
                 'sample_programs' => array_keys($adItem['sample_programs']),
+                'stage_counts' => $adItem['stage_counts'] ?? [],
+                'attributed_leads' => $adItem['attributed_leads'] ?? [],
             ];
         }
         usort($adList, static fn($a, $b) => ($b['spend'] <=> $a['spend']) ?: ($b['leads'] <=> $a['leads']));
@@ -2818,6 +2990,8 @@ class MetaAdsController
             ],
             'pipeline_tiers' => $pipelineTiers,
             'by_pipeline_stage' => $byPipelineStage,
+            'pipeline_stages_catalog' => array_values($pipelineCatalogMap),
+            'attributed_leads' => $allAttributedLeads,
             'interaction_stats' => [
                 'video_plays' => $accountVideoPlays,
                 'thruplays' => $accountThruPlays,

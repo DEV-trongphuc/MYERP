@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { Plus, Search, Phone, PhoneOff, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Upload, ChevronDown, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, UserPlus, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, ChevronLeft, GraduationCap, SlidersHorizontal, RotateCcw, Sparkles, BarChart3, MessageSquare, Globe, GitBranch, Ticket, ClipboardList, Flame } from 'lucide-react';
+import { Plus, Search, Phone, PhoneOff, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Upload, ChevronDown, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, UserPlus, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, ChevronLeft, GraduationCap, SlidersHorizontal, RotateCcw, Sparkles, BarChart3, MessageSquare, Globe, GitBranch, Ticket, ClipboardList, Flame, Bell, CreditCard, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar, getColorFromName } from '../components/ui/Avatar';
 import { useUIStore } from '../store/uiStore';
@@ -35,6 +35,10 @@ import { ReportDataModal } from '../components/ui/ReportDataModal';
 import { TableContextMenu } from '../components/ui/TableContextMenu';
 import { pushOverlay, removeOverlay } from '../utils/overlayStack';
 import { CrmSendTemplateEmailModal, CrmBulkMarketingModal, CrmFilterToStaticListModal } from '../components/crm/CrmMarketingModals';
+import { ClassGradebookModal } from '../components/academic/ClassGradebookModal';
+import { LecturerInvitationAnd1on1Modal } from '../components/academic/LecturerInvitationAnd1on1Modal';
+import { SubjectAnnouncementModal } from '../components/academic/SubjectAnnouncementModal';
+import { StudentOnboardingEmailModal } from '../components/academic/StudentOnboardingEmailModal';
 
 const PAGE_SIZE = 10;
 
@@ -769,6 +773,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   }, [searchParams, isActiveInstance]);
 
   const [studentCounts, setStudentCounts] = useState<{ nop_ho_so?: number; le_phi?: number; chinh_thuc?: number }>({});
+  const [showClassGradebookModal, setShowClassGradebookModal] = useState(false);
+  const [showAcademic1on1Modal, setShowAcademic1on1Modal] = useState(false);
+  const [lecturerModalState, setLecturerModalState] = useState<{ isOpen: boolean; tab: 'invitation' | '1on1' }>({ isOpen: false, tab: '1on1' });
+  const [showAcademicTbcdModal, setShowAcademicTbcdModal] = useState(false);
+  const [showOnboardingEmailModal, setShowOnboardingEmailModal] = useState(false);
   const fetchStudentCounts = async () => {
     try {
       const res = await api.get('/contacts/student-counts');
@@ -2894,11 +2903,14 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   return (
     <div className="page-container contacts-page-container">
       {/* Header */}
-      <div className="page-header" style={{ marginBottom: isMobile ? '0.75rem' : '1.5rem', gap: '14px' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', width: '100%', justifyContent: 'space-between' }}>
+      {segment === 'customer' ? (
+        <div className="page-header" style={{ marginBottom: isMobile ? '0.75rem' : '1.25rem', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {/* Row 1: Title + View Switcher + Primary Actions */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', width: '100%' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <h1 className="page-title" style={{ margin: 0 }}>{segment === 'customer' ? (studentSubTab === 'le_phi' ? 'Lệ phí hồ sơ' : studentSubTab === 'nop_ho_so' ? 'Nộp hồ sơ' : 'Học viên chính thức') : 'Tiềm năng'}</h1>
+              <h1 className="page-title" style={{ margin: 0, fontSize: '1.45rem', fontWeight: 800, color: '#0f172a' }}>
+                {studentSubTab === 'le_phi' ? 'Lệ phí hồ sơ' : studentSubTab === 'nop_ho_so' ? 'Nộp hồ sơ' : 'Học viên chính thức'}
+              </h1>
               {activeMainTab === 'list' && (
                 <span style={{ fontSize: '0.85rem', color: 'var(--color-text-light)', fontWeight: 600, marginTop: '2px' }}>
                   {loading ? '(...)' : `(${total} liên hệ)`}
@@ -2906,7 +2918,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
               )}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              {/* View Switcher: Danh sách Học viên / Tổng quan Data */}
               <div
                 className="touch-scroll-x"
                 style={{
@@ -2918,12 +2931,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   borderRadius: '10px',
                   gap: '3px',
                   height: '40px',
-                  boxSizing: 'border-box',
-                  maxWidth: '100%',
-                  overflowX: 'auto',
-                  scrollbarWidth: 'none',
-                  WebkitOverflowScrolling: 'touch'
-                }}>
+                  boxSizing: 'border-box'
+                }}
+              >
                 <button
                   type="button"
                   onClick={() => setActiveMainTab('list')}
@@ -2945,37 +2955,12 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   }}
                 >
                   <Users size={14} />
-                  <span>{segment === 'customer' ? 'Danh sách Học viên' : 'Danh sách Tiềm năng'}</span>
+                  <span>Danh sách Học viên</span>
                 </button>
-                {isManagerOrAbove && segment === 'tiem_nang' && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveMainTab('performance')}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      height: '32px',
-                      padding: '0 13px',
-                      borderRadius: '7px',
-                      border: 'none',
-                      background: activeMainTab === 'performance' ? 'var(--color-surface)' : 'transparent',
-                      color: activeMainTab === 'performance' ? 'var(--color-primary, #BD1D2D)' : 'var(--color-text-muted)',
-                      fontWeight: activeMainTab === 'performance' ? 700 : 600,
-                      fontSize: '0.82rem',
-                      cursor: 'pointer',
-                      boxShadow: activeMainTab === 'performance' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    <BarChart3 size={14} />
-                    <span>Dashboard Hiệu suất</span>
-                  </button>
-                )}
                 <button
                   type="button"
                   onClick={() => setActiveMainTab(activeMainTab === 'persona' ? 'list' : 'persona')}
-                  title="Tổng quan Data & Chân dung Khách hàng / Học viên"
+                  title="Tổng quan Data & Chân dung Học viên"
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -3001,170 +2986,112 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   <span>Tổng quan Data</span>
                 </button>
               </div>
-            </div>
-          </div>
-          {segment === 'customer' && (
-            <div
-              className="mobile-horizontal-strip touch-scroll-x"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                marginTop: '10px',
-                flexWrap: isMobile ? 'nowrap' : 'wrap',
-                overflowX: isMobile ? 'auto' : 'visible',
-                maxWidth: '100%',
-                scrollbarWidth: 'none',
-                WebkitOverflowScrolling: 'touch'
-              }}
-            >
-              <button
-                type="button"
-                className={`btn ${studentSubTab === 'chinh_thuc' ? 'primary' : 'outline'} sm`}
-                onClick={() => {
-                  setSearchParams({ tab: 'chinh_thuc' });
-                  setPage(1);
-                }}
-                style={{
-                  borderRadius: '20px',
-                  fontSize: '0.8rem',
-                  fontWeight: studentSubTab === 'chinh_thuc' ? 700 : 500,
-                  padding: '6px 14px'
-                }}
-              >
-                Học viên chính thức {studentCounts.chinh_thuc !== undefined ? `(${studentCounts.chinh_thuc})` : ''}
-              </button>
-              <button
-                type="button"
-                className={`btn ${studentSubTab === 'le_phi' ? 'primary' : 'outline'} sm`}
-                onClick={() => {
-                  setSearchParams({ tab: 'le_phi' });
-                  setPage(1);
-                }}
-                style={{
-                  borderRadius: '20px',
-                  fontSize: '0.8rem',
-                  fontWeight: studentSubTab === 'le_phi' ? 700 : 500,
-                  padding: '6px 14px'
-                }}
-              >
-                Lệ phí hồ sơ {studentCounts.le_phi !== undefined ? `(${studentCounts.le_phi})` : ''}
-              </button>
-              <button
-                type="button"
-                className={`btn ${studentSubTab === 'nop_ho_so' ? 'primary' : 'outline'} sm`}
-                onClick={() => {
-                  setSearchParams({ tab: 'nop_ho_so' });
-                  setPage(1);
-                }}
-                style={{
-                  borderRadius: '20px',
-                  fontSize: '0.8rem',
-                  fontWeight: studentSubTab === 'nop_ho_so' ? 700 : 500,
-                  padding: '6px 14px'
-                }}
-              >
-                Nộp hồ sơ {studentCounts.nop_ho_so !== undefined ? `(${studentCounts.nop_ho_so})` : ''}
-              </button>
-            </div>
-          )}
-        </div>
-        
-        {/* Render header action buttons */}
-        {activeMainTab === 'list' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: '6px', flexShrink: 0 }}>
-            {canAddOrAssign && (
-            <>
-              <button 
-                className="btn primary" 
-                onClick={() => setShowCreateModal(true)} 
-                title="Thêm data mới"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', whiteSpace: 'nowrap', height: '40px', borderRadius: '10px', padding: '0 16px', fontSize: '0.84rem', fontWeight: 600 }}
-              >
-                <Plus size={16} />
-                <span>Thêm data</span>
-              </button>
-              <button 
-                className="btn outline" 
-                onClick={() => window.dispatchEvent(new CustomEvent('open-quick-add-lead'))} 
-                title="Giao data / chia data nhanh cho Sales"
-                style={{ 
-                  display: 'inline-flex', 
-                  alignItems: 'center', 
-                  gap: '7px', 
-                  whiteSpace: 'nowrap',
-                  height: '40px',
-                  borderRadius: '10px',
-                  padding: '0 16px',
-                  fontSize: '0.84rem',
-                  fontWeight: 600,
-                  background: 'var(--color-surface, #ffffff)',
-                  boxShadow: 'var(--shadow-sm)'
-                }}
-              >
-                <UserCheck size={16} />
-                <span>Giao data</span>
-              </button>
-            </>
-          )}
-          {!isMobile && user?.role !== 'viewer' && (
-            <div style={{ position: 'relative' }} ref={exportDropdownRef}>
-              <button 
-                type="button"
-                className="btn outline" 
-                onClick={() => setShowExportDropdown(!showExportDropdown)} 
-                disabled={isExporting} 
-                title="Hành động dữ liệu (Nhập / Xuất / Tạo Danh sách tĩnh Marketing)"
-                style={{ 
-                  display: 'inline-flex', 
-                  alignItems: 'center', 
-                  gap: '8px', 
-                  whiteSpace: 'nowrap', 
-                  height: '40px',
-                  borderRadius: '10px', 
-                  padding: '0 16px', 
-                  fontSize: '0.84rem', 
-                  fontWeight: 600,
-                  background: showExportDropdown ? 'var(--color-bg-light)' : 'var(--color-surface, #ffffff)',
-                  borderColor: showExportDropdown ? 'var(--color-primary)' : 'var(--color-border)',
-                  boxShadow: 'var(--shadow-sm)'
-                }}
-              >
-                {isExporting ? <Loader2 size={15} className="spin" /> : <Layers size={15} />}
-                <span>{isExporting ? 'Đang xử lý...' : 'Hành động'}</span>
-                <ChevronDown size={14} style={{ opacity: 0.75, transform: showExportDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />
-              </button>
 
-              <AnimatePresence>
-                {showExportDropdown && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 6, scale: 0.96 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 6, scale: 0.96 }}
-                    transition={{ duration: 0.15 }}
-                    style={{
-                      position: 'absolute',
-                      right: 0,
-                      top: 'calc(100% + 6px)',
-                      width: '285px',
-                      background: 'var(--color-surface)',
-                      border: '1px solid var(--color-border)',
-                      borderRadius: '12px',
-                      boxShadow: 'var(--shadow-lg, 0 12px 30px rgba(0,0,0,0.14))',
-                      padding: '6px',
-                      zIndex: 1000,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '2px'
+              {/* Thêm học viên */}
+              {activeMainTab === 'list' && canAddOrAssign && (
+                <button 
+                  className="btn primary" 
+                  onClick={() => setShowCreateModal(true)} 
+                  title="Thêm học viên mới"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', whiteSpace: 'nowrap', height: '40px', borderRadius: '10px', padding: '0 16px', fontSize: '0.84rem', fontWeight: 600 }}
+                >
+                  <Plus size={16} />
+                  <span>Thêm học viên</span>
+                </button>
+              )}
+
+              {/* Dropdown Hành động (Import, Export, Tạo danh sách tĩnh) */}
+              {activeMainTab === 'list' && !isMobile && user?.role !== 'viewer' && (
+                <div style={{ position: 'relative' }} ref={exportDropdownRef}>
+                  <button 
+                    type="button"
+                    className="btn outline" 
+                    onClick={() => setShowExportDropdown(!showExportDropdown)} 
+                    disabled={isExporting} 
+                    title="Hành động dữ liệu (Nhập / Xuất / Tạo Danh sách tĩnh Marketing & CTSV)"
+                    style={{ 
+                      display: 'inline-flex', 
+                      alignItems: 'center', 
+                      gap: '8px', 
+                      whiteSpace: 'nowrap', 
+                      height: '40px',
+                      borderRadius: '10px', 
+                      padding: '0 16px', 
+                      fontSize: '0.84rem', 
+                      fontWeight: 600,
+                      background: showExportDropdown ? 'var(--color-bg-light)' : 'var(--color-surface, #ffffff)',
+                      borderColor: showExportDropdown ? 'var(--color-primary)' : 'var(--color-border)',
+                      boxShadow: 'var(--shadow-sm)'
                     }}
                   >
-                    {!isSale && (
-                      <>
+                    {isExporting ? <Loader2 size={15} className="spin" /> : <Layers size={15} />}
+                    <span>{isExporting ? 'Đang xử lý...' : 'Hành động'}</span>
+                    <ChevronDown size={14} style={{ opacity: 0.75, transform: showExportDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />
+                  </button>
+
+                  <AnimatePresence>
+                    {showExportDropdown && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                        transition={{ duration: 0.15 }}
+                        style={{
+                          position: 'absolute',
+                          right: 0,
+                          top: 'calc(100% + 6px)',
+                          width: '285px',
+                          background: 'var(--color-surface)',
+                          border: '1px solid var(--color-border)',
+                          borderRadius: '12px',
+                          boxShadow: 'var(--shadow-lg, 0 12px 30px rgba(0,0,0,0.14))',
+                          padding: '6px',
+                          zIndex: 1000,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '2px'
+                        }}
+                      >
+                        {!isSale && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowExportDropdown(false);
+                                setShowImportExport(true);
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: '10px',
+                                padding: '8px 10px',
+                                border: 'none',
+                                background: 'transparent',
+                                color: 'var(--color-text)',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                                transition: 'background-color 0.15s'
+                              }}
+                              className="hover-bg-alt"
+                            >
+                              <div style={{ marginTop: '2px', color: '#2563eb' }}>
+                                <Upload size={15} />
+                              </div>
+                              <div>
+                                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)' }}>Nhập dữ liệu (Import Excel/CSV)</div>
+                                <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Tải lên danh sách học viên từ file</div>
+                              </div>
+                            </button>
+                            <div style={{ height: '1px', background: 'var(--color-border-light)', margin: '2px 0' }} />
+                          </>
+                        )}
+
                         <button
                           type="button"
                           onClick={() => {
                             setShowExportDropdown(false);
-                            setShowImportExport(true);
+                            setShowFilterStaticListModal(true);
                           }}
                           style={{
                             display: 'flex',
@@ -3181,57 +3108,24 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                           }}
                           className="hover-bg-alt"
                         >
-                          <div style={{ marginTop: '2px', color: '#2563eb' }}>
-                            <Upload size={15} />
+                          <div style={{ marginTop: '2px', color: '#BD1D2D' }}>
+                            <Users size={15} />
                           </div>
                           <div>
-                            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)' }}>Nhập dữ liệu (Import Excel/CSV)</div>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Tải lên danh sách khách hàng / học viên từ file</div>
+                            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)' }}>Tạo Danh sách tĩnh Marketing &amp; CTSV</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Lưu bộ lọc hiện tại thành danh sách chăm sóc</div>
                           </div>
                         </button>
-                        <div style={{ height: '1px', background: 'var(--color-border-light)', margin: '2px 0' }} />
-                      </>
-                    )}
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowExportDropdown(false);
-                        setShowFilterStaticListModal(true);
-                      }}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        gap: '10px',
-                        padding: '8px 10px',
-                        border: 'none',
-                        background: 'transparent',
-                        color: 'var(--color-text)',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                        transition: 'background-color 0.15s'
-                      }}
-                      className="hover-bg-alt"
-                    >
-                      <div style={{ marginTop: '2px', color: '#059669' }}>
-                        <List size={15} />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#059669' }}>Tạo Danh sách tĩnh (Mkt)</div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Đóng băng tệp khách hàng khớp bộ lọc sang Marketing</div>
-                      </div>
-                    </button>
-
-                    {!isSale && (
-                      <>
                         <div style={{ height: '1px', background: 'var(--color-border-light)', margin: '2px 0' }} />
+
                         <button
                           type="button"
                           onClick={() => {
                             setShowExportDropdown(false);
                             bulkExport('filtered');
                           }}
+                          disabled={isExporting}
                           style={{
                             display: 'flex',
                             alignItems: 'flex-start',
@@ -3247,56 +3141,589 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                           }}
                           className="hover-bg-alt"
                         >
-                          <div style={{ marginTop: '2px', color: 'var(--color-primary)' }}>
-                            <Filter size={15} />
-                          </div>
-                          <div>
-                            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text)' }}>Xuất dữ liệu theo bộ lọc đang xem</div>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Xuất chuẩn theo các tiêu chí & bộ lọc trên màn hình</div>
-                          </div>
-                        </button>
-
-                        <div style={{ height: '1px', background: 'var(--color-border-light)', margin: '2px 0' }} />
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowExportDropdown(false);
-                            bulkExport('full');
-                          }}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'flex-start',
-                            gap: '10px',
-                            padding: '8px 10px',
-                            border: 'none',
-                            background: 'transparent',
-                            color: 'var(--color-text)',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            textAlign: 'left',
-                            transition: 'background-color 0.15s'
-                          }}
-                          className="hover-bg-alt"
-                        >
-                          <div style={{ marginTop: '2px', color: 'var(--color-success)' }}>
+                          <div style={{ marginTop: '2px', color: '#059669' }}>
                             <Download size={15} />
                           </div>
                           <div>
-                            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text)' }}>Xuất toàn bộ dữ liệu</div>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Tất cả 100% trường khách hàng (hồ sơ, đào tạo, CRM...)</div>
+                            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)' }}>Xuất toàn bộ dữ liệu (CSV/Excel)</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Tải xuống file dữ liệu khớp 100% với bộ lọc</div>
                           </div>
                         </button>
-                      </>
+                      </motion.div>
                     )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                  </AnimatePresence>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Row 2: Subtabs phân luồng hồ sơ (Trái) + Toàn bộ chức năng học vụ (Phải) */}
+          {activeMainTab === 'list' && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+                flexWrap: 'wrap',
+                width: '100%',
+                paddingTop: '6px'
+              }}
+            >
+              {/* Subtabs Phân Luồng Hồ Sơ (Chuẩn Executive Segmented Control theo AGENTS.md Chapter V) */}
+              <div
+                className="touch-scroll-x"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  background: '#f1f5f9',
+                  border: '1px solid #e2e8f0',
+                  padding: '3px',
+                  borderRadius: '10px',
+                  gap: '2px',
+                  height: '38px',
+                  boxSizing: 'border-box'
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchParams({ tab: 'chinh_thuc' });
+                    setPage(1);
+                  }}
+                  style={{
+                    height: '32px',
+                    padding: '0 14px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    background: studentSubTab === 'chinh_thuc' ? '#ffffff' : 'transparent',
+                    color: studentSubTab === 'chinh_thuc' ? '#BD1D2D' : '#64748b',
+                    fontWeight: studentSubTab === 'chinh_thuc' ? 700 : 600,
+                    fontSize: '0.82rem',
+                    boxShadow: studentSubTab === 'chinh_thuc' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <GraduationCap size={14} />
+                  <span>Học viên chính thức {studentCounts.chinh_thuc !== undefined ? `(${studentCounts.chinh_thuc})` : ''}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchParams({ tab: 'le_phi' });
+                    setPage(1);
+                  }}
+                  style={{
+                    height: '32px',
+                    padding: '0 14px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    background: studentSubTab === 'le_phi' ? '#ffffff' : 'transparent',
+                    color: studentSubTab === 'le_phi' ? '#BD1D2D' : '#64748b',
+                    fontWeight: studentSubTab === 'le_phi' ? 700 : 600,
+                    fontSize: '0.82rem',
+                    boxShadow: studentSubTab === 'le_phi' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <CreditCard size={14} />
+                  <span>Lệ phí hồ sơ {studentCounts.le_phi !== undefined ? `(${studentCounts.le_phi})` : ''}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchParams({ tab: 'nop_ho_so' });
+                    setPage(1);
+                  }}
+                  style={{
+                    height: '32px',
+                    padding: '0 14px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    background: studentSubTab === 'nop_ho_so' ? '#ffffff' : 'transparent',
+                    color: studentSubTab === 'nop_ho_so' ? '#BD1D2D' : '#64748b',
+                    fontWeight: studentSubTab === 'nop_ho_so' ? 700 : 600,
+                    fontSize: '0.82rem',
+                    boxShadow: studentSubTab === 'nop_ho_so' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <FileText size={14} />
+                  <span>Nộp hồ sơ {studentCounts.nop_ho_so !== undefined ? `(${studentCounts.nop_ho_so})` : ''}</span>
+                </button>
+              </div>
+
+              {/* Academic Actions Hub (Thanh công cụ Học vụ & CTSV đầy đủ nhất) */}
+              <div
+                className="touch-scroll-x"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  maxWidth: '100%',
+                  overflowX: 'auto',
+                  scrollbarWidth: 'none',
+                  WebkitOverflowScrolling: 'touch'
+                }}
+              >
+                {/* 1. Gửi TBCĐ Môn học */}
+                <button
+                  type="button"
+                  onClick={() => setShowAcademicTbcdModal(true)}
+                  title="Gửi Thông Báo Chuyên Đề Môn học (Tự điền lịch, giảng viên, zoom & gửi 1 lượt cả lớp)"
+                  style={{
+                    height: '34px',
+                    padding: '0 13px',
+                    borderRadius: '8px',
+                    border: '1px solid #fecaca',
+                    background: '#fef2f2',
+                    color: '#BD1D2D',
+                    fontSize: '0.81rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 1px 2px rgba(189, 29, 45, 0.08)',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <Bell size={14} style={{ color: '#BD1D2D' }} />
+                  <span>Gửi TBCĐ Môn học</span>
+                </button>
+
+                {/* 2. Bảng điểm lớp */}
+                <button
+                  type="button"
+                  onClick={() => setShowClassGradebookModal(true)}
+                  title="Bảng điểm lớp & Quản lý điểm số học phần theo lớp"
+                  style={{
+                    height: '34px',
+                    padding: '0 13px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    color: '#0f172a',
+                    fontSize: '0.81rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <ClipboardList size={14} style={{ color: '#BD1D2D' }} />
+                  <span>Bảng điểm lớp</span>
+                </button>
+
+                {/* 3. Lịch hướng dẫn 1:1 */}
+                <button
+                  type="button"
+                  onClick={() => setLecturerModalState({ isOpen: true, tab: '1on1' })}
+                  title="Quản lý lịch hướng dẫn 1:1 Mentoring giữa học viên và Giảng viên / Chuyên gia"
+                  style={{
+                    height: '34px',
+                    padding: '0 13px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    color: '#0f172a',
+                    fontSize: '0.81rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <Calendar size={14} style={{ color: '#2563eb' }} />
+                  <span>Lịch hướng dẫn 1:1</span>
+                </button>
+
+                {/* 4. Thư tiếp nhận */}
+                <button
+                  type="button"
+                  onClick={() => setShowOnboardingEmailModal(true)}
+                  title="Gửi Thư Tiếp Nhận Học Viên & Hướng dẫn học tập các chương trình (UMEF, ISTEC, ESTIAM)"
+                  style={{
+                    height: '34px',
+                    padding: '0 13px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    color: '#0f172a',
+                    fontSize: '0.81rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <Mail size={14} style={{ color: '#059669' }} />
+                  <span>Thư tiếp nhận</span>
+                </button>
+
+                {/* 5. Mời giảng viên */}
+                <button
+                  type="button"
+                  onClick={() => setLecturerModalState({ isOpen: true, tab: 'invitation' })}
+                  title="Soạn thư mời giảng viên và tạo hợp đồng giảng dạy chuyên đề"
+                  style={{
+                    height: '34px',
+                    padding: '0 13px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    color: '#0f172a',
+                    fontSize: '0.81rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <UserCheck size={14} style={{ color: '#7c3aed' }} />
+                  <span>Mời giảng viên</span>
+                </button>
+              </div>
             </div>
           )}
         </div>
-        )}
-      </div>
+      ) : (
+        <div className="page-header" style={{ marginBottom: isMobile ? '0.75rem' : '1.5rem', gap: '14px' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', width: '100%', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <h1 className="page-title" style={{ margin: 0 }}>Tiềm năng</h1>
+                {activeMainTab === 'list' && (
+                  <span style={{ fontSize: '0.85rem', color: 'var(--color-text-light)', fontWeight: 600, marginTop: '2px' }}>
+                    {loading ? '(...)' : `(${total} liên hệ)`}
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <div
+                  className="touch-scroll-x"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    background: 'var(--color-border-light)',
+                    border: '1px solid var(--color-border)',
+                    padding: '3px',
+                    borderRadius: '10px',
+                    gap: '3px',
+                    height: '40px',
+                    boxSizing: 'border-box',
+                    maxWidth: '100%',
+                    overflowX: 'auto',
+                    scrollbarWidth: 'none',
+                    WebkitOverflowScrolling: 'touch'
+                  }}>
+                  <button
+                    type="button"
+                    onClick={() => setActiveMainTab('list')}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      height: '32px',
+                      padding: '0 13px',
+                      borderRadius: '7px',
+                      border: 'none',
+                      background: activeMainTab === 'list' ? 'var(--color-surface)' : 'transparent',
+                      color: activeMainTab === 'list' ? 'var(--color-primary, #BD1D2D)' : 'var(--color-text-muted)',
+                      fontWeight: activeMainTab === 'list' ? 700 : 600,
+                      fontSize: '0.82rem',
+                      cursor: 'pointer',
+                      boxShadow: activeMainTab === 'list' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <Users size={14} />
+                    <span>Danh sách Tiềm năng</span>
+                  </button>
+                  {isManagerOrAbove && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveMainTab('performance')}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        height: '32px',
+                        padding: '0 13px',
+                        borderRadius: '7px',
+                        border: 'none',
+                        background: activeMainTab === 'performance' ? 'var(--color-surface)' : 'transparent',
+                        color: activeMainTab === 'performance' ? 'var(--color-primary, #BD1D2D)' : 'var(--color-text-muted)',
+                        fontWeight: activeMainTab === 'performance' ? 700 : 600,
+                        fontSize: '0.82rem',
+                        cursor: 'pointer',
+                        boxShadow: activeMainTab === 'performance' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <BarChart3 size={14} />
+                      <span>Dashboard Hiệu suất</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setActiveMainTab(activeMainTab === 'persona' ? 'list' : 'persona')}
+                    title="Tổng quan Data & Chân dung Khách hàng / Học viên"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      height: '32px',
+                      padding: '0 13px',
+                      borderRadius: '7px',
+                      border: 'none',
+                      background: activeMainTab === 'persona' ? 'var(--color-surface)' : 'transparent',
+                      color: activeMainTab === 'persona' ? 'var(--color-primary, #BD1D2D)' : 'var(--color-text-muted)',
+                      fontWeight: activeMainTab === 'persona' ? 700 : 600,
+                      fontSize: '0.82rem',
+                      cursor: 'pointer',
+                      boxShadow: activeMainTab === 'persona' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <img
+                      src="/stickers/ideas/ideas_3.webp"
+                      alt="IDEAS"
+                      style={{ width: 18, height: 18, objectFit: 'contain', flexShrink: 0 }}
+                    />
+                    <span>Tổng quan Data</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Render header action buttons */}
+          {activeMainTab === 'list' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: '6px', flexShrink: 0 }}>
+              {canAddOrAssign && (
+              <>
+                <button 
+                  className="btn primary" 
+                  onClick={() => setShowCreateModal(true)} 
+                  title="Thêm data mới"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', whiteSpace: 'nowrap', height: '40px', borderRadius: '10px', padding: '0 16px', fontSize: '0.84rem', fontWeight: 600 }}
+                >
+                  <Plus size={16} />
+                  <span>Thêm data</span>
+                </button>
+                <button 
+                  className="btn outline" 
+                  onClick={() => window.dispatchEvent(new CustomEvent('open-quick-add-lead'))} 
+                  title="Giao data / chia data nhanh cho Sales"
+                  style={{ 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    gap: '7px', 
+                    whiteSpace: 'nowrap',
+                    height: '40px',
+                    borderRadius: '10px',
+                    padding: '0 16px',
+                    fontSize: '0.84rem',
+                    fontWeight: 600,
+                    background: 'var(--color-surface, #ffffff)',
+                    boxShadow: 'var(--shadow-sm)'
+                  }}
+                >
+                  <UserCheck size={16} />
+                  <span>Giao data</span>
+                </button>
+              </>
+            )}
+            {!isMobile && user?.role !== 'viewer' && (
+              <div style={{ position: 'relative' }} ref={exportDropdownRef}>
+                <button 
+                  type="button"
+                  className="btn outline" 
+                  onClick={() => setShowExportDropdown(!showExportDropdown)} 
+                  disabled={isExporting} 
+                  title="Hành động dữ liệu (Nhập / Xuất / Tạo Danh sách tĩnh Marketing)"
+                  style={{ 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    gap: '8px', 
+                    whiteSpace: 'nowrap', 
+                    height: '40px',
+                    borderRadius: '10px', 
+                    padding: '0 16px', 
+                    fontSize: '0.84rem', 
+                    fontWeight: 600,
+                    background: showExportDropdown ? 'var(--color-bg-light)' : 'var(--color-surface, #ffffff)',
+                    borderColor: showExportDropdown ? 'var(--color-primary)' : 'var(--color-border)',
+                    boxShadow: 'var(--shadow-sm)'
+                  }}
+                >
+                  {isExporting ? <Loader2 size={15} className="spin" /> : <Layers size={15} />}
+                  <span>{isExporting ? 'Đang xử lý...' : 'Hành động'}</span>
+                  <ChevronDown size={14} style={{ opacity: 0.75, transform: showExportDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />
+                </button>
+
+                <AnimatePresence>
+                  {showExportDropdown && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                      transition={{ duration: 0.15 }}
+                      style={{
+                        position: 'absolute',
+                        right: 0,
+                        top: 'calc(100% + 6px)',
+                        width: '285px',
+                        background: 'var(--color-surface)',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: '12px',
+                        boxShadow: 'var(--shadow-lg, 0 12px 30px rgba(0,0,0,0.14))',
+                        padding: '6px',
+                        zIndex: 1000,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '2px'
+                      }}
+                    >
+                      {!isSale && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowExportDropdown(false);
+                              setShowImportExport(true);
+                            }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: '10px',
+                              padding: '8px 10px',
+                              border: 'none',
+                              background: 'transparent',
+                              color: 'var(--color-text)',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                              transition: 'background-color 0.15s'
+                            }}
+                            className="hover-bg-alt"
+                          >
+                            <div style={{ marginTop: '2px', color: '#2563eb' }}>
+                              <Upload size={15} />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)' }}>Nhập dữ liệu (Import Excel/CSV)</div>
+                              <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Tải lên danh sách khách hàng / học viên từ file</div>
+                            </div>
+                          </button>
+                          <div style={{ height: '1px', background: 'var(--color-border-light)', margin: '2px 0' }} />
+                        </>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowExportDropdown(false);
+                          setShowFilterStaticListModal(true);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: '10px',
+                          padding: '8px 10px',
+                          border: 'none',
+                          background: 'transparent',
+                          color: 'var(--color-text)',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          transition: 'background-color 0.15s'
+                        }}
+                        className="hover-bg-alt"
+                      >
+                        <div style={{ marginTop: '2px', color: '#BD1D2D' }}>
+                          <Users size={15} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)' }}>Tạo Danh sách tĩnh Marketing &amp; CTSV</div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Lưu bộ lọc hiện tại thành danh sách chăm sóc</div>
+                        </div>
+                      </button>
+
+                      <div style={{ height: '1px', background: 'var(--color-border-light)', margin: '2px 0' }} />
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowExportDropdown(false);
+                          bulkExport('filtered');
+                        }}
+                        disabled={isExporting}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: '10px',
+                          padding: '8px 10px',
+                          border: 'none',
+                          background: 'transparent',
+                          color: 'var(--color-text)',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          transition: 'background-color 0.15s'
+                        }}
+                        className="hover-bg-alt"
+                      >
+                        <div style={{ marginTop: '2px', color: '#059669' }}>
+                          <Download size={15} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)' }}>Xuất toàn bộ dữ liệu (CSV/Excel)</div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Tải xuống file dữ liệu khớp 100% với bộ lọc</div>
+                        </div>
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+          </div>
+          )}
+        </div>
+      )}
 
       {activeMainTab === 'persona' ? (
         <CustomerPersonaOverviewDeck
@@ -7274,7 +7701,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                             onMouseLeave={() => setHoveredCell(null)}
                           >
                             {(() => {
-                              const rawNote = cleanInteractionText(c.last_interaction || c.notes || '');
+                              const latestNotesSegment = (!c.last_interaction && c.notes && String(c.notes).includes('___'))
+                                ? (String(c.notes).split(/\r?\n?_{3,}\r?\n?/).map(s => s.trim()).filter(Boolean).pop() || c.notes)
+                                : (c.last_interaction || c.notes || '');
+                              const rawNote = cleanInteractionText(latestNotesSegment);
                               const noteText = rawNote ? rawNote.replace(/\s*\r?\n\s*/g, ' • ').replace(/\s{2,}/g, ' ').trim() : '';
                               if (!noteText) {
                                 return <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Chưa có nhật ký</span>;
@@ -8644,6 +9074,74 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
         }}
       />
       <ContactsFloatingTooltip triggerRef={hoveredCellTriggerRef} pipelineStages={pipelineStages} />
+
+      {showClassGradebookModal && (
+        <ClassGradebookModal
+          isOpen={showClassGradebookModal}
+          onClose={() => setShowClassGradebookModal(false)}
+          initialCampaignId={filterCampaignId ? Number(filterCampaignId) : null}
+          initialProjectId={filterProjectId ? Number(filterProjectId) : null}
+          initialProgramName={
+            activeFilters.projectId
+              ? projects.find(p => String(p.id) === String(activeFilters.projectId))?.name || ''
+              : ''
+          }
+          campaignsList={campaigns}
+          projectsList={projects}
+        />
+      )}
+
+      {(lecturerModalState.isOpen || showAcademic1on1Modal) && (
+        <LecturerInvitationAnd1on1Modal
+          isOpen={lecturerModalState.isOpen || showAcademic1on1Modal}
+          onClose={() => {
+            setLecturerModalState(prev => ({ ...prev, isOpen: false }));
+            setShowAcademic1on1Modal(false);
+          }}
+          initialTab={lecturerModalState.isOpen ? lecturerModalState.tab : '1on1'}
+          campaignId={filterCampaignId ? Number(filterCampaignId) : null}
+        />
+      )}
+
+      {showAcademicTbcdModal && (
+        <SubjectAnnouncementModal
+          isOpen={showAcademicTbcdModal}
+          onClose={() => setShowAcademicTbcdModal(false)}
+          subject={{
+            id: 0,
+            code: '',
+            name: 'Chọn chuyên đề / môn học cần thông báo'
+          }}
+          campaign={
+            activeFilters.campaignId
+              ? campaigns.find(c => String(c.id) === String(activeFilters.campaignId)) || null
+              : (campaigns[0] || null)
+          }
+          programName={
+            activeFilters.projectId
+              ? projects.find(p => String(p.id) === String(activeFilters.projectId))?.name || ''
+              : (projects[0]?.name || '')
+          }
+          addToast={addToast}
+        />
+      )}
+
+      {showOnboardingEmailModal && (
+        <StudentOnboardingEmailModal
+          isOpen={showOnboardingEmailModal}
+          onClose={() => setShowOnboardingEmailModal(false)}
+          studentsList={contacts}
+          preselectedStudent={
+            selected.size === 1
+              ? contacts.find(c => String(c.id) === String(Array.from(selected)[0])) || null
+              : null
+          }
+          addToast={addToast}
+          onSuccess={() => {
+            fetchData(true);
+          }}
+        />
+      )}
     </div>
   );
 };

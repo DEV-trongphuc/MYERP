@@ -8,6 +8,7 @@ import { getMktPortalRoot } from '../../../utils/portalRoot';
 interface ZaloOA {
     id: string;
     name: string;
+    oa_id?: string;
     status: string;
 }
 
@@ -242,7 +243,31 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
         const res = await api.get<ZaloOA[]>('zalo_oa');
         if (res.success) {
             const raw = Array.isArray(res.data) ? res.data : ((res.data as any)?.data || []);
-            setOas(raw.filter((oa: ZaloOA) => oa && oa.status === 'active'));
+            const activeOas = raw.filter(
+                (oa: ZaloOA) => oa && oa.oa_id && oa.status !== 'verifying' && oa.status !== 'inactive' && oa.status !== 'suspended'
+            );
+            setOas(activeOas);
+
+            if (activeOas.length > 0) {
+                if (!config.zalo_oa_id && activeOas.length === 1) {
+                    onChange({
+                        ...config,
+                        zalo_oa_id: activeOas[0].id,
+                        input_mode: config.input_mode || 'manual'
+                    });
+                } else if (config.zalo_oa_id) {
+                    const matchedById = activeOas.find((oa: ZaloOA) => oa.id === config.zalo_oa_id);
+                    if (!matchedById) {
+                        const matchedByRealOaId = activeOas.find((oa: ZaloOA) => (oa as any).oa_id === config.zalo_oa_id);
+                        if (matchedByRealOaId) {
+                            onChange({
+                                ...config,
+                                zalo_oa_id: matchedByRealOaId.id
+                            });
+                        }
+                    }
+                }
+            }
         }
         setLoading(false);
     };
@@ -581,7 +606,7 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                 <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-3" />
                 <p className="text-sm font-bold text-amber-800 mb-2">Chưa kết nối Zalo OA</p>
                 <p className="text-xs text-amber-700 leading-relaxed mb-4 max-w-sm mx-auto">Vui lòng kết nối Zalo Official Account trong phần Cài đặt Hệ thống để bắt đầu thiết lập gửi tin nhắn ZNS.</p>
-                <a href="/settings" target="_blank" className="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-amber-700 font-black text-[10px] uppercase tracking-widest rounded-xl shadow-[0_2px_10px_rgba(245,158,11,0.15)] border border-amber-200 hover:bg-amber-100 hover:-translate-y-0.5 hover:shadow-md transition-all active:scale-95">
+                <a href="/marketing/social-bot?channel=zalo&subtab=templates" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-amber-700 font-black text-[10px] uppercase tracking-widest rounded-xl shadow-[0_2px_10px_rgba(245,158,11,0.15)] border border-amber-200 hover:bg-amber-100 hover:-translate-y-0.5 hover:shadow-md transition-all active:scale-95">
                     Đến trang Quản lý Kết nối <ArrowRight className="w-3.5 h-3.5" />
                 </a>
             </div>

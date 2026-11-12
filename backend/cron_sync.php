@@ -35,8 +35,8 @@ if (!defined('BYPASS_CRON_LOCK')) {
 // --- END PREVENT CONCURRENT EXECUTION ---
 
 if (!defined('DIAG_TOKEN')) {
-    // Auto-recover any sheet connections stuck in 'syncing' status from a previous crashed run (older than 10 minutes)
-    $conn->query("UPDATE sheet_connections SET sync_status = 'idle' WHERE sync_status = 'syncing' AND (last_sync_at IS NULL OR last_sync_at <= DATE_SUB(NOW(), INTERVAL 10 MINUTE))");
+    // Auto-recover any sheet connections stuck in 'syncing' status from a previous crashed run (older than 3 minutes)
+    $conn->query("UPDATE sheet_connections SET sync_status = 'idle' WHERE sync_status = 'syncing' AND (last_sync_at IS NULL OR last_sync_at <= DATE_SUB(NOW(), INTERVAL 3 MINUTE))");
 
     // Ensure sheet_sync_records table exists
     $conn->query("CREATE TABLE IF NOT EXISTS sheet_sync_records (
@@ -1032,7 +1032,7 @@ if (!function_exists('releasePendingWorkHoursLeads')) {
                 
                 $conn->begin_transaction();
                 try {
-                    $stmtUp = $conn->prepare("UPDATE distribution_logs SET status = ?, message = CONCAT(message, '\n[Released at ', NOW(), ']') WHERE id = ? AND status = 'pending_work_hours'");
+                    $stmtUp = $conn->prepare("UPDATE distribution_logs SET status = ?, received_at = NOW(), message = CONCAT(message, '\n[Released at ', NOW(), ']') WHERE id = ? AND status = 'pending_work_hours'");
                     $stmtUp->bind_param("si", $newStatus, $row['log_id']);
                     $stmtUp->execute();
                     $affected = $stmtUp->affected_rows;
@@ -1284,7 +1284,7 @@ if (!function_exists('recallInactiveLeads')) {
                         $excludeIds = array_values(array_unique($excludeIds));
                     }
 
-                    $assignResult = getNextConsultantInRound($conn, $roundId, null, $excludeIds);
+                    $assignResult = getNextConsultantInRound($conn, $roundId, null, $excludeIds, false);
                     if ($assignResult) {
                         $newConsultantId = $assignResult['id'];
                         $newStatus = $assignResult['is_compensation'] ? 'compensation' : 'assigned';
@@ -1344,11 +1344,6 @@ if (!function_exists('recallInactiveLeads')) {
                     $upLead->bind_param("ii", $newConsultantId, $leadId);
                     $upLead->execute();
                     $upLead->close();
-
-                    if ($newConsultantId > 0) {
-                        require_once __DIR__ . '/webhook_logic.php';
-                        ensurePersonAndContact($conn, $leadId);
-                    }
                     
                     $compSuffix = ($assignResult && $assignResult['is_compensation']) ? ' (Bù lượt)' : '';
                     $logMsg = "Tái phân bổ tự động do Sale {$oldConsultantName} không tiếp nhận.{$compSuffix}";
@@ -1361,6 +1356,11 @@ if (!function_exists('recallInactiveLeads')) {
                 }
 
                 logDistribution($conn, $leadId, $newConsultantId, $roundId, $newStatus, $logMsg, false);
+
+                if ($newConsultantId > 0) {
+                    require_once __DIR__ . '/webhook_logic.php';
+                    ensurePersonAndContact($conn, $leadId);
+                }
 
                 $conn->commit();
 
@@ -1489,13 +1489,18 @@ foreach ($connections as $connItem) {
     logSync("Syncing Connection ID {$connItem['id']} - {$connItem['sheet_name']}...");
     
     // Update status to syncing atomically to prevent concurrent sync executions
-    $upStmt = $conn->prepare("UPDATE sheet_connections SET sync_status = 'syncing' WHERE id = ? AND sync_status = 'idle'");
+    $isManualSingleSync = (isset($argv[1]) && is_numeric($argv[1]));
+    if ($isManualSingleSync) {
+        $upStmt = $conn->prepare("UPDATE sheet_connections SET sync_status = 'syncing' WHERE id = ?");
+    } else {
+        $upStmt = $conn->prepare("UPDATE sheet_connections SET sync_status = 'syncing' WHERE id = ? AND sync_status IN ('idle', 'error')");
+    }
     $upStmt->bind_param("i", $connItem['id']);
     $upStmt->execute();
     $affected = $upStmt->affected_rows;
     $upStmt->close();
 
-    if ($affected === 0) {
+    if ($affected === 0 && !$isManualSingleSync) {
         logSync("Skipping ID {$connItem['id']}: Connection is in error status or already syncing.");
         continue;
     }
@@ -1508,7 +1513,7 @@ foreach ($connections as $connItem) {
             $upStmt->bind_param("i", $connItem['id']);
             $upStmt->execute();
             $upStmt->close();
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             logSync("Error syncing inventory connection {$connItem['id']}: " . $e->getMessage());
             
             $err = $e->getMessage();
@@ -1641,6 +1646,7 @@ foreach ($connections as $connItem) {
         $updAi = $conn->prepare("UPDATE leads SET ai_screener_status = ?, ai_evaluation = ? WHERE id = ?");
 
         while (($row = fgetcsv($stream)) !== FALSE) {
+            $leadId = null;
             $row = array_map(function($val) { return trim($val ?? '', "\" "); }, $row);
             if ($rowCount === 0) {
                 // Headers
@@ -1911,7 +1917,7 @@ foreach ($connections as $connItem) {
                         
                         // Post-commit: trigger live write-back
                         triggerTwoWaySync($conn, $leadId);
-                    } catch (Exception $txE) {
+                    } catch (\Throwable $txE) {
                         $conn->rollback();
                         logSync("Transaction failed for silent row: " . $txE->getMessage());
                         continue;
@@ -1972,8 +1978,8 @@ foreach ($connections as $connItem) {
                         $leadId = updateLead($conn, $phone, $email, $assignedTo, $source, $type, $note, $connItem['id'], null, $name);
                         if ($leadId) {
                             saveMappedExtendedFields($conn, $leadId, $rowData, $mappings);
+                            logDistribution($conn, $leadId, $assignedTo, null, 'reminder', 'Khách cũ đăng ký lại < ' . $dupCheckMonths . ' tháng (đồng bộ hệ thống).', false);
                         }
-                        logDistribution($conn, $leadId, $assignedTo, null, 'reminder', 'Khách cũ đăng ký lại < ' . $dupCheckMonths . ' tháng (đồng bộ hệ thống).', false);
                         
                         // Record hash so we don't spam duplicate logs on next run
                         $recordStmt->bind_param("is", $connItem['id'], $rowHash);
@@ -1984,7 +1990,7 @@ foreach ($connections as $connItem) {
                         
                         // Post-commit: trigger live write-back
                         triggerTwoWaySync($conn, $leadId);
-                    } catch (Exception $txE) {
+                    } catch (\Throwable $txE) {
                         $conn->rollback();
                         logSync("Transaction failed for duplicate row: " . $txE->getMessage());
                         continue;
@@ -2042,7 +2048,7 @@ foreach ($connections as $connItem) {
                         
                         $conn->commit();
                         triggerTwoWaySync($conn, $leadId);
-                    } catch (Exception $txE) {
+                    } catch (\Throwable $txE) {
                         $conn->rollback();
                         logSync("Transaction failed for duplicate pending_approval row: " . $txE->getMessage());
                     }
@@ -2100,7 +2106,7 @@ foreach ($connections as $connItem) {
                         
                         // Post-commit: trigger live write-back
                         triggerTwoWaySync($conn, $leadId);
-                    } catch (Exception $txE) {
+                    } catch (\Throwable $txE) {
                         $conn->rollback();
                         logSync("Transaction failed for queued AI row: " . $txE->getMessage());
                         continue;
@@ -2138,7 +2144,7 @@ foreach ($connections as $connItem) {
                         
                         // Post-commit: trigger live write-back
                         triggerTwoWaySync($conn, $leadId);
-                    } catch (Exception $txE) {
+                    } catch (\Throwable $txE) {
                         $conn->rollback();
                         logSync("Transaction failed for held row: " . $txE->getMessage());
                         continue;
@@ -2165,7 +2171,7 @@ foreach ($connections as $connItem) {
                     }
 
                     if ($targetRoundId) {
-                        $assignResult = getNextConsultantInRound($conn, $targetRoundId);
+                        $assignResult = getNextConsultantInRound($conn, $targetRoundId, null, [], false);
                         if ($assignResult) {
                             $assignedConsultantId = $assignResult['id'];
                             $cronStatus = $assignResult['is_compensation'] ? 'compensation' : 'assigned';
@@ -2226,6 +2232,10 @@ foreach ($connections as $connItem) {
                     }
 
                     logDistribution($conn, $leadId, $assignedConsultantId, $targetRoundId, $cronStatus, $cronMessage, false);
+
+                    if ($leadId && $assignedConsultantId > 0) {
+                        ensurePersonAndContact($conn, $leadId);
+                    }
                     
                     // Record hash so we don't process this row again on next cron run
                     $recordStmt->bind_param("is", $connItem['id'], $rowHash);
@@ -2236,7 +2246,7 @@ foreach ($connections as $connItem) {
                     
                     // Post-commit: trigger live write-back
                     triggerTwoWaySync($conn, $leadId);
-                } catch (Exception $txE) {
+                } catch (\Throwable $txE) {
                     $conn->rollback();
                     logSync("Transaction failed for row: " . $txE->getMessage());
                     continue;
@@ -2318,7 +2328,7 @@ foreach ($connections as $connItem) {
         $upStmt->execute();
         $upStmt->close();
 
-    } catch (Exception $e) {
+    } catch (\Throwable $e) {
         $errorMessage = $e->getMessage();
         logSync("Error processing ID {$connItem['id']}: " . $errorMessage);
         
@@ -2550,13 +2560,13 @@ function releaseExpiredLeadsToKho($conn) {
                 $stmtDelNotes->execute();
                 $stmtDelNotes->close();
 
-                // Delete activities records for all contacts of this person
+                // Soft-delete activities records for all contacts of this person (Axiom 4: 100% Soft-Delete Mandate)
                 $stmtDelActs = $conn->prepare("
-                    DELETE FROM activities 
-                    WHERE related_type = 'contact' 
-                      AND related_id IN (SELECT id FROM contacts WHERE person_id = ?)
+                    UPDATE activities SET deleted_at = NOW()
+                    WHERE (related_type = 'contact' AND related_id IN (SELECT id FROM contacts WHERE person_id = ?))
+                       OR contact_id IN (SELECT id FROM contacts WHERE person_id = ?)
                 ");
-                $stmtDelActs->bind_param("i", $personId);
+                $stmtDelActs->bind_param("ii", $personId, $personId);
                 $stmtDelActs->execute();
                 $stmtDelActs->close();
 
@@ -3153,7 +3163,7 @@ function checkCapiStuckAlert($conn) {
             if ($admRes) {
                 $notifStmt = $conn->prepare("
                     INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
-                    VALUES (?, ?, ?, ?, 'system', '/capi')
+                    VALUES (?, ?, ?, ?, ?, ?)
                 ");
                 if ($notifStmt) {
                     $title = "CẢNH BÁO CAPI: Tắc nghẽn hàng đợi";
@@ -4260,7 +4270,7 @@ function autoConfirmExpiredAttendanceBatches($conn) {
 
 logSync("Cronjob finished.");
 
-if (!defined('DIAG_TOKEN')) {
+if (!defined('DIAG_TOKEN') && !isset($argv[1])) {
     // --- Chạy giải phóng lead hết hạn bảo mật ra Kho chung ---
     try {
         releaseExpiredLeadsToKho($conn);

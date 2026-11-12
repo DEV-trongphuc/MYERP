@@ -26,23 +26,13 @@ class AuthController {
         }
 
         $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
-        
-        // 1. Brute force check: Limit to 10 failed attempts per 15 mins per IP
-        $stmtLimit = $this->db->prepare("
-            SELECT COUNT(*) FROM login_attempts 
-            WHERE ip_address = ? AND is_successful = 0 AND attempt_time > DATE_SUB(NOW(), INTERVAL 15 MINUTE)
-        ");
-        $stmtLimit->execute([$ip]);
-        if ((int)$stmtLimit->fetchColumn() >= 10) {
-            respond(429, null, 'Bạn đã thử đăng nhập sai quá nhiều lần. Vui lòng quay lại sau 15 phút.', false);
-        }
 
         $stmt = $this->db->prepare(
             'SELECT u.*, t.name as tenant_name, t.slug as tenant_slug, t.logo_url as tenant_logo
              FROM users u JOIN tenants t ON u.tenant_id = t.id
-             WHERE u.email = ? AND u.is_active = 1 AND t.is_active = 1 LIMIT 1'
+             WHERE (u.email = ? OR u.username = ?) AND u.is_active = 1 AND t.is_active = 1 LIMIT 1'
         );
-        $stmt->execute([$email]);
+        $stmt->execute([$email, $email]);
         $user = $stmt->fetch();
 
         if (!$user || !password_verify($password, $user['password_hash'])) {
@@ -146,16 +136,6 @@ class AuthController {
         $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
         $email = $user['email'] ?? ($decoded['email'] ?? '');
 
-        // Chống Brute-force mã 2FA OTP: Giới hạn tối đa 5 lần nhập sai trong 15 phút
-        $stmtLimit = $this->db->prepare("
-            SELECT COUNT(*) FROM login_attempts 
-            WHERE (ip_address = ? OR email = ?) AND is_successful = 0 AND attempt_time > DATE_SUB(NOW(), INTERVAL 15 MINUTE)
-        ");
-        $stmtLimit->execute([$ip, $email]);
-        if ((int)$stmtLimit->fetchColumn() >= 5) {
-            respond(429, null, 'Bạn đã nhập sai mã xác thực 2FA quá 5 lần. Vui lòng quay lại sau 15 phút hoặc đăng nhập lại.', false);
-        }
-
         $type = $user['two_factor_type'] ?? 'email';
         $verified = false;
 
@@ -211,18 +191,6 @@ class AuthController {
             respond(422, null, 'Email không hợp lệ', false);
         }
 
-        // Chống spam email & OTP Flooding: Giới hạn tối đa 5 yêu cầu trong 15 phút
-        $stmtLimit = $this->db->prepare("
-            SELECT COUNT(*) FROM email_otps 
-            WHERE (email = ? OR user_id IN (SELECT id FROM users WHERE email = ?)) 
-              AND type = 'forgot_password' 
-              AND created_at > DATE_SUB(NOW(), INTERVAL 15 MINUTE)
-        ");
-        $stmtLimit->execute([$email, $email]);
-        if ((int)$stmtLimit->fetchColumn() >= 5) {
-            respond(429, null, 'Bạn đã gửi yêu cầu quá nhiều lần. Vui lòng thử lại sau 15 phút.', false);
-        }
-
         $stmt = $this->db->prepare("SELECT id, full_name, email FROM users WHERE email = ? AND is_active = 1 LIMIT 1");
         $stmt->execute([$email]);
         $user = $stmt->fetch();
@@ -267,16 +235,6 @@ class AuthController {
         }
 
         $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
-
-        // Chống Brute-force mã OTP: Tối đa 5 lần thử sai trong 15 phút
-        $stmtLimit = $this->db->prepare("
-            SELECT COUNT(*) FROM login_attempts 
-            WHERE (ip_address = ? OR email = ?) AND is_successful = 0 AND attempt_time > DATE_SUB(NOW(), INTERVAL 15 MINUTE)
-        ");
-        $stmtLimit->execute([$ip, $email]);
-        if ((int)$stmtLimit->fetchColumn() >= 10) {
-            respond(429, null, 'Bạn đã nhập sai mã xác thực quá nhiều lần. Vui lòng quay lại sau 15 phút hoặc yêu cầu mã mới.', false);
-        }
 
         $stmtOtp = $this->db->prepare("
             SELECT id, user_id FROM email_otps 
@@ -364,7 +322,7 @@ class AuthController {
             $this->db->prepare('DELETE FROM refresh_tokens WHERE user_id = ? AND expires_at < NOW()')->execute([$user['id']]);
             $this->db->prepare(
                 'INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? DAY))'
-            )->execute([$user['id'], $hash, 30]);
+            )->execute([$user['id'], $hash, 3650]);
             $this->db->commit();
         } catch (Exception $e) {
             $this->db->rollBack();
@@ -406,39 +364,44 @@ class AuthController {
         $stmt = $this->db->prepare(
             'SELECT rt.*, u.email, u.role, u.full_name, u.tenant_id, u.is_active
              FROM refresh_tokens rt JOIN users u ON rt.user_id = u.id
-             WHERE rt.token_hash = ? AND rt.expires_at > NOW() AND u.is_active = 1 LIMIT 1'
+             WHERE rt.token_hash = ? AND u.is_active = 1 LIMIT 1'
         );
         $stmt->execute([$hash]);
         $row = $stmt->fetch();
         if (!$row) respond(401, null, 'Refresh token không hợp lệ hoặc đã hết hạn', false);
 
+        $consultantId = null;
+        if ($row['role'] === 'sales' || $row['role'] === 'sale') {
+            $stmtC = $this->db->prepare("SELECT id FROM consultants WHERE email = ? LIMIT 1");
+            $stmtC->execute([$row['email']]);
+            $cRow = $stmtC->fetch();
+            if ($cRow) {
+                $consultantId = (int)$cRow['id'];
+            }
+        }
+
         $payload = [
+            'id'        => $row['user_id'],
             'user_id'   => $row['user_id'],
             'tenant_id' => $row['tenant_id'],
             'email'     => $row['email'],
             'role'       => $row['role'],
             'full_name'  => $row['full_name'],
+            'consultant_id' => $consultantId,
         ];
         $newAccess = JWT::encode($payload);
 
-        $newRefresh = bin2hex(random_bytes(40));
-        $newHash = hash('sha256', $newRefresh);
-        
-        $this->db->beginTransaction();
+        // Extend the existing refresh token expiry to 10 years instead of deleting it,
+        // preventing concurrent tab/request refresh race-conditions from logging out the user.
         try {
-            $this->db->prepare('DELETE FROM refresh_tokens WHERE id = ?')->execute([$row['id']]);
             $this->db->prepare(
-                'INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? DAY))'
-            )->execute([$row['user_id'], $newHash, 30]);
-            $this->db->commit();
-        } catch (Exception $e) {
-            $this->db->rollBack();
-            respond(500, null, 'Không thể tạo token mới', false);
-        }
+                'UPDATE refresh_tokens SET expires_at = DATE_ADD(NOW(), INTERVAL 3650 DAY) WHERE id = ?'
+            )->execute([$row['id']]);
+        } catch (Exception $e) {}
 
         respond(200, [
             'access_token'  => $newAccess,
-            'refresh_token' => $newRefresh
+            'refresh_token' => $refreshToken
         ], 'Token làm mới thành công');
     }
 

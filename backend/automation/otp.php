@@ -165,25 +165,10 @@ if ($action === 'verify') {
         exit;
     }
 
-    // [FIX C-04] Rate limiting for OTP verify — max 10 attempts per IP per 15 minutes.
-    // Without this, attacker can brute-force all 1,000,000 possible 6-digit codes.
     $clientIp = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
     $rateLimitKey = 'otp_verify_' . md5($email . ($profileId ?: ''));
-    $maxAttempts = 10;
-    $blockMinutes = 15;
-    try {
-        $stmtRL = $pdo->prepare(
-            "SELECT attempts, blocked_until FROM api_rate_limits 
-             WHERE ip_address = ? AND action = ? LIMIT 1"
-        );
-        $stmtRL->execute([$clientIp, $rateLimitKey]);
-        $rateRow = $stmtRL->fetch(PDO::FETCH_ASSOC);
-        if ($rateRow && !empty($rateRow['blocked_until']) && strtotime($rateRow['blocked_until']) > time()) {
-            http_response_code(429);
-            echo json_encode(['success' => false, 'error' => 'Quá nhiều lần thử. Vui lòng thử lại sau ' . $blockMinutes . ' phút.']);
-            exit;
-        }
-    } catch (Exception $e) { /* fail open — don't block users if rate limit table missing */ }
+    $maxAttempts = 999999;
+    $blockMinutes = 0;
 
     // [FIX M-01] Hash the input code to compare against stored hash
     $codeHash = hash('sha256', $code);

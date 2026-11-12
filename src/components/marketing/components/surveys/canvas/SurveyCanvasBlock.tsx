@@ -569,23 +569,26 @@ const BlockInputPreview: React.FC<{ block: SurveyBlock; theme: SurveyTheme; acce
 
         case 'matrix_single': case 'matrix_multi':
             return (
-                <div className="overflow-x-auto">
-                    <table className="text-xs w-full border-collapse">
-                        <thead><tr>
-                            <th className="text-left py-1 pr-3 text-slate-600 font-medium" />
-                            {(block.matrixCols ?? []).map(col => <th key={col.id} className="py-1 px-2 text-slate-700 font-bold text-center">{col.label}</th>)}
+                <div className="overflow-x-auto w-full max-w-full rounded-xl border border-slate-200/80" style={{ WebkitOverflowScrolling: 'touch' }}>
+                    <table className="survey-matrix-table text-xs w-full border-collapse">
+                        <thead><tr className="bg-slate-100/90">
+                            <th className="sticky left-0 z-10 bg-slate-100 text-left py-2 px-2.5 text-slate-600 font-bold border-b border-r border-slate-200/80 min-w-[100px]">Tiêu chí</th>
+                            {(block.matrixCols ?? []).map(col => <th key={col.id} className="py-2 px-2 text-slate-700 font-bold text-center border-b border-slate-200 min-w-[56px]">{col.label}</th>)}
                         </tr></thead>
                         <tbody>
-                            {(block.matrixRows ?? []).map(row => (
-                                <tr key={row.id}>
-                                    <td className="py-1.5 pr-3 text-slate-800 font-medium">{row.label}</td>
-                                    {(block.matrixCols ?? []).map(col => (
-                                        <td key={col.id} className="py-1.5 px-2 text-center">
-                                            <div className={`w-4 h-4 border-2 border-slate-400 inline-block ${block.type === 'matrix_single' ? 'rounded-full' : 'rounded'}`} />
-                                        </td>
-                                    ))}
-                                </tr>
-                            ))}
+                            {(block.matrixRows ?? []).map((row, rIdx) => {
+                                const rowBg = rIdx % 2 === 0 ? 'bg-slate-50' : 'bg-white';
+                                return (
+                                    <tr key={row.id} className={`${rowBg} border-b border-slate-100 last:border-b-0`}>
+                                        <td className={`sticky left-0 z-10 ${rowBg} py-2 px-2.5 border-r border-slate-200/70 text-slate-800 font-medium min-w-[100px] whitespace-normal break-words`}>{row.label}</td>
+                                        {(block.matrixCols ?? []).map(col => (
+                                            <td key={col.id} className="py-2 px-2 text-center">
+                                                <div className={`w-4 h-4 border-2 border-slate-400 inline-block ${block.type === 'matrix_single' ? 'rounded-full' : 'rounded'}`} />
+                                            </td>
+                                        ))}
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>

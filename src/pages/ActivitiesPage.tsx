@@ -883,8 +883,14 @@ export const ActivitiesPage: React.FC = () => {
             task={selectedTaskForDrawer}
             onUpdate={(updatedTask?: any) => {
               if (updatedTask && updatedTask.id) {
-                setSelectedTaskForDrawer((prev: any) => prev ? { ...prev, ...updatedTask } : prev);
-                setItems(prev => prev.map(it => Number(it.id) === Number(updatedTask.id) ? { ...it, ...updatedTask } : it));
+                if (updatedTask.__duplicatedFromId || updatedTask.duplicated_from_id) {
+                  const cleanClone = { ...updatedTask, comments: [], comment_count: 0 };
+                  setSelectedTaskForDrawer(cleanClone);
+                  setItems(prev => [cleanClone, ...prev.filter(it => Number(it.id) !== Number(cleanClone.id))]);
+                } else {
+                  setSelectedTaskForDrawer((prev: any) => prev ? { ...prev, ...updatedTask } : prev);
+                  setItems(prev => prev.map(it => Number(it.id) === Number(updatedTask.id) ? { ...it, ...updatedTask } : it));
+                }
               }
               fetchActivities();
             }}

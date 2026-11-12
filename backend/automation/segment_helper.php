@@ -104,6 +104,43 @@ if (!function_exists('getCrmPipelineStageCatalog')) {
     }
 }
 
+if (!function_exists('indexCrmPipelineStageCatalog')) {
+    function indexCrmPipelineStageCatalog(array $rawCatalog): array
+    {
+        if (isset($rawCatalog['by_id']) && isset($rawCatalog['by_num'])) {
+            return $rawCatalog;
+        }
+        $byId = [];
+        $byNum = [];
+        $bySlug = [];
+        foreach ($rawCatalog as $row) {
+            if (!is_array($row) || empty($row['id'])) continue;
+            $id = (int)$row['id'];
+            $num = (int)($row['stage_num'] ?? $row['step_number'] ?? 0);
+            $slug = strtolower(trim((string)($row['slug'] ?? $row['system_slug'] ?? '')));
+            $norm = [
+                'id'          => $id,
+                'name'        => (string)($row['name'] ?? ''),
+                'stage_num'   => $num,
+                'step_number' => $num,
+                'slug'        => $slug,
+                'system_slug' => $slug,
+                'order_index' => (int)($row['order_index'] ?? 0),
+                'is_won'      => (int)($row['is_won'] ?? 0),
+                'is_lost'     => (int)($row['is_lost'] ?? 0),
+            ];
+            $byId[$id] = $norm;
+            if ($num > 0) {
+                $byNum[$num] = $norm;
+            }
+            if ($slug !== '') {
+                $bySlug[$slug] = $norm;
+            }
+        }
+        return ['by_id' => $byId, 'by_num' => $byNum, 'by_slug' => $bySlug];
+    }
+}
+
 /**
  * Fast batch synchronization of all active MYERP `/contacts` rows into `subscribers`
  * so Segment/List filter queries, estimates, previews, and campaign dispatches
@@ -536,7 +573,7 @@ function buildSegmentWhereClause($criteriaJson, $workspaceId, $segmentId = null)
                             $tokens[] = $rt;
                         }
 
-                        $stageCatalog = getCrmPipelineStageCatalog($pdo);
+                        $stageCatalog = indexCrmPipelineStageCatalog(getCrmPipelineStageCatalog($pdo));
                         $matchedStageIds = [];
                         $matchedStageNums = [];
                         $matchedSlugs = [];
@@ -1310,7 +1347,7 @@ function ensureDefaultPipelineSegments(PDO $pdo, int $workspaceId = 1, bool $for
             DomationContactMatcher::ensureColumns($pdo);
         }
 
-        $catalog = getCrmPipelineStageCatalog($pdo);
+        $catalog = indexCrmPipelineStageCatalog(getCrmPipelineStageCatalog($pdo));
         $buildStageGroups = function (array $stageNums) use ($catalog): array {
             $groups = [];
             foreach ($stageNums as $num) {

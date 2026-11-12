@@ -1007,6 +1007,19 @@ export function payroll(c: AzCompany, k: string): AzPayRow[] {
 
 export function slipLines(r: AzPayRow): Array<[string, any, number?]> {
   const L: Array<[string, any, number?]> = [];
+  const phepThang = Number(r.v?.phepThang ?? r.s.P ?? 0);
+  const buThang = Number(r.v?.buThang ?? 0);
+  const phepDaDung = Number(r.e.phepNamDaDung ?? phepThang ?? 0);
+  const phepConLai = Number(r.e.phepNamConLai ?? Math.max(0, 12 - phepDaDung));
+  const buDaDung = Number(r.e.nghiBuDaDung ?? buThang ?? 0);
+  const buConLai = Number(r.e.nghiBuConLai ?? 0);
+
+  L.push(['h', 'Ngày công & Quỹ phép / Nghỉ bù']);
+  L.push(['Ngày công tính lương / Công chuẩn', `${r.s.congTL}/${r.s.congChuan} công`]);
+  L.push(['Phép năm: Dùng trong tháng / Đã dùng (Lũy kế) / Còn lại', `${phepThang} / ${phepDaDung} / ${phepConLai} ngày`]);
+  L.push(['Nghỉ bù: Dùng trong tháng / Đã dùng (Lũy kế) / Còn lại', `${buThang} / ${buDaDung} / ${buConLai} ngày`]);
+  L.push(['Tổng quỹ Phép + Bù còn lại', `${Math.round((phepConLai + buConLai) * 100) / 100} ngày`]);
+
   L.push(['h', 'Thu nhập']);
   L.push([`Lương theo công (${r.s.congTL}/${r.s.congChuan} công)`, r.lTheoCong]);
   r.pcList.filter((x) => x.val).forEach((x) => L.push([x.a.name, x.val]));
@@ -1987,6 +2000,15 @@ export function exportPayrollExcel(c: AzCompany, k: string): void {
     'Lương cơ bản',
     'Công chuẩn',
     'Công tính lương',
+    'Tổng phép năm',
+    'Phép dùng trong tháng',
+    'Phép đã dùng (Lũy kế)',
+    'Phép năm còn lại',
+    'Tổng phép bù',
+    'Bù dùng trong tháng',
+    'Bù đã dùng (Lũy kế)',
+    'Phép bù còn lại',
+    'Tổng Phép + Bù còn lại',
     'Lương theo công',
     ...(c.allowances || []).map((a) => a.name),
     'Tiền làm thêm',
@@ -2009,41 +2031,62 @@ export function exportPayrollExcel(c: AzCompany, k: string): void {
     'Thực lĩnh',
     'Ký nhận',
   ];
-  const body = rows.map((r, i) => [
-    i + 1,
-    r.e.ma,
-    r.e.ten,
-    r.e.viTri,
-    r.luongCB,
-    r.s.congChuan,
-    r.s.congTL,
-    r.lTheoCong,
-    ...r.pcList.map((x) => x.val),
-    r.ot,
-    r.thuong,
-    r.khacMien,
-    r.gross,
-    r.mien,
-    r.tnct,
-    r.luongBH,
-    r.nld.bhxh,
-    r.nld.bhyt,
-    r.nld.bhtn,
-    r.doanPhi,
-    r.npt,
-    r.gt,
-    r.tntt,
-    r.thue,
-    r.tamUng,
-    r.khauTru,
-    r.net,
-    '',
-  ]);
+  const body = rows.map((r, i) => {
+    const phepTong = Number(r.e.phepNamTong ?? 12);
+    const phepThang = Number(r.v?.phepThang ?? r.s.P ?? 0);
+    const phepDaDung = Number(r.e.phepNamDaDung ?? phepThang ?? 0);
+    const phepConLai = Number(r.e.phepNamConLai ?? Math.max(0, phepTong - phepDaDung));
+    const buTong = Number(r.e.nghiBuTong ?? 0);
+    const buThang = Number(r.v?.buThang ?? 0);
+    const buDaDung = Number(r.e.nghiBuDaDung ?? buThang ?? 0);
+    const buConLai = Number(r.e.nghiBuConLai ?? Math.max(0, buTong - buDaDung));
+    const tongPhepBuCon = Math.round((phepConLai + buConLai) * 100) / 100;
+
+    return [
+      i + 1,
+      r.e.ma,
+      r.e.ten,
+      r.e.viTri,
+      r.luongCB,
+      r.s.congChuan,
+      r.s.congTL,
+      phepTong,
+      phepThang,
+      phepDaDung,
+      phepConLai,
+      buTong,
+      buThang,
+      buDaDung,
+      buConLai,
+      tongPhepBuCon,
+      r.lTheoCong,
+      ...r.pcList.map((x) => x.val),
+      r.ot,
+      r.thuong,
+      r.khacMien,
+      r.gross,
+      r.mien,
+      r.tnct,
+      r.luongBH,
+      r.nld.bhxh,
+      r.nld.bhyt,
+      r.nld.bhtn,
+      r.doanPhi,
+      r.npt,
+      r.gt,
+      r.tntt,
+      r.thue,
+      r.tamUng,
+      r.khauTru,
+      r.net,
+      '',
+    ];
+  });
   const sumRow = head.map((_, j) =>
     j === 2
       ? 'Tổng cộng'
       : j >= 4 && j !== 5 && j !== 6 && typeof body[0]?.[j] === 'number'
-      ? body.reduce((t, r) => t + (Number(r[j]) || 0), 0)
+      ? Math.round(body.reduce((t, r) => t + (Number(r[j]) || 0), 0) * 100) / 100
       : ''
   );
   const aoa = [

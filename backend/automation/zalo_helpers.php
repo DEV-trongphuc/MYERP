@@ -612,13 +612,114 @@ function getZaloUserProfile($accessToken, $userId)
 }
 
 /**
+ * Sync fresher Zalo OA tokens from peer database (e.g. vhvxoigh_mail_auto) on the same MySQL server
+ * to prevent split-brain single-use refresh_token invalidation.
+ */
+function syncZaloTokensFromPeerDb($pdo, $oaFilter = null)
+{
+    $peerDbs = ['vhvxoigh_mail_auto', 'vhvxoigh_myerp'];
+    try {
+        $currentDb = $pdo->query("SELECT DATABASE()")->fetchColumn();
+    } catch (Throwable $e) {
+        return;
+    }
+
+    foreach ($peerDbs as $peerDb) {
+        if (!$peerDb || $peerDb === $currentDb) {
+            continue;
+        }
+        try {
+            $sql = "SELECT id, oa_id, name, avatar, access_token, refresh_token, token_expires_at, remaining_quota, quality_48h, quality_7d, monthly_promo_quota, remaining_promo_quota FROM `{$peerDb}`.`zalo_oa_configs` WHERE oa_id IS NOT NULL AND oa_id != '' AND access_token IS NOT NULL AND access_token != ''";
+            $params = [];
+            if ($oaFilter) {
+                $sql .= " AND (id = ? OR oa_id = ?)";
+                $params = [$oaFilter, $oaFilter];
+            }
+            $stmtPeer = $pdo->prepare($sql);
+            $stmtPeer->execute($params);
+            $peerRows = $stmtPeer->fetchAll(PDO::FETCH_ASSOC);
+
+            foreach ($peerRows as $pRow) {
+                $stmtLocal = $pdo->prepare("SELECT id, token_expires_at, status FROM zalo_oa_configs WHERE id = ? OR oa_id = ? LIMIT 1");
+                $stmtLocal->execute([$pRow['id'], $pRow['oa_id']]);
+                $lRow = $stmtLocal->fetch(PDO::FETCH_ASSOC);
+                if (!$lRow) {
+                    continue;
+                }
+                $peerExp = !empty($pRow['token_expires_at']) ? strtotime($pRow['token_expires_at']) : 0;
+                $localExp = !empty($lRow['token_expires_at']) ? strtotime($lRow['token_expires_at']) : 0;
+                if ($peerExp > $localExp || $lRow['status'] !== 'active') {
+                    $upd = $pdo->prepare("
+                        UPDATE zalo_oa_configs
+                        SET access_token = ?,
+                            refresh_token = ?,
+                            token_expires_at = ?,
+                            status = 'active',
+                            token_status = 'healthy',
+                            last_token_check = NOW(),
+                            updated_at = NOW()
+                        WHERE id = ?
+                    ");
+                    $upd->execute([
+                        $pRow['access_token'],
+                        $pRow['refresh_token'],
+                        $pRow['token_expires_at'],
+                        $lRow['id']
+                    ]);
+                }
+            }
+        } catch (Throwable $e) {
+            // Peer DB may not exist in local dev environment — ignore silently
+        }
+    }
+}
+
+/**
+ * Propagate newly refreshed or authorized Zalo OA tokens to peer databases on the same server
+ * so cron jobs across domains never use a stale single-use refresh_token.
+ */
+function propagateZaloTokenToPeerDbs($pdo, $oaConfigId, $oaRealId, $accessToken, $refreshToken, $expiresAt)
+{
+    $peerDbs = ['vhvxoigh_mail_auto', 'vhvxoigh_myerp', 'vhvxoigh_erpstagging'];
+    try {
+        $currentDb = $pdo->query("SELECT DATABASE()")->fetchColumn();
+    } catch (Throwable $e) {
+        return;
+    }
+
+    foreach ($peerDbs as $peerDb) {
+        if (!$peerDb || $peerDb === $currentDb) {
+            continue;
+        }
+        try {
+            $stmt = $pdo->prepare("
+                UPDATE `{$peerDb}`.`zalo_oa_configs`
+                SET access_token = ?,
+                    refresh_token = ?,
+                    token_expires_at = ?,
+                    status = 'active',
+                    updated_at = NOW()
+                WHERE id = ? OR (oa_id IS NOT NULL AND oa_id != '' AND oa_id = ?)
+            ");
+            $stmt->execute([$accessToken, $refreshToken, $expiresAt, $oaConfigId, (string)$oaRealId]);
+        } catch (Throwable $e) {
+            // Ignore if peer DB does not exist or lacks permissions
+        }
+    }
+}
+
+/**
  * Ensures access token is valid, refreshes if needed.
  * returns the valid access_token or null on failure.
  */
 function ensureZaloToken($pdo, $oaId)
 {
+    if (defined('ZALO_APP_ID') === false && file_exists(__DIR__ . '/zalo_config.php')) {
+        require_once __DIR__ . '/zalo_config.php';
+    }
+
     // Try finding by internal ID or real OA ID
-    $stmt = $pdo->prepare("SELECT id, app_id, app_secret, access_token, refresh_token, token_expires_at FROM zalo_oa_configs WHERE id = ? OR oa_id = ? LIMIT 1");
+    $stmt = $pdo->prepare("SELECT id, oa_id, app_id, app_secret, access_token, refresh_token, token_expires_at, status FROM zalo_oa_configs WHERE id = ? OR oa_id = ? LIMIT 1");
     $stmt->execute([$oaId, $oaId]);
     $oa = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -630,6 +731,11 @@ function ensureZaloToken($pdo, $oaId)
     $expiresAt = $oa['token_expires_at'] ? date('Y-m-d H:i:s', strtotime($oa['token_expires_at']) - 300) : null;
 
     if ($oa['access_token'] && ($expiresAt && $expiresAt > $now)) {
+        if ($oa['status'] !== 'active') {
+            try {
+                $pdo->prepare("UPDATE zalo_oa_configs SET status = 'active' WHERE id = ?")->execute([$oa['id']]);
+            } catch (Throwable $e) {}
+        }
         return $oa['access_token'];
     }
 
@@ -639,11 +745,19 @@ function ensureZaloToken($pdo, $oaId)
     db_get_lock($pdo, $lockName, 10); // Wait up to 10s using global manager
 
     try {
-        // RE-FETCH: Check if another process already refreshed it while we waited for lock
-        $stmtReload = $pdo->prepare("SELECT access_token, refresh_token, token_expires_at FROM zalo_oa_configs WHERE id = ?");
-        $stmtReload->execute([$oa['id']]);
-        $oa = array_merge($oa, $stmtReload->fetch(PDO::FETCH_ASSOC));
+        // First sync from peer DB in case another domain's cron already refreshed the single-use token
+        syncZaloTokensFromPeerDb($pdo, $oa['id']);
 
+        // RE-FETCH: Check if another process or peer DB already refreshed it
+        $stmtReload = $pdo->prepare("SELECT oa_id, app_id, app_secret, access_token, refresh_token, token_expires_at FROM zalo_oa_configs WHERE id = ?");
+        $stmtReload->execute([$oa['id']]);
+        $reloaded = $stmtReload->fetch(PDO::FETCH_ASSOC);
+        if ($reloaded) {
+            $oa = array_merge($oa, $reloaded);
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $expiresAt = $oa['token_expires_at'] ? date('Y-m-d H:i:s', strtotime($oa['token_expires_at']) - 300) : null;
         if ($oa['access_token'] && ($expiresAt && $expiresAt > $now)) {
             db_release_lock($pdo, $lockName);
             return $oa['access_token'];
@@ -655,9 +769,14 @@ function ensureZaloToken($pdo, $oaId)
             return null;
         }
 
+        $appId = !empty($oa['app_id']) ? $oa['app_id'] : (defined('ZALO_APP_ID') ? ZALO_APP_ID : '');
+        $appSecret = (!empty($oa['app_secret']) && $oa['app_secret'] !== '********')
+            ? $oa['app_secret']
+            : (defined('ZALO_APP_SECRET') ? ZALO_APP_SECRET : '');
+
         $url = 'https://oauth.zaloapp.com/v4/oa/access_token';
         $params = [
-            'app_id' => $oa['app_id'],
+            'app_id' => $appId,
             'grant_type' => 'refresh_token',
             'refresh_token' => $oa['refresh_token']
         ];
@@ -667,11 +786,11 @@ function ensureZaloToken($pdo, $oaId)
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($params));
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Content-Type: application/x-www-form-urlencoded',
-            'secret_key: ' . $oa['app_secret']
+            'secret_key: ' . $appSecret
         ]);
 
         $response = curl_exec($ch);
@@ -685,16 +804,17 @@ function ensureZaloToken($pdo, $oaId)
                 $new_refresh_token = $result['refresh_token'] ?? $oa['refresh_token'];
                 $expires_at = date('Y-m-d H:i:s', time() + ($result['expires_in'] ?? 86400));
 
-                $stmtU = $pdo->prepare("UPDATE zalo_oa_configs SET access_token = ?, refresh_token = ?, token_expires_at = ?, updated_at = NOW() WHERE id = ?");
+                $stmtU = $pdo->prepare("UPDATE zalo_oa_configs SET access_token = ?, refresh_token = ?, token_expires_at = ?, status = 'active', token_status = 'healthy', last_token_check = NOW(), updated_at = NOW() WHERE id = ?");
                 $stmtU->execute([$new_access_token, $new_refresh_token, $expires_at, $oa['id']]);
+
+                propagateZaloTokenToPeerDbs($pdo, $oa['id'], $oa['oa_id'] ?? '', $new_access_token, $new_refresh_token, $expires_at);
 
                 db_release_lock($pdo, $lockName);
                 return $new_access_token;
             } elseif (isset($result['error']) && $result['error'] != 0) {
-                // [Vòng 33 FIX] Suspend dead token to prevent API hammering
                 try {
-                    $pdo->prepare("UPDATE zalo_oa_configs SET status = 'error_refresh', updated_at = NOW() WHERE id = ?")->execute([$oa['id']]);
-                    error_log("Zalo OA Refresh Failed. Status set to error_refresh. OA: {$oa['id']}");
+                    $pdo->prepare("UPDATE zalo_oa_configs SET token_status = 'expired', last_token_check = NOW(), updated_at = NOW() WHERE id = ?")->execute([$oa['id']]);
+                    error_log("Zalo OA Refresh Failed. token_status set to expired. OA: {$oa['id']}");
                 } catch (Exception $e) {}
             }
         }

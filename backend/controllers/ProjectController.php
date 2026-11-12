@@ -1068,27 +1068,32 @@ class ProjectController {
             $uids = array_values(array_unique(array_filter(array_map('intval', $matchesId[1]), fn($u) => $u > 0 && $u !== (int)$auth['user_id'])));
             if (!empty($uids)) {
                 $inPh = implode(',', array_fill(0, count($uids), '?'));
-                $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE id IN ($inPh)");
-                $stmtUser->execute($uids);
+                $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE id IN ($inPh) AND tenant_id = ?");
+                $stmtUser->execute(array_merge($uids, [(int)$auth['tenant_id']]));
                 foreach ($stmtUser->fetchAll(PDO::FETCH_ASSOC) ?: [] as $userRow) {
                     $mentions[(int)$userRow['id']] = $userRow;
                 }
             }
         }
 
-        // 2. @name fallback
+        // 2. @name fallback (batched single query with tenant isolation)
         $matches = [];
         preg_match_all('/@([a-zA-Z0-9_\x{00C0}-\x{1EF9}()\s]+?)(?:<\/span>|<br|\n|$)/u', (string)$body, $matches);
         $names = is_array($matches[1] ?? null) ? $matches[1] : [];
         if (!empty($names)) {
+            $lookupNames = [];
             foreach ($names as $nameWithUnderscores) {
-                $nameWithUnderscores = trim(strip_tags($nameWithUnderscores));
-                if (empty($nameWithUnderscores)) continue;
-                $fullName = str_replace('_', ' ', $nameWithUnderscores);
-                $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE (full_name=? OR REPLACE(full_name, ' ', '_')=?)");
-                $stmtUser->execute([$fullName, $nameWithUnderscores]);
-                $userRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
-                if ($userRow) {
+                $clean = trim(strip_tags($nameWithUnderscores));
+                if ($clean === '') continue;
+                $lookupNames[] = $clean;
+                $lookupNames[] = str_replace('_', ' ', $clean);
+            }
+            $lookupNames = array_values(array_unique($lookupNames));
+            if (!empty($lookupNames)) {
+                $phNames = implode(',', array_fill(0, count($lookupNames), '?'));
+                $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE tenant_id = ? AND (full_name IN ($phNames) OR REPLACE(full_name, ' ', '_') IN ($phNames))");
+                $stmtUser->execute(array_merge([(int)$auth['tenant_id']], $lookupNames, $lookupNames));
+                foreach ($stmtUser->fetchAll(PDO::FETCH_ASSOC) ?: [] as $userRow) {
                     $uid = (int)$userRow['id'];
                     if ($uid !== (int)$auth['user_id']) {
                         $mentions[$uid] = $userRow;
@@ -1487,18 +1492,39 @@ class ProjectController {
             $params[] = trim($b['title'] ?? $b['subject']);
         }
         if (isset($b['description']) || isset($b['body'])) {
-            $sets[] = "body = ?";
-            $params[] = trim($b['description'] ?? $b['body']);
+            $incomingRaw = trim((string)($b['description'] ?? $b['body']));
+            $incomingDecoded = json_decode($incomingRaw, true);
+            if (is_array($incomingDecoded) && isset($incomingDecoded['erp_task'])) {
+                $sets[] = "body = ?";
+                $params[] = $incomingRaw;
+            } else {
+                $existingDecoded = json_decode((string)($task['body'] ?? ''), true);
+                if (is_array($existingDecoded) && isset($existingDecoded['erp_task']) && is_array($existingDecoded['erp_task'])) {
+                    $existingDecoded['erp_task']['description'] = $incomingRaw;
+                    $sets[] = "body = ?";
+                    $params[] = json_encode($existingDecoded, JSON_UNESCAPED_UNICODE);
+                } else {
+                    $sets[] = "body = ?";
+                    $params[] = $incomingRaw;
+                }
+            }
         }
+        $needsApprovalGate = ((int)($task['require_approval'] ?? 0) === 1 && ($task['approval_status'] ?? '') !== 'approved');
         if (isset($b['status'])) {
             $rawStatus = trim($b['status']);
             $status = in_array($rawStatus, ['planned', 'done', 'cancelled'], true) ? $rawStatus : ($rawStatus === 'completed' ? 'done' : 'planned');
-            $sets[] = "status = ?";
-            $params[] = $status;
-            if ($status === 'done') {
-                $sets[] = "done_at = NOW()";
-            } else {
+            if ($status === 'done' && $needsApprovalGate) {
+                $sets[] = "status = 'planned'";
+                $sets[] = "approval_status = 'pending'";
                 $sets[] = "done_at = NULL";
+            } else {
+                $sets[] = "status = ?";
+                $params[] = $status;
+                if ($status === 'done') {
+                    $sets[] = "done_at = NOW()";
+                } else {
+                    $sets[] = "done_at = NULL";
+                }
             }
         }
         if (isset($b['priority'])) {
@@ -1511,9 +1537,15 @@ class ProjectController {
             $prog = max(0, min(100, (int)$b['progress']));
             $sets[] = "progress = ?";
             $params[] = $prog;
-            if ($prog >= 100) {
-                $sets[] = "status = 'done'";
-                $sets[] = "done_at = NOW()";
+            if ($prog >= 100 && !isset($b['status'])) {
+                if ($needsApprovalGate) {
+                    $sets[] = "status = 'planned'";
+                    $sets[] = "approval_status = 'pending'";
+                    $sets[] = "done_at = NULL";
+                } else {
+                    $sets[] = "status = 'done'";
+                    $sets[] = "done_at = NOW()";
+                }
             }
         }
         if (isset($b['assignee_id']) || isset($b['user_id'])) {
@@ -1585,9 +1617,15 @@ class ProjectController {
         $rawStatus = trim($b['status'] ?? 'done');
         $status = in_array($rawStatus, ['planned', 'done', 'cancelled'], true) ? $rawStatus : ($rawStatus === 'completed' ? 'done' : 'planned');
         $progress = $status === 'done' ? 100 : ($status === 'cancelled' ? 0 : ($task['progress'] >= 100 ? 50 : $task['progress']));
-        $this->db->prepare("UPDATE activities SET status = ?, progress = ?, done_at = IF(? = 'done', NOW(), NULL), updated_at = NOW() WHERE id = ? AND tenant_id = ? AND type = 'task' AND deleted_at IS NULL")
-            ->execute([$status, $progress, $status, $id, $tid]);
-        respond(200, ['id' => $id, 'status' => $status, 'progress' => $progress], 'Cập nhật trạng thái công việc thành công');
+        $approvalStatus = $task['approval_status'] ?? 'none';
+        if ($status === 'done' && (int)($task['require_approval'] ?? 0) === 1 && $approvalStatus !== 'approved') {
+            $status = 'planned';
+            $progress = 100;
+            $approvalStatus = 'pending';
+        }
+        $this->db->prepare("UPDATE activities SET status = ?, progress = ?, approval_status = ?, done_at = IF(? = 'done', NOW(), NULL), updated_at = NOW() WHERE id = ? AND tenant_id = ? AND type = 'task' AND deleted_at IS NULL")
+            ->execute([$status, $progress, $approvalStatus, $status, $id, $tid]);
+        respond(200, ['id' => $id, 'status' => $status, 'progress' => $progress, 'approval_status' => $approvalStatus], 'Cập nhật trạng thái công việc thành công');
     }
 
     public function duplicateTask(array $auth, int $id): void {
@@ -1605,22 +1643,52 @@ class ProjectController {
 
         $newSubject = "[Bản sao] " . preg_replace('/^(\[Bản sao\]\s*)+/', '', $source['subject'] ?? 'Công việc');
 
-        // Parse and reset checklist in body
+        // Parse and reset checklist in body (strictly strip all comments, subtask comments & history)
         $rawBody = $source['body'] ?? '';
         $bodyData = null;
         if (!empty($rawBody)) {
             $decoded = json_decode($rawBody, true);
             if (is_array($decoded)) {
                 $bodyData = $decoded;
+                unset(
+                    $bodyData['comments'],
+                    $bodyData['comment_count'],
+                    $bodyData['subtask_comments'],
+                    $bodyData['subtask_comment_counts'],
+                    $bodyData['timeline'],
+                    $bodyData['history'],
+                    $bodyData['due_sla_notified'],
+                    $bodyData['subtask_sla_notified']
+                );
+                if (isset($bodyData['erp_task']) && is_array($bodyData['erp_task'])) {
+                    unset(
+                        $bodyData['erp_task']['comments'],
+                        $bodyData['erp_task']['comment_count'],
+                        $bodyData['erp_task']['subtask_comments'],
+                        $bodyData['erp_task']['subtask_comment_counts'],
+                        $bodyData['erp_task']['timeline'],
+                        $bodyData['erp_task']['history']
+                    );
+                    $bodyData['erp_task']['due_sla_notified'] = false;
+                    $bodyData['erp_task']['subtask_sla_notified'] = false;
+                }
                 if (!empty($bodyData['erp_task']['checklist']) && is_array($bodyData['erp_task']['checklist'])) {
-                    foreach ($bodyData['erp_task']['checklist'] as &$item) {
-                        $item['id'] = 'sub_' . round(microtime(true) * 1000) . '_' . substr(md5(uniqid('', true)), 0, 5);
+                    foreach ($bodyData['erp_task']['checklist'] as $idx => &$item) {
+                        $item['id'] = 'sub_' . round(microtime(true) * 1000) . '_' . $idx . '_' . substr(md5(uniqid((string)$idx, true)), 0, 5);
                         $item['done'] = false;
                         $item['checked'] = false;
                         $item['status'] = 'pending';
                         $item['deadline'] = null;
                         $item['due_date'] = null;
                         $item['sub_deadline'] = null;
+                        unset(
+                            $item['comments'],
+                            $item['comment_count'],
+                            $item['subtask_comments'],
+                            $item['completed_at'],
+                            $item['completed_by'],
+                            $item['notified_sla']
+                        );
                     }
                     unset($item);
                 }
@@ -1664,11 +1732,13 @@ class ProjectController {
             logActivity($this->db, $tid, $creatorId, 'DUPLICATE_TASK', 'activity', $newTaskId, "Nhân bản công việc từ #$id sang #$newTaskId: $newSubject");
 
             $fetchStmt = $this->db->prepare("
-                SELECT a.id, a.subject as title, a.body as description, a.status, a.priority, 
-                       a.due_date, a.user_id, a.user_id as assignee_id, a.created_by, a.approver_id,
+                SELECT a.id, a.subject, a.subject as title, a.body, a.body as description, a.status, a.priority, 
+                       a.start_date, a.due_date, a.done_at, a.user_id, a.user_id as assignee_id, a.created_by, a.approver_id,
+                       a.task_group_id, a.contact_id, a.require_approval, a.approval_status, a.link, a.type,
                        a.participant_ids, a.tags, a.related_type, a.related_id, a.created_at, a.updated_at,
                        a.is_archived, a.is_hidden, a.progress,
-                       p.name as project_name, u.full_name as assignee_name, u.avatar_url as assignee_avatar,
+                       p.name as project_name,
+                       u.full_name as user_name, u.full_name as assignee_name, u.avatar_url as user_avatar, u.avatar_url as assignee_avatar,
                        uc.full_name as created_by_name, uc.avatar_url as created_by_avatar
                 FROM activities a
                 LEFT JOIN projects p ON (a.related_type = 'project' AND a.related_id = p.id)
@@ -1678,8 +1748,11 @@ class ProjectController {
                 LIMIT 1
             ");
             $fetchStmt->execute([$newTaskId]);
-            $newTaskRow = $fetchStmt->fetch(PDO::FETCH_ASSOC) ?: ['id' => $newTaskId, 'title' => $newSubject];
+            $newTaskRow = $fetchStmt->fetch(PDO::FETCH_ASSOC) ?: ['id' => $newTaskId, 'subject' => $newSubject, 'title' => $newSubject];
             $newTaskRow['comments'] = [];
+            $newTaskRow['comment_count'] = 0;
+            $newTaskRow['subtask_comment_counts'] = new stdClass();
+            $newTaskRow['duplicated_from_id'] = $id;
 
             respond(201, $newTaskRow, 'Nhân bản công việc thành công');
         } catch (\Throwable $e) {
@@ -1788,9 +1861,10 @@ class ProjectController {
 
             $origName = basename($f['name']);
             $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
-            $allowedExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip', 'rar', '7z', 'txt', 'csv'];
-            if (!in_array($ext, $allowedExts, true)) {
-                respond(422, null, 'Định dạng tệp không được hỗ trợ', false);
+            $blockedExts = ['php', 'phtml', 'php3', 'php4', 'php5', 'php7', 'phps', 'phar', 'cgi', 'pl', 'py', 'sh', 'bash', 'exe', 'bat', 'cmd', 'com', 'msi', 'vbs', 'js', 'mjs', 'html', 'htm', 'xhtml', 'svg', 'htaccess'];
+            $allowedExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip', 'rar', '7z', 'txt', 'csv', 'mp4', 'mov', 'mp3', 'wav'];
+            if (in_array($ext, $blockedExts, true) || !in_array($ext, $allowedExts, true)) {
+                respond(422, null, 'Định dạng tệp không được hỗ trợ hoặc không an toàn', false);
             }
 
             $uploadDir = __DIR__ . '/../../uploads/tasks/';
@@ -1947,13 +2021,19 @@ class ProjectController {
         if (empty($mentions)) {
             preg_match_all('/@([a-zA-Z0-9_\x{00C0}-\x{1EF9}()\s]+?)(?:<\/span>|<br|\n|$)/u', (string)$content, $matches);
             $names = is_array($matches[1] ?? null) ? $matches[1] : [];
+            $lookupNames = [];
             foreach ($names as $nameWithUnderscores) {
                 $nameClean = trim(strip_tags($nameWithUnderscores));
                 if (empty($nameClean)) continue;
-                $fullName = str_replace('_', ' ', $nameClean);
-                $stmtUser = $this->db->prepare("SELECT id, full_name, email FROM users WHERE (full_name = ? OR REPLACE(full_name, ' ', '_') = ?) AND tenant_id = ?");
-                $stmtUser->execute([$fullName, $nameClean, $tid]);
-                if ($u = $stmtUser->fetch(PDO::FETCH_ASSOC)) {
+                $lookupNames[] = $nameClean;
+                $lookupNames[] = str_replace('_', ' ', $nameClean);
+            }
+            $lookupNames = array_values(array_unique($lookupNames));
+            if (!empty($lookupNames)) {
+                $phNames = implode(',', array_fill(0, count($lookupNames), '?'));
+                $stmtUser = $this->db->prepare("SELECT id, full_name, email FROM users WHERE tenant_id = ? AND (full_name IN ($phNames) OR REPLACE(full_name, ' ', '_') IN ($phNames))");
+                $stmtUser->execute(array_merge([$tid], $lookupNames, $lookupNames));
+                foreach ($stmtUser->fetchAll(PDO::FETCH_ASSOC) ?: [] as $u) {
                     $mUid = (int)$u['id'];
                     if ($mUid !== $userId) {
                         $mentions[$mUid] = $u;
@@ -2040,7 +2120,7 @@ class ProjectController {
             respond(403, null, 'Bạn không có quyền xóa bình luận này', false);
         }
 
-        $this->db->prepare("DELETE FROM activity_comments WHERE id = ? OR parent_id = ?")->execute([$commentId, $commentId]);
+        $this->db->prepare("DELETE FROM activity_comments WHERE (id = ? OR parent_id = ?) AND tenant_id = ?")->execute([$commentId, $commentId, $tid]);
         respond(200, ['id' => $commentId], 'Xóa bình luận thành công');
     }
 }

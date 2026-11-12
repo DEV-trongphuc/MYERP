@@ -2900,6 +2900,8 @@ export const HrmAccountingAzWorkspace: React.FC<{
                       <th style={{ padding: '8px 8px', textAlign: 'left' }}>#</th>
                       <th style={{ padding: '8px 8px', textAlign: 'left', minWidth: 165 }}>Họ và tên</th>
                       <th style={{ padding: '8px 8px', textAlign: 'right' }}>Công</th>
+                      <th style={{ padding: '8px 8px', textAlign: 'center', minWidth: 120 }}>Phép / Bù sử dụng</th>
+                      <th style={{ padding: '8px 8px', textAlign: 'center', minWidth: 120 }}>Phép / Bù còn lại</th>
                       <th style={{ padding: '8px 8px', textAlign: 'right' }}>Lương theo công</th>
                       <th style={{ padding: '8px 8px', textAlign: 'right' }}>Phụ cấp</th>
                       <th style={{ padding: '8px 8px', textAlign: 'right' }}>Làm thêm</th>
@@ -2949,6 +2951,44 @@ export const HrmAccountingAzWorkspace: React.FC<{
                         </td>
                         <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace' }}>
                           {r.s.congTL}/{r.s.congChuan}
+                        </td>
+                        <td style={{ padding: '6px 8px', textAlign: 'center', fontSize: '0.7rem' }}>
+                          {(() => {
+                            const phepThang = Number(r.v?.phepThang ?? r.s.P ?? 0);
+                            const buThang = Number(r.v?.buThang ?? 0);
+                            const phepDaDung = Number(r.e.phepNamDaDung ?? phepThang ?? 0);
+                            const buDaDung = Number(r.e.nghiBuDaDung ?? buThang ?? 0);
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center' }}>
+                                <span>
+                                  Phép: <strong>{phepThang}</strong> <span style={{ color: '#64748b' }}>(LK: {phepDaDung})</span>
+                                </span>
+                                <span>
+                                  Bù: <strong>{buThang}</strong> <span style={{ color: '#64748b' }}>(LK: {buDaDung})</span>
+                                </span>
+                              </div>
+                            );
+                          })()}
+                        </td>
+                        <td style={{ padding: '6px 8px', textAlign: 'center', fontSize: '0.7rem' }}>
+                          {(() => {
+                            const phepTong = Number(r.e.phepNamTong ?? 12);
+                            const phepDaDung = Number(r.e.phepNamDaDung ?? 0);
+                            const phepCon = Number(r.e.phepNamConLai ?? Math.max(0, phepTong - phepDaDung));
+                            const buTong = Number(r.e.nghiBuTong ?? 0);
+                            const buDaDung = Number(r.e.nghiBuDaDung ?? 0);
+                            const buCon = Number(r.e.nghiBuConLai ?? Math.max(0, buTong - buDaDung));
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center' }}>
+                                <span style={{ color: phepCon > 0 ? '#065f46' : '#64748b', fontWeight: 700 }}>
+                                  Phép: {phepCon}/{phepTong}
+                                </span>
+                                <span style={{ color: buCon > 0 ? '#1d4ed8' : '#64748b', fontWeight: 700 }}>
+                                  Bù: {buCon}/{buTong}
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace' }}>
                           {fmt(r.lTheoCong)}
@@ -3081,7 +3121,7 @@ export const HrmAccountingAzWorkspace: React.FC<{
                   </tbody>
                   <tfoot>
                     <tr style={{ background: '#f1f5f9', fontWeight: 800, borderTop: '2px solid #cbd5e1' }}>
-                      <td colSpan={3} style={{ padding: '8px' }}>
+                      <td colSpan={5} style={{ padding: '8px' }}>
                         Tổng cộng ({currentPayrollRows.length} người)
                       </td>
                       <td style={{ padding: '8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace' }}>

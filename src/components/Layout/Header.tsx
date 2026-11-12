@@ -670,7 +670,7 @@ export const Header = ({
       window.removeEventListener('test-notification-toast', handleManualToastTest);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [showNotifSettings]);
+  }, []);
 
   const handleMarkRead = (id: number, isReadVal: number = 1) => {
     // Optimistic UI: Update notification state immediately (0ms)

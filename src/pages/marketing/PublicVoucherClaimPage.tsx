@@ -71,7 +71,7 @@ export const PublicClaim: React.FC = () => {
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0B0F19] p-6">
+            <div className="w-full h-dvh flex-1 min-w-0 overflow-y-auto overflow-x-hidden flex items-center justify-center bg-slate-50 dark:bg-[#0B0F19] p-6" style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain' }}>
                 <div className="max-w-md w-full bg-white dark:bg-[#111827] border border-slate-200 dark:border-white/[0.07] rounded-[20px] shadow-sm p-8 space-y-6">
                     <div className="flex flex-col items-center space-y-3">
                         <div className="w-16 h-16 rounded-full animate-pulse bg-slate-200/70 dark:bg-white/[0.06]" />
@@ -91,7 +91,7 @@ export const PublicClaim: React.FC = () => {
 
     if (!campaign) {
         return (
-            <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6">
+            <div className="w-full h-dvh flex-1 min-w-0 overflow-y-auto overflow-x-hidden flex flex-col items-center justify-center bg-slate-50 p-6" style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain' }}>
                 <div className="w-20 h-20 bg-slate-200 rounded-full flex items-center justify-center text-slate-400 mb-6">
                     <AlertCircle className="w-10 h-10" />
                 </div>
@@ -102,7 +102,7 @@ export const PublicClaim: React.FC = () => {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-tr from-rose-50/60 to-slate-50 p-6 relative overflow-hidden">
+        <div className="w-full h-dvh flex-1 min-w-0 overflow-y-auto overflow-x-hidden flex items-center justify-center bg-gradient-to-tr from-rose-50/60 to-slate-50 p-4 sm:p-6 relative" style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', touchAction: 'pan-y pan-x' }}>
             <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-rose-200/30 blur-[120px] rounded-full -mr-64 -mt-64 pointer-events-none" />
             <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-rose-100/40 blur-[100px] rounded-full -ml-48 -mb-48 pointer-events-none" />
 

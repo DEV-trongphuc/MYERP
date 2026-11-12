@@ -240,7 +240,7 @@ if (!function_exists('runWorkerFlow')) {
         $stmtUnsubscribeState = $pdo->prepare("UPDATE subscriber_flow_states SET status = 'unsubscribed', updated_at = NOW() WHERE id = ? AND workspace_id = ?");
         $stmtFailState = $pdo->prepare("UPDATE subscriber_flow_states SET status = 'failed', last_error = ?, updated_at = NOW() WHERE id = ? AND workspace_id = ?");
         $stmtCompleteExit = $pdo->prepare("UPDATE subscriber_flow_states SET status = 'completed', step_id = COALESCE(?, step_id), updated_at = NOW() WHERE id = ? AND workspace_id = ?");
-        $stmtStatCompleteBuff = $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment, created_at) VALUES ('flows', ?, 'stat_completed', 1, NOW())");
+        $stmtStatCompleteBuff = $pdo->prepare("INSERT INTO stats_update_buffer (workspace_id, target_table, target_id, column_name, increment, created_at) VALUES (?, 'flows', ?, 'stat_completed', 1, NOW())");
         $stmtStatCompleteFB = $pdo->prepare("UPDATE flows SET stat_completed = stat_completed + 1 WHERE id = ? AND workspace_id = ?");
         $stmtWaitSchedule = $pdo->prepare("UPDATE subscriber_flow_states SET status = 'waiting', scheduled_at = ?, step_id = ?, updated_at = NOW() WHERE id = ? AND workspace_id = ?");
         $stmtUpdateStep = $pdo->prepare("UPDATE subscriber_flow_states SET step_id = ?, step_type = ?, last_step_at = NOW(), updated_at = NOW() WHERE id = ? AND workspace_id = ?");
@@ -248,6 +248,8 @@ if (!function_exists('runWorkerFlow')) {
         $stmtCompleteStepType = $pdo->prepare("UPDATE subscriber_flow_states SET status = 'completed', step_id = ?, step_type = NULL, updated_at = NOW() WHERE id = ? AND workspace_id = ?");
         $stmtDynamicState = $pdo->prepare("UPDATE subscriber_flow_states SET status = ?, scheduled_at = ?, updated_at = NOW(), step_id = ?, step_type = ? WHERE id = ? AND workspace_id = ?");
 
+        $stepsProcessedInRun = $stepsProcessedInRun ?? 0;
+        $processedQueueIds = [];
         foreach ($items as $item) {
             // [PERF-GUARD] Stop if server is saturated (re-check every 10 subscribers)
             if ($stepsProcessedInRun > 0 && $stepsProcessedInRun % 10 === 0 && !isSystemHealthy(2.0, 64)) {
@@ -258,6 +260,7 @@ if (!function_exists('runWorkerFlow')) {
             // [FIX #3] Dùng $workerStartTime thay vì $_SERVER['REQUEST_TIME'] (an toàn hơn cho CLI/Cron)
             if (time() - $workerStartTime > 280)
                 break;
+            $processedQueueIds[(int)$item['queue_id']] = true;
 
             $pdo->beginTransaction();
             try {
@@ -601,7 +604,7 @@ if (!function_exists('runWorkerFlow')) {
 
                             // Buffer Completion Stat
                             try {
-                                $stmtStatCompleteBuff->execute([$flowId]);
+                                $stmtStatCompleteBuff->execute([(int)($item['subscriber_workspace_id'] ?? 1), $flowId]);
                             } catch (Exception $e) {
                                 $stmtStatCompleteFB->execute([$flowId, $item['subscriber_workspace_id']]);
                             }
@@ -647,6 +650,23 @@ if (!function_exists('runWorkerFlow')) {
         
             // [OPTIMIZATION] Explicit Garbage Collection (Zero-Leak Memory Profile)
             unset($item, $currentStep, $activityCache, $exitActivityCache, $contextData, $execResult, $freshState);
+        }
+
+        // Release any items that were locked as 'processing' but skipped due to early break
+        if (count($processedQueueIds) < count($items)) {
+            $unprocessedIds = [];
+            foreach ($items as $remItem) {
+                $qid = (int)($remItem['queue_id'] ?? 0);
+                if ($qid > 0 && empty($processedQueueIds[$qid])) {
+                    $unprocessedIds[] = $qid;
+                }
+            }
+            if (!empty($unprocessedIds)) {
+                $phRem = implode(',', array_fill(0, count($unprocessedIds), '?'));
+                try {
+                    $pdo->prepare("UPDATE subscriber_flow_states SET status = 'waiting', updated_at = NOW() WHERE id IN ($phRem) AND status = 'processing'")->execute($unprocessedIds);
+                } catch (Throwable $ignoreRem) {}
+            }
         }
 
         if (function_exists('flushActivityLogBuffer')) {

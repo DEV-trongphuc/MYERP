@@ -534,11 +534,11 @@ function getActualCustomerLastInteraction($conn, $phone, $email, $excludeLeadId 
 
     $cWhereClause = implode(' OR ', $contactWhere);
     $cSql = "
-        SELECT c.id, c.owner_id, c.last_contact, c.created_at,
+        SELECT c.id, c.owner_id, c.last_contact, c.created_at, c.notes as contact_notes,
                (SELECT MAX(a.created_at) FROM activities a 
-                WHERE a.deleted_at IS NULL AND ((a.related_type = 'contact' AND a.related_id = c.id) OR a.contact_id = c.id)) as max_activity_at,
+                WHERE a.deleted_at IS NULL AND a.created_at <= NOW() AND ((a.related_type = 'contact' AND a.related_id = c.id) OR a.contact_id = c.id)) as max_activity_at,
                (SELECT MAX(n.created_at) FROM notes n 
-                WHERE n.entity_type = 'contact' AND n.entity_id = c.id 
+                WHERE n.entity_type = 'contact' AND n.entity_id = c.id AND n.created_at <= NOW()
                   AND n.body NOT LIKE '[Tự động]%' 
                   AND n.body NOT LIKE '[Auto]%' 
                   AND n.body NOT LIKE '[Phân bổ]%' 
@@ -553,6 +553,8 @@ function getActualCustomerLastInteraction($conn, $phone, $email, $excludeLeadId 
     $realDates = [];
     $contactOwnerId = null;
     $contactId = null;
+    $contactNotesText = '';
+    $nowTs = time() + 86400;
 
     if ($stmtC) {
         $stmtC->bind_param($contactTypes, ...$contactParams);
@@ -561,20 +563,21 @@ function getActualCustomerLastInteraction($conn, $phone, $email, $excludeLeadId 
         if ($cRes && $cRow = $cRes->fetch_assoc()) {
             $contactId = (int)$cRow['id'];
             $contactOwnerId = !empty($cRow['owner_id']) ? (int)$cRow['owner_id'] : null;
-            if (!empty($cRow['last_contact'])) {
-                $realDates[] = $cRow['last_contact'];
-            }
-            if (!empty($cRow['max_activity_at'])) {
-                $realDates[] = $cRow['max_activity_at'];
-            }
-            if (!empty($cRow['max_note_at'])) {
-                $realDates[] = $cRow['max_note_at'];
+            $contactNotesText = (string)($cRow['contact_notes'] ?? '');
+            foreach (['last_contact', 'max_activity_at', 'max_note_at'] as $dCol) {
+                if (!empty($cRow[$dCol])) {
+                    $dTs = strtotime((string)$cRow[$dCol]);
+                    if ($dTs !== false && $dTs > 946684800 && $dTs <= $nowTs) {
+                        $realDates[] = $cRow[$dCol];
+                    }
+                }
             }
         }
         $stmtC->close();
     }
 
-    // 2. Quét thêm bảng leads (nếu có cập nhật tương tác thực tế sau khi tạo)
+    // 2. Quét thêm bảng leads & distribution_logs để lấy người phụ trách và lịch sử đăng ký/phân bổ thực tế
+    // Lưu ý: Bảng leads có UNIQUE theo phone/email (chỉ có 1 dòng/khách), tuyệt đối KHÔNG dùng l.id != $excludeLeadId làm mất bản ghi duy nhất
     $leadWhere = [];
     $leadParams = [];
     $leadTypes = '';
@@ -589,31 +592,98 @@ function getActualCustomerLastInteraction($conn, $phone, $email, $excludeLeadId 
         foreach ($emails as $e) { $leadParams[] = $e; $leadTypes .= 's'; }
     }
     $lWhereClause = implode(' OR ', $leadWhere);
-    $lExClause = $excludeLeadId ? " AND l.id != " . (int)$excludeLeadId : "";
     $lSql = "
-        SELECT l.id, l.assigned_to, l.created_at, l.last_interaction_date 
+        SELECT l.id, l.assigned_to, l.created_at, l.last_interaction_date, l.note as lead_note
         FROM leads l 
-        WHERE ($lWhereClause) $lExClause 
+        WHERE ($lWhereClause)
         ORDER BY l.id DESC LIMIT 1
     ";
     $stmtL = $conn->prepare($lSql);
     $leadOwnerId = null;
+    $foundLeadId = null;
+    $leadNotesText = '';
     if ($stmtL) {
         $stmtL->bind_param($leadTypes, ...$leadParams);
         $stmtL->execute();
         $lRes = $stmtL->get_result();
         if ($lRes && $lRow = $lRes->fetch_assoc()) {
+            $foundLeadId = (int)$lRow['id'];
             $leadOwnerId = !empty($lRow['assigned_to']) ? (int)$lRow['assigned_to'] : null;
-            // Chỉ tính nếu last_interaction_date lớn hơn created_at tối thiểu 1 phút (tức có tương tác thực tế sau khi tạo)
-            if (!empty($lRow['last_interaction_date']) && !empty($lRow['created_at'])) {
-                $createdTs = strtotime($lRow['created_at']);
-                $interactTs = strtotime($lRow['last_interaction_date']);
-                if (($interactTs - $createdTs) > 60) {
-                    $realDates[] = $lRow['last_interaction_date'];
-                }
-            }
+            $leadNotesText = (string)($lRow['lead_note'] ?? '');
         }
         $stmtL->close();
+    }
+
+    // 3. Lấy mốc phân bổ/tương tác thực tế từ distribution_logs (loại trừ import 'silent', 'pending_approval' và lượt vừa tạo trong 5 phút gần nhất)
+    $pendingApprovalDateYmd = null;
+    if ($foundLeadId) {
+        $stmtPend = $conn->prepare("
+            SELECT DATE(received_at) as pend_date
+            FROM distribution_logs
+            WHERE lead_id = ? AND status IN ('pending_approval', 'pending_work_hours', 'pending')
+            ORDER BY id DESC LIMIT 1
+        ");
+        if ($stmtPend) {
+            $stmtPend->bind_param("i", $foundLeadId);
+            $stmtPend->execute();
+            $pendRow = $stmtPend->get_result()->fetch_assoc();
+            $stmtPend->close();
+            if ($pendRow && !empty($pendRow['pend_date'])) {
+                $pendingApprovalDateYmd = $pendRow['pend_date'];
+            }
+        }
+
+        $stmtDl = $conn->prepare("
+            SELECT dl.received_at, dl.assigned_to
+            FROM distribution_logs dl
+            WHERE dl.lead_id = ?
+              AND dl.status IN ('assigned', 'compensation', 'reminder', 'reallocated', 'rule_6_month', 'databank_claim')
+              AND dl.assigned_to IS NOT NULL
+              AND dl.assigned_to > 0
+              AND dl.received_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+            ORDER BY dl.received_at DESC
+            LIMIT 1
+        ");
+        if ($stmtDl) {
+            $stmtDl->bind_param("i", $foundLeadId);
+            $stmtDl->execute();
+            $dlRes = $stmtDl->get_result();
+            if ($dlRes && $dlRow = $dlRes->fetch_assoc()) {
+                if (!empty($dlRow['received_at'])) {
+                    $dTs = strtotime((string)$dlRow['received_at']);
+                    if ($dTs !== false && $dTs > 946684800 && $dTs <= $nowTs) {
+                        $realDates[] = $dlRow['received_at'];
+                    }
+                }
+                if (empty($leadOwnerId) && !empty($dlRow['assigned_to'])) {
+                    $leadOwnerId = (int)$dlRow['assigned_to'];
+                }
+            }
+            $stmtDl->close();
+        }
+    }
+
+    // 4. Quét các mốc [Ngày dd/mm/yyyy] trong ghi chú của Lead / Contact (loại trừ nhãn Tái phân bổ hệ thống và ngày hôm nay / ngày đang chờ duyệt)
+    $todayYmd = date('Y-m-d');
+    $combinedNotes = $leadNotesText . "\n" . $contactNotesText;
+    if (preg_match_all('/\[Ngày\s+(\d{2})\/(\d{2})\/(\d{4})([^\]]*)\]/u', $combinedNotes, $matches, PREG_SET_ORDER)) {
+        foreach ($matches as $m) {
+            $tagSuffix = trim((string)($m[4] ?? ''));
+            if (mb_stripos($tagSuffix, 'Tái phân bổ', 0, 'UTF-8') !== false) {
+                continue;
+            }
+            $dYmd = $m[3] . '-' . $m[2] . '-' . $m[1];
+            if ($dYmd === $todayYmd) {
+                continue;
+            }
+            if ($pendingApprovalDateYmd && $dYmd === $pendingApprovalDateYmd) {
+                continue;
+            }
+            $dTs = strtotime($dYmd . ' 12:00:00');
+            if ($dTs !== false && $dTs > 946684800 && $dTs <= $nowTs) {
+                $realDates[] = $dYmd . ' 12:00:00';
+            }
+        }
     }
 
     if (empty($realDates)) {
@@ -856,7 +926,8 @@ function checkCRMInteraction($conn, $phone, $email, $ignoreReassignIfOwnerInacti
         $hasOwner = true;
     }
 
-    if ($leadExists && !$hasOwner && $leadId) {
+    if ((!$leadExists && $excludeLeadId) || ($leadExists && !$hasOwner && $leadId)) {
+        $lookupHistoryLeadId = $leadId ?: (int)$excludeLeadId;
         $stmtHistory = $conn->prepare("
             SELECT dl.assigned_to, dl.received_at as last_interaction_date, c.name as consultant_name, c.status as consultant_status, c.leave_start, c.leave_end, c.vacation_mode 
             FROM distribution_logs dl
@@ -868,12 +939,17 @@ function checkCRMInteraction($conn, $phone, $email, $ignoreReassignIfOwnerInacti
             ORDER BY dl.received_at DESC LIMIT 1
         ");
         if ($stmtHistory) {
-            $stmtHistory->bind_param("i", $leadId);
+            $stmtHistory->bind_param("i", $lookupHistoryLeadId);
             $stmtHistory->execute();
             $resHistory = $stmtHistory->get_result();
             $stmtHistory->close();
             if ($resHistory && $resHistory->num_rows > 0) {
                 $historyRow = $resHistory->fetch_assoc();
+                if (!$leadExists) {
+                    $leadExists = true;
+                    $leadId = $lookupHistoryLeadId;
+                    $leadRow = ['id' => $lookupHistoryLeadId, 'lead_status' => 'active'];
+                }
                 $leadRow['assigned_to'] = $historyRow['assigned_to'];
                 $leadRow['last_interaction_date'] = $historyRow['last_interaction_date'];
                 $leadRow['consultant_name'] = $historyRow['consultant_name'];
@@ -881,6 +957,7 @@ function checkCRMInteraction($conn, $phone, $email, $ignoreReassignIfOwnerInacti
                 $leadRow['leave_start'] = $historyRow['leave_start'];
                 $leadRow['leave_end'] = $historyRow['leave_end'];
                 $leadRow['vacation_mode'] = $historyRow['vacation_mode'];
+                $hasOwner = true;
             }
         }
     }
@@ -1515,9 +1592,11 @@ function checkNightShiftAvailability($conn, $consultantId, $currentTime)
     return false;
 }
 
-function getNextConsultantInRound($conn, $roundId, $lead = null, $excludeIds = [])
+function getNextConsultantInRound($conn, $roundId, $lead = null, $excludeIds = [], $manageTransaction = true)
 {
-    $conn->begin_transaction();
+    if ($manageTransaction) {
+        $conn->begin_transaction();
+    }
     try {
         // 1. Get round info with FOR UPDATE lock
         $stmt = $conn->prepare("SELECT last_assigned_consultant_id FROM distribution_rounds WHERE id = ? AND is_active = 1 FOR UPDATE");
@@ -1527,7 +1606,9 @@ function getNextConsultantInRound($conn, $roundId, $lead = null, $excludeIds = [
 
         if ($res->num_rows === 0) {
             $stmt->close();
-            $conn->commit();
+            if ($manageTransaction) {
+                $conn->commit();
+            }
             return null; // Round not found or inactive
         }
 
@@ -1603,7 +1684,9 @@ function getNextConsultantInRound($conn, $roundId, $lead = null, $excludeIds = [
         if ($cRes->num_rows === 0) {
             error_log("IDEAS ERROR: Round ID $roundId has no active consultants!");
             $cStmt->close();
-            $conn->commit();
+            if ($manageTransaction) {
+                $conn->commit();
+            }
             return null;
         }
 
@@ -1613,6 +1696,13 @@ function getNextConsultantInRound($conn, $roundId, $lead = null, $excludeIds = [
                 continue;
             }
             $consultants[] = $row;
+        }
+        if (empty($consultants)) {
+            $cStmt->close();
+            if ($manageTransaction) {
+                $conn->commit();
+            }
+            return null;
         }
 
         $starvationCounts = [];
@@ -1719,7 +1809,9 @@ function getNextConsultantInRound($conn, $roundId, $lead = null, $excludeIds = [
             $compStmt->execute();
             $compStmt->close();
             if (isset($cStmt)) $cStmt->close();
-            $conn->commit();
+            if ($manageTransaction) {
+                $conn->commit();
+            }
             return ['id' => $nextId, 'is_compensation' => true];
         }
 
@@ -1731,7 +1823,9 @@ function getNextConsultantInRound($conn, $roundId, $lead = null, $excludeIds = [
             $starvStmt->execute();
             $starvStmt->close();
             if (isset($cStmt)) $cStmt->close();
-            $conn->commit();
+            if ($manageTransaction) {
+                $conn->commit();
+            }
             return ['id' => $nextId, 'is_compensation' => true, 'is_starvation' => true];
         }
 
@@ -1743,7 +1837,9 @@ function getNextConsultantInRound($conn, $roundId, $lead = null, $excludeIds = [
             $midStmt->execute();
             $midStmt->close();
             if (isset($cStmt)) $cStmt->close();
-            $conn->commit();
+            if ($manageTransaction) {
+                $conn->commit();
+            }
             return ['id' => $nextId, 'is_compensation' => false];
         }
 
@@ -1800,7 +1896,9 @@ function getNextConsultantInRound($conn, $roundId, $lead = null, $excludeIds = [
             if (isset($skipResetStmt)) $skipResetStmt->close();
             if (isset($skipIncrStmt)) $skipIncrStmt->close();
             if (isset($cStmt)) $cStmt->close();
-            $conn->commit();
+            if ($manageTransaction) {
+                $conn->commit();
+            }
             return null;
         }
 
@@ -1839,11 +1937,15 @@ function getNextConsultantInRound($conn, $roundId, $lead = null, $excludeIds = [
         if (isset($skipIncrStmt)) $skipIncrStmt->close();
         if (isset($cStmt)) $cStmt->close();
 
-        $conn->commit();
+        if ($manageTransaction) {
+            $conn->commit();
+        }
         return ['id' => $nextId, 'is_compensation' => false];
 
     } catch (Exception $ex) {
-        $conn->rollback();
+        if ($manageTransaction) {
+            $conn->rollback();
+        }
         error_log("IDEAS ERROR: Exception in getNextConsultantInRound: " . $ex->getMessage());
         return null;
     }
@@ -2770,7 +2872,7 @@ if (!function_exists('syncRealtimeMarketingAndMetaAttribution')) {
                     ");
                     if ($iSub) {
                         $iSub->bind_param(
-                            "iiisssssssssssiissss",
+                            "iiissssssssssiissss",
                             $tenantId,
                             $cid,
                             $subPersonId,
@@ -3065,7 +3167,7 @@ function updateLead($conn, $phone, $email, $assignedConsultantId, $source, $type
         $uStmt->execute();
         $uStmt->close();
         if ($id > 0) {
-            ensurePersonAndContact($conn, $id);
+            ensurePersonAndContact($conn, $id, null, $note);
             if (function_exists('syncRealtimeMarketingAndMetaAttribution')) {
                 syncRealtimeMarketingAndMetaAttribution(
                     $conn,
@@ -5249,7 +5351,7 @@ function sendNewLeadApiNotificationToAdmins($conn, $connData, $leadId, $customer
     return true;
 }
 
-function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
+function ensurePersonAndContact($conn, $leadId, $creatorUserId = null, $incrementalNote = null) {
     // 1. Get lead info
     $stmt = $conn->prepare("SELECT phone, email, name, source, type, note, assigned_to, is_accepted, target_round_id, person_id FROM leads WHERE id = ?");
     if (!$stmt) return;
@@ -5419,7 +5521,7 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
         // Get all active contacts for this person
         $existingContacts = [];
         if (!empty($person_id)) {
-            $stmtExist = $conn->prepare("SELECT id, owner_id, status, pipeline_status, stage_id FROM contacts WHERE person_id = ? AND deleted_at IS NULL ORDER BY id DESC");
+            $stmtExist = $conn->prepare("SELECT id, owner_id, status, pipeline_status, stage_id, notes FROM contacts WHERE person_id = ? AND deleted_at IS NULL ORDER BY id DESC");
             $stmtExist->bind_param("i", $person_id);
             $stmtExist->execute();
             $resExist = $stmtExist->get_result();
@@ -5433,7 +5535,7 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
         if (empty($existingContacts) && !empty($phone)) {
             $noZeroP = ltrim($phone, '0');
             $withZeroP = '0' . $noZeroP;
-            $stmtExistPhone = $conn->prepare("SELECT id, owner_id, status, pipeline_status, stage_id FROM contacts WHERE (phone = ? OR phone = ?) AND deleted_at IS NULL ORDER BY id DESC");
+            $stmtExistPhone = $conn->prepare("SELECT id, owner_id, status, pipeline_status, stage_id, notes FROM contacts WHERE (phone = ? OR phone = ?) AND deleted_at IS NULL ORDER BY id DESC");
             if ($stmtExistPhone) {
                 $stmtExistPhone->bind_param("ss", $withZeroP, $noZeroP);
                 $stmtExistPhone->execute();
@@ -5449,8 +5551,27 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
             // (Không tạo thêm tiềm năng mới nha chỉ lấy cái cũ giao lại cho sale mới thôi)
             $primaryContact = $existingContacts[0];
             $primaryContactId = (int)$primaryContact['id'];
+            $existingNotesStr = trim((string)($primaryContact['notes'] ?? ''));
+            // Nếu là cập nhật từ upsertLead ($incrementalNote !== null), chỉ nối phần ghi chú mới của lần tương tác này,
+            // tuyệt đối không lấy toàn bộ leads.note cũ trong quá khứ nối lại gây nhân bản hoặc gắn nhầm nhãn ngày hiện tại lên lịch sử cũ.
+            $candidateNote = ($incrementalNote !== null) ? (string)$incrementalNote : (string)$note;
+            $cleanIncomingNote = trim($candidateNote);
+            if ($incrementalNote === null && $cleanIncomingNote !== '' && $existingNotesStr !== '') {
+                $blocks = preg_split('/\r?\n___\r?\n/u', $cleanIncomingNote);
+                $newBlocks = [];
+                foreach ($blocks as $blk) {
+                    $bTrim = trim(preg_replace('/^\[Ngày\s+[^\]]+\]\s*/u', '', trim($blk)));
+                    if ($bTrim !== '' && mb_strpos($existingNotesStr, $bTrim, 0, 'UTF-8') === false) {
+                        $newBlocks[] = trim($blk);
+                    }
+                }
+                $cleanIncomingNote = implode("\n___\n", $newBlocks);
+            }
+            $noteToAppend = ($cleanIncomingNote !== '' && $existingNotesStr !== '' && mb_strpos($existingNotesStr, $cleanIncomingNote, 0, 'UTF-8') !== false)
+                ? ''
+                : $cleanIncomingNote;
 
-            // Kiểm tra xem lead này vừa được chia vòng mới chính thức (assigned / rule_6_month / compensation...) hay chỉ là nhắc nhở (reminder)
+            // Kiểm tra xem lead này vừa được chia vòng mới chính thức trong vòng 2 phút gần nhất hay chỉ là nhắc nhở (reminder)
             $isFreshOfficialDistribution = false;
             $freshDistTime = date('Y-m-d H:i:s');
             if ($leadId > 0) {
@@ -5461,8 +5582,9 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
                     $dlRow = $stmtChkDl->get_result()->fetch_assoc();
                     $stmtChkDl->close();
                     if ($dlRow && in_array(strtolower(trim((string)($dlRow['status'] ?? ''))), ['assigned', 'rule_6_month', 'compensation', 'pending_work_hours', 'fallback', 'success', 'databank_claim'], true)) {
-                        $isFreshOfficialDistribution = true;
-                        if (!empty($dlRow['received_at'])) {
+                        $dlTs = !empty($dlRow['received_at']) ? strtotime($dlRow['received_at']) : 0;
+                        if ($dlTs > 0 && (time() - $dlTs) <= 120) {
+                            $isFreshOfficialDistribution = true;
                             $freshDistTime = $dlRow['received_at'];
                         }
                     }
@@ -5470,14 +5592,18 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
             }
 
             $alreadyOwned = ((int)$primaryContact['owner_id'] === (int)$ownerUserId);
+            $isBeforeHoSo = isContactBeforeHoSoStep($conn, $primaryContactId);
 
-            if ($alreadyOwned && !$isFreshOfficialDistribution) {
-                // Đã thuộc Sale này (nhắc lại / reminder trong 6 tháng) -> Cập nhật thông tin, nối thêm ghi chú, giữ nguyên created_at và pipeline cũ
+            // NẾU ĐÃ THUỘC SALE NÀY NHƯNG KHÔNG PHẢI CHIA VÒNG MỚI CHÍNH THỨC (>6 THÁNG, TRƯỚC HỒ SƠ):
+            // BẢO TOÀN 100% TIẾN TRÌNH PIPELINE (stage_id & pipeline_status), KHÔNG BAO GIỜ RESET VỀ NEW_LEAD
+            if ($alreadyOwned && !($isFreshOfficialDistribution && $isBeforeHoSo)) {
+                // Đã thuộc Sale này (nhắc lại / reminder trong 6 tháng / re-sync sheet) -> Cập nhật thông tin, nối thêm ghi chú, giữ nguyên created_at và pipeline cũ
                 $stmtUpContact = $conn->prepare("
                     UPDATE contacts 
                     SET full_name = IF(? != '' AND (full_name = '' OR full_name IS NULL), ?, full_name),
                         email = IF(? != '' AND (email = '' OR email IS NULL), ?, email),
-                        phone = IF(? != '' AND (phone = '' OR phone IS NULL), ?, phone),
+                        phone = IF(? != '' AND (phone = '' OR phone IS NULL OR phone NOT LIKE '0%'), ?, phone),
+                        source = IF(? != '' AND ? != 'other', ?, source),
                         stage_id = IF(stage_id IS NULL OR stage_id = 0, ?, stage_id),
                         pipeline_status = IF(pipeline_status IS NULL OR pipeline_status = '' OR pipeline_status = 'chua_xac_dinh', ?, pipeline_status),
                         notes = IF(TRIM(?) = '', notes, CONCAT(IFNULL(notes, ''), IF(IFNULL(notes, '') = '', '', CONCAT('\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ' - Khách hàng nhắc lại / tương tác mới]\n')), ?)),
@@ -5487,13 +5613,12 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
                     WHERE id = ?
                 ");
                 if ($stmtUpContact) {
-                    $stmtUpContact->bind_param("ssssssississi", $fullName, $fullName, $email, $email, $phone, $phone, $firstStageId, $firstStageSlug, $note, $note, $type, $type, $primaryContactId);
+                    $stmtUpContact->bind_param("sssssssssisssssi", $fullName, $fullName, $email, $email, $phone, $phone, $source, $source, $source, $firstStageId, $firstStageSlug, $noteToAppend, $noteToAppend, $type, $type, $primaryContactId);
                     $stmtUpContact->execute();
                     $stmtUpContact->close();
                 }
             } else {
                 // Thuộc Sale cũ HOẶC được chia vòng mới chính thức (>6 tháng) -> kiểm tra điều kiện
-                $isBeforeHoSo = isContactBeforeHoSoStep($conn, $primaryContactId);
                 $isOldContactOwnerInactive = false;
                 if (!$isBeforeHoSo) {
                     $oldContactOwnerId = (int)($primaryContact['owner_id'] ?? 0);
@@ -5513,7 +5638,7 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
                             person_id = IF(person_id IS NULL, ?, person_id),
                             full_name = IF(? != '' AND (full_name = '' OR full_name IS NULL), ?, full_name),
                             email = IF(? != '' AND (email = '' OR email IS NULL), ?, email),
-                            phone = IF(? != '' AND (phone = '' OR phone IS NULL), ?, phone),
+                            phone = IF(? != '' AND (phone = '' OR phone IS NULL OR phone NOT LIKE '0%'), ?, phone),
                             source = IF(? != '' AND ? != 'other', ?, source),
                             status = 'lead',
                             lead_status = 'active',
@@ -5538,7 +5663,7 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
                             $firstStageSlug,
                             $firstStageId,
                             $secExpiresTime, 
-                            $note, $note, 
+                            $noteToAppend, $noteToAppend, 
                             $type, $type,
                             $freshDistTime,
                             $primaryContactId
@@ -5578,14 +5703,14 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
                         UPDATE contacts 
                         SET full_name = IF(? != '' AND (full_name = '' OR full_name IS NULL), ?, full_name),
                             email = IF(? != '' AND (email = '' OR email IS NULL), ?, email),
-                            phone = IF(? != '' AND (phone = '' OR phone IS NULL), ?, phone),
+                            phone = IF(? != '' AND (phone = '' OR phone IS NULL OR phone NOT LIKE '0%'), ?, phone),
                             notes = IF(TRIM(?) = '', notes, CONCAT(IFNULL(notes, ''), IF(IFNULL(notes, '') = '', '', CONCAT('\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ' - Khách đăng ký lại (Giữ nguyên Sale do đã ở bước Hồ sơ)]\n')), ?)),
                             customer_type = IF(? != '', ?, customer_type),
                             updated_at = NOW()
                         WHERE id = ?
                     ");
                     if ($stmtKeepOld) {
-                        $stmtKeepOld->bind_param("ssssssssssi", $fullName, $fullName, $email, $email, $phone, $phone, $note, $note, $type, $type, $primaryContactId);
+                        $stmtKeepOld->bind_param("ssssssssssi", $fullName, $fullName, $email, $email, $phone, $phone, $noteToAppend, $noteToAppend, $type, $type, $primaryContactId);
                         $stmtKeepOld->execute();
                         $stmtKeepOld->close();
                     }
@@ -5702,7 +5827,7 @@ if (!function_exists('redistributePendingLeads')) {
                     $lockStmt->close();
                     
                     // Assign to next consultant (without any exclusions since it's a new day!)
-                    $assignResult = getNextConsultantInRound($conn, $roundId);
+                    $assignResult = getNextConsultantInRound($conn, $roundId, null, [], false);
                     
                     $newConsultantId = null;
                     $newStatus = 'assigned';
@@ -5764,10 +5889,6 @@ if (!function_exists('redistributePendingLeads')) {
                     $upLead->bind_param("iii", $newConsultantId, $isAcceptedVal, $leadId);
                     $upLead->execute();
                     $upLead->close();
-
-                    if ($isAcceptedVal === 1) {
-                        ensurePersonAndContact($conn, $leadId);
-                    }
                     
                     // Get round info
                     $rStmt = $conn->prepare("SELECT round_name, cc_emails FROM distribution_rounds WHERE id = ?");
@@ -5790,6 +5911,10 @@ if (!function_exists('redistributePendingLeads')) {
                     }
                     
                     logDistribution($conn, $leadId, $newConsultantId, $roundId, $newStatus, $logMsg, false);
+
+                    if ($isAcceptedVal === 1) {
+                        ensurePersonAndContact($conn, $leadId);
+                    }
                     
                     $conn->commit();
                     

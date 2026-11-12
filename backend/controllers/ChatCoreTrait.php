@@ -1144,16 +1144,31 @@ trait ChatCoreTrait {
         }
 
         $parsed = parse_url($rawUrl);
-        $domain = $parsed['host'] ?? $rawUrl;
+        $scheme = strtolower($parsed['scheme'] ?? '');
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            respond(400, null, 'Chỉ hỗ trợ giao thức HTTP/HTTPS', false);
+        }
+        $domain = $parsed['host'] ?? '';
+        if (empty($domain) || in_array(strtolower($domain), ['localhost', '127.0.0.1', '::1', '0.0.0.0', 'metadata.google.internal'], true)) {
+            respond(400, null, 'Tên miền không hợp lệ', false);
+        }
+        $resolvedIp = @gethostbyname($domain);
+        if ($resolvedIp && filter_var($resolvedIp, FILTER_VALIDATE_IP)) {
+            if (!filter_var($resolvedIp, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                respond(400, null, 'Địa chỉ IP nội bộ không được phép truy cập', false);
+            }
+        }
 
         try {
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $rawUrl);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-            curl_setopt($ch, CURLOPT_MAXREDIRS, 3);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
+            if (defined('CURLOPT_PROTOCOLS') && defined('CURLPROTO_HTTP') && defined('CURLPROTO_HTTPS')) {
+                curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+            }
             curl_setopt($ch, CURLOPT_TIMEOUT, 3);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
             curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 (compatible; Googlebot/2.1)');
             // Limit downloaded bytes to 350KB
             curl_setopt($ch, CURLOPT_RANGE, '0-350000');
@@ -1406,18 +1421,36 @@ trait ChatCoreTrait {
      */
     public function togglePinMessage(array $auth, int $conversationId): void {
         $uid = (int)($auth['user_id'] ?? 0);
+        $tid = (int)($auth['tenant_id'] ?? 1);
         $body = getBody();
         $messageId = (int)($body['message_id'] ?? 0);
 
         try {
-            $stmtCurr = $this->db->prepare("SELECT pinned_message_id FROM chat_conversations WHERE id = ?");
-            $stmtCurr->execute([$conversationId]);
-            $currentPinned = (int)$stmtCurr->fetchColumn();
+            $stmtAccess = $this->db->prepare("
+                SELECT c.pinned_message_id 
+                FROM chat_conversations c
+                INNER JOIN chat_participants cp ON cp.conversation_id = c.id AND cp.user_id = ?
+                WHERE c.id = ? AND c.tenant_id = ?
+            ");
+            $stmtAccess->execute([$uid, $conversationId, $tid]);
+            $convRow = $stmtAccess->fetch(PDO::FETCH_ASSOC);
+            if (!$convRow) {
+                respond(403, null, 'Bạn không phải là thành viên của cuộc trò chuyện này', false);
+            }
+            $currentPinned = (int)($convRow['pinned_message_id'] ?? 0);
 
-            $newPinned = ($currentPinned === $messageId) ? null : $messageId;
+            if ($messageId > 0 && $currentPinned !== $messageId) {
+                $stmtMsg = $this->db->prepare("SELECT id FROM chat_messages WHERE id = ? AND conversation_id = ? AND is_deleted = 0");
+                $stmtMsg->execute([$messageId, $conversationId]);
+                if (!$stmtMsg->fetch()) {
+                    respond(404, null, 'Tin nhắn không thuộc cuộc trò chuyện này', false);
+                }
+            }
 
-            $this->db->prepare("UPDATE chat_conversations SET pinned_message_id = ? WHERE id = ?")
-                     ->execute([$newPinned, $conversationId]);
+            $newPinned = ($currentPinned === $messageId || $messageId <= 0) ? null : $messageId;
+
+            $this->db->prepare("UPDATE chat_conversations SET pinned_message_id = ? WHERE id = ? AND tenant_id = ?")
+                     ->execute([$newPinned, $conversationId, $tid]);
 
             respond(200, ['pinned_message_id' => $newPinned]);
         } catch (\Throwable $e) {

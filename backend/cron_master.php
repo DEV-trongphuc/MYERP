@@ -92,18 +92,25 @@ $tasks = [
     'cron_recurring_tasks.php',
     'cron_deposit_reminders.php',
     'cron_academic_reminders.php',
-    'cron_mailer.php'
+    'cron_mailer.php',
+    'automation/worker_tracking_aggregator.php',
+    'automation/worker_flow.php',
+    'automation/worker_campaign.php',
+    'automation/worker_queue.php',
+    'automation/worker_trigger.php',
+    'automation/worker_enroll.php'
 ];
 
 require_once __DIR__ . '/db_connect.php';
 
 function runBackgroundProcess($phpBin, $taskPath) {
+    $taskDir = dirname($taskPath);
     if (stristr(PHP_OS, 'WIN')) {
         // Windows background execute command
-        @pclose(@popen('start /B "" "' . $phpBin . '" "' . $taskPath . '"', 'r'));
+        @pclose(@popen('cd /d "' . $taskDir . '" && start /B "" "' . $phpBin . '" "' . $taskPath . '"', 'r'));
     } else {
         // Linux background execute command
-        @exec('"' . $phpBin . '" "' . $taskPath . '" > /dev/null 2>&1 &');
+        @exec('cd "' . $taskDir . '" && "' . $phpBin . '" "' . $taskPath . '" > /dev/null 2>&1 &');
     }
 }
 

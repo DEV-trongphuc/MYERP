@@ -1149,6 +1149,31 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                                 [activeConversationId]: isMulti ? 'collaborating' : 'handover'
                               }
                             }));
+                          } else if (event.type === 'agent_step' && event.step) {
+                            set((state) => {
+                              const currentMsgs = state.messagesByConvId[activeConversationId] || [];
+                              return {
+                                messagesByConvId: {
+                                  ...state.messagesByConvId,
+                                  [activeConversationId]: currentMsgs.map((m) => {
+                                    if (m.id !== aiTempId) return m;
+                                    const prevMeta = (m.metadata && typeof m.metadata === 'object') ? m.metadata : {};
+                                    const prevSteps = Array.isArray((prevMeta as any).agent_steps) ? (prevMeta as any).agent_steps : [];
+                                    const stepIdx = prevSteps.findIndex((s: any) => s && s.id === event.step.id);
+                                    const nextSteps = stepIdx >= 0
+                                      ? prevSteps.map((s: any, idx: number) => idx === stepIdx ? event.step : s)
+                                      : [...prevSteps, event.step];
+                                    return {
+                                      ...m,
+                                      metadata: {
+                                        ...prevMeta,
+                                        agent_steps: nextSteps
+                                      }
+                                    };
+                                  })
+                                }
+                              };
+                            });
                           } else if (event.type === 'chunk' && event.delta) {
                             const isFirstChunk = accumulatedAiText.length === 0;
                             accumulatedAiText += event.delta;
@@ -1941,7 +1966,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         set((state) => {
           const existing = state.messagesByConvId[activeConversationId] || [];
           const existingIds = new Set(existing.map((m) => m.id));
-          const uniqueNew = incoming.filter((m) => !existingIds.has(m.id));
+          const isStreamingHere = !!(state.isAiThinkingByConvId[activeConversationId] || state.isAiTypingByConvId[activeConversationId]);
+          const uniqueNew = incoming.filter((m) => {
+            if (existingIds.has(m.id)) return false;
+            if (isStreamingHere && Number(m.sender_id) === 9000001) return false;
+            return true;
+          });
 
           if (uniqueNew.length === 0) return state;
 
@@ -1949,10 +1979,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             hasNewFromOther = true;
           }
 
+          // Remove any optimistic negative-ID bubble that matches a newly arrived positive-ID message
+          const cleanedExisting = existing.filter((ex) => {
+            if (ex.id >= 0) return true;
+            return !uniqueNew.some(
+              (nm) => Number(nm.sender_id) === Number(ex.sender_id) && (nm.content || '').trim() === (ex.content || '').trim()
+            );
+          });
+
           return {
             messagesByConvId: {
               ...state.messagesByConvId,
-              [activeConversationId]: [...existing, ...uniqueNew]
+              [activeConversationId]: [...cleanedExisting, ...uniqueNew]
             }
           };
         });
@@ -2250,8 +2288,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               incoming.forEach((msg) => {
                 const convId = msg.conversation_id;
                 const existing = updatedMessages[convId] || [];
+                const isStreamingConv = !!(state.isAiThinkingByConvId[convId] || state.isAiTypingByConvId[convId]);
+                if (isStreamingConv && Number(msg.sender_id) === 9000001) {
+                  return;
+                }
                 if (!existing.some((m) => m.id === msg.id)) {
-                  updatedMessages[convId] = [...existing, msg];
+                  const cleanedExisting = existing.filter((ex) => {
+                    if (ex.id >= 0) return true;
+                    return !(Number(ex.sender_id) === Number(msg.sender_id) && (ex.content || '').trim() === (msg.content || '').trim());
+                  });
+                  updatedMessages[convId] = [...cleanedExisting, msg];
                   if (convId === activeConversationId) {
                     hasNewInActive = true;
                   }

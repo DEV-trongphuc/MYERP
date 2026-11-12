@@ -44,6 +44,9 @@ html, body {
 /* 4. Drawer & Modal Z-Index Hierarchy (Strict Hiến Chương MYERP)
    NOTE: Never place 10-digit integers inside var(--x, 21474836xx) fallbacks in CSS files because
    LightningCSS parses var() fallback tokens as 32-bit float (f32) and truncates them to 2147480000. */
+.subject-announcement-modal-backdrop {
+  z-index: 2147483647 !important;
+}
 .drawer-backdrop {
   z-index: 2147483620 !important;
 }
@@ -1421,14 +1424,14 @@ button[data-loading="true"],
   overflow-x: auto !important;
 }
 
-table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *) {
+table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *):not(.survey-matrix-table) {
   width: 100%;
   border-collapse: collapse;
 }
 
-table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *) > thead > tr > th,
-table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *) > tbody > tr > th,
-table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *) > tr > th {
+table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *):not(.survey-matrix-table) > thead > tr > th,
+table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *):not(.survey-matrix-table) > tbody > tr > th,
+table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *):not(.survey-matrix-table) > tr > th {
   text-align: left;
   padding: 0.875rem 1.25rem;
   font-size: 0.725rem;
@@ -1440,8 +1443,8 @@ table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scop
   border-bottom: 0.5px solid var(--color-border);
 }
 
-table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *) > tbody > tr > td,
-table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *) > tr > td {
+table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *):not(.survey-matrix-table) > tbody > tr > td,
+table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *):not(.survey-matrix-table) > tr > td {
   padding: 0.875rem 1.25rem;
   border-bottom: 0.5px solid var(--color-border-light);
   font-size: 0.875rem;
@@ -1449,16 +1452,16 @@ table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scop
   color: var(--color-text);
 }
 
-table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *) > tbody > tr {
+table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *):not(.survey-matrix-table) > tbody > tr {
   transition: all 0.15s ease;
   cursor: pointer;
 }
 
-table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *) > tbody > tr:hover {
+table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *):not(.survey-matrix-table) > tbody > tr:hover {
   background: var(--color-bg);
 }
 
-table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *) > tbody > tr:last-child > td {
+table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *):not(.survey-matrix-table) > tbody > tr:last-child > td {
   border-bottom: none;
 }
 
@@ -4220,12 +4223,12 @@ button[class*="Eye"]:active {
 }
 
 /* Snug list tables (excluding email editor / presentation tables) */
-table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *) th:not(.email-canvas-cell) {
+table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *):not(.survey-matrix-table) th:not(.email-canvas-cell) {
   padding: 0.75rem 1rem !important; /* Reduced padding from 1rem */
   font-size: 0.725rem !important;
 }
 
-table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *) td:not(.email-canvas-cell) {
+table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *):not(.survey-matrix-table) td:not(.email-canvas-cell) {
   padding: 0.75rem 1rem !important; /* Reduced padding from 1rem */
   font-size: 0.785rem !important;
 }
@@ -4472,8 +4475,8 @@ header, .navbar {
 }
 
 /* Ensure single line content and ellipsis for long text in cells (excluding email editor / presentation tables and multi-line note cells) */
-table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *) td:not(.email-canvas-cell):not(.col-last-note),
-table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *) th:not(.email-canvas-cell) {
+table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *):not(.survey-matrix-table) td:not(.email-canvas-cell):not(.col-last-note),
+table:not([role="presentation"]):not(.email-canvas-table):not(.email-canvas-scope *):not(.email-canvas-isolated *):not(.survey-matrix-table) th:not(.email-canvas-cell) {
   white-space: nowrap !important;
   text-overflow: ellipsis !important;
   overflow: hidden !important;

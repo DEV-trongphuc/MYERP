@@ -748,7 +748,7 @@ try {
     }
 
     if ($targetRoundId) {
-        $assignResult = getNextConsultantInRound($conn, $targetRoundId, $data);
+        $assignResult = getNextConsultantInRound($conn, $targetRoundId, $data, [], false);
         if ($assignResult) {
             $assignedConsultantId = $assignResult['id'];
             $status = $assignResult['is_compensation'] ? 'compensation' : 'assigned';
@@ -769,7 +769,6 @@ try {
                 if (!isConsultantInWorkHours($currentTime, $whStart, $whEnd, $workSchedule, $assignedConsultantId, $conn)) {
                     $status = 'pending_work_hours';
                     $message .= ' (Trì hoãn: ngoài khung giờ làm việc)';
-                    $assignedConsultantId = null; // Do NOT pre-assign to any sale! Hold by system!
                 }
             }
             $whStmt->close();

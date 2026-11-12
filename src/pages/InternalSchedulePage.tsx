@@ -5,11 +5,14 @@ import { CustomSelect } from '../components/ui/CustomSelect';
 import { Avatar } from '../components/ui/Avatar';
 import { CalendarSkeleton, Skeleton } from '../components/ui/Skeleton';
 import { CompanyDrawer } from './CompanyDrawer';
+import { ClassGradebookModal } from '../components/academic/ClassGradebookModal';
+import { LecturerInvitationAnd1on1Modal } from '../components/academic/LecturerInvitationAnd1on1Modal';
+import { SubjectAnnouncementModal } from '../components/academic/SubjectAnnouncementModal';
 import { 
   Calendar, BookOpen, User, Users, Copy, ExternalLink, 
   ChevronLeft, ChevronRight, Clock, MapPin, 
   AlertCircle, CalendarDays, Award, Briefcase, FileText,
-  Video
+  Video, FileSpreadsheet, Mail, Send
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
@@ -37,6 +40,9 @@ export const InternalSchedulePage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLecturerDrawerOpen, setIsLecturerDrawerOpen] = useState(false);
   const [selectedLecturerEntity, setSelectedLecturerEntity] = useState<any>(null);
+  const [showClassGradebookModal, setShowClassGradebookModal] = useState(false);
+  const [lecturerModal, setLecturerModal] = useState<{ isOpen: boolean; tab: 'invitation' | '1on1' }>({ isOpen: false, tab: '1on1' });
+  const [announcingSubject, setAnnouncingSubject] = useState<any>(null);
 
   // Load lists
   useEffect(() => {
@@ -140,7 +146,8 @@ export const InternalSchedulePage: React.FC = () => {
               location: hs.location || 'Online',
               zoom_link: (isShared ? sub.zoom_link : sub.school_zoom_link) || '',
               zoom_id: (isShared ? sub.zoom_id : sub.school_zoom_id) || '',
-              zoom_pass: (isShared ? sub.zoom_pass : sub.school_zoom_pass) || ''
+              zoom_pass: (isShared ? sub.zoom_pass : sub.school_zoom_pass) || '',
+              rawSubject: sub
             });
           }
         });
@@ -161,7 +168,8 @@ export const InternalSchedulePage: React.FC = () => {
               location: sem.location || 'Online',
               zoom_link: (isShared ? sub.zoom_link : sub.seminar_zoom_link) || '',
               zoom_id: (isShared ? sub.zoom_id : sub.seminar_zoom_id) || '',
-              zoom_pass: (isShared ? sub.zoom_pass : sub.seminar_zoom_pass) || ''
+              zoom_pass: (isShared ? sub.zoom_pass : sub.seminar_zoom_pass) || '',
+              rawSubject: sub
             });
           }
         });
@@ -446,6 +454,71 @@ export const InternalSchedulePage: React.FC = () => {
             )}
           </div>
 
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <button
+              type="button"
+              onClick={() => setShowClassGradebookModal(true)}
+              style={{
+                padding: '8px 14px',
+                borderRadius: '10px',
+                border: '1px solid #cbd5e1',
+                background: '#0f172a',
+                color: '#ffffff',
+                fontSize: '0.78rem',
+                fontWeight: 750,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <FileSpreadsheet size={14} />
+              <span>Up điểm cả lớp (Nhiều HV)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setLecturerModal({ isOpen: true, tab: '1on1' })}
+              style={{
+                padding: '8px 14px',
+                borderRadius: '10px',
+                border: 'none',
+                background: '#BD1D2D',
+                color: '#ffffff',
+                fontSize: '0.78rem',
+                fontWeight: 750,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <Calendar size={14} />
+              <span>Tạo Form Hướng Dẫn 1:1 (Slot 30p)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setLecturerModal({ isOpen: true, tab: 'invitation' })}
+              style={{
+                padding: '8px 14px',
+                borderRadius: '10px',
+                border: '1px solid #fecaca',
+                background: 'rgba(189, 29, 45, 0.08)',
+                color: '#BD1D2D',
+                fontSize: '0.78rem',
+                fontWeight: 750,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <Mail size={14} />
+              <span>Gửi Mail Hợp Đồng & Mời Giảng (GV)</span>
+            </button>
+          </div>
+
           {((viewType === 'course' && selectedCampaignId) || (viewType === 'lecturer' && selectedLecturerId)) && (
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
@@ -616,6 +689,39 @@ export const InternalSchedulePage: React.FC = () => {
                 <div>
                   <div style={{ fontSize: '0.625rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Đơn vị</div>
                   <div style={{ fontSize: '0.78rem', fontWeight: 750, color: 'var(--color-text)' }}>{program.degree_awarding_body}</div>
+                </div>
+              </div>
+            )}
+
+            {!lecturer && Array.isArray(subjects) && subjects.length > 0 && (
+              <div style={{ width: '100%', borderTop: '1px solid var(--color-border-light)', paddingTop: '10px', marginTop: '4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                  Gửi Thông báo Chuyên đề / Lịch học theo môn (TBCĐ):
+                </span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {subjects.map((subItem: any, sIdx: number) => (
+                    <button
+                      key={subItem.id || sIdx}
+                      type="button"
+                      onClick={() => setAnnouncingSubject(subItem)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '5px 10px',
+                        borderRadius: '8px',
+                        border: '1px solid #fecaca',
+                        background: '#fef2f2',
+                        color: '#BD1D2D',
+                        fontSize: '0.74rem',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <Send size={12} />
+                      <span>Gửi TBCĐ: {subItem.code ? `${subItem.code} - ${subItem.name}` : subItem.name}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
@@ -1015,9 +1121,33 @@ export const InternalSchedulePage: React.FC = () => {
                                }}>
                                  {evt.type === 'school' ? 'Trường' : 'Chuyên đề'}
                                </span>
-                               <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 700 }}>
-                                 {evt.subjectCode} - {evt.subjectName}
-                               </span>
+                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                 <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 700 }}>
+                                   {evt.subjectCode} - {evt.subjectName}
+                                 </span>
+                                 {evt.rawSubject && (
+                                   <button
+                                     type="button"
+                                     onClick={() => setAnnouncingSubject(evt.rawSubject)}
+                                     style={{
+                                       display: 'inline-flex',
+                                       alignItems: 'center',
+                                       gap: '4px',
+                                       padding: '2px 8px',
+                                       borderRadius: '6px',
+                                       border: '1px solid #fecaca',
+                                       background: '#fef2f2',
+                                       color: '#BD1D2D',
+                                       fontSize: '0.68rem',
+                                       fontWeight: 700,
+                                       cursor: 'pointer'
+                                     }}
+                                   >
+                                     <Send size={10} />
+                                     Gửi TBCĐ
+                                   </button>
+                                 )}
+                               </div>
                              </div>
                              <div style={{ fontSize: '0.825rem', fontWeight: 800, color: 'var(--color-text)' }}>{evt.title}</div>
                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.72rem', color: 'var(--color-text-light)', borderTop: '1px dashed var(--color-border-light)', paddingTop: '6px', marginTop: '2px' }}>
@@ -1242,6 +1372,54 @@ export const InternalSchedulePage: React.FC = () => {
           onSave={() => {}}
         />
       )}
+
+      {showClassGradebookModal && (
+        <ClassGradebookModal
+          isOpen={showClassGradebookModal}
+          onClose={() => setShowClassGradebookModal(false)}
+          initialCampaignId={selectedCampaignId ? Number(selectedCampaignId) : null}
+          campaignsList={campaigns}
+        />
+      )}
+
+      {lecturerModal.isOpen && (
+        <LecturerInvitationAnd1on1Modal
+          isOpen={lecturerModal.isOpen}
+          onClose={() => setLecturerModal(prev => ({ ...prev, isOpen: false }))}
+          initialTab={lecturerModal.tab}
+          lecturer={
+            selectedLecturerId && selectedLecturerId !== 'all'
+              ? companies.find(c => String(c.id) === String(selectedLecturerId)) || null
+              : null
+          }
+          campaignId={selectedCampaignId ? Number(selectedCampaignId) : null}
+          campaignName={
+            selectedCampaignId
+              ? campaigns.find(c => String(c.id) === String(selectedCampaignId))?.name || ''
+              : ''
+          }
+        />
+      )}
+
+      <SubjectAnnouncementModal
+        isOpen={!!announcingSubject}
+        onClose={() => setAnnouncingSubject(null)}
+        subject={announcingSubject}
+        campaign={
+          selectedCampaignId
+            ? campaigns.find(c => String(c.id) === String(selectedCampaignId)) || {
+                id: Number(selectedCampaignId),
+                name: course?.name || ''
+              }
+            : null
+        }
+        programName={program?.name || course?.name || ''}
+        companiesList={companies}
+        addToast={(msg, type) => {
+          if (type === 'error') toast.error(msg);
+          else toast.success(msg);
+        }}
+      />
     </div>
   );
 };

@@ -864,7 +864,7 @@ if (!function_exists('runWorkerCampaign')) {
                         // Bulk Update Hard Bounces
                         if (!empty($bouncedIds)) {
                             $idPlaceholdersBounce = implode(',', array_fill(0, count($bouncedIds), '?'));
-                            $pdo->prepare("UPDATE subscribers SET status = 'bounced' WHERE id IN ($idPlaceholdersBounce)")->execute($bouncedIds);
+                            $pdo->prepare("UPDATE subscribers SET status = 'bounced' WHERE id IN ($idPlaceholdersBounce) AND workspace_id = ?")->execute(array_merge($bouncedIds, [$workspace_id]));
                         }
 
                         // Cleanup temporary 'processing_campaign' locks for this specific batch
@@ -899,7 +899,7 @@ if (!function_exists('runWorkerCampaign')) {
                             // [DEADLOCK FIX] Consistent locking order
                             sort($successIds);
                             $idPlaceholders = implode(',', array_fill(0, count($successIds), '?'));
-                            $pdo->prepare("UPDATE subscribers SET stats_sent = stats_sent + 1 WHERE id IN ($idPlaceholders)")->execute($successIds);
+                            $pdo->prepare("UPDATE subscribers SET stats_sent = stats_sent + 1 WHERE id IN ($idPlaceholders) AND workspace_id = ?")->execute(array_merge($successIds, [$workspace_id]));
                         }
 
                         // 3. Flow Enrollments
@@ -938,7 +938,7 @@ if (!function_exists('runWorkerCampaign')) {
                             $affected = $stmtFlow->rowCount();
                             if ($affected > 0) {
                                 foreach ($fidStats as $fid => $count) {
-                                    $actualIncrement = (count($fidStats) === 1) ? ceil($affected / 1.5) : $count; 
+                                    $actualIncrement = (count($fidStats) === 1) ? min($count, (int)ceil($affected / 2)) : $count; 
                                     $stmtUpdateFlowEnrolled->execute([$actualIncrement, $fid]);
                                 }
                             }

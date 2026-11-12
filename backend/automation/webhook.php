@@ -117,13 +117,10 @@ if ($method === 'POST') {
                 // Continue processing...
             }
         } else {
-            // [FIX NM-03] Unknown OA ID — reject instead of silently continuing.
-            // Previously: logged warning and continued processing unsigned payload.
-            // Now: reject with 400 to prevent forged events with non-existent oa_id.
-            $warnMsg = "[SECURITY] Rejected webhook — No OA Config for ID: $zaloOaId. Possible forged event.";
+            $warnMsg = "[SECURITY] No OA Config for ID: $zaloOaId. Acknowledging with 200 OK for verification.";
             file_put_contents($webhookLogFile, date('[Y-m-d H:i:s] ') . $warnMsg . "\n", FILE_APPEND);
-            http_response_code(400);
-            exit(json_encode(['status' => 'error', 'reason' => 'unknown_oa_id']));
+            http_response_code(200);
+            exit(json_encode(['status' => 'ok', 'message' => 'Acknowledged']));
         }
     }
 

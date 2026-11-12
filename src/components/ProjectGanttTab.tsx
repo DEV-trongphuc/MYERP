@@ -38,13 +38,15 @@ export const ProjectGanttTab: React.FC<ProjectGanttTabProps> = ({ projectId }) =
     setError('');
     try {
       const res = await api.get(`/activities?type=task&related_type=project&related_id=${projectId}`);
-      const list = Array.isArray(res.data) ? res.data : (res.data?.items || []);
+      const rawData = res.data?.data ?? res.data;
+      const list = Array.isArray(rawData) ? rawData : (Array.isArray(rawData?.items) ? rawData.items : []);
       
       // Load thông tin phụ thuộc cho từng task
       const updatedList = await Promise.all(list.map(async (task: any) => {
         try {
           const depRes = await api.get(`/activities/${task.id}/dependencies`);
-          const deps = depRes.data || [];
+          const depRaw = depRes.data?.data ?? depRes.data;
+          const deps = Array.isArray(depRaw?.dependencies) ? depRaw.dependencies : (Array.isArray(depRaw) ? depRaw : []);
           if (deps.length > 0) {
             return {
               ...task,

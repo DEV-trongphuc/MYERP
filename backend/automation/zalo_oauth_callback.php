@@ -140,10 +140,9 @@ if (isset($info_data['data'])) {
 $final_oa_config_id = $state;
 
 if ($oa_real_id) {
-    // Check if this OA ID already exists in another record within the SAME workspace
-    $workspace_id = $session_config['workspace_id'];
-    $stmt = $pdo->prepare("SELECT id FROM zalo_oa_configs WHERE oa_id = ? AND id != ? AND workspace_id = ?");
-    $stmt->execute([$oa_real_id, $state, $workspace_id]);
+    // Check if this OA ID already exists in another record (uq_zalo_oa_id is global across table)
+    $stmt = $pdo->prepare("SELECT id FROM zalo_oa_configs WHERE oa_id = ? AND id != ? LIMIT 1");
+    $stmt->execute([$oa_real_id, $state]);
     $existing = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($existing) {
@@ -152,10 +151,14 @@ if ($oa_real_id) {
 
         $stmt = $pdo->prepare("
             UPDATE zalo_oa_configs 
-            SET access_token=?, 
+            SET name=?,
+                access_token=?, 
                 refresh_token=?, 
                 token_expires_at=?, 
                 status='active', 
+                token_status='healthy',
+                last_token_check=NOW(),
+                workspace_id='1',
                 updated_at=NOW(),
                 avatar=?,
                 app_id=?, 
@@ -163,6 +166,7 @@ if ($oa_real_id) {
             WHERE id=?
         ");
         $stmt->execute([
+            $oa_name,
             $access_token,
             $refresh_token,
             $expires_at,
@@ -187,6 +191,9 @@ if ($oa_real_id) {
                 refresh_token=?, 
                 token_expires_at=?, 
                 status='active', 
+                token_status='healthy',
+                last_token_check=NOW(),
+                workspace_id='1',
                 updated_at=NOW()
             WHERE id=?
         ");
@@ -199,6 +206,10 @@ if ($oa_real_id) {
             $expires_at,
             $state
         ]);
+    }
+
+    if (function_exists('propagateZaloTokenToPeerDbs')) {
+        propagateZaloTokenToPeerDbs($pdo, $final_oa_config_id, $oa_real_id, $access_token, $refresh_token, $expires_at);
     }
 } else {
     // Fallback: Update tokens on the temp record

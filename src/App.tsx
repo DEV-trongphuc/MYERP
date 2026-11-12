@@ -69,6 +69,7 @@ const MyPayslips = lazy(() => import('./pages/MyPayslips'));
 const Approvals = lazy(() => import('./pages/Approvals'));
 const EnterpriseFeed = lazy(() => import('./pages/EnterpriseFeed').then(module => ({ default: module.EnterpriseFeed })));
 const PublicSchedulePage = lazy(() => import('./pages/PublicSchedulePage').then(module => ({ default: module.PublicSchedulePage })));
+const PublicBooking1on1Page = lazy(() => import('./pages/PublicBooking1on1Page').then(module => ({ default: module.PublicBooking1on1Page })));
 const InternalSchedulePage = lazy(() => import('./pages/InternalSchedulePage').then(module => ({ default: module.InternalSchedulePage })));
 const SplashPreviewPage = lazy(() => import('./pages/SplashPreviewPage').then(module => ({ default: module.SplashPreviewPage })));
 const DocumentationPage = lazy(() => import('./pages/DocumentationPage'));
@@ -766,6 +767,14 @@ export default function App() {
       document.documentElement.setAttribute('data-theme', 'light');
     }
     localStorage.setItem('Ideas_global_date', getDefaultDateFilter());
+    // Strip transient cache-busting ?_v=... query parameter once app boots cleanly
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has('_v')) {
+        url.searchParams.delete('_v');
+        window.history.replaceState({}, '', url.pathname + (url.search ? url.search : '') + url.hash);
+      }
+    } catch {}
     // Ưu tiên nạp ngầm toàn bộ hình nền workspace ngay khi vào app
     preloadWorkspaceWallpapers();
   }, []);
@@ -787,6 +796,8 @@ export default function App() {
                   <Route path="/demo" element={<DemoEntry />} />
                   <Route path="/download" element={<DownloadPage />} />
                   <Route path="/splash-preview" element={<SplashPreviewPage />} />
+                  <Route path="/public-schedule/1on1/:bookingCode" element={<PublicBooking1on1Page />} />
+                  <Route path="/public-booking/1on1/:bookingCode" element={<PublicBooking1on1Page />} />
                   <Route path="/public-schedule/course/:campaignId" element={<PublicSchedulePage />} />
                   <Route path="/public-schedule/lecturer/:lecturerId" element={<PublicSchedulePage />} />
                   <Route path="/public-schedule/:customerId" element={<PublicSchedulePage />} />

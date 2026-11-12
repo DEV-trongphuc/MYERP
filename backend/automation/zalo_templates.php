@@ -175,6 +175,14 @@ function syncTemplatesFromZalo($pdo, $oa_id)
 {
     require_once 'zalo_sender.php';
 
+    // Resolve internal oa_config_id in case numeric oa_id was passed
+    $stmtResolve = $pdo->prepare("SELECT id FROM zalo_oa_configs WHERE id = ? OR oa_id = ? LIMIT 1");
+    $stmtResolve->execute([$oa_id, $oa_id]);
+    $resolvedId = $stmtResolve->fetchColumn();
+    if ($resolvedId) {
+        $oa_id = $resolvedId;
+    }
+
     // Get Access Token
     $tokenResult = getAccessToken($pdo, $oa_id);
     if (!$tokenResult['success']) {
@@ -368,10 +376,10 @@ function getAllTemplates($pdo, $oa_id = '')
                 o.name as oa_name
             FROM zalo_templates t
             LEFT JOIN zalo_oa_configs o ON t.oa_config_id = o.id
-            WHERE t.oa_config_id = ?
+            WHERE (t.oa_config_id = ? OR o.oa_id = ?)
             ORDER BY t.created_at DESC
         ");
-        $stmt->execute([$oa_id]);
+        $stmt->execute([$oa_id, $oa_id]);
     } else {
         $stmt = $pdo->query("
             SELECT 

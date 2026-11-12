@@ -705,7 +705,8 @@ class DealController {
     }
 
     public function bulkDelete(array $auth): void {
-        if (in_array($auth['role'], ['sales', 'viewer'], true)) respond(403, null, 'Bạn không có quyền xóa deal', false);
+        $scope = $this->getScope($auth, 'deals', 'delete');
+        if ($scope === 'none' || in_array($auth['role'], ['sales', 'viewer'], true)) respond(403, null, 'Bạn không có quyền xóa deal', false);
         $b = getBody();
         $ids = is_array($b['ids'] ?? null) ? array_values(array_filter(array_map('intval', $b['ids']), fn($x) => $x > 0)) : [];
         if (empty($ids)) respond(400, null, 'ID không hợp lệ', false);
@@ -713,6 +714,11 @@ class DealController {
         
         $sql = "UPDATE deals SET deleted_at=NOW() WHERE tenant_id=? AND id IN ($placeholders) AND deleted_at IS NULL";
         $p = array_merge([$auth['tenant_id']], $ids);
+        if ($scope === 'own') {
+            $sql .= " AND (owner_id = ? OR created_by = ?)";
+            $p[] = $auth['user_id'];
+            $p[] = $auth['user_id'];
+        }
         
         $stmt = $this->db->prepare($sql);
         $stmt->execute($p);
@@ -801,14 +807,15 @@ class DealController {
             ]);
             $newDealId = (int)$this->db->lastInsertId();
 
-            // Copy custom field values from the old deal to the new deal
+            // Copy custom field values from the old deal to the new deal (scoped strictly to deal custom_fields)
             $stmtCF = $this->db->prepare("
                 INSERT INTO custom_field_values (custom_field_id, entity_id, value_text, value_number, value_date, value_json, updated_at)
-                SELECT custom_field_id, ?, value_text, value_number, value_date, value_json, NOW()
-                FROM custom_field_values
-                WHERE entity_id = ?
+                SELECT cfv.custom_field_id, ?, cfv.value_text, cfv.value_number, cfv.value_date, cfv.value_json, NOW()
+                FROM custom_field_values cfv
+                INNER JOIN custom_fields cf ON cf.id = cfv.custom_field_id
+                WHERE cfv.entity_id = ? AND cf.entity_type = 'deal' AND cf.tenant_id = ?
             ");
-            $stmtCF->execute([$newDealId, $id]);
+            $stmtCF->execute([$newDealId, $id, $auth['tenant_id']]);
 
             // Insert into history for the new deal
             $this->db->prepare("INSERT INTO deal_stage_history (deal_id, from_stage, to_stage, moved_by) VALUES (?, NULL, ?, ?)")

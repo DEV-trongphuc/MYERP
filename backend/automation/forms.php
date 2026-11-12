@@ -114,15 +114,23 @@ try {
 
             // Merge firstName + lastName → store as single first_name
             // This prevents display duplication (e.g. "y khoan mlô khoan mlô")
-            $rawFirst = trim($data['firstName'] ?? $data['first_name'] ?? '');
+            $rawFirst = trim($data['firstName'] ?? $data['first_name'] ?? $data['name'] ?? '');
             $rawLast  = trim($data['lastName'] ?? $data['last_name'] ?? '');
             if ($rawFirst && $rawLast) {
                 $data['firstName'] = trim($rawFirst . ' ' . $rawLast);
                 unset($data['lastName'], $data['last_name']);
+            } elseif ($rawFirst) {
+                $data['firstName'] = $rawFirst;
             } elseif ($rawLast && !$rawFirst) {
                 // only last name provided → use as first_name
                 $data['firstName'] = $rawLast;
                 unset($data['lastName'], $data['last_name']);
+            }
+            if (empty($data['jobTitle']) && !empty($data['job_title'])) {
+                $data['jobTitle'] = trim((string)$data['job_title']);
+            }
+            if (empty($data['companyName']) && !empty($data['company_name'])) {
+                $data['companyName'] = trim((string)$data['company_name']);
             }
 
             // [VALIDATION] Normalize date fields to prevent SQL errors
@@ -198,9 +206,6 @@ try {
                     if (isset($data[$dataKey]) && $data[$dataKey] !== '' && $data[$dataKey] !== null) {
                         if ($dbField === 'tags') {
                             // Handle tags after the main UPDATE below
-                        } elseif ($dbField === 'first_name' || $dbField === 'last_name') {
-                            $updateSqlParts[] = "$dbField = IF(COALESCE($dbField, '') = '', ?, $dbField)";
-                            $updateValues[] = $data[$dataKey];
                         } else {
                             $updateSqlParts[] = "$dbField = ?";
                             $updateValues[] = $data[$dataKey];
@@ -373,8 +378,32 @@ try {
                 domationSyncSubscriberMatchOnly($pdo, $sid);
             }
 
+            $addedToTargetList = false;
             if ($targetListId) {
-                $pdo->prepare("INSERT IGNORE INTO subscriber_lists (workspace_id, subscriber_id, list_id) VALUES (?, ?, ?)")->execute([$form_ws_id, $sid, $targetListId]);
+                $stmtInsList = $pdo->prepare("INSERT IGNORE INTO subscriber_lists (workspace_id, subscriber_id, list_id) VALUES (?, ?, ?)");
+                $stmtInsList->execute([$form_ws_id, $sid, $targetListId]);
+                $addedToTargetList = ($stmtInsList->rowCount() > 0);
+
+                // Immediately recalculate and persist lists.subscriber_count & lists.phone_count
+                $pdo->prepare("
+                    UPDATE lists
+                    SET subscriber_count = (
+                            SELECT COUNT(DISTINCT sl.subscriber_id)
+                            FROM subscriber_lists sl
+                            INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ?
+                            WHERE sl.workspace_id = ? AND sl.list_id = ?
+                        ),
+                        phone_count = (
+                            SELECT COUNT(DISTINCT sl.subscriber_id)
+                            FROM subscriber_lists sl
+                            INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ?
+                            WHERE sl.workspace_id = ? AND sl.list_id = ?
+                              AND s.phone_number IS NOT NULL
+                              AND TRIM(s.phone_number) != ''
+                              AND TRIM(s.phone_number) != '0'
+                        )
+                    WHERE workspace_id = ? AND id = ?
+                ")->execute([$form_ws_id, $form_ws_id, $targetListId, $form_ws_id, $form_ws_id, $targetListId, $form_ws_id, $targetListId]);
             }
 
             // [FIX] IP detection: removed spoofable HTTP_CLIENT_IP and duplicate X_FORWARDED_FOR.
@@ -454,6 +483,23 @@ try {
 
             $pdo->prepare("SELECT RELEASE_LOCK(?)")->execute([$lockName]);
 
+            // Immediately flush RAM activity buffer -> activity_buffer -> subscriber_activity
+            // so form submission counts and customer 360 timelines update in real time (0s delay)
+            try {
+                if (function_exists('flushActivityLogBuffer')) {
+                    flushActivityLogBuffer($pdo);
+                }
+                if (!defined('WORKER_GUARD_LOADED')) {
+                    define('WORKER_GUARD_LOADED', true);
+                }
+                require_once __DIR__ . '/worker_tracking_aggregator.php';
+                if (function_exists('syncActivityBuffer')) {
+                    syncActivityBuffer($pdo);
+                }
+            } catch (Exception $eFlush) {
+                error_log("Form immediate activity flush warning: " . $eFlush->getMessage());
+            }
+
             if (function_exists('domationSyncSubscriberMatchOnly')) {
                 domationSyncSubscriberMatchOnly($pdo, $sid);
             }
@@ -503,12 +549,33 @@ try {
                 $_GET['trigger_type'] = 'form';
                 $_GET['target_id'] = $formId;
                 $_GET['subscriber_id'] = $sid;
+                $_GET['workspace_id'] = $form_ws_id;
                 $_GET['secret'] = $cronSecret;
                 
                 $backupMailer = isset($mailer) ? $mailer : null;
                 require __DIR__ . '/worker_priority.php';
                 if ($backupMailer) {
                     $mailer = $backupMailer;
+                }
+
+                // Also trigger any active flow watching the linked Static List ('list' / 'added_to_list')
+                if (!empty($targetListId) && !empty($addedToTargetList)) {
+                    $_GET['trigger_type'] = 'list';
+                    $_GET['target_id'] = $targetListId;
+                    $_GET['subscriber_id'] = $sid;
+                    $_GET['workspace_id'] = $form_ws_id;
+                    $_GET['secret'] = $cronSecret;
+                    require __DIR__ . '/worker_priority.php';
+                    if ($backupMailer) {
+                        $mailer = $backupMailer;
+                    }
+                }
+
+                if (function_exists('flushActivityLogBuffer')) {
+                    flushActivityLogBuffer($pdo);
+                }
+                if (function_exists('syncActivityBuffer')) {
+                    syncActivityBuffer($pdo);
                 }
             } catch (Exception $ePriority) {
                 error_log("Form Priority Trigger Local Error: " . $ePriority->getMessage());
@@ -734,9 +801,15 @@ try {
                         $form['notificationCcEmails'] = $form['notification_cc_emails'] ?? '';
                         $form['notificationSubject'] = $form['notification_subject'] ?? '';
                         $form['creator'] = function_exists('domationFormatCreator') ? domationFormatCreator($form) : null;
-                        // Use specialized index for count
-                        $stmtS = $pdo->prepare("SELECT COUNT(*) FROM subscriber_activity WHERE type='form_submit' AND reference_id = ? AND workspace_id = ?");
-                        $stmtS->execute([$path, $admin_workspace_id]);
+                        // Use specialized index for count (include any unprocessed buffer fallback)
+                        $stmtS = $pdo->prepare("
+                            SELECT (
+                                (SELECT COUNT(*) FROM subscriber_activity WHERE type = 'form_submit' AND reference_id = ? AND workspace_id = ?)
+                                +
+                                (SELECT COUNT(*) FROM activity_buffer WHERE type = 'form_submit' AND reference_id = ? AND workspace_id = ? AND processed = 0)
+                            )
+                        ");
+                        $stmtS->execute([$path, $admin_workspace_id, $path, $admin_workspace_id]);
                         $form['stats'] = ['submissions' => (int) $stmtS->fetchColumn()];
                         unset($form['fields_json'], $form['target_list_id'], $form['notification_enabled'], $form['notification_emails'], $form['notification_cc_emails'], $form['notification_subject']);
                         jsonResponse(true, $form);
@@ -750,7 +823,7 @@ try {
                 } else {
                     $stmt = $pdo->prepare(
                         "SELECT f.*,
-                                COALESCE(sa_count.cnt, 0) as submission_count,
+                                (COALESCE(sa_count.cnt, 0) + COALESCE(ab_count.cnt, 0)) as submission_count,
                                 u_creator.id AS creator_id,
                                 u_creator.full_name AS creator_name,
                                 u_creator.email AS creator_email,
@@ -763,11 +836,17 @@ try {
                              WHERE type = 'form_submit' AND workspace_id = ?
                              GROUP BY reference_id
                          ) sa_count ON sa_count.reference_id = f.id
+                         LEFT JOIN (
+                             SELECT reference_id, COUNT(*) as cnt
+                             FROM activity_buffer
+                             WHERE type = 'form_submit' AND workspace_id = ? AND processed = 0
+                             GROUP BY reference_id
+                         ) ab_count ON ab_count.reference_id = f.id
                          LEFT JOIN users u_creator ON u_creator.id = f.created_by
                          WHERE f.workspace_id = ?
                          ORDER BY f.created_at DESC"
                     );
-                    $stmt->execute([$admin_workspace_id, $admin_workspace_id]);
+                    $stmt->execute([$admin_workspace_id, $admin_workspace_id, $admin_workspace_id]);
                     $data = array_map(function ($f) {
                         $f['fields'] = json_decode($f['fields_json'] ?? '[]');
                         $f['targetListId'] = $f['target_list_id'];

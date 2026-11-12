@@ -8,10 +8,10 @@ if (!defined('DB_USER')) define('DB_USER', $_ENV['DB_USER'] ?? 'vhvxoigh_mail_au
 if (!defined('DB_PASS')) define('DB_PASS', $_ENV['DB_PASS'] ?? 'Ideas@812');
 if (!defined('DB_NAME')) define('DB_NAME', $_ENV['DB_NAME'] ?? 'vhvxoigh_myerp');
 
-// JWT
+// JWT — Persistent session (10 years) so logged-in users are never auto-logged out
 if (!defined('JWT_SECRET'))         define('JWT_SECRET',         $_ENV['JWT_SECRET'] ?? 'MYERP_SECRET_KEY_2026_IDEAS');
-if (!defined('JWT_EXPIRE_ACCESS'))  define('JWT_EXPIRE_ACCESS',  60 * 60 * 24 * 30); // 30 days
-if (!defined('JWT_EXPIRE_REFRESH')) define('JWT_EXPIRE_REFRESH', 60 * 60 * 24 * 90); // 90 days
+if (!defined('JWT_EXPIRE_ACCESS'))  define('JWT_EXPIRE_ACCESS',  60 * 60 * 24 * 365 * 10); // 10 years
+if (!defined('JWT_EXPIRE_REFRESH')) define('JWT_EXPIRE_REFRESH', 60 * 60 * 24 * 365 * 10); // 10 years
 
 // CORS allowed origins
 if (!defined('ALLOWED_ORIGINS'))

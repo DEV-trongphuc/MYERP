@@ -1773,7 +1773,7 @@ class FlowExecutor
 
                         if ($notifyUserId) {
                             try {
-                                $linkUrl = $crmContactId > 0 ? "/crm/contacts?id={$crmContactId}" : "/automation/flows";
+                                $linkUrl = $crmContactId > 0 ? "/contacts?id={$crmContactId}" : "/automation/flows";
                                 $this->pdo->prepare("
                                     INSERT INTO notifications (tenant_id, user_id, type, title, body, link, is_read, created_at)
                                     VALUES (1, ?, 'automation_flow', ?, ?, ?, 0, NOW())

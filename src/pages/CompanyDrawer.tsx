@@ -21,6 +21,7 @@ import { CurrencyInput } from '../components/ui/CurrencyInput';
 import { CopyButton } from '../components/ui/CopyButton';
 import { canEditPartnerOrSupplier, isSales } from '../utils/roleUtils';
 import { pushOverlay } from '../utils/overlayStack';
+import { LecturerInvitationAnd1on1Modal } from '../components/academic/LecturerInvitationAnd1on1Modal';
 
 interface CompanyDrawerProps {
   isOpen: boolean;
@@ -80,6 +81,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
   const [formData, setFormData] = useState(entity || {});
   const isPartner = true; // All partner types have data referral and pipeline recording capabilities
   const isLecturer = ['f1', 'f2', 'giang_vien', 'chuyen_gia'].includes(String(formData?.tier || entity?.tier || '').toLowerCase());
+  const [lecturerModalState, setLecturerModalState] = useState<{ isOpen: boolean; tab: 'invitation' | '1on1' }>({ isOpen: false, tab: 'invitation' });
   const [tags, setTags] = useState<string[]>(entity?.tags || []);
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, boolean>>({});
@@ -885,33 +887,83 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                     {formData?.status === 'active' ? 'Hoạt động' : formData?.status === 'inactive' ? 'Ngừng' : 'Tiềm năng'}
                   </span>
                   {isLecturer && formData?.id && (
-                    <button
-                      type="button"
-                      className="btn outline hover-lift"
-                      style={{
-                        borderColor: '#ea580c',
-                        color: '#ea580c',
-                        background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)',
-                        border: '1px solid #fed7aa',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '8px 16px',
-                        fontSize: '0.85rem',
-                        fontWeight: 750,
-                        height: '38px',
-                        borderRadius: '10px',
-                        boxShadow: 'var(--shadow-sm)',
-                        cursor: 'pointer'
-                      }}
-                      onClick={() => {
-                        const publicLink = `/public-schedule/lecturer/${formData.id}`;
-                        window.open(publicLink, '_blank');
-                      }}
-                    >
-                      <Calendar size={16} />
-                      <span>Xem lịch giảng</span>
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        className="btn outline hover-lift"
+                        style={{
+                          borderColor: '#BD1D2D',
+                          color: '#BD1D2D',
+                          background: 'rgba(189, 29, 45, 0.08)',
+                          border: '1px solid #fecaca',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '8px 14px',
+                          fontSize: '0.82rem',
+                          fontWeight: 750,
+                          height: '38px',
+                          borderRadius: '10px',
+                          boxShadow: 'var(--shadow-sm)',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => setLecturerModalState({ isOpen: true, tab: 'invitation' })}
+                      >
+                        <Mail size={15} />
+                        <span>Gửi Mail Hợp Đồng & Mời Giảng</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="btn outline hover-lift"
+                        style={{
+                          borderColor: '#0f172a',
+                          color: '#0f172a',
+                          background: '#f8fafc',
+                          border: '1px solid #cbd5e1',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '8px 14px',
+                          fontSize: '0.82rem',
+                          fontWeight: 750,
+                          height: '38px',
+                          borderRadius: '10px',
+                          boxShadow: 'var(--shadow-sm)',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => setLecturerModalState({ isOpen: true, tab: '1on1' })}
+                      >
+                        <Calendar size={15} />
+                        <span>Form Hướng Dẫn 1:1 (30p)</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="btn outline hover-lift"
+                        style={{
+                          borderColor: '#ea580c',
+                          color: '#ea580c',
+                          background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)',
+                          border: '1px solid #fed7aa',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '8px 14px',
+                          fontSize: '0.82rem',
+                          fontWeight: 750,
+                          height: '38px',
+                          borderRadius: '10px',
+                          boxShadow: 'var(--shadow-sm)',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => {
+                          const publicLink = `/public-schedule/lecturer/${formData.id}`;
+                          window.open(publicLink, '_blank');
+                        }}
+                      >
+                        <Calendar size={16} />
+                        <span>Xem lịch giảng</span>
+                      </button>
+                    </>
                   )}
                   <button 
                     className="btn primary" 
@@ -2142,6 +2194,70 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
 
                 {activeTab === 'teaching' && (
                   <div className="animate-fade" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    {/* Quick Academic Coordination Bar for Lecturer */}
+                    <div style={{
+                      padding: '14px 18px',
+                      borderRadius: '14px',
+                      background: '#ffffff',
+                      border: '1px solid #e2e8f0',
+                      boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px'
+                    }}>
+                      <div>
+                        <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>
+                          Điều phối Hợp đồng Giảng dạy & Lịch Hướng dẫn 1:1
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
+                          Gửi Email Hợp đồng mời giảng kèm lịch dạy hoặc tạo Form đăng ký Hướng dẫn 1:1 (Khung 30 phút tự động đồng bộ Calendar).
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          onClick={() => setLecturerModalState({ isOpen: true, tab: 'invitation' })}
+                          style={{
+                            padding: '8px 14px',
+                            borderRadius: '8px',
+                            border: 'none',
+                            background: '#BD1D2D',
+                            color: '#ffffff',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}
+                        >
+                          <Mail size={15} />
+                          Gửi Mail Hợp Đồng & Thông Tin Mời Giảng
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLecturerModalState({ isOpen: true, tab: '1on1' })}
+                          style={{
+                            padding: '8px 14px',
+                            borderRadius: '8px',
+                            border: '1px solid #cbd5e1',
+                            background: '#0f172a',
+                            color: '#ffffff',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}
+                        >
+                          <Calendar size={15} />
+                          Tạo Form Đăng Ký Hướng Dẫn 1:1 (Slot 30p)
+                        </button>
+                      </div>
+                    </div>
                     {(() => {
                       const companyIdStr = String(entity?.id);
                       const companyNameStr = String(entity?.name || '').toLowerCase();
@@ -3411,6 +3527,22 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
               zIndex={2147483620}
               onUpdate={() => {
                 fetchSubContacts();
+              }}
+            />
+          )}
+
+          {lecturerModalState.isOpen && (
+            <LecturerInvitationAnd1on1Modal
+              isOpen={lecturerModalState.isOpen}
+              onClose={() => setLecturerModalState(prev => ({ ...prev, isOpen: false }))}
+              initialTab={lecturerModalState.tab}
+              lecturer={{
+                id: Number(formData?.id || entity?.id || 0),
+                name: formData?.name || entity?.name || '',
+                email: formData?.email || entity?.email || '',
+                phone: formData?.phone || entity?.phone || '',
+                degree_title: formData?.degree_title || '',
+                teaching_subjects: formData?.focus_markets || ''
               }}
             />
           )}

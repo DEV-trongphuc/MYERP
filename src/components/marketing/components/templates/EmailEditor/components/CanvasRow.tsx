@@ -229,9 +229,9 @@ const CanvasRow: React.FC<CanvasRowProps> = (props) => {
                 position: isRowActive ? 'relative' : 'static',
                 zIndex: isRowActive ? 1000 : 'auto'
             }}
-            draggable={!isSelected && resizingIdx === null}
+            draggable={!isRowActive && resizingIdx === null}
             onDragStart={(e) => {
-                if (isSelected || resizingIdx !== null || (e.target as HTMLElement)?.closest?.('[contenteditable="true"], input, textarea')) {
+                if (isRowActive || resizingIdx !== null || (e.target as HTMLElement)?.closest?.('[contenteditable="true"], input, textarea')) {
                     e.preventDefault();
                     return;
                 }

@@ -417,7 +417,38 @@ const Audience: React.FC = () => {
         if (contactId) {
             window.dispatchEvent(new CustomEvent('open-customer-drawer', { detail: { id: Number(contactId), initialTab: 'journey360' } }));
         } else {
-            window.dispatchEvent(new CustomEvent('open-customer-drawer', { detail: { phone: s.phone, email: s.email, contact: s, initialTab: 'journey360' } }));
+            const fullName = String(
+                s.full_name ||
+                [s.firstName || s.first_name || '', s.lastName || s.last_name || ''].filter(Boolean).join(' ') ||
+                s.email ||
+                s.phoneNumber ||
+                s.phone ||
+                'Subscriber'
+            ).trim();
+            const phone = String(s.phone || s.phoneNumber || s.phone_number || '').trim();
+            const rawNotes = Array.isArray(s.notes)
+                ? s.notes.map((n: any) => (typeof n === 'string' ? n : String(n?.content || n?.text || n?.body || ''))).filter(Boolean).join('\n')
+                : typeof s.notes === 'string'
+                ? s.notes
+                : '';
+            const normalizedSubContact = {
+                ...s,
+                id: s.id,
+                is_subscriber_only: true,
+                domation_subscriber_id: String(s.id || ''),
+                full_name: fullName,
+                name: fullName,
+                phone,
+                mobile: phone,
+                email: String(s.email || '').trim(),
+                source: s.source || 'Marketing Audience',
+                status: 'lead',
+                lead_status: 'new',
+                pipeline_status: 'new',
+                notes: rawNotes,
+                tags: Array.isArray(s.tags) ? s.tags : [],
+            };
+            window.dispatchEvent(new CustomEvent('open-customer-drawer', { detail: { phone, email: normalizedSubContact.email, contact: normalizedSubContact, initialTab: 'journey360' } }));
         }
     }, []);
 

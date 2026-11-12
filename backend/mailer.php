@@ -20,9 +20,12 @@ function _getBaseHtml($title, $subtitle, $contentHtml, $isCustomer = false)
         <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
             
             <!-- Header -->
-            <div style="background: linear-gradient(135deg, #BD1D2D, #8C111E); padding: 30px 20px; text-align: center;">
-                <h1 style="color: #ffffff; font-size: 26px; margin: 0; font-weight: 900; letter-spacing: 2px;">' . $brandTitle . '</h1>
-                <p style="color: rgba(255,255,255,0.9); font-size: 12px; margin: 6px 0 0; text-transform: uppercase; font-weight: 700;">' . $headerSub . '</p>
+            <div style="background: linear-gradient(135deg, #BD1D2D, #8C111E); padding: 25px 20px; text-align: center;">
+                ' . ($isCustomer
+                    ? '<div style="display: block; text-align: center; margin-bottom: 8px;"><img src="https://myerp.ideas.edu.vn/Logo_IDEAS_white.png" alt="IDEAS" style="height: 38px; width: auto; max-width: 180px; display: inline-block;" /></div>'
+                    : '<h1 style="color: #ffffff; font-size: 26px; margin: 0; font-weight: 900; letter-spacing: 2px;">' . $brandTitle . '</h1>'
+                ) . '
+                <p style="color: rgba(255,255,255,0.95); font-size: 12px; margin: 4px 0 0; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">' . $headerSub . '</p>
             </div>
             
             <!-- Content -->

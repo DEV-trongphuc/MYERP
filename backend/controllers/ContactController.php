@@ -692,14 +692,17 @@ class ContactController {
                 AND NOT EXISTS (
                     SELECT 1 FROM activities a1
                     WHERE a1.contact_id = c.id AND a1.deleted_at IS NULL
+                      AND (c.stage_id != 31 OR a1.created_at >= c.created_at)
                 )
                 AND NOT EXISTS (
                     SELECT 1 FROM activities a2
                     WHERE a2.related_type IN ('contact', 'lead') AND a2.related_id = c.id AND a2.deleted_at IS NULL
+                      AND (c.stage_id != 31 OR a2.created_at >= c.created_at)
                 )
                 AND NOT EXISTS (
                     SELECT 1 FROM notes n 
                     WHERE n.tenant_id = c.tenant_id AND n.entity_type = 'contact' AND n.entity_id = c.id 
+                      AND (c.stage_id != 31 OR n.created_at >= c.created_at)
                       AND n.body NOT LIKE '[Tự động]%' 
                       AND n.body NOT LIKE '[Phân bổ]%' 
                       AND n.body NOT LIKE '[Giao data]%'
@@ -1091,15 +1094,63 @@ class ContactController {
 
         foreach ($data as &$row) {
             $cid = (int)($row['id'] ?? 0);
+            $isFreshNewLead = (
+                ((int)($row['stage_id'] ?? 0) === 31 || ($row['pipeline_status'] ?? '') === 'new_lead')
+                && empty($row['last_contact'])
+            );
+            $contactCreatedTs = !empty($row['created_at']) ? (int)strtotime((string)$row['created_at']) : 0;
+
+            $candNote = $latestNoteByContact[$cid] ?? null;
+            $candAct = $latestActivityByContact[$cid] ?? null;
+
+            if ($isFreshNewLead && $contactCreatedTs > 0) {
+                if ($candNote && !empty($candNote['created_at']) && strtotime((string)$candNote['created_at']) < ($contactCreatedTs - 60)) {
+                    $candNote = null;
+                }
+                if ($candAct && !empty($candAct['created_at']) && strtotime((string)$candAct['created_at']) < ($contactCreatedTs - 60)) {
+                    $candAct = null;
+                }
+            }
+
             if (empty($row['last_interaction'])) {
-                $rawLast = $latestNoteByContact[$cid]['content'] ?? ($latestActivityByContact[$cid]['content'] ?? null);
+                $rawLast = $candNote['content'] ?? ($candAct['content'] ?? null);
                 $row['last_interaction'] = $rawLast !== null ? $this->cleanLastInteractionText((string)$rawLast) : null;
             }
             if (empty($row['last_interaction_at'])) {
-                $row['last_interaction_at'] = $latestNoteByContact[$cid]['created_at'] ?? ($latestActivityByContact[$cid]['created_at'] ?? null);
+                $row['last_interaction_at'] = $candNote['created_at'] ?? ($candAct['created_at'] ?? null);
             }
 
             $candidates = $rawByContact[$cid] ?? [];
+            if (!empty($row['notes'])) {
+                $rawNotesStr = trim((string)$row['notes']);
+                if (strpos($rawNotesStr, '___') !== false) {
+                    $noteBlocks = preg_split('/\r?\n?_{3,}\r?\n?/', $rawNotesStr) ?: [];
+                    $noteBlocks = array_values(array_filter(array_map('trim', $noteBlocks), function ($b) {
+                        return $b !== '';
+                    }));
+                    $latestBlockIdx = count($noteBlocks) - 1;
+                    if ($latestBlockIdx >= 0) {
+                        $latestBlockAt = $row['distributed_at'] ?? ($row['updated_at'] ?? ($row['created_at'] ?? null));
+                        $candidates[] = [
+                            'id' => 999999999,
+                            'content' => $noteBlocks[$latestBlockIdx],
+                            'created_at' => $latestBlockAt,
+                            'user_name' => null,
+                            'is_initial' => true
+                        ];
+                    }
+                    if ($latestBlockIdx >= 1) {
+                        $candidates[] = [
+                            'id' => 0,
+                            'content' => $noteBlocks[0],
+                            'created_at' => null,
+                            'user_name' => 'Ghi chú trước đó',
+                            'is_initial' => false
+                        ];
+                    }
+                }
+            }
+
             usort($candidates, function ($a, $b) {
                 $ta = !empty($a['created_at']) ? strtotime((string)$a['created_at']) : 0;
                 $tb = !empty($b['created_at']) ? strtotime((string)$b['created_at']) : 0;
@@ -1118,7 +1169,8 @@ class ContactController {
                 $cleanList[] = [
                     'content' => $cleaned,
                     'created_at' => $cand['created_at'] ?? null,
-                    'user_name' => $cand['user_name'] ?? null
+                    'user_name' => $cand['user_name'] ?? null,
+                    'is_initial' => !empty($cand['is_initial'])
                 ];
                 if (count($cleanList) >= 3) break;
             }
@@ -1705,7 +1757,11 @@ class ContactController {
         $this->show($auth, $id);
     }
 
-    public function show(array $auth, int $id): void {
+    public function show(array $auth, int|string $id): void {
+        $rawId = trim((string)$id);
+        $isNumericId = ctype_digit($rawId) && (int)$rawId > 0;
+        $numericId = $isNumericId ? (int)$rawId : 0;
+
         $sql = "SELECT c.*, 
                     CASE 
                         WHEN comp.deleted_at IS NOT NULL THEN CONCAT(comp.name, ' (Đã xóa)')
@@ -1792,13 +1848,66 @@ class ContactController {
             )
             WHERE c.id=? AND c.tenant_id=? AND c.deleted_at IS NULL";
         
-        $p = [$id, $auth['tenant_id']];
-        // Allow all authenticated users within the same tenant to view contact details
-        // to support collaborative sales, interaction viewing, handovers, and academic workflows.
-        
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute($p);
-        $row = $stmt->fetch();
+        $row = null;
+        if ($isNumericId) {
+            $p = [$numericId, $auth['tenant_id']];
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($p);
+            $row = $stmt->fetch();
+        }
+
+        if (!$row && $rawId !== '') {
+            // Fallback: check if $rawId is a DOMATION subscriber ID (strictly read/match-only, never creates a CRM contact)
+            try {
+                $stmtSub = $this->db->prepare("SELECT * FROM subscribers WHERE id = ? LIMIT 1");
+                $stmtSub->execute([$rawId]);
+                $sub = $stmtSub->fetch(PDO::FETCH_ASSOC);
+                if ($sub) {
+                    require_once __DIR__ . '/../utils/DomationContactMatcher.php';
+                    $matchedContactId = (int)($sub['contact_id'] ?? 0);
+                    if ($matchedContactId <= 0) {
+                        $syncRes = DomationContactMatcher::syncSubscriberMatchOnly($this->db, (string)$sub['id']);
+                        if (!empty($syncRes['contact_id'])) {
+                            $matchedContactId = (int)$syncRes['contact_id'];
+                        }
+                    }
+                    if ($matchedContactId > 0) {
+                        $stmt = $this->db->prepare($sql);
+                        $stmt->execute([$matchedContactId, $auth['tenant_id']]);
+                        $row = $stmt->fetch();
+                    }
+                    if (!$row) {
+                        $fullName = trim(((string)($sub['first_name'] ?? '')) . ' ' . ((string)($sub['last_name'] ?? '')));
+                        if ($fullName === '') {
+                            $fullName = (string)($sub['email'] ?? $sub['phone_number'] ?? 'Subscriber');
+                        }
+                        respond(200, [
+                            'id'                     => (string)$sub['id'],
+                            'is_subscriber_only'     => true,
+                            'domation_subscriber_id' => (string)$sub['id'],
+                            'tenant_id'              => (int)($auth['tenant_id'] ?? 1),
+                            'full_name'              => $fullName,
+                            'email'                  => $sub['email'] ?? '',
+                            'phone'                  => $sub['phone_number'] ?? '',
+                            'mobile'                 => $sub['phone_number'] ?? '',
+                            'source'                 => $sub['source'] ?? 'Marketing Audience',
+                            'status'                 => 'lead',
+                            'lead_status'            => 'new',
+                            'pipeline_status'        => 'new',
+                            'marketing_status'       => (($sub['status'] ?? 'active') === 'unsubscribed') ? 'unsubscribed' : 'subscribed',
+                            'engagement_score'       => (int)($sub['engagement_score'] ?? 0),
+                            'notes'                  => '',
+                            'tags'                   => [],
+                            'custom_fields'          => json_decode((string)($sub['custom_fields'] ?? '{}'), true) ?: [],
+                            'created_at'             => $sub['joined_at'] ?? ($sub['updated_at'] ?? date('Y-m-d H:i:s')),
+                            'updated_at'             => $sub['updated_at'] ?? ($sub['joined_at'] ?? date('Y-m-d H:i:s')),
+                        ]);
+                    }
+                }
+            } catch (\Throwable $eSub) {
+            }
+        }
+
         if (!$row) respond(404, null, 'Không tìm thấy liên hệ', false);
         foreach (['birthday', 'dob', 'admission_date'] as $dateCol) {
             if (isset($row[$dateCol]) && ($row[$dateCol] === '0000-00-00' || $row[$dateCol] === '0000-00-00 00:00:00' || $row[$dateCol] === '00/00/0000')) {
@@ -5032,10 +5141,19 @@ class ContactController {
     }
 
     public function addNote(array $auth, int $contactId): void {
+        if (($auth['role'] ?? '') === 'viewer') {
+            respond(403, null, 'Tài khoản chỉ xem không có quyền thêm ghi chú', false);
+        }
         $body = getBody();
         $content = trim($body['content'] ?? $body['note'] ?? $body['body'] ?? '');
         if (!$content) {
             respond(422, null, 'Nội dung ghi chú không được để trống', false);
+        }
+
+        $chk = $this->db->prepare("SELECT id FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $chk->execute([$contactId, $auth['tenant_id']]);
+        if (!$chk->fetch()) {
+            respond(404, null, 'Không tìm thấy liên hệ', false);
         }
 
         try {
@@ -5047,7 +5165,7 @@ class ContactController {
             $noteId = (int)$this->db->lastInsertId();
             respond(201, ['id' => $noteId, 'contact_id' => $contactId, 'content' => $content, 'body' => $content], 'Thêm ghi chú thành công');
         } catch (\Throwable $e) {
-            respond(200, ['contact_id' => $contactId, 'content' => $content], 'Đã ghi nhận ghi chú');
+            respond(500, null, 'Lỗi khi lưu ghi chú: ' . $e->getMessage(), false);
         }
     }
 

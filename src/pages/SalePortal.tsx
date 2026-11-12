@@ -2165,7 +2165,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       setWsTaskFilter('assigned_to_me');
       setWsStatus('pending');
       setWsDatePreset('today');
-      setWsSubTab('personal');
+      setWsSubTab('all');
       return;
     }
 
@@ -2190,7 +2190,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
   useEffect(() => {
     setWsTasksPage(1);
-  }, [wsSearch, wsPriority, wsStatus, wsDatePreset, wsSubTab, wsTeamSubFilter, wsTaskFilter, wsActivityType, wsRelatedType, adminViewFull]);
+  }, [wsSearch, debouncedWsSearch, wsPriority, wsStatus, showDoneTasks, wsDatePreset, wsSubTab, wsTeamSubFilter, wsTaskFilter, wsActivityType, wsRelatedType, adminViewFull, activeTaskGroupId, wsUserId, wsTeamId]);
 
   useEffect(() => {
     const isFocus = wsViewMode === 'focus';
@@ -2348,15 +2348,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 if (canSwitchToWorkspaceTab && activeTab !== 'workspace') {
                   setActiveTab('workspace');
                 }
-                const isClient = task.related_type && ['contact', 'deal', 'company'].includes(task.related_type);
-                const tagsList = task.tags ? String(task.tags).split(',').map((t: string) => t.trim()) : [];
-                if (tagsList.includes('personal_task')) {
-                  setWsSubTab('personal');
-                } else if (!isClient) {
-                  setWsSubTab('team');
-                } else {
-                  setWsSubTab('customer');
-                }
               }
             })
             .catch(err => {
@@ -2498,12 +2489,12 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     return { start, end };
   };
 
-  const filteredWsTasks = useMemo(() => {
+  const wsGroupBaseTasks = useMemo(() => {
     const targetUserId = wsUserId ? Number(wsUserId) : Number(currentUser?.id);
     const searchVal = debouncedWsSearch ? debouncedWsSearch.toLowerCase() : '';
     const datePreset = wsDatePreset && wsDatePreset !== 'all' ? getPresetDates(wsDatePreset) : null;
 
-    const filtered = wsTasks.filter(task => {
+    return wsTasks.filter(task => {
       // 0. Strict privacy isolation:
       // "nếu là admin thì có 1 nút admin view full thì mới hiện hết công việc ra thôi còn lại thì vẫn chỉ show công việc của họ"
       const shouldViewAll = isTopAdmin && adminViewFull;
@@ -2538,9 +2529,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         if (!task.is_hidden || Number(task.is_hidden) !== 1) return false;
       } else {
         if (task.is_hidden && Number(task.is_hidden) === 1) return false;
-        // Filter by Status: hide completed tasks unless showDoneTasks or explicitly filtered by wsStatus === 'done'
-        if (!showDoneTasks && wsStatus !== 'done' && isTaskEffectivelyDone(task)) return false;
-        if (wsStatus && wsStatus !== 'all' && wsStatus !== 'planned' && !showDoneTasks && task.status !== wsStatus) return false;
       }
 
       // 2. Filter by Priority
@@ -2560,36 +2548,18 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         }
       }
 
-      // 4. Filter by main subtabs
-      const isTaskPersonal = isTaskPersonalForUser(task, currentUser?.id);
-
-      if (wsSubTab === 'customer') {
-        if (!task.related_type || !['contact', 'deal', 'company'].includes(task.related_type)) return false;
-      } else if (wsSubTab === 'personal') {
-        if (!isTaskPersonal) return false;
-      } else if (wsSubTab === 'team') {
-        const isClientRelated = task.related_type && ['contact', 'deal', 'company'].includes(task.related_type);
-        if (isClientRelated || isTaskPersonal) return false;
-
-        // Filter by team sub-filters
-        if (wsTeamSubFilter !== 'all') {
-          const targetTag = `internal_${wsTeamSubFilter}`;
-          if (!task.tags || !task.tags.includes(targetTag)) return false;
-        }
-      }
-
-      // 5. Apply quick filters (assignee, approver, collaborator)
+      // 4. Apply quick filters (assignee, approver, collaborator)
       if (wsTaskFilter === 'assigned_to_me') {
         if (Number(task.user_id) !== targetUserId) return false;
       } else if (wsTaskFilter === 'approve_by_me') {
         if (Number(task.require_approval) !== 1 || Number(task.approver_id) !== targetUserId) return false;
       } else if (wsTaskFilter === 'collaborator') {
         if (!task.participant_ids) return false;
-        const pIds = task.participant_ids.split(',');
+        const pIds = String(task.participant_ids).split(',').map(s => s.trim());
         if (!pIds.includes(String(targetUserId))) return false;
       }
 
-      // 6. Search filtering (Debounced)
+      // 5. Search filtering (Debounced)
       if (searchVal) {
         const subject = task.subject ? String(task.subject).toLowerCase() : '';
         const body = task.body ? String(task.body).toLowerCase() : '';
@@ -2601,7 +2571,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         const projectName = task.project_name ? String(task.project_name).toLowerCase() : '';
         const campaignName = task.campaign_name ? String(task.campaign_name).toLowerCase() : '';
 
-        return (
+        const matchesSearch =
           subject.includes(searchVal) ||
           body.includes(searchVal) ||
           contactName.includes(searchVal) ||
@@ -2610,11 +2580,28 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
           userName.includes(searchVal) ||
           teamName.includes(searchVal) ||
           projectName.includes(searchVal) ||
-          campaignName.includes(searchVal)
-        );
+          campaignName.includes(searchVal);
+
+        if (!matchesSearch) return false;
       }
 
-      // 7. Task Group filtering
+      return true;
+    });
+  }, [wsTasks, debouncedWsSearch, wsTaskFilter, currentUser, wsUserId, wsPriority, wsStatus, wsDatePreset, adminViewFull, isTopAdmin]);
+
+  const filteredWsTasks = useMemo(() => {
+    const targetUserId = wsUserId ? Number(wsUserId) : Number(currentUser?.id);
+
+    const filtered = wsGroupBaseTasks.filter(task => {
+      if (wsStatus !== 'hidden') {
+        // Filter by Status: hide completed tasks unless showDoneTasks or explicitly filtered by wsStatus === 'done'
+        if (!showDoneTasks && wsStatus !== 'done' && isTaskEffectivelyDone(task)) return false;
+        if (wsStatus && wsStatus !== 'all' && wsStatus !== 'planned' && !showDoneTasks && task.status !== wsStatus) return false;
+      }
+
+      const isTaskPersonal = isTaskPersonalForUser(task, targetUserId || currentUser?.id);
+
+      // Task Group filtering
       if (activeTaskGroupId === 'personal') {
         if (!isTaskPersonal) return false;
       } else if (activeTaskGroupId === 'unassigned') {
@@ -2647,7 +2634,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
       return Number(b.id || 0) - Number(a.id || 0);
     });
-  }, [wsTasks, debouncedWsSearch, wsTaskFilter, wsSubTab, wsTeamSubFilter, currentUser, wsUserId, wsPriority, wsStatus, showDoneTasks, wsDatePreset, pinnedTaskIds, adminViewFull, isTopAdmin, activeTaskGroupId]);
+  }, [wsGroupBaseTasks, currentUser, wsUserId, wsStatus, showDoneTasks, pinnedTaskIds, activeTaskGroupId]);
 
   const workspaceStats = useMemo(() => {
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -2751,7 +2738,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   }, [wsTasks, wsSubTab, currentUser, adminViewFull, isTopAdmin]);
 
   const paginatedWsTasks = useMemo(() => {
-    const startIndex = (wsTasksPage - 1) * wsTasksPageSize;
+    const maxPage = Math.max(1, Math.ceil(filteredWsTasks.length / wsTasksPageSize));
+    const safePage = Math.min(Math.max(1, wsTasksPage), maxPage);
+    const startIndex = (safePage - 1) * wsTasksPageSize;
     return filteredWsTasks.slice(startIndex, startIndex + wsTasksPageSize);
   }, [filteredWsTasks, wsTasksPage, wsTasksPageSize]);
 
@@ -3452,7 +3441,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   useEffect(() => {
     if (!activeOfferLeadId) return;
     setNow(Date.now());
-    const timer = setInterval(() => setNow(Date.now()), 250);
+    const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [activeOfferLeadId]);
 
@@ -3718,11 +3707,28 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
           try {
             const newErp = {
               ...erp,
+              due_sla_notified: false,
+              subtask_sla_notified: false,
               recurrence: {
                 ...erp.recurrence,
                 last_generated: ''
               },
-              checklist: (erp.checklist || []).map((c: any) => ({ ...c, done: false }))
+              checklist: (erp.checklist || []).map((c: any, idx: number) => ({
+                id: `sub_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
+                text: c.text || c.title || c.name || '',
+                title: c.title || c.text || c.name || '',
+                done: false,
+                checked: false,
+                status: 'pending',
+                deadline: null,
+                due_date: null,
+                sub_deadline: null,
+                priority: c.priority || 'medium',
+                user_id: c.user_id || c.assignee_id || null,
+                assignee_id: c.assignee_id || c.user_id || null,
+                assignee_name: c.assignee_name || null,
+                assignee_avatar: c.assignee_avatar || null
+              }))
             };
 
             await api.post('/activities', {
@@ -3861,7 +3867,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     };
   }, []);
 
-  const fetchWorkspaceTasks = async () => {
+  const fetchWorkspaceTasks = async (isSilent = false) => {
     if (!token) return;
     if (wsTasksAbortRef.current) {
       wsTasksAbortRef.current.abort();
@@ -3870,7 +3876,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     wsTasksAbortRef.current = controller;
     const { signal } = controller;
 
-    setLoadingWsTasks(true);
+    if (!isSilent && wsTasks.length === 0) {
+      setLoadingWsTasks(true);
+    }
     try {
       let url = '/activities?limit=1000';
       const effectiveStatus = showDoneTasks ? 'all' : wsStatus;
@@ -3974,7 +3982,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const enrichedTaskGroups = useMemo(() => {
     const list = Array.isArray(taskGroups) ? taskGroups : [];
     return list.map(g => {
-      const gTasks = wsTasks.filter(t => Number(t.task_group_id) === Number(g.id));
+      const gTasks = wsGroupBaseTasks.filter(t => Number(t.task_group_id) === Number(g.id));
       const gTotal = gTasks.length;
       const gDone = gTasks.filter(t => isTaskEffectivelyDone(t)).length;
       return {
@@ -3985,17 +3993,17 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         progress_percent: gTotal > 0 ? Math.round((gDone / gTotal) * 100) : 0
       };
     });
-  }, [taskGroups, wsTasks]);
+  }, [taskGroups, wsGroupBaseTasks]);
 
   const computedGroupSummary = useMemo<TaskGroupsSummary>(() => {
-    const totalAll = wsTasks.length;
-    const doneAll = wsTasks.filter(t => isTaskEffectivelyDone(t)).length;
-    const unassignedTasks = wsTasks.filter(t => !t.task_group_id);
+    const totalAll = wsGroupBaseTasks.length;
+    const doneAll = wsGroupBaseTasks.filter(t => isTaskEffectivelyDone(t)).length;
+    const unassignedTasks = wsGroupBaseTasks.filter(t => !t.task_group_id);
     const totalUnassigned = unassignedTasks.length;
     const doneUnassigned = unassignedTasks.filter(t => isTaskEffectivelyDone(t)).length;
 
-    const curUid = Number(currentUser?.id || 0);
-    const personalTasks = wsTasks.filter(t => isTaskPersonalForUser(t, curUid));
+    const curUid = wsUserId ? Number(wsUserId) : Number(currentUser?.id || 0);
+    const personalTasks = wsGroupBaseTasks.filter(t => isTaskPersonalForUser(t, curUid));
     const totalPersonal = personalTasks.length;
     const donePersonal = personalTasks.filter(t => isTaskEffectivelyDone(t)).length;
 
@@ -4019,7 +4027,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         progress_percent: totalPersonal > 0 ? Math.round((donePersonal / totalPersonal) * 100) : 0
       }
     };
-  }, [wsTasks, currentUser]);
+  }, [wsGroupBaseTasks, currentUser, wsUserId]);
 
   const handleCreateTaskGroup = async (data: { name: string; color: string; icon: string }) => {
     setShowCardCreateGroupModal(false);
@@ -4195,6 +4203,13 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     }
   }, [taskGroups, t]);
 
+  const fetchWorkspaceTasksRef = useRef(fetchWorkspaceTasks);
+  fetchWorkspaceTasksRef.current = fetchWorkspaceTasks;
+  const fetchTaskGroupsRef = useRef(fetchTaskGroups);
+  fetchTaskGroupsRef.current = fetchTaskGroups;
+  const fetchPortalTasksRef = useRef(fetchPortalTasks);
+  fetchPortalTasksRef.current = fetchPortalTasks;
+
   useEffect(() => {
     const handleTaskLocalUpdate = (e: any) => {
       const updated = e?.detail;
@@ -4211,8 +4226,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         });
         setSelectedTaskForDetails((prev: any) => prev && Number(prev.id) === Number(updated.id) ? { ...prev, ...updated } : prev);
       }
-      fetchWorkspaceTasks();
-      fetchPortalTasks();
+      fetchWorkspaceTasksRef.current(true);
+      fetchPortalTasksRef.current();
     };
     window.addEventListener('task-local-updated', handleTaskLocalUpdate);
     window.addEventListener('task-updated', handleTaskUpdated);
@@ -4384,8 +4399,14 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
   useEffect(() => {
     if (activeTab === 'workspace') {
-      fetchWorkspaceTasks();
+      fetchWorkspaceTasks(false);
       fetchTaskGroups();
+      const pollTimer = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          fetchWorkspaceTasksRef.current(true);
+        }
+      }, 15000);
+      return () => clearInterval(pollTimer);
     }
   }, [activeTab, wsPriority, wsStatus, showDoneTasks, wsDatePreset, wsStartDate, wsEndDate, wsTeamId, wsUserId, wsActivityType, wsRelatedType, wsSubTab]);
 
@@ -5537,10 +5558,12 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     };
     const handleNewNotif = () => {
       loadPortalDataRef.current(true);
+      fetchWorkspaceTasksRef.current(true);
     };
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         loadPortalDataRef.current(true);
+        fetchWorkspaceTasksRef.current(true);
       }
     };
 
@@ -7311,9 +7334,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         progress: 0,
                         require_approval: 0,
                         approver_id: '',
-                        tags: wsSubTab === 'personal' ? 'personal_task' : '',
+                        tags: (wsSubTab === 'personal' || activeTaskGroupId === 'personal') ? 'personal_task' : '',
                         internal_type: wsSubTab === 'team' ? 'task' : '',
-                        scope: wsSubTab === 'team' ? 'team' : '',
+                        scope: (wsSubTab === 'personal' || activeTaskGroupId === 'personal') ? 'personal' : (wsSubTab === 'team' ? 'team' : ''),
+                        task_group_id: (typeof activeTaskGroupId === 'number' || (!isNaN(Number(activeTaskGroupId)) && Number(activeTaskGroupId) > 0)) ? Number(activeTaskGroupId) : null,
                         participant_ids: '',
                         related_contact_ids: [],
                         checklist: [],
@@ -8656,6 +8680,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       setWsActivityType('task');
                       setWsRelatedType('');
                       setWsSearch('');
+                      setWsSubTab('all');
+                      setWsTaskFilter('all');
                       toast.success(t('Đã reset toàn bộ bộ lọc'));
                     }}
                     style={{ fontSize: '0.75rem', padding: '6px 12px' }}
@@ -8841,7 +8867,13 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 groups={enrichedTaskGroups}
                 summary={computedGroupSummary}
                 activeGroupId={activeTaskGroupId}
-                onSelectGroup={(groupId) => setActiveTaskGroupId(groupId)}
+                onSelectGroup={(groupId) => {
+                  setActiveTaskGroupId(groupId);
+                  setWsTasksPage(1);
+                  if (groupId === 'personal' && (wsTaskFilter === 'collaborator' || wsTaskFilter === 'approve_by_me')) {
+                    setWsTaskFilter('all');
+                  }
+                }}
                 onCreateGroup={handleCreateTaskGroup}
                 onUpdateGroup={handleUpdateTaskGroup}
                 onDeleteGroup={handleDeleteTaskGroup}
@@ -9594,11 +9626,17 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       taskGroups={taskGroups}
                       onUpdate={(updatedTask?: any) => {
                         if (updatedTask && updatedTask.id) {
-                          setWsTasks(prev => {
-                            return prev.map(t => Number(t.id) === Number(updatedTask.id) ? { ...t, ...updatedTask } : t);
-                          });
-                          if (selectedTaskForDetails && Number(selectedTaskForDetails.id) === Number(updatedTask.id)) {
-                            setSelectedTaskForDetails((prev: any) => ({ ...prev, ...updatedTask }));
+                          if (updatedTask.__duplicatedFromId || updatedTask.duplicated_from_id) {
+                            const cleanClone = { ...updatedTask, comments: [], comment_count: 0 };
+                            setWsTasks(prev => [cleanClone, ...prev.filter(t => Number(t.id) !== Number(cleanClone.id))]);
+                            setSelectedTaskForDetails(cleanClone);
+                          } else {
+                            setWsTasks(prev => {
+                              return prev.map(t => Number(t.id) === Number(updatedTask.id) ? { ...t, ...updatedTask } : t);
+                            });
+                            if (selectedTaskForDetails && Number(selectedTaskForDetails.id) === Number(updatedTask.id)) {
+                              setSelectedTaskForDetails((prev: any) => ({ ...prev, ...updatedTask }));
+                            }
                           }
                         } else {
                           fetchPortalTasks();
@@ -20972,11 +21010,17 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
             taskGroups={taskGroups}
             onUpdate={(updatedTask?: any) => {
               if (updatedTask && updatedTask.id) {
-                setWsTasks(prev => {
-                  return prev.map(t => Number(t.id) === Number(updatedTask.id) ? { ...t, ...updatedTask } : t);
-                });
-                if (selectedTaskForDetails && Number(selectedTaskForDetails.id) === Number(updatedTask.id)) {
-                  setSelectedTaskForDetails((prev: any) => ({ ...prev, ...updatedTask }));
+                if (updatedTask.__duplicatedFromId || updatedTask.duplicated_from_id) {
+                  const cleanClone = { ...updatedTask, comments: [], comment_count: 0 };
+                  setWsTasks(prev => [cleanClone, ...prev.filter(t => Number(t.id) !== Number(cleanClone.id))]);
+                  setSelectedTaskForDetails(cleanClone);
+                } else {
+                  setWsTasks(prev => {
+                    return prev.map(t => Number(t.id) === Number(updatedTask.id) ? { ...t, ...updatedTask } : t);
+                  });
+                  if (selectedTaskForDetails && Number(selectedTaskForDetails.id) === Number(updatedTask.id)) {
+                    setSelectedTaskForDetails((prev: any) => ({ ...prev, ...updatedTask }));
+                  }
                 }
               } else {
                 fetchPortalTasks();

@@ -316,22 +316,16 @@ api.interceptors.request.use((config) => {
     config.url = 'api.php';
   }
 
-  let token = null;
-  const storedUserStr = localStorage.getItem('Ideas_user');
-  if (storedUserStr) {
-    try {
-      const u = JSON.parse(storedUserStr);
-      if (u && (u.role === 'sale' || u.role === 'sales')) {
-        token = localStorage.getItem('Ideas_token');
-      }
-    } catch (e) {}
+  let token = localStorage.getItem('Ideas_token') || localStorage.getItem('access_token');
+  if (token) {
+    if (!localStorage.getItem('Ideas_token')) localStorage.setItem('Ideas_token', token);
+    if (!localStorage.getItem('access_token')) localStorage.setItem('access_token', token);
+    config.headers.Authorization = `Bearer ${token}`;
   }
-  if (!token) {
-    token = localStorage.getItem('access_token') || localStorage.getItem('Ideas_token');
-  }
-  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
+
+let refreshInFlightPromise: Promise<string | null> | null = null;
 
 // Auto-refresh on 401 & Version Header Detection
 api.interceptors.response.use(
@@ -373,30 +367,40 @@ api.interceptors.response.use(
     ) {
       original._retry = true;
       try {
-        const refresh = localStorage.getItem('refresh_token');
-        if (!refresh) {
-          throw new Error('No refresh token');
+        if (!refreshInFlightPromise) {
+          refreshInFlightPromise = (async () => {
+            try {
+              const refresh = localStorage.getItem('refresh_token');
+              if (!refresh) return null;
+              const { data } = await axios.post(`${BASE_URL}/api.php?action=auth/refresh`, { refresh_token: refresh });
+              const newAccess = data?.data?.access_token;
+              const newRefresh = data?.data?.refresh_token;
+              if (newAccess) {
+                localStorage.setItem('access_token', newAccess);
+                localStorage.setItem('Ideas_token', newAccess);
+                if (newRefresh) localStorage.setItem('refresh_token', newRefresh);
+                try {
+                  const { useAuthStore } = await import('../store/authStore' as any);
+                  const s = useAuthStore.getState();
+                  if (s.user) useAuthStore.setState({ accessToken: newAccess });
+                } catch {}
+                return newAccess;
+              }
+              return null;
+            } catch {
+              return null;
+            } finally {
+              refreshInFlightPromise = null;
+            }
+          })();
         }
-        const { data } = await axios.post(`${BASE_URL}/api.php?action=auth/refresh`, { refresh_token: refresh });
-        const { access_token, refresh_token } = data.data;
-        localStorage.setItem('access_token', access_token);
-        if (refresh_token) localStorage.setItem('refresh_token', refresh_token);
-        // Sync new token to Zustand store
-        try { const { useAuthStore } = await import('../store/authStore' as any); const s = useAuthStore.getState(); if (s.user) useAuthStore.setState({ accessToken: access_token }); } catch {}
-        original.headers.Authorization = `Bearer ${access_token}`;
-        return api(original);
+        const refreshedToken = await refreshInFlightPromise;
+        if (refreshedToken) {
+          original.headers.Authorization = `Bearer ${refreshedToken}`;
+          return api(original);
+        }
       } catch {
-        localStorage.removeItem('Ideas_token');
-        localStorage.removeItem('Ideas_user');
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        try {
-          const { useChatStore } = await import('../store/chatStore' as any);
-          useChatStore.getState().resetChatState();
-        } catch {}
-        if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-          window.location.href = '/login';
-        }
+        // Tuyệt đối không tự động logout / xóa localStorage khi phiên đăng nhập của user vẫn tồn tại
       }
     }
     // Safe auto-retry for idempotent GET requests on temporary network loss / 502-504 gateway glitches

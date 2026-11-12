@@ -87,7 +87,7 @@ const METADATA_CACHE_TTL = 10 * 60 * 1000; // 10 minutes cache
 // Helper to automatically recognize URLs and wrap them in <a> tags
 export const linkifyHtml = (html: string): string => {
   if (!html || typeof html !== 'string' || !html.trim()) return html || '';
-  if (!/https?:\/\/|www\./i.test(html)) return html;
+  if (!/https?:\/\/|www\.|<a\b/i.test(html)) return html;
 
   try {
     const parser = new DOMParser();
@@ -95,8 +95,20 @@ export const linkifyHtml = (html: string): string => {
 
     const walk = (node: Node) => {
       if (node.nodeType === Node.ELEMENT_NODE) {
-        const tagName = (node as Element).tagName.toUpperCase();
-        if (tagName === 'A' || tagName === 'SCRIPT' || tagName === 'STYLE') {
+        const el = node as Element;
+        const tagName = el.tagName.toUpperCase();
+        if (tagName === 'A') {
+          const rawHref = (el.getAttribute('href') || '').trim();
+          if (rawHref && rawHref !== '#' && !/^javascript:/i.test(rawHref)) {
+            if (!/^(https?:\/\/|mailto:|tel:|\/)/i.test(rawHref)) {
+              el.setAttribute('href', `https://${rawHref}`);
+            }
+            el.setAttribute('target', '_blank');
+            el.setAttribute('rel', 'noopener noreferrer');
+          }
+          return;
+        }
+        if (tagName === 'SCRIPT' || tagName === 'STYLE') {
           return;
         }
       }
@@ -322,7 +334,12 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
   const [formData, setFormData] = useState<any>({});
   const [isClonedDraft, setIsClonedDraft] = useState<boolean>(false);
-  const isNew = Boolean(isClonedDraft || formData?.id === 'new' || task?.id === 'new' || !task?.id || task?.id === 0 || task?.id === '0');
+  const activeTaskId = (formData?.id && formData.id !== 'new' && formData.id !== 0 && formData.id !== '0')
+    ? formData.id
+    : task?.id;
+  const activeTaskIdRef = useRef<any>(activeTaskId);
+  activeTaskIdRef.current = activeTaskId;
+  const isNew = Boolean(isClonedDraft || formData?.id === 'new' || (!activeTaskId && (task?.id === 'new' || !task?.id || task?.id === 0 || task?.id === '0')));
   const formDataRef = useRef<any>(formData);
   formDataRef.current = formData;
   const isNewRef = useRef<boolean>(isNew);
@@ -364,6 +381,18 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   });
   const erpMetaRef = useRef<any>(erpMeta);
   erpMetaRef.current = erpMeta;
+  const lastSyncedDescRef = useRef<string>('');
+  const isDescDirtyRef = useRef<boolean>(false);
+  const deletedSubtaskIdsRef = useRef<string[]>([]);
+  const lastSyncedUpdatedAtRef = useRef<string>('');
+  const liveSyncInFlightRef = useRef<boolean>(false);
+  const pendingMetaSaveRef = useRef<{
+    updatedMeta: any;
+    overrideProgress?: number;
+    dirtyMetaFields: Set<string>;
+    dirtySubtaskIds: Set<string>;
+    deletedSubtaskIds: Set<string>;
+  } | null>(null);
 
   const [isCustomerLinked, setIsCustomerLinked] = useState<boolean>(false);
   const hasLinkedCustomer = Boolean(
@@ -379,13 +408,14 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
   const unpinIfDone = (status?: string, progress?: number) => {
     const isDone = status === 'done' || Number(progress || 0) >= 100;
-    if (isDone && currentUid && !isNewRef.current && task?.id && task.id !== 'new') {
+    const tid = activeTaskIdRef.current;
+    if (isDone && currentUid && !isNewRef.current && tid && tid !== 'new') {
       try {
         const key = `pinned_tasks_${currentUid}`;
         const stored = localStorage.getItem(key);
         if (stored) {
           const arr = JSON.parse(stored);
-          const filtered = arr.filter((id: any) => Number(id) !== Number(task.id));
+          const filtered = arr.filter((id: any) => Number(id) !== Number(tid));
           localStorage.setItem(key, JSON.stringify(filtered));
         }
       } catch (e) {
@@ -448,9 +478,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
   // Auto-save draft for comment
   const { clearDraft: clearCommentDraft, DraftRecoveryBanner: CommentDraftRecoveryBanner } = useAutoSaveDraft<string>({
-    key: `task_comment_${isNew ? 'new' : (task?.id || 'new')}`,
+    key: `task_comment_${isNew ? 'new' : (activeTaskId || 'new')}`,
     data: newCommentText,
-    enabled: isOpen && !isNew && Boolean(task?.id),
+    enabled: isOpen && !isNew && Boolean(activeTaskId),
     isDataEmpty: (d) => !d || !d.trim()
   });
 
@@ -482,8 +512,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   const [savingCancel, setSavingCancel] = useState(false);
 
   const loadSubtaskCommentCounts = () => {
-    if (isNewRef.current || !task?.id || task.id === 'new') return;
-    api.get(`/activities/${task.id}/subtasks-comment-counts`)
+    const tid = activeTaskIdRef.current;
+    if (isNewRef.current || !tid || tid === 'new') return;
+    api.get(`/activities/${tid}/subtasks-comment-counts`)
       .then(res => {
         if (res.data && res.data.success) {
           setSubtaskCommentCounts(res.data.data || {});
@@ -493,12 +524,14 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   };
 
   useEffect(() => {
-    if (isOpen && !isNew && task?.id && task.id !== 'new') {
-      const taskId = task.id;
+    if (isOpen && !isNew && activeTaskId && activeTaskId !== 'new') {
+      const taskId = activeTaskId;
       setLoadingMute(true);
       
       const promises: Promise<any>[] = [];
-      if (task.is_muted !== undefined) {
+      if (formData?.is_muted !== undefined) {
+        setIsMuted(Boolean(formData.is_muted));
+      } else if (task?.id === taskId && task?.is_muted !== undefined) {
         setIsMuted(Boolean(task.is_muted));
       } else {
         promises.push(
@@ -508,7 +541,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         );
       }
 
-      if (task.is_hidden !== undefined) {
+      if (formData?.is_hidden !== undefined) {
+        setIsHidden(Boolean(formData.is_hidden));
+      } else if (task?.id === taskId && task?.is_hidden !== undefined) {
         setIsHidden(Boolean(task.is_hidden));
       } else {
         promises.push(
@@ -530,15 +565,16 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         setLoadingMute(false);
       });
     }
-  }, [isOpen, task?.id]);
+  }, [isOpen, activeTaskId, isNew]);
 
   const handleBellClick = () => {
-    if (!task?.id || isNewRef.current) return;
+    const tid = activeTaskIdRef.current;
+    if (!tid || tid === 'new' || isNewRef.current) return;
     if (!isMuted) {
       setShowMuteConfirmModal(true);
     } else {
       setLoadingMute(true);
-      api.post(`/activities/${task.id}/toggle-mute`, { mute: false })
+      api.post(`/activities/${tid}/toggle-mute`, { mute: false })
         .then(res => {
           if (res.data && res.data.success) {
             setIsMuted(false);
@@ -553,10 +589,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   };
 
   const handleConfirmMute = () => {
-    if (!task?.id || isNewRef.current) return;
+    const tid = activeTaskIdRef.current;
+    if (!tid || tid === 'new' || isNewRef.current) return;
     setShowMuteConfirmModal(false);
     setLoadingMute(true);
-    api.post(`/activities/${task.id}/toggle-mute`, { mute: true })
+    api.post(`/activities/${tid}/toggle-mute`, { mute: true })
       .then(res => {
         if (res.data && res.data.success) {
           setIsMuted(true);
@@ -570,7 +607,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   };
 
   const handleHideClick = () => {
-    if (!task?.id || isNewRef.current) return;
+    const tid = activeTaskIdRef.current;
+    if (!tid || tid === 'new' || isNewRef.current) return;
     if (isHidden) {
       // Unhide doesn't need confirmation
       executeToggleHide();
@@ -580,14 +618,15 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   };
 
   const executeToggleHide = () => {
-    if (!task?.id || isNewRef.current) return;
+    const tid = activeTaskIdRef.current;
+    if (!tid || tid === 'new' || isNewRef.current) return;
     setLoadingHide(true);
-    api.post(`/activities/${task.id}/toggle-hide`)
+    api.post(`/activities/${tid}/toggle-hide`)
       .then(res => {
         if (res.data && res.data.success) {
           setIsHidden(res.data.is_hidden);
           toast.success(res.data.message);
-          if (onUpdate) onUpdate({ ...task, ...formData, is_hidden: res.data.is_hidden });
+          if (onUpdate) onUpdate({ ...task, ...formData, id: tid, is_hidden: res.data.is_hidden });
           window.dispatchEvent(new CustomEvent('task-updated'));
         }
       })
@@ -599,16 +638,17 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
   const archiveInFlightRef = useRef(false);
   const handleToggleArchive = async () => {
-    if (!task?.id || isNewRef.current || archiveInFlightRef.current) return;
+    const tid = activeTaskIdRef.current;
+    if (!tid || tid === 'new' || isNewRef.current || archiveInFlightRef.current) return;
     archiveInFlightRef.current = true;
     const nextArchived = !formData.is_archived;
     try {
-      const endpoint = nextArchived ? `/tasks/${task.id}/archive` : `/tasks/${task.id}/unarchive`;
+      const endpoint = nextArchived ? `/tasks/${tid}/archive` : `/tasks/${tid}/unarchive`;
       const res = await api.post(endpoint);
       if (res.data?.success) {
         setFormData((prev: any) => ({ ...prev, is_archived: nextArchived ? 1 : 0 }));
         toast.success(nextArchived ? t('Đã lưu trữ công việc') : t('Đã bỏ lưu trữ công việc'));
-        if (onUpdate) onUpdate({ ...task, ...formData, is_archived: nextArchived ? 1 : 0 });
+        if (onUpdate) onUpdate({ ...task, ...formData, id: tid, is_archived: nextArchived ? 1 : 0 });
         window.dispatchEvent(new CustomEvent('task-updated'));
       }
     } catch (err: any) {
@@ -865,8 +905,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             }
 
             const html = editorRef.current.innerHTML;
+            isDescDirtyRef.current = false;
+            lastSyncedDescRef.current = html;
             setErpMeta((prev) => ({ ...prev, description: html }));
-            handleSaveMeta({ ...erpMeta, description: html });
+            handleSaveMeta({ ...erpMeta, description: html }, undefined, { dirtyMetaFields: ['description'] });
           }
         } else {
           toast.error(res.data?.message || t('Lỗi tải tệp lên'), { id: toastId });
@@ -951,8 +993,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             }
 
             const html = editorRef.current.innerHTML;
+            isDescDirtyRef.current = false;
+            lastSyncedDescRef.current = html;
             setErpMeta((prev) => ({ ...prev, description: html }));
-            handleSaveMeta({ ...erpMeta, description: html });
+            handleSaveMeta({ ...erpMeta, description: html }, undefined, { dirtyMetaFields: ['description'] });
           }
         } else {
           toast.error(res.data?.message || t('Lỗi tải tệp lên'), { id: toastId });
@@ -971,8 +1015,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       document.execCommand('insertHTML', false, htmlToInsert);
       if (editorRef.current) {
         const updatedHtml = editorRef.current.innerHTML;
+        isDescDirtyRef.current = false;
+        lastSyncedDescRef.current = updatedHtml;
         setErpMeta((prev: any) => ({ ...prev, description: updatedHtml }));
-        handleSaveMeta({ ...erpMeta, description: updatedHtml });
+        handleSaveMeta({ ...erpMeta, description: updatedHtml }, undefined, { dirtyMetaFields: ['description'] });
       }
     }
   };
@@ -1241,15 +1287,16 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   };
 
   const handleDeleteComment = async (commentId: number) => {
-    if (!task?.id || isNewRef.current || task.id === 'new') return;
+    const tid = activeTaskIdRef.current;
+    if (!tid || isNewRef.current || tid === 'new') return;
     if (deleteCommentInFlightRef.current) return;
     deleteCommentInFlightRef.current = true;
     try {
       const res = await api.delete(`/activities/comments/${commentId}`);
       if (res.data && (res.data.success || res.status === 200)) {
-        await loadComments(Number(task.id));
-        if (activeTab === 'timeline') await loadTimeline(Number(task.id));
-        if (onUpdate) onUpdate({ ...task, ...formData, comment_count: Math.max(0, Number(formData.comment_count || task.comment_count || 1) - 1) });
+        await loadComments(Number(tid));
+        if (activeTab === 'timeline') await loadTimeline(Number(tid));
+        if (onUpdate) onUpdate({ ...task, ...formData, id: tid, comment_count: Math.max(0, Number(formData.comment_count || task?.comment_count || 1) - 1) });
         toast.success(t('Đã xóa bình luận!'));
       } else {
         toast.error(res.data?.message || t('Không thể xóa bình luận'));
@@ -1289,10 +1336,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
   // Lazy-load timeline only when user switches to 'timeline' tab
   useEffect(() => {
-    if (isOpen && activeTab === 'timeline' && !isNew && task?.id && task.id !== 'new') {
-      loadTimeline(Number(task.id));
+    if (isOpen && activeTab === 'timeline' && !isNew && activeTaskId && activeTaskId !== 'new') {
+      loadTimeline(Number(activeTaskId));
     }
-  }, [isOpen, activeTab, isNew, task?.id]);
+  }, [isOpen, activeTab, isNew, activeTaskId]);
 
   const loadSubtaskComments = async (taskId: number, subtaskId: string) => {
     if (subtaskCommentsAbortRef.current) subtaskCommentsAbortRef.current.abort();
@@ -1314,13 +1361,13 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   };
 
   useEffect(() => {
-    if (task && !isNew && task.id !== 'new' && selectedSubtask) {
-      loadSubtaskComments(Number(task.id), selectedSubtask.id);
+    if (activeTaskId && !isNew && activeTaskId !== 'new' && selectedSubtask) {
+      loadSubtaskComments(Number(activeTaskId), selectedSubtask.id);
     }
     return () => {
       if (subtaskCommentsAbortRef.current) subtaskCommentsAbortRef.current.abort();
     };
-  }, [selectedSubtask]);
+  }, [selectedSubtask, activeTaskId, isNew]);
 
   const lastHighlightedCommentRef = useRef<string>('');
 
@@ -1519,6 +1566,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
       erpMetaRef.current = parsedMeta;
       setErpMeta(parsedMeta);
+      lastSyncedDescRef.current = cleanDescHtml;
+      isDescDirtyRef.current = false;
+      deletedSubtaskIdsRef.current = [];
+      lastSyncedUpdatedAtRef.current = String(task.updated_at || '');
+      pendingMetaSaveRef.current = null;
 
       const hasInitialCustomer = Boolean(
         normalizedTask.contact_id || 
@@ -1572,6 +1624,169 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       }));
     }
   }, [task, isFromCustomerDrawer, isOpen, embedMode]);
+
+  // Live merge helper for both PUT responses and real-time multi-user polling
+  const applyLiveServerTask = useCallback((serverTask: any, options?: { fromSave?: boolean }) => {
+    if (!serverTask || !serverTask.id) return;
+    const currentTid = activeTaskIdRef.current;
+    if (!currentTid || currentTid === 'new' || String(currentTid) !== String(serverTask.id)) return;
+    if (!options?.fromSave) {
+      if (saveMetaInFlightRef.current || manualSaveInFlightRef.current || updateFieldInFlightRef.current || pendingMetaSaveRef.current) {
+        return;
+      }
+    }
+
+    const curForm = formDataRef.current || {};
+    const curMeta = erpMetaRef.current || {};
+    const serverUpdatedAt = String(serverTask.updated_at || '');
+    const parsedServerBody = parseTaskBody(serverTask.body || '');
+    const serverChecklist = Array.isArray(parsedServerBody.checklist) ? parsedServerBody.checklist : [];
+    const serverLinks = Array.isArray(parsedServerBody.links) ? parsedServerBody.links : [];
+    const serverDescHtml = linkifyHtml(convertTextToHtmlParagraphs(parsedServerBody.description));
+
+    const prevCommentCount = Number(curForm.comment_count || 0);
+    const nextCommentCount = Number(serverTask.comment_count ?? prevCommentCount);
+
+    const checklistChanged = JSON.stringify(serverChecklist) !== JSON.stringify(curMeta.checklist || []);
+    const linksChanged = JSON.stringify(serverLinks) !== JSON.stringify(curMeta.links || []);
+    const descChanged = !isDescDirtyRef.current && serverDescHtml !== (curMeta.description || '');
+    const fieldsChanged =
+      String(serverTask.status || '') !== String(curForm.status || '') ||
+      Number(serverTask.progress ?? 0) !== Number(curForm.progress ?? 0) ||
+      String(serverTask.priority || '') !== String(curForm.priority || '') ||
+      String(serverTask.due_date || '') !== String(curForm.due_date || '') ||
+      Number(serverTask.user_id || 0) !== Number(curForm.user_id || 0) ||
+      String(serverTask.participant_ids || '') !== String(curForm.participant_ids || '') ||
+      String(serverTask.approval_status || '') !== String(curForm.approval_status || '') ||
+      Number(serverTask.require_approval || 0) !== Number(curForm.require_approval || 0) ||
+      Number(serverTask.approver_id || 0) !== Number(curForm.approver_id || 0) ||
+      Number(serverTask.task_group_id || 0) !== Number(curForm.task_group_id || 0) ||
+      nextCommentCount !== prevCommentCount;
+
+    if (!options?.fromSave && !checklistChanged && !linksChanged && !descChanged && !fieldsChanged && serverUpdatedAt === lastSyncedUpdatedAtRef.current) {
+      return;
+    }
+
+    const nextMeta = {
+      ...curMeta,
+      checklist: serverChecklist,
+      links: serverLinks,
+      ...(descChanged ? { description: serverDescHtml } : {}),
+      ...(parsedServerBody.recurrence ? { recurrence: parsedServerBody.recurrence } : {})
+    };
+    if (descChanged) {
+      lastSyncedDescRef.current = serverDescHtml;
+    }
+    erpMetaRef.current = nextMeta;
+    setErpMeta(nextMeta);
+
+    setSelectedSubtask((prevSub: any) => {
+      if (!prevSub || !prevSub.id) return prevSub;
+      const updatedSub = serverChecklist.find((item: any) => String(item.id) === String(prevSub.id));
+      return updatedSub ? { ...prevSub, ...updatedSub } : prevSub;
+    });
+
+    const isEditingSubject = typeof document !== 'undefined' && document.activeElement?.tagName === 'INPUT' && (document.activeElement as HTMLInputElement).value === curForm.subject;
+    const nextForm = {
+      ...curForm,
+      ...(isEditingSubject ? {} : { subject: serverTask.subject || curForm.subject }),
+      body: serverTask.body || curForm.body,
+      status: serverTask.status ?? curForm.status,
+      progress: serverTask.progress !== undefined ? Number(serverTask.progress) : curForm.progress,
+      priority: serverTask.priority ?? curForm.priority,
+      due_date: serverTask.due_date !== undefined ? serverTask.due_date : curForm.due_date,
+      user_id: serverTask.user_id ? Number(serverTask.user_id) : null,
+      user_name: serverTask.user_name ?? curForm.user_name,
+      participant_ids: serverTask.participant_ids !== undefined ? String(serverTask.participant_ids || '') : curForm.participant_ids,
+      require_approval: serverTask.require_approval !== undefined ? Number(serverTask.require_approval) : curForm.require_approval,
+      approver_id: serverTask.approver_id ? Number(serverTask.approver_id) : null,
+      approval_status: serverTask.approval_status ?? curForm.approval_status,
+      task_group_id: serverTask.task_group_id ? Number(serverTask.task_group_id) : null,
+      task_group_name: serverTask.task_group_name ?? curForm.task_group_name,
+      task_group_color: serverTask.task_group_color ?? curForm.task_group_color,
+      comment_count: nextCommentCount,
+      updated_at: serverTask.updated_at || curForm.updated_at
+    };
+    formDataRef.current = nextForm;
+    setFormData(nextForm);
+
+    if (serverUpdatedAt) {
+      lastSyncedUpdatedAtRef.current = serverUpdatedAt;
+    }
+
+    const cleanObj = (obj: any) => {
+      const clean: any = {};
+      Object.keys(obj || {}).forEach(key => {
+        if (['created_at', 'updated_at', 'deleted_at', 'created_by_name', 'created_by_avatar', 'contact_name', 'contact_avatar', 'user_name'].includes(key)) {
+          return;
+        }
+        const val = obj[key];
+        clean[key] = (val === null || val === undefined) ? '' : val;
+      });
+      return clean;
+    };
+    setOriginalHash(JSON.stringify({
+      formData: cleanObj(nextForm),
+      erpMeta: cleanObj(nextMeta)
+    }));
+
+    window.dispatchEvent(new CustomEvent('task-local-updated', { detail: { id: serverTask.id, ...nextForm } }));
+
+    if (!options?.fromSave) {
+      if (nextCommentCount !== prevCommentCount) {
+        loadComments(Number(serverTask.id));
+        loadSubtaskCommentCounts();
+      }
+      if (activeTab === 'timeline') {
+        loadTimeline(Number(serverTask.id));
+      }
+    }
+  }, [activeTab]);
+
+  // Real-time multi-user sync polling while WorkspaceTaskDrawer is open
+  useEffect(() => {
+    if (!isOpen || isNew || isClonedDraft || !activeTaskId || activeTaskId === 'new') {
+      return;
+    }
+    const taskIdNum = Number(activeTaskId);
+    if (!taskIdNum || isNaN(taskIdNum)) return;
+
+    const pollLatestTask = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      if (liveSyncInFlightRef.current || saveMetaInFlightRef.current || manualSaveInFlightRef.current || updateFieldInFlightRef.current || pendingMetaSaveRef.current) {
+        return;
+      }
+      liveSyncInFlightRef.current = true;
+      try {
+        const res = await api.get(`/activities/${taskIdNum}`);
+        const serverTask = res.data?.data || res.data;
+        if (serverTask && serverTask.id) {
+          applyLiveServerTask(serverTask, { fromSave: false });
+        }
+      } catch {
+        // Ignore transient network errors during background polling
+      } finally {
+        liveSyncInFlightRef.current = false;
+      }
+    };
+
+    // Immediately hydrate fresh server state when drawer opens so stale board cards never show outdated subtasks
+    pollLatestTask();
+    const intervalId = window.setInterval(pollLatestTask, 4000);
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        pollLatestTask();
+      }
+    };
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+    };
+  }, [isOpen, isNew, isClonedDraft, activeTaskId, applyLiveServerTask]);
 
   const validateRecurrence = (meta: any): { isValid: boolean; error?: string } => {
     const rec = meta?.recurrence;
@@ -1682,7 +1897,15 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   const completeMeetingInFlightRef = useRef(false);
   const cancelMeetingInFlightRef = useRef(false);
 
-  const handleSaveMeta = async (updatedMeta: any, overrideProgress?: number) => {
+  const handleSaveMeta = async (
+    updatedMeta: any,
+    overrideProgress?: number,
+    metaOptions?: {
+      dirtyMetaFields?: string[];
+      dirtySubtaskIds?: string[];
+      deletedSubtaskIds?: string[];
+    }
+  ) => {
     if (!task) return;
 
     // Recurrence validation
@@ -1694,120 +1917,156 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     }
 
     const curForm = formDataRef.current || formData;
-    const currentProgress = overrideProgress !== undefined ? overrideProgress : (curForm.progress ?? 0);
+    erpMetaRef.current = updatedMeta;
+    setErpMeta(updatedMeta);
+    if (overrideProgress !== undefined) {
+      setFormData((prev: any) => {
+        const next = { ...prev, progress: overrideProgress };
+        formDataRef.current = next;
+        return next;
+      });
+    }
 
     if (isNewRef.current || isClonedDraft || curForm?.id === 'new' || task.id === 'new') {
-      erpMetaRef.current = updatedMeta;
-      setErpMeta(updatedMeta);
-      if (overrideProgress !== undefined) {
-        setFormData((prev: any) => {
-          const next = { ...prev, progress: overrideProgress };
-          formDataRef.current = next;
-          return next;
-        });
-      }
       return;
     }
+
+    // Queue or coalesce concurrent local meta updates so rapid clicks never drop subtasks
+    const prevPending = pendingMetaSaveRef.current;
+    const dirtyMetaFieldsSet = new Set<string>(prevPending ? Array.from(prevPending.dirtyMetaFields) : []);
+    const dirtySubtaskIdsSet = new Set<string>(prevPending ? Array.from(prevPending.dirtySubtaskIds) : []);
+    const deletedSubtaskIdsSet = new Set<string>(prevPending ? Array.from(prevPending.deletedSubtaskIds) : []);
+    (metaOptions?.dirtyMetaFields || []).forEach(f => dirtyMetaFieldsSet.add(String(f)));
+    (metaOptions?.dirtySubtaskIds || []).forEach(id => dirtySubtaskIdsSet.add(String(id)));
+    (metaOptions?.deletedSubtaskIds || []).forEach(id => deletedSubtaskIdsSet.add(String(id)));
+
+    pendingMetaSaveRef.current = {
+      updatedMeta,
+      overrideProgress: overrideProgress !== undefined ? overrideProgress : prevPending?.overrideProgress,
+      dirtyMetaFields: dirtyMetaFieldsSet,
+      dirtySubtaskIds: dirtySubtaskIdsSet,
+      deletedSubtaskIds: deletedSubtaskIdsSet
+    };
+
     if (saveMetaInFlightRef.current) return;
     saveMetaInFlightRef.current = true;
     try {
-      const latestForm = formDataRef.current || formData;
-      const payloadObj: any = { erp_task: updatedMeta };
-      if (updatedMeta.due_sla_notified || task.due_sla_notified) {
-        payloadObj.due_sla_notified = true;
-      }
-      if (updatedMeta.subtask_sla_notified || task.subtask_sla_notified) {
-        payloadObj.subtask_sla_notified = true;
-      }
-      const bodyPayload = JSON.stringify(payloadObj);
-      let finalTags = latestForm.tags || task.tags || '';
+      while (pendingMetaSaveRef.current) {
+        const batch = pendingMetaSaveRef.current;
+        pendingMetaSaveRef.current = null;
 
-      // Manage pinned tag
-      if (updatedMeta.internal_type === 'announcement') {
-        if (isPinned && !finalTags.includes('pinned')) {
-          finalTags += (finalTags ? ',' : '') + 'pinned';
-        } else if (!isPinned && finalTags.includes('pinned')) {
-          finalTags = finalTags.split(',').filter((t: string) => t !== 'pinned').join(',');
+        const batchMeta = erpMetaRef.current || batch.updatedMeta;
+        const latestForm = formDataRef.current || formData;
+        const dirtyMetaArr = Array.from(batch.dirtyMetaFields);
+        const dirtySubArr = Array.from(batch.dirtySubtaskIds);
+        const deletedSubArr = Array.from(batch.deletedSubtaskIds);
+
+        const payloadObj: any = {
+          erp_task: {
+            ...batchMeta,
+            ...(dirtyMetaArr.length > 0 ? { _dirty_meta_fields: dirtyMetaArr } : {}),
+            ...(dirtySubArr.length > 0 ? { _dirty_subtask_ids: dirtySubArr } : {}),
+            ...(deletedSubArr.length > 0 ? { _deleted_subtask_ids: deletedSubArr } : {})
+          }
+        };
+        if (batchMeta.due_sla_notified || task.due_sla_notified) {
+          payloadObj.due_sla_notified = true;
         }
-      }
+        if (batchMeta.subtask_sla_notified || task.subtask_sla_notified) {
+          payloadObj.subtask_sla_notified = true;
+        }
+        const bodyPayload = JSON.stringify(payloadObj);
+        let finalTags = latestForm.tags || task.tags || '';
 
-      // Sync tags with type
-      const newTag = `internal_${updatedMeta.internal_type}`;
-      let tagArray = finalTags.split(',').map((t: string) => t.trim()).filter(Boolean);
-      tagArray = tagArray.filter((t: string) => !t.startsWith('internal_'));
-      tagArray.push(newTag);
-      finalTags = tagArray.join(',');
+        // Manage pinned tag
+        if (batchMeta.internal_type === 'announcement') {
+          if (isPinned && !finalTags.includes('pinned')) {
+            finalTags += (finalTags ? ',' : '') + 'pinned';
+          } else if (!isPinned && finalTags.includes('pinned')) {
+            finalTags = finalTags.split(',').filter((t: string) => t !== 'pinned').join(',');
+          }
+        }
 
-      let relType = null;
-      let relId = null;
+        // Sync tags with type
+        const newTag = `internal_${batchMeta.internal_type}`;
+        let tagArray = finalTags.split(',').map((t: string) => t.trim()).filter(Boolean);
+        tagArray = tagArray.filter((t: string) => !t.startsWith('internal_'));
+        tagArray.push(newTag);
+        finalTags = tagArray.join(',');
 
-      if (updatedMeta.project_id) {
-        relType = 'project';
-        relId = updatedMeta.project_id;
-      } else if (updatedMeta.campaign_id) {
-        relType = 'campaign';
-        relId = updatedMeta.campaign_id;
-      } else if (updatedMeta.team_id) {
-        relType = 'team';
-        relId = updatedMeta.team_id;
-      } else if (latestForm.related_type && ['deal', 'company', 'project', 'campaign', 'team'].includes(latestForm.related_type) && latestForm.related_id) {
-        relType = latestForm.related_type;
-        relId = latestForm.related_id;
-      } else if (latestForm.contact_id || latestForm.related_id) {
-        relType = 'contact';
-        relId = latestForm.contact_id || latestForm.related_id;
-      }
-
-      const finalContactId = latestForm.contact_id || (latestForm.related_type === 'contact' ? latestForm.related_id : null);
-
-      const payload: any = {
-        body: bodyPayload,
-        tags: finalTags,
-        progress: currentProgress,
-        priority: latestForm.priority,
-        status: latestForm.status,
-        due_date: latestForm.due_date,
-        subject: latestForm.subject,
-        user_id: latestForm.user_id,
-        related_type: relType,
-        related_id: relId ? Number(relId) : null,
-        contact_id: finalContactId ? Number(finalContactId) : null
-      };
-
-      const res = await api.put(`/activities/${task.id}`, payload);
-      if (res.data && res.data.success) {
-        erpMetaRef.current = updatedMeta;
-        setErpMeta(updatedMeta);
-        const latestAfterPut = formDataRef.current || latestForm;
-        const updatedFormData = {
-          ...latestAfterPut,
+        const payload: any = {
           body: bodyPayload,
           tags: finalTags,
-          ...(overrideProgress !== undefined ? { progress: overrideProgress } : {})
+          ...(dirtyMetaArr.length > 0 ? { _dirty_meta_fields: dirtyMetaArr } : {}),
+          ...(dirtySubArr.length > 0 ? { _dirty_subtask_ids: dirtySubArr } : {}),
+          ...(deletedSubArr.length > 0 ? { _deleted_subtask_ids: deletedSubArr } : {})
         };
-        formDataRef.current = updatedFormData;
-        setFormData(updatedFormData);
-        
-        const cleanObj = (obj: any) => {
-          const clean: any = {};
-          Object.keys(obj || {}).forEach(key => {
-            if (['created_at', 'updated_at', 'deleted_at', 'created_by_name', 'created_by_avatar', 'contact_name', 'contact_avatar', 'user_name'].includes(key)) {
-              return;
-            }
-            const val = obj[key];
-            clean[key] = (val === null || val === undefined) ? '' : val;
-          });
-          return clean;
-        };
-        setOriginalHash(JSON.stringify({
-          formData: cleanObj(updatedFormData),
-          erpMeta: cleanObj(updatedMeta)
-        }));
 
-        unpinIfDone(updatedFormData.status, updatedFormData.progress);
-        const nextDetail = { id: task.id, ...updatedFormData, body: bodyPayload, progress: currentProgress };
-        window.dispatchEvent(new CustomEvent('task-local-updated', { detail: nextDetail }));
-        if (onUpdate) onUpdate(nextDetail);
+        if (batch.overrideProgress !== undefined) {
+          payload.progress = batch.overrideProgress;
+        }
+
+        // Only send related_type / related_id / contact_id when relation fields were explicitly modified
+        const isRelationModified =
+          dirtyMetaArr.length === 0 ||
+          dirtyMetaArr.some(f => ['project_id', 'campaign_id', 'team_id', 'team_ids', 'related_contact_ids'].includes(f));
+        if (isRelationModified) {
+          let relType = null;
+          let relId = null;
+
+          if (batchMeta.project_id) {
+            relType = 'project';
+            relId = batchMeta.project_id;
+          } else if (batchMeta.campaign_id) {
+            relType = 'campaign';
+            relId = batchMeta.campaign_id;
+          } else if (batchMeta.team_id) {
+            relType = 'team';
+            relId = batchMeta.team_id;
+          } else if (latestForm.related_type && ['deal', 'company', 'project', 'campaign', 'team'].includes(latestForm.related_type) && latestForm.related_id) {
+            relType = latestForm.related_type;
+            relId = latestForm.related_id;
+          } else if (latestForm.contact_id || latestForm.related_id) {
+            relType = 'contact';
+            relId = latestForm.contact_id || latestForm.related_id;
+          }
+
+          const finalContactId = latestForm.contact_id || (latestForm.related_type === 'contact' ? latestForm.related_id : null);
+          payload.related_type = relType;
+          payload.related_id = relId ? Number(relId) : null;
+          payload.contact_id = finalContactId ? Number(finalContactId) : null;
+        }
+
+        const targetId = activeTaskIdRef.current || task.id;
+        const res = await api.put(`/activities/${targetId}`, payload);
+        if (res.data && res.data.success) {
+          if (deletedSubArr.length > 0) {
+            deletedSubtaskIdsRef.current = deletedSubtaskIdsRef.current.filter(id => !deletedSubArr.includes(String(id)));
+          }
+          const serverTask = res.data?.data;
+          if (serverTask && serverTask.id) {
+            applyLiveServerTask(serverTask, { fromSave: true });
+            unpinIfDone(serverTask.status, serverTask.progress);
+            if (onUpdate) onUpdate(serverTask);
+          } else {
+            const latestAfterPut = formDataRef.current || latestForm;
+            const resolvedProgress = batch.overrideProgress !== undefined ? batch.overrideProgress : (latestAfterPut.progress ?? 0);
+            const cleanBodyPayload = JSON.stringify({ erp_task: batchMeta });
+            const updatedFormData = {
+              ...latestAfterPut,
+              body: cleanBodyPayload,
+              tags: finalTags,
+              ...(batch.overrideProgress !== undefined ? { progress: batch.overrideProgress } : {})
+            };
+            formDataRef.current = updatedFormData;
+            setFormData(updatedFormData);
+            unpinIfDone(updatedFormData.status, updatedFormData.progress);
+            const nextDetail = { id: targetId, ...updatedFormData, body: cleanBodyPayload, progress: resolvedProgress };
+            window.dispatchEvent(new CustomEvent('task-local-updated', { detail: nextDetail }));
+            if (onUpdate) onUpdate(nextDetail);
+          }
+          if (activeTab === 'timeline') loadTimeline(Number(targetId));
+        }
       }
     } catch (e: any) {
       toast.error(t('Lỗi lưu thay đổi: ') + e.message);
@@ -1849,9 +2108,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         rawDescToSave = formatVietnameseDescription(rawDescToSave);
       }
       const finalDesc = linkifyHtml(rawDescToSave);
-      const updatedErpMeta = {
+      const updatedErpMeta: any = {
         ...erpMeta,
-        description: finalDesc
+        description: finalDesc,
+        ...(deletedSubtaskIdsRef.current.length > 0 ? { _deleted_subtask_ids: deletedSubtaskIdsRef.current } : {})
       };
 
       const payloadObj: any = { erp_task: updatedErpMeta };
@@ -1906,6 +2166,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         subject: (formDataRef.current?.subject ?? formData.subject) || (formDataRef.current?.title ?? formData.title) || '',
         description: finalDesc,
         body: bodyPayload,
+        ...(deletedSubtaskIdsRef.current.length > 0 ? { _deleted_subtask_ids: deletedSubtaskIdsRef.current } : {}),
         tags: finalTags,
         progress: formData.progress || 0,
         priority: formData.priority || 'medium',
@@ -1975,13 +2236,14 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         }
       } else {
         // Optimistic UI for existing task: Update board cards instantly (0ms)
+        const targetId = activeTaskIdRef.current || task.id;
         const taskName = formData.subject || t('Không có tiêu đề');
         setOriginalHash(currentHash);
         window.dispatchEvent(new CustomEvent('task-local-updated', {
-          detail: { id: task.id, ...payload }
+          detail: { id: targetId, ...payload }
         }));
 
-        const res = await api.put(`/activities/${task.id}`, payload);
+        const res = await api.put(`/activities/${targetId}`, payload);
         const isSuccess = Boolean(
           res && (
             res.data?.success === true ||
@@ -1993,6 +2255,14 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         );
 
         if (isSuccess) {
+          deletedSubtaskIdsRef.current = [];
+          isDescDirtyRef.current = false;
+          lastSyncedDescRef.current = finalDesc;
+          const serverTask = res.data?.data;
+          if (serverTask && serverTask.id) {
+            applyLiveServerTask(serverTask, { fromSave: true });
+          }
+
           toast.success(t('Đã lưu các thay đổi của công việc "{subject}" thành công!').replace('{subject}', taskName));
           setIsSaving(false);
 
@@ -2001,8 +2271,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             setShowApprovalSuccessModal(approverName);
           }
 
-          unpinIfDone(formData.status, formData.progress);
-          const nextDetail = { id: task.id, ...formData, body: bodyPayload };
+          unpinIfDone(serverTask?.status ?? formData.status, serverTask?.progress ?? formData.progress);
+          const nextDetail = serverTask && serverTask.id ? serverTask : { id: targetId, ...formData, body: bodyPayload };
           window.dispatchEvent(new CustomEvent('task-local-updated', { detail: nextDetail }));
           // Background non-blocking sync
           setTimeout(() => { if (onUpdate) onUpdate(nextDetail); }, 50);
@@ -2073,7 +2343,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   };
 
   const handleDeleteTask = async () => {
-    if (!task?.id || isNewRef.current || task.id === 'new') return;
+    const tid = activeTaskIdRef.current;
+    if (!tid || isNewRef.current || tid === 'new') return;
     
     showConfirm({
       title: t('Xóa công việc?'),
@@ -2084,7 +2355,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         if (deleteTaskInFlightRef.current) return;
         deleteTaskInFlightRef.current = true;
         try {
-          const res = await api.delete(`/activities/${task.id}`);
+          const res = await api.delete(`/activities/${tid}`);
           if (res.data.success) {
             toast.success(t('Đã xóa công việc'));
             onUpdate();
@@ -2106,7 +2377,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   const isAssignee = Number(currentUser?.id) === Number(formData.user_id || task?.user_id);
   const isCreator = Number(currentUser?.id) === Number(formData.created_by || task?.created_by);
   const isApprover = Number(currentUser?.id) === Number(formData.approver_id || task?.approver_id);
-  const canDelete = task?.id && task.id !== 'new' && (isAdminOrManager || isAssignee || isCreator || isApprover);
+  const canDelete = activeTaskId && activeTaskId !== 'new' && (isAdminOrManager || isAssignee || isCreator || isApprover);
 
   const pendingFieldUpdatesRef = useRef<Record<string, any>>({});
 
@@ -2116,7 +2387,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       ? { [fieldOrPatch]: value }
       : { ...fieldOrPatch };
 
-    if (isNewRef.current || isClonedDraft || formDataRef.current?.id === 'new' || task.id === 'new') {
+    const targetId = activeTaskIdRef.current || task.id;
+    if (isNewRef.current || isClonedDraft || formDataRef.current?.id === 'new' || targetId === 'new') {
       setFormData((prev: any) => {
         const next = { ...prev, ...incomingPatch };
         formDataRef.current = next;
@@ -2130,7 +2402,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     formDataRef.current = optimisticNext;
     setFormData(optimisticNext);
     window.dispatchEvent(new CustomEvent('task-local-updated', {
-      detail: { id: task.id, ...optimisticNext }
+      detail: { id: targetId, ...optimisticNext }
     }));
 
     pendingFieldUpdatesRef.current = {
@@ -2145,32 +2417,38 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         const payload = { ...pendingFieldUpdatesRef.current };
         pendingFieldUpdatesRef.current = {};
 
-        const res = await api.put(`/activities/${task.id}`, payload);
+        const res = await api.put(`/activities/${targetId}`, payload);
         if (res.data && res.data.success) {
-          const nextData = { ...(formDataRef.current || formData), ...payload };
-          formDataRef.current = nextData;
-          setFormData(nextData);
+          const serverTask = res.data?.data;
+          if (serverTask && serverTask.id) {
+            applyLiveServerTask(serverTask, { fromSave: true });
+            if (onUpdate) onUpdate(serverTask);
+          } else {
+            const nextData = { ...(formDataRef.current || formData), ...payload };
+            formDataRef.current = nextData;
+            setFormData(nextData);
 
-          const cleanObj = (obj: any) => {
-            const clean: any = {};
-            Object.keys(obj || {}).forEach(key => {
-              if (['created_at', 'updated_at', 'deleted_at', 'created_by_name', 'created_by_avatar', 'contact_name', 'contact_avatar', 'user_name'].includes(key)) {
-                return;
-              }
-              const val = obj[key];
-              clean[key] = (val === null || val === undefined) ? '' : val;
-            });
-            return clean;
-          };
-          setOriginalHash(JSON.stringify({
-            formData: cleanObj(nextData),
-            erpMeta: cleanObj(erpMetaRef.current || erpMeta)
-          }));
+            const cleanObj = (obj: any) => {
+              const clean: any = {};
+              Object.keys(obj || {}).forEach(key => {
+                if (['created_at', 'updated_at', 'deleted_at', 'created_by_name', 'created_by_avatar', 'contact_name', 'contact_avatar', 'user_name'].includes(key)) {
+                  return;
+                }
+                const val = obj[key];
+                clean[key] = (val === null || val === undefined) ? '' : val;
+              });
+              return clean;
+            };
+            setOriginalHash(JSON.stringify({
+              formData: cleanObj(nextData),
+              erpMeta: cleanObj(erpMetaRef.current || erpMeta)
+            }));
 
-          const nextDetail = { id: task.id, ...nextData };
-          window.dispatchEvent(new CustomEvent('task-local-updated', { detail: nextDetail }));
-          if (onUpdate) onUpdate(nextDetail);
-          if (activeTab === 'timeline') loadTimeline(task.id);
+            const nextDetail = { id: targetId, ...nextData };
+            window.dispatchEvent(new CustomEvent('task-local-updated', { detail: nextDetail }));
+            if (onUpdate) onUpdate(nextDetail);
+          }
+          if (activeTab === 'timeline') loadTimeline(Number(targetId));
         }
       }
     } catch (e: any) {
@@ -2208,12 +2486,17 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       };
     });
 
-    const newChecklist = [...(erpMeta.checklist || []), ...newItems];
-    const updatedMeta = { ...erpMeta, checklist: newChecklist };
+    const curMeta = erpMetaRef.current || erpMeta;
+    const newChecklist = [...(curMeta.checklist || []), ...newItems];
+    const updatedMeta = { ...curMeta, checklist: newChecklist };
     const totalItems = newChecklist.length;
     const completedItems = newChecklist.filter((x: any) => x.done).length;
     const newProgress = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
-    handleSaveMeta(updatedMeta, newProgress);
+    const addedIds = newItems.map((x: any) => String(x.id));
+    handleSaveMeta(updatedMeta, newProgress, {
+      dirtyMetaFields: ['checklist'],
+      dirtySubtaskIds: addedIds
+    });
 
     const fieldPatch: Record<string, any> = {};
     if (!isPersonalTask) {
@@ -2247,7 +2530,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   };
 
   const handleToggleChecklist = (itemId: string) => {
-    const updatedChecklist = erpMeta.checklist.map((item: any) => {
+    const curMeta = erpMetaRef.current || erpMeta;
+    const updatedChecklist = (curMeta.checklist || []).map((item: any) => {
       if (item.id === itemId) {
         const isCurrentDone = item.done !== undefined ? Boolean(item.done) : Boolean(item.checked);
         const nextDone = !isCurrentDone;
@@ -2259,39 +2543,55 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       return item;
     });
 
-    const updatedMeta = { ...erpMeta, checklist: updatedChecklist };
+    const updatedMeta = { ...curMeta, checklist: updatedChecklist };
     const totalItems = updatedChecklist.length;
     const completedItems = updatedChecklist.filter((x: any) => x.done || x.checked).length;
     const newProgress = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
-    handleSaveMeta(updatedMeta, newProgress);
+    handleSaveMeta(updatedMeta, newProgress, {
+      dirtyMetaFields: ['checklist'],
+      dirtySubtaskIds: [String(itemId)]
+    });
   };
 
   const handleDeleteChecklistItem = (itemId: string) => {
-    const updatedChecklist = erpMeta.checklist.filter((item: any) => item.id !== itemId);
-    const updatedMeta = { ...erpMeta, checklist: updatedChecklist };
+    const curMeta = erpMetaRef.current || erpMeta;
+    const idStr = String(itemId);
+    if (!deletedSubtaskIdsRef.current.includes(idStr)) {
+      deletedSubtaskIdsRef.current.push(idStr);
+    }
+    const updatedChecklist = (curMeta.checklist || []).filter((item: any) => String(item.id) !== idStr);
+    const updatedMeta = { ...curMeta, checklist: updatedChecklist };
     const totalItems = updatedChecklist.length;
     const completedItems = updatedChecklist.filter((x: any) => x.done).length;
     const newProgress = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
-    handleSaveMeta(updatedMeta, newProgress);
+    handleSaveMeta(updatedMeta, newProgress, {
+      dirtyMetaFields: ['checklist'],
+      deletedSubtaskIds: [idStr]
+    });
     toast.success(t('Đã xóa việc con'));
   };
 
   const handleUpdateChecklistItemTitle = (itemId: string, newTitle: string) => {
     if (!newTitle.trim()) return;
-    const updatedChecklist = erpMeta.checklist.map((item: any) => {
+    const curMeta = erpMetaRef.current || erpMeta;
+    const updatedChecklist = (curMeta.checklist || []).map((item: any) => {
       if (item.id === itemId) {
         return { ...item, title: newTitle.trim() };
       }
       return item;
     });
-    const updatedMeta = { ...erpMeta, checklist: updatedChecklist };
-    handleSaveMeta(updatedMeta);
+    const updatedMeta = { ...curMeta, checklist: updatedChecklist };
+    handleSaveMeta(updatedMeta, undefined, {
+      dirtyMetaFields: ['checklist'],
+      dirtySubtaskIds: [String(itemId)]
+    });
     toast.success(t('Đã cập nhật tiêu đề việc con'));
   };
 
   const handleUpdateChecklistItem = (itemId: string, newTitle: string, newDeadline: string) => {
     if (!newTitle.trim()) return;
-    const updatedChecklist = erpMeta.checklist.map((item: any) => {
+    const curMeta = erpMetaRef.current || erpMeta;
+    const updatedChecklist = (curMeta.checklist || []).map((item: any) => {
       if (item.id === itemId) {
         return { 
           ...item, 
@@ -2301,8 +2601,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       }
       return item;
     });
-    const updatedMeta = { ...erpMeta, checklist: updatedChecklist };
-    handleSaveMeta(updatedMeta);
+    const updatedMeta = { ...curMeta, checklist: updatedChecklist };
+    handleSaveMeta(updatedMeta, undefined, {
+      dirtyMetaFields: ['checklist'],
+      dirtySubtaskIds: [String(itemId)]
+    });
     toast.success(t('Đã cập nhật công việc con'));
 
     if (newDeadline && (!formData.due_date || newDeadline > formData.due_date)) {
@@ -2313,7 +2616,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   };
 
   const handleUpdateChecklistItemAssignee = (itemId: string, newAssigneeId: string) => {
-    const updatedChecklist = erpMeta.checklist.map((item: any) => {
+    const curMeta = erpMetaRef.current || erpMeta;
+    const updatedChecklist = (curMeta.checklist || []).map((item: any) => {
       if (item.id === itemId) {
         return { ...item, assignee_id: newAssigneeId };
       }
@@ -2337,8 +2641,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       }
     }
 
-    const updatedMeta = { ...erpMeta, checklist: updatedChecklist };
-    handleSaveMeta(updatedMeta);
+    const updatedMeta = { ...curMeta, checklist: updatedChecklist };
+    handleSaveMeta(updatedMeta, undefined, {
+      dirtyMetaFields: ['checklist'],
+      dirtySubtaskIds: [String(itemId)]
+    });
     toast.success(t('Đã phân công nhân sự thực hiện'));
   };
 
@@ -2361,9 +2668,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       label: autoLabel,
       url: cleanUrl
     };
-    const newLinks = [...(erpMeta.links || []), newLink];
-    const updatedMeta = { ...erpMeta, links: newLinks };
-    handleSaveMeta(updatedMeta);
+    const curMeta = erpMetaRef.current || erpMeta;
+    const newLinks = [...(curMeta.links || []), newLink];
+    const updatedMeta = { ...curMeta, links: newLinks };
+    handleSaveMeta(updatedMeta, undefined, { dirtyMetaFields: ['links'] });
 
     setNewLinkLabel('');
     setNewLinkUrl('');
@@ -2372,9 +2680,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   };
 
   const handleDeleteLink = (index: number) => {
-    const newLinks = erpMeta.links.filter((_: any, i: number) => i !== index);
-    const updatedMeta = { ...erpMeta, links: newLinks };
-    handleSaveMeta(updatedMeta);
+    const curMeta = erpMetaRef.current || erpMeta;
+    const newLinks = (curMeta.links || []).filter((_: any, i: number) => i !== index);
+    const updatedMeta = { ...curMeta, links: newLinks };
+    handleSaveMeta(updatedMeta, undefined, { dirtyMetaFields: ['links'] });
     toast.success(t('Đã xóa liên kết'));
   };
 
@@ -2409,9 +2718,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
           url: fileUrl,
           is_file: true
         };
-        const newLinks = [...(erpMeta.links || []), newResource];
-        const updatedMeta = { ...erpMeta, links: newLinks };
-        handleSaveMeta(updatedMeta);
+        const curMeta = erpMetaRef.current || erpMeta;
+        const newLinks = [...(curMeta.links || []), newResource];
+        const updatedMeta = { ...curMeta, links: newLinks };
+        handleSaveMeta(updatedMeta, undefined, { dirtyMetaFields: ['links'] });
         toast.success(t('Tải lên tài liệu thành công!'));
       } else {
         finishUpload(taskId, false, res.data?.message || t('Lỗi tải tệp lên'));
@@ -2433,9 +2743,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         url: item.url,
         is_file: false
       };
-      const newLinks = [...(erpMeta.links || []), newResource];
-      const updatedMeta = { ...erpMeta, links: newLinks };
-      handleSaveMeta(updatedMeta);
+      const curMeta = erpMetaRef.current || erpMeta;
+      const newLinks = [...(curMeta.links || []), newResource];
+      const updatedMeta = { ...curMeta, links: newLinks };
+      handleSaveMeta(updatedMeta, undefined, { dirtyMetaFields: ['links'] });
       toast.success(t('Thêm liên kết đính kèm thành công!'));
       return;
     }
@@ -2469,9 +2780,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             url: fileUrl,
             is_file: true
           };
-          const newLinks = [...(erpMeta.links || []), newResource];
-          const updatedMeta = { ...erpMeta, links: newLinks };
-          handleSaveMeta(updatedMeta);
+          const curMeta = erpMetaRef.current || erpMeta;
+          const newLinks = [...(curMeta.links || []), newResource];
+          const updatedMeta = { ...curMeta, links: newLinks };
+          handleSaveMeta(updatedMeta, undefined, { dirtyMetaFields: ['links'] });
           toast.success(t('Tải lên đính kèm thành công!'));
         } else {
           finishUpload(taskId, false, res.data?.message || t('Lỗi tải tệp lên'));
@@ -2566,7 +2878,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       setReplyTo(null);
       clearCommentDraft();
 
-      const res = await api.post(`/activities/${task.id}/comments`, {
+      const targetId = activeTaskIdRef.current || task.id;
+      const res = await api.post(`/activities/${targetId}/comments`, {
         content: commentText,
         attachments: uploadedUrls,
         parent_id: replyTo ? replyTo.id : null
@@ -2576,10 +2889,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         if (res.data.data?.participant_ids !== undefined && res.data.data?.participant_ids !== null) {
           setFormData((prev: any) => ({ ...prev, participant_ids: res.data.data.participant_ids }));
         }
-        await loadComments(Number(task.id));
-        if (activeTab === 'timeline') await loadTimeline(Number(task.id));
+        await loadComments(Number(targetId));
+        if (activeTab === 'timeline') await loadTimeline(Number(targetId));
         const latestForm = formDataRef.current || formData;
-        if (onUpdate) onUpdate({ ...task, ...latestForm, comment_count: Number(latestForm.comment_count || task.comment_count || 0) + 1 });
+        if (onUpdate) onUpdate({ ...task, ...latestForm, id: targetId, comment_count: Number(latestForm.comment_count ?? task?.comment_count ?? 0) + 1 });
         toast.success(t('Đã thêm bình luận!'));
       }
     } catch (e: any) {
@@ -2664,7 +2977,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       setNewSubtaskCommentText('');
       setSubtaskCommentAttachments([]);
 
-      const res = await api.post(`/activities/${task.id}/comments`, {
+      const targetId = activeTaskIdRef.current || task.id;
+      const res = await api.post(`/activities/${targetId}/comments`, {
         content: commentText,
         attachments: uploadedUrls,
         subtask_id: selectedSubtask.id
@@ -2674,10 +2988,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         if (res.data.data?.participant_ids !== undefined && res.data.data?.participant_ids !== null) {
           setFormData((prev: any) => ({ ...prev, participant_ids: res.data.data.participant_ids }));
         }
-        loadSubtaskComments(Number(task.id), selectedSubtask.id);
+        loadSubtaskComments(Number(targetId), selectedSubtask.id);
         loadSubtaskCommentCounts();
         const latestForm = formDataRef.current || formData;
-        if (onUpdate) onUpdate({ ...task, ...latestForm });
+        if (onUpdate) onUpdate({ ...task, ...latestForm, id: targetId });
         toast.success(t('Đã thêm bình luận việc con!'));
       }
     } catch (e: any) {
@@ -2778,22 +3092,118 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     if (duplicateTaskInFlightRef.current) return;
     duplicateTaskInFlightRef.current = true;
 
+    // Immediately abort any in-flight comment/timeline/subtask requests from the old task
+    if (commentsAbortRef.current) commentsAbortRef.current.abort();
+    if (timelineAbortRef.current) timelineAbortRef.current.abort();
+    if (subtaskCommentsAbortRef.current) subtaskCommentsAbortRef.current.abort();
+
+    // Immediately wipe all comment, subtask-comment, attachment & timeline states so zero comments ever leak
+    setComments([]);
+    setSubtaskComments([]);
+    setSubtaskCommentCounts({});
+    setTimeline([]);
+    setSelectedSubtask(null);
+    setNewCommentText('');
+    setNewSubtaskCommentText('');
+    setCommentAttachments([]);
+    setSubtaskCommentAttachments([]);
+    setReplyTo(null);
+    clearCommentDraft();
+
+    const sourceTaskId = activeTaskIdRef.current || task?.id;
+
     // Fast-path: If task has valid ID, attempt instant server duplicate
-    if (task?.id && task.id !== 'new' && task.id !== 0 && task.id !== '0') {
+    if (sourceTaskId && sourceTaskId !== 'new' && sourceTaskId !== 0 && sourceTaskId !== '0') {
       try {
-        const res = await api.post(`/tasks/${task.id}/duplicate`);
+        const res = await api.post(`/tasks/${sourceTaskId}/duplicate`);
         if (res.data?.success && res.data?.data) {
           const newTask = res.data.data;
-          toast.success(t('Đã nhân bản công việc thành công!'));
-          if (onUpdate) onUpdate(newTask);
-          window.dispatchEvent(new CustomEvent('task-updated'));
+          let detailData: any = null;
           if (newTask.id) {
             const detailRes = await api.get(`/activities/${newTask.id}`).catch(() => null);
-            if (detailRes?.data?.data) {
-              setFormData(detailRes.data.data);
-              formDataRef.current = detailRes.data.data;
-            }
+            detailData = detailRes?.data?.data || detailRes?.data || null;
           }
+
+          const mergedRaw = {
+            ...formDataRef.current,
+            ...newTask,
+            ...(detailData && typeof detailData === 'object' ? detailData : {})
+          };
+
+          const resolvedSubject =
+            mergedRaw.subject ||
+            mergedRaw.title ||
+            (formData.subject ? `[Bản sao] ${formData.subject.replace(/^(\[Bản sao\]\s*)+/, '')}` : 'Công việc mới');
+          const resolvedBody = mergedRaw.body || mergedRaw.description || '';
+
+          const parsedBody = parseTaskBody(resolvedBody);
+          const cleanChecklist = (Array.isArray(parsedBody.checklist) ? parsedBody.checklist : []).map((item: any, idx: number) => ({
+            id: item.id && !erpMeta.checklist?.some((oldItem: any) => oldItem.id === item.id)
+              ? item.id
+              : `sub_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
+            text: item.text || item.title || item.name || '',
+            title: item.title || item.text || item.name || '',
+            done: false,
+            checked: false,
+            status: 'pending',
+            deadline: null,
+            due_date: null,
+            sub_deadline: null,
+            priority: item.priority || 'medium',
+            user_id: item.user_id || item.assignee_id || null,
+            assignee_id: item.assignee_id || item.user_id || null,
+            assignee_name: item.assignee_name || null,
+            assignee_avatar: item.assignee_avatar || null
+          }));
+
+          const nextErpMeta = {
+            ...erpMeta,
+            description: linkifyHtml(convertTextToHtmlParagraphs(parsedBody.description)),
+            internal_type: parsedBody.internal_type || erpMeta.internal_type || 'task',
+            scope: parsedBody.scope || erpMeta.scope || 'team',
+            recurrence: parsedBody.recurrence || erpMeta.recurrence || { pattern: 'none', weekly_days: [], monthly_day: 1, days_interval: 3, last_generated: '' },
+            checklist: cleanChecklist,
+            links: Array.isArray(parsedBody.links) ? parsedBody.links : (erpMeta.links || []),
+            due_sla_notified: false,
+            subtask_sla_notified: false
+          };
+
+          const cleanDuplicatedTask = {
+            ...mergedRaw,
+            id: newTask.id,
+            subject: resolvedSubject,
+            title: resolvedSubject,
+            body: resolvedBody,
+            description: resolvedBody,
+            status: mergedRaw.status || 'planned',
+            progress: 0,
+            due_date: null,
+            start_date: null,
+            done_at: null,
+            comments: [],
+            comment_count: 0,
+            subtask_comment_counts: {},
+            __duplicatedFromId: sourceTaskId
+          };
+
+          pendingFieldUpdatesRef.current = {};
+          prevTaskIdRef.current = newTask.id;
+          activeTaskIdRef.current = newTask.id;
+          isNewRef.current = false;
+          setIsClonedDraft(false);
+          formDataRef.current = cleanDuplicatedTask;
+          erpMetaRef.current = nextErpMeta;
+          setFormData(cleanDuplicatedTask);
+          setErpMeta(nextErpMeta);
+          setComments([]);
+          setSubtaskComments([]);
+          setSubtaskCommentCounts({});
+          setTimeline([]);
+          setSelectedSubtask(null);
+
+          toast.success(t('Đã nhân bản công việc thành công!'));
+          if (onUpdate) onUpdate(cleanDuplicatedTask);
+          window.dispatchEvent(new CustomEvent('task-updated', { detail: cleanDuplicatedTask }));
           duplicateTaskInFlightRef.current = false;
           return;
         }
@@ -2843,7 +3253,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         contact_id: formData.contact_id || null,
         created_by: currentUser?.id,
         created_by_name: currentUser?.name || (currentUser as any)?.full_name || '',
-        created_by_avatar: currentUser?.avatar || (currentUser as any)?.avatar_url || ''
+        created_by_avatar: currentUser?.avatar || (currentUser as any)?.avatar_url || '',
+        comments: [],
+        comment_count: 0,
+        subtask_comment_counts: {}
       };
 
       // 3. Clone erpMeta without deadlines
@@ -2863,6 +3276,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       setFormData(clonedFormData);
       setErpMeta(clonedErpMeta);
       setComments([]);
+      setSubtaskComments([]);
+      setSubtaskCommentCounts({});
       setTimeline([]);
       setSelectedSubtask(null);
 
@@ -3398,7 +3813,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             )}
 
             {/* Delete task button */}
-            {Boolean(!isNew && canDelete && task?.id && task.id !== 'new' && task.id !== 0 && task.id !== '0') && (
+            {Boolean(!isNew && canDelete && activeTaskId && activeTaskId !== 'new' && activeTaskId !== 0 && activeTaskId !== '0') && (
               <button
                 type="button"
                 onClick={handleDeleteTask}
@@ -3425,7 +3840,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             )}
 
             {/* Archive Task Button */}
-            {Boolean(!isNew && formData?.id && formData.id !== 'new' && formData.id !== 0 && formData.id !== '0') && (
+            {Boolean(!isNew && activeTaskId && activeTaskId !== 'new' && activeTaskId !== 0 && activeTaskId !== '0') && (
               <button
                 type="button"
                 onClick={handleToggleArchive}
@@ -3452,7 +3867,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             )}
 
             {/* Hide task eye button */}
-            {Boolean(!isNew && task?.id && task.id !== 'new' && task.id !== 0 && task.id !== '0') && (
+            {Boolean(!isNew && activeTaskId && activeTaskId !== 'new' && activeTaskId !== 0 && activeTaskId !== '0') && (
               <button
                 type="button"
                 onClick={handleHideClick}
@@ -3619,7 +4034,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 {t('Tên công việc')}
               </label>
               <TaskSubjectInput
-                taskKey={isNew ? `new_${isClonedDraft ? 'clone' : 'fresh'}_${task?.id || '0'}` : String(task?.id || '')}
+                taskKey={isNew ? `new_${isClonedDraft ? 'clone' : 'fresh'}_${activeTaskId || '0'}` : String(activeTaskId || '')}
                 initialValue={formData.subject || ''}
                 onSave={(val) => handleUpdateField('subject', val)}
                 onSyncFormData={(val) => {
@@ -3692,19 +4107,36 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 {t('Mô tả chi tiết')}
               </label>
               <MentionInput
-                key={isNew ? `new_${isClonedDraft ? 'clone' : 'fresh'}_${task?.id || '0'}` : String(task.id)}
+                key={isNew ? `new_${isClonedDraft ? 'clone' : 'fresh'}_${activeTaskId || '0'}` : String(activeTaskId || '')}
                 value={erpMeta?.description || ''}
                 onChange={(e: any) => {
                   const html = e.target.value;
-                  setErpMeta((prev: any) => ({ ...prev, description: html }));
+                  isDescDirtyRef.current = true;
+                  setErpMeta((prev: any) => {
+                    const next = { ...prev, description: html };
+                    erpMetaRef.current = next;
+                    return next;
+                  });
                 }}
                 onBlur={() => {
-                  const html = erpMeta?.description || '';
+                  const curMeta = erpMetaRef.current || erpMeta;
+                  const html = curMeta?.description || '';
                   const linkified = linkifyHtml(html);
                   if (linkified !== html) {
-                    setErpMeta((prev: any) => ({ ...prev, description: linkified }));
+                    setErpMeta((prev: any) => {
+                      const next = { ...prev, description: linkified };
+                      erpMetaRef.current = next;
+                      return next;
+                    });
                   }
-                  handleSaveMeta({ ...erpMeta, description: linkified });
+                  if (!isDescDirtyRef.current && linkified === lastSyncedDescRef.current) {
+                    return;
+                  }
+                  isDescDirtyRef.current = false;
+                  lastSyncedDescRef.current = linkified;
+                  handleSaveMeta({ ...curMeta, description: linkified }, undefined, {
+                    dirtyMetaFields: ['description']
+                  });
                 }}
                 users={users}
                 placeholder={t('Nhập mô tả chi tiết công việc... Gõ @ để nhắc tên đồng nghiệp')}
@@ -6180,7 +6612,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                           });
                         }}
                         onBlur={() => {
-                          if (!isNew && task?.id && task.id !== 'new') {
+                          if (!isNew && activeTaskId && activeTaskId !== 'new') {
                             handleUpdateField('progress', Number(formData.progress || 0));
                           }
                         }}
@@ -6218,17 +6650,17 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                       });
                     }}
                     onMouseUp={() => {
-                      if (!isNew && task?.id && task.id !== 'new') {
+                      if (!isNew && activeTaskId && activeTaskId !== 'new') {
                         handleUpdateField('progress', Number(formData.progress || 0));
                       }
                     }}
                     onTouchEnd={() => {
-                      if (!isNew && task?.id && task.id !== 'new') {
+                      if (!isNew && activeTaskId && activeTaskId !== 'new') {
                         handleUpdateField('progress', Number(formData.progress || 0));
                       }
                     }}
                     onKeyUp={() => {
-                      if (!isNew && task?.id && task.id !== 'new') {
+                      if (!isNew && activeTaskId && activeTaskId !== 'new') {
                         handleUpdateField('progress', Number(formData.progress || 0));
                       }
                     }}
@@ -6525,10 +6957,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                     type="button"
                                     onClick={() => {
                                       const nextIds = addContactIds.filter((id: number) => id !== Number(c.id));
-                                      const updatedMeta = { ...erpMeta, related_contact_ids: nextIds };
+                                      const curMeta = erpMetaRef.current || erpMeta;
+                                      const updatedMeta = { ...curMeta, related_contact_ids: nextIds };
                                       setErpMeta(updatedMeta);
                                       if (!isNew && task.id !== 'new') {
-                                        handleSaveMeta(updatedMeta);
+                                        handleSaveMeta(updatedMeta, undefined, { dirtyMetaFields: ['related_contact_ids'] });
                                       }
                                     }}
                                     style={{ border: 'none', background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '0.9rem', padding: '4px', lineHeight: 1 }}
@@ -6561,11 +6994,12 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                             value={addContactIds.map(String)}
                             onChange={(vals) => {
                               const nextIds = vals.map(Number);
-                              const updatedMeta = { ...erpMeta, related_contact_ids: nextIds };
+                              const curMeta = erpMetaRef.current || erpMeta;
+                              const updatedMeta = { ...curMeta, related_contact_ids: nextIds };
                               setErpMeta(updatedMeta);
                               setIsCustomerLinked(true);
                               if (!isNew && task.id !== 'new') {
-                                handleSaveMeta(updatedMeta);
+                                handleSaveMeta(updatedMeta, undefined, { dirtyMetaFields: ['related_contact_ids'] });
                               }
                             }}
                             placeholder={t('Chọn khách hàng...')}
@@ -6785,9 +7219,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                             type="button"
                             onClick={() => {
                               const nextTeamIds = selectedTeamIds.filter(id => String(id) !== String(t.id));
-                              const nextMeta = { ...erpMeta, team_ids: nextTeamIds, team_id: nextTeamIds[0] || null };
+                              const curMeta = erpMetaRef.current || erpMeta;
+                              const nextMeta = { ...curMeta, team_ids: nextTeamIds, team_id: nextTeamIds[0] || null };
                               setErpMeta(nextMeta);
-                              handleSaveMeta(nextMeta);
+                              handleSaveMeta(nextMeta, undefined, { dirtyMetaFields: ['team_ids', 'team_id'] });
                             }}
                             style={{
                               background: 'transparent',
@@ -6893,9 +7328,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                 }
                               }
                             }
-                            const nextMeta = { ...erpMeta, team_ids: nextTeamIds, team_id: nextTeamIds[0] || null };
+                            const curMeta = erpMetaRef.current || erpMeta;
+                            const nextMeta = { ...curMeta, team_ids: nextTeamIds, team_id: nextTeamIds[0] || null };
                             setErpMeta(nextMeta);
-                            handleSaveMeta(nextMeta);
+                            handleSaveMeta(nextMeta, undefined, { dirtyMetaFields: ['team_ids', 'team_id'] });
                           }}
                           style={{
                             padding: '8px 12px',
@@ -7464,13 +7900,14 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     value={erpMeta.recurrence?.pattern || 'none'}
                     onChange={val => {
                       const nextPattern = val.toString();
+                      const curMeta = erpMetaRef.current || erpMeta;
                       const nextRecurrence = {
-                        ...(erpMeta.recurrence || { weekly_days: [], monthly_day: 1, days_interval: 3, last_generated: '' }),
+                        ...(curMeta.recurrence || { weekly_days: [], monthly_day: 1, days_interval: 3, last_generated: '' }),
                         pattern: nextPattern
                       };
-                      const nextMeta = { ...erpMeta, recurrence: nextRecurrence };
+                      const nextMeta = { ...curMeta, recurrence: nextRecurrence };
                       setErpMeta(nextMeta);
-                      handleSaveMeta(nextMeta);
+                      handleSaveMeta(nextMeta, undefined, { dirtyMetaFields: ['recurrence'] });
                     }}
                     width="100%"
                   />
@@ -7504,18 +7941,19 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                               key={day.key}
                               type="button"
                               onClick={() => {
-                                const currentDays = erpMeta.recurrence?.weekly_days || [];
+                                const curMeta = erpMetaRef.current || erpMeta;
+                                const currentDays = curMeta.recurrence?.weekly_days || [];
                                 const isSelected = currentDays.includes(day.key);
                                 const newDays = isSelected
                                   ? currentDays.filter((d: number) => d !== day.key)
                                   : [...currentDays, day.key].sort((a, b) => a - b);
                                 const nextRecurrence = {
-                                  ...(erpMeta.recurrence || { monthly_day: 1, days_interval: 3, last_generated: '' }),
+                                  ...(curMeta.recurrence || { monthly_day: 1, days_interval: 3, last_generated: '' }),
                                   weekly_days: newDays
                                 };
-                                const nextMeta = { ...erpMeta, recurrence: nextRecurrence };
+                                const nextMeta = { ...curMeta, recurrence: nextRecurrence };
                                 setErpMeta(nextMeta);
-                                handleSaveMeta(nextMeta);
+                                handleSaveMeta(nextMeta, undefined, { dirtyMetaFields: ['recurrence'] });
                               }}
                               style={{
                                 width: '32px',
@@ -7560,7 +7998,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                             setErpMeta(nextMeta);
                           }}
                           onBlur={() => {
-                            handleSaveMeta(erpMeta);
+                            handleSaveMeta(erpMetaRef.current || erpMeta, undefined, { dirtyMetaFields: ['recurrence'] });
                           }}
                           style={{ width: '55px', height: '32px', textAlign: 'center', padding: 0, borderRadius: '6px', border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
                         />
@@ -7589,7 +8027,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                             setErpMeta(nextMeta);
                           }}
                           onBlur={() => {
-                            handleSaveMeta(erpMeta);
+                            handleSaveMeta(erpMetaRef.current || erpMeta, undefined, { dirtyMetaFields: ['recurrence'] });
                           }}
                           style={{ width: '55px', height: '32px', textAlign: 'center', padding: 0, borderRadius: '6px', border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
                         />

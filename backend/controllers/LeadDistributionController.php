@@ -79,7 +79,11 @@ class LeadDistributionController {
 
             $stmt = $this->db->prepare("
                 UPDATE contacts 
-                SET owner_id = ?, pipeline_status = 'assigned', assigned_at = NOW(), updated_at = NOW() 
+                SET owner_id = ?, 
+                    pipeline_status = CASE WHEN pipeline_status IS NULL OR pipeline_status IN ('', 'new', 'held', 'assigned') THEN 'new_lead' ELSE pipeline_status END,
+                    stage_id = CASE WHEN stage_id IS NULL OR stage_id = 0 THEN 31 ELSE stage_id END,
+                    assigned_at = NOW(), 
+                    updated_at = NOW() 
                 WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
             ");
             $stmt->execute([$consultantId, $contactId, $tid]);
@@ -182,11 +186,11 @@ class LeadDistributionController {
 
         if (!empty($leadIds) && is_array($leadIds)) {
             $inClause = implode(',', array_map('intval', $leadIds));
-            $this->db->prepare("UPDATE contacts SET pipeline_status = 'new', owner_id = NULL, updated_at = NOW() WHERE id IN ($inClause) AND tenant_id = ? AND deleted_at IS NULL")
+            $this->db->prepare("UPDATE contacts SET pipeline_status = 'new_lead', stage_id = 31, owner_id = NULL, updated_at = NOW() WHERE id IN ($inClause) AND tenant_id = ? AND deleted_at IS NULL")
                 ->execute([$tid]);
         } else {
             // Release holding leads
-            $this->db->prepare("UPDATE contacts SET pipeline_status = 'new', owner_id = NULL, updated_at = NOW() WHERE pipeline_status = 'held' AND tenant_id = ? AND deleted_at IS NULL")
+            $this->db->prepare("UPDATE contacts SET pipeline_status = 'new_lead', stage_id = 31, owner_id = NULL, updated_at = NOW() WHERE pipeline_status = 'held' AND tenant_id = ? AND deleted_at IS NULL")
                 ->execute([$tid]);
         }
 
@@ -225,7 +229,7 @@ class LeadDistributionController {
 
         $tid = $auth['tenant_id'];
         // Remove from holding queue or reset lead
-        $stmt = $this->db->prepare("UPDATE contacts SET pipeline_status = 'new', owner_id = NULL WHERE id = ? AND tenant_id = ?");
+        $stmt = $this->db->prepare("UPDATE contacts SET pipeline_status = 'new_lead', stage_id = 31, owner_id = NULL WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
         $stmt->execute([$id, $tid]);
         respond(200, null, 'Xóa khỏi hàng đợi thành công');
     }

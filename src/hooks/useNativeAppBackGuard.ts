@@ -158,18 +158,6 @@ export function useNativeAppBackGuard(): void {
       startY = touch.clientY;
       isEdgeTouch = startX <= 24 || startX >= window.innerWidth - 24;
       isTracking = true;
-
-      // On iOS Safari, an immediate edge touch within 16px can trigger native swipe-back
-      // unless touchstart or first touchmove prevents default when not on an interactive control
-      if (startX <= 16 || startX >= window.innerWidth - 16) {
-        const target = e.target as HTMLElement | null;
-        const isInteractiveEdgeControl = Boolean(
-          target?.closest?.('button, a, input, select, textarea, [role="button"]')
-        );
-        if (!isInteractiveEdgeControl && e.cancelable) {
-          e.preventDefault();
-        }
-      }
     };
 
     const handleTouchMove = (e: TouchEvent) => {

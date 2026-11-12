@@ -11817,42 +11817,45 @@ class AgentToolRegistry {
                         $params[] = $maxAmount;
                     }
 
-                    // 7. Time Period / Date Range
-                    if ($fromDate !== '' && $toDate !== '') {
-                        $where[] = "d.created_at BETWEEN ? AND ?";
-                        $params[] = $fromDate . ' 00:00:00';
-                        $params[] = $toDate . ' 23:59:59';
-                    } elseif ($fromDate !== '') {
-                        $where[] = "d.created_at >= ?";
-                        $params[] = $fromDate . ' 00:00:00';
-                    } elseif ($toDate !== '') {
-                        $where[] = "d.created_at <= ?";
-                        $params[] = $toDate . ' 23:59:59';
-                    } elseif ($period === 'today') {
-                        $where[] = "d.created_at >= CURDATE() AND d.created_at <= CONCAT(CURDATE(), ' 23:59:59')";
-                    } elseif ($period === 'yesterday') {
-                        $where[] = "d.created_at >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND d.created_at < CURDATE()";
-                    } elseif ($period === 'this_week') {
-                        $where[] = "d.created_at BETWEEN ? AND ?";
-                        $params[] = date('Y-m-d 00:00:00', strtotime('monday this week'));
-                        $params[] = date('Y-m-d 23:59:59', strtotime('sunday this week'));
-                    } elseif ($period === 'this_month') {
-                        $where[] = "d.created_at >= DATE_FORMAT(NOW(), '%Y-%m-01 00:00:00') AND d.created_at <= CONCAT(LAST_DAY(NOW()), ' 23:59:59')";
-                    } elseif ($period === 'last_month') {
-                        $where[] = "d.created_at >= DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 1 MONTH), '%Y-%m-01 00:00:00') AND d.created_at <= CONCAT(LAST_DAY(DATE_SUB(NOW(), INTERVAL 1 MONTH)), ' 23:59:59')";
-                    } elseif ($period === 'this_quarter') {
-                        $curMonth = (int)date('n');
-                        $qStartMonth = (floor(($curMonth - 1) / 3) * 3) + 1;
-                        $qEndMonth   = $qStartMonth + 2;
-                        $qStart      = date('Y-' . str_pad((string)$qStartMonth, 2, '0', STR_PAD_LEFT) . '-01 00:00:00');
-                        $qEnd        = date('Y-m-t 23:59:59', strtotime(date('Y-' . str_pad((string)$qEndMonth, 2, '0', STR_PAD_LEFT) . '-01')));
-                        $where[]     = "d.created_at BETWEEN ? AND ?";
-                        $params[]    = $qStart;
-                        $params[]    = $qEnd;
-                    } elseif ($period === 'this_year') {
-                        $where[] = "d.created_at BETWEEN ? AND ?";
-                        $params[] = date('Y-01-01 00:00:00');
-                        $params[] = date('Y-12-31 23:59:59');
+                    // 7. Time Period / Date Range (scoped to deposit_milestones.expected_pay_date)
+                    $effFromDate = $fromDate !== '' ? substr($fromDate, 0, 10) : '';
+                    $effToDate   = $toDate !== '' ? substr($toDate, 0, 10) : '';
+                    if ($effFromDate === '' && $effToDate === '') {
+                        if ($period === 'today') {
+                            $effFromDate = $effToDate = date('Y-m-d');
+                        } elseif ($period === 'yesterday') {
+                            $effFromDate = $effToDate = date('Y-m-d', strtotime('-1 day'));
+                        } elseif ($period === 'this_week') {
+                            $effFromDate = date('Y-m-d', strtotime('monday this week'));
+                            $effToDate   = date('Y-m-d', strtotime('sunday this week'));
+                        } elseif ($period === 'this_month') {
+                            $effFromDate = date('Y-m-01');
+                            $effToDate   = date('Y-m-t');
+                        } elseif ($period === 'last_month') {
+                            $effFromDate = date('Y-m-01', strtotime('first day of last month'));
+                            $effToDate   = date('Y-m-t', strtotime('last day of last month'));
+                        } elseif ($period === 'this_quarter') {
+                            $curMonth    = (int)date('n');
+                            $qStartMonth = (floor(($curMonth - 1) / 3) * 3) + 1;
+                            $qEndMonth   = $qStartMonth + 2;
+                            $effFromDate = date('Y-' . str_pad((string)$qStartMonth, 2, '0', STR_PAD_LEFT) . '-01');
+                            $effToDate   = date('Y-m-t', strtotime(date('Y-' . str_pad((string)$qEndMonth, 2, '0', STR_PAD_LEFT) . '-01')));
+                        } elseif ($period === 'this_year') {
+                            $effFromDate = date('Y-01-01');
+                            $effToDate   = date('Y-12-31');
+                        }
+                    }
+
+                    $hasMilestoneDateScope = ($effFromDate !== '' || $effToDate !== '');
+                    if ($effFromDate !== '' && $effToDate !== '') {
+                        $where[] = "(EXISTS (SELECT 1 FROM deposit_milestones dm_dt WHERE dm_dt.deposit_id = d.id AND dm_dt.expected_pay_date >= ? AND dm_dt.expected_pay_date <= ?) OR (NOT EXISTS (SELECT 1 FROM deposit_milestones dm_none WHERE dm_none.deposit_id = d.id) AND d.created_at BETWEEN ? AND ?))";
+                        array_push($params, $effFromDate, $effToDate, $effFromDate . ' 00:00:00', $effToDate . ' 23:59:59');
+                    } elseif ($effFromDate !== '') {
+                        $where[] = "(EXISTS (SELECT 1 FROM deposit_milestones dm_dt WHERE dm_dt.deposit_id = d.id AND dm_dt.expected_pay_date >= ?) OR (NOT EXISTS (SELECT 1 FROM deposit_milestones dm_none WHERE dm_none.deposit_id = d.id) AND d.created_at >= ?))";
+                        array_push($params, $effFromDate, $effFromDate . ' 00:00:00');
+                    } elseif ($effToDate !== '') {
+                        $where[] = "(EXISTS (SELECT 1 FROM deposit_milestones dm_dt WHERE dm_dt.deposit_id = d.id AND dm_dt.expected_pay_date <= ?) OR (NOT EXISTS (SELECT 1 FROM deposit_milestones dm_none WHERE dm_none.deposit_id = d.id) AND d.created_at <= ?))";
+                        array_push($params, $effToDate, $effToDate . ' 23:59:59');
                     }
 
                     // 8. Search Keyword
@@ -11873,20 +11876,48 @@ class AgentToolRegistry {
                                   LEFT JOIN users u ON d.created_by = u.id
                                   LEFT JOIN users u_c ON c.owner_id = u_c.id";
 
-                    // Aggregate Summary (including milestone-accurate Thực thu vs Doanh thu dự kiến)
+                    // Build milestone date condition for scoped sums when filtering by period
+                    $msDateSql = '';
+                    if ($effFromDate !== '') {
+                        $msDateSql .= " AND dm_s.expected_pay_date >= " . $db->quote($effFromDate);
+                    }
+                    if ($effToDate !== '') {
+                        $msDateSql .= " AND dm_s.expected_pay_date <= " . $db->quote($effToDate);
+                    }
+
+                    // Aggregate Summary (milestone-scoped when period filter is active)
+                    $depScopedTotalExpr = $hasMilestoneDateScope
+                        ? "(CASE
+                            WHEN d.status IN ('cancelled', 'rejected', 'deleted') THEN 0
+                            WHEN EXISTS (SELECT 1 FROM deposit_milestones dm_ex WHERE dm_ex.deposit_id = d.id)
+                            THEN COALESCE((SELECT SUM(dm_s.expected_amount) FROM deposit_milestones dm_s WHERE dm_s.deposit_id = d.id {$msDateSql}), 0)
+                            ELSE COALESCE(d.price, 0)
+                        END)"
+                        : "(CASE WHEN d.status NOT IN ('cancelled', 'rejected', 'deleted') THEN COALESCE(d.price, 0) ELSE 0 END)";
+
                     $depMilestoneCollectedExpr = "(CASE
                         WHEN d.status IN ('cancelled', 'rejected', 'deleted') THEN 0
                         WHEN EXISTS (SELECT 1 FROM deposit_milestones dm_ex WHERE dm_ex.deposit_id = d.id)
-                        THEN COALESCE((SELECT SUM(dm_ap.expected_amount) FROM deposit_milestones dm_ap WHERE dm_ap.deposit_id = d.id AND dm_ap.status = 'approved'), 0)
+                        THEN COALESCE((SELECT SUM(dm_s.expected_amount) FROM deposit_milestones dm_s WHERE dm_s.deposit_id = d.id AND dm_s.status = 'approved' {$msDateSql}), 0)
                         WHEN d.status IN ('approved', 'completed', 'paid', 'confirmed')
                         THEN COALESCE(d.price, 0)
                         ELSE 0
                     END)";
+
+                    $depMilestonePendingExpr = "(CASE
+                        WHEN d.status IN ('cancelled', 'rejected', 'deleted') THEN 0
+                        WHEN EXISTS (SELECT 1 FROM deposit_milestones dm_ex WHERE dm_ex.deposit_id = d.id)
+                        THEN COALESCE((SELECT SUM(dm_s.expected_amount) FROM deposit_milestones dm_s WHERE dm_s.deposit_id = d.id AND dm_s.status != 'approved' {$msDateSql}), 0)
+                        WHEN d.status IN ('pending', 'pending_admin')
+                        THEN COALESCE(d.price, 0)
+                        ELSE 0
+                    END)";
+
                     $stmtAgg = $db->prepare("
                         SELECT COUNT(DISTINCT d.id) as total_count,
-                               COALESCE(SUM(CASE WHEN d.status NOT IN ('cancelled', 'rejected', 'deleted') THEN d.price ELSE 0 END), 0) as total_active_amount,
-                               COALESCE(SUM(CASE WHEN d.status IN ('approved', 'completed', 'paid', 'confirmed') THEN d.price ELSE 0 END), 0) as approved_amount,
-                               COALESCE(SUM(CASE WHEN d.status IN ('pending', 'pending_admin') THEN d.price ELSE 0 END), 0) as pending_amount,
+                               COALESCE(SUM({$depScopedTotalExpr}), 0) as total_active_amount,
+                               COALESCE(SUM({$depMilestoneCollectedExpr}), 0) as approved_amount,
+                               COALESCE(SUM({$depMilestonePendingExpr}), 0) as pending_amount,
                                COALESCE(SUM({$depMilestoneCollectedExpr}), 0) as collected_amount
                         {$baseJoins}
                         WHERE {$whereSql}
@@ -11899,7 +11930,7 @@ class AgentToolRegistry {
                     $stmtProg = $db->prepare("
                         SELECT COALESCE(NULLIF(TRIM(c.program), ''), NULLIF(TRIM(p.name), ''), 'Chưa phân loại') as program_name,
                                COUNT(DISTINCT d.id) as count,
-                               COALESCE(SUM(d.price), 0) as total_amount
+                               COALESCE(SUM({$depScopedTotalExpr}), 0) as total_amount
                         {$baseJoins}
                         WHERE {$whereSql}
                         GROUP BY program_name
@@ -11913,7 +11944,7 @@ class AgentToolRegistry {
                     $stmtSt = $db->prepare("
                         SELECT COALESCE(d.status, 'pending') as status,
                                COUNT(DISTINCT d.id) as count,
-                               COALESCE(SUM(d.price), 0) as total_amount
+                               COALESCE(SUM({$depScopedTotalExpr}), 0) as total_amount
                         {$baseJoins}
                         WHERE {$whereSql}
                         GROUP BY d.status
@@ -11924,7 +11955,7 @@ class AgentToolRegistry {
 
                     // Sample rows
                     $stmtRows = $db->prepare("
-                        SELECT d.id, d.price, d.status, d.unit_code, d.created_at,
+                        SELECT d.id, ({$depScopedTotalExpr}) as price, d.price as total_so_price, d.status, d.unit_code, d.created_at,
                                c.id as contact_id, c.full_name as customer_name, c.phone as customer_phone, c.program as contact_program, c.city,
                                p.name as project_name,
                                COALESCE(u.full_name, u_c.full_name, 'Chưa gán') as sale_name

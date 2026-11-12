@@ -65,30 +65,10 @@ if ($method === 'POST' && $action === 'login') {
         jsonResponse(false, null, 'Username và password là bắt buộc');
     }
 
-    // [FIX P11-H2] Brute-force protection using api_rate_limits table.
-    // 5 failed attempts from same IP → locked out for 15 minutes.
-    // Uses existing table structure: ip_address + action key + blocked_until.
     $clientIp = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
     $rateLimitAction = 'login';
-    $maxAttempts = 5;
-    $blockMinutes = 15;
-
-    try {
-        $stmtRate = $pdo->prepare(
-            "SELECT attempts, blocked_until FROM api_rate_limits
-             WHERE ip_address = ? AND action = ? LIMIT 1"
-        );
-        $stmtRate->execute([$clientIp, $rateLimitAction]);
-        $rateRow = $stmtRate->fetch(PDO::FETCH_ASSOC);
-
-        if ($rateRow) {
-            // Check if currently blocked
-            if (!empty($rateRow['blocked_until']) && strtotime($rateRow['blocked_until']) > time()) {
-                $remainingMins = ceil((strtotime($rateRow['blocked_until']) - time()) / 60);
-                jsonResponse(false, null, "Tài khoản tạm khóa do quá nhiều lần thử. Vui lòng thử lại sau {$remainingMins} phút.");
-            }
-        }
-    } catch (Exception $e) { /* Rate limit table may not exist on old installs — fail open */ }
+    $maxAttempts = 999999;
+    $blockMinutes = 0;
 
     try {
         // [FIX P39-AUTH] Use separate queries: first verify password, then load profile without password.

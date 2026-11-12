@@ -117,6 +117,49 @@ switch ($method) {
 
             $creatorCols = "l.id, l.name, l.source, l.type, l.subscriber_count as count, l.phone_count, l.created_by, l.updated_by, DATE_FORMAT(l.created_at, '%d/%m/%Y') as created, u_creator.id AS creator_id, u_creator.full_name AS creator_name, u_creator.email AS creator_email, u_creator.avatar_url AS creator_avatar, u_creator.role AS creator_role";
 
+            $enrichLiveListCounts = function(array &$listRows) use ($pdo, $workspace_id) {
+                if (empty($listRows)) return;
+                $listIds = array_values(array_unique(array_filter(array_column($listRows, 'id'))));
+                if (empty($listIds)) return;
+
+                $ph = implode(',', array_fill(0, count($listIds), '?'));
+                $stmtLive = $pdo->prepare("
+                    SELECT sl.list_id,
+                           COUNT(DISTINCT sl.subscriber_id) AS actual_count,
+                           COUNT(DISTINCT CASE WHEN s.phone_number IS NOT NULL AND TRIM(s.phone_number) != '' AND TRIM(s.phone_number) != '0' THEN sl.subscriber_id END) AS actual_phone
+                    FROM subscriber_lists sl
+                    INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ?
+                    WHERE sl.workspace_id = ? AND sl.list_id IN ($ph)
+                    GROUP BY sl.list_id
+                ");
+                $stmtLive->execute(array_merge([$workspace_id, $workspace_id], $listIds));
+                $liveMap = [];
+                while ($lr = $stmtLive->fetch(PDO::FETCH_ASSOC)) {
+                    $liveMap[$lr['list_id']] = [
+                        'count' => (int)($lr['actual_count'] ?? 0),
+                        'phone_count' => (int)($lr['actual_phone'] ?? 0),
+                    ];
+                }
+
+                $stmtHeal = null;
+                foreach ($listRows as &$row) {
+                    $lid = $row['id'] ?? '';
+                    $liveC = $liveMap[$lid]['count'] ?? 0;
+                    $liveP = $liveMap[$lid]['phone_count'] ?? 0;
+                    if ((int)($row['count'] ?? 0) !== $liveC || (int)($row['phone_count'] ?? 0) !== $liveP) {
+                        if ($stmtHeal === null) {
+                            $stmtHeal = $pdo->prepare("UPDATE lists SET subscriber_count = ?, phone_count = ? WHERE id = ? AND workspace_id = ?");
+                        }
+                        try {
+                            $stmtHeal->execute([$liveC, $liveP, $lid, $workspace_id]);
+                        } catch (\Throwable $eHeal) {}
+                    }
+                    $row['count'] = $liveC;
+                    $row['phone_count'] = $liveP;
+                }
+                unset($row);
+            };
+
             if (!isset($_GET['page']) && !isset($_GET['limit']) && !isset($_GET['search'])) {
                 // Single-item lookup: ?id=xxx (no pagination params)
                 if ($path) {
@@ -124,6 +167,9 @@ switch ($method) {
                     $stmt->execute([$path, $workspace_id]);
                     $item = $stmt->fetch(PDO::FETCH_ASSOC);
                     if ($item) {
+                        $singleArr = [$item];
+                        $enrichLiveListCounts($singleArr);
+                        $item = $singleArr[0];
                         $item['creator'] = function_exists('domationFormatCreator') ? domationFormatCreator($item) : null;
                     }
                     jsonResponse(true, $item ?: null);
@@ -137,6 +183,7 @@ switch ($method) {
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute([$workspace_id]);
                 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                $enrichLiveListCounts($rows);
                 foreach ($rows as &$r) {
                     $r['creator'] = function_exists('domationFormatCreator') ? domationFormatCreator($r) : null;
                 }
@@ -169,6 +216,7 @@ switch ($method) {
             $stmt = $pdo->prepare($sql);
             $stmt->execute($params);
             $lists = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $enrichLiveListCounts($lists);
             foreach ($lists as &$r) {
                 $r['creator'] = function_exists('domationFormatCreator') ? domationFormatCreator($r) : null;
             }

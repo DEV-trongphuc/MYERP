@@ -1310,7 +1310,7 @@ if ($eventName === 'user_send_text' || $eventName === 'message.text.received') {
                         if (!$upd) {
                             throw new Exception("Lỗi chuẩn bị cập nhật Lead.");
                         }
-                        $upd->bind_param("iisiiii", $targetRoundId, $assignedConsultantId, $note, $assignedConsultantId, $assignedConsultantId, $leadId);
+                        $upd->bind_param("iisiii", $targetRoundId, $assignedConsultantId, $note, $assignedConsultantId, $assignedConsultantId, $leadId);
                         $upd->execute();
                         $upd->close();
 

@@ -1246,6 +1246,11 @@ export const WorkChatModal: React.FC = () => {
   const [editingMsgId, setEditingMsgId] = useState<number | null>(null);
   const [editingContent, setEditingContent] = useState('');
   const [floatingMenu, setFloatingMenu] = useState<{ msg: ChatMessage; x: number; y: number } | null>(null);
+  useEffect(() => {
+    setFloatingMenu(null);
+    setEditingMsgId(null);
+    setEditingContent('');
+  }, [activeConversationId]);
   const activeMenuMsgId = floatingMenu?.msg.id ?? null;
   const setActiveMenuMsgId = useCallback((val: number | null) => {
     if (val === null) setFloatingMenu(null);

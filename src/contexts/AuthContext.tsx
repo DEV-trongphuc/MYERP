@@ -35,13 +35,6 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // One-time forced relogin trigger
-  if (!localStorage.getItem('Ideas_relogin_done_v4')) {
-    localStorage.setItem('Ideas_relogin_done_v4', 'true');
-    localStorage.removeItem('Ideas_token');
-    localStorage.removeItem('Ideas_user');
-  }
-
   const normalizeUser = (u: any): User | null => {
     if (!u) return null;
     let role = u.role;
@@ -66,10 +59,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [user, setUser] = useState<User | null>(() => {
     const storedUser = localStorage.getItem('Ideas_user');
-    return storedUser ? normalizeUser(JSON.parse(storedUser)) : null;
+    if (storedUser) {
+      try {
+        return normalizeUser(JSON.parse(storedUser));
+      } catch {}
+    }
+    try {
+      const zustandRaw = localStorage.getItem('minth-auth');
+      if (zustandRaw) {
+        const parsed = JSON.parse(zustandRaw);
+        if (parsed?.state?.user) {
+          const norm = normalizeUser(parsed.state.user);
+          if (norm) localStorage.setItem('Ideas_user', JSON.stringify(norm));
+          return norm;
+        }
+      }
+    } catch {}
+    return null;
   });
   const [token, setToken] = useState<string | null>(() => {
-    return localStorage.getItem('Ideas_token');
+    const t = localStorage.getItem('Ideas_token') || localStorage.getItem('access_token');
+    if (t) {
+      localStorage.setItem('Ideas_token', t);
+      localStorage.setItem('access_token', t);
+    }
+    return t;
   });
 
   const login = useCallback((newToken: string, newUser: User, refreshToken?: string) => {

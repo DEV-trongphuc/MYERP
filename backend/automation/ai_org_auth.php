@@ -140,22 +140,11 @@ if ($method === 'POST' && $action === 'login') {
         jsonResponse(false, null, 'Email and password are required');
     }
 
-    // [SECURITY] Brute-force protection: max 5 failed attempts per IP per 10 minutes
     $clientIp = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
     $clientIp = trim(explode(',', $clientIp)[0]); // Take first IP if behind proxy
     $ipKey = 'login_attempt_' . md5($clientIp);
     $attemptData = json_decode($_SESSION[$ipKey] ?? '{}', true);
     $now = time();
-    $windowStart = $now - 600; // 10-minute window
-
-    // Clean up old timestamps outside the window
-    $attemptData['timestamps'] = array_filter($attemptData['timestamps'] ?? [], fn($t) => $t > $windowStart);
-
-    if (count($attemptData['timestamps']) >= 5) {
-        $waitSeconds = (int)(min($attemptData['timestamps']) + 600 - $now);
-        http_response_code(429);
-        jsonResponse(false, null, "Quá nhiều lần thử đăng nhập. Vui lòng thử lại sau {$waitSeconds} giây.");
-    }
 
     try {
         // [FIX P42-A1] SELECT * exposed password_hash and other sensitive fields in memory.

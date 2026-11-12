@@ -732,13 +732,15 @@ class ExportController {
                     AND NOT EXISTS (SELECT 1 FROM activities act_f WHERE (act_f.contact_id = t.id OR (act_f.related_id = t.id AND act_f.related_type IN ('contact', 'lead'))) AND act_f.deleted_at IS NULL)
                     AND NOT EXISTS (
                         SELECT 1 FROM notes n_f 
-                        WHERE n_f.entity_type = 'contact' AND n_f.entity_id = t.id 
+                        WHERE n_f.tenant_id = t.tenant_id AND n_f.entity_type = 'contact' AND n_f.entity_id = t.id 
                           AND n_f.body NOT LIKE '[Tự động]%' 
                           AND n_f.body NOT LIKE '[Phân bổ]%' 
                           AND n_f.body NOT LIKE '[Giao data]%'
                           AND n_f.body NOT LIKE '[Auto]%'
                           AND n_f.body NOT LIKE '[Import]%'
                           AND n_f.body NOT LIKE '[Tái phân bổ]%'
+                          AND n_f.body NOT LIKE 'Tái phân bổ%'
+                          AND n_f.body NOT LIKE 'Giao lại%'
                     )
                 )";
             } elseif ($interactionStatus === 'has_call_recently') {
@@ -813,7 +815,7 @@ class ExportController {
             switch ($segment) {
                 case 'tiem_nang':
                     if (empty($stage) && empty($stageSlug) && empty($_GET['stage_id']) && empty($stagesParam) && empty($_GET['stage_ids']) && $exportMode !== 'full' && $dataType === '') {
-                        $where[] = "((t.stage_id IS NULL OR t.stage_id != 44) AND (t.pipeline_status IS NULL OR t.pipeline_status NOT IN ('enrolled', 'hoc_vien')) AND (t.status IS NULL OR t.status != 'customer'))";
+                        $where[] = "((t.stage_id IS NULL OR t.stage_id != 44) AND (t.pipeline_status IS NULL OR t.pipeline_status NOT IN ('enrolled', 'hoc_vien', 'won')) AND (t.status IS NULL OR t.status != 'customer'))";
                     }
                     break;
                 case 'hot':        $where[] = 't.lead_score >= 80'; break;
@@ -831,7 +833,7 @@ class ExportController {
                         (t.last_contact IS NULL OR t.last_contact = '')
                         AND NOT EXISTS (
                             SELECT 1 FROM activities a 
-                            WHERE a.tenant_id = t.tenant_id AND ((a.related_type = 'contact' AND a.related_id = t.id) OR a.contact_id = t.id) 
+                            WHERE a.tenant_id = t.tenant_id AND ((a.related_type IN ('contact', 'lead') AND a.related_id = t.id) OR a.contact_id = t.id) 
                               AND a.deleted_at IS NULL
                         )
                         AND NOT EXISTS (
@@ -2897,12 +2899,22 @@ class ExportController {
         $uid  = (int)($auth['user_id'] ?? ($auth['id'] ?? 0));
         $role = strtolower(trim((string)($auth['role'] ?? 'user')));
 
+        $departmentsParam = trim((string)($_GET['departments'] ?? $_GET['department'] ?? ''));
+        $rolesParam       = trim((string)($_GET['role'] ?? $_GET['roles'] ?? ''));
+        $statusParam      = strtolower(trim((string)($_GET['status'] ?? 'active')));
+        $hasInsurance     = strtolower(trim((string)($_GET['has_insurance'] ?? 'all')));
+        $monthYear        = trim((string)($_GET['month_year'] ?? date('Y-m')));
+        $search           = trim((string)($_GET['search'] ?? $_GET['search_query'] ?? ''));
+        $rawType          = strtolower(trim((string)($_GET['type'] ?? 'staff')));
+        $isPayrollMode    = in_array($rawType, ['payroll', 'bang_luong'], true);
+
         while (ob_get_level() > 0) {
             @ob_end_clean();
         }
 
+        $filePrefix = $isPayrollMode ? ('bang_luong_thang_' . preg_replace('/[^0-9A-Za-z_-]/', '_', $monthYear) . '_') : 'danh_sach_nhan_su_hrm_';
         header('Content-Type: text/csv; charset=UTF-8');
-        header('Content-Disposition: attachment; filename="danh_sach_nhan_su_hrm_' . date('Ymd_His') . '.csv"');
+        header('Content-Disposition: attachment; filename="' . $filePrefix . date('Ymd_His') . '.csv"');
         header('Cache-Control: no-cache, no-store, must-revalidate');
         header('Pragma: no-cache');
         header('Expires: 0');
@@ -2921,27 +2933,84 @@ class ExportController {
             'Email',
             'Ngày vào làm',
             'Trạng thái BHXH',
+            'Tổng phép năm',
+            'Phép năm dùng trong tháng',
+            'Phép năm đã dùng (Lũy kế)',
             'Quỹ phép năm còn lại',
+            'Tổng nghỉ bù',
+            'Nghỉ bù dùng trong tháng',
+            'Nghỉ bù đã dùng (Lũy kế)',
             'Quỹ nghỉ bù còn lại',
+            'Tổng Phép + Bù dùng trong tháng',
+            'Tổng Phép + Bù đã dùng (Lũy kế)',
+            'Tổng Phép + Bù còn lại',
+            'Công thực tế',
+            'Công tiêu chuẩn',
             'Số phút đi trễ',
             'Định mức trễ cho phép (60p Nữ / 30p Nam)',
+            'Tăng ca (ngày)',
             'Lương cơ bản (VNĐ)',
             'Lương thỏa thuận (Deal)',
+            'Lương ngày công (VNĐ)',
+            'Lương tăng ca (VNĐ)',
+            'Thưởng chuyên cần (VNĐ)',
+            'Thưởng KPI (VNĐ)',
+            'Tổng phụ cấp (VNĐ)',
+            'Khấu trừ BHXH/BHYT/BHTN (VNĐ)',
+            'Thuế TNCN (VNĐ)',
+            'Trừ tạm ứng (VNĐ)',
             'Lương thực lĩnh kỳ này (VNĐ)',
+            'Ngân hàng',
+            'Số tài khoản',
             'Trạng thái phiếu lương',
             'Trạng thái làm việc'
         ]);
 
-        $departmentsParam = trim((string)($_GET['departments'] ?? $_GET['department'] ?? ''));
-        $rolesParam       = trim((string)($_GET['role'] ?? $_GET['roles'] ?? ''));
-        $statusParam      = strtolower(trim((string)($_GET['status'] ?? 'active')));
-        $hasInsurance     = strtolower(trim((string)($_GET['has_insurance'] ?? 'all')));
-        $monthYear        = trim((string)($_GET['month_year'] ?? date('Y-m')));
-        $search           = trim((string)($_GET['search'] ?? $_GET['search_query'] ?? ''));
+        $otCompMap = [];
+        try {
+            $stmtOtComp = $this->db->prepare("
+                SELECT u.id AS user_id,
+                       ROUND(COALESCE(p.misa_comp_carryover, 0.0) + COALESCE((
+                           SELECT SUM(ROUND(l.total_days * COALESCE(NULLIF(l.ot_rate, 0), 1.0), 2))
+                           FROM hrm_leave_requests l
+                           WHERE l.user_id = u.id AND l.leave_type = 'overtime' AND l.ot_type = 'compensatory' AND l.status = 'approved'
+                       ), 0.0), 2) AS earned_comp
+                FROM users u
+                LEFT JOIN hrm_profiles p ON p.user_id = u.id
+                WHERE u.tenant_id = ?
+            ");
+            $stmtOtComp->execute([$tid]);
+            foreach ($stmtOtComp->fetchAll(PDO::FETCH_ASSOC) ?: [] as $otRow) {
+                $otCompMap[(int)$otRow['user_id']] = round((float)$otRow['earned_comp'], 2);
+            }
+        } catch (\Throwable $eOt) {}
+
+        $monthLeavesMap = [];
+        try {
+            $stmtLv = $this->db->prepare("
+                SELECT lr.user_id,
+                       LOWER(TRIM(lr.leave_type)) AS ltype,
+                       SUM(GREATEST(0.0, COALESCE(lr.total_days, 0.0) - COALESCE(lr.unpaid_days, 0.0))) AS used_days
+                FROM hrm_leave_requests lr
+                JOIN users u ON lr.user_id = u.id
+                WHERE u.tenant_id = ?
+                  AND lr.status = 'approved'
+                  AND lr.leave_type IN ('annual', 'compensatory')
+                  AND DATE_FORMAT(lr.start_date, '%Y-%m') = ?
+                GROUP BY lr.user_id, LOWER(TRIM(lr.leave_type))
+            ");
+            $stmtLv->execute([$tid, $monthYear]);
+            foreach ($stmtLv->fetchAll(PDO::FETCH_ASSOC) ?: [] as $lvRow) {
+                $uId = (int)$lvRow['user_id'];
+                $lt = (string)$lvRow['ltype'];
+                $monthLeavesMap[$uId][$lt] = round((float)$lvRow['used_days'], 2);
+            }
+        } catch (\Throwable $eLv) {}
 
         $where = [
             'u.tenant_id = ?',
             "u.role NOT IN ('superadmin', 'super_admin', 'bot', 'system')",
+            "u.email != 'info@ideas.edu.vn'",
             'u.id != 9000001'
         ];
         $params = [$monthYear, $tid];
@@ -3009,12 +3078,18 @@ class ExportController {
             }
         }
 
-        $sql = "SELECT u.id, u.full_name, u.email, u.phone, u.gender, u.role, u.job_title, u.department, COALESCE(u.is_active, 1) as is_active,
+        $sql = "SELECT u.id, u.full_name, u.email, u.phone, u.gender, u.role, u.job_title, u.department,
+                       u.bank_name, u.bank_account, COALESCE(u.is_active, 1) as is_active,
                        COALESCE(tm.name, '') as team_name,
                        hp.joined_date, hp.base_salary, hp.deal_salary, hp.has_insurance,
                        hp.annual_leave_total, hp.annual_leave_used,
                        hp.compensatory_leave_total, hp.compensatory_leave_used,
-                       mp.net_salary, mp.lateness_minutes, mp.status as payslip_status
+                       mp.work_days_actual, mp.work_days_required, mp.overtime_days,
+                       mp.salary_basic_calculated, mp.overtime_salary, mp.diligence_bonus, mp.kpi_bonus,
+                       mp.allowance_total, mp.insurance_bhxh, mp.insurance_bhyt, mp.insurance_bhtn,
+                       mp.tax_pit, mp.advance_deduction, mp.net_salary,
+                       mp.lateness_minutes, mp.lateness_annual_deducted, mp.lateness_compensatory_deducted,
+                       mp.status as payslip_status
                 FROM users u
                 LEFT JOIN hrm_profiles hp ON hp.user_id = u.id
                 LEFT JOIN teams tm ON u.team_id = tm.id
@@ -3030,8 +3105,22 @@ class ExportController {
             $sid = (int)$r['id'];
             $canSeeSalary = $canViewFullHrm || $sid === $uid;
             $dept = $r['department'] ?: ($r['team_name'] ?: '');
-            $leaveRem = max(0, (float)($r['annual_leave_total'] ?? 12) - (float)($r['annual_leave_used'] ?? 0));
-            $compLeaveRem = max(0, (float)($r['compensatory_leave_total'] ?? 0) - (float)($r['compensatory_leave_used'] ?? 0));
+
+            $annTotal = round((float)($r['annual_leave_total'] ?? 12.0), 2);
+            $annUsed = round((float)($r['annual_leave_used'] ?? 0.0), 2);
+            $leaveRem = round(max(0.0, $annTotal - $annUsed), 2);
+
+            $earnedComp = $otCompMap[$sid] ?? 0.0;
+            $compTotal = round(max((float)($r['compensatory_leave_total'] ?? 0.0), $earnedComp), 2);
+            $compUsed = round((float)($r['compensatory_leave_used'] ?? 0.0), 2);
+            $compLeaveRem = round(max(0.0, $compTotal - $compUsed), 2);
+
+            $annMonthUsed = round((float)($monthLeavesMap[$sid]['annual'] ?? 0.0) + (float)($r['lateness_annual_deducted'] ?? 0.0), 2);
+            $compMonthUsed = round((float)($monthLeavesMap[$sid]['compensatory'] ?? 0.0) + (float)($r['lateness_compensatory_deducted'] ?? 0.0), 2);
+            $totMonthUsed = round($annMonthUsed + $compMonthUsed, 2);
+            $totUsed = round($annUsed + $compUsed, 2);
+            $totRem = round($leaveRem + $compLeaveRem, 2);
+
             $latenessMins = (int)($r['lateness_minutes'] ?? 0);
             $genderNorm = strtolower(trim((string)($r['gender'] ?? '')));
             $isFemale = in_array($genderNorm, ['female', 'nu', 'nữ', 'f'], true);
@@ -3039,17 +3128,23 @@ class ExportController {
 
             $psStatusRaw = strtolower((string)($r['payslip_status'] ?? ''));
             $psStatusLabel = 'Chưa chốt';
-            if ($psStatusRaw === 'confirmed' || $psStatusRaw === 'paid') {
+            if ($psStatusRaw === 'locked') {
+                $psStatusLabel = 'Đã chốt khóa sổ';
+            } elseif ($psStatusRaw === 'confirmed' || $psStatusRaw === 'paid') {
                 $psStatusLabel = 'Đã xác nhận';
             } elseif ($psStatusRaw === 'sent' || $psStatusRaw === 'published') {
                 $psStatusLabel = 'Đã gửi (Chờ xác nhận)';
+            } elseif ($psStatusRaw === 'draft') {
+                $psStatusLabel = 'Bản nháp';
             } elseif ($psStatusRaw !== '') {
                 $psStatusLabel = $r['payslip_status'];
             }
 
+            $insTotal = (float)($r['insurance_bhxh'] ?? 0) + (float)($r['insurance_bhyt'] ?? 0) + (float)($r['insurance_bhtn'] ?? 0);
+
             fputcsv($output, [
                 $stt++,
-                '#' . $sid,
+                'NV' . str_pad((string)$sid, 3, '0', STR_PAD_LEFT),
                 $r['full_name'] ?: '',
                 $r['job_title'] ?: '',
                 $r['role'] ?: '',
@@ -3058,13 +3153,35 @@ class ExportController {
                 $r['email'] ?: '',
                 $r['joined_date'] ?: '',
                 !empty($r['has_insurance']) ? 'Có BHXH' : 'Chưa đóng',
+                $annTotal,
+                $annMonthUsed,
+                $annUsed,
                 $leaveRem,
+                $compTotal,
+                $compMonthUsed,
+                $compUsed,
                 $compLeaveRem,
+                $totMonthUsed,
+                $totUsed,
+                $totRem,
+                $r['work_days_actual'] !== null ? (float)$r['work_days_actual'] : '',
+                $r['work_days_required'] !== null ? (float)$r['work_days_required'] : '',
                 $latenessMins,
                 $latenessQuotaLabel,
+                $r['overtime_days'] !== null ? (float)$r['overtime_days'] : 0,
                 $canSeeSalary ? number_format((float)($r['base_salary'] ?? 0), 0, ',', '.') : 'Bảo mật',
                 $canSeeSalary ? number_format((float)($r['deal_salary'] ?? 0), 0, ',', '.') : 'Bảo mật',
+                $canSeeSalary && $r['salary_basic_calculated'] !== null ? number_format((float)$r['salary_basic_calculated'], 0, ',', '.') : ($canSeeSalary ? '0' : 'Bảo mật'),
+                $canSeeSalary && $r['overtime_salary'] !== null ? number_format((float)$r['overtime_salary'], 0, ',', '.') : ($canSeeSalary ? '0' : 'Bảo mật'),
+                $canSeeSalary && $r['diligence_bonus'] !== null ? number_format((float)$r['diligence_bonus'], 0, ',', '.') : ($canSeeSalary ? '0' : 'Bảo mật'),
+                $canSeeSalary && $r['kpi_bonus'] !== null ? number_format((float)$r['kpi_bonus'], 0, ',', '.') : ($canSeeSalary ? '0' : 'Bảo mật'),
+                $canSeeSalary && $r['allowance_total'] !== null ? number_format((float)$r['allowance_total'], 0, ',', '.') : ($canSeeSalary ? '0' : 'Bảo mật'),
+                $canSeeSalary ? number_format($insTotal, 0, ',', '.') : 'Bảo mật',
+                $canSeeSalary && $r['tax_pit'] !== null ? number_format((float)$r['tax_pit'], 0, ',', '.') : ($canSeeSalary ? '0' : 'Bảo mật'),
+                $canSeeSalary && $r['advance_deduction'] !== null ? number_format((float)$r['advance_deduction'], 0, ',', '.') : ($canSeeSalary ? '0' : 'Bảo mật'),
                 $canSeeSalary && $r['net_salary'] !== null ? number_format((float)$r['net_salary'], 0, ',', '.') : ($canSeeSalary ? 'Chưa chốt' : 'Bảo mật'),
+                $r['bank_name'] ?: '',
+                $r['bank_account'] ? ("'" . $r['bank_account']) : '',
                 $psStatusLabel,
                 (int)($r['is_active'] ?? 1) === 1 ? 'Đang làm việc' : 'Ngừng hoạt động'
             ]);
@@ -3827,7 +3944,13 @@ class ExportController {
                 }
             }
         }
-        if ($deductionMonth !== '') {
+        if ($deductionMonth !== '' && preg_match('/^\d{4}-\d{2}$/', $deductionMonth)) {
+            $monthStart = $deductionMonth . '-01 00:00:00';
+            $monthEnd = date('Y-m-t 23:59:59', strtotime($monthStart));
+            $where[] = "(a.request_date >= ? AND a.request_date <= ?)";
+            $params[] = $monthStart;
+            $params[] = $monthEnd;
+        } elseif ($deductionMonth !== '') {
             $where[] = "DATE_FORMAT(a.request_date, '%Y-%m') = ?";
             $params[] = $deductionMonth;
         }

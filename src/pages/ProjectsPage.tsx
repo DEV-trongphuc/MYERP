@@ -27,6 +27,7 @@ import { FilesPage } from './FilesPage';
 import { useUploadProgress } from '../contexts/UploadProgressContext';
 import { ProjectGanttTab } from '../components/ProjectGanttTab';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
+import { SubjectAnnouncementModal } from '../components/academic/SubjectAnnouncementModal';
 
 const parseSeminarTimeSlot = (timeSlot: string) => {
   const result = {
@@ -696,9 +697,10 @@ export default function ProjectsPage() {
     try {
       const res = await api.post(`/tasks/${taskId}/duplicate`);
       if (res.data?.success && res.data?.data) {
+        const cleanClone = { ...res.data.data, comments: [], comment_count: 0 };
         addToast(t('Đã nhân bản nhiệm vụ thành công!'), 'success');
         setLinkedTasks(prev => {
-          const next = [res.data.data, ...prev];
+          const next = [cleanClone, ...prev];
           if (editingProject?.id) entityTasksCache.set(`project:${editingProject.id}`, { data: next, timestamp: Date.now() });
           if (editingCampaign?.id) entityTasksCache.set(`campaign:${editingCampaign.id}`, { data: next, timestamp: Date.now() });
           return next;
@@ -925,6 +927,7 @@ export default function ProjectsPage() {
   const [showScheduleExportModal, setShowScheduleExportModal] = useState(false);
   const [showNotifModal, setShowNotifModal] = useState(false);
   const [notifText, setNotifText] = useState('');
+  const [announcingSubject, setAnnouncingSubject] = useState<any>(null);
   const [projectStats, setProjectStats] = useState<any>(null);
   const [campaignStats, setCampaignStats] = useState<any>(null);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -4064,6 +4067,27 @@ export default function ProjectsPage() {
                           style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}
                           onClick={(e) => e.stopPropagation()}
                         >
+                          <button
+                            type="button"
+                            className="btn outline sm"
+                            style={{
+                              borderRadius: '8px',
+                              height: '30px',
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '0 10px',
+                              background: '#fef2f2',
+                              color: '#BD1D2D',
+                              border: '1px solid #fecaca'
+                            }}
+                            onClick={() => setAnnouncingSubject(sub)}
+                            title="Gửi Thông báo Chuyên đề / Lịch học môn (Tự động điền thông tin môn học)"
+                          >
+                            <Send size={12} /> Gửi TBCĐ
+                          </button>
                           <button
                             type="button"
                             className="btn primary sm"
@@ -10250,7 +10274,10 @@ export default function ProjectsPage() {
                 navigate(`${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`, { replace: true });
               }}
               task={selectedTaskForDrawer}
-              onUpdate={() => {
+              onUpdate={(updatedTask?: any) => {
+                if (updatedTask && updatedTask.id && (updatedTask.__duplicatedFromId || updatedTask.duplicated_from_id)) {
+                  setSelectedTaskForDrawer({ ...updatedTask, comments: [], comment_count: 0 });
+                }
                 window.dispatchEvent(new CustomEvent('task-updated'));
               }}
               users={users}
@@ -10356,15 +10383,37 @@ export default function ProjectsPage() {
           };
 
           const saveButton = (
-            <button
-              type="button"
-              className="btn primary sm"
-              style={{ borderRadius: '8px', fontWeight: 700, background: 'var(--color-primary)', border: 'none', height: '34px', display: 'flex', alignItems: 'center', gap: '4px', padding: '0 16px' }}
-              disabled={isSaving}
-              onClick={handleSaveConfig}
-            >
-              {isSaving ? 'Đang lưu...' : 'Lưu cấu hình'}
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                className="btn outline sm"
+                style={{
+                  borderRadius: '8px',
+                  fontWeight: 700,
+                  background: '#fef2f2',
+                  color: '#BD1D2D',
+                  border: '1px solid #fecaca',
+                  height: '34px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '0 14px'
+                }}
+                onClick={() => setAnnouncingSubject(sub)}
+              >
+                <Send size={13} />
+                Gửi TBCĐ (Email/Zalo)
+              </button>
+              <button
+                type="button"
+                className="btn primary sm"
+                style={{ borderRadius: '8px', fontWeight: 700, background: 'var(--color-primary)', border: 'none', height: '34px', display: 'flex', alignItems: 'center', gap: '4px', padding: '0 16px' }}
+                disabled={isSaving}
+                onClick={handleSaveConfig}
+              >
+                {isSaving ? 'Đang lưu...' : 'Lưu cấu hình'}
+              </button>
+            </div>
           );
 
           return renderDrawer(
@@ -10376,7 +10425,7 @@ export default function ProjectsPage() {
 
                 {/* Modal Basic Info Inputs */}
                 <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', background: 'var(--color-bg-light)', padding: '16px 20px', borderRadius: '14px', border: '1px solid var(--color-border-light)' }}>
-                  <div style={{ flex: '1 1 150px' }}>
+                  <div style={{ flex: '1 1 130px' }}>
                     <label style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>Mã môn học</label>
                     <input
                       type="text"
@@ -10387,7 +10436,7 @@ export default function ProjectsPage() {
                       style={{ width: '100%', padding: '8px 14px', fontSize: '0.88rem', borderRadius: '10px', border: '1px solid var(--color-border-light)', height: '42px' }}
                     />
                   </div>
-                  <div style={{ flex: '2 1 280px' }}>
+                  <div style={{ flex: '2 1 250px' }}>
                     <label style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>Tên môn học</label>
                     <input
                       type="text"
@@ -10398,7 +10447,7 @@ export default function ProjectsPage() {
                       style={{ width: '100%', padding: '8px 14px', fontSize: '0.88rem', borderRadius: '10px', border: '1px solid var(--color-border-light)', height: '42px' }}
                     />
                   </div>
-                  <div style={{ flex: '1.5 1 220px' }}>
+                  <div style={{ flex: '1.5 1 200px' }}>
                     <label style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>Giảng viên chuyên đề</label>
                     <CustomSelect
                       disabled={!canEdit}
@@ -10416,6 +10465,17 @@ export default function ProjectsPage() {
                       placeholder="Chọn giảng viên..."
                       searchable
                       showAvatars
+                    />
+                  </div>
+                  <div style={{ flex: '1.5 1 220px' }}>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>Link AI Agent hỗ trợ môn học</label>
+                    <input
+                      type="text"
+                      placeholder="https://ai.ideas.edu.vn/..."
+                      disabled={!canEdit}
+                      value={sub.ai_agent_link || ''}
+                      onChange={e => handleUpdateSubjectInModal({ ai_agent_link: e.target.value })}
+                      style={{ width: '100%', padding: '8px 14px', fontSize: '0.84rem', borderRadius: '10px', border: '1px solid var(--color-border-light)', height: '42px' }}
                     />
                   </div>
                 </div>
@@ -10598,13 +10658,35 @@ export default function ProjectsPage() {
                   {/* Tab 2: Vietnam Seminars */}
                   {activeConfigTab === 'seminar' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                         <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Danh sách lớp chuyên đề IDEAS (VN Time)</span>
-                        {canEdit && (
-                          <button type="button" className="btn secondary" style={{ height: '36px', padding: '0 16px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }} onClick={handleAddSeminar}>
-                            <Plus size={14} /> Thêm chuyên đề
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <button
+                            type="button"
+                            className="btn outline"
+                            style={{
+                              height: '36px',
+                              padding: '0 14px',
+                              borderRadius: '8px',
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              background: '#fef2f2',
+                              color: '#BD1D2D',
+                              border: '1px solid #fecaca'
+                            }}
+                            onClick={() => setAnnouncingSubject(sub)}
+                          >
+                            <Send size={14} /> Gửi Thông báo Chuyên đề (TBCĐ)
                           </button>
-                        )}
+                          {canEdit && (
+                            <button type="button" className="btn secondary" style={{ height: '36px', padding: '0 16px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }} onClick={handleAddSeminar}>
+                              <Plus size={14} /> Thêm chuyên đề
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {(!sub.seminars || sub.seminars.length === 0) ? (
@@ -11047,6 +11129,45 @@ export default function ProjectsPage() {
             true
           );
         })()}
+
+        {/* Subject & Seminar Announcement Modal (Auto-Fill 5 Official TBCĐ Templates & 1-Click Send) */}
+        <SubjectAnnouncementModal
+          isOpen={!!announcingSubject}
+          onClose={() => setAnnouncingSubject(null)}
+          subject={announcingSubject}
+          campaign={editingCampaign}
+          programName={
+            editingCampaign?.project_name ||
+            projects.find(p => Number(p.id) === Number(editingCampaign?.project_id))?.name ||
+            editingCampaign?.name ||
+            ''
+          }
+          companiesList={companiesList}
+          consultants={consultants}
+          addToast={addToast}
+          onSubjectUpdated={({ ai_agent_link, school_lecturer }) => {
+            if (!editingCampaign || !announcingSubject) return;
+            try {
+              const subs = typeof editingCampaign.subjects_json === 'string'
+                ? JSON.parse(editingCampaign.subjects_json || '[]')
+                : (Array.isArray(editingCampaign.subjects_json) ? editingCampaign.subjects_json : []);
+              const updatedSubs = subs.map((s: any) => {
+                if (s.id === announcingSubject.id || (s.code && s.code === announcingSubject.code)) {
+                  return {
+                    ...s,
+                    ...(ai_agent_link ? { ai_agent_link } : {}),
+                    ...(school_lecturer ? { school_lecturer } : {})
+                  };
+                }
+                return s;
+              });
+              setEditingCampaign({
+                ...editingCampaign,
+                subjects_json: JSON.stringify(updatedSubs)
+              });
+            } catch {}
+          }}
+        />
 
         {/* Preview Announcement Text Modal */}
         <CustomModal

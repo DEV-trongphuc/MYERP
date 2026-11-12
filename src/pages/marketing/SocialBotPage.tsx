@@ -18,8 +18,11 @@ type ZaloSubTab = 'audience' | 'automation' | 'broadcast' | 'templates';
 const SocialBotPage: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const channelParam = (searchParams.get('channel') as SocialChannel) || 'meta';
+    const subTabParam = (searchParams.get('subtab') as ZaloSubTab) || 'audience';
     const [activeChannel, setActiveChannel] = useState<SocialChannel>(channelParam);
-    const [zaloSubTab, setZaloSubTab] = useState<ZaloSubTab>('audience');
+    const [zaloSubTab, setZaloSubTab] = useState<ZaloSubTab>(
+        ['audience', 'automation', 'broadcast', 'templates'].includes(subTabParam) ? subTabParam : 'audience'
+    );
 
     // Stats
     const [stats, setStats] = useState({
@@ -34,6 +37,10 @@ const SocialBotPage: React.FC = () => {
         const c = searchParams.get('channel') as SocialChannel;
         if (c && (c === 'meta' || c === 'zalo')) {
             setActiveChannel(c);
+        }
+        const st = searchParams.get('subtab') as ZaloSubTab;
+        if (st && ['audience', 'automation', 'broadcast', 'templates'].includes(st)) {
+            setZaloSubTab(st);
         }
     }, [searchParams]);
 

@@ -42,6 +42,25 @@ import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import { getSystemTitle } from '../config/env';
 import { pushOverlay } from '../utils/overlayStack';
 
+function resolveLateEarlySubType(obj: any, fallbackReason?: string): 'early' | 'late' {
+  const explicit = String(obj?.late_early_type || obj?.ot_type || '').toLowerCase().trim();
+  if (explicit === 'early' || explicit === 'late') {
+    return explicit;
+  }
+  const r = String(obj?.raw_reason || obj?.reason || fallbackReason || obj?.description || obj?.title || '').normalize('NFC');
+  const hasEarlyKw = /về\s*sớm|ve\s*som/i.test(r);
+  const hasLateKw = /đi\s*(?:muộn|trễ)|di\s*(?:muon|tre)/i.test(r);
+  if (hasEarlyKw && !hasLateKw) return 'early';
+  if (hasLateKw && !hasEarlyKw) return 'late';
+  const startStr = String(obj?.start_date || obj?.from_date || '');
+  const timeMatch = startStr.match(/(?:T|\s)(\d{1,2}):(\d{2})/);
+  if (timeMatch) {
+    const hour = Number(timeMatch[1]);
+    if (!isNaN(hour) && hour >= 12) return 'early';
+  }
+  return 'late';
+}
+
 function cleanLeaveReasonText(raw?: string, keepTrailingBrackets = false): string {
   if (!raw) return '';
   let r = String(raw).trim().replace(/^["']+|["']+$/g, '');
@@ -69,7 +88,7 @@ function cleanLeaveReasonText(raw?: string, keepTrailingBrackets = false): strin
     prev = r;
     r = r
       .replace(/^\[(?:Đăng ký làm việc từ xa|Tăng ca|Đi muộn\/Về sớm|Nghỉ phép)\]\s*(?:[^:\-\n]+:\s*)?/i, '')
-      .replace(/^(?:Đăng ký WFH|Đăng ký OT|Đăng ký đi muộn\/về sớm|Đăng ký đi trễ\s*\/\s*về sớm|Đăng ký công tác|Đơn xin nghỉ phép(?:\s*\([^)]*\))?|Đề xuất nghỉ[^:\-]*|Đề xuất tạm ứng lương|Đề nghị tạm ứng lương)\s*:?\s*/i, '')
+      .replace(/^(?:Đăng ký WFH|Đăng ký OT|Đăng ký đi muộn\/về sớm|Đăng ký đi trễ\s*\/\s*về sớm|Đăng ký đi muộn|Đăng ký đi trễ|Đăng ký về sớm|Đăng ký công tác|Đơn xin nghỉ phép(?:\s*\([^)]*\))?|Đề xuất nghỉ[^:\-]*|Đề xuất tạm ứng lương|Đề nghị tạm ứng lương)\s*:?\s*/i, '')
       .replace(/^\[(?:Tỷ lệ hưởng lương|Hình thức|Nghỉ buổi sáng|Nghỉ buổi chiều|Nghỉ cả ngày|Nghỉ nhiều ngày|Nghỉ ngắt quãng|Làm việc từ xa)[^\]]*\]\s*/i, '')
       .replace(/^(?:Thời gian:\s*)?\d{1,2}\/\d{1,2}\/\d{4}(?:\s*-\s*\d{1,2}\/\d{1,2}\/\d{4})?\s*(?:\([\d.,]+\s*ngày(?:\/giờ)?\))?\s*(?:-\s*)?/i, '')
       .replace(/^Thời gian:\s*[^.]+\.\s*/i, '')
@@ -1091,7 +1110,7 @@ export default function Approvals() {
   const extractTitleSuffix = useCallback((title: string, defName?: string): string => {
     if (!title) return '';
     let cleanTitle = title.replace(/(?:\s*-\s*Cấp\s*\d+(?:\s*\([^)]*\))?)+$/gi, '').trim();
-    if (/^(?:\[(?:Nghỉ phép|Đăng ký làm việc từ xa|Tăng ca|Đi muộn\/Về sớm)\]|Đăng ký (?:WFH|OT|đi muộn\/về sớm|đi trễ\s*\/\s*về sớm|công tác)|Đơn xin nghỉ phép|Đề xuất tạm ứng lương)/i.test(cleanTitle)) {
+    if (/^(?:\[(?:Nghỉ phép|Đăng ký làm việc từ xa|Tăng ca|Đi muộn\/Về sớm)\]|Đăng ký (?:WFH|OT|đi muộn\/về sớm|đi trễ\s*\/\s*về sớm|đi muộn|đi trễ|về sớm|công tác)|Đơn xin nghỉ phép|Đề xuất tạm ứng lương)/i.test(cleanTitle)) {
       return cleanLeaveReasonText(cleanTitle, false);
     }
     const prefix = defName || selectedWorkflowDef?.name || '';
@@ -1885,6 +1904,8 @@ export default function Approvals() {
 
         const lateEarlyPayload = {
           leave_type: 'late_early',
+          late_early_type: lateEarlyType,
+          ot_type: lateEarlyType,
           reason: effectiveReason,
           from_date: formattedFrom,
           to_date: formattedTo,
@@ -4115,7 +4136,7 @@ export default function Approvals() {
     }
 
     // Deduplicate any repeated segments in leave/HRM titles
-    const hrmHeaderMatch = t.match(/^((?:\[Nghỉ phép\][^:]*|Đăng ký (?:WFH|OT|đi muộn\/về sớm|công tác))\s*(?::\s*\d{1,2}\/\d{1,2}\/\d{4}(?:\s*-\s*\d{1,2}\/\d{1,2}\/\d{4})?)?\s*(?:\([\d.,]+\s*ngày\))?)\s*-\s*(.+)$/i);
+    const hrmHeaderMatch = t.match(/^((?:\[Nghỉ phép\][^:]*|Đăng ký (?:WFH|OT|đi muộn\/về sớm|đi muộn|đi trễ|về sớm|công tác))\s*(?::\s*\d{1,2}\/\d{1,2}\/\d{4}(?:\s*-\s*\d{1,2}\/\d{1,2}\/\d{4})?)?\s*(?:\([\d.,]+\s*ngày\))?)\s*-\s*(.+)$/i);
     if (hrmHeaderMatch) {
       const headerPart = hrmHeaderMatch[1].trim();
       const rawTail = hrmHeaderMatch[2].trim();
@@ -4300,11 +4321,20 @@ export default function Approvals() {
     };
     window.addEventListener('approval-updated', handleRefresh);
     window.addEventListener('refresh-approvals', handleRefresh);
+    window.addEventListener('new-notification-received', handleRefresh);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        handleRefresh();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
     return () => {
       controller.abort();
       if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
       window.removeEventListener('approval-updated', handleRefresh);
       window.removeEventListener('refresh-approvals', handleRefresh);
+      window.removeEventListener('new-notification-received', handleRefresh);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);
 
@@ -4708,13 +4738,34 @@ export default function Approvals() {
             const def = workflowList.find(w => w.id === 'late_early') || matchingDef;
             setSelectedWorkflowDef(def);
             setFormType('late_early');
-            setLateEarlyType(cleanR.includes('Về sớm') ? 'early' : 'late');
+            const resolvedSubType = resolveLateEarlySubType(found, cleanR);
+            setLateEarlyType(resolvedSubType);
+            let resolvedMin = 0;
             const minMatch = cleanR.match(/(\d+)\s*phút/i);
-            if (minMatch) setLateEarlyMinutes(Number(minMatch[1]));
+            if (minMatch) {
+              resolvedMin = Number(minMatch[1]);
+            } else if ((found.start_date || found.from_date) && (found.end_date || found.to_date)) {
+              const sTs = new Date(String(found.start_date || found.from_date).replace(' ', 'T')).getTime();
+              const eTs = new Date(String(found.end_date || found.to_date).replace(' ', 'T')).getTime();
+              if (!isNaN(sTs) && !isNaN(eTs) && eTs > sTs) {
+                resolvedMin = Math.round((eTs - sTs) / 60000);
+              }
+            }
+            if (resolvedMin > 0) {
+              setLateEarlyMinutes(resolvedMin);
+              setIsCustomMinutesMode(![30, 60, 90, 120, 150, 180].includes(resolvedMin));
+            }
             const timeMatch = cleanR.match(/Thời gian:\s*(\d{1,2}:\d{2})/i);
-            if (timeMatch) setOtStart(timeMatch[1]);
-            const startD = String(found.from_date || found.start_date || '').split(/[T ]/)[0] || getTodayDateString();
+            const rawStartStr = String(found.from_date || found.start_date || '');
+            const startClockMatch = rawStartStr.match(/(?:T|\s)(\d{2}:\d{2})/);
+            if (timeMatch) {
+              setOtStart(timeMatch[1]);
+            } else if (startClockMatch) {
+              setOtStart(startClockMatch[1]);
+            }
+            const startD = rawStartStr.split(/[T ]/)[0] || getTodayDateString();
             setLeaveFrom(startD);
+            setLeaveTo(startD);
             const baseReasonMatch = cleanR.match(/Lý do:\s*([\s\S]*)$/i);
             const cleanReasonVal = cleanLeaveReasonText(baseReasonMatch ? baseReasonMatch[1].trim() : cleanR, false);
             setLeaveReason(cleanReasonVal);
@@ -6974,7 +7025,9 @@ export default function Approvals() {
                 
                 const creatorId = Number(item.user_id || (item as any)?.created_by || 0);
                 const isCreator = creatorId > 0 && creatorId === userId;
-                const canEditItem = isCreator && ['pending', 'pending_approval', 'pending_manager', 'pending_hr', 'rejected', 'draft'].includes(String(item.status || 'pending').toLowerCase());
+                const isPrivilegedUser = isSuperAdmin || ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'].includes(String(user?.role || '').toLowerCase());
+                const canEditItem = (isCreator && ['pending', 'pending_approval', 'pending_manager', 'pending_hr', 'rejected', 'draft'].includes(String(item.status || 'pending').toLowerCase())) ||
+                  (isPrivilegedUser && ['pending', 'pending_approval', 'pending_manager', 'pending_hr', 'rejected', 'draft', 'approved'].includes(String(item.status || 'pending').toLowerCase()));
 
                 const isPendingAction = activeTab === 'pending' && isItemAtMyStepToApprove(item);
                 const creatorKey = String(item.employee_name || user?.name || '').toLowerCase().trim();
@@ -7313,7 +7366,9 @@ export default function Approvals() {
                     
                     const creatorId = Number(item.user_id || (item as any)?.created_by || 0);
                     const isCreator = creatorId > 0 && creatorId === userId;
-                    const canEditItem = isCreator && ['pending', 'pending_approval', 'pending_manager', 'pending_hr', 'rejected', 'draft'].includes(String(item.status || 'pending').toLowerCase());
+                    const isPrivilegedUser = isSuperAdmin || ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'].includes(String(user?.role || '').toLowerCase());
+                const canEditItem = (isCreator && ['pending', 'pending_approval', 'pending_manager', 'pending_hr', 'rejected', 'draft'].includes(String(item.status || 'pending').toLowerCase())) ||
+                  (isPrivilegedUser && ['pending', 'pending_approval', 'pending_manager', 'pending_hr', 'rejected', 'draft', 'approved'].includes(String(item.status || 'pending').toLowerCase()));
 
                     const isPendingAction = activeTab === 'pending' && isItemAtMyStepToApprove(item);
 
@@ -15637,7 +15692,16 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       }
     };
     fetchDetail();
-    return () => { active = false; };
+    const handleRefreshDetail = () => {
+      if (active) fetchDetail();
+    };
+    window.addEventListener('approval-updated', handleRefreshDetail);
+    window.addEventListener('refresh-approvals', handleRefreshDetail);
+    return () => {
+      active = false;
+      window.removeEventListener('approval-updated', handleRefreshDetail);
+      window.removeEventListener('refresh-approvals', handleRefreshDetail);
+    };
   }, [item?.id, item?.type]);
 
   useEffect(() => {
@@ -16700,9 +16764,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         case 'special_paid': return t('Đề xuất nghỉ chế độ (Hiếu/Hỉ)');
         case 'late_early': {
           const r = reason || detail?.reason || item?.description || '';
-          if (r.includes('Về sớm')) return t('Đăng ký về sớm');
-          if (r.includes('Đi muộn') || r.includes('Đi trễ')) return t('Đăng ký đi muộn');
-          return t('Đăng ký đi muộn, về sớm');
+          const sub = resolveLateEarlySubType(detail || item, r);
+          return sub === 'early' ? t('Đăng ký về sớm') : t('Đăng ký đi muộn');
         }
         case 'unpaid': return t('Đề xuất nghỉ việc riêng');
         case 'overtime': return t('Đăng ký tăng ca (OT)');
@@ -16751,7 +16814,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       }
     }
 
-    const hrmDrawerHeaderMatch = cleanHeaderTitle.match(/^((?:\[Nghỉ phép\][^:]*|Đăng ký (?:WFH|OT|đi muộn\/về sớm|công tác))\s*(?::\s*\d{1,2}\/\d{1,2}\/\d{4}(?:\s*-\s*\d{1,2}\/\d{1,2}\/\d{4})?)?\s*(?:\([\d.,]+\s*ngày\))?)\s*-\s*(.+)$/i);
+    const hrmDrawerHeaderMatch = cleanHeaderTitle.match(/^((?:\[Nghỉ phép\][^:]*|Đăng ký (?:WFH|OT|đi muộn\/về sớm|đi muộn|đi trễ|về sớm|công tác))\s*(?::\s*\d{1,2}\/\d{1,2}\/\d{4}(?:\s*-\s*\d{1,2}\/\d{1,2}\/\d{4})?)?\s*(?:\([\d.,]+\s*ngày\))?)\s*-\s*(.+)$/i);
     if (hrmDrawerHeaderMatch) {
       const hPart = hrmDrawerHeaderMatch[1].trim();
       const tPart = cleanLeaveReasonText(hrmDrawerHeaderMatch[2].trim(), false);
@@ -16976,7 +17039,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
 
             if (isLateEarly) {
               const reasonStr = detail?.reason || item.description || '';
-              const isEarly = reasonStr.includes('Về sớm');
+              const isEarly = resolveLateEarlySubType(detail || item, reasonStr) === 'early';
               const minMatch = reasonStr.match(/\((\d+)\s*phút\)/i);
               
               let diffMin = 0;
@@ -20234,7 +20297,12 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
               </>
             )}
 
-            {onEdit && Number(user?.id) === Number(item.created_by || item.user_id || detail?.created_by || detail?.user_id) && (item.status === 'pending' || item.status === 'pending_approval' || item.status === 'rejected') && (
+            {onEdit && (() => {
+              const isCreator = Number(user?.id) === Number(item.created_by || item.user_id || detail?.created_by || detail?.user_id);
+              const isPrivilegedUser = isExecutive(user) || ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'].includes(String(user?.role || '').toLowerCase());
+              const canEditThis = (isCreator && ['pending', 'pending_approval', 'pending_manager', 'pending_hr', 'rejected', 'draft'].includes(String(item.status || 'pending').toLowerCase())) ||
+                (isPrivilegedUser && ['pending', 'pending_approval', 'pending_manager', 'pending_hr', 'rejected', 'draft', 'approved'].includes(String(item.status || 'pending').toLowerCase()));
+              return canEditThis ? (
               <button
                 onClick={() => {
                   onEdit(item);
@@ -20261,7 +20329,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 <Pencil size={isMobile ? 15 : 14} />
                 {!isMobile && <span>{t('Sửa')}</span>}
               </button>
-            )}
+              ) : null;
+            })()}
 
             {onDuplicate && (
               <button

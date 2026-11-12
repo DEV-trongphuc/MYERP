@@ -145,7 +145,15 @@ const FlowBuilderTab: React.FC<FlowBuilderTabProps> = memo(({
                 setIsFullscreen(false);
                 return;
             }
-            if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+            const target = e.target as HTMLElement | null;
+            if (
+                target &&
+                (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) ||
+                    target.isContentEditable ||
+                    Boolean(target.closest?.('[contenteditable="true"]')))
+            ) {
+                return;
+            }
 
             if (e.key === ' ' || e.code === 'Space') {
                 e.preventDefault();

@@ -28,11 +28,19 @@ const RichText: React.FC<RichTextProps> = ({ html, onChange, placeholder, classN
     // Unique id to scope CSS rules to this instance
     const instanceId = useRef(`rte-${Math.random().toString(36).slice(2, 8)}`).current;
     const lastCommittedHtmlRef = useRef<string>(sanitizeHtmlLineHeight(html));
+    const isFocusedRef = useRef<boolean>(false);
+    const isComposingRef = useRef<boolean>(false);
 
     useEffect(() => {
         const sanitized = sanitizeHtmlLineHeight(html);
         lastCommittedHtmlRef.current = sanitized;
-        if (elementRef.current && document.activeElement !== elementRef.current) {
+        if (
+            elementRef.current &&
+            !isFocusedRef.current &&
+            !isComposingRef.current &&
+            document.activeElement !== elementRef.current &&
+            !elementRef.current.contains(document.activeElement)
+        ) {
             if (elementRef.current.innerHTML !== sanitized) {
                 elementRef.current.innerHTML = sanitized;
             }
@@ -47,6 +55,7 @@ const RichText: React.FC<RichTextProps> = ({ html, onChange, placeholder, classN
     }, [disabled]);
 
     const handleInput = () => {
+        if (isComposingRef.current) return;
         if (elementRef.current) {
             const sanitized = sanitizeHtmlLineHeight(elementRef.current.innerHTML);
             if (sanitized !== lastCommittedHtmlRef.current) {
@@ -57,8 +66,9 @@ const RichText: React.FC<RichTextProps> = ({ html, onChange, placeholder, classN
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            // Special handling for Enter if needed
+        // Prevent parent canvases / FlowBuilder / global listeners from hijacking Spacebar or typing keys
+        if (!(e.ctrlKey || e.metaKey) && e.key !== 'Escape') {
+            e.stopPropagation();
         }
     };
 
@@ -283,22 +293,37 @@ const RichText: React.FC<RichTextProps> = ({ html, onChange, placeholder, classN
                 id={instanceId}
                 contentEditable={!disabled}
                 onInput={handleInput}
+                onCompositionStart={() => { isComposingRef.current = true; }}
+                onCompositionEnd={() => {
+                    isComposingRef.current = false;
+                    handleInput();
+                }}
                 onKeyDown={handleKeyDown}
                 onMouseUp={handleSelection}
                 onContextMenu={handleContextMenu}
-                onKeyUp={handleSelection}
-                onFocus={handleFocus}
+                onKeyUp={(e) => {
+                    if (!(e.ctrlKey || e.metaKey) && e.key !== 'Escape') {
+                        e.stopPropagation();
+                    }
+                    handleSelection();
+                }}
+                onFocus={() => {
+                    isFocusedRef.current = true;
+                    handleFocus();
+                }}
                 className={`rich-text-editor ${className || ''}`}
                 style={{
                     outline: 'none',
                     cursor: disabled ? 'default' : 'text',
                     minHeight: '1em',
-                    whiteSpace: 'normal',
+                    whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
                     overflowWrap: 'break-word',
                     ...style
                 }}
                 onBlur={() => {
+                    isFocusedRef.current = false;
+                    isComposingRef.current = false;
                     handleInput();
                     // Delay hiding — check if toolbar is being interacted with
                     setTimeout(() => {
@@ -330,13 +355,13 @@ const RichText: React.FC<RichTextProps> = ({ html, onChange, placeholder, classN
                     color: ${style?.color || '#1e293b'} !important;
                     display: block !important;
                     min-height: 1em !important;
-                    white-space: normal !important;
+                    white-space: pre-wrap !important;
                     word-break: break-word !important;
                     overflow-wrap: break-word !important;
                 }
                 #${instanceId} p {
                     color: ${style?.color || '#1e293b'} !important;
-                    white-space: normal !important;
+                    white-space: pre-wrap !important;
                     word-break: break-word !important;
                     overflow-wrap: break-word !important;
                 }

@@ -41,6 +41,15 @@ const CanvasSection: React.FC<CanvasSectionProps> = (props) => {
     const css = buildCss(section.style, viewMode, bodyStyle.fontFamily, 'section');
     const innerBg = (css as any).contentBackgroundColor || section.style.contentBackgroundColor || 'transparent';
     const isSelected = selectedBlockId === section.id;
+    const isBlockInSubtree = (targetId: string | null, current: EmailBlock): boolean => {
+        if (!targetId) return false;
+        if (current.id === targetId) return true;
+        if (current.children) {
+            return current.children.some(child => isBlockInSubtree(targetId, child));
+        }
+        return false;
+    };
+    const isSectionActive = isSelected || isBlockInSubtree(selectedBlockId, section);
     const isThisDragging = draggingBlockId === section.id;
     const isHiddenInCurrentView = (viewMode === 'mobile' && section.style?.hideOnMobile) || (viewMode === 'desktop' && section.style?.hideOnDesktop);
 
@@ -84,9 +93,9 @@ const CanvasSection: React.FC<CanvasSectionProps> = (props) => {
                 marginLeft: 'auto',
                 marginRight: 'auto'
             }}
-            draggable={!isSelected}
+            draggable={!isSectionActive}
             onDragStart={(e) => {
-                if (isSelected || (e.target as HTMLElement)?.closest?.('[contenteditable="true"], input, textarea')) {
+                if (isSectionActive || (e.target as HTMLElement)?.closest?.('[contenteditable="true"], input, textarea')) {
                     e.preventDefault();
                     return;
                 }

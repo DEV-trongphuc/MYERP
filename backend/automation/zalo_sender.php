@@ -93,6 +93,13 @@ function checkQuotaAvailable($pdo, $oaConfigId, $count = 1)
         ];
     }
 
+    if ($oa['status'] === '' || $oa['status'] === 'error_refresh') {
+        try {
+            $pdo->prepare("UPDATE zalo_oa_configs SET status = 'active' WHERE id = ?")->execute([$oa['id']]);
+            $oa['status'] = 'active';
+        } catch (Throwable $e) {}
+    }
+
     if ($oa['status'] !== 'active') {
         return [
             'available' => false,

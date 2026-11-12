@@ -152,7 +152,11 @@ class TicketController {
     }
 
     private function checkTicketAccess(array $auth, int $ticketId): bool {
-        if (in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director'], true)) return true;
+        if (in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director'], true)) {
+            $chkT = $this->db->prepare("SELECT id FROM tickets WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+            $chkT->execute([$ticketId, $auth['tenant_id']]);
+            return (bool)$chkT->fetchColumn();
+        }
         
         $sql = "SELECT id FROM tickets WHERE id=? AND tenant_id=? AND (created_by = ? OR assignee_id = ? OR EXISTS (
             SELECT 1 FROM contacts c 
@@ -715,34 +719,37 @@ class TicketController {
         $bodyText = $cleanBody;
         $mentions = [];
 
-        // 1. First, parse by data-user-id (HTML editor mentions)
+        // 1. First, parse by data-user-id (HTML editor mentions) - batched with tenant isolation
         if (preg_match_all('/data-user-id=(?:&quot;|["\']|\\\\+["\'])?(\d+)/i', $bodyText, $matchesId)) {
-            $uids = array_filter(array_map('intval', $matchesId[1]));
-            foreach ($uids as $uid) {
-                if ($uid !== (int)$auth['user_id']) {
-                    $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE id=?");
-                    $stmtUser->execute([$uid]);
-                    $userRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
-                    if ($userRow) {
-                        $mentions[$uid] = $userRow;
-                    }
+            $uids = array_values(array_unique(array_filter(array_map('intval', $matchesId[1]), fn($u) => $u > 0 && $u !== (int)$auth['user_id'])));
+            if (!empty($uids)) {
+                $phU = implode(',', array_fill(0, count($uids), '?'));
+                $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE id IN ($phU) AND tenant_id = ?");
+                $stmtUser->execute(array_merge($uids, [(int)$auth['tenant_id']]));
+                foreach ($stmtUser->fetchAll(PDO::FETCH_ASSOC) ?: [] as $userRow) {
+                    $mentions[(int)$userRow['id']] = $userRow;
                 }
             }
         }
 
-        // 2. Fallback to @name parsing
+        // 2. Fallback to @name parsing - batched with tenant isolation
         $matches = [];
         preg_match_all('/@([a-zA-Z0-9_\x{00C0}-\x{1EF9}()\s]+?)(?:<\/span>|<br|\n|$)/u', $bodyText, $matches);
         $names = is_array($matches[1] ?? null) ? $matches[1] : [];
         if (!empty($names)) {
+            $lookupNames = [];
             foreach ($names as $nameWithUnderscores) {
-                $nameWithUnderscores = trim(strip_tags($nameWithUnderscores));
-                if (empty($nameWithUnderscores)) continue;
-                $fullName = str_replace('_', ' ', $nameWithUnderscores);
-                $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE (full_name=? OR REPLACE(full_name, ' ', '_')=?)");
-                $stmtUser->execute([$fullName, $nameWithUnderscores]);
-                $userRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
-                if ($userRow) {
+                $clean = trim(strip_tags($nameWithUnderscores));
+                if ($clean === '') continue;
+                $lookupNames[] = $clean;
+                $lookupNames[] = str_replace('_', ' ', $clean);
+            }
+            $lookupNames = array_values(array_unique($lookupNames));
+            if (!empty($lookupNames)) {
+                $phN = implode(',', array_fill(0, count($lookupNames), '?'));
+                $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE tenant_id = ? AND (full_name IN ($phN) OR REPLACE(full_name, ' ', '_') IN ($phN))");
+                $stmtUser->execute(array_merge([(int)$auth['tenant_id']], $lookupNames, $lookupNames));
+                foreach ($stmtUser->fetchAll(PDO::FETCH_ASSOC) ?: [] as $userRow) {
                     $uid = (int)$userRow['id'];
                     if ($uid !== (int)$auth['user_id']) {
                         $mentions[$uid] = $userRow;
@@ -789,7 +796,12 @@ class TicketController {
     }
 
     public function deleteComment(array $auth, int $ticketId, int $commentId): void {
-        if (!$this->checkTicketAccess($auth, $ticketId)) {
+        if ($ticketId <= 0 && $commentId > 0) {
+            $stmtTid = $this->db->prepare("SELECT ticket_id FROM ticket_comments WHERE id = ?");
+            $stmtTid->execute([$commentId]);
+            $ticketId = (int)$stmtTid->fetchColumn();
+        }
+        if ($ticketId <= 0 || !$this->checkTicketAccess($auth, $ticketId)) {
             respond(403, null, 'Bạn không có quyền truy cập vào ticket này', false);
         }
         $stmt = $this->db->prepare("SELECT * FROM ticket_comments WHERE id = ? AND ticket_id = ?");

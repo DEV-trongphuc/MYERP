@@ -155,7 +155,10 @@ export const ChatFloatingLauncher: React.FC = () => {
     location.pathname.startsWith('/download') ||
     location.pathname === '/login' ||
     location.pathname.startsWith('/login') ||
+    location.pathname.startsWith('/s/') ||
+    location.pathname.startsWith('/claim/') ||
     location.pathname.startsWith('/public-schedule') ||
+    location.pathname.startsWith('/public-booking') ||
     location.pathname.startsWith('/splash-preview') ||
     location.pathname.startsWith('/docs') ||
     location.pathname.startsWith('/documentation') ||

@@ -533,7 +533,7 @@ if (!empty($rawAction)) {
     $requestUri = preg_replace('#^/index\.php#i', '', $requestUri);
     $path       = trim(urldecode($requestUri), '/');
 }
-$segments   = array_values(array_filter(explode('/', $path)));
+$segments   = array_values(array_filter(explode('/', $path), fn($s) => $s !== ''));
 if (isset($segments[0]) && $segments[0] === 'v1') {
     array_shift($segments);
 }
@@ -903,11 +903,11 @@ switch ($resource) {
         elseif ($resourceId === 'match-domation-sync' && $method === 'POST') { require_once __DIR__ . '/controllers/DomationOmnichannelController.php'; (new DomationOmnichannelController($db))->triggerSilentMatchSync($auth); }
         elseif (!$resourceId && $method === 'GET')    $ctrl->index($auth);
         elseif (!$resourceId && $method === 'POST')   $ctrl->store($auth);
-        elseif ($resourceId  && $subResource === 'omnichannel-journey' && $method === 'GET') { require_once __DIR__ . '/controllers/DomationOmnichannelController.php'; (new DomationOmnichannelController($db))->getOmnichannelJourney($auth, (int)$resourceId); }
-        elseif ($resourceId  && $subResource === 'enroll-flow' && $method === 'POST') { require_once __DIR__ . '/controllers/DomationOmnichannelController.php'; (new DomationOmnichannelController($db))->enrollContactInFlow($auth, (int)$resourceId); }
-        elseif ($resourceId  && $subResource === 'flow-state' && in_array($method, ['POST', 'PUT', 'PATCH'], true)) { require_once __DIR__ . '/controllers/DomationOmnichannelController.php'; (new DomationOmnichannelController($db))->updateContactFlowState($auth, (int)$resourceId); }
-        elseif ($resourceId  && $subResource === 'issue-voucher' && $method === 'POST') { require_once __DIR__ . '/controllers/DomationOmnichannelController.php'; (new DomationOmnichannelController($db))->issueContactVoucher($auth, (int)$resourceId); }
-        elseif ($resourceId  && $subResource === 'redeem-voucher' && $method === 'POST') { require_once __DIR__ . '/controllers/DomationOmnichannelController.php'; (new DomationOmnichannelController($db))->redeemContactVoucher($auth, (int)$resourceId); }
+        elseif ($resourceId  && $subResource === 'omnichannel-journey' && $method === 'GET') { require_once __DIR__ . '/controllers/DomationOmnichannelController.php'; (new DomationOmnichannelController($db))->getOmnichannelJourney($auth, $resourceId); }
+        elseif ($resourceId  && $subResource === 'enroll-flow' && $method === 'POST') { require_once __DIR__ . '/controllers/DomationOmnichannelController.php'; (new DomationOmnichannelController($db))->enrollContactInFlow($auth, $resourceId); }
+        elseif ($resourceId  && $subResource === 'flow-state' && in_array($method, ['POST', 'PUT', 'PATCH'], true)) { require_once __DIR__ . '/controllers/DomationOmnichannelController.php'; (new DomationOmnichannelController($db))->updateContactFlowState($auth, $resourceId); }
+        elseif ($resourceId  && $subResource === 'issue-voucher' && $method === 'POST') { require_once __DIR__ . '/controllers/DomationOmnichannelController.php'; (new DomationOmnichannelController($db))->issueContactVoucher($auth, $resourceId); }
+        elseif ($resourceId  && $subResource === 'redeem-voucher' && $method === 'POST') { require_once __DIR__ . '/controllers/DomationOmnichannelController.php'; (new DomationOmnichannelController($db))->redeemContactVoucher($auth, $resourceId); }
         elseif ($resourceId  && $subResource === 'clone' && $method === 'POST') $ctrl->cloneContact($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'linked-profiles' && $method === 'GET') $ctrl->getLinkedProfiles($auth, (int)$resourceId);
         elseif ($resourceId  && in_array($subResource, ['stage', 'move', 'move-stage'], true) && in_array($method, ['PATCH', 'POST', 'PUT'], true)) $ctrl->moveStage($auth, (int)$resourceId);
@@ -920,10 +920,69 @@ switch ($resource) {
         elseif ($resourceId  && $subResource === 'tags' && in_array($method, ['POST', 'PUT', 'DELETE'], true)) $ctrl->manageContactTags($auth, (int)$resourceId, $method);
         elseif ($resourceId  && in_array($subResource, ['presence-ping', 'ping'], true) && in_array($method, ['POST', 'GET'], true)) $ctrl->presencePing($auth, (int)$resourceId);
         elseif ($resourceId  && in_array($subResource, ['presence-leave', 'leave'], true) && in_array($method, ['POST', 'GET'], true)) $ctrl->presenceLeave($auth, (int)$resourceId);
-        elseif ($resourceId  && $method === 'GET')    $ctrl->show($auth, (int)$resourceId);
+        elseif ($resourceId  && $method === 'GET')    $ctrl->show($auth, $resourceId);
         elseif ($resourceId  && ($method === 'PUT' || $method === 'PATCH')) $ctrl->update($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'DELETE') $ctrl->destroy($auth, (int)$resourceId);
         else respond(404, null, 'Route không tồn tại', false);
+        break;
+
+    // ACADEMIC AFFAIRS (HỌC VỤ, BẢNG ĐIỂM, BẢO LƯU, MỜI GIẢNG GV, ĐĂNG KÝ 1:1)
+    case 'academic':
+    case 'academic-affairs':
+        $ctrl = new AcademicAffairsController($db);
+        $seg3 = $segments[3] ?? null;
+        if ($resourceId === 'public-1on1') {
+            $code = (string)($subResource ?? ($_GET['code'] ?? ''));
+            if ($seg3 === 'book' && $method === 'POST') {
+                $ctrl->bookPublic1on1Slot($code);
+            } elseif ($method === 'GET') {
+                $ctrl->getPublic1on1Schedule($code);
+            } elseif ($method === 'POST') {
+                $ctrl->bookPublic1on1Slot($code);
+            } else {
+                respond(404, null, 'Route không tồn tại', false);
+            }
+            break;
+        }
+        $auth = requireAuth();
+        if ($resourceId === 'student-grades') {
+            $targetContactId = (int)($subResource ?? ($_GET['contact_id'] ?? 0));
+            if ($method === 'GET') $ctrl->getStudentGrades($auth, $targetContactId);
+            elseif (in_array($method, ['POST', 'PUT', 'PATCH'], true)) $ctrl->saveStudentGrades($auth, $targetContactId);
+            else respond(404, null, 'Route không tồn tại', false);
+        } elseif ($resourceId === 'class-gradebook') {
+            $targetCampaignId = (int)($subResource ?? ($_GET['campaign_id'] ?? 0));
+            if ($method === 'GET') $ctrl->getClassGradebook($auth, $targetCampaignId);
+            elseif (in_array($method, ['POST', 'PUT', 'PATCH'], true)) $ctrl->saveClassGradebook($auth, $targetCampaignId);
+            else respond(404, null, 'Route không tồn tại', false);
+        } elseif ($resourceId === 'postpone') {
+            $targetContactId = (int)($subResource ?? ($_GET['contact_id'] ?? 0));
+            if (($seg3 === 'ocr' || $subResource === 'ocr') && $method === 'POST') $ctrl->ocrPostponeForm($auth, $targetContactId);
+            elseif ($method === 'GET') $ctrl->getPostponeInfo($auth, $targetContactId);
+            elseif (in_array($method, ['POST', 'PUT', 'PATCH'], true)) $ctrl->savePostponeRecord($auth, $targetContactId);
+            else respond(404, null, 'Route không tồn tại', false);
+        } elseif ($resourceId === 'lecturer' && ($seg3 === 'send-invitation-email' || $subResource === 'send-invitation-email') && $method === 'POST') {
+            $targetLecturerId = ($subResource === 'send-invitation-email') ? 0 : (int)$subResource;
+            $ctrl->sendLecturerInvitationEmail($auth, $targetLecturerId);
+        } elseif ($resourceId === '1on1-configs') {
+            if ($method === 'GET') $ctrl->list1on1Configs($auth);
+            elseif (in_array($method, ['POST', 'PUT', 'PATCH'], true)) $ctrl->save1on1Config($auth);
+            else respond(404, null, 'Route không tồn tại', false);
+        } elseif ($resourceId === 'subject-announcement') {
+            if ($subResource === 'recipients' && $method === 'GET') {
+                $ctrl->getSubjectAnnouncementRecipients($auth);
+            } elseif ($subResource === 'send' && $method === 'POST') {
+                $ctrl->sendSubjectAnnouncementEmail($auth);
+            } elseif ($method === 'GET') {
+                $ctrl->getSubjectAnnouncementRecipients($auth);
+            } elseif ($method === 'POST') {
+                $ctrl->sendSubjectAnnouncementEmail($auth);
+            } else {
+                respond(404, null, 'Route không tồn tại', false);
+            }
+        } else {
+            respond(404, null, 'Route học vụ không tồn tại', false);
+        }
         break;
 
     case 'contact_presence_ping':

@@ -683,7 +683,15 @@ const ScenarioCanvas: React.FC<CanvasProps> = ({ nodes, onChange, keywords, onKe
         el.addEventListener('wheel', onWheel, { passive: false });
         
         const onKeyDown = (e: KeyboardEvent) => {
-            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+            const target = e.target as HTMLElement | null;
+            if (
+                e.target instanceof HTMLInputElement ||
+                e.target instanceof HTMLTextAreaElement ||
+                target?.isContentEditable ||
+                Boolean(target?.closest?.('[contenteditable="true"]'))
+            ) {
+                return;
+            }
             if (e.code === 'Space') {
                 e.preventDefault();
                 centerView();

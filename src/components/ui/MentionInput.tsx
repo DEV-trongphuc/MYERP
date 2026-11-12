@@ -910,8 +910,34 @@ export const MentionInput: React.FC<MentionInputProps> = ({
       }
       
       handleEditorCommand('createLink', absoluteUrl);
+      if (editorRef.current) {
+        editorRef.current.querySelectorAll('a[href]').forEach((a) => {
+          a.setAttribute('target', '_blank');
+          a.setAttribute('rel', 'noopener noreferrer');
+        });
+        handleInput();
+      }
     }
     setShowLinkModal(false);
+  };
+
+  const handleEditorClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement | null;
+    if (!target) return;
+    const anchor = target.closest('a') as HTMLAnchorElement | null;
+    if (!anchor) return;
+
+    // Do not hijack drag-selection across text
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed) return;
+
+    const rawHref = (anchor.getAttribute('href') || anchor.getAttribute('data-file-url') || '').trim();
+    if (!rawHref || rawHref === '#' || /^javascript:/i.test(rawHref)) return;
+
+    const resolvedUrl = /^(https?:\/\/|mailto:|tel:|\/)/i.test(rawHref) ? rawHref : `https://${rawHref}`;
+    e.preventDefault();
+    e.stopPropagation();
+    window.open(resolvedUrl, '_blank', 'noopener,noreferrer');
   };
 
   const triggerFileUpload = (accept: string = '*/*') => {
@@ -1146,6 +1172,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
           onKeyUp={handleKeyUp}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
+          onClick={handleEditorClick}
           onFocus={() => {
             isFocusedRef.current = true;
           }}
@@ -1159,6 +1186,13 @@ export const MentionInput: React.FC<MentionInputProps> = ({
           style={editorStyle}
           className="rich-text-editor-content custom-scrollbar"
         />
+        <style>{`
+          .rich-text-editor-content a {
+            color: var(--color-primary, #bd1d2d) !important;
+            text-decoration: underline !important;
+            cursor: pointer !important;
+          }
+        `}</style>
       </div>
 
       {/* Mention Dropdown Portal */}

@@ -28,6 +28,13 @@ const DepositDetailDrawer = lazy(() => import('../components/DepositDetailDrawer
 const TicketDrawer = lazy(() => import('./TicketDrawer').then(module => ({ default: module.TicketDrawer })));
 import { CustomerJourneyAIPanel } from '../components/CustomerJourneyAIPanel';
 import { CustomerOmnichannelJourneyTab } from '../components/contacts/CustomerOmnichannelJourneyTab';
+import {
+  StudentAcademicWorkspace,
+  STANDARD_PROGRAM_NAMES,
+  STANDARD_PROGRAM_CURRICULUMS,
+  resolveCurriculumSubjects
+} from '../components/academic/StudentAcademicWorkspace';
+import { SubjectAnnouncementModal } from '../components/academic/SubjectAnnouncementModal';
 import { CrmSendTemplateEmailModal, CrmBulkMarketingModal } from '../components/crm/CrmMarketingModals';
 import { canViewOmnichannelJourney } from '../utils/roleUtils';
 import { ReportDataModal } from '../components/ui/ReportDataModal';
@@ -1783,12 +1790,28 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       delete (window as any).__showDepositAnimation;
     };
   }, [setIsSubmitting, setShowDealModal]);
-  const lastLoadedContactIdRef = React.useRef<number | null>(null);
-  const [formData, setFormData] = useState<any>(() => contact || {});
+  const lastLoadedContactIdRef = React.useRef<number | string | null>(null);
+  const [formData, setFormData] = useState<any>(() => {
+    if (!contact) return {};
+    const safeNotes = Array.isArray(contact.notes)
+      ? contact.notes.map((n: any) => (typeof n === 'string' ? n : String(n?.content || n?.text || n?.body || ''))).filter(Boolean).join('\n')
+      : typeof contact.notes === 'string'
+      ? contact.notes
+      : '';
+    const safeFullName = contact.full_name || [contact.firstName || contact.first_name || '', contact.lastName || contact.last_name || ''].filter(Boolean).join(' ').trim() || contact.name || '';
+    const safePhone = contact.phone || contact.phoneNumber || contact.phone_number || '';
+    return {
+      ...contact,
+      full_name: safeFullName,
+      phone: safePhone,
+      notes: safeNotes,
+    };
+  });
 
   // ── Multi-Program Linked Profiles & Clone State ──
-  const [activeContactId, setActiveContactId] = useState<number | null>(() => contact?.id || null);
+  const [activeContactId, setActiveContactId] = useState<number | string | null>(() => contact?.id || null);
   const effectiveContactId = activeContactId || contact?.id;
+  const isNumericEffectiveContactId = Boolean(effectiveContactId && /^\d+$/.test(String(effectiveContactId)));
   const [linkedProfiles, setLinkedProfiles] = useState<any[]>([]);
   const [loadingLinkedProfiles, setLoadingLinkedProfiles] = useState(false);
   const [showCloneModal, setShowCloneModal] = useState(false);
@@ -1802,7 +1825,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [activeViewers, setActiveViewers] = useState<any[]>([]);
 
   useEffect(() => {
-    if (!isOpen || !effectiveContactId) {
+    if (!isOpen || !effectiveContactId || !isNumericEffectiveContactId) {
       setActiveViewers([]);
       return;
     }
@@ -1844,7 +1867,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         api.post(`/contacts/${effectiveContactId}/presence-leave`).catch(() => {});
       } catch (e) {}
     };
-  }, [isOpen, effectiveContactId]);
+  }, [isOpen, effectiveContactId, isNumericEffectiveContactId]);
 
   useEffect(() => {
     if (contact?.id) {
@@ -1852,8 +1875,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     }
   }, [contact?.id]);
 
-  const fetchLinkedProfiles = useCallback(async (contactId: number) => {
-    if (!contactId) return;
+  const fetchLinkedProfiles = useCallback(async (contactId: number | string) => {
+    if (!contactId || !/^\d+$/.test(String(contactId))) {
+      setLinkedProfiles([]);
+      return;
+    }
     setLoadingLinkedProfiles(true);
     try {
       const res = await api.get(`/contacts/${contactId}/linked-profiles`);
@@ -1877,6 +1903,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [tags, setTags] = useState<string[]>([]);
   const [baseTags, setBaseTags] = useState<string[]>([]);
   const [baseData, setBaseData] = useState<any>(contact || {});
+  const inFlightRef = useRef<boolean>(false);
   const [isInitialNotesExpanded, setIsInitialNotesExpanded] = useState(true);
   const [isEditingInitialNotes, setIsEditingInitialNotes] = useState(false);
   const [showLiveAdPreviewModal, setShowLiveAdPreviewModal] = useState<boolean>(false);
@@ -1937,7 +1964,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   }, [formData, contact]);
 
   // Program, Admission Date & Industry state & suggestions
-  const [programSuggestions, setProgramSuggestions] = useState<string[]>([]);
+  const [programSuggestions, setProgramSuggestions] = useState<string[]>([...STANDARD_PROGRAM_NAMES]);
   const [showProgramDropdown, setShowProgramDropdown] = useState(false);
   const [showBodyProgramDropdown, setShowBodyProgramDropdown] = useState(false);
   const programDropdownRef = useRef<HTMLDivElement>(null);
@@ -2010,8 +2037,17 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           if (res.data?.data && Array.isArray(res.data.data)) {
             const cleaned = res.data.data
               .map((p: string) => String(p || '').trim())
-              .filter((p: string) => p.length > 0 && !/\bbba\b/i.test(p));
-            setProgramSuggestions(Array.from(new Set(cleaned)));
+              .filter((p: string) => p.length > 0);
+            const seen = new Set<string>();
+            const merged: string[] = [];
+            [...STANDARD_PROGRAM_NAMES, ...cleaned].forEach(item => {
+              const k = item.trim().toLowerCase();
+              if (k && !seen.has(k)) {
+                seen.add(k);
+                merged.push(item.trim());
+              }
+            });
+            setProgramSuggestions(merged);
           }
         })
         .catch(() => {});
@@ -2119,15 +2155,31 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       'program', 'admission_date', 'student_id', 'study_status'
     ];
     const payload: Record<string, any> = {};
-    allowedFields.forEach(f => { if (formData[f] !== undefined) payload[f] = formData[f]; });
-    if (formData.birthday !== undefined) {
+    const hasBaseRecord = Boolean(baseData && baseData.id);
+    allowedFields.forEach(f => {
+      if (formData[f] === undefined) return;
+      if (!hasBaseRecord) {
+        payload[f] = formData[f];
+        return;
+      }
+      const curVal = formData[f] ?? null;
+      const origVal = baseData[f] ?? null;
+      if (typeof curVal === 'object' || typeof origVal === 'object') {
+        if (JSON.stringify(curVal) !== JSON.stringify(origVal)) {
+          payload[f] = formData[f];
+        }
+      } else if (String(curVal ?? '') !== String(origVal ?? '')) {
+        payload[f] = formData[f];
+      }
+    });
+    if (payload.birthday !== undefined) {
       if (!formData.birthday || formData.birthday === '0000-00-00' || formData.birthday === '00/00/0000') {
         payload.birthday = null;
       } else {
         payload.birthday = parseVnDateToIso(formData.birthday) || formData.birthday;
       }
     }
-    if (formData.admission_date !== undefined) {
+    if (payload.admission_date !== undefined) {
       if (!formData.admission_date || formData.admission_date === '0000-00-00' || formData.admission_date === '00/00/0000') {
         payload.admission_date = null;
       } else {
@@ -3419,7 +3471,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   };
 
   const fetchCoopSlip = async (forceLoadDetails = false) => {
-    if (!effectiveContactId) return;
+    if (!effectiveContactId || !/^\d+$/.test(String(effectiveContactId))) return;
     setCoopLoading(true);
     setCoopError('');
     try {
@@ -4207,6 +4259,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   // Academic Program Templates configuration
   const ACADEMIC_PROGRAM_OPTIONS = [
     {
+      id: 'istec',
+      label: 'Trường Kinh doanh ISTEC - Pháp (BBA / MBA / DBA ISTEC)',
+      school: 'istec',
+      docLink: 'https://drive.google.com/drive/folders/1ZNcaYWUSd79CbLRDpV0LjbRAPeTCnumO?usp=drive_link'
+    },
+    {
       id: 'estiam',
       label: 'Tiến sĩ Quản trị Kinh doanh - Paris Education / ESTIAM (DBA ESTIAM)',
       school: 'estiam',
@@ -4240,6 +4298,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
   const detectAcademicProgram = (programStr: string) => {
     const p = (programStr || '').trim().toLowerCase();
+    if (p.includes('istec')) return 'istec';
     if (p.includes('estiam') || p.includes('paris education') || p.includes('dual dba') || p === 'de') return 'estiam';
     if (p.includes('ai') || p.includes('msc') || p.includes('trí tuệ') || p.includes('tri tue')) return 'msc_ai';
     if (p.includes('top up') || p.includes('topup') || p.includes('bba') || p.includes('cử nhân') || p.includes('cu nhan') || p.includes('bachelor')) return 'bba';
@@ -4251,17 +4310,40 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const DEFAULT_ACADEMIC_CC_EMAILS = 'it.dept@ideas.edu.vn, student.notice@ideas.edu.vn, support@ideas.edu.vn';
   const [savingStudyStatus, setSavingStudyStatus] = useState(false);
   const [showAcademicEmailModal, setShowAcademicEmailModal] = useState(false);
-  const [academicEmailTab, setAcademicEmailTab] = useState<'preview' | 'edit'>('preview');
+  const [drawerTbcdState, setDrawerTbcdState] = useState<{
+    subject: any;
+    allSubjects: any[];
+    campaignId?: number | null;
+    campaignName?: string;
+    programName?: string;
+  } | null>(null);
+  const [academicEmailTab, setAcademicEmailTab] = useState<'preview' | 'edit' | 'zalo'>('preview');
   const [academicEmailProgram, setAcademicEmailProgram] = useState('mba_standard');
   const [isSendingAcademicEmail, setIsSendingAcademicEmail] = useState(false);
   const [academicEmailForm, setAcademicEmailForm] = useState({
     to_email: '',
     cc_email: DEFAULT_ACADEMIC_CC_EMAILS,
     subject: '[IDEAS] Thông báo Tiếp nhận học viên & Hướng dẫn học tập - Swiss UMEF',
-    content: ''
+    content: '',
+    zalo_text: ''
   });
 
+  const getAcademicZaloOnboardingText = useCallback((studentName: string) => {
+    const nameStr = studentName ? `Anh/Chị ${studentName}` : 'Anh/Chị';
+    const ctsvName = (currentUser?.full_name || currentUser?.name || 'Chuyên viên CTSV').trim();
+    return `Chào ${nameStr}, Em là ${ctsvName} từ Bộ phận Công tác Sinh viên (CTSV) của Viện Quốc tế IDEAS.
+Chào mừng Anh/Chị chính thức trở thành Tân Học viên chương trình tại IDEAS. Em xin phép kết nối Zalo để đồng hành và hỗ trợ mình sát sao nhất trong suốt khóa học ạ!
+Để bắt đầu hành trình học tập thuận lợi, Anh/Chị lưu ý giúp em các thông tin quan trọng sau nhé:
+1. Đọc kỹ các thông tin, tài liệu và hướng dẫn sử dụng các nền tảng học tập đã được gửi qua email cá nhân.
+2. Khi cần giải đáp thắc mắc về lịch học, tài liệu hay kỹ thuật, Anh/Chị cứ nhắn trực tiếp qua Zalo CTSV 098 736 3935 để được phản hồi nhanh nhất.
+3. Thường xuyên theo dõi thông tin khóa học trên nhóm Zalo Thông báo khóa học.
+Chúc Anh/Chị có một kỳ học tập hiệu quả và gặt hái nhiều giá trị! Nếu cần hỗ trợ thêm thông tin gì, Anh/Chị cứ nhắn cho CTSV bất cứ lúc nào nhé ạ.`;
+  }, [currentUser?.full_name, currentUser?.name]);
+
   const getAcademicEmailDefaultSubject = useCallback((programKey: string = 'mba_standard') => {
+    if (programKey === 'istec') {
+      return '[IDEAS] Thông báo Tiếp nhận học viên & Hướng dẫn học tập - Istec Business School';
+    }
     if (programKey === 'estiam') {
       return '[IDEAS] Thông báo Tiếp nhận học viên & Hướng dẫn học tập - Paris Education/ESTIAM';
     }
@@ -4270,8 +4352,40 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
   const getAcademicEmailDefaultContent = useCallback((studentName: string, programKey: string = 'mba_standard') => {
     const greeting = studentName ? `Kính gửi Quý Anh/Chị học viên <strong>${studentName}</strong>,` : 'Kính gửi Quý Anh/Chị học viên,';
-    const selectedProg = ACADEMIC_PROGRAM_OPTIONS.find(opt => opt.id === programKey) || ACADEMIC_PROGRAM_OPTIONS[2];
+    const selectedProg = ACADEMIC_PROGRAM_OPTIONS.find(opt => opt.id === programKey) || ACADEMIC_PROGRAM_OPTIONS[3];
     const docFolderLink = selectedProg.docLink;
+
+    if (programKey === 'istec') {
+      return `<p>${greeting}</p>
+<p>Lời đầu tiên, Ban Công tác Sinh viên IDEAS xin gửi lời chúc mừng và trân trọng cảm ơn Anh/Chị đã tin chọn IDEAS làm người bạn đồng hành trên chặng đường chinh phục tấm bằng từ <strong>Istec Business School</strong>. Chúng tôi cam kết đồng hành và hỗ trợ Anh/Chị xuyên suốt quá trình học tập.</p>
+
+<p><strong style="color: #BD1D2D; font-size: 15px;">A. KÊNH LIÊN LẠC CHÍNH THỨC</strong></p>
+<p>1. <strong>Kênh Hỗ trợ Nhanh (Zalo/Hotline):</strong> 098 736 3935<br/>
+2. <strong>Kênh Hỗ trợ Học vụ (Email):</strong><br/>
+&nbsp;&nbsp;&bull; Tiếp nhận yêu cầu: <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a><br/>
+&nbsp;&nbsp;&bull; CC (Đồng gửi): <a href="mailto:it.dept@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">it.dept@ideas.edu.vn</a>, <a href="mailto:student.notice@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">student.notice@ideas.edu.vn</a>, <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a> <em>(Vui lòng luôn CC các địa chỉ này để hệ thống ghi nhận và xử lý nhanh nhất)</em></p>
+
+<p><strong style="color: #BD1D2D; font-size: 15px;">B. TÀI KHOẢN HỌC TẬP</strong></p>
+<p>Anh/Chị sẽ được cấp 3 tài khoản học tập, sử dụng xuyên suốt chương trình:</p>
+<ul style="padding-left: 20px; line-height: 1.8;">
+  <li><strong>1. Tài khoản LMS IDEAS</strong> (xem tài liệu, video buổi học, hỗ trợ học thuật): <a href="https://lms.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://lms.ideas.edu.vn/</a> | Video hướng dẫn: <a href="https://drive.google.com/file/d/1wXQtghJSd7CHoek_hPXOfXuVuGuT8bMv/view?usp=sharing" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></li>
+  <li><strong>2. Tài khoản LMS ISTEC</strong> (làm bài, nộp bài, tính điểm chính thức): <a href="https://istec.education" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://istec.education</a></li>
+  <li><strong>3. Platform IDEAS AI</strong> (công cụ bổ trợ học tập): <a href="https://ai.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://ai.ideas.edu.vn/</a></li>
+</ul>
+<p><em>(thông tin tài khoản sẽ được gửi trực tiếp đến email cá nhân của học viên đã đăng ký học tập)</em></p>
+
+<p><strong style="color: #BD1D2D; font-size: 15px;">C. TÀI LIỆU ĐÍNH KÈM</strong></p>
+<ul style="padding-left: 20px; line-height: 1.8;">
+  <li>File giải thích Format APA</li>
+  <li>File hướng dẫn sử dụng các hệ thống học tập</li>
+  <li>Hướng dẫn sử dụng Zoom Meeting &amp; Format bài làm mẫu</li>
+</ul>
+<p>Link tổng hợp tài liệu hướng dẫn: <a href="${docFolderLink}" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></p>
+
+<p>Nếu có bất kỳ vướng mắc nào, Anh/Chị vui lòng liên hệ CTSV để được hỗ trợ kịp thời. Chúc Anh/Chị có hành trình học tập thật thuận lợi và thành công!</p>
+
+<p style="margin-top: 20px;">Trân trọng,<br/><strong>Ban Công tác Sinh viên IDEAS</strong></p>`;
+    }
 
     if (programKey === 'estiam') {
       return `<p>${greeting}</p>
@@ -4348,7 +4462,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       to_email: recipientEmail,
       cc_email: DEFAULT_ACADEMIC_CC_EMAILS,
       subject: getAcademicEmailDefaultSubject(detectedProg),
-      content: getAcademicEmailDefaultContent(studentName, detectedProg)
+      content: getAcademicEmailDefaultContent(studentName, detectedProg),
+      zalo_text: getAcademicZaloOnboardingText(studentName)
     });
     setAcademicEmailTab('preview');
     setShowAcademicEmailModal(true);
@@ -4360,7 +4475,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     setAcademicEmailForm(prev => ({
       ...prev,
       subject: getAcademicEmailDefaultSubject(progKey),
-      content: getAcademicEmailDefaultContent(studentName, progKey)
+      content: getAcademicEmailDefaultContent(studentName, progKey),
+      zalo_text: getAcademicZaloOnboardingText(studentName)
     }));
   };
 
@@ -4547,7 +4663,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
   const fetchContactDocs = useCallback(async (cId?: number | string) => {
     const targetCId = cId || effectiveContactId;
-    if (!targetCId) return;
+    if (!targetCId || !/^\d+$/.test(String(targetCId))) return;
     try {
       // 1. Fetch cloud-files directly and immediately update state (sub-50ms)
       const docsRes = await api.get(`/cloud-files?contact_id=${targetCId}&limit=1000`);
@@ -4750,6 +4866,27 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const normalizeContactData = (c: any) => {
     if (!c) return c;
     const newC = { ...c };
+
+    // Normalize subscriber fields (firstName/lastName, phoneNumber, array notes)
+    if (!newC.full_name && (newC.firstName || newC.first_name || newC.lastName || newC.last_name || newC.name)) {
+      newC.full_name = [newC.firstName || newC.first_name || '', newC.lastName || newC.last_name || '']
+        .filter(Boolean)
+        .join(' ')
+        .trim() || String(newC.name || '');
+    }
+    if (!newC.phone && (newC.phoneNumber || newC.phone_number)) {
+      newC.phone = String(newC.phoneNumber || newC.phone_number);
+    }
+    if (Array.isArray(newC.notes)) {
+      newC.notes = newC.notes
+        .map((n: any) => (typeof n === 'string' ? n : String(n?.content || n?.text || n?.body || '')))
+        .filter(Boolean)
+        .join('\n');
+    } else if (newC.notes != null && typeof newC.notes !== 'string') {
+      newC.notes = String(newC.notes);
+    } else if (newC.notes == null) {
+      newC.notes = '';
+    }
     
     // Normalize source
     if (newC.source) {
@@ -4865,16 +5002,17 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     });
   };
 
-  const fetchData = useCallback(async (targetTab?: string, forceFreshContact = false, overrideContactId?: number) => {
+  const fetchData = useCallback(async (targetTab?: string, forceFreshContact = false, overrideContactId?: number | string) => {
     const currentCId = overrideContactId || activeContactId || contact?.id;
     if (!currentCId) return;
+    const isNumericCId = /^\d+$/.test(String(currentCId));
     const tabToLoad = targetTab || activeTab;
 
     setLoadingRelated(true);
     try {
       const shouldFetchContact = forceFreshContact || !targetTab || currentCId !== lastLoadedContactIdRef.current;
-      const needActivities = shouldFetchContact || tabToLoad === 'tasks' || tabToLoad === 'timeline';
-      const needNotes = shouldFetchContact || tabToLoad === 'timeline' || tabToLoad === 'tags';
+      const needActivities = isNumericCId && (shouldFetchContact || tabToLoad === 'tasks' || tabToLoad === 'timeline');
+      const needNotes = isNumericCId && (shouldFetchContact || tabToLoad === 'timeline' || tabToLoad === 'tags');
       const needProjects = (!globalProjectsCache || globalProjectsCache.length === 0) && projectsList.length === 0;
       const needCompanies = tabToLoad === 'info' && (!globalCompaniesCache || globalCompaniesCache.length === 0) && companiesList.length === 0;
       const needContacts = tabToLoad === 'info' && contactsList.length === 0;
@@ -4890,13 +5028,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         notesRes,
         tasksRes
       ] = await Promise.all([
-        shouldFetchContact ? api.get(`/contacts/${currentCId}`) : Promise.resolve(null),
-        needStages ? api.get('/pipeline-stages') : Promise.resolve(null),
-        needProjects ? api.get('/projects?bypass_roster=1') : Promise.resolve(null),
-        needCompanies ? api.get('/companies?limit=100') : Promise.resolve(null),
-        needContacts ? api.get('/contacts?limit=30') : Promise.resolve(null),
-        needNotes ? api.get(`/notes?entity_type=contact&entity_id=${currentCId}`) : Promise.resolve(null),
-        needActivities ? api.get(`/activities?related_type=contact&related_id=${currentCId}&limit=100`) : Promise.resolve(null)
+        shouldFetchContact ? api.get(`/contacts/${currentCId}`).catch(() => null) : Promise.resolve(null),
+        needStages ? api.get('/pipeline-stages').catch(() => null) : Promise.resolve(null),
+        needProjects ? api.get('/projects?bypass_roster=1').catch(() => null) : Promise.resolve(null),
+        needCompanies ? api.get('/companies?limit=100').catch(() => null) : Promise.resolve(null),
+        needContacts ? api.get('/contacts?limit=30').catch(() => null) : Promise.resolve(null),
+        needNotes ? api.get(`/notes?entity_type=contact&entity_id=${currentCId}`).catch(() => null) : Promise.resolve(null),
+        needActivities ? api.get(`/activities?related_type=contact&related_id=${currentCId}&limit=100`).catch(() => null) : Promise.resolve(null)
       ]);
 
       // 2. Xử lý Fresh Contact Details
@@ -4904,9 +5042,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         const freshContact = contactRes.data?.data || contactRes.data;
         if (freshContact && freshContact.id) {
           const normalized = normalizeContactData(freshContact);
-          setFormData(prev => ({ ...prev, ...normalized }));
+          setFormData((prev: any) => ({ ...prev, ...normalized }));
           setBaseData(normalized);
           lastLoadedContactIdRef.current = freshContact.id;
+          // If backend matched this subscriber to a real numeric CRM contact, upgrade activeContactId seamlessly
+          if (!isNumericCId && /^\d+$/.test(String(freshContact.id))) {
+            setActiveContactId(Number(freshContact.id));
+          }
         }
       }
       setLoadingContactDetails(false);
@@ -5033,7 +5175,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         }));
       }
 
-      if (tabToLoad === 'deals' || tabToLoad === 'cooperation') {
+      if (isNumericCId && (tabToLoad === 'deals' || tabToLoad === 'cooperation')) {
         if (tabToLoad === 'cooperation') {
           api.get(`/cloud-files?contact_id=${currentCId}&limit=1000`)
             .then(res => {
@@ -5104,33 +5246,33 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         }
       }
 
-      if (tabToLoad === 'invoices') {
+      if (isNumericCId && tabToLoad === 'invoices') {
         const invoicesRes = await api.get(`/invoices?contact_id=${currentCId}`);
         const invData = invoicesRes.data.data;
         setDrawerInvoices(Array.isArray(invData) ? invData : (invData?.items || []));
       }
 
-      if (tabToLoad === 'quotes') {
+      if (isNumericCId && tabToLoad === 'quotes') {
         const quotesRes = await api.get(`/quotes?contact_id=${currentCId}`);
         const qData = quotesRes.data.data;
         setDrawerQuotes(Array.isArray(qData) ? qData : (qData?.items || []));
       }
 
-      if (tabToLoad === 'expenses') {
+      if (isNumericCId && tabToLoad === 'expenses') {
         const expensesRes = await api.get(`/expenses/entity/contact/${currentCId}`);
         const expData = expensesRes.data.data;
         setDrawerExpenses(Array.isArray(expData) ? expData : (expData?.items || []));
       }
 
-      if (tabToLoad === 'tickets') {
+      if (isNumericCId && tabToLoad === 'tickets') {
         const ticketsRes = await api.get(`/tickets?contact_id=${currentCId}`);
         const tData = ticketsRes.data.data;
         setDrawerTickets(Array.isArray(tData) ? tData : (tData?.items || []));
       }
 
-      if (tabToLoad === 'docs') {
+      if (isNumericCId && tabToLoad === 'docs') {
         await fetchContactDocs(currentCId);
-      } else if (shouldFetchContact) {
+      } else if (isNumericCId && shouldFetchContact) {
         fetchContactDocs(currentCId).catch(() => {});
       }
     } catch (e: any) {
@@ -5834,9 +5976,14 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
   const handleSelectProgramEverywhere = useCallback((nextProgramName: string, persist = true) => {
     const trimmed = String(nextProgramName || '').trim();
+    const isStandardCurr = STANDARD_PROGRAM_NAMES.some(
+      sp => sp.toLowerCase() === trimmed.toLowerCase()
+    );
     const matchedProj = trimmed ? findMatchingProjectByProgram(trimmed, projectsList) : null;
     const nextProjectId = matchedProj ? Number(matchedProj.id) : null;
-    const canonicalProgram = matchedProj?.name ? String(matchedProj.name).trim() : trimmed;
+    const canonicalProgram = isStandardCurr
+      ? (STANDARD_PROGRAM_NAMES.find(sp => sp.toLowerCase() === trimmed.toLowerCase()) || trimmed)
+      : (matchedProj?.name ? String(matchedProj.name).trim() : trimmed);
     const nextCampaignId = nextProjectId ? getDefaultCampaignForProject(nextProjectId, formData.campaign_id) : null;
     const updates = {
       program: canonicalProgram,
@@ -5879,15 +6026,23 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     }
   }, [projectsList, formData.program, formData.campaign_id, getDefaultCampaignForProject, effectiveContactId, persistProgramSyncToBackend, handleSelectProgramEverywhere]);
 
-  // Keep programSuggestions strictly synchronized with active projectsList names
+  // Keep programSuggestions strictly synchronized with standard 5 programs + active projectsList names
   useEffect(() => {
     if (projectsList.length > 0) {
       const projNames = projectsList
         .filter((p: any) => !p?.deleted_at && !Number(p?.is_archived) && p?.status !== 'deleted')
         .map((p: any) => String(p.name || '').trim())
-        .filter((n: string) => n.length > 0 && !/\bbba\b/i.test(n));
-      const uniqueNames = Array.from(new Set(projNames)).sort((a, b) => a.localeCompare(b, 'vi'));
-      setProgramSuggestions(uniqueNames);
+        .filter((n: string) => n.length > 0);
+      const seen = new Set<string>();
+      const merged: string[] = [];
+      [...STANDARD_PROGRAM_NAMES, ...projNames].forEach(item => {
+        const k = item.trim().toLowerCase();
+        if (k && !seen.has(k)) {
+          seen.add(k);
+          merged.push(item.trim());
+        }
+      });
+      setProgramSuggestions(merged);
     }
   }, [projectsList]);
 
@@ -6315,7 +6470,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     if (formData.ttl1_completed === 1) { s += Number(rulesConfig.ttl1_completed ?? 25); r.push({ rule: 'Đã hoàn thành xác minh điều kiện gặp (TTL1)', pts: Number(rulesConfig.ttl1_completed ?? 25), type: 'Behavioral' }); }
 
     // Content Enrichment
-    if (formData.notes && formData.notes.trim().length > 10) { s += Number(rulesConfig.notes_long ?? 10); r.push({ rule: 'Có ghi chú chi tiết về nhu cầu', pts: Number(rulesConfig.notes_long ?? 10), type: 'Behavioral' }); }
+    const safeNotesStr = typeof formData.notes === 'string' ? formData.notes : '';
+    if (safeNotesStr.trim().length > 10) { s += Number(rulesConfig.notes_long ?? 10); r.push({ rule: 'Có ghi chú chi tiết về nhu cầu', pts: Number(rulesConfig.notes_long ?? 10), type: 'Behavioral' }); }
     if (tags && tags.length > 0) { s += Number(rulesConfig.has_tags ?? 10); r.push({ rule: 'Đã gắn thẻ phân loại (Tags)', pts: Number(rulesConfig.has_tags ?? 10), type: 'Behavioral' }); }
 
     // Temperature Decay rule
@@ -10924,8 +11080,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setIsEditingInitialNotes(false);
-                                  if (contact) {
-                                    setFormData((prev: any) => ({ ...prev, notes: contact.notes || '' }));
+                                  if (baseData || contact) {
+                                    setFormData((prev: any) => ({ ...prev, notes: (baseData?.notes ?? contact?.notes) || '' }));
                                   }
                                 }}
                                 style={{
@@ -10967,7 +11123,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 <textarea
                                   className="form-input custom-scrollbar"
                                   rows={6}
-                                  value={formData.notes || ''}
+                                  value={typeof formData.notes === 'string' ? formData.notes : ''}
                                   onChange={e => setFormData((prev: any) => ({ ...prev, notes: e.target.value }))}
                                   placeholder="Nhập ghi chú ban đầu..."
                                   style={{
@@ -11001,7 +11157,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                     userSelect: 'text'
                                   }}
                                 >
-                                  {formData.notes ? decodeHtmlEntities(formData.notes) : <span style={{ color: '#a16207', fontStyle: 'italic' }}>Không có ghi chú ban đầu</span>}
+                                  {typeof formData.notes === 'string' && formData.notes ? decodeHtmlEntities(formData.notes) : <span style={{ color: '#a16207', fontStyle: 'italic' }}>Không có ghi chú ban đầu</span>}
                                 </div>
                               )}
                             </motion.div>
@@ -11311,7 +11467,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                         return;
                                       }
                                       setShowBodyProgramDropdown(false);
-                                      if ((formData.program || '').trim()) {
+                                      const curProg = (formData.program || '').trim();
+                                      const origProg = ((baseData?.program ?? contact?.program) || '').trim();
+                                      if (curProg && curProg !== origProg) {
                                         handleSelectProgramEverywhere(formData.program, true);
                                       }
                                     }}
@@ -11476,6 +11634,32 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 </div>
                               </div>
                             </div>
+
+                            {isStudent && contact?.id && (
+                              <StudentAcademicWorkspace
+                                contactId={contact.id}
+                                studentName={formData.full_name || contact?.full_name || ''}
+                                studentCode={formData.student_id || formData.student_code || ''}
+                                studentEmail={formData.email || contact?.email || ''}
+                                studentPhone={formData.phone || contact?.phone || ''}
+                                programName={formData.program || contact?.program || ''}
+                                campaignId={Number(formData.campaign_id || contact?.campaign_id || 0) || null}
+                                studyStatus={formData.study_status || contact?.study_status || 'studying'}
+                                defaultCollapsed={true}
+                                onProgramChange={(newProg) => handleSelectProgramEverywhere(newProg, true)}
+                                onOpenOnboardingEmail={() => handleOpenAcademicEmailModal()}
+                                onPostponeSaved={(pData) => {
+                                  setFormData((prev: any) => ({
+                                    ...prev,
+                                    study_status: 'postpone',
+                                    postpone_reason: pData.postpone_reason,
+                                    postpone_from_date: pData.postpone_from_date,
+                                    postpone_to_date: pData.postpone_to_date,
+                                    postpone_remind_date: pData.postpone_remind_date,
+                                  }));
+                                }}
+                              />
+                            )}
                           </div>
 
                           {/* Row 4: Ngày sinh & Giới tính */}
@@ -12010,7 +12194,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           </button>
                         </div>
 
-                        {/* Thanh tiến trình 7 Stage Học viên: Enrolled => Tranning => Studying => Postpone => Withdraw => Completed => Graduated */}
+                        {/* Thanh tiến trình 7 Stage Học viên (Mobile/Tablet - trên Desktop đã hiển thị ở thanh Sticky phía trên) */}
+                        {isMobileOrTablet && (
                         <div style={{
                           padding: '12px 14px',
                           borderRadius: '12px',
@@ -12079,6 +12264,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             })()}
                           </div>
                         </div>
+                        )}
 
                         {/* Trạng thái học tập, Chương trình & Khóa học */}
                         <div style={{ display: 'grid', gridTemplateColumns: isMobileOrTablet ? '1fr' : 'repeat(3, 1fr)', gap: '1.25rem' }}>
@@ -12142,14 +12328,24 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           <div className="form-group">
                             <label className="form-label">Chương trình</label>
                             {(() => {
-                              const resolvedProj = formData.project_id
+                              const rawProg = String(formData.program || '').trim();
+                              const matchedStdProg = STANDARD_PROGRAM_NAMES.find(
+                                sp => sp.toLowerCase() === rawProg.toLowerCase()
+                              );
+                              const resolvedProj = (!matchedStdProg && formData.project_id)
                                 ? projectsList.find(p => Number(p.id) === Number(formData.project_id))
-                                : findMatchingProjectByProgram(formData.program);
-                              const currentProjValue = resolvedProj
-                                ? String(resolvedProj.id)
-                                : (formData.program ? `__custom__:${formData.program}` : '');
-                              const extraOptions = (!resolvedProj && formData.program)
-                                ? [{ value: `__custom__:${formData.program}`, label: String(formData.program) }]
+                                : (!matchedStdProg ? findMatchingProjectByProgram(rawProg) : null);
+                              const currentProjValue = matchedStdProg
+                                ? `__std__:${matchedStdProg}`
+                                : resolvedProj
+                                  ? String(resolvedProj.id)
+                                  : (rawProg ? `__custom__:${rawProg}` : '');
+                              const stdOptions = STANDARD_PROGRAM_NAMES.map((sp, idx) => ({
+                                value: `__std__:${sp}`,
+                                label: `${idx + 1}/ ${sp} (${(STANDARD_PROGRAM_CURRICULUMS[sp] || []).length} môn)`
+                              }));
+                              const extraOptions = (!matchedStdProg && !resolvedProj && rawProg)
+                                ? [{ value: `__custom__:${rawProg}`, label: rawProg }]
                                 : [];
 
                               return (
@@ -12157,12 +12353,17 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   searchable
                                   options={[
                                     { value: '', label: '— Không chọn —' },
+                                    ...stdOptions,
                                     ...extraOptions,
                                     ...projectsList.map(p => ({ value: String(p.id), label: p.name }))
                                   ]}
                                   value={currentProjValue}
                                   onChange={val => {
                                     const strVal = String(val || '');
+                                    if (strVal.startsWith('__std__:')) {
+                                      handleSelectProgramEverywhere(strVal.replace('__std__:', ''), true);
+                                      return;
+                                    }
                                     if (strVal.startsWith('__custom__:')) {
                                       handleSelectProgramEverywhere(strVal.replace('__custom__:', ''), true);
                                       return;
@@ -12235,6 +12436,31 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             })()}
                           </div>
                         </div>
+
+                        {contact?.id && (
+                          <StudentAcademicWorkspace
+                            contactId={contact.id}
+                            studentName={formData.full_name || contact?.full_name || ''}
+                            studentCode={formData.student_id || formData.student_code || ''}
+                            studentEmail={formData.email || contact?.email || ''}
+                            studentPhone={formData.phone || contact?.phone || ''}
+                            programName={formData.program || contact?.program || ''}
+                            campaignId={Number(formData.campaign_id || contact?.campaign_id || 0) || null}
+                            studyStatus={formData.study_status || contact?.study_status || 'studying'}
+                            onProgramChange={(newProg) => handleSelectProgramEverywhere(newProg, true)}
+                            onOpenOnboardingEmail={() => handleOpenAcademicEmailModal()}
+                            onPostponeSaved={(pData) => {
+                              setFormData((prev: any) => ({
+                                ...prev,
+                                study_status: 'postpone',
+                                postpone_reason: pData.postpone_reason,
+                                postpone_from_date: pData.postpone_from_date,
+                                postpone_to_date: pData.postpone_to_date,
+                                postpone_remind_date: pData.postpone_remind_date,
+                              }));
+                            }}
+                          />
+                        )}
                       </div>
 
                       {/* Display subjects & schedule here */}
@@ -12245,7 +12471,19 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         const effectiveProjId = resolvedProj ? Number(resolvedProj.id) : (formData.project_id ? Number(formData.project_id) : null);
                         const effectiveCampId = formData.campaign_id || (effectiveProjId ? getDefaultCampaignForProject(effectiveProjId) : null);
 
-                        if (!effectiveCampId) {
+                        const selectedCamp = effectiveCampId
+                          ? allowedCampaigns.find(c => Number(c.id) === Number(effectiveCampId))
+                          : null;
+                        let subjects = selectedCamp?.subjects_json
+                          ? (typeof selectedCamp.subjects_json === 'string'
+                            ? JSON.parse(selectedCamp.subjects_json)
+                            : selectedCamp.subjects_json)
+                          : [];
+                        if (!Array.isArray(subjects) || subjects.length === 0) {
+                          subjects = resolveCurriculumSubjects(formData.program || resolvedProj?.name || '');
+                        }
+
+                        if (!effectiveCampId && subjects.length === 0) {
                           return (
                             <div style={{ padding: '3rem 2rem', textAlign: 'center', background: 'var(--color-surface)', border: '1px dashed var(--color-border)', borderRadius: '16px' }}>
                               <BookOpen size={40} style={{ color: 'var(--color-text-light)', marginBottom: '12px' }} />
@@ -12253,13 +12491,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             </div>
                           );
                         }
-
-                        const selectedCamp = allowedCampaigns.find(c => Number(c.id) === Number(effectiveCampId));
-                        const subjects = selectedCamp?.subjects_json
-                          ? (typeof selectedCamp.subjects_json === 'string'
-                            ? JSON.parse(selectedCamp.subjects_json)
-                            : selectedCamp.subjects_json)
-                          : [];
 
                         if (subjects.length === 0) {
                           return (
@@ -12418,8 +12649,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       >
                                         <div>
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '2px 6px', borderRadius: '4px' }}>{sub.code || 'MÃ'}</span>
-                                            <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--color-text)' }}>{sub.name}</span>
+                                            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '2px 6px', borderRadius: '4px' }}>#{idx + 1}</span>
+                                            <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--color-text)' }}>
+                                              {String(sub.name || '').replace(/^\[[A-Z0-9_-]+\]\s*/i, '').replace(/^([A-Z]{2,8}[-_][A-Z0-9_-]+)\s*[-–:]?\s*/i, '').trim() || sub.name}
+                                            </span>
                                             {isInactive && (
                                               <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', background: '#e2e8f0', padding: '1px 5px', borderRadius: '4px', marginLeft: '4px' }}>
                                                 Chưa xếp lịch
@@ -12434,6 +12667,37 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                         </div>
 
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setDrawerTbcdState({
+                                                subject: sub,
+                                                allSubjects: subjects,
+                                                campaignId: effectiveCampId,
+                                                campaignName: selectedCamp?.name || formData.program || '',
+                                                programName: formData.program || resolvedProj?.name || '',
+                                              });
+                                            }}
+                                            style={{
+                                              padding: '4px 10px',
+                                              borderRadius: '6px',
+                                              border: '1px solid #fecaca',
+                                              background: '#fef2f2',
+                                              color: '#BD1D2D',
+                                              fontSize: '0.72rem',
+                                              fontWeight: 700,
+                                              cursor: 'pointer',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '4px',
+                                              whiteSpace: 'nowrap',
+                                            }}
+                                            title="Gửi Thông báo Chuyên đề & Lịch học môn này (Tự fill thông tin Học vụ)"
+                                          >
+                                            <Send size={11} />
+                                            Gửi TBCĐ
+                                          </button>
                                           <ChevronDown 
                                             size={16} 
                                             style={{ 
@@ -18616,7 +18880,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
             }}
             task={selectedTaskForDetails}
             isFromCustomerDrawer={true}
-            onUpdate={() => {
+            onUpdate={(updatedTask?: any) => {
+              if (updatedTask && updatedTask.id && (updatedTask.__duplicatedFromId || updatedTask.duplicated_from_id)) {
+                setSelectedTaskForDetails({ ...updatedTask, comments: [], comment_count: 0 });
+              }
               fetchData();
             }}
             users={users}
@@ -19628,6 +19895,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 className="btn primary sm" 
                                 disabled={submittingExpenseRefund}
                                 onClick={async () => {
+                                  if (inFlightRef.current || submittingExpenseRefund) return;
+                                  inFlightRef.current = true;
                                   setSubmittingExpenseRefund(true);
                                   try {
                                     await api.put(`/expenses/${viewExpense.id}`, { 
@@ -19641,6 +19910,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   } catch (e: any) {
                                     addToast('Lỗi khi cập nhật hoàn tiền: ' + (e.response?.data?.message || e.message), 'error');
                                   } finally {
+                                    inFlightRef.current = false;
                                     setSubmittingExpenseRefund(false);
                                   }
                                 }}
@@ -19672,6 +19942,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                     className="btn success" 
                     style={{ flex: 1, background: 'var(--color-success)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 600 }}
                     onClick={async () => {
+                      if (inFlightRef.current) return;
+                      inFlightRef.current = true;
                       try {
                         await api.patch(`/expenses/${viewExpense.id}`, { status: 'approved' });
                         setViewExpense(prev => ({ ...prev, status: 'approved' }));
@@ -19679,6 +19951,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         fetchData();
                       } catch (e: any) {
                         addToast('Lỗi khi phê duyệt chi phí', 'error');
+                      } finally {
+                        inFlightRef.current = false;
                       }
                     }}
                   >
@@ -19734,10 +20008,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                 className="btn danger sm" 
                 style={{ background: 'var(--color-danger)', color: 'white', border: 'none', fontWeight: 600 }}
                 onClick={async () => {
+                  if (inFlightRef.current || submittingReject) return;
                   if (!rejectReason.trim()) {
                     addToast('Vui lòng nhập lý do từ chối', 'error');
                     return;
                   }
+                  inFlightRef.current = true;
                   setSubmittingReject(true);
                   try {
                     await api.patch(`/expenses/${rejectingExpense.id}`, { status: 'rejected', reject_reason: rejectReason });
@@ -19749,6 +20025,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   } catch (e: any) {
                     addToast('Lỗi khi từ chối chi phí', 'error');
                   } finally {
+                    inFlightRef.current = false;
                     setSubmittingReject(false);
                   }
                 }}
@@ -20573,11 +20850,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               />
             </div>
 
-            {/* Content Tabs (Preview / Edit) */}
+            {/* Content Tabs (Preview / Edit / Zalo) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                 <label className="form-label" style={{ margin: 0, fontWeight: 700, fontSize: '0.8rem' }}>
-                  Nội dung email <span style={{ color: 'var(--color-danger)' }}>*</span>
+                  {academicEmailTab === 'zalo' ? 'Nội dung tin nhắn Zalo tiếp nhận' : 'Nội dung email'} <span style={{ color: 'var(--color-danger)' }}>*</span>
                 </label>
 
                 <div style={{ display: 'flex', gap: '4px', background: 'var(--color-bg)', padding: '3px', borderRadius: '8px', border: '1px solid var(--color-border-light)' }}>
@@ -20622,6 +20899,27 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   >
                     <Pencil size={12} />
                     Chỉnh sửa (HTML/Text)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAcademicEmailTab('zalo')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      background: academicEmailTab === 'zalo' ? 'var(--color-surface)' : 'transparent',
+                      color: academicEmailTab === 'zalo' ? '#0284c7' : 'var(--color-text-muted)',
+                      boxShadow: academicEmailTab === 'zalo' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                    }}
+                  >
+                    <MessageSquare size={12} />
+                    Mẫu Tin nhắn Zalo
                   </button>
                 </div>
               </div>
@@ -20720,7 +21018,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                     </div>
                   </div>
                 </div>
-              ) : (
+              ) : academicEmailTab === 'edit' ? (
                 <textarea
                   className="form-input"
                   style={{
@@ -20733,45 +21031,78 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   value={academicEmailForm.content}
                   onChange={e => setAcademicEmailForm(prev => ({ ...prev, content: e.target.value }))}
                 />
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ fontSize: '0.78rem', color: '#0369a1', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '8px', padding: '8px 12px' }}>
+                    Mẫu tin nhắn Zalo tiếp nhận học viên (đã điền sẵn tên học viên &amp; CTSV). Bấm <strong>Copy Tin nhắn Zalo</strong> để dán ngay vào Zalo!
+                  </div>
+                  <textarea
+                    className="form-input"
+                    style={{
+                      minHeight: '220px',
+                      fontSize: '0.84rem',
+                      lineHeight: '1.6',
+                      padding: '12px'
+                    }}
+                    value={academicEmailForm.zalo_text}
+                    onChange={e => setAcademicEmailForm(prev => ({ ...prev, zalo_text: e.target.value }))}
+                  />
+                </div>
               )}
             </div>
 
             {/* Actions */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '0.5rem', paddingTop: '10px', borderTop: '1px solid var(--color-border-light)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginTop: '0.5rem', paddingTop: '10px', borderTop: '1px solid var(--color-border-light)' }}>
               <button
                 type="button"
                 className="btn outline"
-                onClick={() => setShowAcademicEmailModal(false)}
-                disabled={isSendingAcademicEmail}
-              >
-                Hủy
-              </button>
-              <button
-                type="button"
-                className="btn primary"
-                onClick={handleSendAcademicEmail}
-                disabled={isSendingAcademicEmail}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  minWidth: '120px',
-                  justifyContent: 'center',
-                  background: 'linear-gradient(135deg, #BD1D2D, #8C111E)'
+                onClick={() => {
+                  const textToCopy = academicEmailForm.zalo_text || getAcademicZaloOnboardingText((formData.full_name || contact?.full_name || '').trim());
+                  navigator.clipboard.writeText(textToCopy).then(() => {
+                    addToast('Đã sao chép mẫu Tin nhắn Zalo Tiếp nhận vào Clipboard!', 'success');
+                  });
                 }}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#0284c7', borderColor: '#bae6fd', background: '#f0f9ff' }}
               >
-                {isSendingAcademicEmail ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    Đang gửi...
-                  </>
-                ) : (
-                  <>
-                    <Send size={15} />
-                    Gửi email
-                  </>
-                )}
+                <Copy size={14} />
+                Copy Tin nhắn Zalo Tiếp nhận
               </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="btn outline"
+                  onClick={() => setShowAcademicEmailModal(false)}
+                  disabled={isSendingAcademicEmail}
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={handleSendAcademicEmail}
+                  disabled={isSendingAcademicEmail}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    minWidth: '120px',
+                    justifyContent: 'center',
+                    background: 'linear-gradient(135deg, #BD1D2D, #8C111E)'
+                  }}
+                >
+                  {isSendingAcademicEmail ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Đang gửi...
+                    </>
+                  ) : (
+                    <>
+                      <Send size={15} />
+                      Gửi email
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </CustomModal>
@@ -20783,7 +21114,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           isOpen={studyStatusModal.isOpen}
           onClose={() => !isSubmittingStudyStatus && setStudyStatusModal(prev => ({ ...prev, isOpen: false }))}
           title="Chuyển trạng thái học tập của học viên"
-          width="560px"
+          width={['postpone', 'reserved'].includes(studyStatusModal.targetStatus) ? '780px' : '560px'}
           zIndex={Math.min(effectiveZIndex + 20, 2147483645)}
         >
           <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -20847,6 +21178,43 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                 </div>
               );
             })()}
+
+            {/* POSTPONE FORM UPLOAD + AI OCR AUTO-FILL + AUTO EMAIL REMIND */}
+            {['postpone', 'reserved'].includes(studyStatusModal.targetStatus) && contact?.id && (
+              <StudentAcademicWorkspace
+                contactId={contact.id}
+                studentName={formData.full_name || contact?.full_name || ''}
+                studentCode={formData.student_id || formData.student_code || ''}
+                studentEmail={formData.email || contact?.email || ''}
+                studentPhone={formData.phone || contact?.phone || ''}
+                programName={formData.program || contact?.program || ''}
+                campaignId={Number(formData.campaign_id || contact?.campaign_id || 0) || null}
+                studyStatus="postpone"
+                mode="postpone_inline"
+                onPostponeSaved={(pData) => {
+                  const summaryReason = [
+                    pData.postpone_reason || 'Bảo lưu theo đơn học viên',
+                    pData.postpone_from_date ? `Từ: ${pData.postpone_from_date}` : '',
+                    pData.postpone_to_date ? `Đến: ${pData.postpone_to_date}` : '',
+                    pData.postpone_remind_date ? `Nhắc Email Remind: ${pData.postpone_remind_date}` : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' | ');
+                  setStudyStatusModal(prev => ({
+                    ...prev,
+                    note: summaryReason,
+                  }));
+                  setFormData((prev: any) => ({
+                    ...prev,
+                    study_status: 'postpone',
+                    postpone_reason: pData.postpone_reason,
+                    postpone_from_date: pData.postpone_from_date,
+                    postpone_to_date: pData.postpone_to_date,
+                    postpone_remind_date: pData.postpone_remind_date,
+                  }));
+                }}
+              />
+            )}
 
             {/* Quick Reason Suggestions */}
             <div>
@@ -21209,6 +21577,38 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
             </div>
           </div>
         </CustomModal>
+      )}
+
+      {drawerTbcdState && (
+        <SubjectAnnouncementModal
+          isOpen={!!drawerTbcdState}
+          onClose={() => setDrawerTbcdState(null)}
+          subject={drawerTbcdState.subject}
+          allSubjects={drawerTbcdState.allSubjects}
+          campaign={
+            drawerTbcdState.campaignId
+              ? {
+                  id: drawerTbcdState.campaignId,
+                  name: drawerTbcdState.campaignName || '',
+                  project_name: drawerTbcdState.programName || '',
+                }
+              : null
+          }
+          programName={drawerTbcdState.programName || ''}
+          companiesList={companiesList}
+          consultants={users}
+          preselectedStudent={
+            formData.email || contact?.email
+              ? {
+                  id: contact?.id,
+                  full_name: formData.full_name || contact?.full_name || '',
+                  email: formData.email || contact?.email || '',
+                  program: drawerTbcdState.programName || formData.program || '',
+                }
+              : null
+          }
+          addToast={addToast}
+        />
       )}
     </>,
     document.body

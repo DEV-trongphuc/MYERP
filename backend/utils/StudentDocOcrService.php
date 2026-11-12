@@ -230,7 +230,7 @@ class StudentDocOcrService {
             $stmtFiles = $db->prepare("
                 SELECT id, name, file_path, mime_type, category
                 FROM cloud_files
-                WHERE contact_id = ? AND (is_link = 0 OR is_link IS NULL)
+                WHERE contact_id = ? AND COALESCE(mime_type, '') != 'text/uri-list'
                 ORDER BY id DESC
             ");
             $stmtFiles->execute([$contactId]);
@@ -789,7 +789,7 @@ EOT;
                   AND EXISTS (
                       SELECT 1 FROM cloud_files cf
                       WHERE cf.contact_id = c.id
-                        AND (cf.is_link = 0 OR cf.is_link IS NULL)
+                        AND COALESCE(cf.mime_type, '') != 'text/uri-list'
                   )
                   AND NOT EXISTS (
                       SELECT 1 FROM activities a
@@ -1042,5 +1042,188 @@ EOT;
             return ['ok' => false, 'code' => $code];
         }
         return ['ok' => false, 'code' => 0];
+    }
+
+    /**
+     * AI OCR & Smart Extraction for Student Postponement / Deferral Forms (Đơn xin bảo lưu học tập)
+     */
+    public static function extractPostponeForm(PDO $db, string $filePath, string $fileName, array $studentContext = [], int $remindDaysBefore = 14): array {
+        $today = date('Y-m-d');
+        $defaultFrom = $today;
+        $defaultMonths = 6;
+        $defaultTo = date('Y-m-d', strtotime("+{$defaultMonths} months"));
+        $remindDaysBefore = max(1, min(90, $remindDaysBefore));
+
+        $result = [
+            'postpone_reason' => 'Bảo lưu kết quả học tập theo đơn đề nghị của học viên',
+            'postpone_from_date' => $defaultFrom,
+            'postpone_to_date' => $defaultTo,
+            'duration_months' => $defaultMonths,
+            'deferred_subjects' => '',
+            'remind_days_before' => $remindDaysBefore,
+            'postpone_remind_date' => date('Y-m-d', strtotime($defaultTo . " -{$remindDaysBefore} days")),
+            'student_id' => $studentContext['student_id'] ?? '',
+            'program' => $studentContext['program'] ?? '',
+            'ocr_source' => 'fallback'
+        ];
+
+        if (!file_exists($filePath)) {
+            return $result;
+        }
+
+        $ext = strtolower(pathinfo($fileName ?: $filePath, PATHINFO_EXTENSION));
+        $extractedText = '';
+        $parts = [];
+
+        $contextStr = "STUDENT CONTEXT: " . json_encode($studentContext, JSON_UNESCAPED_UNICODE) . "\nTODAY DATE: {$today}\n\n";
+        $parts[] = ['text' => $contextStr];
+
+        if ($ext === 'docx') {
+            $d = self::extractDocxContent($filePath);
+            $extractedText = $d['text'] ?? '';
+            if ($extractedText !== '') {
+                $parts[] = ['text' => "POSTPONE FORM DOCX TEXT:\n" . mb_substr($extractedText, 0, 15000)];
+            }
+            if (!empty($d['images'])) {
+                foreach (array_slice($d['images'], 0, 3) as $imgObj) {
+                    $mType = $imgObj['ext'] === 'png' ? 'image/png' : ($imgObj['ext'] === 'webp' ? 'image/webp' : 'image/jpeg');
+                    $comp = self::compressImageBytes($imgObj['bytes'], $mType);
+                    $parts[] = ['inlineData' => ['mimeType' => $comp['mimeType'], 'data' => $comp['data']]];
+                }
+            }
+        } elseif (in_array($ext, ['pdf', 'png', 'jpg', 'jpeg', 'webp'], true)) {
+            $rawBytes = @file_get_contents($filePath);
+            if ($rawBytes) {
+                if ($ext === 'pdf') {
+                    if (strlen($rawBytes) <= 14 * 1024 * 1024) {
+                        $parts[] = ['inlineData' => ['mimeType' => 'application/pdf', 'data' => base64_encode($rawBytes)]];
+                    }
+                } else {
+                    $mType = $ext === 'png' ? 'image/png' : ($ext === 'webp' ? 'image/webp' : 'image/jpeg');
+                    $comp = self::compressImageBytes($rawBytes, $mType);
+                    $parts[] = ['inlineData' => ['mimeType' => $comp['mimeType'], 'data' => $comp['data']]];
+                }
+            }
+        } else {
+            $rawTxt = (string)@file_get_contents($filePath);
+            if ($rawTxt !== '') {
+                $extractedText = mb_substr(strip_tags($rawTxt), 0, 15000);
+                $parts[] = ['text' => "POSTPONE FORM CONTENT:\n" . $extractedText];
+            }
+        }
+
+        // 1. Regex heuristic extraction from text (if DOCX/text available)
+        if ($extractedText !== '') {
+            if (preg_match('/(?:lý do|ly do|reason)[:\s\-]+([^\n\r]+)/iu', $extractedText, $mReason)) {
+                $candReason = trim($mReason[1], " .,-;\t");
+                if (mb_strlen($candReason, 'UTF-8') >= 4) {
+                    $result['postpone_reason'] = $candReason;
+                }
+            }
+            if (preg_match('/(\d{1,2})\s*(?:tháng|thang|months?)/iu', $extractedText, $mDur)) {
+                $mVal = (int)$mDur[1];
+                if ($mVal >= 1 && $mVal <= 24) {
+                    $result['duration_months'] = $mVal;
+                }
+            }
+            if (preg_match_all('/\b(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]20\d{2}|20\d{2}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2})\b/u', $extractedText, $mDates)) {
+                $isoDates = [];
+                foreach ($mDates[1] as $rawDt) {
+                    $iso = self::normalizeDateIso($rawDt, false);
+                    if ($iso !== '' && $iso >= '2024-01-01') {
+                        $isoDates[] = $iso;
+                    }
+                }
+                $isoDates = array_values(array_unique($isoDates));
+                if (count($isoDates) >= 2) {
+                    sort($isoDates);
+                    $result['postpone_from_date'] = $isoDates[0];
+                    $result['postpone_to_date'] = $isoDates[count($isoDates) - 1];
+                } elseif (count($isoDates) === 1) {
+                    $result['postpone_from_date'] = $isoDates[0];
+                    $result['postpone_to_date'] = date('Y-m-d', strtotime($isoDates[0] . ' +' . $result['duration_months'] . ' months'));
+                }
+            }
+            if (preg_match('/(?:môn học|học phần|subject|module)[:\s\-]+([^\n\r]+)/iu', $extractedText, $mSub)) {
+                $result['deferred_subjects'] = trim($mSub[1], " .,-;\t");
+            }
+        }
+
+        // 2. Multimodal AI OCR via Gemini
+        try {
+            $apiKey = trim((string)$db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'gemini_api_key'")->fetchColumn());
+            if ($apiKey === '') {
+                $apiKey = trim((string)($_ENV['GEMINI_API_KEY'] ?? getenv('GEMINI_API_KEY') ?: ''));
+            }
+            $model = trim((string)$db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'gemini_model'")->fetchColumn()) ?: 'gemini-3.5-flash-lite';
+            if (strpos($model, 'embedding') !== false) {
+                $model = 'gemini-3.5-flash-lite';
+            }
+
+            if ($apiKey !== '' && count($parts) > 1) {
+                $prompt = <<<EOT
+You are an Academic Affairs AI assistant for IDEAS Academy (MYERP).
+Analyze this Student Deferral / Postponement Request Form (Đơn xin bảo lưu kết quả học tập) and extract the postponement details in strict JSON format:
+{
+  "postpone_reason": "Clear Vietnamese summary of the student's reason for postponement (e.g., 'Lịch công tác nước ngoài dày đặc không sắp xếp được thời gian học', 'Lý do sức khỏe và việc gia đình', etc.).",
+  "postpone_from_date": "Start date of postponement in YYYY-MM-DD format. If only a signing date is present, use that date. If not found, use '{$today}'.",
+  "postpone_to_date": "End date of postponement / expected return date in YYYY-MM-DD format. If the form states a duration (e.g., 3 months, 6 months, 1 year) instead of an exact end date, calculate postpone_from_date + duration.",
+  "duration_months": "Integer number of months postponed (e.g. 3, 6, 12).",
+  "deferred_subjects": "List of subjects, modules, or intake deferred if mentioned on the form, or empty string.",
+  "student_id": "Student ID if written on the form, or empty string.",
+  "program": "Program name if written on the form (e.g., MBA, EMBA, DBA, MSC-AI, TOP UP), or empty string."
+}
+Return ONLY valid JSON.
+EOT;
+                $parts[] = ['text' => $prompt];
+                $resp = self::callGemini($apiKey, $model, $parts);
+                if (!empty($resp['ok']) && is_array($resp['data'])) {
+                    $ai = $resp['data'];
+                    if (!empty($ai['postpone_reason']) && $ai['postpone_reason'] !== 'null') {
+                        $result['postpone_reason'] = trim((string)$ai['postpone_reason']);
+                    }
+                    if (!empty($ai['duration_months']) && (int)$ai['duration_months'] > 0 && (int)$ai['duration_months'] <= 36) {
+                        $result['duration_months'] = (int)$ai['duration_months'];
+                    }
+                    if (!empty($ai['postpone_from_date'])) {
+                        $isoFrom = self::normalizeDateIso((string)$ai['postpone_from_date'], false);
+                        if ($isoFrom !== '') {
+                            $result['postpone_from_date'] = $isoFrom;
+                        }
+                    }
+                    if (!empty($ai['postpone_to_date'])) {
+                        $isoTo = self::normalizeDateIso((string)$ai['postpone_to_date'], false);
+                        if ($isoTo !== '' && $isoTo > $result['postpone_from_date']) {
+                            $result['postpone_to_date'] = $isoTo;
+                        } else {
+                            $result['postpone_to_date'] = date('Y-m-d', strtotime($result['postpone_from_date'] . ' +' . $result['duration_months'] . ' months'));
+                        }
+                    } else {
+                        $result['postpone_to_date'] = date('Y-m-d', strtotime($result['postpone_from_date'] . ' +' . $result['duration_months'] . ' months'));
+                    }
+                    if (!empty($ai['deferred_subjects']) && $ai['deferred_subjects'] !== 'null') {
+                        $result['deferred_subjects'] = trim((string)$ai['deferred_subjects']);
+                    }
+                    if (!empty($ai['student_id']) && $ai['student_id'] !== 'null') {
+                        $result['student_id'] = trim((string)$ai['student_id']);
+                    }
+                    if (!empty($ai['program']) && $ai['program'] !== 'null') {
+                        $result['program'] = trim((string)$ai['program']);
+                    }
+                    $result['ocr_source'] = 'gemini_ai';
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log("extractPostponeForm AI error: " . $e->getMessage());
+        }
+
+        // 3. Auto-calculate Email Reminder Date (postpone_to_date - remind_days_before)
+        $calcRemind = date('Y-m-d', strtotime($result['postpone_to_date'] . " -{$remindDaysBefore} days"));
+        if ($calcRemind < $today) {
+            $calcRemind = $result['postpone_to_date'] >= $today ? $result['postpone_to_date'] : date('Y-m-d', strtotime('+3 days'));
+        }
+        $result['postpone_remind_date'] = $calcRemind;
+
+        return $result;
     }
 }

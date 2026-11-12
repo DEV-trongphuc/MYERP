@@ -199,14 +199,32 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     ];
   }, [t]);
 
+  const hasDateFilter = Boolean(dateRange.from || dateRange.to);
+
+  const getScopedMilestones = React.useCallback((d: any): Milestone[] => {
+    const ms: Milestone[] = Array.isArray(d?.milestones) ? d.milestones : [];
+    if (!dateRange.from && !dateRange.to) {
+      return ms;
+    }
+    return ms.filter((m: any) => {
+      const rawDate = m?.expected_pay_date || d?.created_at || '';
+      const mDate = typeof rawDate === 'string' ? rawDate.substring(0, 10) : '';
+      if (!mDate) return false;
+      if (dateRange.from && mDate < dateRange.from) return false;
+      if (dateRange.to && mDate > dateRange.to) return false;
+      return true;
+    });
+  }, [dateRange.from, dateRange.to]);
+
   const overdueSoCount = useMemo(() => {
     const todayStr = new Date().toISOString().substring(0, 10);
     return deposits.filter((d: any) => {
       if (d.status === 'cancelled') return false;
-      if (!Array.isArray(d.milestones)) return false;
-      return d.milestones.some((m: any) => m.status !== 'approved' && m.expected_pay_date && m.expected_pay_date.substring(0, 10) < todayStr);
+      const ms = hasDateFilter ? getScopedMilestones(d) : (Array.isArray(d.milestones) ? d.milestones : []);
+      if (ms.length === 0) return false;
+      return ms.some((m: any) => m.status !== 'approved' && m.expected_pay_date && m.expected_pay_date.substring(0, 10) < todayStr);
     }).length;
-  }, [deposits]);
+  }, [deposits, hasDateFilter, getScopedMilestones]);
 
   const filteredDepositsList = React.useMemo(() => {
     let list = deposits;
@@ -228,27 +246,30 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       );
     }
 
-    // Filter by Overdue
+    // Filter by dateRange using milestone payment schedule (expected_pay_date)
+    if (dateRange.from || dateRange.to) {
+      list = list.filter((d: any) => {
+        if (d.status === 'cancelled' && filterStatus !== 'cancelled') return false;
+        const ms = Array.isArray(d.milestones) ? d.milestones : [];
+        if (ms.length > 0) {
+          return getScopedMilestones(d).length > 0;
+        }
+        const dateStr = d.created_at?.substring(0, 10);
+        if (!dateStr) return false;
+        if (dateRange.from && dateStr < dateRange.from) return false;
+        if (dateRange.to && dateStr > dateRange.to) return false;
+        return true;
+      });
+    }
+
+    // Filter by Overdue (scoped to filtered period when date filter is active)
     if (filterOverdue) {
       const todayStr = new Date().toISOString().substring(0, 10);
       list = list.filter((d: any) => {
         if (d.status === 'cancelled') return false;
-        if (!Array.isArray(d.milestones)) return false;
-        return d.milestones.some((m: any) => m.status !== 'approved' && m.expected_pay_date && m.expected_pay_date.substring(0, 10) < todayStr);
-      });
-    }
-
-    // Filter by dateRange
-    if (dateRange.from) {
-      list = list.filter((d: any) => {
-        const dateStr = d.created_at?.substring(0, 10);
-        return !dateStr || dateStr >= dateRange.from;
-      });
-    }
-    if (dateRange.to) {
-      list = list.filter((d: any) => {
-        const dateStr = d.created_at?.substring(0, 10);
-        return !dateStr || dateStr <= dateRange.to;
+        const ms = hasDateFilter ? getScopedMilestones(d) : (Array.isArray(d.milestones) ? d.milestones : []);
+        if (ms.length === 0) return false;
+        return ms.some((m: any) => m.status !== 'approved' && m.expected_pay_date && m.expected_pay_date.substring(0, 10) < todayStr);
       });
     }
 
@@ -266,7 +287,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
 
       return matchesSearch && matchesProject && matchesStatus;
     });
-  }, [deposits, user, searchQuery, filterProjectId, filterStatus, filterSalesId, filterOverdue, dateRange]);
+  }, [deposits, user, searchQuery, filterProjectId, filterStatus, filterSalesId, filterOverdue, dateRange, hasDateFilter, getScopedMilestones]);
 
   const paginatedDeposits = React.useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -505,13 +526,15 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       if (signal.aborted) return;
 
       if (resDep.success) {
-        const nextDeps = resDep.data || [];
+        const rawDeps = resDep.data?.items || resDep.data || [];
+        const nextDeps = Array.isArray(rawDeps) ? rawDeps : [];
         setDeposits(nextDeps);
         depositsCache.deposits = nextDeps;
         depositsCache.timestamp = Date.now();
       }
       if (resCont.success) {
-        const allContacts = resCont.data?.items || resCont.data || [];
+        const rawCont = resCont.data?.items || resCont.data || [];
+        const allContacts = Array.isArray(rawCont) ? rawCont : [];
         const filteredContacts = (user?.role === 'sale') 
           ? allContacts.filter((c: any) => String(c.owner_id) === String(user.id))
           : allContacts;
@@ -519,27 +542,32 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
         depositsCache.contacts = filteredContacts;
       }
       if (resComp?.success) {
-        const nextComp = resComp.data?.items || resComp.data || [];
+        const rawComp = resComp.data?.items || resComp.data || [];
+        const nextComp = Array.isArray(rawComp) ? rawComp : [];
         setCompanies(nextComp);
         depositsCache.companies = nextComp;
       }
       if (resSup?.success) {
-        const nextSup = resSup.data?.items || resSup.data || [];
+        const rawSup = resSup.data?.items || resSup.data?.suppliers || resSup.data || [];
+        const nextSup = Array.isArray(rawSup) ? rawSup : [];
         setSuppliers(nextSup);
         depositsCache.suppliers = nextSup;
       }
       if (resProj.success) {
-        const nextProj = resProj.data || [];
+        const rawProj = resProj.data?.items || resProj.data || [];
+        const nextProj = Array.isArray(rawProj) ? rawProj : [];
         setProjects(nextProj);
         depositsCache.projects = nextProj;
       }
       if (resCoop.success) {
-        const nextCoop = resCoop.data || [];
+        const rawCoop = resCoop.data?.items || resCoop.data || [];
+        const nextCoop = Array.isArray(rawCoop) ? rawCoop : [];
         setCoopSlips(nextCoop);
         depositsCache.coopSlips = nextCoop;
       }
       if (resUsr.success) {
-        const nextUsr = resUsr.data || [];
+        const rawUsr = resUsr.data?.items || resUsr.data || [];
+        const nextUsr = Array.isArray(rawUsr) ? rawUsr : [];
         setUsersList(nextUsr);
         depositsCache.usersList = nextUsr;
       }
@@ -1730,18 +1758,23 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     let approvedCount = 0;
     let pendingCount = 0;
     let pendingStudentCount = 0;
+    let activeOrderCount = 0;
+    let totalScopedMilestonesCount = 0;
 
     filteredDepositsList.forEach(d => {
-      const priceVal = Number(d.price) || 0;
-      totalSOAmount += priceVal;
-      if (priceVal > maxSOAmount) {
-        maxSOAmount = priceVal;
-        maxSOTitle = `${d.full_name || ''} - ${d.project_name || 'Dự án'}`;
+      if (d.status === 'cancelled' && filterStatus !== 'cancelled') {
+        return;
       }
+      activeOrderCount++;
 
-      if (d.milestones && d.milestones.length > 0) {
-        d.milestones.forEach(m => {
+      const scopedMs = getScopedMilestones(d);
+      let depScopedAmount = 0;
+
+      if (scopedMs.length > 0) {
+        scopedMs.forEach(m => {
           const amt = Number(m.expected_amount) || 0;
+          depScopedAmount += amt;
+          totalScopedMilestonesCount++;
           if (m.status === 'approved') {
             approvedMilestoneAmount += amt;
             approvedCount++;
@@ -1756,6 +1789,17 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
             pendingCount++;
           }
         });
+      } else if (!hasDateFilter) {
+        depScopedAmount = Number(d.price) || 0;
+      }
+
+      totalSOAmount += depScopedAmount;
+
+      if (depScopedAmount > maxSOAmount) {
+        maxSOAmount = depScopedAmount;
+        const isPartial = hasDateFilter && scopedMs.length > 0 && (d.milestones?.length || 0) > scopedMs.length;
+        const msSuffix = isPartial ? ` (${scopedMs.map((m: any) => m.milestone_name).join(', ')})` : '';
+        maxSOTitle = `${d.full_name || ''} - ${d.project_name || 'Dự án'}${msSuffix}`;
       }
     });
 
@@ -1768,9 +1812,11 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       maxSOTitle,
       approvedCount,
       pendingCount,
-      pendingStudentCount
+      pendingStudentCount,
+      activeOrderCount,
+      totalScopedMilestonesCount
     };
-  }, [filteredDepositsList]);
+  }, [filteredDepositsList, filterStatus, hasDateFilter, getScopedMilestones]);
 
   return (
     <div className="anim-fade-up" style={{ color: 'var(--color-text)', display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -1853,7 +1899,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                 icon: DollarSign,
                 color: '#2563eb',
                 bg: 'rgba(37, 99, 235, 0.08)',
-                sub: `${filteredDepositsList.length} đơn hàng`,
+                sub: hasDateFilter ? `${listStats.totalScopedMilestonesCount} đợt thanh toán (${listStats.activeOrderCount} đơn hàng)` : `${listStats.activeOrderCount} đơn hàng`,
                 decor: (
                   <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
                     <path d="M10 80 L30 50 L50 60 L90 20" stroke="currentColor" strokeWidth="2" strokeDasharray="3 3" />
@@ -2342,33 +2388,57 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
 
                       {/* Value */}
                       <td style={{ padding: '1rem', verticalAlign: 'middle' }}>
-                        <div style={{ fontWeight: 600, color: 'var(--color-text)', fontSize: '0.875rem' }}>
-                          {dep.currency !== 'VND' ? (
-                            <div>
-                               <div>{formatMoney(dep.price / (parseFloat(String(dep.exchange_rate)) || 1), dep.currency)}</div>
-                              <div style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: '2px', fontWeight: 500 }}>
-                                ≈ {formatMoney(dep.price, 'VND')}
-                              </div>
+                        {(() => {
+                          const scopedMs = getScopedMilestones(dep);
+                          const totalMsCount = Array.isArray(dep.milestones) ? dep.milestones.length : 0;
+                          const scopedVndAmount = hasDateFilter && scopedMs.length > 0
+                            ? scopedMs.reduce((sum, m) => sum + (Number(m.expected_amount) || 0), 0)
+                            : (Number(dep.price) || 0);
+                          const isPartialRoadmap = hasDateFilter && totalMsCount > scopedMs.length && Math.round(scopedVndAmount) !== Math.round(Number(dep.price) || 0);
+                          const rate = parseFloat(String(dep.exchange_rate)) || 1;
+                          return (
+                            <div style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: '0.875rem' }}>
+                              {dep.currency && dep.currency !== 'VND' ? (
+                                <div>
+                                  <div>{formatMoney(scopedVndAmount / rate, dep.currency)}</div>
+                                  <div style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: '2px', fontWeight: 500 }}>
+                                    ≈ {formatMoney(scopedVndAmount, 'VND')}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div>{formatMoney(scopedVndAmount, 'VND')}</div>
+                              )}
+                              {isPartialRoadmap && (
+                                <div style={{ marginTop: '3px', display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                                  <span style={{ fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 600 }}>
+                                    {scopedMs.map(m => m.milestone_name).join(', ')}
+                                  </span>
+                                  <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+                                    Tổng SO: {formatMoney(dep.price, 'VND')}
+                                  </span>
+                                </div>
+                              )}
                             </div>
-                          ) : (
-                            formatMoney(dep.price, 'VND')
-                          )}
-                        </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Nearest Payment Date */}
                       <td style={{ padding: '1rem', verticalAlign: 'middle' }}>
                         {(() => {
-                          const ms = dep.milestones || [];
+                          const ms = hasDateFilter ? getScopedMilestones(dep) : (dep.milestones || []);
                           if (ms.length === 0) return <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>—</span>;
 
                           const allApproved = ms.every((m: any) => m.status === 'approved');
                           if (allApproved) {
-                            const dates = ms.map((m: any) => m.paid_at || m.updated_at || m.expected_pay_date).filter(Boolean);
+                            const dates = ms.map((m: any) => m.expected_pay_date || m.paid_at || m.updated_at).filter(Boolean);
                             const latestDate = dates.length > 0 ? new Date(Math.max(...dates.map(d => new Date(d).getTime()))) : null;
                             const latestDateStr = latestDate ? latestDate.toLocaleDateString('vi-VN') : '—';
                             return (
-                              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#10b981' }}>{latestDateStr}</span>
+                              <div>
+                                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#10b981', display: 'block' }}>{latestDateStr}</span>
+                                <span style={{ fontSize: '0.7rem', color: '#10b981', display: 'block', marginTop: '2px', fontWeight: 600 }}>Đã đối soát</span>
+                              </div>
                             );
                           }
 
